@@ -183,9 +183,7 @@ export namespace Storage {
       const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
-      const tempFile = target + ".tmp"
-      await Bun.write(tempFile, jsonContent)
-      await fs.rename(tempFile, target)
+      await Bun.write(target, jsonContent)
       return content as T
     })
   }
@@ -197,9 +195,7 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const tempFile = target + ".tmp"
-      await Bun.write(tempFile, jsonContent)
-      await fs.rename(tempFile, target)
+      await Bun.write(target, jsonContent)
     })
   }
 
