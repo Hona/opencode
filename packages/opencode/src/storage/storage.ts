@@ -165,10 +165,25 @@ export namespace Storage {
     })
   }
 
+  function getTempFile(target: string): string {
+    // Use unique temp filename to avoid collisions
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 9)
+    return `${target}.${timestamp}.${random}.tmp`
+  }
+
   async function replaceFile(source: string, target: string) {
     if (process.platform === "win32") {
-      // Windows: delete then rename (not atomic, but safe with write lock)
-      await fs.unlink(target).catch(() => {})
+      // Windows: must delete before rename (creates brief window where file doesn't exist)
+      // Callers must hold write lock to coordinate with Storage.read()
+      try {
+        await fs.unlink(target)
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code
+        if (code !== "ENOENT") {
+          log.warn("Unexpected unlink error during replace", { target, code })
+        }
+      }
     }
     // Unix: rename is atomic and overwrites
     await fs.rename(source, target)
@@ -179,7 +194,9 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      return Bun.file(target).json() as Promise<T>
+      // Must await JSON parsing before lock releases
+      const result = await Bun.file(target).json()
+      return result as T
     })
   }
 
@@ -191,9 +208,15 @@ export namespace Storage {
       const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
-      const tempFile = target + ".tmp"
-      await Bun.write(tempFile, jsonContent)
-      await replaceFile(tempFile, target)
+      const tempFile = getTempFile(target)
+      try {
+        await Bun.write(tempFile, jsonContent)
+        await replaceFile(tempFile, target)
+      } catch (e) {
+        // Clean up temp file on failure
+        await fs.unlink(tempFile).catch(() => {})
+        throw e
+      }
       return content as T
     })
   }
@@ -205,9 +228,15 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const tempFile = target + ".tmp"
-      await Bun.write(tempFile, jsonContent)
-      await replaceFile(tempFile, target)
+      const tempFile = getTempFile(target)
+      try {
+        await Bun.write(tempFile, jsonContent)
+        await replaceFile(tempFile, target)
+      } catch (e) {
+        // Clean up temp file on failure
+        await fs.unlink(tempFile).catch(() => {})
+        throw e
+      }
     })
   }
 
