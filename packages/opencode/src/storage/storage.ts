@@ -173,19 +173,8 @@ export namespace Storage {
   }
 
   async function replaceFile(source: string, target: string) {
-    if (process.platform === "win32") {
-      // Windows: must delete before rename (creates brief window where file doesn't exist)
-      // Callers must hold write lock to coordinate with Storage.read()
-      try {
-        await fs.unlink(target)
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code
-        if (code !== "ENOENT") {
-          log.warn("Unexpected unlink error during replace", { target, code })
-        }
-      }
-    }
-    // Unix: rename is atomic and overwrites
+    // Both Unix and Windows: rename should be atomic with overwrite
+    // Node.js uses MoveFileEx with MOVEFILE_REPLACE_EXISTING on Windows
     await fs.rename(source, target)
   }
 
