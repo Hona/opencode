@@ -165,10 +165,12 @@ export namespace Storage {
     })
   }
 
-  async function atomicRename(source: string, target: string) {
+  async function replaceFile(source: string, target: string) {
     if (process.platform === "win32") {
+      // Windows: delete then rename (not atomic, but safe with write lock)
       await fs.unlink(target).catch(() => {})
     }
+    // Unix: rename is atomic and overwrites
     await fs.rename(source, target)
   }
 
@@ -191,7 +193,7 @@ export namespace Storage {
       const jsonContent = JSON.stringify(content, null, 2)
       const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
-      await atomicRename(tempFile, target)
+      await replaceFile(tempFile, target)
       return content as T
     })
   }
@@ -205,7 +207,7 @@ export namespace Storage {
       await fs.mkdir(path.dirname(target), { recursive: true })
       const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
-      await atomicRename(tempFile, target)
+      await replaceFile(tempFile, target)
     })
   }
 
