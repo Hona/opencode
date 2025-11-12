@@ -165,13 +165,6 @@ export namespace Storage {
     })
   }
 
-  function getTempFile(target: string): string {
-    // Use unique temp filename to avoid collisions
-    const timestamp = Date.now()
-    const random = Math.random().toString(36).substring(2, 9)
-    return `${target}.${timestamp}.${random}.tmp`
-  }
-
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
@@ -190,7 +183,7 @@ export namespace Storage {
       const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
-      const tempFile = getTempFile(target)
+      const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
       await fs.rename(tempFile, target)
       return content as T
@@ -204,7 +197,7 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const tempFile = getTempFile(target)
+      const tempFile = target + ".tmp"
       await Bun.write(tempFile, jsonContent)
       await fs.rename(tempFile, target)
     })
