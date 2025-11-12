@@ -172,18 +172,11 @@ export namespace Storage {
     return `${target}.${timestamp}.${random}.tmp`
   }
 
-  async function replaceFile(source: string, target: string) {
-    // Both Unix and Windows: rename should be atomic with overwrite
-    // Node.js uses MoveFileEx with MOVEFILE_REPLACE_EXISTING on Windows
-    await fs.rename(source, target)
-  }
-
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      // Must await JSON parsing before lock releases
       const result = await Bun.file(target).json()
       return result as T
     })
@@ -198,14 +191,8 @@ export namespace Storage {
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
       const tempFile = getTempFile(target)
-      try {
-        await Bun.write(tempFile, jsonContent)
-        await replaceFile(tempFile, target)
-      } catch (e) {
-        // Clean up temp file on failure
-        await fs.unlink(tempFile).catch(() => {})
-        throw e
-      }
+      await Bun.write(tempFile, jsonContent)
+      await fs.rename(tempFile, target)
       return content as T
     })
   }
@@ -218,14 +205,8 @@ export namespace Storage {
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
       const tempFile = getTempFile(target)
-      try {
-        await Bun.write(tempFile, jsonContent)
-        await replaceFile(tempFile, target)
-      } catch (e) {
-        // Clean up temp file on failure
-        await fs.unlink(tempFile).catch(() => {})
-        throw e
-      }
+      await Bun.write(tempFile, jsonContent)
+      await fs.rename(tempFile, target)
     })
   }
 
