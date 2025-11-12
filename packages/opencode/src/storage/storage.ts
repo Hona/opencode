@@ -170,8 +170,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as Promise<T>
+      return Bun.file(target).json() as Promise<T>
     })
   }
 
