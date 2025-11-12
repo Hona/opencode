@@ -182,13 +182,17 @@ export namespace Storage {
       const content = await Bun.file(target).json()
       fn(content)
       const jsonContent = JSON.stringify(content, null, 2)
-      const handle = await fs.open(target, "w")
+      const tempFile = target + ".tmp"
+      const handle = await fs.open(tempFile, "w")
       try {
         await handle.writeFile(jsonContent, "utf-8")
         await handle.sync()
       } finally {
         await handle.close()
       }
+      // On Windows, must delete target before rename
+      await fs.unlink(target).catch(() => {})
+      await fs.rename(tempFile, target)
       return content as T
     })
   }
@@ -200,13 +204,17 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const jsonContent = JSON.stringify(content, null, 2)
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const handle = await fs.open(target, "w")
+      const tempFile = target + ".tmp"
+      const handle = await fs.open(tempFile, "w")
       try {
         await handle.writeFile(jsonContent, "utf-8")
         await handle.sync()
       } finally {
         await handle.close()
       }
+      // On Windows, must delete target before rename
+      await fs.unlink(target).catch(() => {})
+      await fs.rename(tempFile, target)
     })
   }
 
