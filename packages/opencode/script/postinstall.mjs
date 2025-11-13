@@ -143,6 +143,7 @@ async function main() {
     if (os.platform() === "win32") {
       // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
       // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
+      // pnpm eg format - pnpm/8.10.0 npm/? node/v20.10.0 win32 x64
       const userAgent = process.env.npm_config_user_agent || ""
 
       if (userAgent.startsWith("npm")) {
@@ -152,6 +153,13 @@ async function main() {
 
       if (userAgent.startsWith("bun")) {
         console.log("Windows + bun detected: Setting up binary")
+        const { binaryPath, binaryName } = findBinary()
+        copyBinary(binaryPath, binaryName)
+        return
+      }
+
+      if (userAgent.startsWith("pnpm")) {
+        console.log("Windows + pnpm detected: Setting up binary")
         const { binaryPath, binaryName } = findBinary()
         copyBinary(binaryPath, binaryName)
         return
