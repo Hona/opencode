@@ -18,12 +18,16 @@ const { binaries } = await import("./build.ts")
 fs.mkdirSync(`./dist/${pkg.name}`, { recursive: true })
 fs.cpSync("./bin", `./dist/${pkg.name}/bin`, { recursive: true })
 
-// On Windows, copy the .exe file as well
-if (process.platform === "win32") {
-  const winBinaryPackage = `${pkg.name}-windows-${process.arch}`
-  const winBinaryPath = `./dist/${winBinaryPackage}/bin/opencode.exe`
-  if (fs.existsSync(winBinaryPath)) {
-    fs.copyFileSync(winBinaryPath, `./dist/${pkg.name}/bin/opencode.exe`)
+// Copy Windows .exe if any Windows binaries were built
+let hasWindowsBinary = false
+for (const binaryName of Object.keys(binaries)) {
+  if (binaryName.includes("win32")) {
+    const winBinaryPath = `./dist/${binaryName}/bin/opencode.exe`
+    if (fs.existsSync(winBinaryPath)) {
+      fs.copyFileSync(winBinaryPath, `./dist/${pkg.name}/bin/opencode.exe`)
+      hasWindowsBinary = true
+      break
+    }
   }
 }
 
@@ -34,7 +38,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: process.platform === "win32" ? `./bin/${pkg.name}.exe` : `./bin/${pkg.name}`,
+        [pkg.name]: hasWindowsBinary ? `./bin/${pkg.name}.exe` : `./bin/${pkg.name}`,
       },
       scripts: {
         preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
@@ -48,16 +52,22 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 for (const [name] of Object.entries(binaries)) {
-  process.chdir(`./dist/${name}`)
-  if (process.platform !== "win32") {
-    await $`chmod 777 -R .`
+  try {
+    process.chdir(`./dist/${name}`)
+    if (process.platform !== "win32") {
+      await $`chmod 755 -R .`
+    }
+    await $`bun publish --access public --tag ${Script.channel}`
+  } finally {
+    process.chdir(dir)
   }
+}
+try {
+  process.chdir(`./dist/${pkg.name}`)
   await $`bun publish --access public --tag ${Script.channel}`
+} finally {
   process.chdir(dir)
 }
-process.chdir(`./dist/${pkg.name}`)
-await $`bun publish --access public --tag ${Script.channel}`
-process.chdir(dir)
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
