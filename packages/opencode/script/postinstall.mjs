@@ -50,21 +50,62 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "win32" ? "opencode.exe" : "opencode"
+  const binaryName = platform === "win32" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package
     const packageJsonPath = require.resolve(`${packageName}/package.json`)
     const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binary)
+    const binaryPath = path.join(packageDir, "bin", binaryName)
 
     if (!fs.existsSync(binaryPath)) {
       throw new Error(`Binary not found at ${binaryPath}`)
     }
 
-    return binaryPath
+    return { binaryPath, binaryName }
   } catch (error) {
     throw new Error(`Could not find package ${packageName}: ${error.message}`)
+  }
+}
+
+function prepareBinDirectory(binaryName) {
+  const binDir = path.join(__dirname, "bin")
+  const targetPath = path.join(binDir, binaryName)
+
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true })
+  }
+
+  // Remove existing binary/symlink if it exists
+  if (fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath)
+  }
+
+  return { binDir, targetPath }
+}
+
+function copyBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.copyFileSync(sourcePath, targetPath)
+  console.log(`opencode binary installed: ${targetPath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to copy binary to ${targetPath}`)
+  }
+}
+
+function symlinkBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.symlinkSync(sourcePath, targetPath)
+  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to symlink binary to ${targetPath}`)
   }
 }
 
@@ -110,25 +151,9 @@ async function main() {
       }
 
       if (userAgent.startsWith("bun")) {
-        // For bun on Windows, copy the .exe directly
         console.log("Windows + bun detected: Setting up binary")
-        const binaryPath = findBinary()
-        const binDir = path.join(__dirname, "bin")
-        const binScript = path.join(binDir, "opencode.exe")
-
-        // Ensure bin directory exists
-        if (!fs.existsSync(binDir)) {
-          fs.mkdirSync(binDir, { recursive: true })
-        }
-
-        // Remove existing binary if it exists
-        if (fs.existsSync(binScript)) {
-          fs.unlinkSync(binScript)
-        }
-
-        // Copy the binary
-        fs.copyFileSync(binaryPath, binScript)
-        console.log(`opencode binary installed: ${binScript}`)
+        const { binaryPath, binaryName } = findBinary()
+        copyBinary(binaryPath, binaryName)
         return
       }
 
@@ -137,19 +162,10 @@ async function main() {
       return
     }
 
-    const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
-
-    // Remove existing bin script if it exists
-    if (fs.existsSync(binScript)) {
-      fs.unlinkSync(binScript)
-    }
-
-    // Create symlink to the actual binary
-    fs.symlinkSync(binaryPath, binScript)
-    console.log(`opencode binary symlinked: ${binScript} -> ${binaryPath}`)
+    const { binaryPath, binaryName } = findBinary()
+    symlinkBinary(binaryPath, binaryName)
   } catch (error) {
-    console.error("Failed to create opencode binary symlink:", error.message)
+    console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
   }
 }
