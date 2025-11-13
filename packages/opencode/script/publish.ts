@@ -20,7 +20,7 @@ fs.cpSync("./bin", `./dist/${pkg.name}/bin`, { recursive: true })
 
 // On Windows, copy the .exe file as well
 if (process.platform === "win32") {
-  const winBinaryPackage = `${pkg.name}-${process.platform}-${process.arch}`
+  const winBinaryPackage = `${pkg.name}-windows-${process.arch}`
   const winBinaryPath = `./dist/${winBinaryPackage}/bin/opencode.exe`
   if (fs.existsSync(winBinaryPath)) {
     fs.copyFileSync(winBinaryPath, `./dist/${pkg.name}/bin/opencode.exe`)
