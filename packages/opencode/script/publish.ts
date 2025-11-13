@@ -15,8 +15,8 @@ const { binaries } = await import("./build.ts")
   await $`./dist/${name}/bin/opencode --version`
 }
 
-fs.mkdirSync(`./dist/${pkg.name}`, { recursive: true })
-fs.cpSync("./bin", `./dist/${pkg.name}/bin`, { recursive: true })
+await $`mkdir -p ./dist/${pkg.name}`
+await $`cp -r ./bin ./dist/${pkg.name}/bin`
 
 // Copy Windows .exe if any Windows binaries were built
 let hasWindowsBinary = false
@@ -24,15 +24,16 @@ for (const binaryName of Object.keys(binaries)) {
   if (binaryName.includes("win32")) {
     const winBinaryPath = `./dist/${binaryName}/bin/opencode.exe`
     if (fs.existsSync(winBinaryPath)) {
-      fs.copyFileSync(winBinaryPath, `./dist/${pkg.name}/bin/opencode.exe`)
+      await $`cp ${winBinaryPath} ./dist/${pkg.name}/bin/opencode.exe`
       hasWindowsBinary = true
       break
     }
   }
 }
 
-fs.copyFileSync("./script/preinstall.mjs", `./dist/${pkg.name}/preinstall.mjs`)
-fs.copyFileSync("./script/postinstall.mjs", `./dist/${pkg.name}/postinstall.mjs`)
+await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
+await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
@@ -62,12 +63,7 @@ for (const [name] of Object.entries(binaries)) {
     process.chdir(dir)
   }
 }
-try {
-  process.chdir(`./dist/${pkg.name}`)
-  await $`bun publish --access public --tag ${Script.channel}`
-} finally {
-  process.chdir(dir)
-}
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
