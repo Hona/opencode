@@ -2,8 +2,10 @@
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import { fileURLToPath } from "url"
+import fs from "fs"
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
@@ -13,16 +15,26 @@ const { binaries } = await import("./build.ts")
   await $`./dist/${name}/bin/opencode --version`
 }
 
-await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
-await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+fs.mkdirSync(`./dist/${pkg.name}`, { recursive: true })
+fs.cpSync("./bin", `./dist/${pkg.name}/bin`, { recursive: true })
+
+// On Windows, copy the .exe file as well
+if (process.platform === "win32") {
+  const winBinaryPackage = `${pkg.name}-${process.platform}-${process.arch}`
+  const winBinaryPath = `./dist/${winBinaryPackage}/bin/opencode.exe`
+  if (fs.existsSync(winBinaryPath)) {
+    fs.copyFileSync(winBinaryPath, `./dist/${pkg.name}/bin/opencode.exe`)
+  }
+}
+
+fs.copyFileSync("./script/preinstall.mjs", `./dist/${pkg.name}/preinstall.mjs`)
+fs.copyFileSync("./script/postinstall.mjs", `./dist/${pkg.name}/postinstall.mjs`)
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        [pkg.name]: process.platform === "win32" ? `./bin/${pkg.name}.exe` : `./bin/${pkg.name}`,
       },
       scripts: {
         preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
@@ -36,9 +48,16 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 for (const [name] of Object.entries(binaries)) {
-  await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${Script.channel}`
+  process.chdir(`./dist/${name}`)
+  if (process.platform !== "win32") {
+    await $`chmod 777 -R .`
+  }
+  await $`bun publish --access public --tag ${Script.channel}`
+  process.chdir(dir)
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
+process.chdir(`./dist/${pkg.name}`)
+await $`bun publish --access public --tag ${Script.channel}`
+process.chdir(dir)
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
