@@ -20,7 +20,7 @@ function detectPlatformAndArch() {
       platform = "linux"
       break
     case "win32":
-      platform = "windows"
+      platform = "win32"
       break
     default:
       platform = os.platform()
@@ -50,7 +50,7 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "windows" ? "opencode.exe" : "opencode"
+  const binary = platform === "win32" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package
@@ -102,11 +102,38 @@ async function main() {
     if (os.platform() === "win32") {
       // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
       // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
-      if (process.env.npm_config_user_agent.startsWith("npm")) {
+      const userAgent = process.env.npm_config_user_agent || ""
+
+      if (userAgent.startsWith("npm")) {
         await regenerateWindowsCmdWrappers()
-      } else {
-        console.log("Windows detected but not npm, skipping postinstall")
+        return
       }
+
+      if (userAgent.startsWith("bun")) {
+        // For bun on Windows, copy the .exe directly
+        console.log("Windows + bun detected: Setting up binary")
+        const binaryPath = findBinary()
+        const binDir = path.join(__dirname, "bin")
+        const binScript = path.join(binDir, "opencode.exe")
+
+        // Ensure bin directory exists
+        if (!fs.existsSync(binDir)) {
+          fs.mkdirSync(binDir, { recursive: true })
+        }
+
+        // Remove existing binary if it exists
+        if (fs.existsSync(binScript)) {
+          fs.unlinkSync(binScript)
+        }
+
+        // Copy the binary
+        fs.copyFileSync(binaryPath, binScript)
+        console.log(`opencode binary installed: ${binScript}`)
+        return
+      }
+
+      // Unknown package manager on Windows
+      console.log("Windows detected but unknown package manager, skipping postinstall")
       return
     }
 
