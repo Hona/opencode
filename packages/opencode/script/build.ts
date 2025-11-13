@@ -88,7 +88,8 @@ await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parc
 for (const item of targets) {
   const name = [
     pkg.name,
-    item.os,
+    // changing to win32 flags npm for some reason
+    item.os === "win32" ? "windows" : item.os,
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
