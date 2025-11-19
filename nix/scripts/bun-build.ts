@@ -4,12 +4,16 @@ import fs from "fs"
 
 const version = "@VERSION@"
 const pkg = path.join(process.cwd(), "packages/opencode")
-const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"))
+const parser = path.join(pkg, "./node_modules/@opentui/core/lib/tree-sitter/parser.worker.js")
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
 
 if (!target) {
   throw new Error("BUN_COMPILE_TARGET not set")
+}
+
+if (!fs.existsSync(parser)) {
+  throw new Error(`Parser worker not found at: ${parser}`)
 }
 
 process.chdir(pkg)
@@ -46,6 +50,8 @@ const addAsset = async (p: string) => {
 
 removeTrackedAssets()
 
+const workerBunfsPath = "./" + path.relative(pkg, parser).split(path.sep).join("/")
+
 const result = await Bun.build({
   conditions: ["browser"],
   tsconfig: "./tsconfig.json",
@@ -54,7 +60,7 @@ const result = await Bun.build({
   entrypoints: ["./src/index.ts", parser, worker],
   define: {
     OPENCODE_VERSION: `'@VERSION@'`,
-    OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(pkg, parser).replace(/\\/g, "/"),
+    OTUI_TREE_SITTER_WORKER_PATH: `'${workerBunfsPath}'`,
     OPENCODE_CHANNEL: "'latest'",
   },
   compile: {

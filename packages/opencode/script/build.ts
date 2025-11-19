@@ -16,6 +16,7 @@ import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
+const skipInstall = process.argv.includes("--skip-install")
 
 const allTargets: {
   os: string
@@ -83,8 +84,10 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+if (!skipInstall) {
+  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+}
 for (const item of targets) {
   const name = [
     pkg.name,
@@ -99,8 +102,14 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const parserWorker = path.resolve(dir, "./node_modules/@opentui/core/lib/tree-sitter/parser.worker.js")
   const workerPath = "./src/cli/cmd/tui/worker.ts"
+
+  if (!fs.existsSync(parserWorker)) {
+    throw new Error(`Parser worker not found at: ${parserWorker}`)
+  }
+
+  const workerBunfsPath = "./" + path.relative(dir, parserWorker).split(path.sep).join("/")
 
   await Bun.build({
     conditions: ["browser"],
@@ -116,8 +125,8 @@ for (const item of targets) {
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
-      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker).replaceAll("\\", "/"),
-      OPENCODE_WORKER_PATH: workerPath,
+      OTUI_TREE_SITTER_WORKER_PATH: `'${workerBunfsPath}'`,
+      OPENCODE_WORKER_PATH: `'${workerPath}'`,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
     },
   })
