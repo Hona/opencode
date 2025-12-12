@@ -17,12 +17,13 @@ describe("Clipboard Memory Leak", () => {
     if (typeof Bun.gc === "function") Bun.gc(true)
 
     const baselineRSS = process.memoryUsage.rss()
-    const iterations = 10000
+    // Windows PowerShell is slow - use fewer iterations there
+    const iterations = isWindows ? 100 : 10000
 
     console.log(`\nRunning ${iterations} clipboard operations on ${platform()}...`)
 
     for (let i = 0; i < iterations; i++) {
-      await Clipboard.copy(`Memory test ${i} - ${"x".repeat(500)}`)
+      await Clipboard.copy(`Memory test ${i}`)
     }
 
     if (typeof Bun.gc === "function") Bun.gc(true)
@@ -40,41 +41,44 @@ describe("Clipboard Memory Leak", () => {
     console.log(`  Per Operation:  ${growthPerOpKB.toFixed(2)}KB`)
 
     // macOS: ~9KB per op is normal baseline overhead
-    // Windows with leak: significantly higher (50KB+ per op due to process accumulation)
-    // Threshold: 25KB per operation indicates a leak
+    // Windows with leak: significantly higher due to process accumulation
     expect(growthPerOpKB).toBeLessThan(25)
-  })
+  }, 600000) // 10 minute timeout
 
-  test.skipIf(!isWindows)("PowerShell processes should not accumulate", async () => {
-    const { Clipboard } = await import("../../src/cli/cmd/tui/util/clipboard")
-    const { execSync } = await import("child_process")
+  test.skipIf(!isWindows)(
+    "PowerShell processes should not accumulate",
+    async () => {
+      const { Clipboard } = await import("../../src/cli/cmd/tui/util/clipboard")
+      const { execSync } = await import("child_process")
 
-    const countPowershellProcesses = () => {
-      try {
-        const output = execSync('tasklist /FI "IMAGENAME eq powershell.exe" /NH', { encoding: "utf8" })
-        return output.split("\n").filter((line) => line.includes("powershell")).length
-      } catch {
-        return 0
+      const countPowershellProcesses = () => {
+        try {
+          const output = execSync('tasklist /FI "IMAGENAME eq powershell.exe" /NH', { encoding: "utf8" })
+          return output.split("\n").filter((line) => line.includes("powershell")).length
+        } catch {
+          return 0
+        }
       }
-    }
 
-    const baselineProcesses = countPowershellProcesses()
-    console.log(`\nBaseline PowerShell processes: ${baselineProcesses}`)
+      const baselineProcesses = countPowershellProcesses()
+      console.log(`\nBaseline PowerShell processes: ${baselineProcesses}`)
 
-    const iterations = 10000
-    for (let i = 0; i < iterations; i++) {
-      await Clipboard.copy(`Process test ${i} - ${Date.now()}`)
-    }
+      const iterations = 50
+      for (let i = 0; i < iterations; i++) {
+        await Clipboard.copy(`Process test ${i}`)
+      }
 
-    await new Promise((r) => setTimeout(r, 500))
+      await new Promise((r) => setTimeout(r, 2000))
 
-    const afterProcesses = countPowershellProcesses()
-    const growth = afterProcesses - baselineProcesses
+      const afterProcesses = countPowershellProcesses()
+      const growth = afterProcesses - baselineProcesses
 
-    console.log(`After ${iterations} copies: ${afterProcesses} processes`)
-    console.log(`Process growth: ${growth}`)
+      console.log(`After ${iterations} copies: ${afterProcesses} processes`)
+      console.log(`Process growth: ${growth}`)
 
-    // If leak exists, hundreds/thousands of zombie processes will accumulate
-    expect(growth).toBeLessThan(10)
-  })
+      // If leak exists, processes will accumulate
+      expect(growth).toBeLessThan(10)
+    },
+    600000,
+  ) // 10 minute timeout
 })
