@@ -26,8 +26,11 @@ describe("Clipboard Memory Leak", () => {
       await Clipboard.copy(`Memory test ${i}`)
     }
 
-    if (typeof Bun.gc === "function") Bun.gc(true)
-    await new Promise((r) => setTimeout(r, 1000))
+    // Aggressive GC - multiple passes with delays
+    for (let i = 0; i < 5; i++) {
+      if (typeof Bun.gc === "function") Bun.gc(true)
+      await new Promise((r) => setTimeout(r, 500))
+    }
 
     const finalRSS = process.memoryUsage.rss()
     const growthMB = (finalRSS - baselineRSS) / 1024 / 1024
