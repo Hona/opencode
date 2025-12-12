@@ -39,11 +39,10 @@ export const GrepTool = Tool.define("grep", {
     let buffer = ""
     const matches: Array<{
       path: string
-      modTime: number
       lineNum: number
       lineText: string
     }> = []
-    let hitCollectLimit = false
+    let truncated = false
 
     try {
       while (true) {
@@ -57,50 +56,35 @@ export const GrepTool = Tool.define("grep", {
         for (const line of lines) {
           if (!line) continue
           if (matches.length >= MATCH_LIMIT) {
-            hitCollectLimit = true
+            truncated = true
             break
           }
 
           const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
           if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
-          const lineNum = parseInt(lineNumStr, 10)
-          const lineText = lineTextParts.join("|")
-
-          const file = Bun.file(filePath)
-          const stats = await file.stat().catch(() => null)
-          if (!stats) continue
-
           matches.push({
             path: filePath,
-            modTime: stats.mtime.getTime(),
-            lineNum,
-            lineText,
+            lineNum: parseInt(lineNumStr, 10),
+            lineText: lineTextParts.join("|"),
           })
         }
 
-        if (hitCollectLimit) break
+        if (truncated) break
       }
 
-      if (!hitCollectLimit && buffer) {
+      if (!truncated && buffer) {
         const [filePath, lineNumStr, ...lineTextParts] = buffer.split("|")
         if (filePath && lineNumStr && lineTextParts.length > 0) {
-          const lineNum = parseInt(lineNumStr, 10)
-          const lineText = lineTextParts.join("|")
-          const file = Bun.file(filePath)
-          const stats = await file.stat().catch(() => null)
-          if (stats) {
-            matches.push({
-              path: filePath,
-              modTime: stats.mtime.getTime(),
-              lineNum,
-              lineText,
-            })
-          }
+          matches.push({
+            path: filePath,
+            lineNum: parseInt(lineNumStr, 10),
+            lineText: lineTextParts.join("|"),
+          })
         }
       }
     } finally {
-      if (hitCollectLimit) proc.kill()
+      if (truncated) proc.kill()
       reader.releaseLock()
     }
 
@@ -115,16 +99,11 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    if (exitCode !== 0 && exitCode !== 1 && !hitCollectLimit) {
+    if (exitCode !== 0 && exitCode !== 1 && !truncated) {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
-    matches.sort((a, b) => b.modTime - a.modTime)
-
-    const truncated = matches.length > MATCH_LIMIT
-    const finalMatches = truncated ? matches.slice(0, MATCH_LIMIT) : matches
-
-    if (finalMatches.length === 0) {
+    if (matches.length === 0) {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
@@ -132,10 +111,10 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const outputLines = [`Found ${matches.length} matches`]
 
     let currentFile = ""
-    for (const match of finalMatches) {
+    for (const match of matches) {
       if (currentFile !== match.path) {
         if (currentFile !== "") {
           outputLines.push("")
@@ -148,7 +127,7 @@ export const GrepTool = Tool.define("grep", {
       outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
     }
 
-    if (truncated || hitCollectLimit) {
+    if (truncated) {
       outputLines.push("")
       outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
     }
@@ -156,8 +135,8 @@ export const GrepTool = Tool.define("grep", {
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
-        truncated: truncated || hitCollectLimit,
+        matches: matches.length,
+        truncated,
       },
       output: outputLines.join("\n"),
     }
