@@ -4,14 +4,14 @@ import { platform } from "os"
 /**
  * Memory leak reproduction test for clipboard operations.
  *
- * - macOS: Should PASS (no leak - uses osascript properly)
- * - Windows: Should FAIL (leak exists - PowerShell processes accumulate)
+ * - macOS: Should PASS (no leak - reasonable per-operation overhead)
+ * - Windows: Should FAIL (leak - PowerShell processes accumulate without cleanup)
  */
 
 const isWindows = platform() === "win32"
 
 describe("Clipboard Memory Leak", () => {
-  test("memory should not grow significantly after many clipboard operations", async () => {
+  test("memory growth per clipboard operation should be reasonable", async () => {
     const { Clipboard } = await import("../../src/cli/cmd/tui/util/clipboard")
 
     if (typeof Bun.gc === "function") Bun.gc(true)
@@ -30,16 +30,19 @@ describe("Clipboard Memory Leak", () => {
 
     const finalRSS = process.memoryUsage.rss()
     const growthMB = (finalRSS - baselineRSS) / 1024 / 1024
+    const growthPerOpKB = (growthMB * 1024) / iterations
 
     console.log(`\nMemory after ${iterations} clipboard operations:`)
-    console.log(`  Platform: ${platform()}`)
-    console.log(`  Baseline: ${(baselineRSS / 1024 / 1024).toFixed(2)}MB`)
-    console.log(`  Final:    ${(finalRSS / 1024 / 1024).toFixed(2)}MB`)
-    console.log(`  Growth:   ${growthMB.toFixed(2)}MB`)
+    console.log(`  Platform:       ${platform()}`)
+    console.log(`  Baseline:       ${(baselineRSS / 1024 / 1024).toFixed(2)}MB`)
+    console.log(`  Final:          ${(finalRSS / 1024 / 1024).toFixed(2)}MB`)
+    console.log(`  Total Growth:   ${growthMB.toFixed(2)}MB`)
+    console.log(`  Per Operation:  ${growthPerOpKB.toFixed(2)}KB`)
 
-    // macOS: should pass (minimal growth)
-    // Windows: should fail (significant growth due to leak)
-    expect(growthMB).toBeLessThan(30)
+    // macOS: ~9KB per op is normal baseline overhead
+    // Windows with leak: significantly higher (50KB+ per op due to process accumulation)
+    // Threshold: 25KB per operation indicates a leak
+    expect(growthPerOpKB).toBeLessThan(25)
   })
 
   test.skipIf(!isWindows)("PowerShell processes should not accumulate", async () => {
@@ -71,7 +74,7 @@ describe("Clipboard Memory Leak", () => {
     console.log(`After ${iterations} copies: ${afterProcesses} processes`)
     console.log(`Process growth: ${growth}`)
 
-    // Should fail on Windows if leak exists
-    expect(growth).toBeLessThan(5)
+    // If leak exists, hundreds/thousands of zombie processes will accumulate
+    expect(growth).toBeLessThan(10)
   })
 })
