@@ -64,6 +64,7 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import { Filesystem } from "@/util/filesystem"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1415,14 +1416,8 @@ ToolRegistry.register<typeof WriteTool>({
     })
 
     const diagnostics = createMemo(() => {
-      const filePath = props.input.filePath ?? ""
-      const diags = props.metadata.diagnostics ?? {}
-      // Case-insensitive lookup on Windows
-      if (process.platform === "win32") {
-        const key = Object.keys(diags).find((k) => k.toLowerCase() === filePath.toLowerCase())
-        return key ? diags[key] : []
-      }
-      return diags[filePath] ?? []
+      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+      return props.metadata.diagnostics?.[filePath] ?? []
     })
 
     return (
@@ -1596,16 +1591,8 @@ ToolRegistry.register<typeof EditTool>({
     const diffContent = createMemo(() => props.metadata.diff ?? props.permission["diff"])
 
     const diagnostics = createMemo(() => {
-      const filePath = props.input.filePath ?? ""
-      const diags = props.metadata.diagnostics ?? {}
-      // Case-insensitive lookup on Windows
-      let arr: any[]
-      if (process.platform === "win32") {
-        const key = Object.keys(diags).find((k) => k.toLowerCase() === filePath.toLowerCase())
-        arr = key ? diags[key] : []
-      } else {
-        arr = diags[filePath] ?? []
-      }
+      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+      const arr = props.metadata.diagnostics?.[filePath] ?? []
       return arr.filter((x) => x.severity === 1).slice(0, 3)
     })
 
