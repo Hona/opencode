@@ -50,6 +50,7 @@ export namespace LSPClient {
       const path = fileURLToPath(params.uri)
       l.info("textDocument/publishDiagnostics", {
         path,
+        count: params.diagnostics.length,
       })
       const exists = diagnostics.has(path)
       diagnostics.set(path, params.diagnostics)
@@ -187,7 +188,11 @@ export namespace LSPClient {
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
+              const pathsMatch =
+                process.platform === "win32"
+                  ? event.properties.path.toLowerCase() === input.path.toLowerCase()
+                  : event.properties.path === input.path
+              if (pathsMatch && event.properties.serverID === result.serverID) {
                 log.info("got diagnostics", input)
                 unsub?.()
                 resolve()

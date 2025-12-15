@@ -142,7 +142,9 @@ export const EditTool = Tool.define("edit", {
     const diagnostics = await LSP.diagnostics()
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
-      if (file === filePath) {
+      const fileMatches =
+        process.platform === "win32" ? file.toLowerCase() === filePath.toLowerCase() : file === filePath
+      if (fileMatches) {
         const errors = issues.filter((item) => item.severity === 1)
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =

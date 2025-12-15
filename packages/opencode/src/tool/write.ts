@@ -87,7 +87,9 @@ export const WriteTool = Tool.define("write", {
       const limited = sorted.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         issues.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${issues.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      if (file === filepath) {
+      const fileMatches =
+        process.platform === "win32" ? file.toLowerCase() === filepath.toLowerCase() : file === filepath
+      if (fileMatches) {
         output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
         continue
       }
