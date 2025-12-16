@@ -188,13 +188,18 @@ export namespace LSPClient {
         )
         log.info("waiting for diagnostics", { path: normalizedPath })
         let unsub: () => void
+        let debounceTimer: ReturnType<typeof setTimeout> | undefined
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
               if (event.properties.path === normalizedPath && event.properties.serverID === result.serverID) {
-                log.info("got diagnostics", { path: normalizedPath })
-                unsub?.()
-                resolve()
+                // Debounce to allow LSP to send follow-up diagnostics (e.g., semantic after syntax)
+                if (debounceTimer) clearTimeout(debounceTimer)
+                debounceTimer = setTimeout(() => {
+                  log.info("got diagnostics", { path: normalizedPath })
+                  unsub?.()
+                  resolve()
+                }, 150)
               }
             })
           }),
@@ -202,6 +207,7 @@ export namespace LSPClient {
         )
           .catch(() => {})
           .finally(() => {
+            if (debounceTimer) clearTimeout(debounceTimer)
             unsub?.()
           })
       },
