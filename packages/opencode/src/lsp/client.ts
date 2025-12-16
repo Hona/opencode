@@ -13,6 +13,8 @@ import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
+const DIAGNOSTICS_DEBOUNCE_MS = 150
+
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
 
@@ -199,7 +201,7 @@ export namespace LSPClient {
                   log.info("got diagnostics", { path: normalizedPath })
                   unsub?.()
                   resolve()
-                }, 150)
+                }, DIAGNOSTICS_DEBOUNCE_MS)
               }
             })
           }),
