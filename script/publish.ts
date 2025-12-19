@@ -6,6 +6,53 @@ import { Script } from "@opencode-ai/script"
 
 const notes = [] as string[]
 
+const team = [
+  "actions-user",
+  "opencode",
+  "rekram1-node",
+  "thdxr",
+  "kommander",
+  "jayair",
+  "fwang",
+  "adamdotdevin",
+  "iamdavidhill",
+  "opencode-agent[bot]",
+]
+
+const PACKAGE_PATHS = [
+  "packages/opencode",
+  "packages/desktop",
+  "packages/tauri",
+  "packages/sdk",
+  "packages/plugin",
+  "packages/extensions/zed",
+  "packages/ui",
+  "packages/docs",
+  "sdks/vscode",
+  "github",
+  "nix",
+  "infra",
+  "script",
+]
+
+async function getAreasForCommit(hash: string): Promise<string[]> {
+  const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
+  const areas = new Set<string>()
+
+  for (const file of files.split("\n").filter(Boolean)) {
+    for (const pkg of PACKAGE_PATHS) {
+      if (file.startsWith(pkg + "/") || file === pkg) {
+        // Simplify path for display: "packages/opencode" -> "opencode", "github" -> "github"
+        const area = pkg.replace("packages/", "").replace("sdks/", "")
+        areas.add(area)
+        break
+      }
+    }
+  }
+
+  return [...areas]
+}
+
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
@@ -16,13 +63,21 @@ if (!Script.preview) {
     })
     .then((data: any) => data.version)
 
-  const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
+  // Get all commits, not filtered by path - we'll categorize everything
+  const log = await $`git log v${previous}..HEAD --oneline --format="%h %s"`.text()
 
-  const commits = log
-    .split("\n")
-    .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
-    .join("\n")
+  const commitLines = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
+
+  // Add area info to each commit
+  const commitsWithAreas: string[] = []
+  for (const line of commitLines) {
+    const hash = line.split(" ")[0]
+    if (!hash) continue
+    const areas = await getAreasForCommit(hash)
+    const areaStr = areas.length > 0 ? ` [areas: ${areas.join(", ")}]` : " [areas: other]"
+    commitsWithAreas.push(`${line}${areaStr}`)
+  }
+  const commits = commitsWithAreas.join("\n")
 
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
@@ -35,37 +90,62 @@ if (!Script.preview) {
       body: {
         model: {
           providerID: "opencode",
-          modelID: "claude-haiku-4-5",
+          modelID: "gemini-3-flash",
         },
         parts: [
           {
             type: "text",
             text: `
-          Analyze these commits and generate a changelog of all notable user facing changes.
+Analyze these commits and generate a changelog of all notable user facing changes, grouped by area.
 
-          Commits between ${previous} and HEAD:
-          ${commits}
+Each commit below includes [areas: ...] showing which areas of the codebase were modified. Use this to categorize changes correctly.
 
-          - Do NOT make general statements about "improvements", be very specific about what was changed.
-          - Do NOT include any information about code changes if they do not affect the user facing changes.
-          - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
-          - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG)
-          - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
+Commits between ${previous} and HEAD:
+${commits}
 
-          IMPORTANT: ONLY return a bulleted list of changes, do not include any other information. Do not include a preamble like "Based on my analysis..."
+Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
+- **TUI**: Changes to "opencode" area (the terminal/CLI interface)
+- **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
+- **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
+- **Extensions**: Changes to "extensions/zed", "vscode", or "github" areas (editor extensions and GitHub Action)
+- **UI**: Changes to "ui" area only (shared UI components)
+- **Docs**: Documentation changes (commits with "docs:" prefix or changes to documentation files)
+- **Other**: Any changes that don't fit the above categories (e.g., infrastructure, nix, root config files)
 
-          <example>
-          - Added ability to @ mention agents
-          - Fixed a bug where the TUI would render improperly on some terminals
-          </example>
-          `,
+Rules:
+- Use the [areas: ...] tags to determine the correct category. If a commit touches multiple areas, put it in the most relevant user-facing category.
+- INCLUDE all commits that could affect users, even if the commit message is vague (like "fix: id" or "tweak: more retry cases"). When the message is vague, write a brief user-facing description based on the commit prefix and package context.
+- Only EXCLUDE "release:" commits. Include everything else - refactors, tweaks, and fixes can all impact users.
+- Do NOT make general statements about "improvements", be very specific about what was changed.
+- For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
+- DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG).
+- If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
+- Omit categories that have no changes.
+- For community contributors, extract their GitHub username from the PR number in the commit message (e.g. "(#1234)") by looking at the author. Include it at the end like: "- Fixed bug X (@username)"
+- The team members are: ${team.join(", ")}. Do NOT add @ mentions for team members.
+
+IMPORTANT: ONLY return the grouped changelog, do not include any other information. Do not include a preamble like "Based on my analysis..." or "Here is the changelog..."
+
+<example>
+## TUI
+- Added ability to @ mention agents
+- Increased retry attempts for failed requests
+- Fixed a bug where the TUI would render improperly on some terminals (@communityuser)
+
+## Desktop
+- Improved startup performance on Windows
+</example>
+`,
           },
         ],
       },
     })
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
   for (const line of raw?.split("\n") ?? []) {
-    if (line.startsWith("- ")) {
+    if (line.startsWith("## ")) {
+      if (notes.length > 0) notes.push("") // blank line before new section
+      notes.push(line)
+    } else if (line.startsWith("- ")) {
       notes.push(line)
     }
   }
@@ -75,18 +155,6 @@ if (!Script.preview) {
   opencode.server.close()
 
   // Get contributors
-  const team = [
-    "actions-user",
-    "opencode",
-    "rekram1-node",
-    "thdxr",
-    "kommander",
-    "jayair",
-    "fwang",
-    "adamdotdevin",
-    "iamdavidhill",
-    "opencode-agent[bot]",
-  ]
   const compare =
     await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
   const contributors = new Map<string, string[]>()
@@ -105,11 +173,8 @@ if (!Script.preview) {
   if (contributors.size > 0) {
     notes.push("")
     notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
-    for (const [username, userCommits] of contributors) {
-      notes.push(`- @${username}:`)
-      for (const commit of userCommits) {
-        notes.push(`  - ${commit}`)
-      }
+    for (const username of contributors.keys()) {
+      notes.push(`- @${username}`)
     }
   }
 }
