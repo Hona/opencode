@@ -42,7 +42,6 @@ async function getAreasForCommit(hash: string): Promise<string[]> {
   for (const file of files.split("\n").filter(Boolean)) {
     for (const pkg of PACKAGE_PATHS) {
       if (file.startsWith(pkg + "/") || file === pkg) {
-        // Simplify path for display: "packages/opencode" -> "opencode", "github" -> "github"
         const area = pkg.replace("packages/", "").replace("sdks/", "")
         areas.add(area)
         break
@@ -63,20 +62,19 @@ if (!Script.preview) {
     })
     .then((data: any) => data.version)
 
-  // Get all commits, not filtered by path - we'll categorize everything
   const log = await $`git log v${previous}..HEAD --oneline --format="%h %s"`.text()
 
-  const commitLines = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
+  const commitLines = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:|release:)/i))
 
-  // Add area info to each commit
-  const commitsWithAreas: string[] = []
-  for (const line of commitLines) {
-    const hash = line.split(" ")[0]
-    if (!hash) continue
-    const areas = await getAreasForCommit(hash)
-    const areaStr = areas.length > 0 ? ` [areas: ${areas.join(", ")}]` : " [areas: other]"
-    commitsWithAreas.push(`${line}${areaStr}`)
-  }
+  const commitsWithAreas = await Promise.all(
+    commitLines.map(async (line) => {
+      const hash = line.split(" ")[0]
+      if (!hash) return null
+      const areas = await getAreasForCommit(hash)
+      const areaStr = areas.length > 0 ? ` [areas: ${areas.join(", ")}]` : " [areas: other]"
+      return `${line}${areaStr}`
+    }),
+  ).then((results) => results.filter(Boolean) as string[])
   const commits = commitsWithAreas.join("\n")
 
   const opencode = await createOpencode()
@@ -114,8 +112,8 @@ Group the changes into these categories based on the [areas: ...] tags (omit any
 
 Rules:
 - Use the [areas: ...] tags to determine the correct category. If a commit touches multiple areas, put it in the most relevant user-facing category.
-- INCLUDE all commits that could affect users, even if the commit message is vague (like "fix: id" or "tweak: more retry cases"). When the message is vague, write a brief user-facing description based on the commit prefix and package context.
-- Only EXCLUDE "release:" commits. Include everything else - refactors, tweaks, and fixes can all impact users.
+- INCLUDE all commits provided. Even if the commit message is vague (like "fix: id" or "tweak: more retry cases"), write a brief user-facing description based on the commit prefix and area context.
+- Include everything - refactors, tweaks, and fixes can all impact users.
 - Do NOT make general statements about "improvements", be very specific about what was changed.
 - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
 - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG).
@@ -128,12 +126,28 @@ IMPORTANT: ONLY return the grouped changelog, do not include any other informati
 
 <example>
 ## TUI
-- Added ability to @ mention agents
+- Added experimental support for the Ty language server (@OpeOginni)
+- Added /fork slash command for keyboard-friendly session forking (@ariane-emory)
 - Increased retry attempts for failed requests
-- Fixed a bug where the TUI would render improperly on some terminals (@communityuser)
+- Fixed model validation before executing slash commands (@devxoul)
 
 ## Desktop
-- Improved startup performance on Windows
+- Added shell mode support
+- Fixed prompt history navigation and optimistic prompt duplication
+- Disabled pinch-to-zoom on Linux (@Brendonovich)
+
+## Extensions
+- Added OIDC_BASE_URL support for custom GitHub App installations (@elithrar)
+
+## UI
+- Fixed markdown styling issues
+- Fixed checkbox rendering in Safari
+
+## Docs
+- Fixed typos in documentation (@byigitt)
+
+## Other
+- Updated Nix flake.lock and dependency hashes
 </example>
 `,
           },
@@ -143,7 +157,7 @@ IMPORTANT: ONLY return the grouped changelog, do not include any other informati
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
   for (const line of raw?.split("\n") ?? []) {
     if (line.startsWith("## ")) {
-      if (notes.length > 0) notes.push("") // blank line before new section
+      if (notes.length > 0) notes.push("")
       notes.push(line)
     } else if (line.startsWith("- ")) {
       notes.push(line)
