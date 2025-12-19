@@ -185,6 +185,8 @@ export async function generateChangelog(previous: string, current: string): Prom
 
   const commits = commitsWithMeta.join("\n")
 
+  if (!commits.trim()) {
+    console.error("No commits found to generate changelog")
   }
 
   // Generate changelog via LLM
