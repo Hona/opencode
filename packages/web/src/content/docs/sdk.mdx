@@ -64,7 +64,7 @@ const opencode = await createOpencode({
 
 console.log(`Server running at ${opencode.server.url}`)
 
-await opencode.server.close()
+opencode.server.close()
 ```
 
 ## Client only

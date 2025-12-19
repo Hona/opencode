@@ -200,7 +200,7 @@ export async function generateChangelog(previous: string, current: string): Prom
       })
       .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
   } finally {
-    await opencode.server.close()
+    opencode.server.close()
   }
 
   const notes = parseChangelog(raw ?? "")
