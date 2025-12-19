@@ -186,7 +186,8 @@ export async function generateChangelog(previous: string, current: string): Prom
   const commits = commitsWithMeta.join("\n")
 
   // Generate changelog via LLM
-  const opencode = await createOpencode()
+  // different port to not conflict with dev running opencode
+  const opencode = await createOpencode({ port: 8192 })
   let raw: string | undefined
   try {
     const session = await opencode.client.session.create()
