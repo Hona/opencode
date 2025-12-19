@@ -82,7 +82,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   return {
     url,
     close() {
-      proc.kill("SIGKILL")
+      proc.kill()
     },
   }
 }
@@ -114,7 +114,7 @@ export function createOpencodeTui(options?: TuiOptions) {
 
   return {
     close() {
-      proc.kill("SIGKILL")
+      proc.kill()
     },
   }
 }
