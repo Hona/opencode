@@ -82,7 +82,14 @@ export async function createOpencodeServer(options?: ServerOptions) {
   return {
     url,
     close() {
-      proc.kill()
+      return new Promise<void>((resolve) => {
+        if (proc.exitCode !== null) {
+          resolve()
+          return
+        }
+        proc.on("exit", () => resolve())
+        proc.kill()
+      })
     },
   }
 }
@@ -114,7 +121,14 @@ export function createOpencodeTui(options?: TuiOptions) {
 
   return {
     close() {
-      proc.kill()
+      return new Promise<void>((resolve) => {
+        if (proc.exitCode !== null) {
+          resolve()
+          return
+        }
+        proc.on("exit", () => resolve())
+        proc.kill()
+      })
     },
   }
 }
