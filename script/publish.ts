@@ -71,7 +71,7 @@ if (!Script.preview) {
   for (const rawLine of diffLog.split("\n")) {
     const line = rawLine.trim()
     if (!line) continue
-    if (/^[0-9a-f]{7,40}$/i.test(line)) {
+    if (/^[0-9a-f]{7}$/i.test(line)) {
       currentHash = line
       if (!areasByHash.has(currentHash)) areasByHash.set(currentHash, new Set())
       continue
