@@ -23,23 +23,15 @@ function getAreaFromPath(file: string): string {
   if (file.startsWith("packages/")) {
     const parts = file.replace("packages/", "").split("/")
     if (parts[0] === "extensions" && parts[1]) return `extensions/${parts[1]}`
-    return parts[0] ?? "other"
+    return parts[0] || "other"
   }
   if (file.startsWith("sdks/")) {
-    return file.replace("sdks/", "").split("/")[0] ?? "other"
+    const name = file.replace("sdks/", "").split("/")[0] || "other"
+    return `extensions/${name}`
   }
   const rootDir = file.split("/")[0]
   if (rootDir && !rootDir.includes(".")) return rootDir
   return "other"
-}
-
-async function getAreasForCommit(hash: string): Promise<string[]> {
-  const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
-  const areas = new Set<string>()
-  for (const file of files.split("\n").filter(Boolean)) {
-    areas.add(getAreaFromPath(file))
-  }
-  return [...areas]
 }
 
 console.log("=== publishing ===\n")
@@ -52,20 +44,59 @@ if (!Script.preview) {
     })
     .then((data: any) => data.version)
 
-  const log = await $`git log v${previous}..HEAD --oneline --format="%h %s"`.text()
+  // Fetch commit authors from GitHub API (hash -> login)
+  const compare =
+    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
+  const authorByHash = new Map<string, string>()
+  const contributors = new Map<string, string[]>()
 
+  for (const line of compare.split("\n").filter(Boolean)) {
+    const { sha, login, message } = JSON.parse(line) as { sha: string; login: string | null; message: string }
+    const shortHash = sha.slice(0, 7)
+    if (login) authorByHash.set(shortHash, login)
+
+    const title = message.split("\n")[0] || ""
+    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
+    if (login && !team.includes(login)) {
+      if (!contributors.has(login)) contributors.set(login, [])
+      contributors.get(login)?.push(title)
+    }
+  }
+
+  // Batch-fetch files for all commits (hash -> areas)
+  const diffLog = await $`git log v${previous}..HEAD --name-only --format="%h"`.text()
+  const areasByHash = new Map<string, Set<string>>()
+  let currentHash: string | null = null
+
+  for (const rawLine of diffLog.split("\n")) {
+    const line = rawLine.trim()
+    if (!line) continue
+    if (/^[0-9a-f]{7,40}$/i.test(line)) {
+      currentHash = line
+      if (!areasByHash.has(currentHash)) areasByHash.set(currentHash, new Set())
+      continue
+    }
+    if (currentHash) {
+      areasByHash.get(currentHash)!.add(getAreaFromPath(line))
+    }
+  }
+
+  // Build commit lines with author and areas
+  const log = await $`git log v${previous}..HEAD --oneline --format="%h %s"`.text()
   const commitLines = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:|release:)/i))
 
-  const commitsWithAreas = await Promise.all(
-    commitLines.map(async (line) => {
+  const commitsWithMeta = commitLines
+    .map((line) => {
       const hash = line.split(" ")[0]
       if (!hash) return null
-      const areas = await getAreasForCommit(hash)
-      const areaStr = areas.length > 0 ? ` [areas: ${areas.join(", ")}]` : " [areas: other]"
-      return `${line}${areaStr}`
-    }),
-  ).then((results) => results.filter(Boolean) as string[])
-  const commits = commitsWithAreas.join("\n")
+      const author = authorByHash.get(hash)
+      const authorStr = author ? ` [author: ${author}]` : ""
+      const areas = areasByHash.get(hash)
+      const areaStr = areas && areas.size > 0 ? ` [areas: ${[...areas].join(", ")}]` : " [areas: other]"
+      return `${line}${authorStr}${areaStr}`
+    })
+    .filter(Boolean) as string[]
+  const commits = commitsWithMeta.join("\n")
 
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
@@ -86,7 +117,9 @@ if (!Script.preview) {
             text: `
 Analyze these commits and generate a changelog of all notable user facing changes, grouped by area.
 
-Each commit below includes [areas: ...] showing which areas of the codebase were modified. Use this to categorize changes correctly.
+Each commit below includes:
+- [author: username] showing the GitHub username of the commit author
+- [areas: ...] showing which areas of the codebase were modified
 
 Commits between ${previous} and HEAD:
 ${commits}
@@ -95,21 +128,23 @@ Group the changes into these categories based on the [areas: ...] tags (omit any
 - **TUI**: Changes to "opencode" area (the terminal/CLI interface)
 - **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
 - **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
-- **Extensions**: Changes to "extensions/zed", "vscode", or "github" areas (editor extensions and GitHub Action)
-- **UI**: Changes to "ui" area only (shared UI components)
-- **Docs**: Documentation changes (commits with "docs:" prefix or changes to documentation files)
-- **Other**: Any changes that don't fit the above categories (e.g., infrastructure, nix, root config files)
+- **Extensions**: Changes to "extensions/zed", "extensions/vscode", or "github" areas (editor extensions and GitHub Action)
+- **Other**: Any user-facing changes that don't fit the above categories
+
+Excluded areas (omit these entirely unless they contain user-facing changes like refactors that may affect behavior):
+- "nix", "infra", "script" - CI/build infrastructure
+- "ui", "docs", "web", "console", "enterprise", "function", "util", "identity", "slack" - internal packages
 
 Rules:
 - Use the [areas: ...] tags to determine the correct category. If a commit touches multiple areas, put it in the most relevant user-facing category.
-- INCLUDE all commits provided. Even if the commit message is vague (like "fix: id" or "tweak: more retry cases"), write a brief user-facing description based on the commit prefix and area context.
-- Include everything - refactors, tweaks, and fixes can all impact users.
+- ONLY include commits that have user-facing impact. Omit purely internal changes (CI, build scripts, internal tooling).
+- However, DO include refactors that touch user-facing code - refactors can introduce bugs or change behavior.
 - Do NOT make general statements about "improvements", be very specific about what was changed.
 - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
 - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG).
 - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
 - Omit categories that have no changes.
-- For community contributors, extract their GitHub username from the PR number in the commit message (e.g. "(#1234)") by looking at the author. Include it at the end like: "- Fixed bug X (@username)"
+- For community contributors: if the [author: username] is NOT in the team list, add (@username) at the end of the changelog entry. This is REQUIRED for all non-team contributors.
 - The team members are: ${team.join(", ")}. Do NOT add @ mentions for team members.
 
 IMPORTANT: ONLY return the grouped changelog, do not include any other information. Do not include a preamble like "Based on my analysis..." or "Here is the changelog..."
@@ -128,16 +163,6 @@ IMPORTANT: ONLY return the grouped changelog, do not include any other informati
 
 ## Extensions
 - Added OIDC_BASE_URL support for custom GitHub App installations (@elithrar)
-
-## UI
-- Fixed markdown styling issues
-- Fixed checkbox rendering in Safari
-
-## Docs
-- Fixed typos in documentation (@byigitt)
-
-## Other
-- Updated Nix flake.lock and dependency hashes
 </example>
 `,
           },
@@ -157,22 +182,6 @@ IMPORTANT: ONLY return the grouped changelog, do not include any other informati
   console.log(notes.join("\n"))
   console.log("-----------------------------")
   opencode.server.close()
-
-  // Get contributors
-  const compare =
-    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
-  const contributors = new Map<string, string[]>()
-
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
-    const title = message.split("\n")[0] ?? ""
-    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
-
-    if (login && !team.includes(login)) {
-      if (!contributors.has(login)) contributors.set(login, [])
-      contributors.get(login)?.push(title)
-    }
-  }
 
   if (contributors.size > 0) {
     notes.push("")
