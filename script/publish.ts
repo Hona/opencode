@@ -19,36 +19,26 @@ const team = [
   "opencode-agent[bot]",
 ]
 
-const PACKAGE_PATHS = [
-  "packages/opencode",
-  "packages/desktop",
-  "packages/tauri",
-  "packages/sdk",
-  "packages/plugin",
-  "packages/extensions/zed",
-  "packages/ui",
-  "packages/docs",
-  "sdks/vscode",
-  "github",
-  "nix",
-  "infra",
-  "script",
-]
+function getAreaFromPath(file: string): string {
+  if (file.startsWith("packages/")) {
+    const parts = file.replace("packages/", "").split("/")
+    if (parts[0] === "extensions" && parts[1]) return `extensions/${parts[1]}`
+    return parts[0] ?? "other"
+  }
+  if (file.startsWith("sdks/")) {
+    return file.replace("sdks/", "").split("/")[0] ?? "other"
+  }
+  const rootDir = file.split("/")[0]
+  if (rootDir && !rootDir.includes(".")) return rootDir
+  return "other"
+}
 
 async function getAreasForCommit(hash: string): Promise<string[]> {
   const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
   const areas = new Set<string>()
-
   for (const file of files.split("\n").filter(Boolean)) {
-    for (const pkg of PACKAGE_PATHS) {
-      if (file.startsWith(pkg + "/") || file === pkg) {
-        const area = pkg.replace("packages/", "").replace("sdks/", "")
-        areas.add(area)
-        break
-      }
-    }
+    areas.add(getAreaFromPath(file))
   }
-
   return [...areas]
 }
 
