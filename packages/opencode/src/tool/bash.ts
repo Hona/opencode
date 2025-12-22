@@ -195,7 +195,14 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const proc = spawn(params.command, {
+      // On Windows with bash shell (e.g., Git Bash), escape $ to prevent variable expansion
+      // This ensures commands like `pwsh.exe -Command "... $_ ..."` work correctly
+      const command =
+        process.platform === "win32" && shell.toLowerCase().endsWith("bash.exe")
+          ? params.command.replace(/\$/g, "\\$")
+          : params.command
+
+      const proc = spawn(command, {
         shell,
         cwd,
         env: {

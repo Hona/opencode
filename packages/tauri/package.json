@@ -27,6 +27,7 @@
     "solid-js": "catalog:"
   },
   "devDependencies": {
+    "@opencode-ai/util": "workspace:*",
     "@actions/artifact": "4.0.0",
     "@tauri-apps/cli": "^2",
     "@types/bun": "catalog:",

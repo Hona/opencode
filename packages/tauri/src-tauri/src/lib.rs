@@ -103,16 +103,26 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
         .expect("Failed to resolve app local data dir");
 
     #[cfg(target_os = "windows")]
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("opencode-cli")
-        .unwrap()
-        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-        .env("OPENCODE_CLIENT", "desktop")
-        .env("XDG_STATE_HOME", &state_dir)
-        .args(["serve", &format!("--port={port}")])
-        .spawn()
-        .expect("Failed to spawn opencode");
+    let (mut rx, child) = {
+        let sidecar_dir = tauri::utils::platform::current_exe()
+            .expect("Failed to get current exe")
+            .parent()
+            .expect("Failed to get parent dir")
+            .to_path_buf();
+        let pty_lib_path = sidecar_dir.join("rust_pty.dll");
+        // Strip the \\?\ prefix that Windows adds for extended-length paths
+        let pty_lib_str = pty_lib_path.to_string_lossy().to_string();
+        let pty_lib_str = pty_lib_str.strip_prefix(r"\\?\").unwrap_or(&pty_lib_str).to_string();
+        app.shell()
+            .sidecar("opencode-cli")
+            .unwrap()
+            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_CLIENT", "desktop")
+            .env("BUN_PTY_LIB", pty_lib_str)
+            .args(["serve", &format!("--port={port}")])
+            .spawn()
+            .expect("Failed to spawn opencode")
+    };
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {

@@ -10,19 +10,21 @@ export namespace Lock {
   >()
 
   function get(key: string) {
-    if (!locks.has(key)) {
-      locks.set(key, {
+    const normalized = key.replaceAll("\\", "/")
+    if (!locks.has(normalized)) {
+      locks.set(normalized, {
         readers: 0,
         writer: false,
         waitingReaders: [],
         waitingWriters: [],
       })
     }
-    return locks.get(key)!
+    return locks.get(normalized)!
   }
 
   function process(key: string) {
-    const lock = locks.get(key)
+    const normalized = key.replaceAll("\\", "/")
+    const lock = locks.get(normalized)
     if (!lock || lock.writer || lock.readers > 0) return
 
     // Prioritize writers to prevent starvation
@@ -40,7 +42,7 @@ export namespace Lock {
 
     // Clean up empty locks
     if (lock.readers === 0 && !lock.writer && lock.waitingReaders.length === 0 && lock.waitingWriters.length === 0) {
-      locks.delete(key)
+      locks.delete(normalized)
     }
   }
 

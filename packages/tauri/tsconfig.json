@@ -16,5 +16,5 @@
     "outDir": "node_modules/.ts-dist"
   },
   "references": [{ "path": "../desktop" }],
-  "include": ["src"]
+  "include": ["src", "scripts"]
 }

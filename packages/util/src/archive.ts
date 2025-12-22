@@ -13,4 +13,9 @@ export namespace Archive {
       await $`unzip -o -q ${zipPath} -d ${destDir}`.quiet()
     }
   }
+
+  export async function extractTar(tarPath: string, destDir: string) {
+    // tar is usually available on modern Windows 10+ and Linux/macOS
+    await $`tar -xf ${tarPath} -C ${destDir}`.quiet()
+  }
 }

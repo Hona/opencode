@@ -836,7 +836,9 @@ export namespace Config {
         if (provider && model) result.model = `${provider}/${model}`
         result["$schema"] = "https://opencode.ai/config.json"
         result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+        const configFile = path.join(Global.Path.config, "config.json")
+        await Bun.write(configFile + ".tmp", JSON.stringify(result, null, 2))
+        await fs.rename(configFile + ".tmp", configFile)
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
       .catch(() => {})
@@ -926,7 +928,9 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
+        const temp = configFilepath + ".tmp"
+        await Bun.write(temp, JSON.stringify(parsed.data, null, 2))
+        await fs.rename(temp, configFilepath)
       }
       const data = parsed.data
       if (data.plugin) {
@@ -978,7 +982,9 @@ export namespace Config {
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    const temp = filepath + ".tmp"
+    await Bun.write(temp, JSON.stringify(mergeDeep(existing, config), null, 2))
+    await fs.rename(temp, filepath)
     await Instance.dispose()
   }
 

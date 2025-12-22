@@ -371,6 +371,7 @@
       },
       "devDependencies": {
         "@actions/artifact": "4.0.0",
+        "@opencode-ai/util": "workspace:*",
         "@tauri-apps/cli": "^2",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",

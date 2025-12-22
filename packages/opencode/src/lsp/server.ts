@@ -9,7 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
-import { Archive } from "../util/archive"
+import { Archive } from "@opencode-ai/util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })

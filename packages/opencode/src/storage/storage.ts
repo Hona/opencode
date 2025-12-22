@@ -59,8 +59,10 @@ export namespace Storage {
           if (!id) continue
           projectID = id
 
+          const projectFile = path.join(dir, "project", projectID + ".json")
+          await fs.mkdir(path.dirname(projectFile), { recursive: true })
           await Bun.write(
-            path.join(dir, "project", projectID + ".json"),
+            projectFile + ".tmp",
             JSON.stringify({
               id,
               vcs: "git",
@@ -71,6 +73,7 @@ export namespace Storage {
               },
             }),
           )
+          await fs.rename(projectFile + ".tmp", projectFile)
 
           log.info(`migrating sessions for project ${projectID}`)
           for await (const sessionFile of new Bun.Glob("storage/session/info/*.json").scan({
@@ -83,7 +86,9 @@ export namespace Storage {
               dest,
             })
             const session = await Bun.file(sessionFile).json()
-            await Bun.write(dest, JSON.stringify(session))
+            await fs.mkdir(path.dirname(dest), { recursive: true })
+            await Bun.write(dest + ".tmp", JSON.stringify(session))
+            await fs.rename(dest + ".tmp", dest)
             log.info(`migrating messages for session ${session.id}`)
             for await (const msgFile of new Bun.Glob(`storage/session/message/${session.id}/*.json`).scan({
               cwd: fullProjectDir,
@@ -95,7 +100,9 @@ export namespace Storage {
                 dest,
               })
               const message = await Bun.file(msgFile).json()
-              await Bun.write(dest, JSON.stringify(message))
+              await fs.mkdir(path.dirname(dest), { recursive: true })
+              await Bun.write(dest + ".tmp", JSON.stringify(message))
+              await fs.rename(dest + ".tmp", dest)
 
               log.info(`migrating parts for message ${message.id}`)
               for await (const partFile of new Bun.Glob(`storage/session/part/${session.id}/${message.id}/*.json`).scan(
@@ -110,7 +117,9 @@ export namespace Storage {
                   partFile,
                   dest,
                 })
-                await Bun.write(dest, JSON.stringify(part))
+                await fs.mkdir(path.dirname(dest), { recursive: true })
+                await Bun.write(dest + ".tmp", JSON.stringify(part))
+                await fs.rename(dest + ".tmp", dest)
               }
             }
           }
@@ -126,8 +135,15 @@ export namespace Storage {
         if (!session.projectID) continue
         if (!session.summary?.diffs) continue
         const { diffs } = session.summary
-        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
-        await Bun.file(path.join(dir, "session", session.projectID, session.id + ".json")).write(
+        const diffFile = path.join(dir, "session_diff", session.id + ".json")
+        await fs.mkdir(path.dirname(diffFile), { recursive: true })
+        await Bun.write(diffFile + ".tmp", JSON.stringify(diffs))
+        await fs.rename(diffFile + ".tmp", diffFile)
+
+        const sessionFile = path.join(dir, "session", session.projectID, session.id + ".json")
+        await fs.mkdir(path.dirname(sessionFile), { recursive: true })
+        await Bun.write(
+          sessionFile + ".tmp",
           JSON.stringify({
             ...session,
             summary: {
@@ -136,6 +152,7 @@ export namespace Storage {
             },
           }),
         )
+        await fs.rename(sessionFile + ".tmp", sessionFile)
       }
     },
   ]
@@ -170,8 +187,13 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as T
+      try {
+        const result = await Bun.file(target).json()
+        return result as T
+      } catch (e) {
+        log.error("failed to parse json", { target, error: e })
+        throw e
+      }
     })
   }
 
@@ -182,7 +204,9 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      const temp = target + ".tmp"
+      await Bun.write(temp, JSON.stringify(content, null, 2))
+      await fs.rename(temp, target)
       return content as T
     })
   }
@@ -192,7 +216,10 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const temp = target + ".tmp"
+      await Bun.write(temp, JSON.stringify(content, null, 2))
+      await fs.rename(temp, target)
     })
   }
 
@@ -216,7 +243,7 @@ export namespace Storage {
           cwd: path.join(dir, ...prefix),
           onlyFiles: true,
         }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(/[\\\/]/)]))
       result.sort()
       return result
     } catch {
