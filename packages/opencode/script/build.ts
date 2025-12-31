@@ -100,6 +100,7 @@ const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+  await $`bun install --os="*" --cpu="*" bun-pty@${pkg.dependencies["bun-pty"]}`
 }
 for (const item of targets) {
   const name = [
@@ -147,6 +148,21 @@ for (const item of targets) {
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
+
+  const ptyLib =
+    item.os === "win32"
+      ? "rust_pty.dll"
+      : item.os === "linux"
+        ? item.arch === "arm64"
+          ? "librust_pty_arm64.so"
+          : "librust_pty.so"
+        : item.arch === "arm64"
+          ? "librust_pty_arm64.dylib"
+          : "librust_pty.dylib"
+  const ptySource = path.resolve(dir, "node_modules/bun-pty/rust-pty/target/release", ptyLib)
+  if (fs.existsSync(ptySource)) {
+    fs.copyFileSync(ptySource, path.join(`dist/${name}/bin`, ptyLib))
+  }
 
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
