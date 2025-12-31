@@ -90,6 +90,7 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  variant?: string
 }
 
 export type ProviderAuthError = {
@@ -131,6 +132,9 @@ export type ApiError = {
       [key: string]: string
     }
     responseBody?: string
+    metadata?: {
+      [key: string]: string
+    }
   }
 }
 
@@ -547,6 +551,55 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -639,48 +692,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
 export type Pty = {
   id: string
   title: string
@@ -752,6 +763,10 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -760,9 +775,6 @@ export type Event =
   | EventSessionError
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -891,6 +903,14 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
+  /**
    * Navigate to last user message
    */
   messages_last_user?: string
@@ -950,6 +970,10 @@ export type KeybindsConfig = {
    * Previous agent
    */
   agent_cycle_reverse?: string
+  /**
+   * Cycle model variants
+   */
+  variant_cycle?: string
   /**
    * Clear input field
    */
@@ -1115,6 +1139,10 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
+   * Go to parent session
+   */
+  session_parent?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
@@ -1122,6 +1150,33 @@ export type KeybindsConfig = {
    * Toggle terminal title
    */
   terminal_title_toggle?: string
+  /**
+   * Toggle tips on home screen
+   */
+  tips_toggle?: string
+}
+
+/**
+ * Log level
+ */
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+
+/**
+ * Server configuration for opencode serve and web commands
+ */
+export type ServerConfig = {
+  /**
+   * Port to listen on
+   */
+  port?: number
+  /**
+   * Hostname to listen on
+   */
+  hostname?: string
+  /**
+   * Enable mDNS service discovery
+   */
+  mdns?: boolean
 }
 
 export type AgentConfig = {
@@ -1155,6 +1210,13 @@ export type AgentConfig = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1175,6 +1237,13 @@ export type AgentConfig = {
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
+          | "ask"
+          | "allow"
+          | "deny"
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
+        skill?:
           | "ask"
           | "allow"
           | "deny"
@@ -1239,6 +1308,18 @@ export type ProviderConfig = {
       }
       provider?: {
         npm: string
+      }
+      /**
+       * Variant-specific configuration
+       */
+      variants?: {
+        [key: string]: {
+          /**
+           * Disable this variant for the model
+           */
+          disabled?: boolean
+          [key: string]: unknown | boolean | undefined
+        }
       }
     }
   }
@@ -1347,6 +1428,7 @@ export type Config = {
    */
   theme?: string
   keybinds?: KeybindsConfig
+  logLevel?: LogLevel
   /**
    * TUI specific settings
    */
@@ -1369,6 +1451,7 @@ export type Config = {
      */
     diff_style?: "auto" | "stacked"
   }
+  server?: ServerConfig
   /**
    * Command configuration, see https://opencode.ai/docs/commands
    */
@@ -1500,6 +1583,13 @@ export type Config = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1512,6 +1602,16 @@ export type Config = {
      * Enterprise URL
      */
     url?: string
+  }
+  compaction?: {
+    /**
+     * Enable automatic compaction when context is full (default: true)
+     */
+    auto?: boolean
+    /**
+     * Enable pruning of old tool outputs (default: true)
+     */
+    prune?: boolean
   }
   experimental?: {
     hook?: {
@@ -1692,6 +1792,11 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  variants?: {
+    [key: string]: {
+      [key: string]: unknown
+    }
+  }
 }
 
 export type Provider = {
@@ -1780,6 +1885,9 @@ export type Agent = {
     bash: {
       [key: string]: "ask" | "allow" | "deny"
     }
+    skill: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1860,6 +1968,25 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type GlobalHealthData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/health"
+}
+
+export type GlobalHealthResponses = {
+  /**
+   * Health information
+   */
+  200: {
+    healthy: true
+    version: string
+  }
+}
+
+export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
 export type GlobalEventData = {
   body?: never
@@ -2750,6 +2877,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    auto?: boolean
   }
   path: {
     /**
@@ -2838,6 +2966,7 @@ export type SessionPromptData = {
       [key: string]: boolean
     }
     system?: string
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3021,6 +3150,7 @@ export type SessionPromptAsyncData = {
       [key: string]: boolean
     }
     system?: string
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3064,6 +3194,7 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
+    variant?: string
   }
   path: {
     /**
@@ -3250,6 +3381,24 @@ export type PermissionRespondResponses = {
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
 
+export type PermissionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission"
+}
+
+export type PermissionListResponses = {
+  /**
+   * List of pending permissions
+   */
+  200: Array<Permission>
+}
+
+export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+
 export type CommandListData = {
   body?: never
   path?: never
@@ -3356,6 +3505,11 @@ export type ProviderListResponses = {
           }
           provider?: {
             npm: string
+          }
+          variants?: {
+            [key: string]: {
+              [key: string]: unknown
+            }
           }
         }
       }
@@ -3509,6 +3663,8 @@ export type FindFilesData = {
     directory?: string
     query: string
     dirs?: "true" | "false"
+    type?: "file" | "directory"
+    limit?: number
   }
   url: "/find/file"
 }

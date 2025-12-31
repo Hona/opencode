@@ -39,6 +39,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".hbs": "handlebars",
   ".handlebars": "handlebars",
   ".hs": "haskell",
+  ".lhs": "haskell",
   ".html": "html",
   ".htm": "html",
   ".ini": "ini",
@@ -110,4 +111,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".tf": "terraform",
   ".tfvars": "terraform-vars",
   ".hcl": "hcl",
+  ".nix": "nix",
+  ".typ": "typst",
+  ".typc": "typst",
 } as const
