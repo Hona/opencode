@@ -50,7 +50,7 @@ export function getCurrentSidecar(target = RUST_TARGET) {
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
   const destDir = "src-tauri/sidecars"
   await fs.mkdir(destDir, { recursive: true })
-  const dest = `${destDir}/opencode-cli-${target}${process.platform === "win32" ? ".exe" : ""}`
+  const dest = `${destDir}/opencode-cli-${target}${target.includes("windows") ? ".exe" : ""}`
   await fs.copyFile(source, dest)
 
   console.log(`Copied ${source} to ${dest}`)
