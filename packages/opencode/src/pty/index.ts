@@ -8,6 +8,7 @@ import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
+import { getPtyLibName } from "@opencode-ai/util/pty"
 import {} from "process"
 import { Installation } from "@/installation"
 import { Shell } from "@/shell/shell"
@@ -17,18 +18,7 @@ export namespace Pty {
 
   const pty = lazy(async () => {
     if (!Installation.isLocal() && !process.env.BUN_PTY_LIB) {
-      const ptyLib =
-        process.platform === "win32"
-          ? "rust_pty.dll"
-          : process.platform === "linux"
-            ? process.arch === "arm64"
-              ? "librust_pty_arm64.so"
-              : "librust_pty.so"
-            : process.arch === "arm64"
-              ? "librust_pty_arm64.dylib"
-              : "librust_pty.dylib"
-
-      const libPath = path.join(path.dirname(process.execPath), ptyLib)
+      const libPath = path.join(path.dirname(process.execPath), getPtyLibName())
       process.env.BUN_PTY_LIB = libPath
     }
     const { spawn } = await import("bun-pty")

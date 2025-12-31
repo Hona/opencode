@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { getPtyLibName } from "@opencode-ai/util/pty"
 
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
@@ -55,20 +56,9 @@ export async function copyBinaryToSidecarFolder(source: string, target = RUST_TA
 
   console.log(`Copied ${source} to ${dest}`)
 
-  const isWindows = target.includes("windows")
-  const isLinux = target.includes("linux")
-  const isArm64 = target.startsWith("aarch64")
-
-  const ptyLib = isWindows
-    ? "rust_pty.dll"
-    : isLinux
-      ? isArm64
-        ? "librust_pty_arm64.so"
-        : "librust_pty.so"
-      : isArm64
-        ? "librust_pty_arm64.dylib"
-        : "librust_pty.dylib"
-
+  const os = target.includes("windows") ? "win32" : target.includes("linux") ? "linux" : "darwin"
+  const arch = target.startsWith("aarch64") ? "arm64" : "x64"
+  const ptyLib = getPtyLibName(os, arch)
   const ptySource = path.join(path.dirname(source), ptyLib)
   const ptySourceExists = await fs
     .access(ptySource)

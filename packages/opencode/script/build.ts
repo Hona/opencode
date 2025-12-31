@@ -14,6 +14,7 @@ process.chdir(dir)
 
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import { getPtyLibName } from "@opencode-ai/util/pty"
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
@@ -149,16 +150,7 @@ for (const item of targets) {
     },
   })
 
-  const ptyLib =
-    item.os === "win32"
-      ? "rust_pty.dll"
-      : item.os === "linux"
-        ? item.arch === "arm64"
-          ? "librust_pty_arm64.so"
-          : "librust_pty.so"
-        : item.arch === "arm64"
-          ? "librust_pty_arm64.dylib"
-          : "librust_pty.dylib"
+  const ptyLib = getPtyLibName(item.os, item.arch)
   const ptySource = path.resolve(dir, "node_modules/bun-pty/rust-pty/target/release", ptyLib)
   if (fs.existsSync(ptySource)) {
     fs.copyFileSync(ptySource, path.join(`dist/${name}/bin`, ptyLib))
