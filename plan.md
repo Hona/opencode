@@ -43,9 +43,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 2.1 Extend Config Schema
 
-- [ ] Open `packages/opencode/src/config/config.ts`
-- [ ] Locate the `openTelemetry` field in the `experimental` object (~line 912)
-- [ ] Change from `z.boolean().optional()` to:
+- [x] Open `packages/opencode/src/config/config.ts`
+- [x] Locate the `openTelemetry` field in the `experimental` object (~line 912)
+- [x] Change from `z.boolean().optional()` to:
   ```typescript
   openTelemetry: z.union([
     z.boolean(),
@@ -57,7 +57,7 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
     .optional()
     .describe("Enable OpenTelemetry tracing and structured logs to Aspire Dashboard")
   ```
-- [ ] Update the description to reflect new capabilities
+- [x] Update the description to reflect new capabilities
 
 ---
 
@@ -65,23 +65,23 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 3.1 Create Telemetry Module Structure
 
-- [ ] Create new file `packages/opencode/src/telemetry/index.ts`
-- [ ] Add namespace `Telemetry` export
+- [x] Create new file `packages/opencode/src/telemetry/index.ts`
+- [x] Add namespace `Telemetry` export
 
 ### 3.2 Implement Configuration Resolution
 
-- [ ] Add `Config` interface with `enabled`, `endpoint`, `serviceName` fields
-- [ ] Implement `resolveConfig()` helper that checks:
+- [x] Add `Config` interface with `enabled`, `endpoint`, `serviceName` fields
+- [x] Implement `resolveConfig()` helper that checks:
   1. `OTEL_EXPORTER_OTLP_ENDPOINT` env var (highest priority)
   2. Config object endpoint
   3. Default: `http://localhost:4317`
 
 ### 3.3 Implement SDK Initialization
 
-- [ ] Add `let sdk: NodeSDK | undefined` module-level variable
-- [ ] Add `let loggerProvider: LoggerProvider | undefined` module-level variable
-- [ ] Add `let initialized = false` flag
-- [ ] Implement `init(config: Config)` function:
+- [x] Add `let sdk: NodeSDK | undefined` module-level variable
+- [x] Add `let loggerProvider: LoggerProvider | undefined` module-level variable
+- [x] Add `let initialized = false` flag
+- [x] Implement `init(config: Config)` function:
   - Create `Resource` with `service.name` = "opencode" and `service.version` from Installation.VERSION
   - Create `OTLPTraceExporter` with endpoint
   - Create `OTLPLogExporter` with endpoint
@@ -94,26 +94,26 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 3.4 Implement Shutdown
 
-- [ ] Implement `shutdown(): Promise<void>` function
-- [ ] Call `sdk?.shutdown()` and `loggerProvider?.shutdown()` in parallel
-- [ ] Handle errors gracefully
+- [x] Implement `shutdown(): Promise<void>` function
+- [x] Call `sdk?.shutdown()` and `loggerProvider?.shutdown()` in parallel
+- [x] Handle errors gracefully
 
 ### 3.5 Implement Helper Functions
 
-- [ ] Implement `isEnabled(): boolean` - returns `initialized`
-- [ ] Implement `getTracer(name: string)` - returns `trace.getTracer(name)`
-- [ ] Implement `getLogger(name: string)` - returns `logs.getLogger(name)`
+- [x] Implement `isEnabled(): boolean` - returns `initialized`
+- [x] Implement `getTracer(name: string)` - returns `trace.getTracer(name)`
+- [x] Implement `getLogger(name: string)` - returns `logs.getLogger(name)`
 
 ### 3.6 Implement withSpan Helper
 
-- [ ] Implement `withSpan<T>(name: string, attributes: Record<string, AttributeValue>, fn: (span: Span) => Promise<T>): Promise<T>`
-- [ ] If not enabled, just call `fn()` with a no-op span
-- [ ] If enabled:
+- [x] Implement `withSpan<T>(name: string, attributes: Record<string, AttributeValue>, fn: (span: Span) => Promise<T>): Promise<T>`
+- [x] If not enabled, just call `fn()` with a no-op span
+- [x] If enabled:
   - Start span with name and attributes
   - Try to execute fn, passing span
   - On success, end span normally
   - On error, record exception on span, set error status, end span, rethrow
-- [ ] Ensure span is always ended in finally block
+- [x] Ensure span is always ended in finally block
 
 ---
 
