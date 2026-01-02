@@ -38,11 +38,46 @@ function doEmit(
   const severityNumber = Telemetry.SeverityMap[level]
   if (!severityNumber) return
 
+  // Build body with key=value pairs like file logs, service first
+  const service = attributes.service
+  const otherAttrs = Object.entries(attributes).filter(([key]) => key !== "service")
+
+  const formatValue = (key: string, value: any): string => {
+    if (value instanceof Error) return `${key}=${value.message}`
+    if (typeof value === "object") return `${key}=${JSON.stringify(value)}`
+    return `${key}=${value}`
+  }
+
+  const parts: string[] = []
+  if (service) parts.push(`service=${service}`)
+  for (const [key, value] of otherAttrs) {
+    if (value !== undefined && value !== null) {
+      parts.push(formatValue(key, value))
+    }
+  }
+  parts.push(message)
+
+  const body = parts.join(" ")
+
+  // Find any Error in attributes and extract for OTEL exception semantic conventions
+  const errorEntry = Object.entries(attributes).find(([_, v]) => v instanceof Error)
+  const finalAttributes = { ...attributes }
+
+  if (errorEntry) {
+    const error = errorEntry[1] as Error
+    // Add OTEL semantic convention attributes for exceptions
+    finalAttributes["exception.type"] = error.name || "Error"
+    finalAttributes["exception.message"] = error.message
+    if (error.stack) {
+      finalAttributes["exception.stacktrace"] = error.stack
+    }
+  }
+
   logger.emit({
     severityNumber,
     severityText: level,
-    body: message,
-    attributes,
+    body,
+    attributes: finalAttributes,
   })
 }
 
