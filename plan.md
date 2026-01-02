@@ -386,10 +386,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 9.1 LSP Client Create
 
-- [ ] Open `packages/opencode/src/lsp/client.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `create()` function with `Telemetry.withSpan("lsp.client.create", {...}, ...)`
-- [ ] Add attributes: `lsp.server_id`, `lsp.root`
+- [x] Open `packages/opencode/src/lsp/client.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `create()` function with `Telemetry.withSpan("lsp.client.create", {...}, ...)`
+- [x] Add attributes: `lsp.server_id`, `lsp.root`
 
 ### 9.2 LSP Initialize Request
 
