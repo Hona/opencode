@@ -393,14 +393,24 @@ export namespace LSP {
   }
 
   export async function definition(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
-      client.connection
-        .sendRequest("textDocument/definition", {
-          textDocument: { uri: pathToFileURL(input.file).href },
-          position: { line: input.line, character: input.character },
-        })
-        .catch(() => null),
-    ).then((result) => result.flat().filter(Boolean))
+    return Telemetry.withSpan(
+      "lsp.request.definition",
+      {
+        "lsp.file": input.file,
+        "lsp.line": input.line,
+        "lsp.character": input.character,
+      },
+      async () => {
+        return run(input.file, (client) =>
+          client.connection
+            .sendRequest("textDocument/definition", {
+              textDocument: { uri: pathToFileURL(input.file).href },
+              position: { line: input.line, character: input.character },
+            })
+            .catch(() => null),
+        ).then((result) => result.flat().filter(Boolean))
+      },
+    )
   }
 
   export async function references(input: { file: string; line: number; character: number }) {
