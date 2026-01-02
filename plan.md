@@ -435,10 +435,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 10.2 Plugin Trigger
 
-- [ ] Open `packages/opencode/src/plugin/index.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `trigger()` function with `Telemetry.withSpan("plugin.trigger", {...}, ...)`
-- [ ] Add attributes: `plugin.hook_name`, `plugin.hooks_count`
+- [x] Open `packages/opencode/src/plugin/index.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `trigger()` function with `Telemetry.withSpan("plugin.trigger", {...}, ...)`
+- [x] Add attributes: `plugin.hook_name`, `plugin.hooks_count`
 
 ### 10.3 Snapshot Track
 
