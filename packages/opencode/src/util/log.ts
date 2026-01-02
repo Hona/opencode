@@ -3,6 +3,49 @@ import fs from "fs/promises"
 import { Global } from "../global"
 import z from "zod"
 
+// Lazy-loaded telemetry to avoid circular dependency
+let telemetryModule: typeof import("@/telemetry") | undefined
+let telemetryLoading = false
+
+function emitOtelLog(level: string, message: string, attributes: Record<string, any>) {
+  // Prevent recursive calls during module loading
+  if (telemetryLoading) return
+  if (!telemetryModule) {
+    telemetryLoading = true
+    import("@/telemetry")
+      .then((mod) => {
+        telemetryModule = mod
+        telemetryLoading = false
+        doEmit(mod.Telemetry, level, message, attributes)
+      })
+      .catch(() => {
+        telemetryLoading = false
+      })
+    return
+  }
+  doEmit(telemetryModule.Telemetry, level, message, attributes)
+}
+
+function doEmit(
+  Telemetry: (typeof import("@/telemetry"))["Telemetry"],
+  level: string,
+  message: string,
+  attributes: Record<string, any>,
+) {
+  if (!Telemetry.isEnabled()) return
+
+  const logger = Telemetry.getLogger("opencode")
+  const severityNumber = Telemetry.SeverityMap[level]
+  if (!severityNumber) return
+
+  logger.emit({
+    severityNumber,
+    severityText: level,
+    body: message,
+    attributes,
+  })
+}
+
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
@@ -128,21 +171,25 @@ export namespace Log {
       debug(message?: any, extra?: Record<string, any>) {
         if (shouldLog("DEBUG")) {
           write("DEBUG " + build(message, extra))
+          emitOtelLog("DEBUG", String(message ?? ""), { ...tags, ...extra })
         }
       },
       info(message?: any, extra?: Record<string, any>) {
         if (shouldLog("INFO")) {
           write("INFO  " + build(message, extra))
+          emitOtelLog("INFO", String(message ?? ""), { ...tags, ...extra })
         }
       },
       error(message?: any, extra?: Record<string, any>) {
         if (shouldLog("ERROR")) {
           write("ERROR " + build(message, extra))
+          emitOtelLog("ERROR", String(message ?? ""), { ...tags, ...extra })
         }
       },
       warn(message?: any, extra?: Record<string, any>) {
         if (shouldLog("WARN")) {
           write("WARN  " + build(message, extra))
+          emitOtelLog("WARN", String(message ?? ""), { ...tags, ...extra })
         }
       },
       tag(key: string, value: string) {
