@@ -199,11 +199,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.5 Glob Tool
 
-- [ ] Open `packages/opencode/src/tool/glob.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.glob.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.pattern`, `tool.path`
-- [ ] Set `tool.files_found`, `tool.truncated` on completion
+- [x] Open `packages/opencode/src/tool/glob.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.glob.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.pattern`, `tool.path`
+- [x] Set `tool.files_found`, `tool.truncated` on completion
 
 ### 6.6 Grep Tool
 
