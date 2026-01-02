@@ -311,9 +311,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 7.2 MCP Tool Call
 
-- [ ] Find `client.callTool()` call in `convertMcpTool` execute wrapper
-- [ ] Wrap with `Telemetry.withSpan("mcp.tool.call", {...}, ...)`
-- [ ] Add attributes: `mcp.server_name`, `mcp.tool_name`
+- [x] Find `client.callTool()` call in `convertMcpTool` execute wrapper
+- [x] Wrap with `Telemetry.withSpan("mcp.tool.call", {...}, ...)`
+- [x] Add attributes: `mcp.server_name`, `mcp.tool_name`
 
 ### 7.3 MCP List Tools
 
