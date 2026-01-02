@@ -412,9 +412,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 9.5 LSP References
 
-- [ ] Find `references()` function
-- [ ] Wrap with `Telemetry.withSpan("lsp.request.references", {...}, ...)`
-- [ ] Add attributes: `lsp.file`, `lsp.line`, `lsp.character`
+- [x] Find `references()` function
+- [x] Wrap with `Telemetry.withSpan("lsp.request.references", {...}, ...)`
+- [x] Add attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
 ### 9.6 LSP Hover
 
