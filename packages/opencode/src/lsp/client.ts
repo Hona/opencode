@@ -87,50 +87,58 @@ export namespace LSPClient {
         connection.listen()
 
         l.info("sending initialize")
-        await withTimeout(
-          connection.sendRequest("initialize", {
-            rootUri: pathToFileURL(input.root).href,
-            processId: input.server.process.pid,
-            workspaceFolders: [
-              {
-                name: "workspace",
-                uri: pathToFileURL(input.root).href,
-              },
-            ],
-            initializationOptions: {
-              ...input.server.initialization,
-            },
-            capabilities: {
-              window: {
-                workDoneProgress: true,
-              },
-              workspace: {
-                configuration: true,
-                didChangeWatchedFiles: {
-                  dynamicRegistration: true,
+        await Telemetry.withSpan(
+          "lsp.request.initialize",
+          {
+            "lsp.server_id": input.serverID,
+          },
+          async () => {
+            await withTimeout(
+              connection.sendRequest("initialize", {
+                rootUri: pathToFileURL(input.root).href,
+                processId: input.server.process.pid,
+                workspaceFolders: [
+                  {
+                    name: "workspace",
+                    uri: pathToFileURL(input.root).href,
+                  },
+                ],
+                initializationOptions: {
+                  ...input.server.initialization,
                 },
-              },
-              textDocument: {
-                synchronization: {
-                  didOpen: true,
-                  didChange: true,
+                capabilities: {
+                  window: {
+                    workDoneProgress: true,
+                  },
+                  workspace: {
+                    configuration: true,
+                    didChangeWatchedFiles: {
+                      dynamicRegistration: true,
+                    },
+                  },
+                  textDocument: {
+                    synchronization: {
+                      didOpen: true,
+                      didChange: true,
+                    },
+                    publishDiagnostics: {
+                      versionSupport: true,
+                    },
+                  },
                 },
-                publishDiagnostics: {
-                  versionSupport: true,
+              }),
+              45_000,
+            ).catch((err) => {
+              l.error("initialize error", { error: err })
+              throw new InitializeError(
+                { serverID: input.serverID },
+                {
+                  cause: err,
                 },
-              },
-            },
-          }),
-          45_000,
-        ).catch((err) => {
-          l.error("initialize error", { error: err })
-          throw new InitializeError(
-            { serverID: input.serverID },
-            {
-              cause: err,
-            },
-          )
-        })
+              )
+            })
+          },
+        )
 
         await connection.sendNotification("initialized", {})
 

@@ -393,9 +393,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 9.2 LSP Initialize Request
 
-- [ ] Find `connection.sendRequest("initialize", ...)` in `create()`
-- [ ] Wrap with `Telemetry.withSpan("lsp.request.initialize", {...}, ...)`
-- [ ] Add attributes: `lsp.server_id`
+- [x] Find `connection.sendRequest("initialize", ...)` in `create()`
+- [x] Wrap with `Telemetry.withSpan("lsp.request.initialize", {...}, ...)`
+- [x] Add attributes: `lsp.server_id`
 
 ### 9.3 LSP Touch File
 
