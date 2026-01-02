@@ -427,10 +427,24 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? 5000).catch((err) => {
-      log.error("failed to get tools from client", { key, error: err })
-      return undefined
-    })
+    const result = await Telemetry.withSpan(
+      "mcp.tools.list",
+      {
+        "mcp.server_name": key,
+      },
+      async (span) => {
+        const tools = await withTimeout(mcpClient!.listTools(), mcp.timeout ?? 5000).catch((err) => {
+          log.error("failed to get tools from client", { key, error: err })
+          return undefined
+        })
+        if (tools) {
+          span.setAttributes({
+            "mcp.tool_count": tools.tools.length,
+          })
+        }
+        return tools
+      },
+    )
     if (!result) {
       await mcpClient.close().catch((error) => {
         log.error("Failed to close MCP client", {
@@ -525,16 +539,30 @@ export namespace MCP {
         continue
       }
 
-      const toolsResult = await client.listTools().catch((e) => {
-        log.error("failed to get tools", { clientName, error: e.message })
-        const failedStatus = {
-          status: "failed" as const,
-          error: e instanceof Error ? e.message : String(e),
-        }
-        s.status[clientName] = failedStatus
-        delete s.clients[clientName]
-        return undefined
-      })
+      const toolsResult = await Telemetry.withSpan(
+        "mcp.tools.list",
+        {
+          "mcp.server_name": clientName,
+        },
+        async (span) => {
+          const tools = await client.listTools().catch((e) => {
+            log.error("failed to get tools", { clientName, error: e.message })
+            const failedStatus = {
+              status: "failed" as const,
+              error: e instanceof Error ? e.message : String(e),
+            }
+            s.status[clientName] = failedStatus
+            delete s.clients[clientName]
+            return undefined
+          })
+          if (tools) {
+            span.setAttributes({
+              "mcp.tool_count": tools.tools.length,
+            })
+          }
+          return tools
+        },
+      )
       if (!toolsResult) {
         continue
       }
