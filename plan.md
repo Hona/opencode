@@ -375,10 +375,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 8.6 Session Summary
 
-- [ ] Open `packages/opencode/src/session/summary.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `summarize()` function with `Telemetry.withSpan("session.summary", {...}, ...)`
-- [ ] Add attributes: `session.id`, `session.message_id`
+- [x] Open `packages/opencode/src/session/summary.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `summarize()` function with `Telemetry.withSpan("session.summary", {...}, ...)`
+- [x] Add attributes: `session.id`, `session.message_id`
 
 ---
 
