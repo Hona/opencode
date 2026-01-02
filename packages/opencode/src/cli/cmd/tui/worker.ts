@@ -17,6 +17,16 @@ await Log.init({
   })(),
 })
 
+// Initialize telemetry if enabled via env var or config
+const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+const globalConfig = otelEndpoint ? undefined : await Config.global()
+const otelConfig = globalConfig?.experimental?.openTelemetry
+if (otelEndpoint || otelConfig) {
+  const { Telemetry } = await import("@/telemetry")
+  const config = Telemetry.resolveConfig("opencode-server", otelConfig)
+  Telemetry.init(config)
+}
+
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,
@@ -58,7 +68,10 @@ export const rpc = {
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
+    Log.Default.info("disposing all instances")
     await Instance.disposeAll()
+    const { Telemetry } = await import("@/telemetry")
+    await Telemetry.shutdown()
     // TODO: this should be awaited, but ws connections are
     // causing this to hang, need to revisit this
     server.stop(true)

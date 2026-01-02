@@ -22,14 +22,17 @@ export namespace Telemetry {
   let loggerProvider: LoggerProvider | undefined
   let initialized = false
 
-  export function resolveConfig(experimental?: boolean | { enabled?: boolean; endpoint?: string }): Config {
+  export function resolveConfig(
+    serviceName: string,
+    experimental?: boolean | { enabled?: boolean; endpoint?: string },
+  ): Config {
     const envEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
 
     if (typeof experimental === "boolean") {
       return {
         enabled: experimental,
         endpoint: envEndpoint || "http://localhost:4317",
-        serviceName: "opencode",
+        serviceName,
       }
     }
 
@@ -37,14 +40,14 @@ export namespace Telemetry {
       return {
         enabled: experimental.enabled !== false,
         endpoint: envEndpoint || experimental.endpoint || "http://localhost:4317",
-        serviceName: "opencode",
+        serviceName,
       }
     }
 
     return {
       enabled: !!envEndpoint,
       endpoint: envEndpoint || "http://localhost:4317",
-      serviceName: "opencode",
+      serviceName,
     }
   }
 

@@ -91,7 +91,7 @@ const cli = yargs(hideBin(process.argv))
     const globalConfig = otelEndpoint ? undefined : await Config.global()
     const otelConfig = globalConfig?.experimental?.openTelemetry
     if (otelEndpoint || otelConfig) {
-      const config = Telemetry.resolveConfig(otelConfig)
+      const config = Telemetry.resolveConfig("opencode-cli", otelConfig)
       Telemetry.init(config)
     }
   })

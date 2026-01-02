@@ -208,9 +208,10 @@ export namespace LLM {
           }),
           experimental_telemetry: {
             isEnabled:
-              typeof cfg.experimental?.openTelemetry === "object"
+              !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+              (typeof cfg.experimental?.openTelemetry === "object"
                 ? cfg.experimental.openTelemetry.enabled
-                : cfg.experimental?.openTelemetry,
+                : cfg.experimental?.openTelemetry),
           },
         })
       },
