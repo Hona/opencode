@@ -168,11 +168,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.1 Bash Tool
 
-- [ ] Open `packages/opencode/src/tool/bash.ts`
-- [ ] Import `Telemetry` from `@/telemetry`
-- [ ] Wrap `execute` function body with `Telemetry.withSpan("tool.bash.execute", {...}, async (span) => { ... })`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.command` (truncated), `tool.workdir`, `tool.timeout`
-- [ ] Set `tool.exit_code` and `tool.timed_out` on span before returning
+- [x] Open `packages/opencode/src/tool/bash.ts`
+- [x] Import `Telemetry` from `@/telemetry`
+- [x] Wrap `execute` function body with `Telemetry.withSpan("tool.bash.execute", {...}, async (span) => { ... })`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.command` (truncated), `tool.workdir`, `tool.timeout`
+- [x] Set `tool.exit_code` and `tool.timed_out` on span before returning
 
 ### 6.2 Read Tool
 
