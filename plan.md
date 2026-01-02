@@ -348,10 +348,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 8.2 Session Processor
 
-- [ ] Open `packages/opencode/src/session/processor.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `process()` function with `Telemetry.withSpan("session.processor.process", {...}, ...)`
-- [ ] Add attributes: `session.id`, `session.message_id`, `llm.model_id`, `llm.provider_id`
+- [x] Open `packages/opencode/src/session/processor.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `process()` function with `Telemetry.withSpan("session.processor.process", {...}, ...)`
+- [x] Add attributes: `session.id`, `session.message_id`, `llm.model_id`, `llm.provider_id`
 
 ### 8.3 Session Prompt
 
