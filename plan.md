@@ -207,11 +207,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.6 Grep Tool
 
-- [ ] Open `packages/opencode/src/tool/grep.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.grep.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.pattern`, `tool.path`, `tool.include`
-- [ ] Set `tool.matches_found`, `tool.truncated` on completion
+- [x] Open `packages/opencode/src/tool/grep.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.grep.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.pattern`, `tool.path`, `tool.include`
+- [x] Set `tool.matches_found`, `tool.truncated` on completion
 
 ### 6.7 WebFetch Tool
 
