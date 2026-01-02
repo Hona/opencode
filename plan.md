@@ -303,11 +303,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 7.1 MCP Client Connect
 
-- [ ] Open `packages/opencode/src/mcp/index.ts`
-- [ ] Import `Telemetry`
-- [ ] Find `client.connect(transport)` call in `create()` function
-- [ ] Wrap with `Telemetry.withSpan("mcp.client.connect", {...}, ...)`
-- [ ] Add attributes: `mcp.server_name`, `mcp.type` (local/remote)
+- [x] Open `packages/opencode/src/mcp/index.ts`
+- [x] Import `Telemetry`
+- [x] Find `client.connect(transport)` call in `create()` function
+- [x] Wrap with `Telemetry.withSpan("mcp.client.connect", {...}, ...)`
+- [x] Add attributes: `mcp.server_name`, `mcp.type` (local/remote)
 
 ### 7.2 MCP Tool Call
 

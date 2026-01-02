@@ -23,6 +23,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import { Telemetry } from "@/telemetry"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -289,7 +290,17 @@ export namespace MCP {
             name: "opencode",
             version: Installation.VERSION,
           })
-          await client.connect(transport)
+          await Telemetry.withSpan(
+            "mcp.client.connect",
+            {
+              "mcp.server_name": key,
+              "mcp.type": "remote",
+              "mcp.transport": name,
+            },
+            async () => {
+              await client.connect(transport)
+            },
+          )
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -364,7 +375,16 @@ export namespace MCP {
           name: "opencode",
           version: Installation.VERSION,
         })
-        await client.connect(transport)
+        await Telemetry.withSpan(
+          "mcp.client.connect",
+          {
+            "mcp.server_name": key,
+            "mcp.type": "local",
+          },
+          async () => {
+            await client.connect(transport)
+          },
+        )
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
