@@ -368,10 +368,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 8.5 Session Compaction
 
-- [ ] Open `packages/opencode/src/session/compaction.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `process()` function with `Telemetry.withSpan("session.compaction.process", {...}, ...)`
-- [ ] Add attributes: `session.id`, `session.auto`, `session.message_count`
+- [x] Open `packages/opencode/src/session/compaction.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `process()` function with `Telemetry.withSpan("session.compaction.process", {...}, ...)`
+- [x] Add attributes: `session.id`, `session.auto`, `session.message_count`
 
 ### 8.6 Session Summary
 
