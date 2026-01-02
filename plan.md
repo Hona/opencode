@@ -399,10 +399,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 9.3 LSP Touch File
 
-- [ ] Open `packages/opencode/src/lsp/index.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `touchFile()` function with `Telemetry.withSpan("lsp.touch_file", {...}, ...)`
-- [ ] Add attributes: `lsp.file`
+- [x] Open `packages/opencode/src/lsp/index.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `touchFile()` function with `Telemetry.withSpan("lsp.touch_file", {...}, ...)`
+- [x] Add attributes: `lsp.file`
 
 ### 9.4 LSP Definition
 
