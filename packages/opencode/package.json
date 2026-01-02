@@ -85,6 +85,7 @@
     "@opentelemetry/sdk-logs": "0.208.0",
     "@opentelemetry/resources": "2.2.0",
     "@opentelemetry/sdk-node": "0.208.0",
+    "@opentelemetry/semantic-conventions": "1.37.0",
     "@opentui/core": "0.1.67",
     "@opentui/solid": "0.1.67",
     "@parcel/watcher": "2.5.1",
