@@ -255,10 +255,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.12 Skill Tool
 
-- [ ] Open `packages/opencode/src/tool/skill.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.skill.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.skill_name`
+- [x] Open `packages/opencode/src/tool/skill.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.skill.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.skill_name`
 
 ### 6.13 List Tool
 
