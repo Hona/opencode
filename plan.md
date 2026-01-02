@@ -262,11 +262,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.13 List Tool
 
-- [ ] Open `packages/opencode/src/tool/ls.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.list.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.path`
-- [ ] Set `tool.files_found`, `tool.truncated` on completion
+- [x] Open `packages/opencode/src/tool/ls.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.list.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.path`
+- [x] Set `tool.files_found`, `tool.truncated` on completion
 
 ### 6.14 Batch Tool
 
