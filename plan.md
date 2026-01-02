@@ -285,17 +285,17 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.16 TodoWrite Tool
 
-- [ ] Open `packages/opencode/src/tool/todowrite.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.todowrite.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.todo_count`
+- [x] Open `packages/opencode/src/tool/todo.ts` (note: both tools are in the same file)
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.todowrite.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.todo_count`
 
 ### 6.17 TodoRead Tool
 
-- [ ] Open `packages/opencode/src/tool/todoread.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.todoread.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`
+- [x] Open `packages/opencode/src/tool/todo.ts` (note: both tools are in the same file)
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.todoread.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`
 
 ---
 
