@@ -317,10 +317,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 7.3 MCP List Tools
 
-- [ ] Find `mcpClient.listTools()` call
-- [ ] Wrap with `Telemetry.withSpan("mcp.tools.list", {...}, ...)`
-- [ ] Add attributes: `mcp.server_name`
-- [ ] Set `mcp.tool_count` on completion
+- [x] Find `mcpClient.listTools()` call
+- [x] Wrap with `Telemetry.withSpan("mcp.tools.list", {...}, ...)`
+- [x] Add attributes: `mcp.server_name`
+- [x] Set `mcp.tool_count` on completion
 
 ### 7.4 MCP List Prompts
 
