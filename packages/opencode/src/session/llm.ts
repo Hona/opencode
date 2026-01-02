@@ -212,6 +212,17 @@ export namespace LLM {
               (typeof cfg.experimental?.openTelemetry === "object"
                 ? cfg.experimental.openTelemetry.enabled
                 : cfg.experimental?.openTelemetry),
+            functionId: `${input.agent.name}.chat`,
+            recordInputs: true,
+            recordOutputs: true,
+            metadata: {
+              "session.id": input.sessionID,
+              "llm.provider_id": input.model.providerID,
+              "llm.model_id": input.model.id,
+              "llm.agent": input.agent.name,
+              "llm.small": input.small ?? false,
+              "llm.tools_count": Object.keys(input.tools).length,
+            },
           },
         })
       },
