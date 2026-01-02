@@ -24,7 +24,7 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 - [x] Add `@opentelemetry/sdk-logs` to dependencies
 - [x] Add `@opentelemetry/resources` to dependencies
 - [x] Add `@opentelemetry/semantic-conventions` to dependencies
-- [ ] Add `@opentelemetry/exporter-trace-otlp-grpc` to dependencies
+- [x] Add `@opentelemetry/exporter-trace-otlp-grpc` to dependencies
 - [ ] Add `@opentelemetry/exporter-logs-otlp-grpc` to dependencies
 - [ ] Run `bun install` to install dependencies
 
