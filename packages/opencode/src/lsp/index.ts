@@ -310,19 +310,29 @@ export namespace LSP {
   }
 
   export async function hover(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) => {
-      return client.connection
-        .sendRequest("textDocument/hover", {
-          textDocument: {
-            uri: pathToFileURL(input.file).href,
-          },
-          position: {
-            line: input.line,
-            character: input.character,
-          },
+    return Telemetry.withSpan(
+      "lsp.request.hover",
+      {
+        "lsp.file": input.file,
+        "lsp.line": input.line,
+        "lsp.character": input.character,
+      },
+      async () => {
+        return run(input.file, (client) => {
+          return client.connection
+            .sendRequest("textDocument/hover", {
+              textDocument: {
+                uri: pathToFileURL(input.file).href,
+              },
+              position: {
+                line: input.line,
+                character: input.character,
+              },
+            })
+            .catch(() => null)
         })
-        .catch(() => null)
-    })
+      },
+    )
   }
 
   enum SymbolKind {
