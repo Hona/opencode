@@ -278,10 +278,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.15 MultiEdit Tool
 
-- [ ] Open `packages/opencode/src/tool/multiedit.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.multiedit.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.edit_count`
+- [x] Open `packages/opencode/src/tool/multiedit.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.multiedit.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.edit_count`
 
 ### 6.16 TodoWrite Tool
 
