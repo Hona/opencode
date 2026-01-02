@@ -30,12 +30,12 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 1.2 Add npm Scripts
 
-- [ ] Add `aspire:start` script to `packages/opencode/package.json`:
+- [x] Add `aspire:start` script to `packages/opencode/package.json`:
   ```
   docker run --rm -d -p 18888:18888 -p 4317:18889 -e ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true --name aspire-dashboard mcr.microsoft.com/dotnet/aspire-dashboard:latest && echo 'Aspire Dashboard: http://localhost:18888'
   ```
-- [ ] Add `aspire:stop` script: `docker stop aspire-dashboard 2>/dev/null || true`
-- [ ] Add `dev:otel` script: `bun run aspire:start; OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 bun dev`
+- [x] Add `aspire:stop` script: `docker stop aspire-dashboard 2>/dev/null || true`
+- [x] Add `dev:otel` script: `bun run aspire:start; OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 bun dev`
 
 ---
 
