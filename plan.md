@@ -223,11 +223,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.8 WebSearch Tool
 
-- [ ] Open `packages/opencode/src/tool/websearch.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.websearch.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.query`, `tool.num_results`, `tool.type`
-- [ ] Set `http.status_code` on completion
+- [x] Open `packages/opencode/src/tool/websearch.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.websearch.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.query`, `tool.num_results`, `tool.type`
+- [x] Set `http.status_code` on completion
 
 ### 6.9 CodeSearch Tool
 
