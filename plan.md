@@ -239,11 +239,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.10 Task Tool
 
-- [ ] Open `packages/opencode/src/tool/task.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.task.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.description`, `tool.subagent_type`
-- [ ] Set `tool.child_session_id` on completion
+- [x] Open `packages/opencode/src/tool/task.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.task.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.description`, `tool.subagent_type`
+- [x] Set `tool.child_session_id` on completion
 
 ### 6.11 LSP Tool
 
