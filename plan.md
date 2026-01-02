@@ -270,11 +270,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.14 Batch Tool
 
-- [ ] Open `packages/opencode/src/tool/batch.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.batch.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.total_calls`
-- [ ] Set `tool.successful_calls`, `tool.failed_calls` on completion
+- [x] Open `packages/opencode/src/tool/batch.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.batch.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.total_calls`
+- [x] Set `tool.successful_calls`, `tool.failed_calls` on completion
 
 ### 6.15 MultiEdit Tool
 
