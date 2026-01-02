@@ -362,9 +362,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 8.4 Session Prompt Loop
 
-- [ ] Find `loop()` function in `packages/opencode/src/session/prompt.ts`
-- [ ] Wrap with `Telemetry.withSpan("session.prompt.loop", {...}, ...)`
-- [ ] Add attributes: `session.id`, `session.step`, `session.agent`
+- [x] Find `loop()` function in `packages/opencode/src/session/prompt.ts`
+- [x] Wrap with `Telemetry.withSpan("session.prompt.loop", {...}, ...)`
+- [x] Add attributes: `session.id`, `session.step`, `session.agent`
 
 ### 8.5 Session Compaction
 
