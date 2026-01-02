@@ -406,9 +406,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 9.4 LSP Definition
 
-- [ ] Find `definition()` function
-- [ ] Wrap with `Telemetry.withSpan("lsp.request.definition", {...}, ...)`
-- [ ] Add attributes: `lsp.file`, `lsp.line`, `lsp.character`
+- [x] Find `definition()` function
+- [x] Wrap with `Telemetry.withSpan("lsp.request.definition", {...}, ...)`
+- [x] Add attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
 ### 9.5 LSP References
 
