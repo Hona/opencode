@@ -121,16 +121,16 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 4.1 Add OTEL Logging to Log Module
 
-- [ ] Open `packages/opencode/src/util/log.ts`
-- [ ] Add import for `Telemetry` (use dynamic import to avoid circular deps)
-- [ ] Add `SeverityNumber` mapping: `{ DEBUG: 5, INFO: 9, WARN: 13, ERROR: 17 }`
+- [x] Open `packages/opencode/src/util/log.ts`
+- [x] Add import for `Telemetry` (use dynamic import to avoid circular deps)
+- [x] Add `SeverityNumber` mapping: `{ DEBUG: 5, INFO: 9, WARN: 13, ERROR: 17 }`
 
 ### 4.2 Create OTEL Log Emission Helper
 
-- [ ] Add `emitOtelLog(level: Level, message: string, attributes: Record<string, any>)` function
-- [ ] Check `Telemetry.isEnabled()` first
-- [ ] Get logger via `Telemetry.getLogger("opencode")`
-- [ ] Call `logger.emit()` with:
+- [x] Add `emitOtelLog(level: Level, message: string, attributes: Record<string, any>)` function
+- [x] Check `Telemetry.isEnabled()` first
+- [x] Get logger via `Telemetry.getLogger("opencode")`
+- [x] Call `logger.emit()` with:
   - `severityNumber` from mapping
   - `severityText` = level
   - `body` = message
@@ -138,10 +138,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 4.3 Integrate into Logger Methods
 
-- [ ] In `debug()` method: call `emitOtelLog("DEBUG", message, { ...tags, ...extra })` after file write
-- [ ] In `info()` method: call `emitOtelLog("INFO", message, { ...tags, ...extra })` after file write
-- [ ] In `warn()` method: call `emitOtelLog("WARN", message, { ...tags, ...extra })` after file write
-- [ ] In `error()` method: call `emitOtelLog("ERROR", message, { ...tags, ...extra })` after file write
+- [x] In `debug()` method: call `emitOtelLog("DEBUG", message, { ...tags, ...extra })` after file write
+- [x] In `info()` method: call `emitOtelLog("INFO", message, { ...tags, ...extra })` after file write
+- [x] In `warn()` method: call `emitOtelLog("WARN", message, { ...tags, ...extra })` after file write
+- [x] In `error()` method: call `emitOtelLog("ERROR", message, { ...tags, ...extra })` after file write
 
 ---
 
@@ -149,8 +149,8 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 5.1 Initialize Telemetry on Startup
 
-- [ ] Open `packages/opencode/src/index.ts`
-- [ ] In the yargs middleware (after `Log.init()`), add telemetry initialization:
+- [x] Open `packages/opencode/src/index.ts`
+- [x] In the yargs middleware (after `Log.init()`), add telemetry initialization:
   - Check if `process.env.OTEL_EXPORTER_OTLP_ENDPOINT` is set
   - If not, load config and check `cfg.experimental?.openTelemetry`
   - If either is truthy, dynamically import `./telemetry`
@@ -158,9 +158,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 5.2 Register Shutdown Handlers
 
-- [ ] Add `process.on("SIGTERM", async () => { await Telemetry.shutdown() })`
-- [ ] Add `process.on("SIGINT", async () => { await Telemetry.shutdown() })`
-- [ ] Ensure shutdown is called before `process.exit()` in the finally block
+- [x] Add `process.on("SIGTERM", async () => { await Telemetry.shutdown() })`
+- [x] Add `process.on("SIGINT", async () => { await Telemetry.shutdown() })`
+- [x] Ensure shutdown is called before `process.exit()` in the finally block
 
 ---
 

@@ -27,6 +27,8 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { Config } from "./config/config"
+import { Telemetry } from "./telemetry"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -38,6 +40,14 @@ process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
     e: e instanceof Error ? e.message : e,
   })
+})
+
+process.on("SIGTERM", async () => {
+  await Telemetry.shutdown()
+})
+
+process.on("SIGINT", async () => {
+  await Telemetry.shutdown()
 })
 
 const cli = yargs(hideBin(process.argv))
@@ -75,6 +85,15 @@ const cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    // Initialize telemetry if enabled via env var or config
+    const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    const globalConfig = otelEndpoint ? undefined : await Config.global()
+    const otelConfig = globalConfig?.experimental?.openTelemetry
+    if (otelEndpoint || otelConfig) {
+      const config = Telemetry.resolveConfig(otelConfig)
+      Telemetry.init(config)
+    }
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
@@ -151,6 +170,8 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // Shutdown telemetry before exit
+  await Telemetry.shutdown()
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
