@@ -621,21 +621,30 @@ export namespace MCP {
       return undefined
     }
 
-    const result = await client
-      .getPrompt({
-        name: name,
-        arguments: args,
-      })
-      .catch((e) => {
-        log.error("failed to get prompt from MCP server", {
-          clientName,
-          promptName: name,
-          error: e.message,
-        })
-        return undefined
-      })
+    return Telemetry.withSpan(
+      "mcp.prompt.get",
+      {
+        "mcp.server_name": clientName,
+        "mcp.prompt_name": name,
+      },
+      async () => {
+        const result = await client
+          .getPrompt({
+            name: name,
+            arguments: args,
+          })
+          .catch((e) => {
+            log.error("failed to get prompt from MCP server", {
+              clientName,
+              promptName: name,
+              error: e.message,
+            })
+            return undefined
+          })
 
-    return result
+        return result
+      },
+    )
   }
 
   /**

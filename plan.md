@@ -331,9 +331,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 7.5 MCP Get Prompt
 
-- [ ] Find `client.getPrompt()` call
-- [ ] Wrap with `Telemetry.withSpan("mcp.prompt.get", {...}, ...)`
-- [ ] Add attributes: `mcp.server_name`, `mcp.prompt_name`
+- [x] Find `client.getPrompt()` call
+- [x] Wrap with `Telemetry.withSpan("mcp.prompt.get", {...}, ...)`
+- [x] Add attributes: `mcp.server_name`, `mcp.prompt_name`
 
 ---
 
