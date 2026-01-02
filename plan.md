@@ -18,7 +18,7 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 1.1 Add OpenTelemetry Dependencies
 
-- [ ] Add `@opentelemetry/api` to dependencies in `packages/opencode/package.json`
+- [x] Add `@opentelemetry/api` to dependencies in `packages/opencode/package.json`
 - [ ] Add `@opentelemetry/api-logs` to dependencies
 - [ ] Add `@opentelemetry/sdk-node` to dependencies
 - [ ] Add `@opentelemetry/sdk-logs` to dependencies
