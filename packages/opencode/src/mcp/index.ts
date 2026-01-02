@@ -191,10 +191,24 @@ export namespace MCP {
 
   // Helper function to fetch prompts for a specific client
   async function fetchPromptsForClient(clientName: string, client: Client) {
-    const prompts = await client.listPrompts().catch((e) => {
-      log.error("failed to get prompts", { clientName, error: e.message })
-      return undefined
-    })
+    const prompts = await Telemetry.withSpan(
+      "mcp.prompts.list",
+      {
+        "mcp.server_name": clientName,
+      },
+      async (span) => {
+        const result = await client.listPrompts().catch((e) => {
+          log.error("failed to get prompts", { clientName, error: e.message })
+          return undefined
+        })
+        if (result) {
+          span.setAttributes({
+            "mcp.prompt_count": result.prompts.length,
+          })
+        }
+        return result
+      },
+    )
 
     if (!prompts) {
       return
