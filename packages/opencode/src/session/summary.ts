@@ -16,6 +16,7 @@ import { Bus } from "@/bus"
 
 import { LLM } from "./llm"
 import { Agent } from "@/agent/agent"
+import { Telemetry } from "@/telemetry"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -26,11 +27,20 @@ export namespace SessionSummary {
       messageID: z.string(),
     }),
     async (input) => {
-      const all = await Session.messages({ sessionID: input.sessionID })
-      await Promise.all([
-        summarizeSession({ sessionID: input.sessionID, messages: all }),
-        summarizeMessage({ messageID: input.messageID, messages: all }),
-      ])
+      return Telemetry.withSpan(
+        "session.summary",
+        {
+          "session.id": input.sessionID,
+          "session.message_id": input.messageID,
+        },
+        async () => {
+          const all = await Session.messages({ sessionID: input.sessionID })
+          await Promise.all([
+            summarizeSession({ sessionID: input.sessionID, messages: all }),
+            summarizeMessage({ messageID: input.messageID, messages: all }),
+          ])
+        },
+      )
     },
   )
 
