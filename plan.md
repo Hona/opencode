@@ -215,11 +215,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.7 WebFetch Tool
 
-- [ ] Open `packages/opencode/src/tool/webfetch.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.webfetch.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.url`, `tool.format`, `tool.timeout`
-- [ ] Set `http.status_code` on completion
+- [x] Open `packages/opencode/src/tool/webfetch.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.webfetch.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.url`, `tool.format`, `tool.timeout`
+- [x] Set `http.status_code` on completion
 
 ### 6.8 WebSearch Tool
 
@@ -231,11 +231,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.9 CodeSearch Tool
 
-- [ ] Open `packages/opencode/src/tool/codesearch.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.codesearch.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.query`, `tool.tokens_num`
-- [ ] Set `http.status_code` on completion
+- [x] Open `packages/opencode/src/tool/codesearch.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.codesearch.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.query`, `tool.tokens_num`
+- [x] Set `http.status_code` on completion
 
 ### 6.10 Task Tool
 
