@@ -428,10 +428,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 10.1 Agent Generate
 
-- [ ] Open `packages/opencode/src/agent/agent.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `generate()` function with `Telemetry.withSpan("agent.generate", {...}, ...)`
-- [ ] Add attributes: `llm.provider_id`, `llm.model_id`
+- [x] Open `packages/opencode/src/agent/agent.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `generate()` function with `Telemetry.withSpan("agent.generate", {...}, ...)`
+- [x] Add attributes: `llm.provider_id`, `llm.model_id`
 
 ### 10.2 Plugin Trigger
 
