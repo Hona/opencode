@@ -90,6 +90,7 @@
     "@opentelemetry/sdk-node": "0.208.0",
     "@opentelemetry/semantic-conventions": "1.37.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "0.208.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "0.208.0",
     "@opentui/core": "0.1.67",
     "@opentui/solid": "0.1.67",
     "@parcel/watcher": "2.5.1",
