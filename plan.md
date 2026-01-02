@@ -442,11 +442,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 10.3 Snapshot Track
 
-- [ ] Open `packages/opencode/src/snapshot/index.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `track()` function with `Telemetry.withSpan("snapshot.track", {...}, ...)`
-- [ ] Add attributes: `snapshot.vcs`
-- [ ] Set `snapshot.hash` on completion
+- [x] Open `packages/opencode/src/snapshot/index.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `track()` function with `Telemetry.withSpan("snapshot.track", {...}, ...)`
+- [x] Add attributes: `snapshot.vcs`
+- [x] Set `snapshot.hash` on completion
 
 ### 10.4 Snapshot Restore
 
