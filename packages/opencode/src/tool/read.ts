@@ -9,6 +9,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { iife } from "@/util/iife"
+import { Telemetry } from "@/telemetry"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -21,131 +22,161 @@ export const ReadTool = Tool.define("read", {
     limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
-    let filepath = params.filePath
-    if (!path.isAbsolute(filepath)) {
-      filepath = path.join(process.cwd(), filepath)
-    }
-    const title = path.relative(Instance.worktree, filepath)
-
-    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      const parentDir = path.dirname(filepath)
-      await ctx.ask({
-        permission: "external_directory",
-        patterns: [parentDir],
-        always: [parentDir + "/*"],
-        metadata: {
-          filepath,
-          parentDir,
-        },
-      })
-    }
-
-    await ctx.ask({
-      permission: "read",
-      patterns: [filepath],
-      always: ["*"],
-      metadata: {},
-    })
-
-    const block = iife(() => {
-      const basename = path.basename(filepath)
-      const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
-
-      if (whitelist.some((w) => basename.endsWith(w))) return false
-      // Block .env, .env.local, .env.production, etc. but not .envrc
-      if (/^\.env(\.|$)/.test(basename)) return true
-
-      return false
-    })
-
-    if (block) {
-      throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
-    }
-
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
-      const dir = path.dirname(filepath)
-      const base = path.basename(filepath)
-
-      const dirEntries = fs.readdirSync(dir)
-      const suggestions = dirEntries
-        .filter(
-          (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
-        )
-        .map((entry) => path.join(dir, entry))
-        .slice(0, 3)
-
-      if (suggestions.length > 0) {
-        throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
-      }
-
-      throw new Error(`File not found: ${filepath}`)
-    }
-
-    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
-    const isPdf = file.type === "application/pdf"
-    if (isImage || isPdf) {
-      const mime = file.type
-      const msg = `${isImage ? "Image" : "PDF"} read successfully`
-      return {
-        title,
-        output: msg,
-        metadata: {
-          preview: msg,
-        },
-        attachments: [
-          {
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            type: "file",
-            mime,
-            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
-          },
-        ],
-      }
-    }
-
-    const isBinary = await isBinaryFile(filepath, file)
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
-
-    const limit = params.limit ?? DEFAULT_READ_LIMIT
-    const offset = params.offset || 0
-    const lines = await file.text().then((text) => text.split("\n"))
-    const raw = lines.slice(offset, offset + limit).map((line) => {
-      return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
-    })
-    const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
-    })
-    const preview = raw.slice(0, 20).join("\n")
-
-    let output = "<file>\n"
-    output += content.join("\n")
-
-    const totalLines = lines.length
-    const lastReadLine = offset + content.length
-    const hasMoreLines = totalLines > lastReadLine
-
-    if (hasMoreLines) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
-    } else {
-      output += `\n\n(End of file - total ${totalLines} lines)`
-    }
-    output += "\n</file>"
-
-    // just warms the lsp client
-    LSP.touchFile(filepath, false)
-    FileTime.read(ctx.sessionID, filepath)
-
-    return {
-      title,
-      output,
-      metadata: {
-        preview,
+    return Telemetry.withSpan(
+      "tool.read.execute",
+      {
+        "tool.name": "read",
+        "session.id": ctx.sessionID,
+        "tool.file_path": params.filePath,
+        "tool.offset": params.offset ?? 0,
+        "tool.limit": params.limit ?? DEFAULT_READ_LIMIT,
       },
-    }
+      async (span) => {
+        let filepath = params.filePath
+        if (!path.isAbsolute(filepath)) {
+          filepath = path.join(process.cwd(), filepath)
+        }
+        const title = path.relative(Instance.worktree, filepath)
+
+        if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
+          const parentDir = path.dirname(filepath)
+          await ctx.ask({
+            permission: "external_directory",
+            patterns: [parentDir],
+            always: [parentDir + "/*"],
+            metadata: {
+              filepath,
+              parentDir,
+            },
+          })
+        }
+
+        await ctx.ask({
+          permission: "read",
+          patterns: [filepath],
+          always: ["*"],
+          metadata: {},
+        })
+
+        const block = iife(() => {
+          const basename = path.basename(filepath)
+          const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
+
+          if (whitelist.some((w) => basename.endsWith(w))) return false
+          // Block .env, .env.local, .env.production, etc. but not .envrc
+          if (/^\.env(\.|$)/.test(basename)) return true
+
+          return false
+        })
+
+        if (block) {
+          throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
+        }
+
+        const file = Bun.file(filepath)
+        if (!(await file.exists())) {
+          const dir = path.dirname(filepath)
+          const base = path.basename(filepath)
+
+          const dirEntries = fs.readdirSync(dir)
+          const suggestions = dirEntries
+            .filter(
+              (entry) =>
+                entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+            )
+            .map((entry) => path.join(dir, entry))
+            .slice(0, 3)
+
+          if (suggestions.length > 0) {
+            throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
+          }
+
+          throw new Error(`File not found: ${filepath}`)
+        }
+
+        const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
+        const isPdf = file.type === "application/pdf"
+        if (isImage || isPdf) {
+          span.setAttributes({
+            "tool.lines_read": 0,
+            "tool.is_binary": false,
+            "tool.is_image": isImage,
+          })
+          const mime = file.type
+          const msg = `${isImage ? "Image" : "PDF"} read successfully`
+          return {
+            title,
+            output: msg,
+            metadata: {
+              preview: msg,
+            },
+            attachments: [
+              {
+                id: Identifier.ascending("part"),
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                type: "file",
+                mime,
+                url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+              },
+            ],
+          }
+        }
+
+        const isBinary = await isBinaryFile(filepath, file)
+        if (isBinary) {
+          span.setAttributes({
+            "tool.lines_read": 0,
+            "tool.is_binary": true,
+            "tool.is_image": false,
+          })
+          throw new Error(`Cannot read binary file: ${filepath}`)
+        }
+
+        const limit = params.limit ?? DEFAULT_READ_LIMIT
+        const offset = params.offset || 0
+        const lines = await file.text().then((text) => text.split("\n"))
+        const raw = lines.slice(offset, offset + limit).map((line) => {
+          return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
+        })
+        const content = raw.map((line, index) => {
+          return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
+        })
+        const preview = raw.slice(0, 20).join("\n")
+
+        let output = "<file>\n"
+        output += content.join("\n")
+
+        const totalLines = lines.length
+        const lastReadLine = offset + content.length
+        const hasMoreLines = totalLines > lastReadLine
+
+        if (hasMoreLines) {
+          output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+        } else {
+          output += `\n\n(End of file - total ${totalLines} lines)`
+        }
+        output += "\n</file>"
+
+        // just warms the lsp client
+        LSP.touchFile(filepath, false)
+        FileTime.read(ctx.sessionID, filepath)
+
+        span.setAttributes({
+          "tool.lines_read": content.length,
+          "tool.is_binary": false,
+          "tool.is_image": false,
+        })
+
+        return {
+          title,
+          output,
+          metadata: {
+            preview,
+          },
+        }
+      },
+    )
   },
 })
 

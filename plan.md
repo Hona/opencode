@@ -176,11 +176,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.2 Read Tool
 
-- [ ] Open `packages/opencode/src/tool/read.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.read.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.offset`, `tool.limit`
-- [ ] Set `tool.lines_read`, `tool.is_binary`, `tool.is_image` on completion
+- [x] Open `packages/opencode/src/tool/read.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.read.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.offset`, `tool.limit`
+- [x] Set `tool.lines_read`, `tool.is_binary`, `tool.is_image` on completion
 
 ### 6.3 Edit Tool
 
