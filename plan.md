@@ -247,11 +247,11 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.11 LSP Tool
 
-- [ ] Open `packages/opencode/src/tool/lsp.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.lsp.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.operation`, `tool.file_path`
-- [ ] Set `tool.result_count` on completion
+- [x] Open `packages/opencode/src/tool/lsp.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.lsp.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.operation`, `tool.file_path`
+- [x] Set `tool.result_count` on completion
 
 ### 6.12 Skill Tool
 
