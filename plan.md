@@ -341,10 +341,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 8.1 LLM Stream
 
-- [ ] Open `packages/opencode/src/session/llm.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `stream()` function body with `Telemetry.withSpan("llm.stream", {...}, ...)`
-- [ ] Add attributes: `llm.provider_id`, `llm.model_id`, `session.id`, `llm.agent`, `llm.tools_count`
+- [x] Open `packages/opencode/src/session/llm.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `stream()` function body with `Telemetry.withSpan("llm.stream", {...}, ...)`
+- [x] Add attributes: `llm.provider_id`, `llm.model_id`, `session.id`, `llm.agent`, `llm.tools_count`
 
 ### 8.2 Session Processor
 
