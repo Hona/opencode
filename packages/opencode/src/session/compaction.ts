@@ -14,6 +14,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { Telemetry } from "@/telemetry"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -96,100 +97,110 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
-    const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
-    const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
-    const msg = (await Session.updateMessage({
-      id: Identifier.ascending("message"),
-      role: "assistant",
-      parentID: input.parentID,
-      sessionID: input.sessionID,
-      mode: "compaction",
-      agent: "compaction",
-      summary: true,
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
+    return Telemetry.withSpan(
+      "session.compaction.process",
+      {
+        "session.id": input.sessionID,
+        "session.auto": input.auto,
+        "session.message_count": input.messages.length,
       },
-      cost: 0,
-      tokens: {
-        output: 0,
-        input: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      modelID: model.id,
-      providerID: model.providerID,
-      time: {
-        created: Date.now(),
-      },
-    })) as MessageV2.Assistant
-    const processor = SessionProcessor.create({
-      assistantMessage: msg,
-      sessionID: input.sessionID,
-      model,
-      abort: input.abort,
-    })
-    // Allow plugins to inject context or replace compaction prompt
-    const compacting = await Plugin.trigger(
-      "experimental.session.compacting",
-      { sessionID: input.sessionID },
-      { context: [], prompt: undefined },
-    )
-    const defaultPrompt =
-      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-    const result = await processor.process({
-      user: userMessage,
-      agent,
-      abort: input.abort,
-      sessionID: input.sessionID,
-      tools: {},
-      system: [],
-      messages: [
-        ...MessageV2.toModelMessage(input.messages),
-        {
-          role: "user",
-          content: [
+      async () => {
+        const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+        const agent = await Agent.get("compaction")
+        const model = agent.model
+          ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+          : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+        const msg = (await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          parentID: input.parentID,
+          sessionID: input.sessionID,
+          mode: "compaction",
+          agent: "compaction",
+          summary: true,
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: {
+            created: Date.now(),
+          },
+        })) as MessageV2.Assistant
+        const processor = SessionProcessor.create({
+          assistantMessage: msg,
+          sessionID: input.sessionID,
+          model,
+          abort: input.abort,
+        })
+        // Allow plugins to inject context or replace compaction prompt
+        const compacting = await Plugin.trigger(
+          "experimental.session.compacting",
+          { sessionID: input.sessionID },
+          { context: [], prompt: undefined },
+        )
+        const defaultPrompt =
+          "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
+        const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+        const result = await processor.process({
+          user: userMessage,
+          agent,
+          abort: input.abort,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            ...MessageV2.toModelMessage(input.messages),
             {
-              type: "text",
-              text: promptText,
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: promptText,
+                },
+              ],
             },
           ],
-        },
-      ],
-      model,
-    })
+          model,
+        })
 
-    if (result === "continue" && input.auto) {
-      const continueMsg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
-        role: "user",
-        sessionID: input.sessionID,
-        time: {
-          created: Date.now(),
-        },
-        agent: userMessage.agent,
-        model: userMessage.model,
-      })
-      await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: continueMsg.id,
-        sessionID: input.sessionID,
-        type: "text",
-        synthetic: true,
-        text: "Continue if you have next steps",
-        time: {
-          start: Date.now(),
-          end: Date.now(),
-        },
-      })
-    }
-    if (processor.message.error) return "stop"
-    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
-    return "continue"
+        if (result === "continue" && input.auto) {
+          const continueMsg = await Session.updateMessage({
+            id: Identifier.ascending("message"),
+            role: "user",
+            sessionID: input.sessionID,
+            time: {
+              created: Date.now(),
+            },
+            agent: userMessage.agent,
+            model: userMessage.model,
+          })
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: continueMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            synthetic: true,
+            text: "Continue if you have next steps",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+          })
+        }
+        if (processor.message.error) return "stop"
+        Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        return "continue"
+      },
+    )
   }
 
   export const create = fn(
