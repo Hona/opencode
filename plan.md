@@ -450,9 +450,9 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 10.4 Snapshot Restore
 
-- [ ] Find `restore()` function
-- [ ] Wrap with `Telemetry.withSpan("snapshot.restore", {...}, ...)`
-- [ ] Add attributes: `snapshot.hash`
+- [x] Find `restore()` function
+- [x] Wrap with `Telemetry.withSpan("snapshot.restore", {...}, ...)`
+- [x] Add attributes: `snapshot.hash`
 
 ---
 

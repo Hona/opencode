@@ -85,22 +85,30 @@ export namespace Snapshot {
   }
 
   export async function restore(snapshot: string) {
-    log.info("restore", { commit: snapshot })
-    const git = gitdir()
-    const result =
-      await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
+    return Telemetry.withSpan(
+      "snapshot.restore",
+      {
+        "snapshot.hash": snapshot,
+      },
+      async () => {
+        log.info("restore", { commit: snapshot })
+        const git = gitdir()
+        const result =
+          await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
 
-    if (result.exitCode !== 0) {
-      log.error("failed to restore snapshot", {
-        snapshot,
-        exitCode: result.exitCode,
-        stderr: result.stderr.toString(),
-        stdout: result.stdout.toString(),
-      })
-    }
+        if (result.exitCode !== 0) {
+          log.error("failed to restore snapshot", {
+            snapshot,
+            exitCode: result.exitCode,
+            stderr: result.stderr.toString(),
+            stdout: result.stdout.toString(),
+          })
+        }
+      },
+    )
   }
 
   export async function revert(patches: Patch[]) {
