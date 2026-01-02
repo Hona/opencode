@@ -192,10 +192,10 @@ Add structured logging and tracing via OpenTelemetry to OpenCode, viewable in re
 
 ### 6.4 Write Tool
 
-- [ ] Open `packages/opencode/src/tool/write.ts`
-- [ ] Import `Telemetry`
-- [ ] Wrap `execute` with `Telemetry.withSpan("tool.write.execute", {...}, ...)`
-- [ ] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.content_length`
+- [x] Open `packages/opencode/src/tool/write.ts`
+- [x] Import `Telemetry`
+- [x] Wrap `execute` with `Telemetry.withSpan("tool.write.execute", {...}, ...)`
+- [x] Add attributes: `tool.name`, `session.id`, `tool.file_path`, `tool.content_length`
 
 ### 6.5 Glob Tool
 
