@@ -910,9 +910,15 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
-            .boolean()
+            .union([
+              z.boolean(),
+              z.object({
+                enabled: z.boolean().optional().default(true),
+                endpoint: z.string().optional().describe("OTLP endpoint (default: http://localhost:4317)"),
+              }),
+            ])
             .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+            .describe("Enable OpenTelemetry tracing and structured logs to Aspire Dashboard"),
           primary_tools: z
             .array(z.string())
             .optional()
