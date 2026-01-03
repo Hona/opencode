@@ -85,8 +85,15 @@ export const WebFetchTool = Tool.define("webfetch", {
 
     const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
+    const statusCode = response.status
+    const responseSize = arrayBuffer.byteLength
 
     const title = `${params.url} (${contentType})`
+    const metadata = {
+      statusCode,
+      contentType,
+      responseSize,
+    }
 
     // Handle content based on requested format and actual content type
     switch (params.format) {
@@ -96,13 +103,13 @@ export const WebFetchTool = Tool.define("webfetch", {
           return {
             output: markdown,
             title,
-            metadata: {},
+            metadata,
           }
         }
         return {
           output: content,
           title,
-          metadata: {},
+          metadata,
         }
 
       case "text":
@@ -111,27 +118,27 @@ export const WebFetchTool = Tool.define("webfetch", {
           return {
             output: text,
             title,
-            metadata: {},
+            metadata,
           }
         }
         return {
           output: content,
           title,
-          metadata: {},
+          metadata,
         }
 
       case "html":
         return {
           output: content,
           title,
-          metadata: {},
+          metadata,
         }
 
       default:
         return {
           output: content,
           title,
-          metadata: {},
+          metadata,
         }
     }
   },
