@@ -112,6 +112,7 @@ export const ListTool = Tool.define("list", {
       metadata: {
         count: files.length,
         truncated: files.length >= LIMIT,
+        directories: dirs.size,
       },
       output,
     }
