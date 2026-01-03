@@ -489,9 +489,10 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `traced()` wrapper pattern with explicit type parameters
   - Attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
-- [ ] **5.1.5** Migrate `LSPClient.create` in `packages/opencode/src/lsp/client.ts`
-  - Use `using span = Telemetry.span(...)` pattern (has nested initialize span)
-  - Keep nested `lsp.request.initialize` span as `Telemetry.withSpan()`
+- [x] **5.1.5** Migrate `LSPClient.create` in `packages/opencode/src/lsp/client.ts`
+  - Used `using _span = Telemetry.span(...)` pattern (has nested initialize span)
+  - Kept nested `lsp.request.initialize` span as `Telemetry.withSpan()`
+  - Unindented function body by one level
 
 ### 5.2 MCP Module
 
