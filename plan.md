@@ -277,7 +277,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `contentType: string` - response content-type
   - Add `responseSize: number` - response size in bytes
 
-- [ ] **2.2.14** Enhance `websearch.ts` metadata (currently empty `{}`)
+- [x] **2.2.14** Enhance `websearch.ts` metadata (currently empty `{}`)
   - Add `statusCode: number` - HTTP status code
   - Add `resultCount: number` - number of results
   - Add `hasResults: boolean` - whether any results returned
