@@ -4,7 +4,6 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
-import { Telemetry } from "@/telemetry"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -18,75 +17,59 @@ export const GlobTool = Tool.define("glob", {
       ),
   }),
   async execute(params, ctx) {
-    return Telemetry.withSpan(
-      "tool.glob.execute",
-      {
-        "tool.name": "glob",
-        "session.id": ctx.sessionID,
-        "tool.pattern": params.pattern,
-        "tool.path": params.path ?? "",
+    await ctx.ask({
+      permission: "glob",
+      patterns: [params.pattern],
+      always: ["*"],
+      metadata: {
+        pattern: params.pattern,
+        path: params.path,
       },
-      async (span) => {
-        await ctx.ask({
-          permission: "glob",
-          patterns: [params.pattern],
-          always: ["*"],
-          metadata: {
-            pattern: params.pattern,
-            path: params.path,
-          },
-        })
+    })
 
-        let search = params.path ?? Instance.directory
-        search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    let search = params.path ?? Instance.directory
+    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
 
-        const limit = 100
-        const files = []
-        let truncated = false
-        for await (const file of Ripgrep.files({
-          cwd: search,
-          glob: [params.pattern],
-        })) {
-          if (files.length >= limit) {
-            truncated = true
-            break
-          }
-          const full = path.resolve(search, file)
-          const stats = await Bun.file(full)
-            .stat()
-            .then((x) => x.mtime.getTime())
-            .catch(() => 0)
-          files.push({
-            path: full,
-            mtime: stats,
-          })
-        }
-        files.sort((a, b) => b.mtime - a.mtime)
+    const limit = 100
+    const files = []
+    let truncated = false
+    for await (const file of Ripgrep.files({
+      cwd: search,
+      glob: [params.pattern],
+    })) {
+      if (files.length >= limit) {
+        truncated = true
+        break
+      }
+      const full = path.resolve(search, file)
+      const stats = await Bun.file(full)
+        .stat()
+        .then((x) => x.mtime.getTime())
+        .catch(() => 0)
+      files.push({
+        path: full,
+        mtime: stats,
+      })
+    }
+    files.sort((a, b) => b.mtime - a.mtime)
 
-        const output = []
-        if (files.length === 0) output.push("No files found")
-        if (files.length > 0) {
-          output.push(...files.map((f) => f.path))
-          if (truncated) {
-            output.push("")
-            output.push("(Results are truncated. Consider using a more specific path or pattern.)")
-          }
-        }
+    const output = []
+    if (files.length === 0) output.push("No files found")
+    if (files.length > 0) {
+      output.push(...files.map((f) => f.path))
+      if (truncated) {
+        output.push("")
+        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
+      }
+    }
 
-        span.setAttributes({
-          "tool.files_found": files.length,
-          "tool.truncated": truncated,
-        })
-
-        return {
-          title: path.relative(Instance.worktree, search),
-          metadata: {
-            count: files.length,
-            truncated,
-          },
-          output: output.join("\n"),
-        }
+    return {
+      title: path.relative(Instance.worktree, search),
+      metadata: {
+        count: files.length,
+        truncated,
       },
-    )
+      output: output.join("\n"),
+    }
   },
 })
