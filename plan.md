@@ -182,11 +182,11 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 - [x] **2.1.14-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/todo.ts`
   - Should show: metadata additions only for both tools, no telemetry wrappers
 
-- [ ] **2.1.15** Migrate `packages/opencode/src/tool/webfetch.ts`
+- [x] **2.1.15** Migrate `packages/opencode/src/tool/webfetch.ts`
   - Remove telemetry wrapper
   - Remove `span.setAttributes()` call
   - Unindent function body
-- [ ] **2.1.15-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/webfetch.ts`
+- [x] **2.1.15-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/webfetch.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
 - [ ] **2.1.16** Migrate `packages/opencode/src/tool/websearch.ts`
