@@ -514,8 +514,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `using _span = Telemetry.span(...)` pattern for both remote and local connections
   - Used block scope `{}` to contain span lifetime for single `client.connect()` call
 
-- [ ] **5.2.5** Review `convertMcpTool` execute wrapper
-  - This creates dynamic tools, may need to stay as `withSpan` inline
+- [x] **5.2.5** Review `convertMcpTool` execute wrapper
+  - **Decision: Keep as `withSpan` inline** - MCP tools are created dynamically via `dynamicTool()` from AI SDK, not `Tool.define()`, so auto-instrumentation doesn't apply. The wrapper is already minimal.
   - Attributes: `mcp.server_name`, `mcp.tool_name`
 
 ### 5.3 Phase 5 Validation
