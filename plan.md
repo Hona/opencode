@@ -24,11 +24,11 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 2: Apply Env Var Override in Config Loading
 
-- [ ] In `packages/opencode/src/config/config.ts`, locate the flag override section (around line 150-156 where `OPENCODE_DISABLE_AUTOCOMPACT` is applied)
+- [x] In `packages/opencode/src/config/config.ts`, locate the flag override section (around line 150-156 where `OPENCODE_DISABLE_AUTOCOMPACT` is applied)
 
-- [ ] Add import for `Flag` at the top of the file if not already present
+- [x] Add import for `Flag` at the top of the file if not already present
 
-- [ ] After the existing flag overrides, add logic to merge the OTLP endpoint into config:
+- [x] After the existing flag overrides, add logic to merge the OTLP endpoint into config:
   ```typescript
   if (Flag.OTEL_EXPORTER_OTLP_ENDPOINT) {
     result.experimental = {
