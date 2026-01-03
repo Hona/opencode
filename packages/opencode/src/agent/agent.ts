@@ -221,12 +221,11 @@ export namespace Agent {
     const existing = await list()
     const result = await generateObject({
       experimental_telemetry: {
-        isEnabled:
-          typeof cfg.experimental?.openTelemetry === "object"
-            ? cfg.experimental.openTelemetry.enabled
-            : cfg.experimental?.openTelemetry,
+        isEnabled: Telemetry.isEnabled(),
+        functionId: "opencode.agent.generate",
         metadata: {
-          userId: cfg.username ?? "unknown",
+          "llm.provider_id": defaultModel.providerID,
+          "llm.model_id": defaultModel.modelID,
         },
       },
       temperature: 0.3,
