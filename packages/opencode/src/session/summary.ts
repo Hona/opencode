@@ -16,32 +16,31 @@ import { Bus } from "@/bus"
 
 import { LLM } from "./llm"
 import { Agent } from "@/agent/agent"
-import { Telemetry } from "@/telemetry"
+import { traced } from "@/telemetry/traced"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
+
+  type SummarizeInput = {
+    sessionID: string
+    messageID: string
+  }
 
   export const summarize = fn(
     z.object({
       sessionID: z.string(),
       messageID: z.string(),
     }),
-    async (input) => {
-      return Telemetry.withSpan(
-        "session.summary",
-        {
-          "session.id": input.sessionID,
-          "session.message_id": input.messageID,
-        },
-        async () => {
-          const all = await Session.messages({ sessionID: input.sessionID })
-          await Promise.all([
-            summarizeSession({ sessionID: input.sessionID, messages: all }),
-            summarizeMessage({ messageID: input.messageID, messages: all }),
-          ])
-        },
-      )
-    },
+    traced<SummarizeInput, void>("session.summary", (input) => ({
+      "session.id": input.sessionID,
+      "session.message_id": input.messageID,
+    }))(async (input) => {
+      const all = await Session.messages({ sessionID: input.sessionID })
+      await Promise.all([
+        summarizeSession({ sessionID: input.sessionID, messages: all }),
+        summarizeMessage({ messageID: input.messageID, messages: all }),
+      ])
+    }),
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {

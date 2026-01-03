@@ -402,7 +402,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.auto`, `session.message_count`
 
-- [ ] **4.1.4** Migrate `SessionSummary.summarize` in `packages/opencode/src/session/summary.ts`
+- [x] **4.1.4** Migrate `SessionSummary.summarize` in `packages/opencode/src/session/summary.ts`
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.message_id`
 
