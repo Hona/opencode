@@ -510,9 +510,9 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `using span` pattern (preserves multi-parameter function signature)
   - Attributes: `mcp.server_name`, `mcp.prompt_name`
 
-- [ ] **5.2.4** Migrate MCP client connection spans in `create()` function
-  - Use `using span = Telemetry.span(...)` or keep `withSpan` for `mcp.client.connect`
-  - This is inside a loop trying different transports, may need special handling
+- [x] **5.2.4** Migrate MCP client connection spans in `create()` function
+  - Changed to `using _span = Telemetry.span(...)` pattern for both remote and local connections
+  - Used block scope `{}` to contain span lifetime for single `client.connect()` call
 
 - [ ] **5.2.5** Review `convertMcpTool` execute wrapper
   - This creates dynamic tools, may need to stay as `withSpan` inline
