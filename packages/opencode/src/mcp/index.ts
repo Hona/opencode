@@ -543,30 +543,22 @@ export namespace MCP {
         continue
       }
 
-      const toolsResult = await Telemetry.withSpan(
-        "mcp.tools.list",
-        {
-          "mcp.server_name": clientName,
-        },
-        async (span) => {
-          const tools = await client.listTools().catch((e) => {
-            log.error("failed to get tools", { clientName, error: e.message })
-            const failedStatus = {
-              status: "failed" as const,
-              error: e instanceof Error ? e.message : String(e),
-            }
-            s.status[clientName] = failedStatus
-            delete s.clients[clientName]
-            return undefined
-          })
-          if (tools) {
-            span.setAttributes({
-              "mcp.tool_count": tools.tools.length,
-            })
-          }
-          return tools
-        },
-      )
+      using span = Telemetry.span("mcp.tools.list", { "mcp.server_name": clientName })
+      const toolsResult = await client.listTools().catch((e) => {
+        log.error("failed to get tools", { clientName, error: e.message })
+        const failedStatus = {
+          status: "failed" as const,
+          error: e instanceof Error ? e.message : String(e),
+        }
+        s.status[clientName] = failedStatus
+        delete s.clients[clientName]
+        return undefined
+      })
+      if (toolsResult) {
+        span.setAttributes({
+          "mcp.tool_count": toolsResult.tools.length,
+        })
+      }
       if (!toolsResult) {
         continue
       }

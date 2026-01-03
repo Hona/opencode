@@ -501,10 +501,10 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Attributes: `mcp.server_name`
   - Preserved `span.setAttributes({ "mcp.prompt_count" })` after results are fetched
 
-- [ ] **5.2.2** Migrate `MCP.tools` in `packages/opencode/src/mcp/index.ts`
-  - The inner `mcp.tools.list` span - change to `traced()` or inline pattern
+- [x] **5.2.2** Migrate `MCP.tools` in `packages/opencode/src/mcp/index.ts`
+  - Changed to `using span` pattern (needs `setAttributes` for `mcp.tool_count` after getting results)
   - Attributes: `mcp.server_name`
-  - Note: Has `span.setAttributes({ "mcp.tool_count" })` - add to return or keep
+  - Preserved `span.setAttributes({ "mcp.tool_count" })` after results are fetched
 
 - [ ] **5.2.3** Migrate `MCP.getPrompt` in `packages/opencode/src/mcp/index.ts`
   - Change to `traced()` wrapper pattern
