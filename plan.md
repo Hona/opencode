@@ -21,20 +21,20 @@ Significantly reduce the `feat/aspire-otel` branch diff by moving telemetry conc
 
 ### 1.1 Telemetry Module Enhancements
 
-- [ ] **1.1.1** Add `flattenAttributes()` utility to `packages/opencode/src/telemetry/index.ts`
+- [x] **1.1.1** Add `flattenAttributes()` utility to `packages/opencode/src/telemetry/index.ts`
   - Takes `prefix: string` and `obj: Record<string, unknown>`
   - Returns `Record<string, AttributeValue>`
   - Truncates strings longer than 200 characters
   - Only captures primitives (string, number, boolean)
   - Skips undefined/null values
 
-- [ ] **1.1.2** Add `span()` function with `using` support to `packages/opencode/src/telemetry/index.ts`
+- [x] **1.1.2** Add `span()` function with `using` support to `packages/opencode/src/telemetry/index.ts`
   - Signature: `span(name: string, attrs: Record<string, AttributeValue>): Span & Disposable`
   - Returns NOOP_SPAN with empty dispose if telemetry not initialized
   - Implements `[Symbol.dispose]` to call `span.end()`
   - Starts span immediately on call
 
-- [ ] **1.1.3** Export `NOOP_SPAN` from telemetry module (needed for span() fallback)
+- [x] **1.1.3** Export `NOOP_SPAN` from telemetry module (needed for span() fallback)
 
 ### 1.2 Traced Wrapper Utility
 
