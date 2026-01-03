@@ -3,7 +3,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { ConfigMarkdown } from "../config/markdown"
-import { Telemetry } from "@/telemetry"
 
 export const SkillTool = Tool.define("skill", async () => {
   const skills = await Skill.all()
@@ -45,46 +44,34 @@ export const SkillTool = Tool.define("skill", async () => {
         .describe("The skill identifier from available_skills (e.g., 'code-review' or 'category/helper')"),
     }),
     async execute(params, ctx) {
-      return Telemetry.withSpan(
-        "tool.skill.execute",
-        {
-          "tool.name": "skill",
-          "session.id": ctx.sessionID,
-          "tool.skill_name": params.name,
+      const skill = await Skill.get(params.name)
+
+      if (!skill) {
+        const available = Skill.all().then((x) => Object.keys(x).join(", "))
+        throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
+      }
+
+      await ctx.ask({
+        permission: "skill",
+        patterns: [params.name],
+        always: [params.name],
+        metadata: {},
+      })
+      // Load and parse skill content
+      const parsed = await ConfigMarkdown.parse(skill.location)
+      const dir = path.dirname(skill.location)
+
+      // Format output similar to plugin pattern
+      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join("\n")
+
+      return {
+        title: `Loaded skill: ${skill.name}`,
+        output,
+        metadata: {
+          name: skill.name,
+          dir,
         },
-        async () => {
-          const skill = await Skill.get(params.name)
-
-          if (!skill) {
-            const available = Skill.all().then((x) => Object.keys(x).join(", "))
-            throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
-          }
-
-          await ctx.ask({
-            permission: "skill",
-            patterns: [params.name],
-            always: [params.name],
-            metadata: {},
-          })
-          // Load and parse skill content
-          const parsed = await ConfigMarkdown.parse(skill.location)
-          const dir = path.dirname(skill.location)
-
-          // Format output similar to plugin pattern
-          const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join(
-            "\n",
-          )
-
-          return {
-            title: `Loaded skill: ${skill.name}`,
-            output,
-            metadata: {
-              name: skill.name,
-              dir,
-            },
-          }
-        },
-      )
+      }
     },
   }
 })
