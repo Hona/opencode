@@ -389,9 +389,10 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 4.1 Session Module
 
-- [ ] **4.1.1** Migrate `LLM.stream` in `packages/opencode/src/session/llm.ts`
+- [x] **4.1.1** Migrate `LLM.stream` in `packages/opencode/src/session/llm.ts`
   - Change from `export async function stream(input)` to `export const stream = traced(...)(async (input) => ...)`
   - Attributes: `llm.provider_id`, `llm.model_id`, `session.id`, `llm.agent`, `llm.tools_count`
+  - Note: Explicit type parameters `traced<StreamInput, StreamOutput>` needed for proper type inference
 
 - [ ] **4.1.2** Migrate `SessionPrompt.prompt` in `packages/opencode/src/session/prompt.ts`
   - Change to `traced()` wrapper pattern
