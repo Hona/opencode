@@ -189,18 +189,18 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 - [x] **2.1.15-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/webfetch.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
-- [ ] **2.1.16** Migrate `packages/opencode/src/tool/websearch.ts`
+- [x] **2.1.16** Migrate `packages/opencode/src/tool/websearch.ts`
   - Remove telemetry wrapper
   - Remove `span.setAttributes()` call
   - Unindent function body
-- [ ] **2.1.16-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/websearch.ts`
+- [x] **2.1.16-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/websearch.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
-- [ ] **2.1.17** Migrate `packages/opencode/src/tool/codesearch.ts`
+- [x] **2.1.17** Migrate `packages/opencode/src/tool/codesearch.ts`
   - Remove telemetry wrapper
   - Remove `span.setAttributes()` call
   - Unindent function body
-- [ ] **2.1.17-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/codesearch.ts`
+- [x] **2.1.17-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/codesearch.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
 ### 2.1-checkpoint: Tool Wrapper Removal Complete
