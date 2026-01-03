@@ -11,7 +11,6 @@ import {
 } from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
-import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -20,6 +19,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { traced } from "@/telemetry/traced"
+import { Telemetry } from "@/telemetry"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -59,7 +59,7 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+    const language = await Provider.getLanguage(input.model)
 
     const system = SystemPrompt.header(input.model.providerID)
     system.push(
@@ -203,11 +203,7 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled:
-          !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-          (typeof cfg.experimental?.openTelemetry === "object"
-            ? cfg.experimental.openTelemetry.enabled
-            : cfg.experimental?.openTelemetry),
+        isEnabled: Telemetry.isEnabled(),
         functionId: `${input.agent.name}.chat`,
         recordInputs: true,
         recordOutputs: true,

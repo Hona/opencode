@@ -86,15 +86,15 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 5: Simplify AI SDK Telemetry Checks
 
-- [ ] In `packages/opencode/src/session/llm.ts`, locate the `experimental_telemetry` block (lines 205-210)
+- [x] In `packages/opencode/src/session/llm.ts`, locate the `experimental_telemetry` block (lines 205-210)
 
-- [ ] Add import for `Telemetry` at the top of the file:
+- [x] Add import for `Telemetry` at the top of the file:
 
   ```typescript
   import { Telemetry } from "@/telemetry"
   ```
 
-- [ ] Replace the `isEnabled` check with the helper:
+- [x] Replace the `isEnabled` check with the helper:
 
   ```typescript
   experimental_telemetry: {
