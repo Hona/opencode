@@ -406,9 +406,9 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.message_id`
 
-- [ ] **4.1.5** Migrate `SessionProcessor.process` in `packages/opencode/src/session/processor.ts`
-  - Change to `traced()` wrapper pattern
-  - Attributes: `session.id`, `llm.provider_id`, `llm.model_id`
+- [x] **4.1.5** Migrate `SessionProcessor.process` in `packages/opencode/src/session/processor.ts`
+  - Changed to `using span` pattern (method inside closure, can't use `traced()`)
+  - Attributes: `session.id`, `session.message_id`, `llm.provider_id`, `llm.model_id`
 
 ### 4.2 Other Modules
 
