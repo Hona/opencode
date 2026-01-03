@@ -272,7 +272,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `todoCount: number` - total todos
   - Add `completedCount: number` - completed todos
 
-- [ ] **2.2.13** Enhance `webfetch.ts` metadata (currently empty `{}`)
+- [x] **2.2.13** Enhance `webfetch.ts` metadata (currently empty `{}`)
   - Add `statusCode: number` - HTTP status code
   - Add `contentType: string` - response content-type
   - Add `responseSize: number` - response size in bytes
