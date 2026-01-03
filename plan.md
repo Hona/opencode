@@ -264,7 +264,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `toolCallsCount: number` - total tool calls made by subagent
   - Add `isNewSession: boolean` - whether a new session was created
 
-- [ ] **2.2.11** Enhance `todo.ts` (TodoWriteTool) metadata
+- [x] **2.2.11** Enhance `todo.ts` (TodoWriteTool) metadata
   - Add `completedCount: number` - todos with status "completed"
   - Add `pendingCount: number` - todos not completed
 
