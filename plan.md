@@ -166,31 +166,46 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 7: Testing
 
-- [ ] Verify telemetry works with only config enabled (no env var):
+- [x] Add unit tests for telemetry configuration:
+  - Created `packages/opencode/test/telemetry/telemetry.test.ts` with tests for `Telemetry.resolveConfig`:
+    - Returns disabled config when no experimental config provided
+    - Handles boolean true/false config
+    - Handles object config with enabled true/false
+    - Handles object config with custom endpoint
+    - Defaults enabled to true when object has no enabled field
+    - Defaults endpoint when object has no endpoint field
+    - Uses custom service name
+  - Added tests to `packages/opencode/test/config/config.test.ts` for config loading:
+    - Verifies openTelemetry config loads from file when enabled as boolean
+    - Verifies openTelemetry config loads from file with custom endpoint
+    - Verifies openTelemetry defaults to undefined when not configured
+    - Tests OTEL_EXPORTER_OTLP_ENDPOINT env var override behavior
+
+- [ ] (Manual) Verify telemetry works with only config enabled (no env var):
   - Set `experimental.openTelemetry: true` in opencode.jsonc
   - Run opencode and confirm telemetry initializes
 
-- [ ] Verify telemetry works with only env var (no config):
+- [ ] (Manual) Verify telemetry works with only env var (no config):
   - Remove any openTelemetry config
   - Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
   - Run opencode and confirm telemetry initializes
 
-- [ ] Verify env var overrides config endpoint:
+- [ ] (Manual) Verify env var overrides config endpoint:
   - Set `experimental.openTelemetry.endpoint: "http://config:4317"` in config
   - Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://envvar:4317`
   - Confirm the env var endpoint is used
 
-- [ ] Verify telemetry disabled when neither config nor env var set:
+- [ ] (Manual) Verify telemetry disabled when neither config nor env var set:
   - Remove all telemetry config and env vars
   - Run opencode and confirm telemetry does not initialize
 
-- [ ] Verify AI SDK telemetry is captured in traces when enabled
+- [ ] (Manual) Verify AI SDK telemetry is captured in traces when enabled
 
 ### Phase 8: Documentation
 
 - [ ] Update any relevant docs in `packages/docs/` if openTelemetry configuration is documented
 
-- [ ] Add inline code comments explaining the config precedence (env var > config)
+- [x] Add inline code comments explaining the config precedence (env var > config)
 
 ## Notes
 
