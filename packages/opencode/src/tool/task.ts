@@ -42,10 +42,14 @@ export const TaskTool = Tool.define("task", async () => {
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      let isNewSession = true
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})
-          if (found) return found
+          if (found) {
+            isNewSession = false
+            return found
+          }
         }
 
         return await Session.create({
@@ -159,6 +163,8 @@ export const TaskTool = Tool.define("task", async () => {
         metadata: {
           summary,
           sessionId: session.id,
+          toolCallsCount: summary.length,
+          isNewSession,
         },
         output,
       }
