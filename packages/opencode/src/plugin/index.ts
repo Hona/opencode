@@ -61,24 +61,19 @@ export namespace Plugin {
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
     const hooks = await state().then((x) => x.hooks)
-    return Telemetry.withSpan(
-      "plugin.trigger",
-      {
-        "plugin.hook_name": name,
-        "plugin.hooks_count": hooks.length,
-      },
-      async () => {
-        for (const hook of hooks) {
-          const fn = hook[name]
-          if (!fn) continue
-          // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-          // give up.
-          // try-counter: 2
-          await fn(input, output)
-        }
-        return output
-      },
-    )
+    using _ = Telemetry.span("plugin.trigger", {
+      "plugin.hook_name": name,
+      "plugin.hooks_count": hooks.length,
+    })
+    for (const hook of hooks) {
+      const fn = hook[name]
+      if (!fn) continue
+      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+      // give up.
+      // try-counter: 2
+      await fn(input, output)
+    }
+    return output
   }
 
   export async function list() {

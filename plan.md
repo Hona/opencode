@@ -421,8 +421,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Change to `traced()` wrapper pattern
   - Attributes: `snapshot.hash`
 
-- [ ] **4.2.3** Migrate `Plugin.trigger` in `packages/opencode/src/plugin/index.ts`
-  - Change to `traced()` wrapper pattern
+- [x] **4.2.3** Migrate `Plugin.trigger` in `packages/opencode/src/plugin/index.ts`
+  - Changed to `using span` pattern (preserves generic type parameters and multi-argument signature)
   - Attributes: `plugin.hook_name`, `plugin.hooks_count`
 
 - [ ] **4.2.4** Migrate `Agent.generate` in `packages/opencode/src/agent/agent.ts`
