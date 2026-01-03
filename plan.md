@@ -244,7 +244,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `operation: string` - the LSP operation performed
   - Add `resultCount: number` - number of results returned
 
-- [ ] **2.2.7** Enhance `multiedit.ts` metadata
+- [x] **2.2.7** Enhance `multiedit.ts` metadata
   - Add `successfulEdits: number` - count of successful edits
   - Add `failedEdits: number` - count of failed edits
   - Add `totalAdditions: number` - sum of all line additions
