@@ -97,11 +97,11 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 - [x] **2.1.1-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/glob.ts`
   - Should show: significant decrease in changed lines, no `Telemetry` import, no indentation noise
 
-- [ ] **2.1.2** Migrate `packages/opencode/src/tool/grep.ts`
+- [x] **2.1.2** Migrate `packages/opencode/src/tool/grep.ts`
   - Remove telemetry wrapper
   - Remove all `span.setAttributes()` calls (3 locations)
   - Unindent function body
-- [ ] **2.1.2-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/grep.ts`
+- [x] **2.1.2-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/grep.ts`
   - Should show: significant decrease in changed lines, metadata additions only, no telemetry wrapper
 
 - [ ] **2.1.3** Migrate `packages/opencode/src/tool/read.ts`
