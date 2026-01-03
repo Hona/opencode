@@ -542,24 +542,7 @@ Enable OpenTelemetry tracing for monitoring and debugging. This exports traces a
 }
 ```
 
-You can also specify a custom endpoint:
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "openTelemetry": {
-      "enabled": true,
-      "endpoint": "http://localhost:4317"
-    }
-  }
-}
-```
-
-- `enabled` - Enable or disable telemetry (default: `true` when object is provided).
-- `endpoint` - OTLP gRPC endpoint URL (default: `http://localhost:4317`).
-
-You can also enable telemetry using the standard `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable. The environment variable takes precedence over config file settings.
+Set the endpoint using the standard `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable (defaults to `http://localhost:4317`).
 
 ```bash title="Terminal"
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 opencode

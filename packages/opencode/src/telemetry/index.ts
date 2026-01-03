@@ -9,6 +9,7 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc"
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
+import { Flag } from "@/flag/flag"
 
 export namespace Telemetry {
   const log = Log.create({ service: "telemetry" })
@@ -23,38 +24,10 @@ export namespace Telemetry {
   let loggerProvider: LoggerProvider | undefined
   let initialized = false
 
-  /**
-   * Resolves telemetry configuration from the experimental config object.
-   *
-   * Config precedence: OTEL_EXPORTER_OTLP_ENDPOINT env var > config file
-   * The env var override is applied in config/config.ts at load time, so by the
-   * time this function is called, the config already reflects the final values.
-   */
-  export function resolveConfig(
-    serviceName: string,
-    experimental?: boolean | { enabled?: boolean; endpoint?: string },
-  ): Config {
-    const defaultEndpoint = "http://localhost:4317"
-
-    if (typeof experimental === "boolean") {
-      return {
-        enabled: experimental,
-        endpoint: defaultEndpoint,
-        serviceName,
-      }
-    }
-
-    if (typeof experimental === "object") {
-      return {
-        enabled: experimental.enabled !== false,
-        endpoint: experimental.endpoint || defaultEndpoint,
-        serviceName,
-      }
-    }
-
+  export function resolveConfig(serviceName: string, enabled?: boolean): Config {
     return {
-      enabled: false,
-      endpoint: defaultEndpoint,
+      enabled: enabled ?? false,
+      endpoint: Flag.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4317",
       serviceName,
     }
   }

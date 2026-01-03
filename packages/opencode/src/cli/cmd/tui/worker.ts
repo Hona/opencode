@@ -17,13 +17,12 @@ await Log.init({
   })(),
 })
 
-// Initialize telemetry if enabled (env var override applied at config load)
 const globalConfig = await Config.global()
 const otelConfig = globalConfig?.experimental?.openTelemetry
 if (otelConfig) {
   const { Telemetry } = await import("@/telemetry")
-  const config = Telemetry.resolveConfig("opencode-server", otelConfig)
-  Telemetry.init(config)
+  const telemetryConfig = Telemetry.resolveConfig("opencode-server", otelConfig)
+  Telemetry.init(telemetryConfig)
 }
 
 process.on("unhandledRejection", (e) => {

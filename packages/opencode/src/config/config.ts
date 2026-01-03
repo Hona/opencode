@@ -155,17 +155,6 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
-    // Apply flag override for OpenTelemetry endpoint (env var > config)
-    if (Flag.OTEL_EXPORTER_OTLP_ENDPOINT) {
-      result.experimental = {
-        ...result.experimental,
-        openTelemetry: {
-          enabled: true,
-          endpoint: Flag.OTEL_EXPORTER_OTLP_ENDPOINT,
-        },
-      }
-    }
-
     return {
       config: result,
       directories,
@@ -935,15 +924,9 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
-            .union([
-              z.boolean(),
-              z.object({
-                enabled: z.boolean().optional().default(true),
-                endpoint: z.string().optional().describe("OTLP endpoint (default: http://localhost:4317)"),
-              }),
-            ])
+            .boolean()
             .optional()
-            .describe("Enable OpenTelemetry tracing and structured logs to Aspire Dashboard"),
+            .describe("Enable OpenTelemetry tracing. Set OTEL_EXPORTER_OTLP_ENDPOINT env var for endpoint."),
           primary_tools: z
             .array(z.string())
             .optional()
