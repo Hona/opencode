@@ -155,6 +155,17 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
+    // Apply flag override for OpenTelemetry endpoint (env var > config)
+    if (Flag.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      result.experimental = {
+        ...result.experimental,
+        openTelemetry: {
+          enabled: true,
+          endpoint: Flag.OTEL_EXPORTER_OTLP_ENDPOINT,
+        },
+      }
+    }
+
     return {
       config: result,
       directories,
