@@ -260,7 +260,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 - [x] **2.2.9** Enhance `skill.ts` metadata
   - Add `skillFound: boolean` - whether skill was found
 
-- [ ] **2.2.10** Enhance `task.ts` metadata
+- [x] **2.2.10** Enhance `task.ts` metadata
   - Add `toolCallsCount: number` - total tool calls made by subagent
   - Add `isNewSession: boolean` - whether a new session was created
 
