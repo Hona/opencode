@@ -250,7 +250,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `totalAdditions: number` - sum of all line additions
   - Add `totalDeletions: number` - sum of all line deletions
 
-- [ ] **2.2.8** Enhance `read.ts` metadata
+- [x] **2.2.8** Enhance `read.ts` metadata
   - Add `isImage: boolean` - whether file is an image
   - Add `isBinary: boolean` - whether file is binary
   - Add `linesRead: number` - number of lines read
