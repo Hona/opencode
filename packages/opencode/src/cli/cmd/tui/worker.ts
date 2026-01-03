@@ -18,11 +18,9 @@ await Log.init({
 })
 
 const globalConfig = await Config.global()
-const otelConfig = globalConfig?.experimental?.openTelemetry
-if (otelConfig) {
+if (globalConfig?.experimental?.openTelemetry) {
   const { Telemetry } = await import("@/telemetry")
-  const telemetryConfig = Telemetry.resolveConfig("opencode-server", otelConfig)
-  Telemetry.init(telemetryConfig)
+  Telemetry.init(Telemetry.resolveConfig("opencode-server", true))
 }
 
 process.on("unhandledRejection", (e) => {
