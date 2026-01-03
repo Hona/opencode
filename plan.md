@@ -230,11 +230,11 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `hasResults: boolean` - whether results were returned
   - Add `statusCode: number` - HTTP status code
 
-- [ ] **2.2.3** Enhance `edit.ts` metadata
+- [x] **2.2.3** Enhance `edit.ts` metadata
   - Add `errorCount: number` - count of LSP errors after edit
   - Add `fileExisted: boolean` - whether file existed before edit
 
-- [ ] **2.2.4** Enhance `grep.ts` metadata
+- [x] **2.2.4** Enhance `grep.ts` metadata
   - Add `uniqueFiles: number` - count of unique files with matches
 
 - [ ] **2.2.5** Enhance `ls.ts` metadata

@@ -51,7 +51,7 @@ export const GrepTool = Tool.define("grep", {
     if (exitCode === 1) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
+        metadata: { matches: 0, truncated: false, uniqueFiles: 0 },
         output: "No files found",
       }
     }
@@ -94,11 +94,12 @@ export const GrepTool = Tool.define("grep", {
     if (finalMatches.length === 0) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
+        metadata: { matches: 0, truncated: false, uniqueFiles: 0 },
         output: "No files found",
       }
     }
 
+    const uniqueFiles = new Set(finalMatches.map((m) => m.path)).size
     const outputLines = [`Found ${finalMatches.length} matches`]
 
     let currentFile = ""
@@ -125,6 +126,7 @@ export const GrepTool = Tool.define("grep", {
       metadata: {
         matches: finalMatches.length,
         truncated,
+        uniqueFiles,
       },
       output: outputLines.join("\n"),
     }
