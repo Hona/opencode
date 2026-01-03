@@ -205,7 +205,7 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 
 ### 2.1-checkpoint: Tool Wrapper Removal Complete
 
-- [ ] **2.1-checkpoint** Run aggregate diff check for all tools:
+- [x] **2.1-checkpoint** Run aggregate diff check for all tools:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/tool/
