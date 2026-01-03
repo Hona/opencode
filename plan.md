@@ -124,10 +124,10 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 - [x] **2.1.5-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/edit.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
-- [ ] **2.1.6** Migrate `packages/opencode/src/tool/multiedit.ts`
+- [x] **2.1.6** Migrate `packages/opencode/src/tool/multiedit.ts`
   - Remove telemetry wrapper
   - Unindent function body
-- [ ] **2.1.6-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/multiedit.ts`
+- [x] **2.1.6-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/multiedit.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
 - [ ] **2.1.7** Migrate `packages/opencode/src/tool/bash.ts`
