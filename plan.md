@@ -578,7 +578,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 6.3 Testing
 
-- [ ] **6.3.1** Run existing test suite: `bun test` in packages/opencode
+- [x] **6.3.1** Run existing test suite: `bun test` in packages/opencode
+  - Result: 518 pass, 1 skip, 0 fail across 35 files
 - [ ] **6.3.2** Manual test: Run `bun dev` and verify basic functionality
 - [ ] **6.3.3** Manual test: Execute glob tool and verify it works
 - [ ] **6.3.4** Manual test: Execute read tool and verify it works
