@@ -89,12 +89,12 @@ For each tool: remove `Telemetry.withSpan()` wrapper, remove telemetry import, u
 git diff dev -- <file> | head -100  # Should show minimal changes (metadata additions only)
 ```
 
-- [ ] **2.1.1** Migrate `packages/opencode/src/tool/glob.ts`
+- [x] **2.1.1** Migrate `packages/opencode/src/tool/glob.ts`
   - Remove `import { Telemetry }`
   - Remove `Telemetry.withSpan()` wrapper from execute
   - Remove `span.setAttributes()` call
   - Unindent function body
-- [ ] **2.1.1-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/glob.ts`
+- [x] **2.1.1-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/glob.ts`
   - Should show: significant decrease in changed lines, no `Telemetry` import, no indentation noise
 
 - [ ] **2.1.2** Migrate `packages/opencode/src/tool/grep.ts`
