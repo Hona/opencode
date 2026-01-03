@@ -529,29 +529,32 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Should show reduction from current state
   - Result: 2 files changed, 84 insertions(+), 48 deletions(-) - clean diff for telemetry addition
 
-- [ ] **5.3.2** Verify MCP module diff is cleaner:
+- [x] **5.3.2** Verify MCP module diff is cleaner:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/mcp/index.ts
   ```
 
   - Should show reduction from current state
+  - Result: 1 file changed, 67 insertions(+), 15 deletions(-) - clean diff for telemetry addition
 
-- [ ] **5.3.3** Verify `traced()` or `using` patterns used:
+- [x] **5.3.3** Verify `traced()` or `using` patterns used:
 
   ```bash
   grep -c "traced(\|using.*Telemetry.span" packages/opencode/src/lsp/index.ts packages/opencode/src/mcp/index.ts
   ```
 
   - Should show counts > 0 for migrated functions
+  - Result: lsp/index.ts:1, mcp/index.ts:5 - patterns are being used
 
-- [ ] **5.3.4** Spot check lsp/index.ts diff:
+- [x] **5.3.4** Spot check lsp/index.ts diff:
 
   ```bash
   git diff dev -- packages/opencode/src/lsp/index.ts
   ```
 
   - Function bodies should be mostly unchanged
+  - Result: Clean diff showing traced() wrappers for hover/definition/references and using span for touchFile
 
 ---
 
@@ -559,14 +562,19 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 6.1 Remove Unused Imports
 
-- [ ] **6.1.1** Run through all migrated tool files and remove unused `Telemetry` imports
-- [ ] **6.1.2** Run through session files and remove unused imports
-- [ ] **6.1.3** Run through LSP/MCP files and remove unused imports
+- [x] **6.1.1** Run through all migrated tool files and remove unused `Telemetry` imports
+  - Result: No unused imports found - only tool.ts has Telemetry import (for auto-instrumentation wrapper)
+- [x] **6.1.2** Run through session files and remove unused imports
+  - Result: All Telemetry/traced imports are being used in session files
+- [x] **6.1.3** Run through LSP/MCP files and remove unused imports
+  - Result: All Telemetry/traced imports are being used in LSP/MCP files
 
 ### 6.2 Type Checking
 
-- [ ] **6.2.1** Run `bun run typecheck` in packages/opencode and fix any type errors
-- [ ] **6.2.2** Ensure `traced()` wrapper preserves correct function types
+- [x] **6.2.1** Run `bun run typecheck` in packages/opencode and fix any type errors
+  - Result: Typecheck passes with no errors
+- [x] **6.2.2** Ensure `traced()` wrapper preserves correct function types
+  - Result: Verified via typecheck - all traced() calls use explicit type parameters where needed
 
 ### 6.3 Testing
 
