@@ -203,7 +203,11 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 8: Documentation
 
-- [ ] Update any relevant docs in `packages/docs/` if openTelemetry configuration is documented
+- [x] Update any relevant docs in `packages/docs/` if openTelemetry configuration is documented
+  - Updated `packages/web/src/content/docs/config.mdx` to document the `openTelemetry` experimental option
+  - Documented boolean and object configuration formats
+  - Documented `enabled` and `endpoint` options with defaults
+  - Documented `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable override
 
 - [x] Add inline code comments explaining the config precedence (env var > config)
 
