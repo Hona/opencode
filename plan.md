@@ -473,8 +473,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 5.1 LSP Module
 
-- [ ] **5.1.1** Migrate `LSP.touchFile` in `packages/opencode/src/lsp/index.ts`
-  - Change to `traced()` wrapper pattern
+- [x] **5.1.1** Migrate `LSP.touchFile` in `packages/opencode/src/lsp/index.ts`
+  - Changed to `using span` pattern (preserves multiple parameters)
   - Attributes: `lsp.file`
 
 - [ ] **5.1.2** Migrate `LSP.hover` in `packages/opencode/src/lsp/index.ts`
