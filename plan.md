@@ -520,13 +520,14 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 5.3 Phase 5 Validation
 
-- [ ] **5.3.1** Verify LSP module diff is cleaner:
+- [x] **5.3.1** Verify LSP module diff is cleaner:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/lsp/
   ```
 
   - Should show reduction from current state
+  - Result: 2 files changed, 84 insertions(+), 48 deletions(-) - clean diff for telemetry addition
 
 - [ ] **5.3.2** Verify MCP module diff is cleaner:
 
