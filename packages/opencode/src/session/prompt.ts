@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Telemetry } from "@/telemetry"
+import { traced } from "@/telemetry/traced"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -148,47 +149,44 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export const prompt = fn(PromptInput, async (input) => {
-    return Telemetry.withSpan(
-      "session.prompt",
-      {
-        "session.id": input.sessionID,
-        "session.agent": input.agent ?? "",
-        "llm.provider_id": input.model?.providerID ?? "",
-        "llm.model_id": input.model?.modelID ?? "",
-      },
-      async () => {
-        const session = await Session.get(input.sessionID)
-        await SessionRevert.cleanup(session)
+  export const prompt = fn(
+    PromptInput,
+    traced<PromptInput, MessageV2.WithParts>("session.prompt", (input) => ({
+      "session.id": input.sessionID,
+      "session.agent": input.agent ?? "",
+      "llm.provider_id": input.model?.providerID ?? "",
+      "llm.model_id": input.model?.modelID ?? "",
+    }))(async (input) => {
+      const session = await Session.get(input.sessionID)
+      await SessionRevert.cleanup(session)
 
-        const message = await createUserMessage(input)
-        await Session.touch(input.sessionID)
+      const message = await createUserMessage(input)
+      await Session.touch(input.sessionID)
 
-        // this is backwards compatibility for allowing `tools` to be specified when
-        // prompting
-        const permissions: PermissionNext.Ruleset = []
-        for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
-          permissions.push({
-            permission: tool,
-            action: enabled ? "allow" : "deny",
-            pattern: "*",
-          })
-        }
-        if (permissions.length > 0) {
-          session.permission = permissions
-          await Session.update(session.id, (draft) => {
-            draft.permission = permissions
-          })
-        }
+      // this is backwards compatibility for allowing `tools` to be specified when
+      // prompting
+      const permissions: PermissionNext.Ruleset = []
+      for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+        permissions.push({
+          permission: tool,
+          action: enabled ? "allow" : "deny",
+          pattern: "*",
+        })
+      }
+      if (permissions.length > 0) {
+        session.permission = permissions
+        await Session.update(session.id, (draft) => {
+          draft.permission = permissions
+        })
+      }
 
-        if (input.noReply === true) {
-          return message
-        }
+      if (input.noReply === true) {
+        return message
+      }
 
-        return loop(input.sessionID)
-      },
-    )
-  })
+      return loop(input.sessionID)
+    }),
+  )
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
     const parts: PromptInput["parts"] = [
