@@ -485,8 +485,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `traced()` wrapper pattern with explicit type parameters
   - Attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
-- [ ] **5.1.4** Migrate `LSP.references` in `packages/opencode/src/lsp/index.ts`
-  - Change to `traced()` wrapper pattern
+- [x] **5.1.4** Migrate `LSP.references` in `packages/opencode/src/lsp/index.ts`
+  - Changed to `traced()` wrapper pattern with explicit type parameters
   - Attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
 - [ ] **5.1.5** Migrate `LSPClient.create` in `packages/opencode/src/lsp/client.ts`
