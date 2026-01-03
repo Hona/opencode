@@ -318,7 +318,8 @@ export namespace SessionPrompt {
       }
 
       step++
-      loopSpan.setAttributes({
+      using stepSpan = Telemetry.span("session.prompt.step", {
+        "session.id": sessionID,
         "session.step": step,
         "session.agent": lastUser.agent,
       })

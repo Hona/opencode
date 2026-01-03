@@ -338,12 +338,12 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Replace `Telemetry.withSpan("session.prompt.loop", ...)` with `using loopSpan = Telemetry.span(...)`
   - Move span creation to top of function body (after early return check)
 
-- [ ] **3.1.2** Add child spans for each loop iteration
-  - Wrap loop body content in `Telemetry.withSpan("session.prompt.step", { step, agent, sessionID }, ...)`
-  - Return `{ done: false }` to continue, `{ done: true, value }` to exit
-  - Check result and break/return accordingly
+- [x] **3.1.2** Add child spans for each loop iteration
+  - Added `using stepSpan = Telemetry.span("session.prompt.step", { "session.id", "session.step", "session.agent" })` after step increment
+  - Per-step spans automatically end when iteration completes (via `using` syntax)
 
-- [ ] **3.1.3** Remove manual `span.setAttributes()` calls from loop
+- [x] **3.1.3** Remove manual `span.setAttributes()` calls from loop
+  - Replaced `loopSpan.setAttributes()` with per-step child span creation
   - Step and agent are now captured per-step span, not updated on parent
 
 - [ ] **3.1.4** Unindent loop body (should be 1 level less than current)
