@@ -209,51 +209,46 @@ export namespace Agent {
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
     const defaultModel = input.model ?? (await Provider.defaultModel())
-    return Telemetry.withSpan(
-      "agent.generate",
-      {
-        "llm.provider_id": defaultModel.providerID,
-        "llm.model_id": defaultModel.modelID,
+    using _ = Telemetry.span("agent.generate", {
+      "llm.provider_id": defaultModel.providerID,
+      "llm.model_id": defaultModel.modelID,
+    })
+    const cfg = await Config.get()
+    const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+    const language = await Provider.getLanguage(model)
+    const system = SystemPrompt.header(defaultModel.providerID)
+    system.push(PROMPT_GENERATE)
+    const existing = await list()
+    const result = await generateObject({
+      experimental_telemetry: {
+        isEnabled:
+          typeof cfg.experimental?.openTelemetry === "object"
+            ? cfg.experimental.openTelemetry.enabled
+            : cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+        },
       },
-      async () => {
-        const cfg = await Config.get()
-        const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
-        const language = await Provider.getLanguage(model)
-        const system = SystemPrompt.header(defaultModel.providerID)
-        system.push(PROMPT_GENERATE)
-        const existing = await list()
-        const result = await generateObject({
-          experimental_telemetry: {
-            isEnabled:
-              typeof cfg.experimental?.openTelemetry === "object"
-                ? cfg.experimental.openTelemetry.enabled
-                : cfg.experimental?.openTelemetry,
-            metadata: {
-              userId: cfg.username ?? "unknown",
-            },
-          },
-          temperature: 0.3,
-          messages: [
-            ...system.map(
-              (item): ModelMessage => ({
-                role: "system",
-                content: item,
-              }),
-            ),
-            {
-              role: "user",
-              content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
-            },
-          ],
-          model: language,
-          schema: z.object({
-            identifier: z.string(),
-            whenToUse: z.string(),
-            systemPrompt: z.string(),
+      temperature: 0.3,
+      messages: [
+        ...system.map(
+          (item): ModelMessage => ({
+            role: "system",
+            content: item,
           }),
-        })
-        return result.object
-      },
-    )
+        ),
+        {
+          role: "user",
+          content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
+        },
+      ],
+      model: language,
+      schema: z.object({
+        identifier: z.string(),
+        whenToUse: z.string(),
+        systemPrompt: z.string(),
+      }),
+    })
+    return result.object
   }
 }
