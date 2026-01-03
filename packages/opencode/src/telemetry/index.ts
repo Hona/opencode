@@ -23,6 +23,13 @@ export namespace Telemetry {
   let loggerProvider: LoggerProvider | undefined
   let initialized = false
 
+  /**
+   * Resolves telemetry configuration from the experimental config object.
+   *
+   * Config precedence: OTEL_EXPORTER_OTLP_ENDPOINT env var > config file
+   * The env var override is applied in config/config.ts at load time, so by the
+   * time this function is called, the config already reflects the final values.
+   */
   export function resolveConfig(
     serviceName: string,
     experimental?: boolean | { enabled?: boolean; endpoint?: string },
