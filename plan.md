@@ -58,7 +58,7 @@ Significantly reduce the `feat/aspire-otel` branch diff by moving telemetry conc
 
 ### 1.4 Phase 1 Validation
 
-- [ ] **1.4.1** Verify framework compiles: `bun run typecheck` in packages/opencode
+- [x] **1.4.1** Verify framework compiles: `bun run typecheck` in packages/opencode
 - [ ] **1.4.2** Verify new exports work:
 
   ```bash
