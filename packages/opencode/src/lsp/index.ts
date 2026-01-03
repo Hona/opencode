@@ -10,7 +10,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, traced } from "@/telemetry"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -302,31 +302,28 @@ export namespace LSP {
     return results
   }
 
-  export async function hover(input: { file: string; line: number; character: number }) {
-    return Telemetry.withSpan(
-      "lsp.request.hover",
-      {
-        "lsp.file": input.file,
-        "lsp.line": input.line,
-        "lsp.character": input.character,
-      },
-      async () => {
-        return run(input.file, (client) => {
-          return client.connection
-            .sendRequest("textDocument/hover", {
-              textDocument: {
-                uri: pathToFileURL(input.file).href,
-              },
-              position: {
-                line: input.line,
-                character: input.character,
-              },
-            })
-            .catch(() => null)
+  export const hover = traced<{ file: string; line: number; character: number }, (unknown | null)[]>(
+    "lsp.request.hover",
+    (input) => ({
+      "lsp.file": input.file,
+      "lsp.line": input.line,
+      "lsp.character": input.character,
+    }),
+  )(async (input) => {
+    return run(input.file, (client) => {
+      return client.connection
+        .sendRequest("textDocument/hover", {
+          textDocument: {
+            uri: pathToFileURL(input.file).href,
+          },
+          position: {
+            line: input.line,
+            character: input.character,
+          },
         })
-      },
-    )
-  }
+        .catch(() => null)
+    })
+  })
 
   enum SymbolKind {
     File = 1,
