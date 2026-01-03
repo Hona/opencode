@@ -158,11 +158,11 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 - [x] **2.1.10-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/lsp.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
-- [ ] **2.1.11** Migrate `packages/opencode/src/tool/task.ts`
+- [x] **2.1.11** Migrate `packages/opencode/src/tool/task.ts`
   - Remove telemetry wrapper
   - Remove `span.setAttributes()` call
   - Unindent function body
-- [ ] **2.1.11-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/task.ts`
+- [x] **2.1.11-validate** Verify diff: `git diff dev -- packages/opencode/src/tool/task.ts`
   - Should show: metadata additions only, no telemetry wrapper
 
 - [ ] **2.1.12** Migrate `packages/opencode/src/tool/skill.ts`
