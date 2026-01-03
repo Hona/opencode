@@ -67,7 +67,7 @@ Significantly reduce the `feat/aspire-otel` branch diff by moving telemetry conc
 
   - Should show all three utilities exported
 
-- [ ] **1.4.3** Verify Tool.define includes auto-instrumentation:
+- [x] **1.4.3** Verify Tool.define includes auto-instrumentation:
 
   ```bash
   grep -A5 "withSpan" packages/opencode/src/tool/tool.ts
