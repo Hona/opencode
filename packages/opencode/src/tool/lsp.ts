@@ -87,7 +87,11 @@ export const LspTool = Tool.define("lsp", {
 
     return {
       title,
-      metadata: { result },
+      metadata: {
+        result,
+        operation: args.operation,
+        resultCount: result.length,
+      },
       output,
     }
   },
