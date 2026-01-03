@@ -334,7 +334,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 3.1 Refactor session.prompt.loop
 
-- [ ] **3.1.1** In `packages/opencode/src/session/prompt.ts`, refactor `loop` function
+- [x] **3.1.1** In `packages/opencode/src/session/prompt.ts`, refactor `loop` function
   - Replace `Telemetry.withSpan("session.prompt.loop", ...)` with `using loopSpan = Telemetry.span(...)`
   - Move span creation to top of function body (after early return check)
 
