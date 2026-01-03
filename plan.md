@@ -268,7 +268,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `completedCount: number` - todos with status "completed"
   - Add `pendingCount: number` - todos not completed
 
-- [ ] **2.2.12** Enhance `todo.ts` (TodoReadTool) metadata
+- [x] **2.2.12** Enhance `todo.ts` (TodoReadTool) metadata
   - Add `todoCount: number` - total todos
   - Add `completedCount: number` - completed todos
 
