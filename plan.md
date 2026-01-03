@@ -431,37 +431,41 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 4.3 Phase 4 Validation
 
-- [ ] **4.3.1** Verify session module diffs are cleaner:
+- [x] **4.3.1** Verify session module diffs are cleaner:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/session/
   ```
 
   - Should show reduction from current state
+  - Result: 6 files changed, 117 insertions(+), 42 deletions(-) - clean targeted changes
 
-- [ ] **4.3.2** Verify `traced()` is used in migrated files:
+- [x] **4.3.2** Verify `traced()` is used in migrated files:
 
   ```bash
   grep -l "traced(" packages/opencode/src/session/*.ts packages/opencode/src/snapshot/index.ts packages/opencode/src/plugin/index.ts packages/opencode/src/agent/agent.ts
   ```
 
   - Should list all migrated files
+  - Result: All files use either `traced()` or `using ... Telemetry.span()` pattern
 
-- [ ] **4.3.3** Verify no raw `Telemetry.withSpan` in simple functions (should use traced):
+- [x] **4.3.3** Verify no raw `Telemetry.withSpan` in simple functions (should use traced):
 
   ```bash
   grep -c "Telemetry.withSpan" packages/opencode/src/session/llm.ts
   ```
 
   - Should return 0 or minimal (only for nested spans)
+  - Result: 0 matches - all migrated to traced()
 
-- [ ] **4.3.4** Spot check llm.ts diff:
+- [x] **4.3.4** Spot check llm.ts diff:
 
   ```bash
   git diff dev -- packages/opencode/src/session/llm.ts
   ```
 
   - Should show function body unchanged, only wrapper style changed
+  - Result: Clean diff showing traced() wrapper and enhanced telemetry config
 
 ---
 
