@@ -621,13 +621,14 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Should return empty
   - Result: Verified - command returns empty, no telemetry wrappers in tool execute functions
 
-- [ ] **6.5.4** Generate per-file diff summary:
+- [x] **6.5.4** Generate per-file diff summary:
 
   ```bash
   git diff dev --stat -- packages/opencode/src | sort -t'|' -k2 -rn | head -20
   ```
 
   - Top changed files should be framework files (tool.ts, telemetry/), not tools
+  - Result: Top files are telemetry/index.ts (+236), cli components, lsp/client.ts (+95), util/log.ts (+82), mcp/index.ts (+82), session/prompt.ts (+79), telemetry/traced.ts (+33). Individual tool files appear at the bottom with minimal changes (multiedit 45, webfetch 19, websearch 17, codesearch 17) confirming framework-level telemetry and minimal tool changes.
 
 - [ ] **6.5.5** Verify diff character is clean (no mass indentation changes):
 
