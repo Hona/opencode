@@ -4,7 +4,6 @@ import { EditTool } from "./edit"
 import DESCRIPTION from "./multiedit.txt"
 import path from "path"
 import { Instance } from "../project/instance"
-import { Telemetry } from "@/telemetry"
 
 export const MultiEditTool = Tool.define("multiedit", {
   description: DESCRIPTION,
@@ -22,37 +21,26 @@ export const MultiEditTool = Tool.define("multiedit", {
       .describe("Array of edit operations to perform sequentially on the file"),
   }),
   async execute(params, ctx) {
-    return Telemetry.withSpan(
-      "tool.multiedit.execute",
-      {
-        "tool.name": "multiedit",
-        "session.id": ctx.sessionID,
-        "tool.file_path": params.filePath,
-        "tool.edit_count": params.edits.length,
+    const tool = await EditTool.init()
+    const results = []
+    for (const [, edit] of params.edits.entries()) {
+      const result = await tool.execute(
+        {
+          filePath: params.filePath,
+          oldString: edit.oldString,
+          newString: edit.newString,
+          replaceAll: edit.replaceAll,
+        },
+        ctx,
+      )
+      results.push(result)
+    }
+    return {
+      title: path.relative(Instance.worktree, params.filePath),
+      metadata: {
+        results: results.map((r) => r.metadata),
       },
-      async (span) => {
-        const tool = await EditTool.init()
-        const results = []
-        for (const [, edit] of params.edits.entries()) {
-          const result = await tool.execute(
-            {
-              filePath: params.filePath,
-              oldString: edit.oldString,
-              newString: edit.newString,
-              replaceAll: edit.replaceAll,
-            },
-            ctx,
-          )
-          results.push(result)
-        }
-        return {
-          title: path.relative(Instance.worktree, params.filePath),
-          metadata: {
-            results: results.map((r) => r.metadata),
-          },
-          output: results.at(-1)!.output,
-        }
-      },
-    )
+      output: results.at(-1)!.output,
+    }
   },
 })
