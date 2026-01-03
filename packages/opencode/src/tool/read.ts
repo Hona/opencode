@@ -93,6 +93,11 @@ export const ReadTool = Tool.define("read", {
         output: msg,
         metadata: {
           preview: msg,
+          isImage,
+          isBinary: false,
+          linesRead: 0,
+          totalLines: 0,
+          truncated: false,
         },
         attachments: [
           {
@@ -144,6 +149,11 @@ export const ReadTool = Tool.define("read", {
       output,
       metadata: {
         preview,
+        isImage: false,
+        isBinary: false,
+        linesRead: content.length,
+        totalLines,
+        truncated: hasMoreLines,
       },
     }
   },
