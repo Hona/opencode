@@ -17,11 +17,10 @@ await Log.init({
   })(),
 })
 
-// Initialize telemetry if enabled via env var or config
-const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
-const globalConfig = otelEndpoint ? undefined : await Config.global()
+// Initialize telemetry if enabled (env var override applied at config load)
+const globalConfig = await Config.global()
 const otelConfig = globalConfig?.experimental?.openTelemetry
-if (otelEndpoint || otelConfig) {
+if (otelConfig) {
   const { Telemetry } = await import("@/telemetry")
   const config = Telemetry.resolveConfig("opencode-server", otelConfig)
   Telemetry.init(config)

@@ -86,11 +86,10 @@ const cli = yargs(hideBin(process.argv))
       args: process.argv.slice(2),
     })
 
-    // Initialize telemetry if enabled via env var or config
-    const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
-    const globalConfig = otelEndpoint ? undefined : await Config.global()
+    // Initialize telemetry if enabled (env var override applied at config load)
+    const globalConfig = await Config.global()
     const otelConfig = globalConfig?.experimental?.openTelemetry
-    if (otelEndpoint || otelConfig) {
+    if (otelConfig) {
       const config = Telemetry.resolveConfig("opencode-cli", otelConfig)
       Telemetry.init(config)
     }

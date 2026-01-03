@@ -43,19 +43,21 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 3: Add Telemetry Helper Function
 
-- [ ] In `packages/opencode/src/telemetry/index.ts`, add a new exported function `isEnabled()`:
+- [x] In `packages/opencode/src/telemetry/index.ts`, add a new exported function `isEnabled()`:
 
   ```typescript
   export function isEnabled(): boolean {
-    return initialized && config?.enabled === true
+    return initialized
   }
   ```
 
-- [ ] Ensure `config` variable is accessible to this function (it's already module-scoped based on `resolveConfig` usage)
+  NOTE: The function already exists at line 102-104. It only checks `initialized` because `init()` returns early if `config.enabled` is false, so `initialized=true` implies telemetry was enabled.
+
+- [x] Ensure `config` variable is accessible to this function (it's already module-scoped based on `resolveConfig` usage)
 
 ### Phase 4: Simplify CLI Entry Points
 
-- [ ] In `packages/opencode/src/index.ts`, simplify lines 89-96:
+- [x] In `packages/opencode/src/index.ts`, simplify lines 89-96:
   - Remove the `otelEndpoint` variable and direct env var check
   - Just check `globalConfig?.experimental?.openTelemetry` since env var is now applied to config
   - Update the condition to:
@@ -68,7 +70,7 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
     }
     ```
 
-- [ ] In `packages/opencode/src/cli/cmd/tui/worker.ts`, apply the same simplification to lines 20-28:
+- [x] In `packages/opencode/src/cli/cmd/tui/worker.ts`, apply the same simplification to lines 20-28:
   - Remove the `otelEndpoint` variable and direct env var check
   - Remove the ternary that skips config loading when env var is set
   - Update to:
