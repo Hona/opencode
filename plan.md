@@ -398,7 +398,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.agent`, `llm.provider_id`, `llm.model_id`
 
-- [ ] **4.1.3** Migrate `SessionCompaction.process` in `packages/opencode/src/session/compaction.ts`
+- [x] **4.1.3** Migrate `SessionCompaction.process` in `packages/opencode/src/session/compaction.ts`
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.auto`, `session.message_count`
 
