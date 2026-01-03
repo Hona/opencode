@@ -417,9 +417,9 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Attributes: `snapshot.vcs`, `snapshot.hash`
   - Note: Used `using span` instead of `traced()` to allow setting hash attribute after computation
 
-- [ ] **4.2.2** Migrate `Snapshot.restore` in `packages/opencode/src/snapshot/index.ts`
+- [x] **4.2.2** Migrate `Snapshot.restore` in `packages/opencode/src/snapshot/index.ts`
   - Change to `traced()` wrapper pattern
-  - Attributes: `snapshot.id`
+  - Attributes: `snapshot.hash`
 
 - [ ] **4.2.3** Migrate `Plugin.trigger` in `packages/opencode/src/plugin/index.ts`
   - Change to `traced()` wrapper pattern
