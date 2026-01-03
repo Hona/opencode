@@ -219,12 +219,12 @@ git diff dev -- <file> | head -100  # Should show minimal changes (metadata addi
 
 Add observability-useful fields to metadata returns so they are auto-captured as span attributes.
 
-- [ ] **2.2.1** Enhance `bash.ts` metadata
+- [x] **2.2.1** Enhance `bash.ts` metadata
   - Add `aborted: boolean` - whether command was user-aborted
   - Add `truncated: boolean` - whether output was truncated
   - Add `timedOut: boolean` - whether command timed out
 
-- [ ] **2.2.2** Enhance `codesearch.ts` metadata (currently empty `{}`)
+- [x] **2.2.2** Enhance `codesearch.ts` metadata (currently empty `{}`)
   - Add `query: string` - the search query
   - Add `tokensNum: number` - tokens requested
   - Add `hasResults: boolean` - whether results were returned

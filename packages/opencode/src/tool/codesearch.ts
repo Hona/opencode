@@ -91,9 +91,10 @@ export const CodeSearchTool = Tool.define("codesearch", {
 
       clearTimeout(timeoutId)
 
+      const statusCode = response.status
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`Code search error (${response.status}): ${errorText}`)
+        throw new Error(`Code search error (${statusCode}): ${errorText}`)
       }
 
       const responseText = await response.text()
@@ -107,7 +108,12 @@ export const CodeSearchTool = Tool.define("codesearch", {
             return {
               output: data.result.content[0].text,
               title: `Code search: ${params.query}`,
-              metadata: {},
+              metadata: {
+                query: params.query,
+                tokensNum: params.tokensNum || 5000,
+                hasResults: true,
+                statusCode,
+              },
             }
           }
         }
@@ -117,7 +123,12 @@ export const CodeSearchTool = Tool.define("codesearch", {
         output:
           "No code snippets or documentation found. Please try a different query, be more specific about the library or programming concept, or check the spelling of framework names.",
         title: `Code search: ${params.query}`,
-        metadata: {},
+        metadata: {
+          query: params.query,
+          tokensNum: params.tokensNum || 5000,
+          hasResults: false,
+          statusCode,
+        },
       }
     } catch (error) {
       clearTimeout(timeoutId)
