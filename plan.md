@@ -283,7 +283,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `hasResults: boolean` - whether any results returned
   - Add `searchType: string` - type of search performed
 
-- [ ] **2.2.15** Enhance `write.ts` metadata
+- [x] **2.2.15** Enhance `write.ts` metadata
   - Add `errorCount: number` - count of LSP errors after write
   - Add `fileCreated: boolean` - whether file was newly created
 
