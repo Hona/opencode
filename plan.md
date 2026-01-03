@@ -425,9 +425,9 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `using span` pattern (preserves generic type parameters and multi-argument signature)
   - Attributes: `plugin.hook_name`, `plugin.hooks_count`
 
-- [ ] **4.2.4** Migrate `Agent.generate` in `packages/opencode/src/agent/agent.ts`
-  - Change to `traced()` wrapper pattern
-  - Attributes: based on current implementation
+- [x] **4.2.4** Migrate `Agent.generate` in `packages/opencode/src/agent/agent.ts`
+  - Changed to `using span` pattern (attributes depend on computed defaultModel value)
+  - Attributes: `llm.provider_id`, `llm.model_id`
 
 ### 4.3 Phase 4 Validation
 
