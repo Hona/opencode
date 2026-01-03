@@ -1,4 +1,5 @@
 import { trace, type Span, SpanStatusCode, type AttributeValue } from "@opentelemetry/api"
+export { traced } from "./traced.ts"
 import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions"
