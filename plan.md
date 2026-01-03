@@ -289,39 +289,44 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 
 ### 2.3 Phase 2 Validation
 
-- [ ] **2.3.1** Run full tool directory diff check:
+- [x] **2.3.1** Run full tool directory diff check:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/tool/
   ```
 
   - Target: Significant decrease in total lines changed compared to current state
+  - Result: 15 files changed, 142 insertions(+), 33 deletions(-) - minimal targeted changes
 
-- [ ] **2.3.2** Verify no telemetry wrappers remain in tools:
+- [x] **2.3.2** Verify no telemetry wrappers remain in tools:
 
   ```bash
   grep -l "Telemetry.withSpan" packages/opencode/src/tool/*.ts
   ```
 
   - Should return empty (no files)
+  - Result: Only tool.ts contains Telemetry.withSpan (the auto-instrumentation wrapper)
 
-- [ ] **2.3.3** Verify no Telemetry imports in tool files (except tool.ts):
+- [x] **2.3.3** Verify no Telemetry imports in tool files (except tool.ts):
 
   ```bash
   grep -l "from.*telemetry" packages/opencode/src/tool/*.ts | grep -v tool.ts
   ```
 
   - Should return empty (no files except tool.ts itself)
+  - Result: No files import Telemetry except tool.ts
 
-- [ ] **2.3.4** Verify all tools still compile: `bun run typecheck` in packages/opencode
+- [x] **2.3.4** Verify all tools still compile: `bun run typecheck` in packages/opencode
+  - Result: Typecheck passes
 
-- [ ] **2.3.5** Spot check one tool diff is clean (glob as reference):
+- [x] **2.3.5** Spot check one tool diff is clean (glob as reference):
 
   ```bash
   git diff dev -- packages/opencode/src/tool/glob.ts
   ```
 
   - Should show only metadata field additions, no indentation changes
+  - Result: No diff (glob.ts already had clean metadata)
 
 ---
 
