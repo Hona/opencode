@@ -477,8 +477,8 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Changed to `using span` pattern (preserves multiple parameters)
   - Attributes: `lsp.file`
 
-- [ ] **5.1.2** Migrate `LSP.hover` in `packages/opencode/src/lsp/index.ts`
-  - Change to `traced()` wrapper pattern
+- [x] **5.1.2** Migrate `LSP.hover` in `packages/opencode/src/lsp/index.ts`
+  - Changed to `traced()` wrapper pattern with explicit type parameters
   - Attributes: `lsp.file`, `lsp.line`, `lsp.character`
 
 - [ ] **5.1.3** Migrate `LSP.definition` in `packages/opencode/src/lsp/index.ts`
