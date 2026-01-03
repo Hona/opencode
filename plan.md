@@ -346,41 +346,42 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Replaced `loopSpan.setAttributes()` with per-step child span creation
   - Step and agent are now captured per-step span, not updated on parent
 
-- [ ] **3.1.4** Unindent loop body (should be 1 level less than current)
+- [x] **3.1.4** Unindent loop body (should be 1 level less than current)
+  - N/A: `using` syntax was used which doesn't add indentation, so body is already at correct level
 
 ### 3.2 Phase 3 Validation
 
-- [ ] **3.2.1** Verify prompt.ts diff is cleaner:
+- [x] **3.2.1** Verify prompt.ts diff is cleaner:
 
   ```bash
   git diff dev --stat -- packages/opencode/src/session/prompt.ts
   ```
 
-  - Should show significant reduction from current state
+  - Result: 77 lines changed (51 insertions, 26 deletions) - clean diff for telemetry addition
 
-- [ ] **3.2.2** Verify loop structure with child spans:
+- [x] **3.2.2** Verify loop structure with child spans:
 
   ```bash
   grep -n "session.prompt.step\|session.prompt.loop" packages/opencode/src/session/prompt.ts
   ```
 
-  - Should show both span names present
+  - Result: Both span names present at lines 278 and 321
 
-- [ ] **3.2.3** Verify no `span.setAttributes` calls remain in loop:
+- [x] **3.2.3** Verify no `span.setAttributes` calls remain in loop:
 
   ```bash
   grep -n "span.setAttributes" packages/opencode/src/session/prompt.ts
   ```
 
-  - Should return empty or only in non-loop contexts
+  - Result: No matches found - all removed
 
-- [ ] **3.2.4** Verify `using` keyword is used for parent span:
+- [x] **3.2.4** Verify `using` keyword is used for parent span:
 
   ```bash
   grep -n "using.*Telemetry.span" packages/opencode/src/session/prompt.ts
   ```
 
-  - Should show at least one match
+  - Result: Two matches at lines 278 and 321
 
 ---
 
