@@ -46,10 +46,13 @@ export const TodoReadTool = Tool.define("todoread", {
     })
 
     const todos = await Todo.get(ctx.sessionID)
+    const completedCount = todos.filter((x) => x.status === "completed").length
     return {
-      title: `${todos.filter((x) => x.status !== "completed").length} todos`,
+      title: `${todos.length - completedCount} todos`,
       metadata: {
         todos,
+        todoCount: todos.length,
+        completedCount,
       },
       output: JSON.stringify(todos, null, 2),
     }
