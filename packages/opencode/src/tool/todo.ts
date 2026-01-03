@@ -20,11 +20,15 @@ export const TodoWriteTool = Tool.define("todowrite", {
       sessionID: ctx.sessionID,
       todos: params.todos,
     })
+    const completedCount = params.todos.filter((x) => x.status === "completed").length
+    const pendingCount = params.todos.length - completedCount
     return {
-      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
+      title: `${pendingCount} todos`,
       output: JSON.stringify(params.todos, null, 2),
       metadata: {
         todos: params.todos,
+        completedCount,
+        pendingCount,
       },
     }
   },
