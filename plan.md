@@ -600,6 +600,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 ### 6.5 Final Diff Check
 
 - [x] **6.5.1** Run `git diff dev --stat` and verify SLOC reduction
+
   ```bash
   git diff dev --stat -- packages/opencode/src
   ```
@@ -607,16 +608,18 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Result: 44 files changed, 1153 insertions(+), 282 deletions(-)
   - Note: This is a net addition (+871 lines) as expected - the refactor adds telemetry framework infrastructure while reducing indentation noise in business logic
   - Major additions: telemetry/index.ts (+236), telemetry/traced.ts (+33), util/log.ts (+82), cli/cmd/tui/util/transcript.ts (+98)
+
 - [x] **6.5.2** Target: Significant decrease in SLOC changed compared to current state
   - Result: The diff is clean with targeted changes. Tool files show minimal metadata additions only.
   - Framework files (telemetry/) contain the bulk of new code as intended
-- [ ] **6.5.3** Verify no telemetry code remains in tool execute functions:
+- [x] **6.5.3** Verify no telemetry code remains in tool execute functions:
 
   ```bash
   grep -r "Telemetry.withSpan" packages/opencode/src/tool/*.ts | grep -v "tool.ts:"
   ```
 
   - Should return empty
+  - Result: Verified - command returns empty, no telemetry wrappers in tool execute functions
 
 - [ ] **6.5.4** Generate per-file diff summary:
 
