@@ -111,16 +111,24 @@ export const WebSearchTool = Tool.define("websearch", {
 
       const responseText = await response.text()
 
+      const searchType = params.type || "auto"
+
       // Parse SSE response
       const lines = responseText.split("\n")
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           const data: McpSearchResponse = JSON.parse(line.substring(6))
           if (data.result && data.result.content && data.result.content.length > 0) {
+            const resultCount = data.result.content.length
             return {
               output: data.result.content[0].text,
               title: `Web search: ${params.query}`,
-              metadata: {},
+              metadata: {
+                statusCode: response.status,
+                resultCount,
+                hasResults: true,
+                searchType,
+              },
             }
           }
         }
@@ -129,7 +137,12 @@ export const WebSearchTool = Tool.define("websearch", {
       return {
         output: "No search results found. Please try a different query.",
         title: `Web search: ${params.query}`,
-        metadata: {},
+        metadata: {
+          statusCode: response.status,
+          resultCount: 0,
+          hasResults: false,
+          searchType,
+        },
       }
     } catch (error) {
       clearTimeout(timeoutId)
