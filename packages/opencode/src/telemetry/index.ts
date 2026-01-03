@@ -110,7 +110,7 @@ export namespace Telemetry {
     return logs.getLogger(name)
   }
 
-  const NOOP_SPAN: Span = {
+  export const NOOP_SPAN: Span = {
     spanContext: () => ({ traceId: "", spanId: "", traceFlags: 0 }),
     setAttribute: () => NOOP_SPAN,
     setAttributes: () => NOOP_SPAN,
@@ -174,5 +174,62 @@ export namespace Telemetry {
       }
     }
     return result
+  }
+
+  export type DisposableSpan = Span & Disposable
+
+  // Create a self-referential NOOP disposable span
+  const NOOP_DISPOSABLE_SPAN: DisposableSpan = {
+    spanContext: () => ({ traceId: "", spanId: "", traceFlags: 0 }),
+    setAttribute: function () {
+      return this
+    },
+    setAttributes: function () {
+      return this
+    },
+    addEvent: function () {
+      return this
+    },
+    addLink: function () {
+      return this
+    },
+    addLinks: function () {
+      return this
+    },
+    setStatus: function () {
+      return this
+    },
+    updateName: function () {
+      return this
+    },
+    end: () => {},
+    isRecording: () => false,
+    recordException: () => {},
+    [Symbol.dispose]: () => {},
+  }
+
+  /**
+   * Creates a span that can be used with the `using` keyword for automatic cleanup.
+   * Returns a NOOP span if telemetry is not initialized.
+   *
+   * @example
+   * ```ts
+   * using span = Telemetry.span("my.operation", { "attr.key": "value" })
+   * // span.end() is automatically called when scope exits
+   * ```
+   */
+  export function span(name: string, attrs: Record<string, AttributeValue> = {}): DisposableSpan {
+    if (!initialized) {
+      return NOOP_DISPOSABLE_SPAN
+    }
+
+    const tracer = getTracer("opencode")
+    const activeSpan = tracer.startSpan(name, { attributes: attrs })
+
+    return Object.assign(activeSpan, {
+      [Symbol.dispose]: () => {
+        activeSpan.end()
+      },
+    })
   }
 }
