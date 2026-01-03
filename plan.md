@@ -237,10 +237,10 @@ Add observability-useful fields to metadata returns so they are auto-captured as
 - [x] **2.2.4** Enhance `grep.ts` metadata
   - Add `uniqueFiles: number` - count of unique files with matches
 
-- [ ] **2.2.5** Enhance `ls.ts` metadata
+- [x] **2.2.5** Enhance `ls.ts` metadata
   - Add `directories: number` - count of directories found
 
-- [ ] **2.2.6** Enhance `lsp.ts` metadata
+- [x] **2.2.6** Enhance `lsp.ts` metadata
   - Add `operation: string` - the LSP operation performed
   - Add `resultCount: number` - number of results returned
 
