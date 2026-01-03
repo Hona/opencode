@@ -257,7 +257,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Add `totalLines: number` - total lines in file (if applicable)
   - Add `truncated: boolean` - whether content was truncated
 
-- [ ] **2.2.9** Enhance `skill.ts` metadata
+- [x] **2.2.9** Enhance `skill.ts` metadata
   - Add `skillFound: boolean` - whether skill was found
 
 - [ ] **2.2.10** Enhance `task.ts` metadata
