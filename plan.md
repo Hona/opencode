@@ -127,11 +127,11 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
 
 ### Phase 6: Clean Up resolveConfig
 
-- [ ] In `packages/opencode/src/telemetry/index.ts`, review the `resolveConfig` function (lines 26-53)
+- [x] In `packages/opencode/src/telemetry/index.ts`, review the `resolveConfig` function (lines 26-53)
 
-- [ ] Remove the `envEndpoint` variable and direct `process.env.OTEL_EXPORTER_OTLP_ENDPOINT` check since the env var is now applied to config at load time
+- [x] Remove the `envEndpoint` variable and direct `process.env.OTEL_EXPORTER_OTLP_ENDPOINT` check since the env var is now applied to config at load time
 
-- [ ] Simplify `resolveConfig` to only handle the config object:
+- [x] Simplify `resolveConfig` to only handle the config object:
 
   ```typescript
   export function resolveConfig(

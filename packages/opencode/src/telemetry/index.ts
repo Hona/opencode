@@ -27,12 +27,12 @@ export namespace Telemetry {
     serviceName: string,
     experimental?: boolean | { enabled?: boolean; endpoint?: string },
   ): Config {
-    const envEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    const defaultEndpoint = "http://localhost:4317"
 
     if (typeof experimental === "boolean") {
       return {
         enabled: experimental,
-        endpoint: envEndpoint || "http://localhost:4317",
+        endpoint: defaultEndpoint,
         serviceName,
       }
     }
@@ -40,14 +40,14 @@ export namespace Telemetry {
     if (typeof experimental === "object") {
       return {
         enabled: experimental.enabled !== false,
-        endpoint: envEndpoint || experimental.endpoint || "http://localhost:4317",
+        endpoint: experimental.endpoint || defaultEndpoint,
         serviceName,
       }
     }
 
     return {
-      enabled: !!envEndpoint,
-      endpoint: envEndpoint || "http://localhost:4317",
+      enabled: false,
+      endpoint: defaultEndpoint,
       serviceName,
     }
   }
