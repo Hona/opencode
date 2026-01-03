@@ -303,17 +303,14 @@ export namespace MCP {
             name: "opencode",
             version: Installation.VERSION,
           })
-          await Telemetry.withSpan(
-            "mcp.client.connect",
-            {
+          {
+            using _span = Telemetry.span("mcp.client.connect", {
               "mcp.server_name": key,
               "mcp.type": "remote",
               "mcp.transport": name,
-            },
-            async () => {
-              await client.connect(transport)
-            },
-          )
+            })
+            await client.connect(transport)
+          }
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -388,16 +385,13 @@ export namespace MCP {
           name: "opencode",
           version: Installation.VERSION,
         })
-        await Telemetry.withSpan(
-          "mcp.client.connect",
-          {
+        {
+          using _span = Telemetry.span("mcp.client.connect", {
             "mcp.server_name": key,
             "mcp.type": "local",
-          },
-          async () => {
-            await client.connect(transport)
-          },
-        )
+          })
+          await client.connect(transport)
+        }
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
