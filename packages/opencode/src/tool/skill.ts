@@ -70,6 +70,7 @@ export const SkillTool = Tool.define("skill", async () => {
         metadata: {
           name: skill.name,
           dir,
+          skillFound: true,
         },
       }
     },
