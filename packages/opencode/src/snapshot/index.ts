@@ -15,40 +15,35 @@ export namespace Snapshot {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
-    return Telemetry.withSpan(
-      "snapshot.track",
-      {
-        "snapshot.vcs": Instance.project.vcs,
-      },
-      async (span) => {
-        const git = gitdir()
-        if (await fs.mkdir(git, { recursive: true })) {
-          await $`git init`
-            .env({
-              ...process.env,
-              GIT_DIR: git,
-              GIT_WORK_TREE: Instance.worktree,
-            })
-            .quiet()
-            .nothrow()
-          // Configure git to not convert line endings on Windows
-          await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
-          log.info("initialized")
-        }
-        await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
-        const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
-          .quiet()
-          .cwd(Instance.directory)
-          .nothrow()
-          .text()
-        log.info("tracking", { hash, cwd: Instance.directory, git })
-        const trimmedHash = hash.trim()
-        span.setAttributes({
-          "snapshot.hash": trimmedHash,
+    using span = Telemetry.span("snapshot.track", {
+      "snapshot.vcs": Instance.project.vcs,
+    })
+    const git = gitdir()
+    if (await fs.mkdir(git, { recursive: true })) {
+      await $`git init`
+        .env({
+          ...process.env,
+          GIT_DIR: git,
+          GIT_WORK_TREE: Instance.worktree,
         })
-        return trimmedHash
-      },
-    )
+        .quiet()
+        .nothrow()
+      // Configure git to not convert line endings on Windows
+      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
+      log.info("initialized")
+    }
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .text()
+    log.info("tracking", { hash, cwd: Instance.directory, git })
+    const trimmedHash = hash.trim()
+    span.setAttributes({
+      "snapshot.hash": trimmedHash,
+    })
+    return trimmedHash
   }
 
   export const Patch = z.object({
