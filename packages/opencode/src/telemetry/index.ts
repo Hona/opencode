@@ -156,4 +156,23 @@ export namespace Telemetry {
     WARN: SeverityNumber.WARN,
     ERROR: SeverityNumber.ERROR,
   }
+
+  /**
+   * Flattens an object into OpenTelemetry span attributes with a prefix.
+   * Only captures primitives (string, number, boolean), skips undefined/null.
+   * Truncates strings longer than 200 characters.
+   */
+  export function flattenAttributes(prefix: string, obj: Record<string, unknown>): Record<string, AttributeValue> {
+    const result: Record<string, AttributeValue> = {}
+    for (const key in obj) {
+      const value = obj[key]
+      if (value === undefined || value === null) continue
+      if (typeof value === "string") {
+        result[`${prefix}${key}`] = value.length > 200 ? value.slice(0, 200) + "..." : value
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        result[`${prefix}${key}`] = value
+      }
+    }
+    return result
+  }
 }
