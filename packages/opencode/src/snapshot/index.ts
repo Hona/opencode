@@ -6,7 +6,7 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, traced } from "@/telemetry"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -79,32 +79,26 @@ export namespace Snapshot {
     }
   }
 
-  export async function restore(snapshot: string) {
-    return Telemetry.withSpan(
-      "snapshot.restore",
-      {
-        "snapshot.hash": snapshot,
-      },
-      async () => {
-        log.info("restore", { commit: snapshot })
-        const git = gitdir()
-        const result =
-          await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
-            .quiet()
-            .cwd(Instance.worktree)
-            .nothrow()
+  export const restore = traced<string, void>("snapshot.restore", (snapshot) => ({ "snapshot.hash": snapshot }))(async (
+    snapshot,
+  ) => {
+    log.info("restore", { commit: snapshot })
+    const git = gitdir()
+    const result =
+      await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
 
-        if (result.exitCode !== 0) {
-          log.error("failed to restore snapshot", {
-            snapshot,
-            exitCode: result.exitCode,
-            stderr: result.stderr.toString(),
-            stdout: result.stdout.toString(),
-          })
-        }
-      },
-    )
-  }
+    if (result.exitCode !== 0) {
+      log.error("failed to restore snapshot", {
+        snapshot,
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
+    }
+  })
 
   export async function revert(patches: Patch[]) {
     const files = new Set<string>()
