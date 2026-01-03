@@ -56,8 +56,10 @@ export const EditTool = Tool.define("edit", {
     let diff = ""
     let contentOld = ""
     let contentNew = ""
+    let fileExisted = true
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
+        fileExisted = false
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
@@ -147,6 +149,8 @@ export const EditTool = Tool.define("edit", {
         diagnostics,
         diff,
         filediff,
+        errorCount: errors.length,
+        fileExisted,
       },
       title: `${path.relative(Instance.worktree, filePath)}`,
       output,
