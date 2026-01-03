@@ -630,13 +630,14 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Top changed files should be framework files (tool.ts, telemetry/), not tools
   - Result: Top files are telemetry/index.ts (+236), cli components, lsp/client.ts (+95), util/log.ts (+82), mcp/index.ts (+82), session/prompt.ts (+79), telemetry/traced.ts (+33). Individual tool files appear at the bottom with minimal changes (multiedit 45, webfetch 19, websearch 17, codesearch 17) confirming framework-level telemetry and minimal tool changes.
 
-- [ ] **6.5.5** Verify diff character is clean (no mass indentation changes):
+- [x] **6.5.5** Verify diff character is clean (no mass indentation changes):
 
   ```bash
   git diff dev -- packages/opencode/src/tool/glob.ts | grep "^[-+]" | head -30
   ```
 
   - Should show only targeted changes, not wholesale re-indentation
+  - Result: Verified across multiple tool files (bash.ts, edit.ts, read.ts, grep.ts, write.ts). All show only targeted metadata field additions with no mass re-indentation. glob.ts has no diff (already clean).
 
 - [ ] **6.5.6** Final SLOC count comparison:
 
