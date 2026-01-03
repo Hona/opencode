@@ -38,23 +38,23 @@ Significantly reduce the `feat/aspire-otel` branch diff by moving telemetry conc
 
 ### 1.2 Traced Wrapper Utility
 
-- [ ] **1.2.1** Create new file `packages/opencode/src/telemetry/traced.ts`
+- [x] **1.2.1** Create new file `packages/opencode/src/telemetry/traced.ts`
   - Export `traced<TInput, TOutput>()` higher-order function
   - Signature: `traced(name, attributesFn)(fn) => wrappedFn`
   - Uses `Telemetry.withSpan()` internally
   - Preserves function return type
 
-- [ ] **1.2.2** Add export for `traced` from `packages/opencode/src/telemetry/index.ts`
+- [x] **1.2.2** Add export for `traced` from `packages/opencode/src/telemetry/index.ts`
 
 ### 1.3 Tool Auto-Instrumentation
 
-- [ ] **1.3.1** Modify `Tool.define()` in `packages/opencode/src/tool/tool.ts` to wrap `execute`
+- [x] **1.3.1** Modify `Tool.define()` in `packages/opencode/src/tool/tool.ts` to wrap `execute`
   - Wrap original execute with `Telemetry.withSpan()`
   - Span name: `tool.${id}.execute`
   - Auto-capture params using `flattenAttributes("tool.param.", args)`
   - Auto-capture result metadata using `flattenAttributes("tool.", result.metadata)`
 
-- [ ] **1.3.2** Add `"tool.name"` and `"session.id"` as default span attributes in Tool.define wrapper
+- [x] **1.3.2** Add `"tool.name"` and `"session.id"` as default span attributes in Tool.define wrapper
 
 ### 1.4 Phase 1 Validation
 

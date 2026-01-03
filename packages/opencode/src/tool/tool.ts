@@ -2,6 +2,7 @@ import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
 import type { PermissionNext } from "../permission/next"
+import { Telemetry } from "../telemetry"
 
 export namespace Tool {
   interface Metadata {
@@ -64,7 +65,19 @@ export namespace Tool {
               { cause: error },
             )
           }
-          return execute(args, ctx)
+          return Telemetry.withSpan(
+            `tool.${id}.execute`,
+            {
+              "tool.name": id,
+              "session.id": ctx.sessionID,
+              ...Telemetry.flattenAttributes("tool.param.", args as Record<string, unknown>),
+            },
+            async (span) => {
+              const result = await execute(args, ctx)
+              span.setAttributes(Telemetry.flattenAttributes("tool.", result.metadata as Record<string, unknown>))
+              return result
+            },
+          )
         }
         return toolInfo
       },
