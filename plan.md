@@ -108,26 +108,22 @@ The telemetry enablement check is repeated in 4 places with inconsistent logic:
   },
   ```
 
-- [ ] In `packages/opencode/src/agent/agent.ts`, locate the `experimental_telemetry` block (lines 223-227)
+- [x] In `packages/opencode/src/agent/agent.ts`, locate the `experimental_telemetry` block (lines 223-227)
 
-- [ ] Add import for `Telemetry` at the top of the file:
+- [x] Add import for `Telemetry` at the top of the file (already present)
 
-  ```typescript
-  import { Telemetry } from "@/telemetry"
-  ```
-
-- [ ] Replace the `isEnabled` check with the helper:
+- [x] Replace the `isEnabled` check with the helper:
   ```typescript
   experimental_telemetry: {
     isEnabled: Telemetry.isEnabled(),
     functionId: "opencode.agent.generate",
     metadata: {
-      sessionId: input.sessionID,
-      modelId: input.modelID,
-      providerID: input.providerID,
+      "llm.provider_id": defaultModel.providerID,
+      "llm.model_id": defaultModel.modelID,
     },
   },
   ```
+  NOTE: Metadata updated to use the contextually available `defaultModel` values with dotted notation consistent with other telemetry in the codebase.
 
 ### Phase 6: Clean Up resolveConfig
 
