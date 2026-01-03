@@ -394,7 +394,7 @@ Add observability-useful fields to metadata returns so they are auto-captured as
   - Attributes: `llm.provider_id`, `llm.model_id`, `session.id`, `llm.agent`, `llm.tools_count`
   - Note: Explicit type parameters `traced<StreamInput, StreamOutput>` needed for proper type inference
 
-- [ ] **4.1.2** Migrate `SessionPrompt.prompt` in `packages/opencode/src/session/prompt.ts`
+- [x] **4.1.2** Migrate `SessionPrompt.prompt` in `packages/opencode/src/session/prompt.ts`
   - Change to `traced()` wrapper pattern
   - Attributes: `session.id`, `session.agent`, `llm.provider_id`, `llm.model_id`
 
