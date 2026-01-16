@@ -6,7 +6,6 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { exists } from "fs/promises"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -76,7 +75,7 @@ export namespace Skill {
     )
     // Also include global ~/.claude/skills/
     const globalClaude = `${Global.Path.home}/.claude`
-    if (await exists(globalClaude)) {
+    if (await Bun.file(globalClaude).exists()) {
       claudeDirs.push(globalClaude)
     }
 

@@ -23,7 +23,7 @@ export namespace Storage {
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
-      if (!fs.exists(project)) return
+      if (!(await Bun.file(project).exists())) return
       for await (const projectDir of new Bun.Glob("*").scan({
         cwd: project,
         onlyFiles: false,
@@ -43,7 +43,7 @@ export namespace Storage {
             if (worktree) break
           }
           if (!worktree) continue
-          if (!(await fs.exists(worktree))) continue
+          if (!(await Bun.file(worktree).exists())) continue
           const [id] = await $`git rev-list --max-parents=0 --all`
             .quiet()
             .nothrow()
