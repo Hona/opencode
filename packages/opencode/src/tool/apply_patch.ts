@@ -1,5 +1,4 @@
 import z from "zod"
-import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
 import { FileTime } from "../file/time"
@@ -58,7 +57,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     let totalDiff = ""
 
     for (const hunk of hunks) {
-      const filePath = path.resolve(Instance.directory, hunk.path)
+      const filePath = Filesystem.resolve(Instance.directory, hunk.path)
       await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
@@ -118,7 +117,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             if (change.removed) deletions += change.count || 0
           }
 
-          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          const movePath = hunk.move_path ? Filesystem.resolve(Instance.directory, hunk.move_path) : undefined
           await assertExternalDirectory(ctx, movePath)
 
           fileChanges.push({
@@ -163,7 +162,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Check permissions if needed
     await ctx.ask({
       permission: "edit",
-      patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
+      patterns: fileChanges.map((c) => Filesystem.relative(Instance.worktree, c.filePath)),
       always: ["*"],
       metadata: {
         diff: totalDiff,
@@ -177,8 +176,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       switch (change.type) {
         case "add":
           // Create parent directories (recursive: true is safe on existing/root dirs)
-          await fs.mkdir(path.dirname(change.filePath), { recursive: true })
+          await fs.mkdir(Filesystem.dirname(change.filePath), { recursive: true })
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
+
           changedFiles.push(change.filePath)
           break
 
@@ -190,7 +190,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         case "move":
           if (change.movePath) {
             // Create parent directories (recursive: true is safe on existing/root dirs)
-            await fs.mkdir(path.dirname(change.movePath), { recursive: true })
+            await fs.mkdir(Filesystem.dirname(change.movePath), { recursive: true })
             await fs.writeFile(change.movePath, change.newContent, "utf-8")
             await fs.unlink(change.filePath)
             changedFiles.push(change.movePath)
@@ -226,13 +226,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Generate output summary
     const summaryLines = fileChanges.map((change) => {
       if (change.type === "add") {
-        return `A ${path.relative(Instance.worktree, change.filePath)}`
+        return `A ${Filesystem.relative(Instance.worktree, change.filePath)}`
       }
       if (change.type === "delete") {
-        return `D ${path.relative(Instance.worktree, change.filePath)}`
+        return `D ${Filesystem.relative(Instance.worktree, change.filePath)}`
       }
       const target = change.movePath ?? change.filePath
-      return `M ${path.relative(Instance.worktree, target)}`
+      return `M ${Filesystem.relative(Instance.worktree, target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
@@ -248,14 +248,14 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =
           errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-        output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+        output += `\n\nLSP errors detected in ${Filesystem.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
 
     // Build per-file metadata for UI rendering
     const files = fileChanges.map((change) => ({
       filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
+      relativePath: Filesystem.relative(Instance.worktree, change.movePath ?? change.filePath),
       type: change.type,
       diff: change.diff,
       before: change.oldContent,

@@ -1231,8 +1231,8 @@ export namespace ACP {
   ): { type: "file"; url: string; filename: string; mime: string } | { type: "text"; text: string } {
     try {
       if (uri.startsWith("file://")) {
-        const path = uri.slice(7)
-        const name = path.split("/").pop() || path
+        const filepath = uri.slice(7)
+        const name = filepath.split("/").pop() || filepath
         return {
           type: "file",
           url: uri,
@@ -1242,12 +1242,12 @@ export namespace ACP {
       }
       if (uri.startsWith("zed://")) {
         const url = new URL(uri)
-        const path = url.searchParams.get("path")
-        if (path) {
-          const name = path.split("/").pop() || path
+        const filepath = url.searchParams.get("path")
+        if (filepath) {
+          const name = filepath.split("/").pop() || filepath
           return {
             type: "file",
-            url: `file://${path}`,
+            url: `file://${filepath}`,
             filename: name,
             mime: "text/plain",
           }

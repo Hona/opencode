@@ -3,7 +3,6 @@ import z from "zod"
 import { $ } from "bun"
 import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
-import path from "path"
 import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
@@ -128,7 +127,7 @@ export namespace File {
 
     const fn = async (result: Entry) => {
       // Disable scanning if in root of file system
-      if (Instance.directory === path.parse(Instance.directory).root) return
+      if (Instance.directory === Filesystem.dirname(Instance.directory)) return
       fetching = true
 
       if (isGlobalHome) {
@@ -151,7 +150,7 @@ export namespace File {
           if (shouldIgnore(entry.name)) continue
           dirs.add(entry.name + "/")
 
-          const base = path.join(Instance.directory, entry.name)
+          const base = Filesystem.join(Instance.directory, entry.name)
           const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
           for (const child of children) {
             if (!child.isDirectory()) continue
@@ -171,7 +170,7 @@ export namespace File {
         result.files.push(file)
         let current = file
         while (true) {
-          const dir = path.dirname(current)
+          const dir = Filesystem.dirname(current)
           if (dir === ".") break
           if (dir === current) break
           current = dir
@@ -233,7 +232,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
+          const content = await Bun.file(Filesystem.join(Instance.directory, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -268,14 +267,14 @@ export namespace File {
 
     return changedFiles.map((x) => ({
       ...x,
-      path: path.relative(Instance.directory, x.path),
+      path: Filesystem.relative(Instance.directory, x.path),
     }))
   }
 
   export async function read(file: string): Promise<Content> {
     using _ = log.time("read", { file })
     const project = Instance.project
-    const full = path.join(Instance.directory, file)
+    const full = Filesystem.join(Instance.directory, file)
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
@@ -325,17 +324,17 @@ export namespace File {
     let ignored = (_: string) => false
     if (project.vcs === "git") {
       const ig = ignore()
-      const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
+      const gitignore = Bun.file(Filesystem.join(Instance.worktree, ".gitignore"))
       if (await gitignore.exists()) {
         ig.add(await gitignore.text())
       }
-      const ignoreFile = Bun.file(path.join(Instance.worktree, ".ignore"))
+      const ignoreFile = Bun.file(Filesystem.join(Instance.worktree, ".ignore"))
       if (await ignoreFile.exists()) {
         ig.add(await ignoreFile.text())
       }
       ignored = ig.ignores.bind(ig)
     }
-    const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
+    const resolved = dir ? Filesystem.join(Instance.directory, dir) : Instance.directory
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
@@ -350,8 +349,8 @@ export namespace File {
       })
       .catch(() => [])) {
       if (exclude.includes(entry.name)) continue
-      const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(Instance.directory, fullPath)
+      const fullPath = Filesystem.join(resolved, entry.name)
+      const relativePath = Filesystem.relative(Instance.directory, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({
         name: entry.name,

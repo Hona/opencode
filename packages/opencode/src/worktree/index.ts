@@ -1,6 +1,5 @@
 import { $ } from "bun"
 import fs from "fs/promises"
-import path from "path"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Global } from "../global"
@@ -8,6 +7,7 @@ import { Instance } from "../project/instance"
 import { Project } from "../project/project"
 import { fn } from "../util/fn"
 import { Config } from "@/config/config"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Worktree {
   export const Info = z
@@ -198,7 +198,7 @@ export namespace Worktree {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
       const branch = `opencode/${name}`
-      const directory = path.join(root, name)
+      const directory = Filesystem.join(root, name)
 
       if (await exists(directory)) continue
 
@@ -224,7 +224,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const root = path.join(Global.Path.data, "worktree", Instance.project.id)
+    const root = Filesystem.join(Global.Path.data, "worktree", Instance.project.id)
     await fs.mkdir(root, { recursive: true })
 
     const base = input?.name ? slug(input.name) : ""
@@ -254,7 +254,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
+    const directory = Filesystem.resolve(input.directory)
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -277,7 +277,7 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = entries.find((item) => item.path && Filesystem.resolve(item.path) === directory)
     if (!entry?.path) {
       throw new RemoveFailedError({ message: "Worktree not found" })
     }
@@ -303,8 +303,8 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
-    if (directory === path.resolve(Instance.worktree)) {
+    const directory = Filesystem.resolve(input.directory)
+    if (directory === Filesystem.resolve(Instance.worktree)) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
@@ -330,7 +330,7 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = entries.find((item) => item.path && Filesystem.resolve(item.path) === directory)
     if (!entry?.path) {
       throw new ResetFailedError({ message: "Worktree not found" })
     }

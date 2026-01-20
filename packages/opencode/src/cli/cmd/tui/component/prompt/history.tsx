@@ -1,4 +1,3 @@
-import path from "path"
 import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -6,6 +5,7 @@ import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import { Filesystem } from "@/util/filesystem"
 
 export type PromptInfo = {
   input: string
@@ -30,7 +30,7 @@ const MAX_HISTORY_ENTRIES = 50
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const historyFile = Bun.file(path.join(Global.Path.state, "prompt-history.jsonl"))
+    const historyFile = Bun.file(Filesystem.join(Global.Path.state, "prompt-history.jsonl"))
     onMount(async () => {
       const text = await historyFile.text().catch(() => "")
       const lines = text

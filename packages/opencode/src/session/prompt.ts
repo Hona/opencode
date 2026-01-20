@@ -1,4 +1,3 @@
-import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
@@ -11,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
+import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -193,8 +193,8 @@ export namespace SessionPrompt {
         if (seen.has(name)) return
         seen.add(name)
         const filepath = name.startsWith("~/")
-          ? path.join(os.homedir(), name.slice(2))
-          : path.resolve(Instance.worktree, name)
+          ? Filesystem.join(os.homedir(), name.slice(2))
+          : Filesystem.resolve(Instance.worktree, name)
 
         const stats = await fs.stat(filepath).catch(() => undefined)
         if (!stats) {
@@ -1225,7 +1225,7 @@ export namespace SessionPrompt {
 
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
-      const plan = Session.plan(input.session)
+      const plan = Filesystem.normalize(Session.plan(input.session))
       const exists = await Bun.file(plan).exists()
       if (exists) {
         const part = await Session.updatePart({
@@ -1244,9 +1244,9 @@ export namespace SessionPrompt {
 
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
-      const plan = Session.plan(input.session)
+      const plan = Filesystem.normalize(Session.plan(input.session))
       const exists = await Bun.file(plan).exists()
-      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      if (!exists) await fs.mkdir(Filesystem.dirname(plan), { recursive: true })
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
@@ -1423,9 +1423,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     await Session.updatePart(part)
     const shell = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
-    ).toLowerCase()
+    const shellName =
+      shell
+        .split(/[\\/]/)
+        .at(-1)
+        ?.replace(/\.exe$/i, "")
+        ?.toLowerCase() ?? ""
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {

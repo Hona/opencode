@@ -3,7 +3,7 @@ import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
-import path from "path"
+import { Filesystem } from "../../../../util/filesystem"
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -30,7 +30,7 @@ export namespace Clipboard {
     const os = platform()
 
     if (os === "darwin") {
-      const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
+      const tmpfile = Filesystem.join(tmpdir(), "opencode-clipboard.png")
       try {
         await $`osascript -e 'set imageData to the clipboard as "PNGf"' -e 'set fileRef to open for access POSIX file "${tmpfile}" with write permission' -e 'set eof fileRef to 0' -e 'write imageData to fileRef' -e 'close access fileRef'`
           .nothrow()

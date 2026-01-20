@@ -1,7 +1,6 @@
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
-import path from "path"
 import z from "zod"
 
 import * as Formatter from "./formatter"
@@ -105,7 +104,7 @@ export namespace Format {
     Bus.subscribe(File.Event.Edited, async (payload) => {
       const file = payload.properties.file
       log.info("formatting", { file })
-      const ext = path.extname(file)
+      const ext = file.includes(".") ? "." + file.split(".").at(-1) : ""
 
       for (const item of await getFormatter(ext)) {
         log.info("running", { command: item.command })

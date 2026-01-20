@@ -1,11 +1,11 @@
 import { BusEvent } from "@/bus/bus-event"
-import path from "path"
 import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
 import { Flag } from "../flag/flag"
+import { Filesystem } from "../util/filesystem"
 
 declare global {
   const OPENCODE_VERSION: string
@@ -58,8 +58,8 @@ export namespace Installation {
   }
 
   export async function method() {
-    if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
-    if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
+    if (process.execPath.includes(Filesystem.join(".opencode", "bin"))) return "curl"
+    if (process.execPath.includes(Filesystem.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
     const checks = [

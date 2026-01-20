@@ -1,5 +1,4 @@
 import z from "zod"
-import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
@@ -22,10 +21,11 @@ export const WriteTool = Tool.define("write", {
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filepath = Filesystem.resolve(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
     const file = Bun.file(filepath)
+
     const exists = await file.exists()
     const contentOld = exists ? await file.text() : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
@@ -33,7 +33,7 @@ export const WriteTool = Tool.define("write", {
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
     await ctx.ask({
       permission: "edit",
-      patterns: [path.relative(Instance.worktree, filepath)],
+      patterns: [Filesystem.relative(Instance.worktree, filepath)],
       always: ["*"],
       metadata: {
         filepath,
@@ -68,7 +68,7 @@ export const WriteTool = Tool.define("write", {
     }
 
     return {
-      title: path.relative(Instance.worktree, filepath),
+      title: Filesystem.relative(Instance.worktree, filepath),
       metadata: {
         diagnostics,
         filepath,

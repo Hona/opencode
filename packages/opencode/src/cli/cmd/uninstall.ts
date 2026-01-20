@@ -5,8 +5,8 @@ import { Installation } from "../../installation"
 import { Global } from "../../global"
 import { $ } from "bun"
 import fs from "fs/promises"
-import path from "path"
 import os from "os"
+import { Filesystem } from "../../util/filesystem"
 
 interface UninstallArgs {
   keepConfig: boolean
@@ -216,7 +216,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     prompts.log.message("To finish removing the binary, run:")
     prompts.log.info(`  rm "${targets.binary}"`)
 
-    const binDir = path.dirname(targets.binary)
+    const binDir = Filesystem.dirname(targets.binary)
     if (binDir.includes(".opencode")) {
       prompts.log.info(`  rmdir "${binDir}" 2>/dev/null`)
     }
@@ -235,27 +235,27 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
 }
 
 async function getShellConfigFile(): Promise<string | null> {
-  const shell = path.basename(process.env.SHELL || "bash")
+  const shell = (process.env.SHELL || "bash").split("/").at(-1) ?? "bash"
   const home = os.homedir()
-  const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
+  const xdgConfig = process.env.XDG_CONFIG_HOME || Filesystem.join(home, ".config")
 
   const configFiles: Record<string, string[]> = {
-    fish: [path.join(xdgConfig, "fish", "config.fish")],
+    fish: [Filesystem.join(xdgConfig, "fish", "config.fish")],
     zsh: [
-      path.join(home, ".zshrc"),
-      path.join(home, ".zshenv"),
-      path.join(xdgConfig, "zsh", ".zshrc"),
-      path.join(xdgConfig, "zsh", ".zshenv"),
+      Filesystem.join(home, ".zshrc"),
+      Filesystem.join(home, ".zshenv"),
+      Filesystem.join(xdgConfig, "zsh", ".zshrc"),
+      Filesystem.join(xdgConfig, "zsh", ".zshenv"),
     ],
     bash: [
-      path.join(home, ".bashrc"),
-      path.join(home, ".bash_profile"),
-      path.join(home, ".profile"),
-      path.join(xdgConfig, "bash", ".bashrc"),
-      path.join(xdgConfig, "bash", ".bash_profile"),
+      Filesystem.join(home, ".bashrc"),
+      Filesystem.join(home, ".bash_profile"),
+      Filesystem.join(home, ".profile"),
+      Filesystem.join(xdgConfig, "bash", ".bashrc"),
+      Filesystem.join(xdgConfig, "bash", ".bash_profile"),
     ],
-    ash: [path.join(home, ".ashrc"), path.join(home, ".profile")],
-    sh: [path.join(home, ".profile")],
+    ash: [Filesystem.join(home, ".ashrc"), Filesystem.join(home, ".profile")],
+    sh: [Filesystem.join(home, ".profile")],
   }
 
   const candidates = configFiles[shell] || configFiles.bash
@@ -325,7 +325,7 @@ async function getDirectorySize(dir: string): Promise<number> {
     const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
 
     for (const entry of entries) {
-      const full = path.join(current, entry.name)
+      const full = Filesystem.join(current, entry.name)
       if (entry.isDirectory()) {
         await walk(full)
         continue

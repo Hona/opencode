@@ -1,5 +1,4 @@
 import type { Argv } from "yargs"
-import path from "path"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
@@ -11,6 +10,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { Filesystem } from "../../util/filesystem"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -102,7 +102,7 @@ export const RunCommand = cmd({
       const files = Array.isArray(args.file) ? args.file : [args.file]
 
       for (const filePath of files) {
-        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const resolvedPath = Filesystem.resolve(process.cwd(), filePath)
         const file = Bun.file(resolvedPath)
         const stats = await file.stat().catch(() => {})
         if (!stats) {
@@ -120,7 +120,7 @@ export const RunCommand = cmd({
         fileParts.push({
           type: "file",
           url: `file://${resolvedPath}`,
-          filename: path.basename(resolvedPath),
+          filename: resolvedPath.split("/").at(-1) ?? "",
           mime,
         })
       }

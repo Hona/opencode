@@ -16,14 +16,15 @@ const cache = new Map<string, Promise<Context>>()
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    let existing = cache.get(input.directory)
+    const directory = Filesystem.normalize(input.directory)
+    let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory: input.directory })
+      Log.Default.info("creating instance", { directory })
       existing = iife(async () => {
-        const { project, sandbox } = await Project.fromDirectory(input.directory)
+        const { project, sandbox } = await Project.fromDirectory(directory)
         const ctx = {
-          directory: input.directory,
-          worktree: sandbox,
+          directory,
+          worktree: Filesystem.normalize(sandbox),
           project,
         }
         await context.provide(ctx, async () => {
@@ -31,7 +32,7 @@ export const Instance = {
         })
         return ctx
       })
-      cache.set(input.directory, existing)
+      cache.set(directory, existing)
     }
     const ctx = await existing
     return context.provide(ctx, async () => {

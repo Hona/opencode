@@ -1,8 +1,8 @@
 import z from "zod"
-import * as path from "path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Patch {
   const log = Log.create({ service: "patch" })
@@ -528,7 +528,7 @@ export namespace Patch {
       switch (hunk.type) {
         case "add":
           // Create parent directories
-          const addDir = path.dirname(hunk.path)
+          const addDir = Filesystem.dirname(hunk.path)
           if (addDir !== "." && addDir !== "/") {
             await fs.mkdir(addDir, { recursive: true })
           }
@@ -549,7 +549,7 @@ export namespace Patch {
 
           if (hunk.move_path) {
             // Handle file move
-            const moveDir = path.dirname(hunk.move_path)
+            const moveDir = Filesystem.dirname(hunk.move_path)
             if (moveDir !== "." && moveDir !== "/") {
               await fs.mkdir(moveDir, { recursive: true })
             }
@@ -604,11 +604,11 @@ export namespace Patch {
     switch (result.type) {
       case MaybeApplyPatch.Body:
         const { args } = result
-        const effectiveCwd = args.workdir ? path.resolve(cwd, args.workdir) : cwd
+        const effectiveCwd = args.workdir ? Filesystem.resolve(cwd, args.workdir) : cwd
         const changes = new Map<string, ApplyPatchFileChange>()
 
         for (const hunk of args.hunks) {
-          const resolvedPath = path.resolve(
+          const resolvedPath = Filesystem.resolve(
             effectiveCwd,
             hunk.type === "update" && hunk.move_path ? hunk.move_path : hunk.path,
           )
@@ -623,7 +623,7 @@ export namespace Patch {
 
             case "delete":
               // For delete, we need to read the current content
-              const deletePath = path.resolve(effectiveCwd, hunk.path)
+              const deletePath = Filesystem.resolve(effectiveCwd, hunk.path)
               try {
                 const content = await fs.readFile(deletePath, "utf-8")
                 changes.set(resolvedPath, {
@@ -639,13 +639,13 @@ export namespace Patch {
               break
 
             case "update":
-              const updatePath = path.resolve(effectiveCwd, hunk.path)
+              const updatePath = Filesystem.resolve(effectiveCwd, hunk.path)
               try {
                 const fileUpdate = deriveNewContentsFromChunks(updatePath, hunk.chunks)
                 changes.set(resolvedPath, {
                   type: "update",
                   unified_diff: fileUpdate.unified_diff,
-                  move_path: hunk.move_path ? path.resolve(effectiveCwd, hunk.move_path) : undefined,
+                  move_path: hunk.move_path ? Filesystem.resolve(effectiveCwd, hunk.move_path) : undefined,
                   new_content: fileUpdate.content,
                 })
               } catch (error) {

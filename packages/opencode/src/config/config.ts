@@ -1,5 +1,4 @@
 import { Log } from "../util/log"
-import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
 import z from "zod"
@@ -115,8 +114,8 @@ export namespace Config {
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
+          log.debug(`loading config from ${Filesystem.join(dir, file)}`)
+          result = mergeConfigConcatArrays(result, await loadFile(Filesystem.join(dir, file)))
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -124,7 +123,7 @@ export namespace Config {
         }
       }
 
-      const exists = existsSync(path.join(dir, "node_modules"))
+      const exists = existsSync(Filesystem.join(dir, "node_modules"))
       const installing = installDependencies(dir)
       if (!exists) await installing
 
@@ -188,13 +187,13 @@ export namespace Config {
   })
 
   export async function installDependencies(dir: string) {
-    const pkg = path.join(dir, "package.json")
+    const pkg = Filesystem.join(dir, "package.json")
 
     if (!(await Bun.file(pkg).exists())) {
       await Bun.write(pkg, "{}")
     }
 
-    const gitignore = path.join(dir, ".gitignore")
+    const gitignore = Filesystem.join(dir, ".gitignore")
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
@@ -219,7 +218,7 @@ export namespace Config {
   }
 
   function trim(file: string) {
-    const ext = path.extname(file)
+    const ext = file.includes(".") ? "." + file.split(".").at(-1) : ""
     return ext.length ? file.slice(0, -ext.length) : file
   }
 
@@ -244,7 +243,7 @@ export namespace Config {
       if (!md) continue
 
       const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const file = rel(item, patterns) ?? item.split("/").at(-1) ?? ""
       const name = trim(file)
 
       const config = {
@@ -284,7 +283,7 @@ export namespace Config {
       if (!md) continue
 
       const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const file = rel(item, patterns) ?? item.split("/").at(-1) ?? ""
       const agentName = trim(file)
 
       const config = {
@@ -323,7 +322,7 @@ export namespace Config {
       if (!md) continue
 
       const config = {
-        name: path.basename(item, ".md"),
+        name: (item.split("/").at(-1) ?? "").replace(/\.md$/, ""),
         ...md.data,
         prompt: md.content.trim(),
       }
@@ -366,7 +365,8 @@ export namespace Config {
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const pathname = new URL(plugin).pathname
+      return (pathname.split("/").at(-1) ?? "").replace(/\.[^/.]+$/, "")
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
@@ -1085,12 +1085,12 @@ export namespace Config {
   export const global = lazy(async () => {
     let result: Info = pipe(
       {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(Filesystem.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(Filesystem.join(Global.Path.config, "opencode.json"))),
+      mergeDeep(await loadFile(Filesystem.join(Global.Path.config, "opencode.jsonc"))),
     )
 
-    await import(path.join(Global.Path.config, "config"), {
+    await import(Filesystem.join(Global.Path.config, "config"), {
       with: {
         type: "toml",
       },
@@ -1100,8 +1100,8 @@ export namespace Config {
         if (provider && model) result.model = `${provider}/${model}`
         result["$schema"] = "https://opencode.ai/config.json"
         result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-        await fs.unlink(path.join(Global.Path.config, "config"))
+        await Bun.write(Filesystem.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+        await fs.unlink(Filesystem.join(Global.Path.config, "config"))
       })
       .catch(() => {})
 
@@ -1128,7 +1128,7 @@ export namespace Config {
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configFilepath)
+      const configDir = Filesystem.dirname(configFilepath)
       const lines = text.split("\n")
 
       for (const match of fileMatches) {
@@ -1138,9 +1138,9 @@ export namespace Config {
         }
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
-          filePath = path.join(os.homedir(), filePath.slice(2))
+          filePath = Filesystem.join(os.homedir(), filePath.slice(2))
         }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const resolvedPath = Filesystem.resolve(configDir, filePath)
         const fileContent = (
           await Bun.file(resolvedPath)
             .text()
@@ -1243,7 +1243,7 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    const filepath = Filesystem.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()

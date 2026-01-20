@@ -4,10 +4,10 @@ import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
 import { Provider } from "../../provider/provider"
-import path from "path"
 import fs from "fs/promises"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { Filesystem } from "../../util/filesystem"
 import { EOL } from "os"
 import type { Argv } from "yargs"
 
@@ -75,7 +75,7 @@ const AgentCreateCommand = cmd({
         // Determine scope/path
         let targetPath: string
         if (cliPath) {
-          targetPath = path.join(cliPath, "agent")
+          targetPath = Filesystem.join(cliPath, "agent")
         } else {
           let scope: "global" | "project" = "global"
           if (project.vcs === "git") {
@@ -97,8 +97,8 @@ const AgentCreateCommand = cmd({
             if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
             scope = scopeResult
           }
-          targetPath = path.join(
-            scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
+          targetPath = Filesystem.join(
+            scope === "global" ? Global.Path.config : Filesystem.join(Instance.worktree, ".opencode"),
             "agent",
           )
         }
@@ -198,7 +198,7 @@ const AgentCreateCommand = cmd({
 
         // Write file
         const content = matter.stringify(generated.systemPrompt, frontmatter)
-        const filePath = path.join(targetPath, `${generated.identifier}.md`)
+        const filePath = Filesystem.join(targetPath, `${generated.identifier}.md`)
 
         await fs.mkdir(targetPath, { recursive: true })
 

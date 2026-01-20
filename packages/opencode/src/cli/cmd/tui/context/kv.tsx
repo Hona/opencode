@@ -2,14 +2,14 @@ import { Global } from "@/global"
 import { createSignal, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import path from "path"
+import { Filesystem } from "@/util/filesystem"
 
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
-    const file = Bun.file(path.join(Global.Path.state, "kv.json"))
+    const file = Bun.file(Filesystem.join(Global.Path.state, "kv.json"))
 
     file
       .json()

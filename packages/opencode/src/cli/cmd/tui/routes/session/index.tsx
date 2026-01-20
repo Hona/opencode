@@ -12,7 +12,6 @@ import {
   useContext,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
@@ -68,8 +67,8 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -830,7 +829,7 @@ export function Session() {
           } else {
             const exportDir = process.cwd()
             const filename = options.filename.trim()
-            const filepath = path.join(exportDir, filename)
+            const filepath = Filesystem.join(exportDir, filename)
 
             await Bun.write(filepath, transcript)
 
@@ -1615,13 +1614,13 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const base = sync.data.path.directory
     if (!base) return undefined
 
-    const absolute = path.resolve(base, workdir)
+    const absolute = Filesystem.resolve(base, workdir)
     if (absolute === base) return undefined
 
     const home = Global.Path.home
     if (!home) return absolute
 
-    const match = absolute === home || absolute.startsWith(home + path.sep)
+    const match = absolute === home || absolute.startsWith(home + "/")
     return match ? absolute.replace(home, "~") : absolute
   })
 
@@ -2026,8 +2025,8 @@ function Question(props: ToolProps<typeof QuestionTool>) {
 
 function normalizePath(input?: string) {
   if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+  if (input.startsWith("/")) {
+    return Filesystem.relative(process.cwd(), input) || "."
   }
   return input
 }
@@ -2043,7 +2042,7 @@ function input(input: Record<string, any>, omit?: string[]): string {
 
 function filetype(input?: string) {
   if (!input) return "none"
-  const ext = path.extname(input)
+  const ext = input.includes(".") ? "." + input.split(".").at(-1) : ""
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language

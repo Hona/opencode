@@ -1,8 +1,8 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
-import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { Filesystem } from "@/util/filesystem"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -40,7 +40,6 @@ import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
 import { useSDK } from "./sdk"
 
 type ThemeColors = {
@@ -412,7 +411,7 @@ async function getCustomThemes() {
       dot: true,
       cwd: dir,
     })) {
-      const name = path.basename(item, ".json")
+      const name = (item.split("/").at(-1) ?? "").replace(/\.json$/, "")
       result[name] = await Bun.file(item).json()
     }
   }

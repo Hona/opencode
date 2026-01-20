@@ -1,5 +1,4 @@
 import { $ } from "bun"
-import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
@@ -7,6 +6,7 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Scheduler } from "../scheduler"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -104,7 +104,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.worktree, x)),
+        .map((x) => Filesystem.join(Instance.worktree, x)),
     }
   }
 
@@ -139,7 +139,7 @@ export namespace Snapshot {
           .cwd(Instance.worktree)
           .nothrow()
         if (result.exitCode !== 0) {
-          const relativePath = path.relative(Instance.worktree, file)
+          const relativePath = Filesystem.relative(Instance.worktree, file)
           const checkTree =
             await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
               .quiet()
@@ -231,6 +231,6 @@ export namespace Snapshot {
 
   function gitdir() {
     const project = Instance.project
-    return path.join(Global.Path.data, "snapshot", project.id)
+    return Filesystem.join(Global.Path.data, "snapshot", project.id)
   }
 }

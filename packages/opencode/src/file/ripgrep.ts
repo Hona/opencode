@@ -1,5 +1,4 @@
 // Ripgrep utility functions
-import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
@@ -9,6 +8,7 @@ import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -125,7 +125,7 @@ export namespace Ripgrep {
   const state = lazy(async () => {
     let filepath = Bun.which("rg")
     if (filepath) return { filepath }
-    filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
+    filepath = Filesystem.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
@@ -141,7 +141,7 @@ export namespace Ripgrep {
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 
       const buffer = await response.arrayBuffer()
-      const archivePath = path.join(Global.Path.bin, filename)
+      const archivePath = Filesystem.join(Global.Path.bin, filename)
       await Bun.write(archivePath, buffer)
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
@@ -210,7 +210,9 @@ export namespace Ripgrep {
     follow?: boolean
     maxDepth?: number
   }) {
+    const cwd = Filesystem.normalize(input.cwd)
     const args = [await filepath(), "--files", "--glob=!.git/*"]
+    if (process.platform === "win32") args.push("--path-separator=/")
     if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
@@ -222,16 +224,16 @@ export namespace Ripgrep {
 
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
     // See https://github.com/oven-sh/bun/issues/24012
-    if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
-      throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
+    if (!(await fs.stat(cwd).catch(() => undefined))?.isDirectory()) {
+      throw Object.assign(new Error(`No such file or directory: '${cwd}'`), {
         code: "ENOENT",
         errno: -2,
-        path: input.cwd,
+        path: cwd,
       })
     }
 
     const proc = Bun.spawn(args, {
-      cwd: input.cwd,
+      cwd,
       stdout: "pipe",
       stderr: "ignore",
       maxBuffer: 1024 * 1024 * 20,
@@ -252,11 +254,11 @@ export namespace Ripgrep {
         buffer = lines.pop() || ""
 
         for (const line of lines) {
-          if (line) yield line
+          if (line) yield Filesystem.normalize(line)
         }
       }
 
-      if (buffer) yield buffer
+      if (buffer) yield Filesystem.normalize(buffer)
     } finally {
       reader.releaseLock()
       await proc.exited
@@ -295,7 +297,7 @@ export namespace Ripgrep {
     }
     for (const file of files) {
       if (file.includes(".opencode")) continue
-      const parts = file.split(path.sep)
+      const parts = file.split("/")
       getPath(root, parts, true)
     }
 
@@ -372,7 +374,9 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
+    const cwd = Filesystem.normalize(input.cwd)
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    if (process.platform === "win32") args.push("--path-separator=/")
     if (input.follow !== false) args.push("--follow")
 
     if (input.glob) {
@@ -389,7 +393,7 @@ export namespace Ripgrep {
     args.push(input.pattern)
 
     const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
+    const result = await $`${{ raw: command }}`.cwd(cwd).quiet().nothrow()
     if (result.exitCode !== 0) {
       return []
     }
@@ -403,5 +407,13 @@ export namespace Ripgrep {
       .map((parsed) => Result.parse(parsed))
       .filter((r) => r.type === "match")
       .map((r) => r.data)
+      .map((match) => {
+        return {
+          ...match,
+          path: {
+            text: Filesystem.normalize(match.path.text),
+          },
+        }
+      })
   }
 }

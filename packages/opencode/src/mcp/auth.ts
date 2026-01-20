@@ -1,7 +1,7 @@
-import path from "path"
 import fs from "fs/promises"
 import z from "zod"
 import { Global } from "../global"
+import { Filesystem } from "../util/filesystem"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -29,7 +29,7 @@ export namespace McpAuth {
   })
   export type Entry = z.infer<typeof Entry>
 
-  const filepath = path.join(Global.Path.data, "mcp-auth.json")
+  const filepath = Filesystem.join(Global.Path.data, "mcp-auth.json")
 
   export async function get(mcpName: string): Promise<Entry | undefined> {
     const data = await all()

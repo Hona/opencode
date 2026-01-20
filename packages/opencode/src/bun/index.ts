@@ -1,7 +1,6 @@
 import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
-import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
@@ -65,8 +64,8 @@ export namespace BunProc {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
-    const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
+    const mod = Filesystem.join(Global.Path.cache, "node_modules", pkg)
+    const pkgjson = Bun.file(Filesystem.join(Global.Path.cache, "package.json"))
     const parsed = await pkgjson.json().catch(async () => {
       const result = { dependencies: {} }
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
@@ -120,7 +119,7 @@ export namespace BunProc {
     // This ensures subsequent starts use the cached version until explicitly updated
     let resolvedVersion = version
     if (version === "latest") {
-      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
+      const installedPkgJson = Bun.file(Filesystem.join(mod, "package.json"))
       const installedPkg = await installedPkgJson.json().catch(() => null)
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version

@@ -1,14 +1,14 @@
 import { Global } from "../global"
 import { Log } from "../util/log"
-import path from "path"
 import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { Filesystem } from "../util/filesystem"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
-  const filepath = path.join(Global.Path.cache, "models.json")
+  const filepath = Filesystem.join(Global.Path.cache, "models.json")
 
   export const Model = z.object({
     id: z.string(),

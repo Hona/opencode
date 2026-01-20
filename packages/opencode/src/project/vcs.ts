@@ -1,11 +1,11 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { $ } from "bun"
-import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
+import { Filesystem } from "@/util/filesystem"
 
 const log = Log.create({ service: "vcs" })
 

@@ -1,5 +1,4 @@
 import z from "zod"
-import path from "path"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"

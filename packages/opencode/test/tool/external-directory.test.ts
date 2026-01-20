@@ -123,4 +123,28 @@ describe("tool.assertExternalDirectory", () => {
 
     expect(requests.length).toBe(0)
   })
+
+  test("normalizes Windows paths to forward slashes", async () => {
+    if (process.platform !== "win32") return
+
+    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const ctx: Tool.Context = {
+      ...baseCtx,
+      ask: async (req) => {
+        requests.push(req)
+      },
+    }
+
+    await Instance.provide({
+      directory: "C:/tmp/project",
+      fn: async () => {
+        await assertExternalDirectory(ctx, String.raw`C:\\outside\\file.txt`)
+      },
+    })
+
+    const req = requests.find((r) => r.permission === "external_directory")
+    expect(req).toBeDefined()
+    expect(req!.patterns).toEqual(["C:/outside/*"])
+    expect(req!.always).toEqual(["C:/outside/*"])
+  })
 })

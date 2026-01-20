@@ -1,9 +1,9 @@
-import path from "path"
 import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile } from "fs/promises"
+import { Filesystem } from "@/util/filesystem"
 
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }): number {
   if (!entry) return 0
@@ -17,7 +17,7 @@ const MAX_FRECENCY_ENTRIES = 1000
 export const { use: useFrecency, provider: FrecencyProvider } = createSimpleContext({
   name: "Frecency",
   init: () => {
-    const frecencyFile = Bun.file(path.join(Global.Path.state, "frecency.jsonl"))
+    const frecencyFile = Bun.file(Filesystem.join(Global.Path.state, "frecency.jsonl"))
     onMount(async () => {
       const text = await frecencyFile.text().catch(() => "")
       const lines = text
@@ -62,7 +62,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     })
 
     function updateFrecency(filePath: string) {
-      const absolutePath = path.resolve(process.cwd(), filePath)
+      const absolutePath = Filesystem.resolve(process.cwd(), filePath)
       const newEntry = {
         frequency: (store.data[absolutePath]?.frequency || 0) + 1,
         lastOpen: Date.now(),
@@ -81,7 +81,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     }
 
     return {
-      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(process.cwd(), filePath)]),
+      getFrecency: (filePath: string) => calculateFrecency(store.data[Filesystem.resolve(process.cwd(), filePath)]),
       updateFrecency,
       data: () => store.data,
     }

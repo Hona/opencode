@@ -1,14 +1,14 @@
 import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
-import path from "path"
 import os from "os"
+import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
 
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const data = Filesystem.join(xdgData!, app)
+const cache = Filesystem.join(xdgCache!, app)
+const config = Filesystem.join(xdgConfig!, app)
+const state = Filesystem.join(xdgState!, app)
 
 export namespace Global {
   export const Path = {
@@ -17,8 +17,8 @@ export namespace Global {
       return process.env.OPENCODE_TEST_HOME || os.homedir()
     },
     data,
-    bin: path.join(data, "bin"),
-    log: path.join(data, "log"),
+    bin: Filesystem.join(data, "bin"),
+    log: Filesystem.join(data, "log"),
     cache,
     config,
     state,
@@ -35,7 +35,7 @@ await Promise.all([
 
 const CACHE_VERSION = "18"
 
-const version = await Bun.file(path.join(Global.Path.cache, "version"))
+const version = await Bun.file(Filesystem.join(Global.Path.cache, "version"))
   .text()
   .catch(() => "0")
 
@@ -44,12 +44,12 @@ if (version !== CACHE_VERSION) {
     const contents = await fs.readdir(Global.Path.cache)
     await Promise.all(
       contents.map((item) =>
-        fs.rm(path.join(Global.Path.cache, item), {
+        fs.rm(Filesystem.join(Global.Path.cache, item), {
           recursive: true,
           force: true,
         }),
       ),
     )
   } catch (e) {}
-  await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)
+  await Bun.file(Filesystem.join(Global.Path.cache, "version")).write(CACHE_VERSION)
 }

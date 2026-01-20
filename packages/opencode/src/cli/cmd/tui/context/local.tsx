@@ -3,8 +3,8 @@ import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
-import path from "path"
 import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
@@ -112,7 +112,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
 
-      const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      const file = Bun.file(Filesystem.join(Global.Path.state, "model.json"))
       const state = {
         pending: false,
       }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import os from "node:os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
@@ -133,17 +134,18 @@ describe("tool.bash permissions", () => {
             requests.push(req)
           },
         }
+        const workdir = os.tmpdir()
         await bash.execute(
           {
             command: "ls",
-            workdir: "/tmp",
-            description: "List /tmp",
+            workdir,
+            description: "List tmpdir",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp")
+        expect(extDirReq!.patterns).toContain(workdir.replace(/\\/g, "/"))
       },
     })
   })

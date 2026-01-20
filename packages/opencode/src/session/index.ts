@@ -1,5 +1,4 @@
 import { Slug } from "@opencode-ai/util/slug"
-import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -12,6 +11,7 @@ import { Installation } from "../installation"
 
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
@@ -234,9 +234,9 @@ export namespace Session {
 
   export function plan(input: { slug: string; time: { created: number } }) {
     const base = Instance.project.vcs
-      ? path.join(Instance.worktree, ".opencode", "plans")
-      : path.join(Global.Path.data, "plans")
-    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
+      ? Filesystem.join(Instance.worktree, ".opencode", "plans")
+      : Filesystem.join(Global.Path.data, "plans")
+    return Filesystem.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {

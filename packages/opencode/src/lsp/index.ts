@@ -2,13 +2,13 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
-import path from "path"
 import { pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { Filesystem } from "../util/filesystem"
 import { Flag } from "@/flag/flag"
 
 export namespace LSP {
@@ -166,7 +166,7 @@ export namespace LSP {
         result.push({
           id: client.serverID,
           name: x.servers[client.serverID].id,
-          root: path.relative(Instance.directory, client.root),
+          root: Filesystem.relative(Instance.directory, client.root),
           status: "connected",
         })
       }
@@ -176,7 +176,7 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const extension = Filesystem.extname(file) || file
     const result: LSPClient.Info[] = []
 
     async function schedule(server: LSPServer.Info, root: string, key: string) {
@@ -263,7 +263,7 @@ export namespace LSP {
 
   export async function hasClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const extension = Filesystem.extname(file) || file
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)

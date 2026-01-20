@@ -9,11 +9,11 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
-import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -22,14 +22,15 @@ function normalizePath(input?: string) {
 
   const cwd = process.cwd()
   const home = Global.Path.home
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
+  const isAbsolute = input.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(input)
+  const absolute = Filesystem.normalize(isAbsolute ? input : Filesystem.resolve(cwd, input))
+  const relative = Filesystem.relative(cwd, absolute)
 
   if (!relative) return "."
   if (!relative.startsWith("..")) return relative
 
   // outside cwd - use ~ or absolute
-  if (home && (absolute === home || absolute.startsWith(home + path.sep))) {
+  if (home && (absolute === home || absolute.startsWith(home + "/"))) {
     return absolute.replace(home, "~")
   }
   return absolute
@@ -37,7 +38,7 @@ function normalizePath(input?: string) {
 
 function filetype(input?: string) {
   if (!input) return "none"
-  const ext = path.extname(input)
+  const ext = input.includes(".") ? "." + input.split(".").at(-1) : ""
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
@@ -245,7 +246,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                       const derived =
                         typeof pattern === "string"
                           ? pattern.includes("*")
-                            ? path.dirname(pattern)
+                            ? Filesystem.dirname(pattern)
                             : pattern
                           : undefined
 

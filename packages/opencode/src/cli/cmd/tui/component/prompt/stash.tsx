@@ -1,4 +1,3 @@
-import path from "path"
 import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -6,6 +5,7 @@ import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
 import type { PromptInfo } from "./history"
+import { Filesystem } from "@/util/filesystem"
 
 export type StashEntry = {
   input: string
@@ -18,7 +18,7 @@ const MAX_STASH_ENTRIES = 50
 export const { use: usePromptStash, provider: PromptStashProvider } = createSimpleContext({
   name: "PromptStash",
   init: () => {
-    const stashFile = Bun.file(path.join(Global.Path.state, "prompt-stash.jsonl"))
+    const stashFile = Bun.file(Filesystem.join(Global.Path.state, "prompt-stash.jsonl"))
     onMount(async () => {
       const text = await stashFile.text().catch(() => "")
       const lines = text

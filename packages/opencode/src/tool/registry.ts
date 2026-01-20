@@ -15,7 +15,7 @@ import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
-import path from "path"
+import { Filesystem } from "../util/filesystem"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
@@ -42,7 +42,8 @@ export namespace ToolRegistry {
         followSymlinks: true,
         dot: true,
       })) {
-        const namespace = path.basename(match, path.extname(match))
+        const filename = match.split("/").at(-1) ?? ""
+        const namespace = filename.replace(/\.[^.]+$/, "")
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
           custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))

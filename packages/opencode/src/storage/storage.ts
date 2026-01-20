@@ -1,5 +1,4 @@
 import { Log } from "../util/log"
-import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
@@ -23,7 +22,7 @@ export namespace Storage {
 
   const MIGRATIONS: Migration[] = [
     async (dir) => {
-      const project = path.resolve(dir, "../project")
+      const project = Filesystem.resolve(dir, "../project")
       if (!(await Filesystem.isDir(project))) return
       for await (const projectDir of new Bun.Glob("*").scan({
         cwd: project,
@@ -31,12 +30,12 @@ export namespace Storage {
       })) {
         log.info(`migrating project ${projectDir}`)
         let projectID = projectDir
-        const fullProjectDir = path.join(project, projectDir)
+        const fullProjectDir = Filesystem.join(project, projectDir)
         let worktree = "/"
 
         if (projectID !== "global") {
           for await (const msgFile of new Bun.Glob("storage/session/message/*/*.json").scan({
-            cwd: path.join(project, projectDir),
+            cwd: Filesystem.join(project, projectDir),
             absolute: true,
           })) {
             const json = await Bun.file(msgFile).json()
@@ -61,7 +60,7 @@ export namespace Storage {
           projectID = id
 
           await Bun.write(
-            path.join(dir, "project", projectID + ".json"),
+            Filesystem.join(dir, "project", projectID + ".json"),
             JSON.stringify({
               id,
               vcs: "git",
@@ -78,7 +77,7 @@ export namespace Storage {
             cwd: fullProjectDir,
             absolute: true,
           })) {
-            const dest = path.join(dir, "session", projectID, path.basename(sessionFile))
+            const dest = Filesystem.join(dir, "session", projectID, sessionFile.split("/").at(-1) ?? "")
             log.info("copying", {
               sessionFile,
               dest,
@@ -90,7 +89,7 @@ export namespace Storage {
               cwd: fullProjectDir,
               absolute: true,
             })) {
-              const dest = path.join(dir, "message", session.id, path.basename(msgFile))
+              const dest = Filesystem.join(dir, "message", session.id, msgFile.split("/").at(-1) ?? "")
               log.info("copying", {
                 msgFile,
                 dest,
@@ -105,7 +104,7 @@ export namespace Storage {
                   absolute: true,
                 },
               )) {
-                const dest = path.join(dir, "part", message.id, path.basename(partFile))
+                const dest = Filesystem.join(dir, "part", message.id, partFile.split("/").at(-1) ?? "")
                 const part = await Bun.file(partFile).json()
                 log.info("copying", {
                   partFile,
@@ -127,8 +126,8 @@ export namespace Storage {
         if (!session.projectID) continue
         if (!session.summary?.diffs) continue
         const { diffs } = session.summary
-        await Bun.file(path.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
-        await Bun.file(path.join(dir, "session", session.projectID, session.id + ".json")).write(
+        await Bun.file(Filesystem.join(dir, "session_diff", session.id + ".json")).write(JSON.stringify(diffs))
+        await Bun.file(Filesystem.join(dir, "session", session.projectID, session.id + ".json")).write(
           JSON.stringify({
             ...session,
             summary: {
@@ -142,8 +141,8 @@ export namespace Storage {
   ]
 
   const state = lazy(async () => {
-    const dir = path.join(Global.Path.data, "storage")
-    const migration = await Bun.file(path.join(dir, "migration"))
+    const dir = Filesystem.join(Global.Path.data, "storage")
+    const migration = await Bun.file(Filesystem.join(dir, "migration"))
       .json()
       .then((x) => parseInt(x))
       .catch(() => 0)
@@ -151,7 +150,7 @@ export namespace Storage {
       log.info("running migration", { index })
       const migration = MIGRATIONS[index]
       await migration(dir).catch(() => log.error("failed to run migration", { index }))
-      await Bun.write(path.join(dir, "migration"), (index + 1).toString())
+      await Bun.write(Filesystem.join(dir, "migration"), (index + 1).toString())
     }
     return {
       dir,
@@ -160,7 +159,7 @@ export namespace Storage {
 
   export async function remove(key: string[]) {
     const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
+    const target = Filesystem.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       await fs.unlink(target).catch(() => {})
     })
@@ -168,7 +167,7 @@ export namespace Storage {
 
   export async function read<T>(key: string[]) {
     const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
+    const target = Filesystem.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
       const result = await Bun.file(target).json()
@@ -178,7 +177,7 @@ export namespace Storage {
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
+    const target = Filesystem.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
@@ -190,7 +189,7 @@ export namespace Storage {
 
   export async function write<T>(key: string[], content: T) {
     const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
+    const target = Filesystem.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
       await Bun.write(target, JSON.stringify(content, null, 2))
@@ -214,10 +213,10 @@ export namespace Storage {
     try {
       const result = await Array.fromAsync(
         glob.scan({
-          cwd: path.join(dir, ...prefix),
+          cwd: Filesystem.join(dir, ...prefix),
           onlyFiles: true,
         }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split("/")]))
       result.sort()
       return result
     } catch {

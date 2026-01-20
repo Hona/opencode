@@ -5,7 +5,7 @@ import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
-import path from "path"
+import { Filesystem } from "../util/filesystem"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
@@ -84,7 +84,7 @@ export namespace FileWatcher {
         .nothrow()
         .cwd(Instance.worktree)
         .text()
-        .then((x) => path.resolve(Instance.worktree, x.trim()))
+        .then((x) => Filesystem.resolve(Instance.worktree, x.trim()))
         .catch(() => undefined)
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         const gitDirContents = await readdir(vcsDir).catch(() => [])

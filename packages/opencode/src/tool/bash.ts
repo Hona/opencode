@@ -1,7 +1,6 @@
 import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
-import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -75,7 +74,7 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      const cwd = params.workdir ? Filesystem.normalize(params.workdir) : Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -85,7 +84,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const directories = new Set<string>()
-      if (!Instance.containsPath(cwd)) directories.add(cwd)
+      if (!Instance.containsPath(cwd)) directories.add(Filesystem.normalize(cwd))
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -119,11 +118,7 @@ export const BashTool = Tool.define("bash", async () => {
               .then((x) => x.trim())
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
-              const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
+              const normalized = Filesystem.normalize(resolved)
               if (!Instance.containsPath(normalized)) directories.add(normalized)
             }
           }
@@ -140,7 +135,7 @@ export const BashTool = Tool.define("bash", async () => {
         await ctx.ask({
           permission: "external_directory",
           patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          always: Array.from(directories).map((x) => Filesystem.join(Filesystem.dirname(x), "/*")),
           metadata: {},
         })
       }

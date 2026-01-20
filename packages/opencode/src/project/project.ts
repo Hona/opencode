@@ -1,7 +1,6 @@
 import z from "zod"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
-import path from "path"
 import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
@@ -46,19 +45,20 @@ export namespace Project {
   }
 
   export async function fromDirectory(directory: string) {
-    log.info("fromDirectory", { directory })
+    const dir = Filesystem.normalize(directory)
+    log.info("fromDirectory", { directory: dir })
 
     const { id, sandbox, worktree, vcs } = await iife(async () => {
-      const matches = Filesystem.up({ targets: [".git"], start: directory })
+      const matches = Filesystem.up({ targets: [".git"], start: dir })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
       if (git) {
-        let sandbox = path.dirname(git)
+        let sandbox = Filesystem.dirname(git)
 
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Bun.file(path.join(git, "opencode"))
+        let id = await Bun.file(Filesystem.join(git, "opencode"))
           .text()
           .then((x) => x.trim())
           .catch(() => undefined)
@@ -66,8 +66,8 @@ export namespace Project {
         if (!gitBinary) {
           return {
             id: id ?? "global",
-            worktree: sandbox,
-            sandbox: sandbox,
+            worktree: Filesystem.normalize(sandbox),
+            sandbox: Filesystem.normalize(sandbox),
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
@@ -90,26 +90,27 @@ export namespace Project {
 
           if (!roots) {
             return {
-              id: "global",
-              worktree: sandbox,
-              sandbox: sandbox,
+              id: id ?? "global",
+              worktree: Filesystem.normalize(sandbox),
+              sandbox: Filesystem.normalize(sandbox),
               vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
             }
           }
 
           id = roots[0]
           if (id) {
-            void Bun.file(path.join(git, "opencode"))
+            void Bun.file(Filesystem.join(git, "opencode"))
               .write(id)
               .catch(() => undefined)
           }
         }
 
         if (!id) {
+          const normalizedSandbox = Filesystem.normalize(sandbox)
           return {
             id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
+            worktree: normalizedSandbox,
+            sandbox: normalizedSandbox,
             vcs: "git",
           }
         }
@@ -119,14 +120,15 @@ export namespace Project {
           .nothrow()
           .cwd(sandbox)
           .text()
-          .then((x) => path.resolve(sandbox, x.trim()))
+          .then((x) => Filesystem.resolve(sandbox, x.trim()))
           .catch(() => undefined)
 
         if (!top) {
+          const normalizedSandbox = Filesystem.normalize(sandbox)
           return {
             id,
-            sandbox,
-            worktree: sandbox,
+            sandbox: normalizedSandbox,
+            worktree: normalizedSandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
@@ -139,25 +141,28 @@ export namespace Project {
           .cwd(sandbox)
           .text()
           .then((x) => {
-            const dirname = path.dirname(x.trim())
+            const dirname = Filesystem.dirname(x.trim())
             if (dirname === ".") return sandbox
             return dirname
           })
           .catch(() => undefined)
 
-        if (!worktree) {
+        const normalizedSandbox = Filesystem.normalize(sandbox)
+        const normalizedWorktree = worktree ? Filesystem.normalize(worktree) : undefined
+
+        if (!normalizedWorktree) {
           return {
             id,
-            sandbox,
-            worktree: sandbox,
+            sandbox: normalizedSandbox,
+            worktree: normalizedSandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
         return {
           id,
-          sandbox,
-          worktree,
+          sandbox: normalizedSandbox,
+          worktree: normalizedWorktree,
           vcs: "git",
         }
       }
@@ -201,7 +206,10 @@ export namespace Project {
         updated: Date.now(),
       },
     }
-    if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+    const normalizedSandbox = Filesystem.normalize(sandbox)
+    if (normalizedSandbox !== result.worktree && !result.sandboxes.includes(normalizedSandbox)) {
+      result.sandboxes.push(normalizedSandbox)
+    }
     result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
     await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
@@ -210,7 +218,7 @@ export namespace Project {
         properties: result,
       },
     })
-    return { project: result, sandbox }
+    return { project: result, sandbox: normalizedSandbox }
   }
 
   export async function discover(input: Info) {

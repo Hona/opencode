@@ -1,7 +1,7 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
-import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { Filesystem } from "@/util/filesystem"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -42,7 +42,7 @@ export namespace Shell {
       if (git) {
         // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
         // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-        const bash = path.join(git, "..", "..", "bin", "bash.exe")
+        const bash = Filesystem.join(git, "..", "..", "bin", "bash.exe")
         if (Bun.file(bash).size) return bash
       }
       return process.env.COMSPEC || "cmd.exe"
@@ -61,7 +61,8 @@ export namespace Shell {
 
   export const acceptable = lazy(() => {
     const s = process.env.SHELL
-    if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
+    const name = s ? (s.split(/[\\/]/).at(-1) ?? "") : ""
+    if (s && !BLACKLIST.has(name)) return s
     return fallback()
   })
 }

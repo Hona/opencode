@@ -1,7 +1,7 @@
-import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
 import z from "zod"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -59,7 +59,7 @@ export namespace Log {
     if (options.level) level = options.level
     cleanup(Global.Path.log)
     if (options.print) return
-    logpath = path.join(
+    logpath = Filesystem.join(
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )

@@ -3,6 +3,7 @@ import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 import { Installation } from "@/installation"
+import { Filesystem } from "@/util/filesystem"
 
 export type DialogStatusProps = {}
 
@@ -16,9 +17,9 @@ export function DialogStatus() {
     const list = sync.data.config.plugin ?? []
     const result = list.map((value) => {
       if (value.startsWith("file://")) {
-        const path = value.substring("file://".length)
-        const parts = path.split("/")
-        const filename = parts.pop() || path
+        const filepath = value.substring("file://".length)
+        const parts = Filesystem.normalize(filepath).split("/")
+        const filename = parts.pop() || filepath
         if (!filename.includes(".")) return { name: filename }
         const basename = filename.split(".")[0]
         if (basename === "index") {

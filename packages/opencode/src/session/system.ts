@@ -4,7 +4,6 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 
 import { Instance } from "../project/instance"
-import path from "path"
 import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
@@ -67,14 +66,16 @@ export namespace SystemPrompt {
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
   ]
-  const GLOBAL_RULE_FILES = [path.join(Global.Path.config, "AGENTS.md")]
+  const GLOBAL_RULE_FILES = [Filesystem.join(Global.Path.config, "AGENTS.md")]
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    GLOBAL_RULE_FILES.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    GLOBAL_RULE_FILES.push(Filesystem.join(os.homedir(), ".claude", "CLAUDE.md"))
   }
 
   if (Flag.OPENCODE_CONFIG_DIR) {
-    GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+    GLOBAL_RULE_FILES.push(Filesystem.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
   }
+
+  const basename = (input: string) => input.split("/").filter(Boolean).at(-1) ?? ""
 
   export async function custom() {
     const config = await Config.get()
@@ -103,13 +104,13 @@ export namespace SystemPrompt {
           continue
         }
         if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
+          instruction = Filesystem.join(os.homedir(), instruction.slice(2))
         }
         let matches: string[] = []
-        if (path.isAbsolute(instruction)) {
+        if (Filesystem.normalize(instruction) && Filesystem.normalize(instruction).startsWith("/")) {
           matches = await Array.fromAsync(
-            new Bun.Glob(path.basename(instruction)).scan({
-              cwd: path.dirname(instruction),
+            new Bun.Glob(basename(instruction)).scan({
+              cwd: Filesystem.dirname(instruction),
               absolute: true,
               onlyFiles: true,
             }),

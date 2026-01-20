@@ -1,5 +1,4 @@
 import { EOL } from "os"
-import { basename } from "path"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "../../../provider/provider"
 import { Session } from "../../../session"
@@ -36,7 +35,8 @@ export const AgentCommand = cmd({
       const agent = await Agent.get(agentName)
       if (!agent) {
         process.stderr.write(
-          `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
+          `Agent ${agentName} not found, run '${process.execPath.split("/").at(-1) ?? "opencode"} agent list' to get an agent list` +
+            EOL,
         )
         process.exit(1)
       }

@@ -29,6 +29,18 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  test("blocks Windows cross-drive paths", () => {
+    expect(Filesystem.contains("C:/project", "D:/other/file.txt")).toBe(false)
+  })
+
+  test("blocks Windows UNC paths", () => {
+    expect(Filesystem.contains("C:/project", "//server/share/file.txt")).toBe(false)
+  })
+
+  test("allows Windows UNC paths within same share", () => {
+    expect(Filesystem.contains("//server/share/project", "//server/share/project/sub/file.txt")).toBe(true)
+  })
 })
 
 /*

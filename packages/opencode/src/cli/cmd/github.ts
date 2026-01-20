@@ -1,4 +1,3 @@
-import path from "path"
 import { exec } from "child_process"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -27,6 +26,7 @@ import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { $ } from "bun"
+import { Filesystem } from "@/util/filesystem"
 
 type GitHubAuthor = {
   login: string
@@ -369,7 +369,7 @@ export const GithubInstallCommand = cmd({
                 : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
             await Bun.write(
-              path.join(app.root, WORKFLOW_FILE),
+              Filesystem.join(app.root, WORKFLOW_FILE),
               `name: opencode
 
 on:
@@ -781,7 +781,7 @@ export const GithubRunCommand = cmd({
           const tag = m[0]
           const url = m[1]
           const start = m.index
-          const filename = path.basename(url)
+          const filename = url.split("/").at(-1) ?? ""
 
           // Download image
           const res = await fetch(url, {
