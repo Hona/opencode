@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import path from "path"
+import { toPosix } from "@opencode-ai/util/path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -137,14 +139,14 @@ describe("tool.bash permissions", () => {
         await bash.execute(
           {
             command: "ls",
-            workdir: "/tmp",
+            workdir: os.tmpdir(),
             description: "List /tmp",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp/*")
+        expect(extDirReq!.patterns).toContain(`${toPosix(os.tmpdir())}/*`)
       },
     })
   })

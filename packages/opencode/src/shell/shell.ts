@@ -40,10 +40,16 @@ export namespace Shell {
       if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
       const git = Bun.which("git")
       if (git) {
-        // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
-        // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-        const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Bun.file(bash).size) return bash
+        const base = path.dirname(git)
+        for (let i = 0; i < 6; i++) {
+          const current = path.resolve(base, ...Array(i).fill(".."))
+
+          const bin = path.join(current, "bin", "bash.exe")
+          if (Bun.file(bin).size) return bin
+
+          const usr = path.join(current, "usr", "bin", "bash.exe")
+          if (Bun.file(usr).size) return usr
+        }
       }
       return process.env.COMSPEC || "cmd.exe"
     }
