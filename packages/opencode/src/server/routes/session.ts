@@ -16,6 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import path from "@/util/path"
 
 const log = Log.create({ service: "server" })
 
@@ -54,9 +55,15 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const term = query.search?.toLowerCase()
+        const directory = query.directory ? path.normalize(path.toPosix(query.directory)) : undefined
+        const directoryKey = directory && process.platform === "win32" ? directory.toLowerCase() : directory
         const sessions: Session.Info[] = []
         for await (const session of Session.list()) {
-          if (query.directory !== undefined && session.directory !== query.directory) continue
+          if (directoryKey !== undefined) {
+            const sessionDir = path.normalize(path.toPosix(session.directory))
+            const sessionKey = process.platform === "win32" ? sessionDir.toLowerCase() : sessionDir
+            if (sessionKey !== directoryKey) continue
+          }
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
