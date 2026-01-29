@@ -14,10 +14,12 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
 
   if (options?.bypass) return
 
-  if (Instance.containsPath(target)) return
+  const filepath = path.toPosix(target)
+
+  if (Instance.containsPath(filepath)) return
 
   const kind = options?.kind ?? "file"
-  const parentDir = kind === "directory" ? target : path.dirname(target)
+  const parentDir = kind === "directory" ? filepath : path.dirname(filepath)
   const glob = path.join(parentDir, "*")
 
   await ctx.ask({
@@ -25,7 +27,7 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
     patterns: [glob],
     always: [glob],
     metadata: {
-      filepath: target,
+      filepath,
       parentDir,
     },
   })

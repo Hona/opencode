@@ -5,6 +5,9 @@ import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
 import type { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
+import { toPosix } from "@opencode-ai/util/path"
+
+const isWin = process.platform === "win32"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: "test",
@@ -132,5 +135,34 @@ describe("tool.assertExternalDirectory", () => {
     })
 
     expect(requests.length).toBe(0)
+  })
+
+  if (!isWin) return
+
+  test("windows: normalizes MSYS-style absolute targets", async () => {
+    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const ctx: Tool.Context = {
+      ...baseCtx,
+      ask: async (req) => {
+        requests.push(req)
+      },
+    }
+
+    await using project = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+
+    const msysDir = toPosix(outside.path).replace(/^([a-zA-Z]):\//, (_, d) => `/${d.toLowerCase()}/`)
+    await Instance.provide({
+      directory: project.path,
+      fn: async () => {
+        await assertExternalDirectory(ctx, `${msysDir}/file.txt`)
+      },
+    })
+
+    const req = requests.find((r) => r.permission === "external_directory")
+    expect(req).toBeDefined()
+    expect(req!.patterns[0]).toContain(toPosix(outside.path))
+    expect(req!.patterns[0]).not.toContain("\\")
+    expect(req!.patterns[0]).not.toContain("/c/")
   })
 })
