@@ -6,6 +6,8 @@ import { Instance } from "../../src/project/instance"
 import { Storage } from "../../src/storage/storage"
 import { tmpdir } from "../fixture/fixture"
 
+const isWin = process.platform === "win32"
+
 // fromConfig tests
 
 test("fromConfig - string value becomes wildcard rule", () => {
@@ -68,6 +70,18 @@ test("fromConfig - expands exact tilde to home directory", () => {
   const result = PermissionNext.fromConfig({ external_directory: { "~": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: toPosix(os.homedir()), action: "allow" }])
 })
+
+if (isWin) {
+  test("fromConfig - normalizes windows-style backslashes for path permissions", () => {
+    const result = PermissionNext.fromConfig({ external_directory: { "C:\\Users\\Luke\\*": "allow" } })
+    expect(result).toEqual([{ permission: "external_directory", pattern: "C:/Users/Luke/*", action: "allow" }])
+  })
+
+  test("fromConfig - normalizes MSYS roots for path permissions", () => {
+    const result = PermissionNext.fromConfig({ external_directory: { "/c/Users/Luke/*": "allow" } })
+    expect(result).toEqual([{ permission: "external_directory", pattern: "C:/Users/Luke/*", action: "allow" }])
+  })
+}
 
 test("evaluate - matches expanded tilde pattern", () => {
   const ruleset = PermissionNext.fromConfig({ external_directory: { "~/projects/*": "allow" } })
