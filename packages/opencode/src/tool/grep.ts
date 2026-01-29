@@ -32,8 +32,7 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    const searchPath = path.resolve(Instance.directory, path.toPosix(params.path ?? Instance.directory))
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
@@ -46,6 +45,9 @@ export const GrepTool = Tool.define("grep", {
       "--regexp",
       params.pattern,
     ]
+    if (process.platform === "win32") {
+      args.push("--path-separator=/")
+    }
     if (params.include) {
       args.push("--glob", params.include)
     }
@@ -84,8 +86,10 @@ export const GrepTool = Tool.define("grep", {
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
-      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
+      const [rawFilePath, lineNumStr, ...lineTextParts] = line.split("|")
+      if (!rawFilePath || !lineNumStr || lineTextParts.length === 0) continue
+
+      const filePath = path.toPosix(rawFilePath)
 
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
