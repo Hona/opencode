@@ -27,6 +27,14 @@ describe("util.path", () => {
     expect(path.toPosix("/mnt/f/dev")).toBe("F:/dev")
   })
 
+  test("normalize() converts MSYS roots", () => {
+    expect(path.normalize("/c/Users/Luke")).toBe("C:/Users/Luke")
+  })
+
+  test("normalize() preserves UNC roots", () => {
+    expect(path.normalize("\\\\server\\share")).toBe("//server/share")
+  })
+
   test("preserves UNC paths", () => {
     const unc = "\\\\server\\share\\file.txt"
     expect(path.toPosix(unc)).toBe("//server/share/file.txt")

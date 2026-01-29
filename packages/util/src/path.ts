@@ -21,7 +21,9 @@ export function toPosix(p: string) {
 
   const slashed = p.replace(/\\/g, "/")
   const msys = slashed.replace(/^\/(?:cygdrive\/|mnt\/)?([a-zA-Z])(?:\/|$)/, (_, d) => `${d.toUpperCase()}:/`)
-  return msys.replace(/^([a-z]):\//, (_, d) => `${d.toUpperCase()}:/`)
+  const res = msys.replace(/^([a-z]):\//, (_, d) => `${d.toUpperCase()}:/`)
+  if (/^\/\/[^/]+\/[^/]+\/$/.test(res)) return res.slice(0, -1)
+  return res
 }
 
 export function getDirectory(path: string | undefined) {
