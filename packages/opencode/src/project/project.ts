@@ -1,7 +1,7 @@
 import z from "zod"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
-import path from "path"
+import path from "@/util/path"
 import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
