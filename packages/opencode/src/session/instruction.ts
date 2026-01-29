@@ -94,6 +94,7 @@ export namespace InstructionPrompt {
         if (instruction.startsWith("~/")) {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
+        instruction = path.toPosix(instruction)
         const matches = path.isAbsolute(instruction)
           ? await Array.fromAsync(
               new Bun.Glob(path.basename(instruction)).scan({

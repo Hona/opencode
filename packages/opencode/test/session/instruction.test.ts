@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { toPosix } from "@opencode-ai/util/path"
 import { InstructionPrompt } from "../../src/session/instruction"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -16,7 +17,7 @@ describe("InstructionPrompt.resolve", () => {
       directory: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+        expect(system.has(toPosix(path.join(tmp.path, "AGENTS.md")))).toBe(true)
 
         const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"), "test-message-1")
         expect(results).toEqual([])
@@ -35,7 +36,7 @@ describe("InstructionPrompt.resolve", () => {
       directory: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(path.join(tmp.path, "subdir", "AGENTS.md"))).toBe(false)
+        expect(system.has(toPosix(path.join(tmp.path, "subdir", "AGENTS.md")))).toBe(false)
 
         const results = await InstructionPrompt.resolve(
           [],
@@ -43,7 +44,7 @@ describe("InstructionPrompt.resolve", () => {
           "test-message-2",
         )
         expect(results.length).toBe(1)
-        expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.md"))
+        expect(results[0].filepath).toBe(toPosix(path.join(tmp.path, "subdir", "AGENTS.md")))
       },
     })
   })
