@@ -208,6 +208,7 @@ export namespace Ripgrep {
     maxDepth?: number
   }) {
     const args = [await filepath(), "--files", "--glob=!.git/*"]
+    if (process.platform === "win32") args.push("--path-separator=/")
     if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
@@ -370,6 +371,7 @@ export namespace Ripgrep {
     follow?: boolean
   }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    if (process.platform === "win32") args.push("--path-separator=/")
     if (input.follow !== false) args.push("--follow")
 
     if (input.glob) {
