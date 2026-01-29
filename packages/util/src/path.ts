@@ -5,6 +5,25 @@ export function getFilename(path: string | undefined) {
   return parts[parts.length - 1] ?? ""
 }
 
+const isWin =
+  (typeof process !== "undefined" && process.platform === "win32") ||
+  (typeof navigator !== "undefined" && /\bWindows\b/i.test(navigator.userAgent))
+
+/**
+ * Normalize Windows paths to be Bash/LLM friendly.
+ *
+ * - Forces '/' separators (C:/foo/bar)
+ * - Converts MSYS/Cygwin/WSL roots (/c, /cygdrive/c, /mnt/c) -> C:/
+ * - Preserves UNC shares (//server/share)
+ */
+export function toPosix(p: string) {
+  if (!isWin) return p
+
+  const slashed = p.replace(/\\/g, "/")
+  const msys = slashed.replace(/^\/(?:cygdrive\/|mnt\/)?([a-zA-Z])(?:\/|$)/, (_, d) => `${d.toUpperCase()}:/`)
+  return msys.replace(/^([a-z]):\//, (_, d) => `${d.toUpperCase()}:/`)
+}
+
 export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[\/\\]+$/, "")
