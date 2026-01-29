@@ -9,7 +9,7 @@ import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
 import { Log } from "@/util/log"
-import path from "path"
+import path from "@/util/path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"

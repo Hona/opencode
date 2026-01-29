@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import path from "path"
+import path from "../../src/util/path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
 import type { PermissionNext } from "../../src/permission/next"
+import { tmpdir } from "../fixture/fixture"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: "test",
@@ -25,8 +26,9 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: "/tmp",
+      directory: tmp.path,
       fn: async () => {
         await assertExternalDirectory(ctx)
       },
@@ -44,10 +46,11 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: tmp.path,
       fn: async () => {
-        await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
+        await assertExternalDirectory(ctx, path.join(tmp.path, "file.txt"))
       },
     })
 
@@ -63,8 +66,10 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside/file.txt"
+    await using project = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    const directory = project.path
+    const target = path.join(outside.path, "file.txt")
     const expected = path.join(path.dirname(target), "*")
 
     await Instance.provide({
@@ -89,8 +94,10 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside"
+    await using project = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    const directory = project.path
+    const target = outside.path
     const expected = path.join(target, "*")
 
     await Instance.provide({
@@ -115,10 +122,12 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
+    await using project = await tmpdir({ git: true })
+    await using outside = await tmpdir()
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: project.path,
       fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
+        await assertExternalDirectory(ctx, path.join(outside.path, "file.txt"), { bypass: true })
       },
     })
 

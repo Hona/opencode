@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import path from "path"
+import path from "@/util/path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"

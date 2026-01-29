@@ -5,7 +5,7 @@ import { Installation } from "../../installation"
 import { Global } from "../../global"
 import { $ } from "bun"
 import fs from "fs/promises"
-import path from "path"
+import path from "@/util/path"
 import os from "os"
 
 interface UninstallArgs {

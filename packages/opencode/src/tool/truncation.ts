@@ -1,5 +1,5 @@
 import fs from "fs/promises"
-import path from "path"
+import path from "@/util/path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
 import { PermissionNext } from "../permission/next"

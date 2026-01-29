@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import * as path from "path"
+import path from "@/util/path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"

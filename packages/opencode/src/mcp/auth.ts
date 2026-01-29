@@ -1,4 +1,4 @@
-import path from "path"
+import path from "@/util/path"
 import z from "zod"
 import { Global } from "../global"
 

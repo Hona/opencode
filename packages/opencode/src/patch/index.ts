@@ -1,5 +1,5 @@
 import z from "zod"
-import * as path from "path"
+import path from "@/util/path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
 import { Log } from "../util/log"

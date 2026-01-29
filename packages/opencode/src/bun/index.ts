@@ -1,7 +1,7 @@
 import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
-import path from "path"
+import path from "@/util/path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"

@@ -1,5 +1,5 @@
 import { Log } from "../util/log"
-import path from "path"
+import path from "@/util/path"
 import fs from "fs/promises"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"

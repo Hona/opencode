@@ -1,6 +1,6 @@
 import { $ } from "bun"
 import fs from "fs/promises"
-import path from "path"
+import path from "@/util/path"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Global } from "../global"

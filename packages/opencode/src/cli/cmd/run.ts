@@ -1,5 +1,5 @@
 import type { Argv } from "yargs"
-import path from "path"
+import path from "@/util/path"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"

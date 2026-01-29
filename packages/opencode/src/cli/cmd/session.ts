@@ -6,8 +6,7 @@ import { UI } from "../ui"
 import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
 import { EOL } from "os"
-import path from "path"
-
+import path from "@/util/path"
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
   if (process.platform !== "win32") {

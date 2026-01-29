@@ -1,6 +1,5 @@
 import { $ } from "bun"
-import path from "path"
-
+import path from "@/util/path"
 export namespace Archive {
   export async function extractZip(zipPath: string, destDir: string) {
     if (process.platform === "win32") {

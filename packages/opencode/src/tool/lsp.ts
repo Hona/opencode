@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import path from "path"
+import path from "@/util/path"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"

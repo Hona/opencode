@@ -1,5 +1,5 @@
 import z from "zod"
-import * as path from "path"
+import path from "@/util/path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"

@@ -1,4 +1,4 @@
-import { sep } from "node:path"
+import { toPosix } from "@/util/path"
 
 export namespace FileIgnore {
   const FOLDERS = new Set([
@@ -64,18 +64,20 @@ export namespace FileIgnore {
       whitelist?: Bun.Glob[]
     },
   ) {
+    const target = toPosix(filepath)
+
     for (const glob of opts?.whitelist || []) {
-      if (glob.match(filepath)) return false
+      if (glob.match(target)) return false
     }
 
-    const parts = filepath.split(sep)
+    const parts = target.split("/")
     for (let i = 0; i < parts.length; i++) {
       if (FOLDERS.has(parts[i])) return true
     }
 
     const extra = opts?.extra || []
     for (const glob of [...FILE_GLOBS, ...extra]) {
-      if (glob.match(filepath)) return true
+      if (glob.match(target)) return true
     }
 
     return false

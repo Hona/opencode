@@ -1,4 +1,4 @@
-import path from "path"
+import path from "@/util/path"
 import fs from "fs/promises"
 import { Global } from "../global"
 import z from "zod"

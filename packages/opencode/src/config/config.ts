@@ -1,5 +1,5 @@
 import { Log } from "../util/log"
-import path from "path"
+import path from "@/util/path"
 import { pathToFileURL } from "url"
 import os from "os"
 import z from "zod"

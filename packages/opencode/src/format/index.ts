@@ -1,7 +1,7 @@
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
-import path from "path"
+import path from "@/util/path"
 import z from "zod"
 
 import * as Formatter from "./formatter"

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
-import path from "path"
+import path from "@/util/path"
 import os from "os"
 import { Global } from "../global"
 import { Log } from "../util/log"

@@ -1,5 +1,5 @@
 import z from "zod"
-import * as path from "path"
+import path from "@/util/path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
 import { Bus } from "../bus"

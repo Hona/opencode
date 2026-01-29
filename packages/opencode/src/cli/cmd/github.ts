@@ -1,4 +1,4 @@
-import path from "path"
+import path from "@/util/path"
 import { exec } from "child_process"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"

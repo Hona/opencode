@@ -1,7 +1,7 @@
 import { defer } from "@/util/defer"
 import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import path from "@/util/path"
 import { CliRenderer } from "@opentui/core"
 
 export namespace Editor {
@@ -9,7 +9,7 @@ export namespace Editor {
     const editor = process.env["VISUAL"] || process.env["EDITOR"]
     if (!editor) return
 
-    const filepath = join(tmpdir(), `${Date.now()}.md`)
+    const filepath = path.join(tmpdir(), `${Date.now()}.md`)
     await using _ = defer(async () => rm(filepath, { force: true }))
 
     await Bun.write(filepath, opts.value)

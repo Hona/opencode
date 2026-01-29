@@ -1,4 +1,4 @@
-import path from "path"
+import path from "@/util/path"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
 

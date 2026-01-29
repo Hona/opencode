@@ -1,5 +1,5 @@
 import { Slug } from "@opencode-ai/util/slug"
-import path from "path"
+import path from "@/util/path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"

@@ -1,5 +1,5 @@
 // Ripgrep utility functions
-import path from "path"
+import path from "@/util/path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
@@ -12,6 +12,9 @@ import { Log } from "@/util/log"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
+  const FilePath = z.object({
+    text: z.string().transform((x) => path.toPosix(x)),
+  })
   const Stats = z.object({
     elapsed: z.object({
       secs: z.number(),
@@ -29,18 +32,14 @@ export namespace Ripgrep {
   const Begin = z.object({
     type: z.literal("begin"),
     data: z.object({
-      path: z.object({
-        text: z.string(),
-      }),
+      path: FilePath,
     }),
   })
 
   export const Match = z.object({
     type: z.literal("match"),
     data: z.object({
-      path: z.object({
-        text: z.string(),
-      }),
+      path: FilePath,
       lines: z.object({
         text: z.string(),
       }),
@@ -61,9 +60,7 @@ export namespace Ripgrep {
   const End = z.object({
     type: z.literal("end"),
     data: z.object({
-      path: z.object({
-        text: z.string(),
-      }),
+      path: FilePath,
       binary_offset: z.number().nullable(),
       stats: Stats,
     }),
@@ -252,11 +249,11 @@ export namespace Ripgrep {
         buffer = lines.pop() || ""
 
         for (const line of lines) {
-          if (line) yield line
+          if (line) yield path.toPosix(line)
         }
       }
 
-      if (buffer) yield buffer
+      if (buffer) yield path.toPosix(buffer)
     } finally {
       reader.releaseLock()
       await proc.exited
@@ -295,7 +292,7 @@ export namespace Ripgrep {
     }
     for (const file of files) {
       if (file.includes(".opencode")) continue
-      const parts = file.split(path.sep)
+      const parts = file.split("/")
       getPath(root, parts, true)
     }
 

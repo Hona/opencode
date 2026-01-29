@@ -1,6 +1,6 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
-import path from "path"
+import path from "@/util/path"
 import { spawn, type ChildProcess } from "child_process"
 
 const SIGKILL_TIMEOUT_MS = 200

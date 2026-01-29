@@ -1,5 +1,5 @@
 import z from "zod"
-import path from "path"
+import path from "@/util/path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"

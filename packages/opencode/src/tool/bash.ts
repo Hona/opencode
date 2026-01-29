@@ -1,7 +1,7 @@
 import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
-import path from "path"
+import path from "@/util/path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"

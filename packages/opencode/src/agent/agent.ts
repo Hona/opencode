@@ -16,7 +16,7 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
-import path from "path"
+import path from "@/util/path"
 import { Plugin } from "@/plugin"
 
 export namespace Agent {
