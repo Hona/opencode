@@ -1,5 +1,6 @@
 import { realpathSync } from "fs"
-import { dirname, join, relative } from "path"
+
+import path, { toPosix } from "@/util/path"
 
 export namespace Filesystem {
   export const exists = (p: string) =>
@@ -21,29 +22,57 @@ export namespace Filesystem {
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
     try {
-      return realpathSync.native(p)
+      return toPosix(realpathSync.native(toPosix(p)))
     } catch {
-      return p
+      return toPosix(p)
     }
   }
+
+  function root(p: string) {
+    const normalized = toPosix(p)
+
+    const drive = normalized.match(/^([a-zA-Z]):\//)
+    if (drive) return `${drive[1].toUpperCase()}:/`
+
+    if (!normalized.startsWith("//")) {
+      if (normalized.startsWith("/")) return "/"
+      return ""
+    }
+
+    const parts = normalized.split("/").filter(Boolean)
+    if (parts.length < 2) return "//"
+    return `//${parts[0]}/${parts[1]}/`
+  }
   export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
+    const relA = path.relative(toPosix(a), toPosix(b))
+    const relB = path.relative(toPosix(b), toPosix(a))
     return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const p = toPosix(parent)
+    const c = toPosix(child)
+
+    if (process.platform === "win32") {
+      const rp = root(p).toLowerCase()
+      const rc = root(c).toLowerCase()
+      if (rp && rc && rp !== rc) return false
+    }
+
+    const rel = path.relative(p, c)
+    if (!rel) return true
+    if (rel === ".." || rel.startsWith("../")) return false
+    return !path.isAbsolute(rel)
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
     let current = start
     const result = []
     while (true) {
-      const search = join(current, target)
+      const search = path.join(current, target)
       if (await exists(search)) result.push(search)
       if (stop === current) break
-      const parent = dirname(current)
+      const parent = path.dirname(current)
       if (parent === current) break
       current = parent
     }
@@ -55,11 +84,11 @@ export namespace Filesystem {
     let current = start
     while (true) {
       for (const target of targets) {
-        const search = join(current, target)
+        const search = path.join(current, target)
         if (await exists(search)) yield search
       }
       if (stop === current) break
-      const parent = dirname(current)
+      const parent = path.dirname(current)
       if (parent === current) break
       current = parent
     }
@@ -84,7 +113,7 @@ export namespace Filesystem {
         // Skip invalid glob patterns
       }
       if (stop === current) break
-      const parent = dirname(current)
+      const parent = path.dirname(current)
       if (parent === current) break
       current = parent
     }

@@ -29,6 +29,18 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  if (process.platform !== "win32") return
+
+  test("windows: blocks cross-drive paths", () => {
+    expect(Filesystem.contains("C:/project", "D:/file")).toBe(false)
+    expect(Filesystem.contains("C:/project", "C:/project/file")).toBe(true)
+  })
+
+  test("windows: treats UNC shares as distinct roots", () => {
+    expect(Filesystem.contains("//server/share", "C:/project/file")).toBe(false)
+    expect(Filesystem.contains("//server/share", "//server/share/dir/file")).toBe(true)
+  })
 })
 
 /*
