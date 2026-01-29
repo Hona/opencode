@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
+import { toPosix } from "@opencode-ai/util/path"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -142,7 +143,7 @@ describe("tool.apply_patch freeform", () => {
         const moveFile = permissionCall.metadata.files[0]
         expect(moveFile.type).toBe("move")
         expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
-        expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
+        expect(moveFile.movePath).toBe(toPosix(path.join(fixture.path, "renamed/dir/name.txt")))
         expect(moveFile.before).toBe("old content\n")
         expect(moveFile.after).toBe("new content\n")
       },

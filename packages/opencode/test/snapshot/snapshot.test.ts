@@ -3,6 +3,7 @@ import { $ } from "bun"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { toPosix } from "@opencode-ai/util/path"
 
 async function bootstrap() {
   return tmpdir({
@@ -23,6 +24,8 @@ async function bootstrap() {
   })
 }
 
+const p = (x: string) => toPosix(x)
+
 test("tracks deleted files correctly", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -33,7 +36,7 @@ test("tracks deleted files correctly", async () => {
 
       await $`rm ${tmp.path}/a.txt`.quiet()
 
-      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/a.txt`)
+      expect((await Snapshot.patch(before!)).files).toContain(p(`${tmp.path}/a.txt`))
     },
   })
 })
@@ -126,7 +129,7 @@ test("binary file handling", async () => {
       await Bun.write(`${tmp.path}/image.png`, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(`${tmp.path}/image.png`)
+      expect(patch.files).toContain(p(`${tmp.path}/image.png`))
 
       await Snapshot.revert([patch])
       expect(await Bun.file(`${tmp.path}/image.png`).exists()).toBe(false)
@@ -144,7 +147,7 @@ test("symlink handling", async () => {
 
       await $`ln -s ${tmp.path}/a.txt ${tmp.path}/link.txt`.quiet()
 
-      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/link.txt`)
+      expect((await Snapshot.patch(before!)).files).toContain(p(`${tmp.path}/link.txt`))
     },
   })
 })
@@ -159,7 +162,7 @@ test("large file handling", async () => {
 
       await Bun.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
-      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/large.txt`)
+      expect((await Snapshot.patch(before!)).files).toContain(p(`${tmp.path}/large.txt`))
     },
   })
 })
@@ -195,9 +198,9 @@ test("special characters in filenames", async () => {
       await Bun.write(`${tmp.path}/file_with_underscores.txt`, "UNDERSCORES")
 
       const files = (await Snapshot.patch(before!)).files
-      expect(files).toContain(`${tmp.path}/file with spaces.txt`)
-      expect(files).toContain(`${tmp.path}/file-with-dashes.txt`)
-      expect(files).toContain(`${tmp.path}/file_with_underscores.txt`)
+      expect(files).toContain(p(`${tmp.path}/file with spaces.txt`))
+      expect(files).toContain(p(`${tmp.path}/file-with-dashes.txt`))
+      expect(files).toContain(p(`${tmp.path}/file_with_underscores.txt`))
     },
   })
 })
@@ -266,10 +269,10 @@ test("unicode filenames", async () => {
       expect(before).toBeTruthy()
 
       const unicodeFiles = [
-        { path: `${tmp.path}/文件.txt`, content: "chinese content" },
-        { path: `${tmp.path}/🚀rocket.txt`, content: "emoji content" },
-        { path: `${tmp.path}/café.txt`, content: "accented content" },
-        { path: `${tmp.path}/файл.txt`, content: "cyrillic content" },
+        { path: p(`${tmp.path}/文件.txt`), content: "chinese content" },
+        { path: p(`${tmp.path}/🚀rocket.txt`), content: "emoji content" },
+        { path: p(`${tmp.path}/café.txt`), content: "accented content" },
+        { path: p(`${tmp.path}/файл.txt`), content: "cyrillic content" },
       ]
 
       for (const file of unicodeFiles) {
@@ -297,8 +300,8 @@ test("unicode filenames modification and restore", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const chineseFile = `${tmp.path}/文件.txt`
-      const cyrillicFile = `${tmp.path}/файл.txt`
+      const chineseFile = p(`${tmp.path}/文件.txt`)
+      const cyrillicFile = p(`${tmp.path}/файл.txt`)
 
       await Bun.write(chineseFile, "original chinese")
       await Bun.write(cyrillicFile, "original cyrillic")
@@ -330,7 +333,7 @@ test("unicode filenames in subdirectories", async () => {
       expect(before).toBeTruthy()
 
       await $`mkdir -p "${tmp.path}/目录/подкаталог"`.quiet()
-      const deepFile = `${tmp.path}/目录/подкаталог/文件.txt`
+      const deepFile = p(`${tmp.path}/目录/подкаталог/文件.txt`)
       await Bun.write(deepFile, "deep unicode content")
 
       const patch = await Snapshot.patch(before!)
@@ -351,9 +354,22 @@ test("very long filenames", async () => {
       expect(before).toBeTruthy()
 
       const longName = "a".repeat(200) + ".txt"
-      const longFile = `${tmp.path}/${longName}`
+      const longFile = p(`${tmp.path}/${longName}`)
 
-      await Bun.write(longFile, "long filename content")
+      try {
+        await Bun.write(longFile, "long filename content")
+      } catch (err) {
+        if (
+          process.platform === "win32" &&
+          err &&
+          typeof err === "object" &&
+          "code" in err &&
+          err.code === "ENAMETOOLONG"
+        ) {
+          return
+        }
+        throw err
+      }
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files).toContain(longFile)
@@ -377,9 +393,9 @@ test("hidden files", async () => {
       await Bun.write(`${tmp.path}/.config`, "config content")
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(`${tmp.path}/.hidden`)
-      expect(patch.files).toContain(`${tmp.path}/.gitignore`)
-      expect(patch.files).toContain(`${tmp.path}/.config`)
+      expect(patch.files).toContain(p(`${tmp.path}/.hidden`))
+      expect(patch.files).toContain(p(`${tmp.path}/.gitignore`))
+      expect(patch.files).toContain(p(`${tmp.path}/.config`))
     },
   })
 })
@@ -398,8 +414,12 @@ test("nested symlinks", async () => {
       await $`ln -s ${tmp.path}/sub ${tmp.path}/sub-link`.quiet()
 
       const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(`${tmp.path}/sub/dir/link.txt`)
-      expect(patch.files).toContain(`${tmp.path}/sub-link`)
+      expect(patch.files).toContain(p(`${tmp.path}/sub/dir/link.txt`))
+      if (process.platform !== "win32") {
+        expect(patch.files).toContain(p(`${tmp.path}/sub-link`))
+      } else {
+        expect(patch.files.some((x) => x.includes("/sub-link/"))).toBe(true)
+      }
     },
   })
 })
@@ -457,11 +477,11 @@ test("gitignore changes", async () => {
       const patch = await Snapshot.patch(before!)
 
       // Should track gitignore itself
-      expect(patch.files).toContain(`${tmp.path}/.gitignore`)
+      expect(patch.files).toContain(p(`${tmp.path}/.gitignore`))
       // Should track normal files
-      expect(patch.files).toContain(`${tmp.path}/normal.txt`)
+      expect(patch.files).toContain(p(`${tmp.path}/normal.txt`))
       // Should not track ignored files (git won't see them)
-      expect(patch.files).not.toContain(`${tmp.path}/test.ignored`)
+      expect(patch.files).not.toContain(p(`${tmp.path}/test.ignored`))
     },
   })
 })
@@ -506,7 +526,7 @@ test("snapshot state isolation between projects", async () => {
       const before1 = await Snapshot.track()
       await Bun.write(`${tmp1.path}/project1.txt`, "project1 content")
       const patch1 = await Snapshot.patch(before1!)
-      expect(patch1.files).toContain(`${tmp1.path}/project1.txt`)
+      expect(patch1.files).toContain(p(`${tmp1.path}/project1.txt`))
     },
   })
 
@@ -516,17 +536,17 @@ test("snapshot state isolation between projects", async () => {
       const before2 = await Snapshot.track()
       await Bun.write(`${tmp2.path}/project2.txt`, "project2 content")
       const patch2 = await Snapshot.patch(before2!)
-      expect(patch2.files).toContain(`${tmp2.path}/project2.txt`)
+      expect(patch2.files).toContain(p(`${tmp2.path}/project2.txt`))
 
       // Ensure project1 files don't appear in project2
-      expect(patch2.files).not.toContain(`${tmp1?.path}/project1.txt`)
+      expect(patch2.files).not.toContain(p(`${tmp1?.path}/project1.txt`))
     },
   })
 })
 
 test("patch detects changes in secondary worktree", async () => {
   await using tmp = await bootstrap()
-  const worktreePath = `${tmp.path}-worktree`
+  const worktreePath = p(`${tmp.path}-worktree`)
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
@@ -558,7 +578,7 @@ test("patch detects changes in secondary worktree", async () => {
 
 test("revert only removes files in invoking worktree", async () => {
   await using tmp = await bootstrap()
-  const worktreePath = `${tmp.path}-worktree`
+  const worktreePath = p(`${tmp.path}-worktree`)
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
@@ -568,7 +588,7 @@ test("revert only removes files in invoking worktree", async () => {
         expect(await Snapshot.track()).toBeTruthy()
       },
     })
-    const primaryFile = `${tmp.path}/worktree.txt`
+    const primaryFile = p(`${tmp.path}/worktree.txt`)
     await Bun.write(primaryFile, "primary content")
 
     await Instance.provide({
@@ -591,13 +611,13 @@ test("revert only removes files in invoking worktree", async () => {
   } finally {
     await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
     await $`rm -rf ${worktreePath}`.quiet()
-    await $`rm -f ${tmp.path}/worktree.txt`.quiet()
+    await $`rm -f ${p(`${tmp.path}/worktree.txt`)}`.quiet()
   }
 })
 
 test("diff reports worktree-only/shared edits and ignores primary-only", async () => {
   await using tmp = await bootstrap()
-  const worktreePath = `${tmp.path}-worktree`
+  const worktreePath = p(`${tmp.path}-worktree`)
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
@@ -616,8 +636,8 @@ test("diff reports worktree-only/shared edits and ignores primary-only", async (
 
         await Bun.write(`${worktreePath}/worktree-only.txt`, "worktree diff content")
         await Bun.write(`${worktreePath}/shared.txt`, "worktree edit")
-        await Bun.write(`${tmp.path}/shared.txt`, "primary edit")
-        await Bun.write(`${tmp.path}/primary-only.txt`, "primary change")
+        await Bun.write(p(`${tmp.path}/shared.txt`), "primary edit")
+        await Bun.write(p(`${tmp.path}/primary-only.txt`), "primary change")
 
         const diff = await Snapshot.diff(before!)
         expect(diff).toContain("worktree-only.txt")
@@ -628,8 +648,8 @@ test("diff reports worktree-only/shared edits and ignores primary-only", async (
   } finally {
     await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
     await $`rm -rf ${worktreePath}`.quiet()
-    await $`rm -f ${tmp.path}/shared.txt`.quiet()
-    await $`rm -f ${tmp.path}/primary-only.txt`.quiet()
+    await $`rm -f ${p(`${tmp.path}/shared.txt`)}`.quiet()
+    await $`rm -f ${p(`${tmp.path}/primary-only.txt`)}`.quiet()
   }
 })
 
@@ -713,7 +733,7 @@ test("revert should not delete files that existed but were deleted in snapshot",
       await Bun.write(`${tmp.path}/a.txt`, "recreated content")
 
       const patch = await Snapshot.patch(snapshot2!)
-      expect(patch.files).toContain(`${tmp.path}/a.txt`)
+      expect(patch.files).toContain(p(`${tmp.path}/a.txt`))
 
       await Snapshot.revert([patch])
 
@@ -737,8 +757,8 @@ test("revert preserves file that existed in snapshot when deleted then recreated
       await Bun.write(`${tmp.path}/newfile.txt`, "new")
 
       const patch = await Snapshot.patch(snapshot!)
-      expect(patch.files).toContain(`${tmp.path}/existing.txt`)
-      expect(patch.files).toContain(`${tmp.path}/newfile.txt`)
+      expect(patch.files).toContain(p(`${tmp.path}/existing.txt`))
+      expect(patch.files).toContain(p(`${tmp.path}/newfile.txt`))
 
       await Snapshot.revert([patch])
 

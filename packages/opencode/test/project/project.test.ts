@@ -4,6 +4,7 @@ import { Log } from "../../src/util/log"
 import { Storage } from "../../src/storage/storage"
 import { $ } from "bun"
 import path from "path"
+import { toPosix } from "@opencode-ai/util/path"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -18,7 +19,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).toBe("global")
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(toPosix(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()
@@ -33,7 +34,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).not.toBe("global")
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(toPosix(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()
@@ -47,23 +48,27 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const { project, sandbox } = await Project.fromDirectory(tmp.path)
 
-    expect(project.worktree).toBe(tmp.path)
-    expect(sandbox).toBe(tmp.path)
-    expect(project.sandboxes).not.toContain(tmp.path)
+    expect(project.worktree).toBe(toPosix(tmp.path))
+    expect(sandbox).toBe(toPosix(tmp.path))
+    expect(project.sandboxes).not.toContain(toPosix(tmp.path))
   })
 
   test("should set worktree to root when called from a worktree", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const worktreePath = path.join(tmp.path, "..", "worktree-test")
+    const worktreePath = path.join(
+      tmp.path,
+      "..",
+      `worktree-test-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    )
     await $`git worktree add ${worktreePath} -b test-branch`.cwd(tmp.path).quiet()
 
     const { project, sandbox } = await Project.fromDirectory(worktreePath)
 
-    expect(project.worktree).toBe(tmp.path)
-    expect(sandbox).toBe(worktreePath)
-    expect(project.sandboxes).toContain(worktreePath)
-    expect(project.sandboxes).not.toContain(tmp.path)
+    expect(project.worktree).toBe(toPosix(tmp.path))
+    expect(sandbox).toBe(toPosix(worktreePath))
+    expect(project.sandboxes).toContain(toPosix(worktreePath))
+    expect(project.sandboxes).not.toContain(toPosix(tmp.path))
 
     await $`git worktree remove ${worktreePath}`.cwd(tmp.path).quiet()
   })
@@ -71,18 +76,26 @@ describe("Project.fromDirectory with worktrees", () => {
   test("should accumulate multiple worktrees in sandboxes", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const worktree1 = path.join(tmp.path, "..", "worktree-1")
-    const worktree2 = path.join(tmp.path, "..", "worktree-2")
+    const worktree1 = path.join(
+      tmp.path,
+      "..",
+      `worktree-1-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    )
+    const worktree2 = path.join(
+      tmp.path,
+      "..",
+      `worktree-2-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    )
     await $`git worktree add ${worktree1} -b branch-1`.cwd(tmp.path).quiet()
     await $`git worktree add ${worktree2} -b branch-2`.cwd(tmp.path).quiet()
 
     await Project.fromDirectory(worktree1)
     const { project } = await Project.fromDirectory(worktree2)
 
-    expect(project.worktree).toBe(tmp.path)
-    expect(project.sandboxes).toContain(worktree1)
-    expect(project.sandboxes).toContain(worktree2)
-    expect(project.sandboxes).not.toContain(tmp.path)
+    expect(project.worktree).toBe(toPosix(tmp.path))
+    expect(project.sandboxes).toContain(toPosix(worktree1))
+    expect(project.sandboxes).toContain(toPosix(worktree2))
+    expect(project.sandboxes).not.toContain(toPosix(tmp.path))
 
     await $`git worktree remove ${worktree1}`.cwd(tmp.path).quiet()
     await $`git worktree remove ${worktree2}`.cwd(tmp.path).quiet()
