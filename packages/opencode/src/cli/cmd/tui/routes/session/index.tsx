@@ -12,7 +12,7 @@ import {
   useContext,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import path from "path"
+import path from "@/util/path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
