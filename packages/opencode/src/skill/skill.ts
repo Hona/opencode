@@ -45,12 +45,14 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match).catch((err) => {
+      const file = path.toPosix(match)
+
+      const md = await ConfigMarkdown.parse(file).catch((err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
-          : `Failed to parse skill ${match}`
+          : `Failed to parse skill ${file}`
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load skill", { skill: match, err })
+        log.error("failed to load skill", { skill: file, err })
         return undefined
       })
 
@@ -64,14 +66,14 @@ export namespace Skill {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
           existing: skills[parsed.data.name].location,
-          duplicate: match,
+          duplicate: file,
         })
       }
 
       skills[parsed.data.name] = {
         name: parsed.data.name,
         description: parsed.data.description,
-        location: match,
+        location: file,
       }
     }
 
