@@ -21,12 +21,14 @@ export const MultiEditTool = Tool.define("multiedit", {
       .describe("Array of edit operations to perform sequentially on the file"),
   }),
   async execute(params, ctx) {
+    const input = path.toPosix(params.filePath)
+    const filePath = path.isAbsolute(input) ? input : path.resolve(Instance.directory, input)
     const tool = await EditTool.init()
     const results = []
     for (const [, edit] of params.edits.entries()) {
       const result = await tool.execute(
         {
-          filePath: params.filePath,
+          filePath,
           oldString: edit.oldString,
           newString: edit.newString,
           replaceAll: edit.replaceAll,
@@ -36,7 +38,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       results.push(result)
     }
     return {
-      title: path.relative(Instance.worktree, params.filePath),
+      title: path.relative(Instance.worktree, filePath),
       metadata: {
         results: results.map((r) => r.metadata),
       },
