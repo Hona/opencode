@@ -246,19 +246,21 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+      const filepath = path.toPosix(item)
+
+      const md = await ConfigMarkdown.parse(filepath).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
-          : `Failed to parse command ${item}`
+          : `Failed to parse command ${filepath}`
         const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
+        log.error("failed to load command", { command: filepath, err })
         return undefined
       })
       if (!md) continue
 
       const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const file = rel(filepath, patterns) ?? path.basename(filepath)
       const name = trim(file)
 
       const config = {
@@ -271,7 +273,7 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      throw new InvalidError({ path: filepath, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
   }
@@ -286,19 +288,21 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+      const filepath = path.toPosix(item)
+
+      const md = await ConfigMarkdown.parse(filepath).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
-          : `Failed to parse agent ${item}`
+          : `Failed to parse agent ${filepath}`
         const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load agent", { agent: item, err })
+        log.error("failed to load agent", { agent: filepath, err })
         return undefined
       })
       if (!md) continue
 
       const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const file = rel(filepath, patterns) ?? path.basename(filepath)
       const agentName = trim(file)
 
       const config = {
@@ -311,7 +315,7 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      throw new InvalidError({ path: filepath, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
   }
@@ -325,19 +329,21 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+      const filepath = path.toPosix(item)
+
+      const md = await ConfigMarkdown.parse(filepath).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
-          : `Failed to parse mode ${item}`
+          : `Failed to parse mode ${filepath}`
         const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load mode", { mode: item, err })
+        log.error("failed to load mode", { mode: filepath, err })
         return undefined
       })
       if (!md) continue
 
       const config = {
-        name: path.basename(item, ".md"),
+        name: path.basename(filepath, ".md"),
         ...md.data,
         prompt: md.content.trim(),
       }
@@ -1217,7 +1223,9 @@ export namespace Config {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
+            if (plugin.startsWith("file://")) continue
+            const resolved = Bun.resolveSync(plugin, configFilepath)
+            data.plugin[i] = pathToFileURL(resolved).href
           } catch (err) {}
         }
       }
