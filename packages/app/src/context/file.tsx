@@ -4,7 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename, toPosix } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
@@ -280,10 +280,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const directory = createMemo(() => sync.data.path.directory)
 
     function normalize(input: string) {
-      const root = directory()
+      const root = toPosix(directory())
       const prefix = root.endsWith("/") ? root : root + "/"
 
-      let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
+      let path = toPosix(unquoteGitPath(stripQueryAndHash(stripFileProtocol(input))))
 
       if (path.startsWith(prefix)) {
         path = path.slice(prefix.length)

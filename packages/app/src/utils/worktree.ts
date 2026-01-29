@@ -1,4 +1,10 @@
-const normalize = (directory: string) => directory.replace(/[\\/]+$/, "")
+import { toPosix } from "@opencode-ai/util/path"
+
+const normalize = (directory: string) => {
+  const normalized = toPosix(directory)
+  if (/^[A-Z]:\/$/i.test(normalized) || normalized === "/") return normalized
+  return normalized.replace(/\/+$/, "")
+}
 
 type State =
   | {

@@ -14,7 +14,7 @@ export namespace Global {
   export const Path = {
     // Allow override via OPENCODE_TEST_HOME for test isolation
     get home() {
-      return process.env.OPENCODE_TEST_HOME || os.homedir()
+      return path.toPosix(process.env.OPENCODE_TEST_HOME || os.homedir())
     },
     data,
     bin: path.join(data, "bin"),
