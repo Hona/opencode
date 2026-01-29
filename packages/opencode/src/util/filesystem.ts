@@ -95,7 +95,8 @@ export namespace Filesystem {
   }
 
   export async function globUp(pattern: string, start: string, stop?: string) {
-    let current = start
+    let current = toPosix(start)
+    const ceiling = stop ? toPosix(stop) : undefined
     const result = []
     while (true) {
       try {
@@ -107,12 +108,12 @@ export namespace Filesystem {
           followSymlinks: true,
           dot: true,
         })) {
-          result.push(match)
+          result.push(toPosix(match))
         }
       } catch {
         // Skip invalid glob patterns
       }
-      if (stop === current) break
+      if (ceiling === current) break
       const parent = path.dirname(current)
       if (parent === current) break
       current = parent

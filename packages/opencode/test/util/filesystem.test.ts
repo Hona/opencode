@@ -3,6 +3,9 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, mkdir, rm } from "node:fs/promises"
 import { Filesystem } from "../../src/util/filesystem"
+import { toPosix } from "@opencode-ai/util/path"
+
+const isWin = process.platform === "win32"
 
 describe("util.filesystem", () => {
   test("exists() is true for files and directories", async () => {
@@ -35,5 +38,23 @@ describe("util.filesystem", () => {
     expect(cases).toEqual([true, false, false])
 
     await rm(tmp, { recursive: true, force: true })
+  })
+
+  if (!isWin) return
+
+  test("globUp() returns posix absolute paths on Windows", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "opencode-filesystem-globup-"))
+    const root = toPosix(tmp)
+    const file = toPosix(path.join(tmp, "foo.txt"))
+    const nested = toPosix(path.join(tmp, "sub", "nested"))
+
+    await mkdir(path.join(tmp, "sub", "nested"), { recursive: true })
+    await Bun.write(file, "hello")
+
+    const matches = await Filesystem.globUp("*.txt", nested)
+    expect(matches.some((x) => x.endsWith("/foo.txt"))).toBe(true)
+    expect(matches.some((x) => x.includes("\\"))).toBe(false)
+
+    await rm(root, { recursive: true, force: true })
   })
 })
