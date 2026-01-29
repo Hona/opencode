@@ -2,7 +2,9 @@ import { describe, expect, test, afterEach } from "bun:test"
 import { Ide } from "../../src/ide"
 
 describe("ide", () => {
-  const original = structuredClone(process.env)
+  const original = Object.fromEntries(
+    Object.entries(process.env).filter((x): x is [string, string] => x[1] !== undefined),
+  )
 
   afterEach(() => {
     Object.keys(process.env).forEach((key) => {
