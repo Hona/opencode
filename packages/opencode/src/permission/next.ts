@@ -238,10 +238,19 @@ export namespace PermissionNext {
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
-    log.info("evaluate", { permission, pattern, ruleset: merged })
-    const match = merged.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
+    const isPath = PATH_PERMISSIONS.has(permission)
+
+    const target = isPath ? toPosix(pattern) : pattern
+    const targetKey = isPath && process.platform === "win32" ? target.toLowerCase() : target
+
+    log.info("evaluate", { permission, pattern: target, ruleset: merged })
+
+    const match = merged.findLast((rule) => {
+      if (!Wildcard.match(permission, rule.permission)) return false
+      const candidate = isPath ? toPosix(rule.pattern) : rule.pattern
+      const candidateKey = isPath && process.platform === "win32" ? candidate.toLowerCase() : candidate
+      return Wildcard.match(targetKey, candidateKey)
+    })
     return match ?? { action: "ask", permission, pattern: "*" }
   }
 

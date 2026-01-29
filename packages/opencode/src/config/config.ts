@@ -1163,7 +1163,8 @@ export namespace Config {
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const inputPath = path.toPosix(filePath)
+        const resolvedPath = path.isAbsolute(inputPath) ? inputPath : path.resolve(configDir, inputPath)
         const fileContent = (
           await Bun.file(resolvedPath)
             .text()

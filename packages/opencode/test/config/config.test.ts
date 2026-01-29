@@ -6,6 +6,7 @@ import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
+import { toPosix } from "@opencode-ai/util/path"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -178,6 +179,35 @@ test("handles file inclusion substitution", async () => {
       )
     },
   })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("test_theme")
+    },
+  })
+})
+
+test("windows: handles file inclusion substitution with MSYS absolute paths", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "included.txt"), "test_theme")
+
+      const msysDir = toPosix(dir).replace(/^([a-zA-Z]):\//, (_, d) => `/${d.toLowerCase()}/`)
+      const included = `${msysDir}/included.txt`
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: `{file:${included}}`,
+        }),
+      )
+    },
+  })
+
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {

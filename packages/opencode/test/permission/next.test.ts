@@ -81,6 +81,19 @@ if (isWin) {
     const result = PermissionNext.fromConfig({ external_directory: { "/c/Users/Luke/*": "allow" } })
     expect(result).toEqual([{ permission: "external_directory", pattern: "C:/Users/Luke/*", action: "allow" }])
   })
+
+  test("evaluate - matches stored backslash patterns for path permissions", () => {
+    const ruleset: PermissionNext.Ruleset = [
+      { permission: "external_directory", pattern: "c:\\Users\\Luke\\*", action: "allow" },
+    ]
+    expect(PermissionNext.evaluate("external_directory", "C:/Users/Luke/file.txt", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("external_directory", "/c/Users/Luke/file.txt", ruleset).action).toBe("allow")
+  })
+
+  test("evaluate - matches case-insensitively for path permissions", () => {
+    const ruleset: PermissionNext.Ruleset = [{ permission: "read", pattern: "C:/USERS/LUKE/*", action: "allow" }]
+    expect(PermissionNext.evaluate("read", "c:/users/luke/file.txt", ruleset).action).toBe("allow")
+  })
 }
 
 test("evaluate - matches expanded tilde pattern", () => {
