@@ -20,8 +20,20 @@ export function toPosix(p: string) {
   if (!isWin) return p
 
   const slashed = p.replace(/\\/g, "/")
-  const msys = slashed.replace(/^\/(?:cygdrive\/|mnt\/)?([a-zA-Z])(?:\/|$)/, (_, d) => `${d.toUpperCase()}:/`)
+
+  // Windows extended-length paths:
+  // - Drive: \\\?\\C:\\foo -> //?/C:/foo -> C:/foo
+  // - UNC:   \\\?\\UNC\\srv\\sh -> //?/UNC/srv/sh -> //srv/sh
+  const extendedUnc = slashed.replace(/^\/\/\?\/UNC\//i, "//")
+  const extendedDrive = extendedUnc.replace(/^\/\/\?\/([a-zA-Z]):\//, (_, d) => `${d.toUpperCase()}:/`)
+
+  // MSYS/Cygwin/WSL drive roots
+  const msys = extendedDrive.replace(/^\/(?:cygdrive\/|mnt\/)?([a-zA-Z])(?:\/|$)/, (_, d) => `${d.toUpperCase()}:/`)
+
+  // Normalize drive letter casing
   const res = msys.replace(/^([a-z]):\//, (_, d) => `${d.toUpperCase()}:/`)
+
+  // If the path is a UNC share root with a trailing slash, trim it.
   if (/^\/\/[^/]+\/[^/]+\/$/.test(res)) return res.slice(0, -1)
   return res
 }

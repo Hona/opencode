@@ -44,4 +44,14 @@ describe("util.path", () => {
     expect(path.toPosix("C:/Users/Luke\\dev")).toBe("C:/Users/Luke/dev")
     expect(path.toPosix("c:\\Users\\Luke\\dev")).toBe("C:/Users/Luke/dev")
   })
+
+  test("windows: converts extended-length drive paths", () => {
+    expect(path.toPosix("\\\\?\\C:\\Users\\Luke\\file.txt")).toBe("C:/Users/Luke/file.txt")
+    expect(path.toPosix("//?/C:/Users/Luke/file.txt")).toBe("C:/Users/Luke/file.txt")
+  })
+
+  test("windows: converts extended-length UNC paths", () => {
+    expect(path.toPosix("\\\\?\\UNC\\server\\share\\file.txt")).toBe("//server/share/file.txt")
+    expect(path.toPosix("//?/UNC/server/share/file.txt")).toBe("//server/share/file.txt")
+  })
 })
