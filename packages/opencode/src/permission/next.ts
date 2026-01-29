@@ -8,16 +8,18 @@ import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
+import { toPosix } from "@/util/path"
 import z from "zod"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
 
   function expand(pattern: string): string {
-    if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
-    if (pattern === "~") return os.homedir()
-    if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
-    if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
+    const home = toPosix(os.homedir())
+    if (pattern.startsWith("~/")) return home + pattern.slice(1)
+    if (pattern === "~") return home
+    if (pattern.startsWith("$HOME/")) return home + pattern.slice(5)
+    if (pattern.startsWith("$HOME")) return home + pattern.slice(5)
     return pattern
   }
 
