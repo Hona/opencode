@@ -21,7 +21,7 @@ const disposal = {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = path.resolve(input.directory)
+    const directory = Filesystem.normalizePath(path.resolve(input.directory))
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
