@@ -146,7 +146,8 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
+          const filepath = path.toPosix(input.path)
+          input.path = path.isAbsolute(filepath) ? filepath : path.resolve(Instance.directory, filepath)
           const file = Bun.file(input.path)
           const text = await file.text()
           const extension = path.extname(input.path)
@@ -208,8 +209,9 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
+        const filepath = path.toPosix(input.path)
         const normalizedPath = Filesystem.normalizePath(
-          path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
+          path.isAbsolute(filepath) ? filepath : path.resolve(Instance.directory, filepath),
         )
         log.info("waiting for diagnostics", { path: normalizedPath })
         let unsub: () => void

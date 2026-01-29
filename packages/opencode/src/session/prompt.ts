@@ -951,7 +951,7 @@ export namespace SessionPrompt {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = fileURLToPath(part.url)
+              const filepath = path.toPosix(fileURLToPath(part.url))
               const stat = await Bun.file(filepath).stat()
 
               if (stat.isDirectory()) {
