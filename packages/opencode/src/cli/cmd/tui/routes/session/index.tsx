@@ -1613,7 +1613,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const home = Global.Path.home
     if (!home) return absolute
 
-    const match = absolute === home || absolute.startsWith(home + path.sep)
+    const match = absolute === home || absolute.startsWith(home + "/")
     return match ? absolute.replace(home, "~") : absolute
   })
 

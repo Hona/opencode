@@ -217,7 +217,7 @@ export namespace Storage {
           cwd: path.join(dir, ...prefix),
           onlyFiles: true,
         }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      ).then((results) => results.map((x) => [...prefix, ...path.toPosix(x).slice(0, -5).split("/")]))
       result.sort()
       return result
     } catch {

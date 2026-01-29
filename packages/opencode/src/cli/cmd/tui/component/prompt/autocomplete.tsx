@@ -12,6 +12,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import path from "@/util/path"
+import { pathToFileURL } from "url"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -236,7 +238,8 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            let url = `file://${process.cwd()}/${item}`
+            const filepath = path.join(path.resolve("."), item)
+            let url = pathToFileURL(filepath).toString()
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`

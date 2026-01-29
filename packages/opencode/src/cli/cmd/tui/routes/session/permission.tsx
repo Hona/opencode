@@ -21,16 +21,16 @@ type PermissionStage = "permission" | "always" | "reject"
 function normalizePath(input?: string) {
   if (!input) return ""
 
-  const cwd = process.cwd()
+  const cwd = path.resolve(".")
   const home = Global.Path.home
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const absolute = path.isAbsolute(input) ? path.normalize(input) : path.resolve(cwd, input)
   const relative = path.relative(cwd, absolute)
 
   if (!relative) return "."
   if (!relative.startsWith("..")) return relative
 
   // outside cwd - use ~ or absolute
-  if (home && (absolute === home || absolute.startsWith(home + path.sep))) {
+  if (home && (absolute === home || absolute.startsWith(home + "/"))) {
     return absolute.replace(home, "~")
   }
   return absolute
