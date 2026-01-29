@@ -22,6 +22,12 @@ const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 
 
 export const log = Log.create({ service: "bash-tool" })
 
+export function externalDirectoryGlob(target: string, kind: "file" | "directory" = "file") {
+  const normalized = path.toPosix(target)
+  const dir = kind === "directory" ? normalized : path.dirname(normalized)
+  return path.join(dir, "*")
+}
+
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
   if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
@@ -75,7 +81,7 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      const cwd = path.resolve(params.workdir || Instance.directory)
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -85,7 +91,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const directories = new Set<string>()
-      if (!Instance.containsPath(cwd)) directories.add(cwd)
+      if (!Instance.containsPath(cwd)) directories.add(externalDirectoryGlob(cwd, "directory"))
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -119,12 +125,10 @@ export const BashTool = Tool.define("bash", async () => {
               .then((x) => x.trim())
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
-              const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
-              if (!Instance.containsPath(normalized)) directories.add(normalized)
+              const normalized = path.toPosix(resolved)
+              if (Instance.containsPath(normalized)) continue
+              const isDir = await Filesystem.isDir(normalized)
+              directories.add(externalDirectoryGlob(normalized, isDir ? "directory" : "file"))
             }
           }
         }
@@ -140,7 +144,7 @@ export const BashTool = Tool.define("bash", async () => {
         await ctx.ask({
           permission: "external_directory",
           patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          always: Array.from(directories),
           metadata: {},
         })
       }
