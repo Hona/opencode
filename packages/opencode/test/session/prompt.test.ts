@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test, mock, afterAll } from "bun:test"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -33,6 +33,10 @@ mock.module("../../src/plugin/index", () => ({
 }))
 
 Log.init({ print: false })
+
+afterAll(() => {
+  mock.restore()
+})
 
 describe("SessionPrompt ordering", () => {
   test("keeps @file order with read output parts", async () => {

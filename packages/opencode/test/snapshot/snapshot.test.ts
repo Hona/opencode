@@ -15,7 +15,16 @@ async function bootstrap() {
       await Bun.write(`${dir}/a.txt`, aContent)
       await Bun.write(`${dir}/b.txt`, bContent)
       await $`git add .`.cwd(dir).quiet()
-      await $`git commit --no-gpg-sign -m init`.cwd(dir).quiet()
+      await $`git commit --no-gpg-sign -m init`
+        .cwd(dir)
+        .env({
+          ...process.env,
+          GIT_AUTHOR_NAME: "opencode",
+          GIT_AUTHOR_EMAIL: "opencode@local",
+          GIT_COMMITTER_NAME: "opencode",
+          GIT_COMMITTER_EMAIL: "opencode@local",
+        })
+        .quiet()
       return {
         aContent,
         bContent,
