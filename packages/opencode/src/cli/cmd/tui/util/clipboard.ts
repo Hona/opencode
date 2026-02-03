@@ -1,9 +1,12 @@
 import { $ } from "bun"
-import { platform, release } from "os"
+import type { CliRenderer } from "@opentui/core"
+import { platform, release, tmpdir } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
-import { tmpdir } from "os"
 import path from "@/util/path"
+
+const rendererRef = { current: undefined as CliRenderer | undefined }
+
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
  * This allows clipboard operations to work over SSH by having
@@ -23,6 +26,10 @@ export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
+  }
+
+  export function setRenderer(renderer: CliRenderer | undefined): void {
+    rendererRef.current = renderer
   }
 
   export async function read(): Promise<Content | undefined> {
@@ -153,7 +160,11 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
-    writeOsc52(text)
+    const renderer = rendererRef.current
+    if (renderer) {
+      const copied = renderer.copyToClipboardOSC52(text)
+      if (copied) return
+    }
     await getCopyMethod()(text)
   }
 }
