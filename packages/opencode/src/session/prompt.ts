@@ -856,8 +856,9 @@ export namespace SessionPrompt {
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
-    const parts = await Promise.all(
-      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
+    const parts: MessageV2.Part[] = []
+    for (const part of input.parts) {
+      const items = await (async (): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
           // before checking the protocol we check if this is an mcp resource because it needs special handling
           if (part.source?.type === "resource") {
@@ -1182,8 +1183,9 @@ export namespace SessionPrompt {
             sessionID: input.sessionID,
           },
         ]
-      }),
-    ).then((x) => x.flat())
+      })()
+      parts.push(...items)
+    }
 
     await Plugin.trigger(
       "chat.message",

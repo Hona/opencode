@@ -57,14 +57,18 @@ export const WriteTool = Tool.define("write", {
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
     const normalizedFilepath = Filesystem.normalizePath(filepath)
+    const seen = new Set<string>()
     let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {
+      const key = Filesystem.normalizePath(file)
+      if (seen.has(key)) continue
+      seen.add(key)
       const errors = issues.filter((item) => item.severity === 1)
       if (errors.length === 0) continue
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      if (file === normalizedFilepath) {
+      if (key === normalizedFilepath) {
         output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
         continue
       }

@@ -6,6 +6,8 @@ import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
+import path from "@/util/path"
+import { Filesystem } from "@/util/filesystem"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 
@@ -101,7 +103,10 @@ export namespace Pty {
       args.push("-l")
     }
 
-    const cwd = input.cwd || Instance.directory
+    const cwd = path.resolve(Instance.directory, input.cwd || Instance.directory)
+    if (!(await Filesystem.isDir(cwd))) {
+      throw new Error(`Invalid cwd: ${cwd}`)
+    }
     const env = {
       ...process.env,
       ...input.env,

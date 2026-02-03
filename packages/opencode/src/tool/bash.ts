@@ -82,6 +82,9 @@ export const BashTool = Tool.define("bash", async () => {
     }),
     async execute(params, ctx) {
       const cwd = path.resolve(params.workdir || Instance.directory)
+      if (!(await Filesystem.isDir(cwd))) {
+        throw new Error(`Invalid working directory: ${cwd}`)
+      }
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }

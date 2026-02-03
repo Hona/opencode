@@ -50,13 +50,15 @@ export namespace LSPClient {
 
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
+      const rawPath = path.toPosix(fileURLToPath(params.uri))
+      const filePath = Filesystem.normalizePath(rawPath)
       l.info("textDocument/publishDiagnostics", {
         path: filePath,
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
       diagnostics.set(filePath, params.diagnostics)
+      if (rawPath !== filePath) diagnostics.set(rawPath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })

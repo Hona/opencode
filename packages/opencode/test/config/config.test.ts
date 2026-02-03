@@ -570,6 +570,39 @@ Nested command template`,
   })
 })
 
+test("windows: loads commands when instance directory is MSYS path", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const commandDir = path.join(opencodeDir, "command")
+      await fs.mkdir(commandDir, { recursive: true })
+      await Bun.write(
+        path.join(commandDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from MSYS command`,
+      )
+    },
+  })
+
+  const msysDir = toPosix(tmp.path).replace(/^([a-zA-Z]):\//, (_, d) => `/${d.toLowerCase()}/`)
+
+  await Instance.provide({
+    directory: msysDir,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from MSYS command",
+      })
+    },
+  })
+})
+
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

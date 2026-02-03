@@ -151,6 +151,26 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("throws on invalid workdir", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        await expect(
+          bash.execute(
+            {
+              command: "ls",
+              workdir: path.join(tmp.path, "missing"),
+              description: "List missing directory",
+            },
+            ctx,
+          ),
+        ).rejects.toThrow("Invalid working directory")
+      },
+    })
+  })
+
   test("asks for external_directory permission when file arg is outside project", async () => {
     await using outerTmp = await tmpdir({
       init: async (dir) => {

@@ -1,8 +1,18 @@
+import os from "os"
 import nodePath from "node:path"
 
-import { toPosix } from "@opencode-ai/util/path"
+import { toPosix as baseToPosix } from "@opencode-ai/util/path"
 
 const isWin = process.platform === "win32"
+
+function toPosix(p: string) {
+  const res = baseToPosix(p)
+  if (!isWin) return res
+  // Git Bash/MSYS uses /tmp; map it to the real Windows temp dir.
+  if (res === "/tmp") return baseToPosix(os.tmpdir())
+  if (res.startsWith("/tmp/")) return baseToPosix(nodePath.join(os.tmpdir(), res.slice("/tmp/".length)))
+  return res
+}
 
 function normalizeArgs(args: string[]) {
   if (!isWin) return args

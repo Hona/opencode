@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "@/util/path"
+import { Filesystem } from "@/util/filesystem"
 import { pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
@@ -226,15 +227,22 @@ export namespace LSP {
 
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      const normalized = path.toPosix(root)
+      if (!(await Filesystem.isDir(normalized))) {
+        log.error("LSP root is not a directory", { root: normalized, serverID: server.id })
+        s.broken.add(normalized + server.id)
+        continue
+      }
+      const key = normalized + server.id
+      if (s.broken.has(key)) continue
 
-      const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
+      const match = s.clients.find((x) => x.root === normalized && x.serverID === server.id)
       if (match) {
         result.push(match)
         continue
       }
 
-      const inflight = s.spawning.get(root + server.id)
+      const inflight = s.spawning.get(key)
       if (inflight) {
         const client = await inflight
         if (!client) continue
@@ -242,12 +250,12 @@ export namespace LSP {
         continue
       }
 
-      const task = schedule(server, root, root + server.id)
-      s.spawning.set(root + server.id, task)
+      const task = schedule(server, normalized, key)
+      s.spawning.set(key, task)
 
       task.finally(() => {
-        if (s.spawning.get(root + server.id) === task) {
-          s.spawning.delete(root + server.id)
+        if (s.spawning.get(key) === task) {
+          s.spawning.delete(key)
         }
       })
 
@@ -268,7 +276,12 @@ export namespace LSP {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      const normalized = path.toPosix(root)
+      if (!(await Filesystem.isDir(normalized))) {
+        s.broken.add(normalized + server.id)
+        continue
+      }
+      if (s.broken.has(normalized + server.id)) continue
       return true
     }
     return false

@@ -197,7 +197,8 @@ describe("ConfigMarkdown: frontmatter parsing w/ Markdown header", async () => {
   test("should parse and match", () => {
     expect(result).toBeDefined()
     expect(result.data).toEqual({})
-    expect(result.content.trim()).toBe(`# Response Formatting Requirements
+    const normalized = result.content.trim().replace(/\r\n/g, "\n")
+    expect(normalized).toBe(`# Response Formatting Requirements
 
 Always structure your responses using clear markdown formatting:
 

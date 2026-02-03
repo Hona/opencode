@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { toPosix } from "@opencode-ai/util/path"
 import { tmpdir } from "../fixture/fixture"
 import { Ripgrep } from "../../src/file/ripgrep"
 
@@ -16,7 +17,7 @@ describe("file.ripgrep", () => {
 
     const files = await Array.fromAsync(Ripgrep.files({ cwd: tmp.path }))
     const hasVisible = files.includes("visible.txt")
-    const hasHidden = files.includes(path.join(".opencode", "thing.json"))
+    const hasHidden = files.includes(toPosix(path.join(".opencode", "thing.json")))
     expect(hasVisible).toBe(true)
     expect(hasHidden).toBe(true)
   })

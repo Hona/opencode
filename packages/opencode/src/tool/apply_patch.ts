@@ -258,7 +258,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       if (change.type === "delete") continue
       const target = change.movePath ?? change.filePath
       const normalized = Filesystem.normalizePath(target)
-      const issues = diagnostics[normalized] ?? []
+      const issues = diagnostics[normalized] ?? diagnostics[path.toPosix(target)] ?? []
       const errors = issues.filter((item) => item.severity === 1)
       if (errors.length > 0) {
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
