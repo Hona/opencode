@@ -28,7 +28,7 @@ mock.module("../../src/plugin/index", () => ({
     list: async () => [],
     load: async () => {},
     reload: async () => {},
-    trigger: async () => {},
+    trigger: async (_name: string, _input: unknown, output: unknown) => output,
   },
 }))
 

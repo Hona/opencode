@@ -28,7 +28,17 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
         stderr: init.stderr.toString(),
       })
     }
-    const commit = await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet().nothrow()
+    const commit = await $`git commit --allow-empty -m "root commit ${dirpath}"`
+      .cwd(dirpath)
+      .env({
+        ...process.env,
+        GIT_AUTHOR_NAME: "opencode",
+        GIT_AUTHOR_EMAIL: "opencode@local",
+        GIT_COMMITTER_NAME: "opencode",
+        GIT_COMMITTER_EMAIL: "opencode@local",
+      })
+      .quiet()
+      .nothrow()
     if (commit.exitCode !== 0) {
       console.error("git commit failed", {
         dirpath,
