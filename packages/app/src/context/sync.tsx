@@ -2,6 +2,7 @@ import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
+import { normalizeDirectory, toPosix } from "@opencode-ai/util/path"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
@@ -21,7 +22,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     type Setter = Child[1]
 
     const current = createMemo(() => globalSync.child(sdk.directory))
-    const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
+    const absolute = (input: string) => {
+      if (input.startsWith("/") || /^[a-zA-Z]:/.test(input)) return toPosix(input)
+      const base = normalizeDirectory(current()[0].path.directory)
+      const suffix = input.startsWith("/") ? input.slice(1) : input
+      return toPosix(`${base}/${suffix}`)
+    }
     const chunk = 400
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
