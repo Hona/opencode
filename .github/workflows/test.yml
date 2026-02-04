@@ -20,7 +20,7 @@ jobs:
             command: |
               bun turbo test
           - name: windows
-            host: windows-latest
+            host: blacksmith-4vcpu-windows-2025
             playwright: bunx playwright install
             workdir: .
             command: |
