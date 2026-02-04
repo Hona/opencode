@@ -36,4 +36,33 @@ describe("session.list", () => {
       },
     })
   })
+
+  test("filters by directory with trailing separator", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const app = Server.App()
+
+        const first = await Session.create({})
+
+        const otherDir = path.join(projectRoot, "..", "__session_list_other_2")
+        const second = await Instance.provide({
+          directory: otherDir,
+          fn: async () => Session.create({}),
+        })
+
+        const directory = projectRoot.endsWith(path.sep) ? projectRoot : projectRoot + path.sep
+        const response = await app.request(`/session?directory=${encodeURIComponent(directory)}`)
+        expect(response.status).toBe(200)
+
+        const body = (await response.json()) as unknown[]
+        const ids = body
+          .map((s) => (typeof s === "object" && s && "id" in s ? (s as { id: string }).id : undefined))
+          .filter((x): x is string => typeof x === "string")
+
+        expect(ids).toContain(first.id)
+        expect(ids).not.toContain(second.id)
+      },
+    })
+  })
 })

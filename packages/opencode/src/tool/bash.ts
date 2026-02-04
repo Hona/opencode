@@ -8,11 +8,11 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import fs from "fs/promises"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
@@ -26,6 +26,29 @@ export function externalDirectoryGlob(target: string, kind: "file" | "directory"
   const normalized = path.toPosix(target)
   const dir = kind === "directory" ? normalized : path.dirname(normalized)
   return path.join(dir, "*")
+}
+
+const unquote = (input: string) => {
+  if (input.length < 2) return input
+  const head = input.at(0)
+  const tail = input.at(-1)
+  if (!head || !tail) return input
+  if (head === "'" && tail === "'") return input.slice(1, -1)
+  if (head === '"' && tail === '"') return input.slice(1, -1)
+  return input
+}
+
+const resolveArgPath = async (cwd: string, raw: string) => {
+  const arg = path.toPosix(unquote(raw))
+  if (!arg) return
+  if (arg.startsWith("-")) return
+  if (arg.includes("*") || arg.includes("?") || arg.includes("$")) return
+
+  const resolved = path.resolve(cwd, arg.startsWith("file://") ? path.toPosix(fileURLToPath(arg)) : arg)
+  return fs
+    .realpath(resolved)
+    .then((real) => Filesystem.normalizePath(real))
+    .catch(() => Filesystem.normalizePath(resolved))
 }
 
 const resolveWasm = (asset: string) => {
@@ -81,7 +104,11 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = path.resolve(params.workdir || Instance.directory)
+      const cwd = (() => {
+        if (!params.workdir) return Instance.directory
+        const input = path.toPosix(params.workdir)
+        return path.isAbsolute(input) ? path.resolve(input) : path.resolve(Instance.directory, input)
+      })()
       if (!(await Filesystem.isDir(cwd))) {
         throw new Error(`Invalid working directory: ${cwd}`)
       }
@@ -124,19 +151,13 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = await resolveArgPath(cwd, arg)
             log.info("resolved path", { arg, resolved })
-            if (resolved) {
-              const normalized = path.toPosix(resolved)
-              if (Instance.containsPath(normalized)) continue
-              const isDir = await Filesystem.isDir(normalized)
-              directories.add(externalDirectoryGlob(normalized, isDir ? "directory" : "file"))
-            }
+            if (!resolved) continue
+            const normalized = path.toPosix(resolved)
+            if (Instance.containsPath(normalized)) continue
+            const isDir = await Filesystem.isDir(normalized)
+            directories.add(externalDirectoryGlob(normalized, isDir ? "directory" : "file"))
           }
         }
 

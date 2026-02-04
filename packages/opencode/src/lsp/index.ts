@@ -4,7 +4,7 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "@/util/path"
 import { Filesystem } from "@/util/filesystem"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
@@ -382,7 +382,8 @@ export namespace LSP {
   }
 
   export async function documentSymbol(uri: string) {
-    const file = new URL(uri).pathname
+    if (!uri.startsWith("file://")) return []
+    const file = path.toPosix(fileURLToPath(uri))
     return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/documentSymbol", {
