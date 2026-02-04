@@ -57,14 +57,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
     let totalDiff = ""
 
-    const resolvePatchPath = (input: string) => {
-      const normalized = path.toPosix(input)
-      if (path.isAbsolute(normalized)) return normalized
-      return path.resolve(Instance.directory, normalized)
-    }
-
     for (const hunk of hunks) {
-      const filePath = resolvePatchPath(hunk.path)
+      const filePath = path.resolve(Instance.directory, hunk.path)
       await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
@@ -122,7 +116,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             if (change.removed) deletions += change.count || 0
           }
 
-          const movePath = hunk.move_path ? resolvePatchPath(hunk.move_path) : undefined
+          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
           await assertExternalDirectory(ctx, movePath)
 
           fileChanges.push({

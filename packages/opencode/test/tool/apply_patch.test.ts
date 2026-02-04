@@ -259,26 +259,6 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
-  test("accepts absolute Windows paths with backslashes", async () => {
-    if (process.platform !== "win32") return
-
-    await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
-
-    await Instance.provide({
-      directory: fixture.path,
-      fn: async () => {
-        const target = path.join(fixture.path, "abs.txt")
-        await fs.writeFile(target, "before\n", "utf-8")
-
-        const patchText = `*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`
-        await execute({ patchText }, ctx)
-
-        expect(await fs.readFile(target, "utf-8")).toBe("after\n")
-      },
-    })
-  })
-
   test("adds file overwriting existing file", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
