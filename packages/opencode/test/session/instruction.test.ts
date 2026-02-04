@@ -62,7 +62,7 @@ describe("InstructionPrompt.resolve", () => {
       fn: async () => {
         const filepath = path.join(tmp.path, "subdir", "AGENTS.md")
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(filepath)).toBe(false)
+        expect(system.has(toPosix(filepath))).toBe(false)
 
         const results = await InstructionPrompt.resolve([], filepath, "test-message-2")
         expect(results).toEqual([])
@@ -81,9 +81,9 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
   afterEach(() => {
     if (originalConfigDir === undefined) {
       delete process.env["OPENCODE_CONFIG_DIR"]
-    } else {
-      process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      return
     }
+    process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
   })
 
   test("prefers OPENCODE_CONFIG_DIR AGENTS.md over global when both exist", async () => {
@@ -108,8 +108,8 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(true)
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(false)
+          expect(paths.has(toPosix(path.join(profileTmp.path, "AGENTS.md")))).toBe(true)
+          expect(paths.has(toPosix(path.join(globalTmp.path, "AGENTS.md")))).toBe(false)
         },
       })
     } finally {
@@ -135,8 +135,8 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(false)
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+          expect(paths.has(toPosix(path.join(profileTmp.path, "AGENTS.md")))).toBe(false)
+          expect(paths.has(toPosix(path.join(globalTmp.path, "AGENTS.md")))).toBe(true)
         },
       })
     } finally {
@@ -161,7 +161,7 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+          expect(paths.has(toPosix(path.join(globalTmp.path, "AGENTS.md")))).toBe(true)
         },
       })
     } finally {
