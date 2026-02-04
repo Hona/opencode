@@ -24,8 +24,7 @@ jobs:
             playwright: bunx playwright install
             workdir: .
             command: |
-              bun --cwd packages/opencode test
-              bun --cwd packages/app test:e2e
+              bun turbo test
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
