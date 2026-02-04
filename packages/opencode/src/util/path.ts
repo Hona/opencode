@@ -1,7 +1,7 @@
 import os from "os"
 import nodePath from "node:path"
 
-import { toPosix as baseToPosix } from "@opencode-ai/util/path"
+import { normalizeDirectory as baseNormalizeDirectory, toPosix as baseToPosix } from "@opencode-ai/util/path"
 
 const isWin = process.platform === "win32"
 
@@ -19,7 +19,11 @@ function normalizeArgs(args: string[]) {
   return args.map((x) => toPosix(x))
 }
 
-export { toPosix }
+function normalizeDirectory(input: string) {
+  return toPosix(baseNormalizeDirectory(input))
+}
+
+export { toPosix, normalizeDirectory }
 
 export default {
   ...nodePath,
@@ -32,4 +36,5 @@ export default {
     isWin ? toPosix(nodePath.relative(toPosix(from), toPosix(to))) : nodePath.relative(from, to),
 
   toPosix,
+  normalizeDirectory,
 }

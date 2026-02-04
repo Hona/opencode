@@ -16,7 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import path from "@/util/path"
+import { normalizeDirectory } from "@/util/path"
 
 const log = Log.create({ service: "server" })
 
@@ -55,18 +55,12 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const term = query.search?.toLowerCase()
-        const normalize = (dir: string) => {
-          const normalized = path.normalize(path.toPosix(dir))
-          if (/^[A-Z]:\/$/i.test(normalized) || normalized === "/") return normalized
-          return normalized.replace(/\/+$/, "")
-        }
-
-        const directory = query.directory ? normalize(query.directory) : undefined
+        const directory = query.directory ? normalizeDirectory(query.directory) : undefined
         const directoryKey = directory && process.platform === "win32" ? directory.toLowerCase() : directory
         const sessions: Session.Info[] = []
         for await (const session of Session.list()) {
           if (directoryKey !== undefined) {
-            const sessionDir = normalize(session.directory)
+            const sessionDir = normalizeDirectory(session.directory)
             const sessionKey = process.platform === "win32" ? sessionDir.toLowerCase() : sessionDir
             if (sessionKey !== directoryKey) continue
           }

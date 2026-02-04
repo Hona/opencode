@@ -1,10 +1,5 @@
 import { toPosix } from "@opencode-ai/util/path"
-
-const normalize = (directory: string) => {
-  const normalized = toPosix(directory)
-  if (/^[A-Z]:\/$/i.test(normalized) || normalized === "/") return normalized
-  return normalized.replace(/\/+$/, "")
-}
+import { normalizeDirectory } from "@opencode-ai/util/path"
 
 type State =
   | {
@@ -37,16 +32,16 @@ function deferred() {
 
 export const Worktree = {
   get(directory: string) {
-    return state.get(normalize(directory))
+    return state.get(normalizeDirectory(directory))
   },
   pending(directory: string) {
-    const key = normalize(directory)
+    const key = normalizeDirectory(directory)
     const current = state.get(key)
     if (current && current.status !== "pending") return
     state.set(key, { status: "pending" })
   },
   ready(directory: string) {
-    const key = normalize(directory)
+    const key = normalizeDirectory(directory)
     const next = { status: "ready" } as const
     state.set(key, next)
     const waiter = waiters.get(key)
@@ -55,7 +50,7 @@ export const Worktree = {
     waiter.resolve(next)
   },
   failed(directory: string, message: string) {
-    const key = normalize(directory)
+    const key = normalizeDirectory(directory)
     const next = { status: "failed", message } as const
     state.set(key, next)
     const waiter = waiters.get(key)
@@ -64,7 +59,7 @@ export const Worktree = {
     waiter.resolve(next)
   },
   wait(directory: string) {
-    const key = normalize(directory)
+    const key = normalizeDirectory(directory)
     const current = state.get(key)
     if (current && current.status !== "pending") return Promise.resolve(current)
 

@@ -36,7 +36,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename, toPosix } from "@opencode-ai/util/path"
+import { getFilename, normalizeDirectory } from "@opencode-ai/util/path"
 import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -595,7 +595,7 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
-  const workspaceKey = (directory: string) => toPosix(directory).replace(/\/+$/, "")
+  const workspaceKey = (directory: string) => normalizeDirectory(directory)
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
