@@ -39,7 +39,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getFilenameTruncated, toPosix } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
@@ -482,6 +482,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .map((path) => ({ type: "file", path, display: path }))
       return [...agents, ...pinned, ...fileOptions]
     },
+    normalizeFilter: toPosix,
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {

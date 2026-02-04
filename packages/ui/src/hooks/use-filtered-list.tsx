@@ -14,6 +14,7 @@ export interface FilteredListProps<T> {
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   onSelect?: (value: T | undefined, index: number) => void
   noInitialSelection?: boolean
+  normalizeFilter?: (value: string) => string
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -22,11 +23,16 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   type Group = { category: string; items: [T, ...T[]] }
   const empty: Group[] = []
 
+  const normalize = (value: string) => props.normalizeFilter?.(value) ?? value
+
   const [grouped, { refetch }] = createResource(
-    () => ({
-      filter: store.filter,
-      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
-    }),
+    () => {
+      const filter = normalize(store.filter)
+      return {
+        filter,
+        items: typeof props.items === "function" ? props.items(filter) : props.items,
+      }
+    },
     async ({ filter, items }) => {
       const query = filter ?? ""
       const needle = query.toLowerCase()

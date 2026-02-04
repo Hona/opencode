@@ -5,7 +5,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, toPosix } from "@opencode-ai/util/path"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
@@ -326,6 +326,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         emptyMessage={language.t("palette.empty")}
         loadingMessage={language.t("common.loading")}
         items={items}
+        normalizeFilter={toPosix}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
         groupBy={grouped() ? (item) => item.category : () => ""}
