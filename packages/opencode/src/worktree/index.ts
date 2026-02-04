@@ -12,6 +12,7 @@ import { fn } from "../util/fn"
 import { Log } from "../util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -219,11 +220,15 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
+  function caseInsensitiveKey(value: string) {
+    if (process.platform !== "win32") return value
+    return value.toLowerCase()
+  }
+
   async function canonical(input: string) {
     const abs = path.resolve(input)
     const real = await fs.realpath(abs).catch(() => abs)
-    const normalized = path.normalize(real)
-    return process.platform === "win32" ? normalized.toLowerCase() : normalized
+    return Filesystem.normalizePath(real)
   }
 
   async function candidate(root: string, base?: string) {
@@ -381,7 +386,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = await canonical(input.directory)
+    const directory = caseInsensitiveKey(await canonical(input.directory))
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -407,7 +412,7 @@ export namespace Worktree {
     const entry = await (async () => {
       for (const item of entries) {
         if (!item.path) continue
-        const key = await canonical(item.path)
+        const key = caseInsensitiveKey(await canonical(item.path))
         if (key === directory) return item
       }
     })()
@@ -436,8 +441,8 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = await canonical(input.directory)
-    const primary = await canonical(Instance.worktree)
+    const directory = caseInsensitiveKey(await canonical(input.directory))
+    const primary = caseInsensitiveKey(await canonical(Instance.worktree))
     if (directory === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
@@ -467,7 +472,7 @@ export namespace Worktree {
     const entry = await (async () => {
       for (const item of entries) {
         if (!item.path) continue
-        const key = await canonical(item.path)
+        const key = caseInsensitiveKey(await canonical(item.path))
         if (key === directory) return item
       }
     })()
