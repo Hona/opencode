@@ -22,15 +22,10 @@ mock.module("../../src/bun/index", () => ({
   },
 }))
 
-// Mock Plugin to avoid loading plugins during provider initialization
-mock.module("../../src/plugin/index", () => ({
-  Plugin: {
-    list: async () => [],
-    load: async () => {},
-    reload: async () => {},
-    trigger: async (_name: string, _input: unknown, output: unknown) => output,
-  },
-}))
+// Mock built-in plugins to avoid module resolution failures
+const mockPlugin = () => ({}) as any
+mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
+mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
 Log.init({ print: false })
 
