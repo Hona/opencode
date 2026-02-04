@@ -18,8 +18,6 @@ jobs:
             playwright: bunx playwright install --with-deps
             workdir: .
             command: |
-              git config --global user.email "bot@opencode.ai"
-              git config --global user.name "opencode"
               bun turbo test
           - name: windows
             host: windows-latest
@@ -27,7 +25,7 @@ jobs:
             workdir: .
             command: |
               bun --cwd packages/opencode test
-              bun --cwd packages/app test:e2e:local
+              bun --cwd packages/app test:e2e
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -40,6 +38,11 @@ jobs:
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
 
       - name: Install Playwright browsers
         working-directory: packages/app
@@ -64,7 +67,6 @@ jobs:
           fi
 
       - name: Seed opencode data
-        if: matrix.settings.name != 'windows'
         working-directory: packages/opencode
         run: bun script/seed-e2e.ts
         env:
@@ -83,7 +85,6 @@ jobs:
           OPENCODE_E2E_MODEL: "opencode/gpt-5-nano"
 
       - name: Run opencode server
-        if: matrix.settings.name != 'windows'
         working-directory: packages/opencode
         run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
         env:
@@ -99,7 +100,6 @@ jobs:
           OPENCODE_CLIENT: "app"
 
       - name: Wait for opencode server
-        if: matrix.settings.name != 'windows'
         run: |
           for i in {1..120}; do
             curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
