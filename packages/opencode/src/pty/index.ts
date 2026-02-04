@@ -10,6 +10,7 @@ import path from "@/util/path"
 import { Filesystem } from "@/util/filesystem"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+import { Plugin } from "@/plugin"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -107,9 +108,11 @@ export namespace Pty {
     if (!(await Filesystem.isDir(cwd))) {
       throw new Error(`Invalid cwd: ${cwd}`)
     }
+    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const env = {
       ...process.env,
       ...input.env,
+      ...shellEnv.env,
       TERM: "xterm-256color",
       OPENCODE_TERMINAL: "1",
     } as Record<string, string>
