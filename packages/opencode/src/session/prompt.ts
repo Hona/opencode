@@ -189,45 +189,42 @@ export namespace SessionPrompt {
     ]
     const files = ConfigMarkdown.files(template)
     const seen = new Set<string>()
-    await Promise.all(
-      files.map(async (match) => {
-        const name = match[1]
-        if (seen.has(name)) return
-        seen.add(name)
-        const filepath = name.startsWith("~/")
-          ? path.join(os.homedir(), name.slice(2))
-          : path.resolve(Instance.worktree, name)
+    for (const match of files) {
+      const name = match[1]
+      if (seen.has(name)) continue
+      seen.add(name)
+      const filepath = name.startsWith("~/")
+        ? path.join(os.homedir(), name.slice(2))
+        : path.resolve(Instance.worktree, name)
 
-        const stats = await fs.stat(filepath).catch(() => undefined)
-        if (!stats) {
-          const agent = await Agent.get(name)
-          if (agent) {
-            parts.push({
-              type: "agent",
-              name: agent.name,
-            })
-          }
-          return
-        }
+      const stats = await fs.stat(filepath).catch(() => undefined)
+      if (!stats) {
+        const agent = await Agent.get(name)
+        if (!agent) continue
+        parts.push({
+          type: "agent",
+          name: agent.name,
+        })
+        continue
+      }
 
-        if (stats.isDirectory()) {
-          parts.push({
-            type: "file",
-            url: `file://${filepath}`,
-            filename: name,
-            mime: "application/x-directory",
-          })
-          return
-        }
-
+      if (stats.isDirectory()) {
         parts.push({
           type: "file",
           url: `file://${filepath}`,
           filename: name,
-          mime: "text/plain",
+          mime: "application/x-directory",
         })
-      }),
-    )
+        continue
+      }
+
+      parts.push({
+        type: "file",
+        url: `file://${filepath}`,
+        filename: name,
+        mime: "text/plain",
+      })
+    }
     return parts
   }
 
