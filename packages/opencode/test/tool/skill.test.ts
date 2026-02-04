@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
+import { toPosix } from "@opencode-ai/util/path"
 import type { PermissionNext } from "../../src/permission/next"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
@@ -91,8 +92,8 @@ Use this skill.
           }
 
           const result = await tool.execute({ name: "tool-skill" }, ctx)
-          const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
-          const file = path.resolve(dir, "scripts", "demo.txt")
+          const dir = toPosix(path.join(tmp.path, ".opencode", "skill", "tool-skill"))
+          const file = toPosix(path.resolve(dir, "scripts", "demo.txt"))
 
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("skill")
