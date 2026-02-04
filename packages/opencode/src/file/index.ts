@@ -542,7 +542,7 @@ export namespace File {
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    const query = input.query.trim()
+    const query = path.toPosix(input.query.trim())
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
     log.info("search", { query, kind })

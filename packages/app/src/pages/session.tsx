@@ -41,6 +41,7 @@ import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
+import { toPosix } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
@@ -495,7 +496,7 @@ export default function Page() {
       return "mix" as const
     }
 
-    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
+    const normalize = (p: string) => toPosix(p).replace(/\/+$/, "")
 
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
