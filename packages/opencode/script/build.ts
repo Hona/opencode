@@ -137,6 +137,16 @@ for (const item of targets) {
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
 
+  // Use fork bun runtime for Windows targets
+  // Set BUN_FORK_VERSION env var (e.g. "1.3.9-opencode") to use anomalyco/bun fork binaries
+  const forkVersion = process.env.BUN_FORK_VERSION
+  if (item.os === "win32" && forkVersion) {
+    const variant = item.avx2 === false ? "bun-windows-x64-baseline" : "bun-windows-x64"
+    process.env.BUN_COMPILE_TARGET_TARBALL_URL = `https://github.com/anomalyco/bun/releases/download/v${forkVersion}/${variant}.tgz`
+  } else {
+    delete process.env.BUN_COMPILE_TARGET_TARBALL_URL
+  }
+
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
