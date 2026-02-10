@@ -151,14 +151,15 @@ for (const item of targets) {
     if (!fs.existsSync(forkBin)) {
       const tgzUrl = `https://github.com/anomalyco/bun/releases/download/v${BUN_FORK_VERSION}/${variant}.tgz`
       console.log(`downloading bun fork ${BUN_FORK_VERSION} (${variant})...`)
-      const resp = await fetch(tgzUrl, { redirect: "follow" })
-      if (!resp.ok) throw new Error(`failed to download ${tgzUrl}: ${resp.status}`)
+      console.log(`  ${tgzUrl}`)
       fs.mkdirSync(forkDir, { recursive: true })
       const tgzName = `${variant}.tgz`
-      await Bun.write(path.join(forkDir, tgzName), resp)
+      const tgzPath = path.join(forkDir, tgzName)
+      const dl = Bun.spawnSync(["curl", "-fSL", "-o", tgzName, tgzUrl], { cwd: forkDir })
+      if (dl.exitCode !== 0) throw new Error(`download failed: ${dl.stderr.toString()}`)
       const tar = Bun.spawnSync(["tar", "-xzf", tgzName, "--strip-components=2"], { cwd: forkDir })
       if (tar.exitCode !== 0) throw new Error(`tar extract failed: ${tar.stderr.toString()}`)
-      fs.unlinkSync(path.join(forkDir, tgzName))
+      fs.unlinkSync(tgzPath)
     }
     forkExePath = forkBin
     console.log(`using bun fork: ${forkBin}`)
