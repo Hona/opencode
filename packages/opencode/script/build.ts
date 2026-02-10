@@ -3,6 +3,7 @@
 import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
+import os from "os"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -138,13 +139,29 @@ for (const item of targets) {
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
 
   // Use anomalyco/bun fork for Windows targets (includes Ctrl+C fix from PR #25876)
-  // https://github.com/anomalyco/bun/releases/tag/v1.3.9-opencode.1
-  const BUN_FORK_VERSION = "1.3.9-opencode.1"
+  // https://github.com/anomalyco/bun/releases/tag/v1.3.9-opencode.2
+  // BUN_COMPILE_TARGET_TARBALL_URL only works for cross-compilation, so we download
+  // the fork binary and use executablePath to ensure it works for both native and cross builds.
+  const BUN_FORK_VERSION = "1.3.9-opencode.2"
+  let forkExePath: string | undefined
   if (item.os === "win32") {
     const variant = item.avx2 === false ? "bun-windows-x64-baseline" : "bun-windows-x64"
-    process.env.BUN_COMPILE_TARGET_TARBALL_URL = `https://github.com/anomalyco/bun/releases/download/v${BUN_FORK_VERSION}/${variant}.tgz`
-  } else {
-    delete process.env.BUN_COMPILE_TARGET_TARBALL_URL
+    const forkDir = path.join(os.tmpdir(), "bun-fork", BUN_FORK_VERSION, variant)
+    const forkBin = path.join(forkDir, "bun.exe")
+    if (!fs.existsSync(forkBin)) {
+      const tgzUrl = `https://github.com/anomalyco/bun/releases/download/v${BUN_FORK_VERSION}/${variant}.tgz`
+      console.log(`downloading bun fork ${BUN_FORK_VERSION} (${variant})...`)
+      const resp = await fetch(tgzUrl, { redirect: "follow" })
+      if (!resp.ok) throw new Error(`failed to download ${tgzUrl}: ${resp.status}`)
+      fs.mkdirSync(forkDir, { recursive: true })
+      const tgzName = `${variant}.tgz`
+      await Bun.write(path.join(forkDir, tgzName), resp)
+      const tar = Bun.spawnSync(["tar", "-xzf", tgzName, "--strip-components=2"], { cwd: forkDir })
+      if (tar.exitCode !== 0) throw new Error(`tar extract failed: ${tar.stderr.toString()}`)
+      fs.unlinkSync(path.join(forkDir, tgzName))
+    }
+    forkExePath = forkBin
+    console.log(`using bun fork: ${forkBin}`)
   }
 
   await Bun.build({
@@ -162,6 +179,7 @@ for (const item of targets) {
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
+      executablePath: forkExePath,
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
