@@ -5,6 +5,24 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
+// On Windows, ignore CTRL_C_EVENT in this shim process so only the child
+// (the real opencode binary) handles Ctrl+C gracefully. Without this, stock
+// Bun's shim dies instantly on Ctrl+C, killing the child mid-cleanup.
+// Uses bun:ffi to call Win32 SetConsoleCtrlHandler(NULL, TRUE).
+// No-op under Node.js where bun:ffi is unavailable.
+if (os.platform() === "win32") {
+  try {
+    var ffi = require("bun:ffi")
+    var kernel32 = ffi.dlopen("kernel32.dll", {
+      SetConsoleCtrlHandler: {
+        args: [ffi.FFIType.ptr, ffi.FFIType.i32],
+        returns: ffi.FFIType.i32,
+      },
+    })
+    kernel32.symbols.SetConsoleCtrlHandler(null, 1)
+  } catch {}
+}
+
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
