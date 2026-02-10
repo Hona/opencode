@@ -15,5 +15,9 @@ const dir = "src-tauri/target/opencode-binaries"
 
 await $`mkdir -p ${dir}`
 await $`gh run download ${Bun.env.GITHUB_RUN_ID} -n opencode-cli`.cwd(dir)
+// Windows CLI binaries are built in a separate job using the bun fork.
+// nothrow() because this artifact only exists for the Windows target — non-Windows
+// Tauri builds won't have it and that's expected.
+await $`gh run download ${Bun.env.GITHUB_RUN_ID} -n opencode-cli-windows`.cwd(dir).nothrow()
 
 await copyBinaryToSidecarFolder(windowsify(`${dir}/${sidecarConfig.ocBinary}/bin/opencode`))

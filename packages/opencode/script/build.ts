@@ -29,6 +29,9 @@ console.log("Generated models-snapshot.ts")
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const skipRelease = process.argv.includes("--skip-release")
+const osFilter = process.argv.filter((a) => a.startsWith("--os=")).map((a) => a.split("=")[1])
+const excludeOs = process.argv.filter((a) => a.startsWith("--exclude-os=")).map((a) => a.split("=")[1])
 
 const allTargets: {
   os: string
@@ -89,26 +92,18 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
-
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
-
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
-
-      return true
-    })
-  : allTargets
+const targets = allTargets.filter((item) => {
+  if (osFilter.length && !osFilter.includes(item.os)) return false
+  if (excludeOs.includes(item.os)) return false
+  if (!singleFlag) return true
+  if (item.os !== process.platform || item.arch !== process.arch) return false
+  // When building for the current platform, prefer a single native binary by default.
+  // Baseline binaries require additional Bun artifacts and can be flaky to download.
+  if (item.avx2 === false) return baselineFlag
+  // also skip abi-specific builds for the same reason
+  if (item.abi !== undefined) return false
+  return true
+})
 
 await $`rm -rf dist`
 
@@ -142,27 +137,32 @@ for (const item of targets) {
   // https://github.com/anomalyco/bun/releases/tag/v1.3.9-opencode.2
   // BUN_COMPILE_TARGET_TARBALL_URL only works for cross-compilation, so we download
   // the fork binary and use executablePath to ensure it works for both native and cross builds.
+  // When running natively on Windows (build-cli-windows job), the fork is already the
+  // system Bun so executablePath is only needed for the baseline variant.
   const BUN_FORK_VERSION = "1.3.9-opencode.2"
   let forkExePath: string | undefined
   if (item.os === "win32") {
-    const variant = item.avx2 === false ? "bun-windows-x64-baseline" : "bun-windows-x64"
-    const forkDir = path.join(os.tmpdir(), "bun-fork", BUN_FORK_VERSION, variant)
-    const forkBin = path.join(forkDir, "bun.exe")
-    if (!fs.existsSync(forkBin)) {
-      const tgzUrl = `https://github.com/anomalyco/bun/releases/download/v${BUN_FORK_VERSION}/${variant}.tgz`
-      console.log(`downloading bun fork ${BUN_FORK_VERSION} (${variant})...`)
-      console.log(`  ${tgzUrl}`)
-      fs.mkdirSync(forkDir, { recursive: true })
-      const tgzName = `${variant}.tgz`
-      const tgzPath = path.join(forkDir, tgzName)
-      const dl = Bun.spawnSync(["curl", "-fSL", "-o", tgzName, tgzUrl], { cwd: forkDir })
-      if (dl.exitCode !== 0) throw new Error(`download failed: ${dl.stderr.toString()}`)
-      const tar = Bun.spawnSync(["tar", "-xzf", tgzName, "--strip-components=2"], { cwd: forkDir })
-      if (tar.exitCode !== 0) throw new Error(`tar extract failed: ${tar.stderr.toString()}`)
-      fs.unlinkSync(tgzPath)
+    const native = process.platform === "win32"
+    if (!native || item.avx2 === false) {
+      const variant = item.avx2 === false ? "bun-windows-x64-baseline" : "bun-windows-x64"
+      const forkDir = path.join(os.tmpdir(), "bun-fork", BUN_FORK_VERSION, variant)
+      const forkBin = path.join(forkDir, "bun.exe")
+      if (!fs.existsSync(forkBin)) {
+        const tgzUrl = `https://github.com/anomalyco/bun/releases/download/v${BUN_FORK_VERSION}/${variant}.tgz`
+        console.log(`downloading bun fork ${BUN_FORK_VERSION} (${variant})...`)
+        console.log(`  ${tgzUrl}`)
+        fs.mkdirSync(forkDir, { recursive: true })
+        const tgzName = `${variant}.tgz`
+        const tgzPath = path.join(forkDir, tgzName)
+        const dl = Bun.spawnSync(["curl", "-fSL", "-o", tgzName, tgzUrl], { cwd: forkDir })
+        if (dl.exitCode !== 0) throw new Error(`download failed: ${dl.stderr.toString()}`)
+        const tar = Bun.spawnSync(["tar", "-xzf", tgzName, "--strip-components=2"], { cwd: forkDir })
+        if (tar.exitCode !== 0) throw new Error(`tar extract failed: ${tar.stderr.toString()}`)
+        fs.unlinkSync(tgzPath)
+      }
+      forkExePath = forkBin
+      console.log(`using bun fork: ${forkBin}`)
     }
-    forkExePath = forkBin
-    console.log(`using bun fork: ${forkBin}`)
   }
 
   await Bun.build({
@@ -208,15 +208,20 @@ for (const item of targets) {
   binaries[name] = Script.version
 }
 
-if (Script.release) {
+if (Script.release && !skipRelease) {
+  const archives: string[] = []
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
       await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+      archives.push(`./dist/${key}.tar.gz`)
     } else {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+      archives.push(`./dist/${key}.zip`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber`
+  if (archives.length) {
+    await $`gh release upload v${Script.version} ${archives} --clobber`
+  }
 }
 
 export { binaries }

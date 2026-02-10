@@ -12,7 +12,10 @@ if (!expectedBunVersion) {
 // relax version requirement
 const expectedBunVersionRange = `^${expectedBunVersion}`
 
-if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
+if (
+  !process.env["OPENCODE_SKIP_BUN_VERSION_CHECK"] &&
+  !semver.satisfies(process.versions.bun, expectedBunVersionRange)
+) {
   throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
 }
 
