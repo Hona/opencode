@@ -179,7 +179,7 @@ for (const item of targets) {
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
-      executablePath: forkExePath,
+      ...(forkExePath ? { executablePath: forkExePath } : {}),
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
