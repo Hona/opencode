@@ -52,7 +52,7 @@ function supportsAvx2() {
 
   if (platform === "linux") {
     try {
-      return fs.readFileSync("/proc/cpuinfo", "utf8").toLowerCase().includes(" avx2")
+      return /(^|\s)avx2(\s|$)/i.test(fs.readFileSync("/proc/cpuinfo", "utf8"))
     } catch {
       return false
     }

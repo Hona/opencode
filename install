@@ -130,7 +130,7 @@ else
     needs_baseline=false
     if [ "$arch" = "x64" ]; then
       if [ "$os" = "linux" ]; then
-        if ! grep -qi avx2 /proc/cpuinfo 2>/dev/null; then
+        if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
           needs_baseline=true
         fi
       fi
