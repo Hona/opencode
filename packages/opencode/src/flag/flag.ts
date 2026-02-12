@@ -1,6 +1,10 @@
+function truthyValue(value: string | undefined) {
+  const v = value?.toLowerCase()
+  return v === "true" || v === "1"
+}
+
 function truthy(key: string) {
-  const value = process.env[key]?.toLowerCase()
-  return value === "true" || value === "1"
+  return truthyValue(process.env[key])
 }
 
 export namespace Flag {
@@ -39,7 +43,7 @@ export namespace Flag {
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
   const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
-    copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
+    copy === undefined ? process.platform === "win32" : truthyValue(copy)
   export const OPENCODE_ENABLE_EXA =
     truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
   export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")

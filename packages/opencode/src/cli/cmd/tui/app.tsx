@@ -1,5 +1,6 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
+import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
@@ -210,22 +211,19 @@ function App() {
   const promptRef = usePromptRef()
 
   useKeyboard((evt) => {
-    const selection = renderer.getSelection()
-    if (!selection) return
+    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!renderer.getSelection()) return
 
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
     // - Esc dismisses selection
     // - Most other key input dismisses selection and is passed through
     if (evt.ctrl && evt.name === "c") {
-      const text = selection.getSelectedText()
-      if (text) {
-        Clipboard.copy(text)
-          .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-          .catch(toast.error)
+      if (!Selection.copy(renderer, toast)) {
+        renderer.clearSelection()
+        return
       }
 
-      renderer.clearSelection()
       evt.preventDefault()
       evt.stopPropagation()
       return
@@ -739,30 +737,11 @@ function App() {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
-        const text = renderer.getSelection()?.getSelectedText()
-        if (!text) return
-
-        Clipboard.copy(text)
-          .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-          .catch(toast.error)
-
-        renderer.clearSelection()
+        if (!Selection.copy(renderer, toast)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? undefined
-          : async () => {
-              const text = renderer.getSelection()?.getSelectedText()
-              if (text && text.length > 0) {
-                await Clipboard.copy(text)
-                  .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-                  .catch(toast.error)
-                renderer.clearSelection()
-              }
-            }
-      }
+      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Switch>
         <Match when={route.data.type === "home"}>

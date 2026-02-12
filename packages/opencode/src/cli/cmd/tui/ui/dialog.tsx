@@ -3,9 +3,9 @@ import { batch, createContext, Show, useContext, type JSX, type ParentProps } fr
 import { useTheme } from "@tui/context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
-import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
 import { Flag } from "@/flag/flag"
+import { Selection } from "@tui/util/selection"
 
 export function Dialog(
   props: ParentProps<{
@@ -17,10 +17,18 @@ export function Dialog(
   const { theme } = useTheme()
   const renderer = useRenderer()
 
+  let dismiss = false
+
   return (
     <box
-      onMouseUp={async () => {
-        if (renderer.getSelection()) return
+      onMouseDown={() => {
+        dismiss = !!renderer.getSelection()
+      }}
+      onMouseUp={() => {
+        if (dismiss) {
+          dismiss = false
+          return
+        }
         props.onClose?.()
       }}
       width={dimensions().width}
@@ -33,8 +41,8 @@ export function Dialog(
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
-        onMouseUp={async (e) => {
-          if (renderer.getSelection()) return
+        onMouseUp={(e) => {
+          dismiss = false
           e.stopPropagation()
         }}
         width={props.size === "large" ? 80 : 60}
@@ -61,6 +69,7 @@ function init() {
 
   useKeyboard((evt) => {
     if (store.stack.length === 0) return
+    if (evt.defaultPrevented) return
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()) return
     if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
       const current = store.stack.at(-1)!
@@ -146,29 +155,12 @@ export function DialogProvider(props: ParentProps) {
           if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
 
-          const text = renderer.getSelection()?.getSelectedText()
-          if (!text) return
-
-          Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-
-          renderer.clearSelection()
+          if (!Selection.copy(renderer, toast)) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
         onMouseUp={
-          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-            ? async () => {
-                const text = renderer.getSelection()?.getSelectedText()
-                if (text && text.length > 0) {
-                  await Clipboard.copy(text)
-                    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-                    .catch(toast.error)
-                  renderer.clearSelection()
-                }
-              }
-            : undefined
+          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
         }
       >
         <Show when={value.stack.length}>
