@@ -72,16 +72,6 @@ function supportsAvx2() {
   }
 
   if (platform === "windows") {
-    try {
-      const { dlopen } = require("bun:ffi")
-      const k32 = dlopen("kernel32.dll", {
-        IsProcessorFeaturePresent: { args: ["u32"], returns: "i32" },
-      })
-      return k32.symbols.IsProcessorFeaturePresent(40) !== 0
-    } catch {
-      // ignore
-    }
-
     const cmd =
       '(Add-Type -MemberDefinition "[DllImport(""kernel32.dll"")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
 
@@ -101,7 +91,7 @@ function supportsAvx2() {
       }
     }
 
-    return false
+    return true
   }
 
   return false
