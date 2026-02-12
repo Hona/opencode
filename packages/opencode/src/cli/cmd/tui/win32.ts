@@ -8,7 +8,7 @@ const kernel = () =>
     GetStdHandle: { args: ["i32"], returns: "ptr" },
     GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
     SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
-    SetConsoleCtrlHandler: { args: ["ptr", "i32"], returns: "i32" },
+    FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
   })
 
 let k32: ReturnType<typeof kernel> | undefined
@@ -41,18 +41,15 @@ export function win32DisableProcessedInput() {
 }
 
 /**
- * Tell Windows to ignore CTRL_C_EVENT for this process.
- *
- * SetConsoleCtrlHandler(NULL, TRUE) makes the process ignore Ctrl+C
- * signals at the OS level. Belt-and-suspenders alongside disabling
- * ENABLE_PROCESSED_INPUT.
+ * Discard any queued console input (mouse events, key presses, etc.).
  */
-export function win32IgnoreCtrlC() {
+export function win32FlushInputBuffer() {
   if (process.platform !== "win32") return
   if (!process.stdin.isTTY) return
   if (!load()) return
 
-  k32!.symbols.SetConsoleCtrlHandler(null, 1)
+  const handle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
+  k32!.symbols.FlushConsoleInputBuffer(handle)
 }
 
 let unhook: (() => void) | undefined
@@ -80,6 +77,9 @@ export function win32InstallCtrlCGuard() {
   const handle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
   const buf = new Uint32Array(1)
 
+  if (k32!.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
+  const initial = buf[0]!
+
   const enforce = () => {
     if (k32!.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
     const mode = buf[0]!
@@ -93,24 +93,35 @@ export function win32InstallCtrlCGuard() {
     setImmediate(enforce)
   }
 
+  let wrapped: ((mode: boolean) => unknown) | undefined
+
   if (typeof original === "function") {
-    stdin.setRawMode = (mode: boolean) => {
+    wrapped = (mode: boolean) => {
       const result = original.call(stdin, mode)
       later()
       return result
     }
+
+    stdin.setRawMode = wrapped
   }
 
   // Ensure it's cleared immediately too (covers any earlier mode changes).
   later()
 
   const interval = setInterval(enforce, 100)
+  interval.unref()
 
+  let done = false
   unhook = () => {
+    if (done) return
+    done = true
+
     clearInterval(interval)
-    if (typeof original === "function") {
+    if (wrapped && stdin.setRawMode === wrapped) {
       stdin.setRawMode = original
     }
+
+    k32!.symbols.SetConsoleMode(handle, initial)
     unhook = undefined
   }
 
