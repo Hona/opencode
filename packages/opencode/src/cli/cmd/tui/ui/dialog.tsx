@@ -1,10 +1,11 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { Renderable, RGBA } from "@opentui/core"
+import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
+import { Flag } from "@/flag/flag"
 
 export function Dialog(
   props: ParentProps<{
@@ -56,8 +57,12 @@ function init() {
     size: "medium" as "medium" | "large",
   })
 
+  const renderer = useRenderer()
+
   useKeyboard((evt) => {
-    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && store.stack.length > 0) {
+    if (store.stack.length === 0) return
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()) return
+    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
@@ -67,7 +72,6 @@ function init() {
     }
   })
 
-  const renderer = useRenderer()
   let focus: Renderable | null
   function refocus() {
     setTimeout(() => {
@@ -138,15 +142,34 @@ export function DialogProvider(props: ParentProps) {
       {props.children}
       <box
         position="absolute"
-        onMouseUp={async () => {
+        onMouseDown={(evt) => {
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (evt.button !== MouseButton.RIGHT) return
+
           const text = renderer.getSelection()?.getSelectedText()
-          if (text && text.length > 0) {
-            await Clipboard.copy(text)
-              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-              .catch(toast.error)
-            renderer.clearSelection()
-          }
+          if (!text) return
+
+          Clipboard.copy(text)
+            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .catch(toast.error)
+
+          renderer.clearSelection()
+          evt.preventDefault()
+          evt.stopPropagation()
         }}
+        onMouseUp={
+          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+            ? async () => {
+                const text = renderer.getSelection()?.getSelectedText()
+                if (text && text.length > 0) {
+                  await Clipboard.copy(text)
+                    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+                    .catch(toast.error)
+                  renderer.clearSelection()
+                }
+              }
+            : undefined
+        }
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>
