@@ -3,7 +3,9 @@ use process_wrap::tokio::CommandWrap;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 #[cfg(windows)]
-use process_wrap::tokio::{JobObject, KillOnDrop};
+use process_wrap::tokio::{CreationFlags, JobObject, KillOnDrop};
+#[cfg(windows)]
+use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::sync::Arc;
@@ -318,9 +320,6 @@ pub fn spawn_command(
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
 
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000);
-
     let mut wrap = CommandWrap::from(cmd);
 
     #[cfg(unix)]
@@ -330,7 +329,9 @@ pub fn spawn_command(
 
     #[cfg(windows)]
     {
-        wrap.wrap(JobObject).wrap(KillOnDrop);
+        wrap.wrap(CreationFlags(CREATE_NO_WINDOW))
+            .wrap(JobObject)
+            .wrap(KillOnDrop);
     }
 
     let mut child = wrap.spawn()?;
