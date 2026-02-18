@@ -3,9 +3,7 @@ use process_wrap::tokio::CommandWrap;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 #[cfg(windows)]
-use process_wrap::tokio::{CreationFlags, JobObject, KillOnDrop};
-#[cfg(windows)]
-use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+use process_wrap::tokio::{CommandWrapper, JobObject, KillOnDrop};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::sync::Arc;
@@ -20,9 +18,24 @@ use tokio::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
+#[cfg(windows)]
+use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
 use crate::server::get_wsl_config;
 
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+// Keep this as a custom wrapper instead of process_wrap::CreationFlags.
+// JobObject pre_spawn rewrites creation flags, so this must run after it.
+struct WinCreationFlags;
+
+#[cfg(windows)]
+impl CommandWrapper for WinCreationFlags {
+    fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
+        command.creation_flags((CREATE_NO_WINDOW | CREATE_SUSPENDED).0);
+        Ok(())
+    }
+}
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -205,7 +218,7 @@ fn get_user_shell() -> String {
 }
 
 fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
-  get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
+    get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -329,9 +342,7 @@ pub fn spawn_command(
 
     #[cfg(windows)]
     {
-        wrap.wrap(CreationFlags(CREATE_NO_WINDOW))
-            .wrap(JobObject)
-            .wrap(KillOnDrop);
+        wrap.wrap(JobObject).wrap(WinCreationFlags).wrap(KillOnDrop);
     }
 
     let mut child = wrap.spawn()?;
