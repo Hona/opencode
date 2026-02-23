@@ -1347,7 +1347,7 @@ export namespace Config {
               try {
                 data.plugin[i] = import.meta.resolve!(plugin, options.path)
               } catch {
-                // Ignore, plugin might be a generic string identifier like "jira"
+                // Ignore, plugin might be a generic string identifier like "mcp-server"
               }
             }
           }

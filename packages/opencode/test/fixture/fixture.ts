@@ -9,40 +9,6 @@ function sanitizePath(p: string): string {
   return p.replace(/\0/g, "")
 }
 
-const GIT_TEMPLATE = [
-  {
-    path: ".git/config",
-    content:
-      "W2NvcmVdCglyZXBvc2l0b3J5Zm9ybWF0dmVyc2lvbiA9IDAKCWZpbGVtb2RlID0gZmFsc2UKCWJhcmUgPSBmYWxzZQoJbG9nYWxscmVmdXBkYXRlcyA9IHRydWUKCWlnbm9yZWNhc2UgPSB0cnVlCg==",
-  },
-  {
-    path: ".git/description",
-    content: "VW5uYW1lZCByZXBvc2l0b3J5OyBlZGl0IHRoaXMgZmlsZSAnZGVzY3JpcHRpb24nIHRvIG5hbWUgdGhlIHJlcG9zaXRvcnkuCg==",
-  },
-  {
-    path: ".git/HEAD",
-    content: "cmVmOiByZWZzL2hlYWRzL21hc3Rlcgo=",
-  },
-  {
-    path: ".git/info/exclude",
-    content:
-      "IyBnaXQgbHMtZmlsZXMgLS1vdGhlcnMgLS1leGNsdWRlLWZyb209LmdpdC9pbmZvL2V4Y2x1ZGUKIyBMaW5lcyB0aGF0IHN0YXJ0IHdpdGggJyMnIGFyZSBjb21tZW50cy4KIyBGb3IgYSBwcm9qZWN0IG1vc3RseSBpbiBDLCB0aGUgZm9sbG93aW5nIHdvdWxkIGJlIGEgZ29vZCBzZXQgb2YKIyBleGNsdWRlIHBhdHRlcm5zICh1bmNvbW1lbnQgdGhlbSBpZiB5b3Ugd2FudCB0byB1c2UgdGhlbSk6CiMgKi5bb2FdCiMgKn4K",
-  },
-  {
-    path: ".git/objects/4b/825dc642cb6eb9a060e54bf8d69288fbee4904",
-    content: "eAErKUpNVTBgAAAKLAIB",
-  },
-  {
-    path: ".git/objects/57/47945c9cea2d26bb461e85f2f92fde96a86069",
-    content:
-      "eAGtzk0KwjAQQGHXOcXsC2US0/yAiAsXLlx4hSSdWqntSJoI3t6CV3D7Fh8v8Tw/CiiFu5KJQEenuj4ZrVI0FH1Ag9TpOLjeeOXcEIm0Ry1CLSNnuNaJbiFPlM/0hoNEvUfnsbnwEk51pby2C2d6PT/t/VHGGtvE8xGktdJJa7yFRiKi2Or2Ueh/osjMBX6u+AJw/EeI",
-  },
-  {
-    path: ".git/refs/heads/master",
-    content: "NTc0Nzk0NWM5Y2VhMmQyNmJiNDYxZTg1ZjJmOTJmZGU5NmE4NjA2OQo=",
-  },
-]
-
 let gitTemplatePromise: Promise<string> | undefined
 async function getGitTemplate() {
   if (gitTemplatePromise) return gitTemplatePromise
@@ -51,11 +17,21 @@ async function getGitTemplate() {
       os.tmpdir(),
       "opencode-git-template-" + process.pid + "-" + Math.random().toString(36).slice(2),
     )
-    for (const file of GIT_TEMPLATE) {
-      const fullPath = path.join(templatePath, file.path)
-      await fs.mkdir(path.dirname(fullPath), { recursive: true })
-      await fs.writeFile(fullPath, Buffer.from(file.content, "base64"))
+    await fs.mkdir(templatePath, { recursive: true })
+
+    // Retry logic to handle Windows CI resource exhaustion
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await $`git init`.cwd(templatePath).quiet()
+        await $`git commit --allow-empty -m "root commit"`.cwd(templatePath).quiet()
+        break // Success
+      } catch (err) {
+        if (attempt === 5) throw err
+        // Wait before retrying to let other processes finish
+        await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000))
+      }
     }
+
     return templatePath
   })()
   return gitTemplatePromise
@@ -73,6 +49,10 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   if (options?.git) {
     const templatePath = await getGitTemplate()
     await fs.cp(templatePath, dirpath, { recursive: true })
+
+    // Write a unique project ID to .git/opencode so that projects sharing the exact same
+    // git template commit hash don't incorrectly collide in the test Database.
+    await fs.writeFile(path.join(dirpath, ".git", "opencode"), "test-id-" + Math.random().toString(36).slice(2))
   }
   if (options?.config) {
     await Bun.write(
