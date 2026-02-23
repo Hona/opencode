@@ -280,7 +280,9 @@ export namespace Config {
         "@opencode-ai/plugin": targetVersion,
       }
       await Filesystem.writeJson(pkg, json)
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      // Brief delay to let filesystem flush before bun install reads the file.
+      // Skipped on CI where --no-cache already ensures clean installs.
+      if (!process.env.CI) await new Promise((resolve) => setTimeout(resolve, 3000))
 
       const gitignore = path.join(dir, ".gitignore")
       const hasGitIgnore = await Filesystem.exists(gitignore)
