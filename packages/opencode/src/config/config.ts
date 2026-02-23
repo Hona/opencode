@@ -265,47 +265,39 @@ export namespace Config {
     await Promise.all(deps)
   }
 
-  let installMutex = Promise.resolve()
-
   export async function installDependencies(dir: string) {
-    const execute = async () => {
-      const pkg = path.join(dir, "package.json")
-      const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+    const pkg = path.join(dir, "package.json")
+    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
-      const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
-        dependencies: {},
-      }))
-      json.dependencies = {
-        ...json.dependencies,
-        "@opencode-ai/plugin": targetVersion,
-      }
-      await Filesystem.writeJson(pkg, json)
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-
-      const gitignore = path.join(dir, ".gitignore")
-      const hasGitIgnore = await Filesystem.exists(gitignore)
-      if (!hasGitIgnore)
-        await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-      // Install any additional dependencies defined in the package.json
-      // This allows local plugins and custom tools to use external packages
-      await BunProc.run(
-        [
-          "install",
-          // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-          ...(proxied() || !!process.env.CI || !!process.env.OPENCODE_E2E ? ["--no-cache"] : []),
-        ],
-        { cwd: dir },
-      ).catch((err) => {
-        log.warn("failed to install dependencies", { dir, error: err })
-      })
+    const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
+      dependencies: {},
+    }))
+    json.dependencies = {
+      ...json.dependencies,
+      "@opencode-ai/plugin": targetVersion,
     }
+    await Filesystem.writeJson(pkg, json)
+    await new Promise((resolve) => setTimeout(resolve, 3000))
 
-    // Serialize bun install calls to prevent Windows NTFS cache corruption
-    // when multiple directories trigger installation simultaneously.
-    const run = installMutex.then(execute)
-    installMutex = run.catch(() => {})
-    await run
+    const gitignore = path.join(dir, ".gitignore")
+    const hasGitIgnore = await Filesystem.exists(gitignore)
+    if (!hasGitIgnore)
+      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
+    // Install any additional dependencies defined in the package.json
+    // This allows local plugins and custom tools to use external packages
+    await BunProc.run(
+      [
+        "install",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        // Bypass global cache in E2E environments to prevent concurrent lock contention
+        // on Windows when multiple Playwright worker backends initialize plugins simultaneously.
+        ...(proxied() || !!process.env.OPENCODE_E2E_PROJECT_DIR ? ["--no-cache"] : []),
+      ],
+      { cwd: dir },
+    ).catch((err) => {
+      log.warn("failed to install dependencies", { dir, error: err })
+    })
   }
 
   async function isWritable(dir: string) {
