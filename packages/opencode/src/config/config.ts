@@ -293,9 +293,9 @@ export namespace Config {
         [
           "install",
           // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-          // Bypass global cache in E2E environments to prevent concurrent lock contention
-          // on Windows when multiple Playwright worker backends initialize plugins simultaneously.
-          ...(proxied() || !!process.env.OPENCODE_E2E_PROJECT_DIR ? ["--no-cache"] : []),
+          // Bypass global cache on CI and E2E environments to prevent concurrent
+          // lock contention when multiple processes install simultaneously.
+          ...(proxied() || !!process.env.CI || !!process.env.OPENCODE_E2E_PROJECT_DIR ? ["--no-cache"] : []),
         ],
         { cwd: dir },
       ).catch((err) => {
