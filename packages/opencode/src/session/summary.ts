@@ -72,15 +72,12 @@ export namespace SessionSummary {
       messageID: z.string(),
     }),
     async (input) => {
-      try {
-        const all = await Session.messages({ sessionID: input.sessionID })
-        await Promise.all([
-          summarizeSession({ sessionID: input.sessionID, messages: all }),
-          summarizeMessage({ messageID: input.messageID, messages: all }),
-        ])
-      } catch {
-        // Session may have been deleted concurrently; safe to ignore
-      }
+      const all = await Session.messages({ sessionID: input.sessionID }).catch(() => [] as MessageV2.WithParts[])
+      if (!all.length) return
+      await Promise.all([
+        summarizeSession({ sessionID: input.sessionID, messages: all }).catch(() => {}),
+        summarizeMessage({ messageID: input.messageID, messages: all }).catch(() => {}),
+      ])
     },
   )
 
