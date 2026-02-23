@@ -1334,22 +1334,18 @@ export namespace Config {
           try {
             data.plugin[i] = import.meta.resolve!(plugin, options.path)
           } catch (e) {
-            try {
-              // import.meta.resolve sometimes fails with newly created node_modules on Windows
-              const url = new URL(options.path)
-              let pathname = url.pathname
-              if (process.platform === "win32" && pathname.startsWith("/")) {
-                pathname = pathname.slice(1)
-              }
-              const resolvedPath = Bun.resolveSync(plugin, path.dirname(pathname))
-              data.plugin[i] = pathToFileURL(resolvedPath).href
-            } catch (err) {
+            if (process.platform === "win32") {
               try {
-                data.plugin[i] = import.meta.resolve!(plugin, options.path)
+                // import.meta.resolve sometimes fails with newly created node_modules on Windows tests
+                const url = new URL(options.path)
+                const pathname = url.pathname.startsWith("/") ? url.pathname.slice(1) : url.pathname
+                const resolvedPath = Bun.resolveSync(plugin, path.dirname(pathname))
+                data.plugin[i] = pathToFileURL(resolvedPath).href
               } catch {
                 // Ignore, plugin might be a generic string identifier like "mcp-server"
               }
             }
+            // If not Windows, or if fallback failed, it remains unchanged (generic identifier)
           }
         }
       }

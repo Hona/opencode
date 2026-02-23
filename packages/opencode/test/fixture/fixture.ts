@@ -23,6 +23,8 @@ async function getGitTemplate() {
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         await $`git init`.cwd(templatePath).quiet()
+        await $`git config core.longpaths true`.cwd(templatePath).quiet()
+        await $`git config core.symlinks true`.cwd(templatePath).quiet()
         await $`git commit --allow-empty -m "root commit"`.cwd(templatePath).quiet()
         break // Success
       } catch (err) {
@@ -64,7 +66,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
     )
   }
   const extra = await options?.init?.(dirpath)
-  const realpath = sanitizePath(await fs.realpath(dirpath))
+  const realpath = sanitizePath(await fs.realpath(dirpath)).replaceAll("\\", "/")
   const result = {
     [Symbol.asyncDispose]: async () => {
       await options?.dispose?.(dirpath)

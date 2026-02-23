@@ -216,9 +216,6 @@ export namespace Project {
           updated: Date.now(),
         },
       }
-      if (data.id !== "global") {
-        await migrateFromGlobal(data.id, data.worktree)
-      }
       return fresh
     })
 
@@ -263,6 +260,11 @@ export namespace Project {
     Database.use((db) =>
       db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
     )
+
+    if (!row && data.id !== "global") {
+      await migrateFromGlobal(data.id, data.worktree)
+    }
+
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
@@ -309,7 +311,7 @@ export namespace Project {
 
     await work(10, sessions, async (row) => {
       // Skip sessions that belong to a different directory
-      if (row.directory && row.directory !== worktree) return
+      if (row.directory && row.directory.replaceAll("\\", "/") !== worktree.replaceAll("\\", "/")) return
 
       log.info("migrating session", { sessionID: row.id, from: "global", to: id })
       Database.use((db) => db.update(SessionTable).set({ project_id: id }).where(eq(SessionTable.id, row.id)).run())

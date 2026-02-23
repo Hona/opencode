@@ -83,6 +83,12 @@ export namespace SessionPrompt {
     },
   )
 
+  export function init() {
+    Bus.subscribe(Session.Event.Deleted, async (payload) => {
+      cancel(payload.properties.info.id)
+    })
+  }
+
   export function assertNotBusy(sessionID: string) {
     const match = state()[sessionID]
     if (match) throw new Session.BusyError(sessionID)
