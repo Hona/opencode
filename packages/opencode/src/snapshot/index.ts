@@ -67,6 +67,10 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.longpaths true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.symlinks true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.fscache true`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.preloadIndex true`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.untrackedCache true`.quiet().nothrow()
+      await $`git --git-dir ${git} config gc.auto 0`.quiet().nothrow()
       log.info("initialized")
     }
     await add(git)
