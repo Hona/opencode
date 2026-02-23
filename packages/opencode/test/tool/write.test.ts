@@ -293,9 +293,47 @@ describe("tool.write", () => {
   })
 
   describe("error handling", () => {
-    test("throws error for paths outside project", async () => {
+    test("throws error when OS denies write access", async () => {
       await using tmp = await tmpdir()
-      const outsidePath = "/etc/passwd"
+      const readonlyPath = path.join(tmp.path, "readonly.txt")
+
+      // Create a read-only file
+      await fs.writeFile(readonlyPath, "test", "utf-8")
+      await fs.chmod(readonlyPath, 0o444)
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          FileTime.read(ctx.sessionID, readonlyPath)
+
+          const write = await WriteTool.init()
+          await expect(
+            write.execute(
+              {
+                filePath: readonlyPath,
+                content: "new content",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow()
+        },
+      })
+    })
+
+    test("throws error when user denies permission for path outside project", async () => {
+      await using tmp = await tmpdir()
+      const outsidePath = path.join(require("os").tmpdir(), "outside.txt")
+
+      // Mock a context that rejects the external_directory permission
+      const denyingCtx = {
+        ...ctx,
+        ask: async (req: any) => {
+          if (req.permission === "external_directory") {
+            throw new Error("Permission denied")
+          }
+        },
+      }
 
       await Instance.provide({
         directory: tmp.path,
@@ -307,9 +345,9 @@ describe("tool.write", () => {
                 filePath: outsidePath,
                 content: "test",
               },
-              ctx,
+              denyingCtx,
             ),
-          ).rejects.toThrow()
+          ).rejects.toThrow("Permission denied")
         },
       })
     })

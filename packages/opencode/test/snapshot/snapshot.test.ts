@@ -7,7 +7,7 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
 async function bootstrap() {
-  return tmpdir({
+  const tmp = await tmpdir({
     git: true,
     init: async (dir) => {
       const unique = Math.random().toString(36).slice(2)
@@ -23,6 +23,13 @@ async function bootstrap() {
       }
     },
   })
+
+  if (process.platform === "win32") {
+    // Override the path getter to ensure forward slashes on Windows for template strings
+    Object.defineProperty(tmp, "path", { value: tmp.path.replaceAll("\\", "/") })
+  }
+
+  return tmp
 }
 
 test("tracks deleted files correctly", async () => {
