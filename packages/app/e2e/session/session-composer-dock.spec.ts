@@ -82,8 +82,7 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["README.md"],
-        description: "Need permission for command",
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
@@ -107,7 +106,7 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["REJECT.md"],
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
@@ -128,8 +127,7 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
       await seedSessionPermission(sdk, {
         sessionID: session.id,
         permission: "bash",
-        patterns: ["README.md"],
-        description: "Need permission for command",
+        patterns: [`REJECT_${Date.now()}.md`],
       })
 
       await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
