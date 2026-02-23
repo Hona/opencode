@@ -6,6 +6,7 @@ import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Sh
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { getScrollAcceleration } from "../../util/scroll"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -605,6 +606,7 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(sync.data.config.tui))
 
   return (
     <box
@@ -622,6 +624,7 @@ export function Autocomplete(props: {
         backgroundColor={theme.backgroundMenu}
         height={height()}
         scrollbarOptions={{ visible: false }}
+        scrollAcceleration={scrollAcceleration()}
       >
         <Index
           each={options()}

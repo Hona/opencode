@@ -80,16 +80,7 @@ import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
-
-class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
-
-  tick(_now?: number): number {
-    return this.speed
-  }
-
-  reset(): void {}
-}
+import { getScrollAcceleration } from "../../util/scroll"
 
 const context = createContext<{
   width: number
@@ -165,17 +156,7 @@ export function Session() {
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
-  const scrollAcceleration = createMemo(() => {
-    const tui = sync.data.config.tui
-    if (tui?.scroll_acceleration?.enabled) {
-      return new MacOSScrollAccel()
-    }
-    if (tui?.scroll_speed) {
-      return new CustomSpeedScroll(tui.scroll_speed)
-    }
-
-    return new CustomSpeedScroll(3)
-  })
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(sync.data.config.tui))
 
   createEffect(async () => {
     await sync.session

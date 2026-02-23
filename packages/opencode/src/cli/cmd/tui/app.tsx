@@ -38,6 +38,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { getScrollAcceleration } from "./util/scroll"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -831,7 +832,7 @@ function ErrorComponent(props: {
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>
-      <scrollbox height={Math.floor(term().height * 0.7)}>
+      <scrollbox height={Math.floor(term().height * 0.7)} scrollAcceleration={getScrollAcceleration()}>
         <text fg={colors.muted}>{props.error.stack}</text>
       </scrollbox>
       <text fg={colors.text}>{props.error.message}</text>
