@@ -342,10 +342,11 @@ export namespace Config {
   }
 
   function rel(item: string, patterns: string[]) {
+    const normalizedItem = item.replaceAll("\\", "/")
     for (const pattern of patterns) {
-      const index = item.indexOf(pattern)
+      const index = normalizedItem.indexOf(pattern)
       if (index === -1) continue
-      return item.slice(index + pattern.length)
+      return normalizedItem.slice(index + pattern.length)
     }
   }
 
@@ -1332,7 +1333,20 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, options.path)
-          } catch (err) {}
+          } catch (e) {
+            try {
+              // import.meta.resolve sometimes fails with newly created node_modules on Windows
+              const url = new URL(options.path)
+              let pathname = url.pathname
+              if (process.platform === "win32" && pathname.startsWith("/")) {
+                pathname = pathname.slice(1)
+              }
+              const resolvedPath = Bun.resolveSync(plugin, path.dirname(pathname))
+              data.plugin[i] = pathToFileURL(resolvedPath).href
+            } catch (err) {
+              data.plugin[i] = import.meta.resolve!(plugin, options.path)
+            }
+          }
         }
       }
       return data
