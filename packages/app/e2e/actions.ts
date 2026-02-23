@@ -203,8 +203,10 @@ async function getGitTemplate() {
 
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
+        await fs.writeFile(path.join(templatePath, "README.md"), "# e2e\n")
         execSync("git init", { cwd: templatePath, stdio: "ignore" })
         execSync("git config core.longpaths true", { cwd: templatePath, stdio: "ignore" })
+        execSync("git add -A", { cwd: templatePath, stdio: "ignore" })
         execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
           cwd: templatePath,
           stdio: "ignore",
@@ -224,10 +226,8 @@ async function getGitTemplate() {
 export async function createTestProject() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-"))
 
-  await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
-
   const templatePath = await getGitTemplate()
-  await fs.cp(path.join(templatePath, ".git"), path.join(root, ".git"), { recursive: true })
+  await fs.cp(templatePath, root, { recursive: true })
 
   return root
 }
