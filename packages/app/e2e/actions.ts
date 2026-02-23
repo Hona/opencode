@@ -234,6 +234,11 @@ export async function createTestProject() {
   const templatePath = await getGitTemplate()
   await fs.cp(templatePath, root, { recursive: true })
 
+  const gitIdPath = path.join(root, ".git", "opencode")
+  if (await fs.stat(path.join(root, ".git")).catch(() => false)) {
+    await fs.writeFile(gitIdPath, Math.random().toString(36).slice(2))
+  }
+
   return root
 }
 

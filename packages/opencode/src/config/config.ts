@@ -1337,17 +1337,14 @@ export namespace Config {
           try {
             data.plugin[i] = import.meta.resolve!(plugin, options.path)
           } catch (e) {
-            if (process.platform === "win32") {
-              try {
-                // import.meta.resolve sometimes fails with newly created node_modules on Windows tests
-                const require = createRequire(options.path)
-                const resolvedPath = require.resolve(plugin)
-                data.plugin[i] = pathToFileURL(resolvedPath).href
-              } catch {
-                // Ignore, plugin might be a generic string identifier like "mcp-server"
-              }
+            try {
+              // import.meta.resolve sometimes fails with newly created node_modules
+              const require = createRequire(options.path)
+              const resolvedPath = require.resolve(plugin)
+              data.plugin[i] = pathToFileURL(resolvedPath).href
+            } catch {
+              // Ignore, plugin might be a generic string identifier like "mcp-server"
             }
-            // If not Windows, or if fallback failed, it remains unchanged (generic identifier)
           }
         }
       }
