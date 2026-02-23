@@ -236,7 +236,8 @@ export async function createTestProject() {
 
   const gitIdPath = path.join(root, ".git", "opencode")
   if (await fs.stat(path.join(root, ".git")).catch(() => false)) {
-    await fs.writeFile(gitIdPath, Math.random().toString(36).slice(2))
+    // Generate a uniquely identifiable string for this specific test project instance
+    await fs.writeFile(gitIdPath, Math.random().toString(36).slice(2) + "-" + Date.now().toString())
   }
 
   return root
