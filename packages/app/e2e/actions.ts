@@ -204,6 +204,11 @@ async function getGitTemplate() {
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         await fs.writeFile(path.join(templatePath, "README.md"), "# e2e\n")
+
+        // Add a nested file to explicitly test nested path matching and slash normalization in E2E tests
+        await fs.mkdir(path.join(templatePath, "packages", "app"), { recursive: true })
+        await fs.writeFile(path.join(templatePath, "packages", "app", "package.json"), "{}")
+
         execSync("git init", { cwd: templatePath, stdio: "ignore" })
         execSync("git config core.longpaths true", { cwd: templatePath, stdio: "ignore" })
         execSync("git add -A", { cwd: templatePath, stdio: "ignore" })
