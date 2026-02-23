@@ -311,7 +311,7 @@ export namespace Project {
 
     await work(10, sessions, async (row) => {
       // Skip sessions that belong to a different directory
-      if (row.directory && row.directory.replaceAll("\\", "/") !== worktree.replaceAll("\\", "/")) return
+      if (row.directory && path.relative(row.directory, worktree) !== "") return
 
       log.info("migrating session", { sessionID: row.id, from: "global", to: id })
       Database.use((db) => db.update(SessionTable).set({ project_id: id }).where(eq(SessionTable.id, row.id)).run())

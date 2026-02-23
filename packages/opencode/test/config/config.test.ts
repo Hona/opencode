@@ -694,7 +694,9 @@ test("resolves scoped npm plugins in config", async () => {
         expected = import.meta.resolve("@scope/plugin", baseUrl)
       } catch (e) {
         // Fallback for Windows where dynamically created node_modules aren't immediately available to import.meta.resolve
-        const resolvedPath = Bun.resolveSync("@scope/plugin", tmp.path)
+        const { createRequire } = await import("module")
+        const require = createRequire(tmp.path + "/")
+        const resolvedPath = require.resolve("@scope/plugin")
         expected = pathToFileURL(resolvedPath).href
       }
 
