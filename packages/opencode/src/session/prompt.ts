@@ -726,8 +726,7 @@ export namespace SessionPrompt {
       }
       return item
     }
-    // Session may have been deleted concurrently during teardown
-    log.warn("no assistant message found after loop", { sessionID })
+    throw new Error("no assistant message found after loop")
   })
 
   async function lastModel(sessionID: string) {
