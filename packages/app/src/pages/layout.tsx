@@ -1075,19 +1075,22 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
-    const norm = directory.replaceAll("\\", "/")
-    const project = layout.projects.list().find((item) => item.worktree === norm || item.sandboxes?.includes(norm))
+    const project = layout.projects
+      .list()
+      .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
     if (project) return project.worktree
 
-    const known = Object.entries(store.workspaceOrder).find(([root, dirs]) => root === norm || dirs.includes(norm))
+    const known = Object.entries(store.workspaceOrder).find(
+      ([root, dirs]) => root === directory || dirs.includes(directory),
+    )
     if (known) return known[0]
 
-    const [child] = globalSync.child(norm, { bootstrap: false })
+    const [child] = globalSync.child(directory, { bootstrap: false })
     const id = child.project
-    if (!id) return norm
+    if (!id) return directory
 
     const meta = globalSync.data.project.find((item) => item.id === id)
-    return meta?.worktree ?? norm
+    return meta?.worktree ?? directory
   }
 
   function navigateToProject(directory: string | undefined) {

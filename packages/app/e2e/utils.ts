@@ -23,7 +23,7 @@ export async function getWorktree() {
 }
 
 export function dirSlug(directory: string) {
-  return base64Encode(directory.replaceAll("\\", "/"))
+  return base64Encode(directory)
 }
 
 export function dirPath(directory: string) {
