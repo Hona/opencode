@@ -1344,7 +1344,11 @@ export namespace Config {
               const resolvedPath = Bun.resolveSync(plugin, path.dirname(pathname))
               data.plugin[i] = pathToFileURL(resolvedPath).href
             } catch (err) {
-              data.plugin[i] = import.meta.resolve!(plugin, options.path)
+              try {
+                data.plugin[i] = import.meta.resolve!(plugin, options.path)
+              } catch {
+                // Ignore, plugin might be a generic string identifier like "jira"
+              }
             }
           }
         }
