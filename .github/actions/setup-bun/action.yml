@@ -43,31 +43,33 @@ runs:
         if echo "$BUN_VERSION" | grep -q "canary"; then
           SEMVER=$(echo "$BUN_VERSION" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
           echo "Bun version: $BUN_VERSION (semver: $SEMVER)"
-          CANARY_NPM=$(curl -sf https://registry.npmjs.org/@oven/bun-linux-x64 | bun -e "process.stdout.write(JSON.parse(await Bun.stdin.text())['dist-tags'].canary)")
-          echo "Canary npm version: $CANARY_NPM"
           CACHE_DIR="$HOME/.bun/install/cache"
           mkdir -p "$CACHE_DIR"
+          TMP_DIR=$(mktemp -d)
           for TARGET in linux-aarch64 linux-x64 linux-x64-baseline linux-aarch64-musl linux-x64-musl linux-x64-musl-baseline darwin-aarch64 darwin-x64 darwin-x64-baseline windows-x64 windows-x64-baseline; do
             DEST="$CACHE_DIR/bun-${TARGET}-v${SEMVER}"
             if [ -f "$DEST" ]; then
               echo "Already cached: $DEST"
               continue
             fi
-            URL="https://registry.npmjs.org/@oven/bun-${TARGET}/-/bun-${TARGET}-${CANARY_NPM}.tgz"
+            URL="https://github.com/oven-sh/bun/releases/download/canary/bun-${TARGET}.zip"
             echo "Downloading $TARGET from $URL"
-            if echo "$TARGET" | grep -q "windows"; then
-              BIN_NAME="bun.exe"
-            else
-              BIN_NAME="bun"
-            fi
-            if curl -sfL "$URL" | tar xz --strip-components=2 -C "$CACHE_DIR" "package/bin/$BIN_NAME"; then
-              mv "$CACHE_DIR/$BIN_NAME" "$DEST"
+            if curl -sfL -o "$TMP_DIR/bun.zip" "$URL"; then
+              unzip -qo "$TMP_DIR/bun.zip" -d "$TMP_DIR"
+              if echo "$TARGET" | grep -q "windows"; then
+                BIN_NAME="bun.exe"
+              else
+                BIN_NAME="bun"
+              fi
+              mv "$TMP_DIR/bun-${TARGET}/$BIN_NAME" "$DEST"
               chmod +x "$DEST"
+              rm -rf "$TMP_DIR/bun-${TARGET}" "$TMP_DIR/bun.zip"
               echo "Cached: $DEST"
             else
               echo "Skipped: $TARGET (not available)"
             fi
           done
+          rm -rf "$TMP_DIR"
         else
           echo "Not a canary build ($BUN_VERSION), skipping pre-cache"
         fi
