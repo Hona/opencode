@@ -60,13 +60,6 @@ const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 
-// Resolve canary npm version for cross-compilation tarball override
-const canary = Bun.version.includes("canary")
-  ? await fetch("https://registry.npmjs.org/@oven/bun-linux-x64")
-      .then((r) => r.json())
-      .then((d) => d["dist-tags"].canary as string)
-  : undefined
-
 const allTargets: {
   os: string
   arch: "arm64" | "x64"
@@ -167,14 +160,6 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
-
-  if (canary) {
-    const os = item.os === "win32" ? "windows" : item.os
-    const arch = item.arch === "arm64" ? "aarch64" : item.arch
-    const suffix = (item.abi ? `-${item.abi}` : "") + (item.avx2 === false ? "-baseline" : "")
-    const npmPkg = `bun-${os}-${arch}${suffix}`
-    process.env.BUN_COMPILE_TARGET_TARBALL_URL = `https://registry.npmjs.org/@oven/${npmPkg}/-/${npmPkg}-${canary}.tgz`
-  }
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"

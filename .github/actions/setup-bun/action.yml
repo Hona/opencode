@@ -1,5 +1,10 @@
 name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
+inputs:
+  cross-compile:
+    description: "Pre-cache canary cross-compile binaries for all targets"
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
@@ -29,6 +34,34 @@ runs:
       with:
         bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
         bun-download-url: ${{ steps.bun-url.outputs.url }}
+
+    - name: Pre-cache canary cross-compile binaries
+      if: inputs.cross-compile == 'true'
+      shell: bash
+      run: |
+        BUN_VERSION=$(bun --version)
+        if echo "$BUN_VERSION" | grep -q "canary"; then
+          SEMVER=$(echo "$BUN_VERSION" | grep -oP '^\d+\.\d+\.\d+')
+          CANARY_NPM=$(curl -sf https://registry.npmjs.org/@oven/bun-linux-x64 | node -p "JSON.parse(require('fs').readFileSync(0,'utf8'))['dist-tags'].canary")
+          CACHE_DIR="$HOME/.bun/install/cache"
+          mkdir -p "$CACHE_DIR"
+          for TARGET in linux-aarch64 linux-x64 linux-x64-baseline linux-aarch64-musl linux-x64-musl linux-x64-musl-baseline darwin-aarch64 darwin-x64 darwin-x64-baseline windows-x64 windows-x64-baseline; do
+            DEST="$CACHE_DIR/bun-${TARGET}-v${SEMVER}"
+            if [ -f "$DEST" ]; then
+              echo "Already cached: $DEST"
+              continue
+            fi
+            URL="https://registry.npmjs.org/@oven/bun-${TARGET}/-/bun-${TARGET}-${CANARY_NPM}.tgz"
+            echo "Downloading $TARGET..."
+            if curl -sfL "$URL" | tar xz --strip-components=2 -C "$CACHE_DIR" "package/bin/bun"; then
+              mv "$CACHE_DIR/bun" "$DEST"
+              chmod +x "$DEST"
+              echo "Cached: $DEST"
+            else
+              echo "Skipped: $TARGET (not available)"
+            fi
+          done
+        fi
 
     - name: Install dependencies
       run: bun install
