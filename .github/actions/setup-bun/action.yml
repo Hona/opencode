@@ -46,7 +46,7 @@ runs:
           CACHE_DIR="$HOME/.bun/install/cache"
           mkdir -p "$CACHE_DIR"
           TMP_DIR=$(mktemp -d)
-          for TARGET in linux-aarch64 linux-x64 linux-x64-baseline linux-aarch64-musl linux-x64-musl linux-x64-musl-baseline darwin-aarch64 darwin-x64 darwin-x64-baseline windows-x64 windows-x64-baseline; do
+          for TARGET in linux-aarch64 linux-x64 linux-x64-baseline linux-aarch64-musl linux-x64-musl linux-x64-musl-baseline darwin-aarch64 darwin-x64 windows-x64 windows-x64-baseline; do
             DEST="$CACHE_DIR/bun-${TARGET}-v${SEMVER}"
             if [ -f "$DEST" ]; then
               echo "Already cached: $DEST"
@@ -65,6 +65,15 @@ runs:
               chmod +x "$DEST"
               rm -rf "$TMP_DIR/bun-${TARGET}" "$TMP_DIR/bun.zip"
               echo "Cached: $DEST"
+              # baseline bun resolves "bun-darwin-x64" to the baseline cache key
+              # so copy the modern binary there too
+              if [ "$TARGET" = "darwin-x64" ]; then
+                BASELINE_DEST="$CACHE_DIR/bun-darwin-x64-baseline-v${SEMVER}"
+                if [ ! -f "$BASELINE_DEST" ]; then
+                  cp "$DEST" "$BASELINE_DEST"
+                  echo "Cached (baseline alias): $BASELINE_DEST"
+                fi
+              fi
             else
               echo "Skipped: $TARGET (not available)"
             fi
