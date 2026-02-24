@@ -67,7 +67,6 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.longpaths true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.symlinks true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
-
       log.info("initialized")
     }
     await add(git)
