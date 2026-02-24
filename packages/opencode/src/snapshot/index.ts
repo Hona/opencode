@@ -67,10 +67,6 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.longpaths true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.symlinks true`.quiet().nothrow()
       await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.fscache true`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.preloadIndex true`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.untrackedCache true`.quiet().nothrow()
-      await $`git --git-dir ${git} config gc.auto 0`.quiet().nothrow()
       log.info("initialized")
     }
     await add(git)
@@ -233,13 +229,13 @@ export namespace Snapshot {
       const isBinaryFile = additions === "-" && deletions === "-"
       const before = isBinaryFile
         ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
+        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
             .quiet()
             .nothrow()
             .text()
       const after = isBinaryFile
         ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
+        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
             .quiet()
             .nothrow()
             .text()
