@@ -55,8 +55,13 @@ runs:
             fi
             URL="https://registry.npmjs.org/@oven/bun-${TARGET}/-/bun-${TARGET}-${CANARY_NPM}.tgz"
             echo "Downloading $TARGET from $URL"
-            if curl -sfL "$URL" | tar xz --strip-components=2 -C "$CACHE_DIR" "package/bin/bun"; then
-              mv "$CACHE_DIR/bun" "$DEST"
+            if echo "$TARGET" | grep -q "windows"; then
+              BIN_NAME="bun.exe"
+            else
+              BIN_NAME="bun"
+            fi
+            if curl -sfL "$URL" | tar xz --strip-components=2 -C "$CACHE_DIR" "package/bin/$BIN_NAME"; then
+              mv "$CACHE_DIR/$BIN_NAME" "$DEST"
               chmod +x "$DEST"
               echo "Cached: $DEST"
             else
