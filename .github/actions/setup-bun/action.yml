@@ -41,7 +41,7 @@ runs:
       run: |
         BUN_VERSION=$(bun --version)
         if echo "$BUN_VERSION" | grep -q "canary"; then
-          SEMVER=$(echo "$BUN_VERSION" | grep -oP '^\d+\.\d+\.\d+')
+          SEMVER=$(echo "$BUN_VERSION" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
           CANARY_NPM=$(curl -sf https://registry.npmjs.org/@oven/bun-linux-x64 | node -p "JSON.parse(require('fs').readFileSync(0,'utf8'))['dist-tags'].canary")
           CACHE_DIR="$HOME/.bun/install/cache"
           mkdir -p "$CACHE_DIR"
