@@ -39,7 +39,7 @@ runs:
       if: inputs.cross-compile == 'true'
       shell: bash
       run: |
-        BUN_VERSION=$(bun --version)
+        BUN_VERSION=$(bun --revision)
         if echo "$BUN_VERSION" | grep -q "canary"; then
           SEMVER=$(echo "$BUN_VERSION" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
           echo "Bun version: $BUN_VERSION (semver: $SEMVER)"
