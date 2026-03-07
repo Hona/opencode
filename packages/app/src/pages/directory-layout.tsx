@@ -53,7 +53,6 @@ export default function Layout(props: ParentProps) {
     }
 
     const current = params.dir
-    setState("resolved", "")
     globalSDK
       .createClient({
         directory: raw,
