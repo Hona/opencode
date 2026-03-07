@@ -1,33 +1,9 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled } from "../actions"
+import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, waitSlug } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { createSdk } from "../utils"
-
-function slugFromUrl(url: string) {
-  return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
-}
-
-async function waitSlug(page: Page, skip: string[] = []) {
-  let prev = ""
-  await expect
-    .poll(
-      () => {
-        const slug = slugFromUrl(page.url())
-        if (!slug) return ""
-        if (skip.includes(slug)) return ""
-        if (slug !== prev) {
-          prev = slug
-          return ""
-        }
-        return slug
-      },
-      { timeout: 45_000 },
-    )
-    .not.toBe("")
-  return slugFromUrl(page.url())
-}
 
 async function waitWorkspaceReady(page: Page, slug: string) {
   await openSidebar(page)
@@ -84,7 +60,7 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
   await expect.poll(async () => ((await prompt.textContent()) ?? "").trim()).toContain(text)
   await prompt.press("Enter")
 
-  await expect.poll(() => slugFromUrl(page.url())).toBe(next)
+  await expect.poll(() => page.url()).toContain(`/${next}/session`)
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
 
   const sessionID = sessionIDFromUrl(page.url())

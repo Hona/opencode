@@ -1,13 +1,9 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl } from "../actions"
+import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl, waitSlug } from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug } from "../utils"
-
-function slugFromUrl(url: string) {
-  return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
-}
 
 async function workspaces(page: Page, directory: string, enabled: boolean) {
   await page.evaluate(
@@ -89,19 +85,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
 
-        await expect
-          .poll(
-            () => {
-              const next = slugFromUrl(page.url())
-              if (!next) return ""
-              if (next === slug) return ""
-              return next
-            },
-            { timeout: 45_000 },
-          )
-          .not.toBe("")
-
-        const workspaceSlug = slugFromUrl(page.url())
+        const workspaceSlug = await waitSlug(page, [slug])
         workspaceDir = base64Decode(workspaceSlug)
         if (!workspaceDir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
         trackDirectory(workspaceDir)
@@ -115,7 +99,8 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await expect(newSession).toBeVisible()
         await newSession.click({ force: true })
 
-        await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session(?:[/?#]|$)`))
+        const next = await waitSlug(page)
+        await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
 
         // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
@@ -128,9 +113,11 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         const created = sessionIDFromUrl(page.url())
         if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
-        trackSession(created, workspaceDir)
+        const dir = base64Decode(next)
+        if (!dir) throw new Error(`Failed to decode workspace slug: ${next}`)
+        trackSession(created, dir)
 
-        await expect(page).toHaveURL(new RegExp(`/${workspaceSlug}/session/${created}(?:[/?#]|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
 
         await openSidebar(page)
 
