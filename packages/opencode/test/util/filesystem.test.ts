@@ -449,12 +449,26 @@ describe("filesystem", () => {
       expect(Filesystem.resolve(`/${forward}`)).toBe(Filesystem.normalizePath(tmp.path))
     })
 
+    test("resolves slash-prefixed drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toUpperCase()
+      expect(Filesystem.resolve(`/${drive}:`)).toBe(Filesystem.resolve(`${drive}:/`))
+    })
+
     test("resolves Git Bash paths on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
       const rest = tmp.path.slice(2).replaceAll("\\", "/")
       expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves Git Bash drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
     })
 
     test("resolves MSYS2 paths on Windows", async () => {
@@ -465,6 +479,13 @@ describe("filesystem", () => {
       expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
     })
 
+    test("resolves MSYS2 drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+    })
+
     test("resolves Cygwin paths on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
@@ -473,12 +494,26 @@ describe("filesystem", () => {
       expect(Filesystem.resolve(`/cygdrive/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
     })
 
+    test("resolves Cygwin drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/cygdrive/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+    })
+
     test("resolves WSL mount paths on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
       const rest = tmp.path.slice(2).replaceAll("\\", "/")
       expect(Filesystem.resolve(`/mnt/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves WSL mount roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/mnt/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
     })
   })
 })
