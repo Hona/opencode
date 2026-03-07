@@ -52,29 +52,30 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
   withProject: async ({ page }, use) => {
     await use(async (callback, options) => {
-      const directory = await createTestProject()
-      const slug = dirSlug(directory)
+      const root = await createTestProject()
+      const slug = dirSlug(root)
       const sessions = new Map<string, string>()
-      await seedStorage(page, { directory, extra: options?.extra })
+      await seedStorage(page, { directory: root, extra: options?.extra })
 
       const gotoSession = async (sessionID?: string) => {
-        await page.goto(sessionPath(directory, sessionID))
+        await page.goto(sessionPath(root, sessionID))
         await expect(page.locator(promptSelector)).toBeVisible()
       }
 
-      const trackSession = (sessionID: string, next?: string) => {
-        sessions.set(sessionID, next ?? directory)
+      const trackSession = (sessionID: string, directory?: string) => {
+        sessions.set(sessionID, directory ?? root)
       }
 
       try {
         await gotoSession()
-        return await callback({ directory, slug, gotoSession, trackSession })
+        return await callback({ directory: root, slug, gotoSession, trackSession })
       } finally {
         await Promise.allSettled(
           Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
         )
-        await cleanupTestProject(directory)
+        await cleanupTestProject(root)
       }
+    })
     })
   },
 })
