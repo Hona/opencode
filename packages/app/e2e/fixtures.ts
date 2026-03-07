@@ -1,5 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test"
-import { cleanupTestProject, createTestProject, seedProjects } from "./actions"
+import { cleanupSession, cleanupTestProject, createTestProject, seedProjects } from "./actions"
 import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
@@ -13,6 +13,7 @@ type TestFixtures = {
       directory: string
       slug: string
       gotoSession: (sessionID?: string) => Promise<void>
+      trackSession: (sessionID: string, directory?: string) => void
     }) => Promise<T>,
     options?: { extra?: string[] },
   ) => Promise<T>
@@ -53,6 +54,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(async (callback, options) => {
       const directory = await createTestProject()
       const slug = dirSlug(directory)
+      const sessions = new Map<string, string>()
       await seedStorage(page, { directory, extra: options?.extra })
 
       const gotoSession = async (sessionID?: string) => {
@@ -60,10 +62,17 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         await expect(page.locator(promptSelector)).toBeVisible()
       }
 
+      const trackSession = (sessionID: string, next?: string) => {
+        sessions.set(sessionID, next ?? directory)
+      }
+
       try {
         await gotoSession()
-        return await callback({ directory, slug, gotoSession })
+        return await callback({ directory, slug, gotoSession, trackSession })
       } finally {
+        await Promise.allSettled(
+          Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
+        )
         await cleanupTestProject(directory)
       }
     })

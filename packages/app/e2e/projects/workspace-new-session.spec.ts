@@ -97,9 +97,8 @@ async function sessionDirectory(directory: string, sessionID: string) {
 test("new sessions from sidebar workspace actions stay in selected workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  await withProject(async ({ directory, slug: root }) => {
+  await withProject(async ({ directory, slug: root, trackSession }) => {
     const workspaces = [] as { slug: string; directory: string }[]
-    const sessions = [] as string[]
 
     try {
       await openSidebar(page)
@@ -114,30 +113,18 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
       await waitWorkspaceReady(page, second.slug)
 
       const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
-      sessions.push(firstSession)
+      trackSession(firstSession, first.directory)
 
       const secondSession = await createSessionFromWorkspace(page, second.slug, `workspace two ${Date.now()}`)
-      sessions.push(secondSession)
+      trackSession(secondSession, second.directory)
 
       const thirdSession = await createSessionFromWorkspace(page, first.slug, `workspace one again ${Date.now()}`)
-      sessions.push(thirdSession)
+      trackSession(thirdSession, first.directory)
 
       await expect.poll(() => sessionDirectory(first.directory, firstSession)).toBe(first.directory)
       await expect.poll(() => sessionDirectory(second.directory, secondSession)).toBe(second.directory)
       await expect.poll(() => sessionDirectory(first.directory, thirdSession)).toBe(first.directory)
     } finally {
-      const dirs = [directory, ...workspaces.map((workspace) => workspace.directory)]
-      await Promise.all(
-        sessions.map((sessionID) =>
-          Promise.all(
-            dirs.map((dir) =>
-              createSdk(dir)
-                .session.delete({ sessionID })
-                .catch(() => undefined),
-            ),
-          ),
-        ),
-      )
       await Promise.all(workspaces.map((workspace) => cleanupTestProject(workspace.directory)))
     }
   })

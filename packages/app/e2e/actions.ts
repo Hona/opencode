@@ -307,6 +307,34 @@ export async function clickListItem(
   return item
 }
 
+export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
+  await expect
+    .poll(
+      async () => {
+        const data = await sdk.session
+          .status()
+          .then((x) => x.data ?? {})
+          .catch(() => undefined)
+        const status = data?.[sessionID]
+        return !status || status.type === "idle"
+      },
+      { timeout },
+    )
+    .toBe(true)
+}
+
+export async function cleanupSession(input: {
+  sessionID: string
+  directory?: string
+  sdk?: ReturnType<typeof createSdk>
+}) {
+  const sdk = input.sdk ?? (input.directory ? createSdk(input.directory) : undefined)
+  if (!sdk) throw new Error("cleanupSession requires sdk or directory")
+  await sdk.session.abort({ sessionID: input.sessionID }).catch(() => undefined)
+  await waitSessionIdle(sdk, input.sessionID).catch(() => undefined)
+  await sdk.session.delete({ sessionID: input.sessionID }).catch(() => undefined)
+}
+
 export async function withSession<T>(
   sdk: ReturnType<typeof createSdk>,
   title: string,
@@ -318,7 +346,7 @@ export async function withSession<T>(
   try {
     return await callback(session)
   } finally {
-    await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
+    await cleanupSession({ sdk, sessionID: session.id })
   }
 }
 
