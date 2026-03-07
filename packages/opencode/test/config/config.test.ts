@@ -84,15 +84,8 @@ test("loads JSON config file", async () => {
   })
 })
 
-test("loads project config from Git Bash paths on Windows", async () => {
-  await check((dir) => {
-    const drive = dir[0].toLowerCase()
-    const rest = dir.slice(2).replaceAll("\\", "/")
-    return `/${drive}${rest}`
-  })
-})
-
-test("loads project config from MSYS2 paths on Windows", async () => {
+test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
+  // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
   await check((dir) => {
     const drive = dir[0].toLowerCase()
     const rest = dir.slice(2).replaceAll("\\", "/")

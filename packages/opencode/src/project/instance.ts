@@ -32,16 +32,15 @@ function emit(directory: string) {
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
   return iife(async () => {
-    const directory = Filesystem.resolve(input.directory)
     const ctx =
       input.project && input.worktree
         ? {
-            directory,
+            directory: input.directory,
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(directory).then(({ project, sandbox }) => ({
-            directory,
+        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
+            directory: input.directory,
             worktree: sandbox,
             project,
           }))

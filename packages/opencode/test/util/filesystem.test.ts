@@ -456,7 +456,8 @@ describe("filesystem", () => {
       expect(Filesystem.resolve(`/${drive}:`)).toBe(Filesystem.resolve(`${drive}:/`))
     })
 
-    test("resolves Git Bash paths on Windows", async () => {
+    test("resolves Git Bash and MSYS2 paths on Windows", async () => {
+      // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
@@ -464,22 +465,8 @@ describe("filesystem", () => {
       expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
     })
 
-    test("resolves Git Bash drive roots on Windows", async () => {
-      if (process.platform !== "win32") return
-      await using tmp = await tmpdir()
-      const drive = tmp.path[0].toLowerCase()
-      expect(Filesystem.resolve(`/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
-    })
-
-    test("resolves MSYS2 paths on Windows", async () => {
-      if (process.platform !== "win32") return
-      await using tmp = await tmpdir()
-      const drive = tmp.path[0].toLowerCase()
-      const rest = tmp.path.slice(2).replaceAll("\\", "/")
-      expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
-    })
-
-    test("resolves MSYS2 drive roots on Windows", async () => {
+    test("resolves Git Bash and MSYS2 drive roots on Windows", async () => {
+      // Git Bash and MSYS2 both use /<drive> paths on Windows.
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
