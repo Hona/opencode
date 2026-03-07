@@ -306,20 +306,38 @@ export async function clickListItem(
   return item
 }
 
-export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
+async function status(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  const data = await sdk.session
+    .status()
+    .then((x) => x.data ?? {})
+    .catch(() => undefined)
+  return data?.[sessionID]
+}
+
+async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 10_000) {
+  let prev = ""
   await expect
     .poll(
       async () => {
-        const data = await sdk.session
-          .status()
-          .then((x) => x.data ?? {})
+        const info = await sdk.session
+          .get({ sessionID })
+          .then((x) => x.data)
           .catch(() => undefined)
-        const status = data?.[sessionID]
-        return !status || status.type === "idle"
+        if (!info) return true
+        const next = `${info.title}:${info.time.updated ?? info.time.created}`
+        if (next !== prev) {
+          prev = next
+          return false
+        }
+        return true
       },
       { timeout },
     )
     .toBe(true)
+}
+
+export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
+  await expect.poll(() => status(sdk, sessionID).then((x) => !x || x.type === "idle"), { timeout }).toBe(true)
 }
 
 export async function cleanupSession(input: {
@@ -329,8 +347,13 @@ export async function cleanupSession(input: {
 }) {
   const sdk = input.sdk ?? (input.directory ? createSdk(input.directory) : undefined)
   if (!sdk) throw new Error("cleanupSession requires sdk or directory")
-  await sdk.session.abort({ sessionID: input.sessionID }).catch(() => undefined)
-  await waitSessionIdle(sdk, input.sessionID).catch(() => undefined)
+  await waitSessionIdle(sdk, input.sessionID, 5_000).catch(() => undefined)
+  const current = await status(sdk, input.sessionID).catch(() => undefined)
+  if (current && current.type !== "idle") {
+    await sdk.session.abort({ sessionID: input.sessionID }).catch(() => undefined)
+    await waitSessionIdle(sdk, input.sessionID).catch(() => undefined)
+  }
+  await stable(sdk, input.sessionID).catch(() => undefined)
   await sdk.session.delete({ sessionID: input.sessionID }).catch(() => undefined)
 }
 
