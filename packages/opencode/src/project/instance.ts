@@ -32,15 +32,16 @@ function emit(directory: string) {
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
   return iife(async () => {
+    const directory = Filesystem.resolve(input.directory)
     const ctx =
       input.project && input.worktree
         ? {
-            directory: input.directory,
+            directory,
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
+        : await Project.fromDirectory(directory).then(({ project, sandbox }) => ({
+            directory,
             worktree: sandbox,
             project,
           }))
@@ -62,13 +63,14 @@ function track(directory: string, next: Promise<Context>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    let existing = cache.get(input.directory)
+    const directory = Filesystem.resolve(input.directory)
+    let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory: input.directory })
+      Log.Default.info("creating instance", { directory })
       existing = track(
-        input.directory,
+        directory,
         boot({
-          directory: input.directory,
+          directory,
           init: input.init,
         }),
       )
@@ -103,11 +105,12 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    Log.Default.info("reloading instance", { directory: input.directory })
-    await State.dispose(input.directory)
-    cache.delete(input.directory)
-    const next = track(input.directory, boot(input))
-    emit(input.directory)
+    const directory = Filesystem.resolve(input.directory)
+    Log.Default.info("reloading instance", { directory })
+    await State.dispose(directory)
+    cache.delete(directory)
+    const next = track(directory, boot({ ...input, directory }))
+    emit(directory)
     return await next
   },
   async dispose() {
