@@ -151,5 +151,4 @@ test("switching back to a project opens the latest workspace session", async ({ 
   } finally {
     await cleanupTestProject(other)
   }
-  }
 })
