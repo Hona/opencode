@@ -1,7 +1,7 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, waitSlug } from "../actions"
+import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, slugFromUrl, waitSlug } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { createSdk } from "../utils"
 
@@ -60,7 +60,7 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
   await expect.poll(async () => ((await prompt.textContent()) ?? "").trim()).toContain(text)
   await prompt.press("Enter")
 
-  await expect.poll(() => page.url()).toContain(`/${next}/session`)
+  await expect.poll(() => slugFromUrl(page.url())).toBe(next)
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
 
   const sessionID = sessionIDFromUrl(page.url())

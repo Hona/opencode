@@ -200,11 +200,12 @@ export async function cleanupTestProject(directory: string) {
 }
 
 export function slugFromUrl(url: string) {
-  return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
+  return /\/([^/]+)\/session(?:[/?#]|$)/.exec(url)?.[1] ?? ""
 }
 
 export async function waitSlug(page: Page, skip: string[] = []) {
   let prev = ""
+  let next = ""
   await expect
     .poll(
       () => {
@@ -213,14 +214,16 @@ export async function waitSlug(page: Page, skip: string[] = []) {
         if (skip.includes(slug)) return ""
         if (slug !== prev) {
           prev = slug
+          next = ""
           return ""
         }
+        next = slug
         return slug
       },
       { timeout: 45_000 },
     )
     .not.toBe("")
-  return slugFromUrl(page.url())
+  return next
 }
 
 export function sessionIDFromUrl(url: string) {

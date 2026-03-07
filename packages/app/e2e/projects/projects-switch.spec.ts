@@ -84,26 +84,27 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
         await page.getByRole("button", { name: "New workspace" }).first().click()
 
-        const workspaceSlug = await waitSlug(page, [slug])
-        const dir = base64Decode(workspaceSlug)
-        if (!dir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
+        const raw = await waitSlug(page, [slug])
+        const dir = base64Decode(raw)
+        if (!dir) throw new Error(`Failed to decode workspace slug: ${raw}`)
         const space = await resolveDirectory(dir)
-        const spaceSlug = dirSlug(space)
+        const next = dirSlug(space)
         trackDirectory(space)
         await openSidebar(page)
 
-        const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
-        await expect(workspace).toBeVisible()
-        await workspace.hover()
+        const item = page.locator(`${workspaceItemSelector(next)}, ${workspaceItemSelector(raw)}`).first()
+        await expect(item).toBeVisible()
+        await item.hover()
 
-        const newSession = page.locator(workspaceNewSessionSelector(workspaceSlug)).first()
-        await expect(newSession).toBeVisible()
-        await newSession.click({ force: true })
+        const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
+        await expect(btn).toBeVisible()
+        await btn.click({ force: true })
 
-        // The sidebar can still be keyed by a transient slug while the route settles to the
-        // canonical workspace path on Windows, so assert on the resolved workspace slug here.
+        // A new workspace can be discovered via a transient slug before the route and sidebar
+        // settle to the canonical workspace path on Windows, so interact with either and assert
+        // against the resolved workspace slug.
         await waitSlug(page)
-        await expect(page).toHaveURL(new RegExp(`/${spaceSlug}/session(?:[/?#]|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
 
         // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
@@ -118,7 +119,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
         if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
         trackSession(created, space)
 
-        await expect(page).toHaveURL(new RegExp(`/${spaceSlug}/session/${created}(?:[/?#]|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
 
         await openSidebar(page)
 
