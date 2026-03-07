@@ -112,9 +112,9 @@ export const TuiThreadCommand = cmd({
 
       // Resolve relative paths against PWD to preserve behavior when using --cwd flag
       const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
-      const cwd = Filesystem.resolve(
-        args.project ? (path.isAbsolute(args.project) ? args.project : path.join(root, args.project)) : root,
-      )
+      const cwd = args.project
+        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
+        : root
       const file = await target()
       try {
         process.chdir(cwd)
