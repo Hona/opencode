@@ -79,7 +79,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
   let workspaceDir: string | undefined
   try {
     await withProject(
-      async ({ directory, slug, trackSession }) => {
+      async ({ directory, slug, trackSession, trackDirectory }) => {
         await defocus(page)
         await workspaces(page, directory, true)
         await page.reload()
@@ -104,6 +104,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
         const workspaceSlug = slugFromUrl(page.url())
         workspaceDir = base64Decode(workspaceSlug)
         if (!workspaceDir) throw new Error(`Failed to decode workspace slug: ${workspaceSlug}`)
+        trackDirectory(workspaceDir)
         await openSidebar(page)
 
         const workspace = page.locator(workspaceItemSelector(workspaceSlug)).first()
@@ -148,9 +149,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
       { extra: [other] },
     )
   } finally {
-    if (workspaceDir) {
-      await cleanupTestProject(workspaceDir)
-    }
     await cleanupTestProject(other)
+  }
   }
 })
