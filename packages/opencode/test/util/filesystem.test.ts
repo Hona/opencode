@@ -502,5 +502,24 @@ describe("filesystem", () => {
       const drive = tmp.path[0].toLowerCase()
       expect(Filesystem.resolve(`/mnt/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
     })
+
+    test("resolves symlinked directory to canonical path", async () => {
+      if (process.platform === "win32") return
+      await using tmp = await tmpdir()
+      const link = tmp.path + "-symlink"
+      await fs.symlink(tmp.path, link)
+      try {
+        expect(Filesystem.resolve(link)).toBe(Filesystem.resolve(tmp.path))
+      } finally {
+        await fs.unlink(link).catch(() => {})
+      }
+    })
+
+    test("returns unresolved path when target does not exist", async () => {
+      await using tmp = await tmpdir()
+      const nonExistent = path.join(tmp.path, "does-not-exist-" + Date.now())
+      const result = Filesystem.resolve(nonExistent)
+      expect(result).toBe(Filesystem.normalizePath(path.resolve(nonExistent)))
+    })
   })
 })
