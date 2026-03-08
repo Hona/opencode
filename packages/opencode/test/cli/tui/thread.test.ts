@@ -84,7 +84,29 @@ mock.module("@/project/instance", () => ({
 }))
 
 describe("tui thread", () => {
-  test("uses the real cwd when PWD points at a symlink", async () => {
+  async function call(project?: string) {
+    const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
+    const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
+      _: [],
+      $0: "opencode",
+      project,
+      prompt: "hi",
+      model: undefined,
+      agent: undefined,
+      session: undefined,
+      continue: false,
+      fork: false,
+      port: 0,
+      hostname: "127.0.0.1",
+      mdns: false,
+      "mdns-domain": "opencode.local",
+      mdnsDomain: "opencode.local",
+      cors: [],
+    }
+    return TuiThreadCommand.handler(args)
+  }
+
+  async function check(project?: string) {
     await using tmp = await tmpdir({ git: true })
     const cwd = process.cwd()
     const pwd = process.env.PWD
@@ -92,7 +114,6 @@ describe("tui thread", () => {
     const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")
     const type = process.platform === "win32" ? "junction" : "dir"
-
     seen.tui.length = 0
     seen.inst.length = 0
     await fs.symlink(tmp.path, link, type)
@@ -101,26 +122,18 @@ describe("tui thread", () => {
       configurable: true,
       value: true,
     })
-    globalThis.Worker = class {
-      onerror?: (error: unknown) => void
+    globalThis.Worker = class extends EventTarget {
+      onerror = null
+      onmessage = null
+      onmessageerror = null
+      postMessage() {}
       terminate() {}
-    } as typeof Worker
+    } as unknown as typeof Worker
 
     try {
       process.chdir(tmp.path)
       process.env.PWD = link
-      const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
-      await expect(
-        TuiThreadCommand.handler({
-          project: undefined,
-          prompt: "hi",
-          model: undefined,
-          agent: undefined,
-          session: undefined,
-          continue: false,
-          fork: false,
-        }),
-      ).rejects.toBe(stop)
+      await expect(call(project)).rejects.toBe(stop)
       expect(seen.inst[0]).toBe(tmp.path)
       expect(seen.tui[0]).toBe(tmp.path)
     } finally {
@@ -132,5 +145,13 @@ describe("tui thread", () => {
       globalThis.Worker = worker
       await fs.rm(link, { recursive: true, force: true }).catch(() => undefined)
     }
+  }
+
+  test("uses the real cwd when PWD points at a symlink", async () => {
+    await check()
+  })
+
+  test("uses the real cwd after resolving a relative project from PWD", async () => {
+    await check(".")
   })
 })
