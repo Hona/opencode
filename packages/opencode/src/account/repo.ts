@@ -11,18 +11,16 @@ const decodeAccount = Schema.decodeUnknownSync(Account)
 
 type DbClient = Parameters<typeof Database.use>[0] extends (db: infer T) => unknown ? T : never
 
-const toAccountRepoError = (message: string, cause?: unknown) => new AccountRepoError({ message, cause })
+const ACCOUNT_STATE_ID = 1
 
 const db = <A>(run: (db: DbClient) => A) =>
   Effect.try({
     try: () => Database.use(run),
-    catch: (cause) => toAccountRepoError("Database operation failed", cause),
+    catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
   })
 
-const fromRow = (row: AccountRow) => decodeAccount(row)
-
 const current = (db: DbClient) => {
-  const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, 1)).get()
+  const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
   if (!state?.active_account_id) return
   return db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
 }
@@ -30,7 +28,7 @@ const current = (db: DbClient) => {
 const setActive = (db: DbClient, accountID: AccountID) =>
   db
     .insert(AccountStateTable)
-    .values({ id: 1, active_account_id: accountID })
+    .values({ id: ACCOUNT_STATE_ID, active_account_id: accountID })
     .onConflictDoUpdate({
       target: AccountStateTable.id,
       set: { active_account_id: accountID },
@@ -66,10 +64,10 @@ export class AccountRepo extends ServiceMap.Service<
     AccountRepo,
     AccountRepo.of({
       active: Effect.fn("AccountRepo.active")(() =>
-        db((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(fromRow(row)) : Option.none()))),
+        db((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(decodeAccount(row)) : Option.none()))),
       ),
 
-      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map(fromRow))),
+      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map(decodeAccount))),
 
       remove: Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
         db((db) =>
@@ -142,7 +140,7 @@ export class AccountRepo extends ServiceMap.Service<
                 .run()
               setActive(tx, input.id)
             }),
-          catch: (cause) => toAccountRepoError("Database operation failed", cause),
+          catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
         }).pipe(Effect.asVoid)
       }),
     }),
