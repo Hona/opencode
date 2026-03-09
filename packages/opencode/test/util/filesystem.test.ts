@@ -521,5 +521,48 @@ describe("filesystem", () => {
       const result = Filesystem.resolve(nonExistent)
       expect(result).toBe(Filesystem.normalizePath(path.resolve(nonExistent)))
     })
+
+    test("throws ELOOP on symlink cycle", async () => {
+      if (process.platform === "win32") return
+      await using tmp = await tmpdir()
+      const a = path.join(tmp.path, "a")
+      const b = path.join(tmp.path, "b")
+      await fs.symlink(b, a)
+      await fs.symlink(a, b)
+      expect(() => Filesystem.resolve(a)).toThrow()
+    })
+
+    test("throws EACCES on permission-denied symlink target", async () => {
+      if (process.platform === "win32") return
+      if (process.getuid?.() === 0) return // skip when running as root
+      await using tmp = await tmpdir()
+      const dir = path.join(tmp.path, "restricted")
+      await fs.mkdir(dir)
+      const link = path.join(tmp.path, "link")
+      await fs.symlink(dir, link)
+      // Remove all permissions from the target directory's parent entry
+      // realpathSync needs execute permission on each component
+      await fs.chmod(dir, 0o000)
+      try {
+        // Resolving a path *inside* the restricted dir should throw EACCES
+        expect(() => Filesystem.resolve(path.join(link, "child"))).toThrow()
+      } finally {
+        await fs.chmod(dir, 0o755)
+      }
+    })
+
+    test("rethrows non-ENOENT errors", () => {
+      // Verify the contract: only ENOENT is caught, other errors propagate
+      // We test this indirectly via ELOOP above, but also verify ENOTDIR
+      if (process.platform === "win32") return
+      const tmpFile = path.join(process.env.TMPDIR || "/tmp", `oc-test-${Date.now()}`)
+      require("fs").writeFileSync(tmpFile, "not-a-directory")
+      try {
+        // Treating a file as a directory component should throw ENOTDIR
+        expect(() => Filesystem.resolve(path.join(tmpFile, "child"))).toThrow()
+      } finally {
+        require("fs").unlinkSync(tmpFile)
+      }
+    })
   })
 })
