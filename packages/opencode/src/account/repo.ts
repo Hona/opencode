@@ -67,7 +67,7 @@ export class AccountRepo extends ServiceMap.Service<
         db((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(decodeAccount(row)) : Option.none()))),
       ),
 
-      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map(decodeAccount))),
+      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map((row) => decodeAccount(row)))),
 
       remove: Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
         db((db) =>
