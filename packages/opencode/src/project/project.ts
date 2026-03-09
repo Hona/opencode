@@ -150,8 +150,7 @@ export namespace Project {
             cwd: sandbox,
           })
             .then(async (result) =>
-              result
-                .text()
+              (await result.text())
                 .split("\n")
                 .filter(Boolean)
                 .map((x) => x.trim())
