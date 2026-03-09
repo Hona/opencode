@@ -13,6 +13,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { displayPath } from "@opencode-ai/util/path"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -103,7 +104,7 @@ export default function Home() {
                     class="text-14-mono text-left justify-between px-3"
                     onClick={() => openProject(project.worktree)}
                   >
-                    {project.worktree.replace(homedir(), "~")}
+                    {displayPath(project.worktree, { home: homedir() })}
                     <div class="text-14-regular text-text-weak">
                       {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
                     </div>

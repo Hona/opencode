@@ -1,4 +1,5 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
+import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createResource, Match, on, Show, Switch, type JSX } from "solid-js"
 import { useI18n } from "../context/i18n"
 import {
@@ -248,7 +249,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
       <Match when={isBinary()}>
         <div class="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
           <div class="text-14-semibold text-text-strong">
-            {cfg()?.path?.split("/").pop() ?? i18n.t("ui.fileMedia.binary.title")}
+            {getFilename(cfg()?.path) || i18n.t("ui.fileMedia.binary.title")}
           </div>
           <div class="text-14-regular text-text-weak">
             {(() => {

@@ -104,15 +104,27 @@ function relativizeProjectPath(path: string, directory?: string) {
   if (directory === "\\") return path
   if (path === directory) return ""
 
-  const separator = directory.includes("\\") ? "\\" : "/"
-  const prefix = directory.endsWith(separator) ? directory : directory + separator
-  if (!path.startsWith(prefix)) return path
-  return path.slice(directory.length)
+  const win = /^[A-Za-z]:/.test(directory) || directory.startsWith("\\\\")
+  const root = win ? directory.replace(/\\/g, "/").toLowerCase() : directory.replace(/\\/g, "/")
+  const file = win ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
+  if (file === root) return ""
+  if (!file.startsWith(root)) return path
+  if (!(root.endsWith("/") || file[root.length] === "/")) return path
+
+  const next = path.slice(directory.length)
+  if (next.startsWith("/") || next.startsWith("\\")) return next.slice(1)
+  return next
 }
 
 function getDirectory(path: string | undefined) {
   const data = useData()
   return relativizeProjectPath(_getDirectory(path), data.directory)
+}
+
+function toolPath(path: string | undefined) {
+  const data = useData()
+  if (!path) return ""
+  return getDirectory(path) || relativizeProjectPath(path, data.directory)
 }
 
 import type { IconProps } from "./icon"
@@ -917,8 +929,8 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
               <div data-slot="apply-patch-file-info">
                 <FileIcon node={{ path: props.path, type: "file" }} />
                 <div data-slot="apply-patch-file-name-container">
-                  <Show when={props.path.includes("/")}>
-                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
+                  <Show when={getDirectory(props.path)}>
+                    {(dir) => <span data-slot="apply-patch-directory">{`\u202A${dir()}\u202C`}</span>}
                   </Show>
                   <span data-slot="apply-patch-filename">{getFilename(props.path)}</span>
                 </div>
@@ -1126,7 +1138,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.list")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path)}
+            subtitle={toolPath(props.input.path || "/")}
             animate={props.reveal}
           />
         }
@@ -1157,7 +1169,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.glob")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path)}
+            subtitle={toolPath(props.input.path || "/")}
             args={props.input.pattern ? ["pattern=" + props.input.pattern] : []}
             animate={props.reveal}
           />
@@ -1192,7 +1204,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.grep")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path)}
+            subtitle={toolPath(props.input.path || "/")}
             args={args}
             animate={props.reveal}
           />
@@ -1650,7 +1662,7 @@ ToolRegistry.register({
                     {(name) => (
                       <ToolMetaLine
                         filename={name()}
-                        path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                        path={getDirectory(props.input.filePath) || undefined}
                         changes={props.metadata.filediff}
                         animate={reveal()}
                       />
@@ -1721,7 +1733,7 @@ ToolRegistry.register({
                     {(name) => (
                       <ToolMetaLine
                         filename={name()}
-                        path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                        path={getDirectory(props.input.filePath) || undefined}
                         animate={reveal()}
                       />
                     )}
@@ -1812,7 +1824,7 @@ ToolRegistry.register({
                     {(file) => (
                       <ToolMetaLine
                         filename={getFilename(file().relativePath)}
-                        path={file().relativePath.includes("/") ? getDirectory(file().relativePath) : undefined}
+                        path={getDirectory(file().relativePath) || undefined}
                         changes={{ additions: file().additions, deletions: file().deletions }}
                         animate={reveal()}
                         soft
@@ -1859,8 +1871,8 @@ ToolRegistry.register({
                                 <div data-slot="apply-patch-file-info">
                                   <FileIcon node={{ path: file.relativePath, type: "file" }} />
                                   <div data-slot="apply-patch-file-name-container">
-                                    <Show when={file.relativePath.includes("/")}>
-                                      <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
+                                    <Show when={getDirectory(file.relativePath)}>
+                                      {(dir) => <span data-slot="apply-patch-directory">{`\u202A${dir()}\u202C`}</span>}
                                     </Show>
                                     <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
                                   </div>

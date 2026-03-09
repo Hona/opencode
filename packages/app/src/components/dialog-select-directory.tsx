@@ -3,7 +3,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { displayPath as formatPath, getDirectory, getFilename, getPathSeparator } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -97,23 +97,28 @@ function tildeOf(absolute: string, home: string) {
   return ""
 }
 
-function displayPath(path: string, input: string, home: string) {
+function showPath(path: string, input: string, home: string) {
   const full = trimTrailing(path)
-  if (modeOf(input) === "absolute") return full
-  return tildeOf(full, home) || full
+  if (modeOf(input) === "absolute") return formatPath(full)
+  return formatPath(full, { home })
 }
 
 function toRow(absolute: string, home: string, group: Row["group"]): Row {
   const full = trimTrailing(absolute)
+  const shown = formatPath(full, { home })
   const tilde = tildeOf(full, home)
+  const normalized = normalizePath(full)
   const withSlash = (value: string) => {
     if (!value) return ""
-    if (value.endsWith("/")) return value
-    return value + "/"
+    const sep = getPathSeparator(value)
+    if (value.endsWith(sep)) return value
+    return value + sep
   }
 
   const search = Array.from(
-    new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
+    new Set(
+      [full, shown, normalized, tilde, withSlash(shown), withSlash(normalized), getFilename(full)].filter(Boolean),
+    ),
   ).join("\n")
   return { absolute: full, search, group }
 }
@@ -348,8 +353,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           e.preventDefault()
           e.stopPropagation()
 
-          const value = displayPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
+          const value = showPath(item.absolute, filter(), home())
+          const sep = getPathSeparator(item.absolute)
+          list?.setFilter(value.endsWith(sep) ? value : value + sep)
         }}
         onSelect={(path) => {
           if (!path) return
@@ -357,7 +363,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         }}
       >
         {(item) => {
-          const path = displayPath(item.absolute, filter(), home())
+          const path = showPath(item.absolute, filter(), home())
+          const sep = getPathSeparator(path === "~" ? item.absolute : path || item.absolute)
+          const dir = getDirectory(path)
+          const name = getFilename(path)
           if (path === "~") {
             return (
               <div class="w-full flex items-center justify-between rounded-md">
@@ -365,7 +374,19 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                   <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular min-w-0">
                     <span class="text-text-strong whitespace-nowrap">~</span>
-                    <span class="text-text-weak whitespace-nowrap">/</span>
+                    <span class="text-text-weak whitespace-nowrap">{sep}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+          if (dir === path && name === path) {
+            return (
+              <div class="w-full flex items-center justify-between rounded-md">
+                <div class="flex items-center gap-x-3 grow min-w-0">
+                  <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                  <div class="flex items-center text-14-regular min-w-0">
+                    <span class="text-text-strong whitespace-nowrap">{path}</span>
                   </div>
                 </div>
               </div>
@@ -377,10 +398,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                 <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular min-w-0">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
+                    {dir}
                   </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                  <span class="text-text-weak whitespace-nowrap">/</span>
+                  <span class="text-text-strong whitespace-nowrap">{name}</span>
+                  <span class="text-text-weak whitespace-nowrap">{sep}</span>
                 </div>
               </div>
             </div>
