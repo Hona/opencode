@@ -247,7 +247,7 @@ test("resolves env templates in account config with account token", async () => 
   const originalActive = Account.active
   const originalConfig = Account.config
   const originalToken = Account.token
-  const originalControlToken = process.env["OPENCODE_CONTROL_TOKEN"]
+  const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
   Account.active = mock(() => ({
     id: AccountID.make("account-1"),
@@ -260,7 +260,7 @@ test("resolves env templates in account config with account token", async () => 
     provider: {
       opencode: {
         options: {
-          apiKey: "{env:OPENCODE_CONTROL_TOKEN}",
+          apiKey: "{env:OPENCODE_CONSOLE_TOKEN}",
         },
       },
     },
@@ -282,9 +282,9 @@ test("resolves env templates in account config with account token", async () => 
     Account.config = originalConfig
     Account.token = originalToken
     if (originalControlToken !== undefined) {
-      process.env["OPENCODE_CONTROL_TOKEN"] = originalControlToken
+      process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
     } else {
-      delete process.env["OPENCODE_CONTROL_TOKEN"]
+      delete process.env["OPENCODE_CONSOLE_TOKEN"]
     }
   }
 })

@@ -180,8 +180,8 @@ export namespace Config {
       const config = await Account.config(active.id, active.selected_org_id)
       const token = await Account.token(active.id)
       if (token) {
-        process.env["OPENCODE_CONTROL_TOKEN"] = token
-        Env.set("OPENCODE_CONTROL_TOKEN", token)
+        process.env["OPENCODE_CONSOLE_TOKEN"] = token
+        Env.set("OPENCODE_CONSOLE_TOKEN", token)
       }
 
       if (config) {
