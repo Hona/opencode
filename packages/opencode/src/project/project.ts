@@ -88,6 +88,12 @@ export namespace Project {
     }
   }
 
+  function readCachedId(dir: string) {
+    return Filesystem.readText(path.join(dir, "opencode"))
+      .then((x) => x.trim())
+      .catch(() => undefined)
+  }
+
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
@@ -101,9 +107,7 @@ export namespace Project {
         const gitBinary = which("git")
 
         // cached id calculation
-        let id = await Filesystem.readText(path.join(dotgit, "opencode"))
-          .then((x) => x.trim())
-          .catch(() => undefined)
+        let id = await readCachedId(dotgit)
 
         if (!gitBinary) {
           return {
@@ -114,13 +118,40 @@ export namespace Project {
           }
         }
 
+        const worktree = await git(["rev-parse", "--git-common-dir"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => {
+            const common = gitpath(sandbox, await result.text())
+            // Avoid going to parent of sandbox when git-common-dir is empty.
+            return common === sandbox ? sandbox : path.dirname(common)
+          })
+          .catch(() => undefined)
+
+        if (!worktree) {
+          return {
+            id: id ?? "global",
+            worktree: sandbox,
+            sandbox: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
+        // In the case of a git worktree, it can't cache the id
+        // because `.git` is not a folder, but it always needs the
+        // same project id as the common dir, so we resolve it now
+        if (id == null) {
+          id = await readCachedId(path.join(worktree, ".git"))
+        }
+
         // generate id from root commit
         if (!id) {
           const roots = await git(["rev-list", "--max-parents=0", "--all"], {
             cwd: sandbox,
           })
             .then(async (result) =>
-              (await result.text())
+              result
+                .text()
                 .split("\n")
                 .filter(Boolean)
                 .map((x) => x.trim())
@@ -161,32 +192,13 @@ export namespace Project {
         if (!top) {
           return {
             id,
-            sandbox,
             worktree: sandbox,
+            sandbox: sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
         sandbox = top
-
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
-          cwd: sandbox,
-        })
-          .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
-            // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
-          })
-          .catch(() => undefined)
-
-        if (!worktree) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
-        }
 
         return {
           id,
