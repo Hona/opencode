@@ -197,7 +197,7 @@ export class AccountService extends ServiceMap.Service<
         return yield* Effect.forEach(
           accounts,
           (account) => orgs(account.id).pipe(Effect.map((orgs) => ({ account, orgs }))),
-          { concurrency: "unbounded" },
+          { concurrency: 3 },
         )
       })
 

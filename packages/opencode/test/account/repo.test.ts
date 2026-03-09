@@ -47,12 +47,14 @@ it.effect(
     const value = Option.getOrThrow(row)
     expect(value.id).toBe("user-1")
     expect(value.email).toBe("test@example.com")
-    expect(value.selected_org_id).toBe("org-1")
+
+    const active = yield* AccountRepo.use((r) => r.active())
+    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-1"))
   }),
 )
 
 it.effect(
-  "persistAccount sets the active account without clearing prior selections",
+  "persistAccount sets the active account and org",
   Effect.gen(function* () {
     const id1 = AccountID.make("user-1")
     const id2 = AccountID.make("user-2")
@@ -81,15 +83,11 @@ it.effect(
       }),
     )
 
-    const row1 = yield* AccountRepo.use((r) => r.getRow(id1))
-    expect(Option.getOrThrow(row1).selected_org_id).toBe("org-1")
-
-    const row2 = yield* AccountRepo.use((r) => r.getRow(id2))
-    expect(Option.getOrThrow(row2).selected_org_id).toBe("org-2")
-
+    // Last persisted account is active with its org
     const active = yield* AccountRepo.use((r) => r.active())
     expect(Option.isSome(active)).toBe(true)
     expect(Option.getOrThrow(active).id).toBe(AccountID.make("user-2"))
+    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
   }),
 )
 
@@ -184,18 +182,13 @@ it.effect(
     )
 
     yield* AccountRepo.use((r) => r.use(id1, Option.some(OrgID.make("org-99"))))
-    const row = yield* AccountRepo.use((r) => r.getRow(id1))
-    expect(Option.getOrThrow(row).selected_org_id).toBe("org-99")
-
-    const active = yield* AccountRepo.use((r) => r.active())
-    expect(Option.getOrThrow(active).id).toBe(id1)
+    const active1 = yield* AccountRepo.use((r) => r.active())
+    expect(Option.getOrThrow(active1).id).toBe(id1)
+    expect(Option.getOrThrow(active1).active_org_id).toBe(OrgID.make("org-99"))
 
     yield* AccountRepo.use((r) => r.use(id1, Option.none()))
-    const row2 = yield* AccountRepo.use((r) => r.getRow(id1))
-    expect(Option.getOrThrow(row2).selected_org_id).toBeNull()
-
-    const other = yield* AccountRepo.use((r) => r.getRow(id2))
-    expect(Option.getOrThrow(other).selected_org_id).toBeNull()
+    const active2 = yield* AccountRepo.use((r) => r.active())
+    expect(Option.getOrThrow(active2).active_org_id).toBeNull()
   }),
 )
 
@@ -300,7 +293,9 @@ it.effect(
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe("at_v2")
-    expect(value.selected_org_id).toBe("org-2")
+
+    const active = yield* AccountRepo.use((r) => r.active())
+    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
   }),
 )
 

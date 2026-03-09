@@ -22,16 +22,18 @@ const db = <A>(run: (db: DbClient) => A) =>
 const current = (db: DbClient) => {
   const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
   if (!state?.active_account_id) return
-  return db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
+  const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
+  if (!account) return
+  return { ...account, active_org_id: state.active_org_id ?? null }
 }
 
-const setActive = (db: DbClient, accountID: AccountID) =>
+const setState = (db: DbClient, accountID: AccountID, orgID: string | null) =>
   db
     .insert(AccountStateTable)
-    .values({ id: ACCOUNT_STATE_ID, active_account_id: accountID })
+    .values({ id: ACCOUNT_STATE_ID, active_account_id: accountID, active_org_id: orgID })
     .onConflictDoUpdate({
       target: AccountStateTable.id,
-      set: { active_account_id: accountID },
+      set: { active_account_id: accountID, active_org_id: orgID },
     })
     .run()
 
@@ -67,13 +69,13 @@ export class AccountRepo extends ServiceMap.Service<
         db((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(decodeAccount(row)) : Option.none()))),
       ),
 
-      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map((row) => decodeAccount(row)))),
+      list: Effect.fn("AccountRepo.list")(() => db((db) => db.select().from(AccountTable).all().map((row) => decodeAccount({ ...row, active_org_id: null })))),
 
       remove: Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
         db((db) =>
           Database.transaction((tx) => {
             tx.update(AccountStateTable)
-              .set({ active_account_id: null })
+              .set({ active_account_id: null, active_org_id: null })
               .where(eq(AccountStateTable.active_account_id, accountID))
               .run()
             tx.delete(AccountTable).where(eq(AccountTable.id, accountID)).run()
@@ -82,15 +84,7 @@ export class AccountRepo extends ServiceMap.Service<
       ),
 
       use: Effect.fn("AccountRepo.use")((accountID: AccountID, orgID: Option.Option<OrgID>) =>
-        db((db) =>
-          Database.transaction((tx) => {
-            tx.update(AccountTable)
-              .set({ selected_org_id: Option.getOrNull(orgID) })
-              .where(eq(AccountTable.id, accountID))
-              .run()
-            setActive(tx, accountID)
-          }),
-        ).pipe(Effect.asVoid),
+        db((db) => setState(db, accountID, Option.getOrNull(orgID))).pipe(Effect.asVoid),
       ),
 
       getRow: Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
@@ -115,33 +109,29 @@ export class AccountRepo extends ServiceMap.Service<
 
       persistAccount: Effect.fn("AccountRepo.persistAccount")((input) => {
         const orgID = Option.getOrNull(input.orgID)
-        return Effect.try({
-          try: () =>
-            Database.transaction((tx) => {
-              tx.insert(AccountTable)
-                .values({
-                  id: input.id,
-                  email: input.email,
-                  url: input.url,
+        return db((db) =>
+          Database.transaction((tx) => {
+            tx.insert(AccountTable)
+              .values({
+                id: input.id,
+                email: input.email,
+                url: input.url,
+                access_token: input.accessToken,
+                refresh_token: input.refreshToken,
+                token_expiry: input.expiry,
+              })
+              .onConflictDoUpdate({
+                target: AccountTable.id,
+                set: {
                   access_token: input.accessToken,
                   refresh_token: input.refreshToken,
                   token_expiry: input.expiry,
-                  selected_org_id: orgID,
-                })
-                .onConflictDoUpdate({
-                  target: AccountTable.id,
-                  set: {
-                    access_token: input.accessToken,
-                    refresh_token: input.refreshToken,
-                    token_expiry: input.expiry,
-                    selected_org_id: orgID,
-                  },
-                })
-                .run()
-              setActive(tx, input.id)
-            }),
-          catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
-        }).pipe(Effect.asVoid)
+                },
+              })
+              .run()
+            setState(tx, input.id, orgID)
+          }),
+        ).pipe(Effect.asVoid)
       }),
     }),
   )

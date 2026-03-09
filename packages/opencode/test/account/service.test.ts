@@ -210,7 +210,7 @@ it.effect(
       expect.objectContaining({
         id: "user-1",
         email: "user@example.com",
-        selected_org_id: "org-1",
+        active_org_id: "org-1",
       }),
     )
   }),

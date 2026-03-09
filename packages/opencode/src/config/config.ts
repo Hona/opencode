@@ -176,8 +176,8 @@ export namespace Config {
     }
 
     const active = Account.active()
-    if (active?.selected_org_id) {
-      const config = await Account.config(active.id, active.selected_org_id)
+    if (active?.active_org_id) {
+      const config = await Account.config(active.id, active.active_org_id)
       const token = await Account.token(active.id)
       if (token) {
         process.env["OPENCODE_CONSOLE_TOKEN"] = token

@@ -44,7 +44,7 @@ export namespace ShareNext {
     const headers: Record<string, string> = {}
 
     const active = Account.active()
-    if (!active?.selected_org_id) {
+    if (!active?.active_org_id) {
       const baseUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
       return { headers, api: legacyApi, baseUrl }
     }
@@ -55,7 +55,7 @@ export namespace ShareNext {
     }
 
     headers["authorization"] = `Bearer ${token}`
-    headers["x-org-id"] = active.selected_org_id
+    headers["x-org-id"] = active.active_org_id
     return { headers, api: controlApi, baseUrl: active.url }
   }
 
