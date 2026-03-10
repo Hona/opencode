@@ -128,7 +128,8 @@ export function Titlebar() {
   createEffect(() => {
     if (!windows()) return
     const api = electronApi()
-    if (!api?.setTitlebar) return
+    const setTitlebar = api?.setTitlebar
+    if (!setTitlebar) return
 
     let frame = 0
     const sync = () => {
@@ -142,7 +143,7 @@ export function Titlebar() {
         const color = css.getPropertyValue("--background-base").trim() || (mode === "dark" ? "#101010" : "#f8f8f8")
         const symbol =
           css.getPropertyValue("--text-base").trim() || (mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f")
-        void api.setTitlebar({ color, symbol, mode }).catch(() => undefined)
+        void setTitlebar({ color, symbol, mode }).catch(() => undefined)
       })
     }
 
