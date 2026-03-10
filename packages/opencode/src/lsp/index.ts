@@ -7,22 +7,9 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
-import { spawn as launch, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "child_process"
+import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
-
-const hide = process.platform === "win32"
-
-function spawn(
-  cmd: string,
-  args: readonly string[],
-  opts: SpawnOptionsWithoutStdio = {},
-): ChildProcessWithoutNullStreams {
-  return launch(cmd, [...args], {
-    ...opts,
-    windowsHide: hide,
-  })
-}
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -127,6 +114,7 @@ export namespace LSP {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
                 cwd: root,
+                windowsHide: process.platform === "win32",
                 env: {
                   ...process.env,
                   ...item.env,
