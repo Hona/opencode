@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
+import { spawn as launch, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -13,6 +13,18 @@ import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
+
+const hide = process.platform === "win32"
+
+function spawn(cmd: string, opts: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
+function spawn(cmd: string, args: readonly string[], opts?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
+function spawn(cmd: string, args?: readonly string[] | SpawnOptionsWithoutStdio, opts: SpawnOptionsWithoutStdio = {}) {
+  const cfg = Array.isArray(args) ? opts : (args ?? {})
+  return launch(cmd, Array.isArray(args) ? [...args] : [], {
+    ...cfg,
+    windowsHide: hide,
+  })
+}
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
