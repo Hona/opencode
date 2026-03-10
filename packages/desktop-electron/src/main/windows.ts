@@ -1,5 +1,5 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, nativeImage } from "electron"
+import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -20,6 +20,38 @@ function iconPath() {
   return join(iconsDir(), `icon.${ext}`)
 }
 
+export type TitlebarTheme = {
+  color: string
+  symbol: string
+  mode: "light" | "dark"
+}
+
+function mode() {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light"
+}
+
+function background(mode: TitlebarTheme["mode"]) {
+  return mode === "dark" ? "#101010" : "#f8f8f8"
+}
+
+function symbols(mode: TitlebarTheme["mode"]) {
+  return mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f"
+}
+
+function overlay(theme: Partial<TitlebarTheme> = {}) {
+  const mode = theme.mode ?? mode()
+  return {
+    color: theme.color || background(mode),
+    symbolColor: theme.symbol || symbols(mode),
+    height: 40,
+  }
+}
+
+export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
+  if (process.platform !== "win32") return
+  win.setTitleBarOverlay(overlay(theme))
+}
+
 export function setDockIcon() {
   if (process.platform !== "darwin") return
   app.dock?.setIcon(nativeImage.createFromPath(join(iconsDir(), "128x128@2x.png")))
@@ -31,6 +63,7 @@ export function createMainWindow(globals: Globals) {
     defaultHeight: 800,
   })
 
+  const tone = mode()
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -47,13 +80,10 @@ export function createMainWindow(globals: Globals) {
       : {}),
     ...(process.platform === "win32"
       ? {
+          backgroundColor: background(tone),
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: {
-            color: "transparent",
-            symbolColor: "#999",
-            height: 40,
-          },
+          titleBarOverlay: overlay({ mode: tone }),
         }
       : {}),
     webPreferences: {
@@ -71,6 +101,7 @@ export function createMainWindow(globals: Globals) {
 }
 
 export function createLoadingWindow(globals: Globals) {
+  const tone = mode()
   const win = new BrowserWindow({
     width: 640,
     height: 480,
@@ -81,13 +112,10 @@ export function createLoadingWindow(globals: Globals) {
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
+          backgroundColor: background(tone),
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: {
-            color: "transparent",
-            symbolColor: "#999",
-            height: 40,
-          },
+          titleBarOverlay: overlay({ mode: tone }),
         }
       : {}),
     webPreferences: {

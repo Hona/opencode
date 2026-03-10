@@ -1,4 +1,4 @@
-import { createEffect, createMemo, Show, untrack } from "solid-js"
+import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -31,9 +31,14 @@ type TauriApi = {
   }
 }
 
+type ElectronApi = {
+  setTitlebar?: (theme: { color: string; symbol: string; mode: "light" | "dark" }) => Promise<void>
+}
+
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
+const electronApi = () => (window as unknown as { api?: ElectronApi }).api
 
 export function Titlebar() {
   const layout = useLayout()
@@ -118,6 +123,41 @@ export function Titlebar() {
     if (!win?.setTheme) return
 
     void win.setTheme(value).catch(() => undefined)
+  })
+
+  createEffect(() => {
+    if (!windows()) return
+    const api = electronApi()
+    if (!api?.setTitlebar) return
+
+    let frame = 0
+    const sync = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const root = document.documentElement
+        const css = getComputedStyle(root)
+        const mode = (
+          root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
+        ) as "light" | "dark"
+        const color = css.getPropertyValue("--background-base").trim() || (mode === "dark" ? "#101010" : "#f8f8f8")
+        const symbol =
+          css.getPropertyValue("--text-base").trim() || (mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f")
+        void api.setTitlebar({ color, symbol, mode }).catch(() => undefined)
+      })
+    }
+
+    sync()
+
+    const obs = new MutationObserver(sync)
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-color-scheme", "style"],
+    })
+
+    onCleanup(() => {
+      obs.disconnect()
+      cancelAnimationFrame(frame)
+    })
   })
 
   const interactive = (target: EventTarget | null) => {
