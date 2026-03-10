@@ -265,6 +265,7 @@ export namespace Config {
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
     await Npm.install(dir).catch((err: any) => {
+      console.log(err)
       log.warn("failed to install dependencies", { dir, error: err.message })
     })
   }
