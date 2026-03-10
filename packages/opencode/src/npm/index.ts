@@ -84,9 +84,11 @@ export namespace Npm {
 
   export async function install(dir: string) {
     log.info("installing dependencies", { dir })
+    // Disable binLinks on Windows CI where symlink permissions are restricted
+    const isWindowsCI = process.platform === "win32" && process.env.CI
     const arb = new Arborist({
       path: dir,
-      binLinks: false,
+      binLinks: !isWindowsCI,
       progress: false,
       savePrefix: "",
     })
