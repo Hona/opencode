@@ -62,7 +62,7 @@ export namespace Npm {
   }
 
   export async function install(dir: string) {
-    console.log(dir)
+    log.info("installing dependencies", { dir })
     const arb = new Arborist({
       path: dir,
       binLinks: true,
