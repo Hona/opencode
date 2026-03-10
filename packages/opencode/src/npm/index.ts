@@ -86,7 +86,7 @@ export namespace Npm {
     log.info("installing dependencies", { dir })
     const arb = new Arborist({
       path: dir,
-      binLinks: !(process.platform === "win32" && process.env.CI),
+      binLinks: false,
       progress: false,
       savePrefix: "",
     })
