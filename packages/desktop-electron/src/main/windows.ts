@@ -26,7 +26,7 @@ export type TitlebarTheme = {
   mode: "light" | "dark"
 }
 
-function mode() {
+function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
 }
 
@@ -39,7 +39,7 @@ function symbols(mode: TitlebarTheme["mode"]) {
 }
 
 function overlay(theme: Partial<TitlebarTheme> = {}) {
-  const mode = theme.mode ?? mode()
+  const mode = theme.mode ?? tone()
   return {
     color: theme.color || background(mode),
     symbolColor: theme.symbol || symbols(mode),
@@ -63,7 +63,7 @@ export function createMainWindow(globals: Globals) {
     defaultHeight: 800,
   })
 
-  const tone = mode()
+  const mode = tone()
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -80,10 +80,10 @@ export function createMainWindow(globals: Globals) {
       : {}),
     ...(process.platform === "win32"
       ? {
-          backgroundColor: background(tone),
+          backgroundColor: background(mode),
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode: tone }),
+          titleBarOverlay: overlay({ mode }),
         }
       : {}),
     webPreferences: {
@@ -101,7 +101,7 @@ export function createMainWindow(globals: Globals) {
 }
 
 export function createLoadingWindow(globals: Globals) {
-  const tone = mode()
+  const mode = tone()
   const win = new BrowserWindow({
     width: 640,
     height: 480,
@@ -112,10 +112,10 @@ export function createLoadingWindow(globals: Globals) {
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
-          backgroundColor: background(tone),
+          backgroundColor: background(mode),
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode: tone }),
+          titleBarOverlay: overlay({ mode }),
         }
       : {}),
     webPreferences: {
