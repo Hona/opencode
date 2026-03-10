@@ -28,7 +28,6 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
 import { iife } from "@/util/iife"
 import { Control } from "@/control"
 import { ConfigPaths } from "./paths"
@@ -302,7 +301,7 @@ export namespace Config {
 
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
     if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+      const isOutdated = await Npm.outdated("@opencode-ai/plugin", depVersion)
       if (!isOutdated) return false
       log.info("Cached version is outdated, proceeding with install", {
         pkg: "@opencode-ai/plugin",
