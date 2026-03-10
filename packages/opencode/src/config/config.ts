@@ -33,6 +33,8 @@ import { Control } from "@/control"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Npm } from "@/npm"
+import { BunProc } from "@/bun"
+import { proxied } from "@/util/proxied"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -264,7 +266,14 @@ export namespace Config {
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await Npm.install(dir).catch((err) => {
+    await BunProc.run(
+      [
+        "install",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
+      ],
+      { cwd: dir },
+    ).catch((err) => {
       log.warn("failed to install dependencies", { dir, error: err })
     })
   }
