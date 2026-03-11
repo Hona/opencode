@@ -125,41 +125,39 @@ export function Titlebar() {
     void win.setTheme(value).catch(() => undefined)
   })
 
-  createEffect(() => {
-    if (!windows()) return
-    const api = electronApi()
-    const setTitlebar = api?.setTitlebar
-    if (!setTitlebar) return
+  if (windows()) {
+    const setTitlebar = electronApi()?.setTitlebar
+    if (setTitlebar) {
+      let frame = 0
+      const sync = () => {
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(() => {
+          const root = document.documentElement
+          const css = getComputedStyle(root)
+          const mode = (
+            root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
+          ) as "light" | "dark"
+          const color = css.getPropertyValue("--background-base").trim() || (mode === "dark" ? "#101010" : "#f8f8f8")
+          const symbol =
+            css.getPropertyValue("--text-base").trim() || (mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f")
+          void setTitlebar({ color, symbol, mode }).catch(() => undefined)
+        })
+      }
 
-    let frame = 0
-    const sync = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        const root = document.documentElement
-        const css = getComputedStyle(root)
-        const mode = (
-          root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
-        ) as "light" | "dark"
-        const color = css.getPropertyValue("--background-base").trim() || (mode === "dark" ? "#101010" : "#f8f8f8")
-        const symbol =
-          css.getPropertyValue("--text-base").trim() || (mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f")
-        void setTitlebar({ color, symbol, mode }).catch(() => undefined)
+      sync()
+
+      const obs = new MutationObserver(sync)
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme", "data-color-scheme", "style"],
+      })
+
+      onCleanup(() => {
+        obs.disconnect()
+        cancelAnimationFrame(frame)
       })
     }
-
-    sync()
-
-    const obs = new MutationObserver(sync)
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme", "data-color-scheme", "style"],
-    })
-
-    onCleanup(() => {
-      obs.disconnect()
-      cancelAnimationFrame(frame)
-    })
-  })
+  }
 
   const interactive = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false
