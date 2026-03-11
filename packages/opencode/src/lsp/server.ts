@@ -1,4 +1,4 @@
-import { spawn as launch, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "child_process"
+import { spawn as launch, type ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
