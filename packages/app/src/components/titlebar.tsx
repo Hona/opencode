@@ -137,9 +137,8 @@ export function Titlebar() {
           const mode = (
             root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
           ) as "light" | "dark"
-          const color = css.getPropertyValue("--background-base").trim() || (mode === "dark" ? "#101010" : "#f8f8f8")
-          const symbol =
-            css.getPropertyValue("--text-base").trim() || (mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f")
+          const color = css.getPropertyValue("--background-base").trim()
+          const symbol = css.getPropertyValue("--text-base").trim()
           void setTitlebar({ color, symbol, mode }).catch(() => undefined)
         })
       }
