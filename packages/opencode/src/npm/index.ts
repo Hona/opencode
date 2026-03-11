@@ -151,7 +151,9 @@ export namespace Npm {
     const files = await readdir(dir).catch(() => [])
     if (!files.length) {
       await add(pkg)
-      return which(pkg)
+      const retry = await readdir(dir).catch(() => [])
+      if (!retry.length) throw new Error(`No binary found for package "${pkg}" after install`)
+      return path.join(dir, retry[0])
     }
     return path.join(dir, files[0])
   }
