@@ -2,6 +2,7 @@ import windowState from "electron-window-state"
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { TitlebarTheme } from "../preload/types"
 
 type Globals = {
   updaterEnabled: boolean
@@ -18,12 +19,6 @@ function iconsDir() {
 function iconPath() {
   const ext = process.platform === "win32" ? "ico" : "png"
   return join(iconsDir(), `icon.${ext}`)
-}
-
-export type TitlebarTheme = {
-  color: string
-  symbol: string
-  mode: "light" | "dark"
 }
 
 function tone() {
