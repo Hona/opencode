@@ -14,17 +14,14 @@ import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
 
-const hide = process.platform === "win32"
-
-function spawn(cmd: string, opts: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
-function spawn(cmd: string, args: readonly string[], opts?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams
-function spawn(cmd: string, args?: readonly string[] | SpawnOptionsWithoutStdio, opts: SpawnOptionsWithoutStdio = {}) {
-  const cfg = Array.isArray(args) ? opts : (args ?? {})
-  return launch(cmd, Array.isArray(args) ? [...args] : [], {
-    ...cfg,
-    windowsHide: hide,
-  })
-}
+const spawn = ((
+  cmd: string,
+  args?: readonly string[] | SpawnOptionsWithoutStdio,
+  opts: SpawnOptionsWithoutStdio = {},
+) => {
+  if (Array.isArray(args)) return launch(cmd, [...args], { ...opts, windowsHide: true })
+  return launch(cmd, { ...(args ?? {}), windowsHide: true })
+}) as typeof launch
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
