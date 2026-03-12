@@ -46,7 +46,6 @@ type TerminalColors = {
 
 type E2EDriver = {
   connected: boolean
-  received: string
   rendered: string
   settled: number
 }
@@ -215,7 +214,6 @@ export const Terminal = (props: TerminalProps) => {
 
   const seed = (): E2EDriver => ({
     connected: false,
-    received: "",
     rendered: "",
     settled: 0,
   })
@@ -228,7 +226,7 @@ export const Terminal = (props: TerminalProps) => {
     root[id] = { ...(root[id] ?? seed()), ...next }
   }
 
-  const append = (key: "received" | "rendered", data: string) => {
+  const append = (key: "rendered", data: string) => {
     const root = driver()
     if (!root) return
     const prev = root[id] ?? seed()
@@ -502,10 +500,6 @@ export const Terminal = (props: TerminalProps) => {
         startResize()
       }
 
-      // t.onScroll((ydisp) => {
-      // console.log("Scroll position:", ydisp)
-      // })
-
       const once = { value: false }
       let closing = false
 
@@ -532,9 +526,6 @@ export const Terminal = (props: TerminalProps) => {
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
         if (closing) return
-        if (typeof event.data === "string" && event.data) {
-          append("received", event.data)
-        }
         if (event.data instanceof ArrayBuffer) {
           const bytes = new Uint8Array(event.data)
           if (bytes[0] !== 0) return

@@ -22,7 +22,6 @@ import {
 
 type TerminalDriver = {
   connected: boolean
-  received: string
   rendered: string
   settled: number
 }
@@ -50,7 +49,7 @@ async function terminalID(term: Locator) {
   throw new Error("Active terminal missing data-pty-id")
 }
 
-export async function terminalState(page: Page, term?: Locator) {
+async function terminalState(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
   return page.evaluate((id) => {

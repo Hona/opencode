@@ -99,7 +99,6 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
             string,
             {
               connected: boolean
-              received: string
               rendered: string
               settled: number
             }
