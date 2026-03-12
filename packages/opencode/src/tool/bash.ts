@@ -20,6 +20,7 @@ import { Plugin } from "@/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const PS = new Set(["powershell", "pwsh"])
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -44,20 +45,55 @@ const parser = lazy(async () => {
   const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
     with: { type: "wasm" },
   })
+  const { default: psWasm } = await import("tree-sitter-powershell/tree-sitter-powershell.wasm" as string, {
+    with: { type: "wasm" },
+  })
   const bashPath = resolveWasm(bashWasm)
-  const bashLanguage = await Language.load(bashPath)
-  const p = new Parser()
-  p.setLanguage(bashLanguage)
-  return p
+  const psPath = resolveWasm(psWasm)
+  const [bashLanguage, psLanguage] = await Promise.all([Language.load(bashPath), Language.load(psPath)])
+  const bash = new Parser()
+  bash.setLanguage(bashLanguage)
+  const ps = new Parser()
+  ps.setLanguage(psLanguage)
+  return { bash, ps }
 })
+
+function launch(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  if (process.platform === "win32" && PS.has(name)) {
+    return spawn(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+      cwd,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+    windowsHide: true,
+    })
+  }
+
+  return spawn(command, {
+    shell,
+    cwd,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+    windowsHide: true,
+  })
+}
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
   const shell = Shell.acceptable()
+  const name = Shell.name(shell)
+  const chain =
+    name === "powershell"
+      ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
+      : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
   log.info("bash tool using shell", { shell })
 
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+      .replaceAll("${os}", process.platform)
+      .replaceAll("${shell}", name)
+      .replaceAll("${chaining}", chain)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
@@ -81,7 +117,8 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
-      const tree = await parser().then((p) => p.parse(params.command))
+      // Always use bash parser for permission scanning — PS-aware parsing comes later
+      const tree = await parser().then((p) => p.bash.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
       }
@@ -164,16 +201,9 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      const proc = spawn(params.command, {
-        shell,
-        cwd,
-        env: {
-          ...process.env,
-          ...shellEnv.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-        windowsHide: process.platform === "win32",
+      const proc = launch(shell, name, params.command, cwd, {
+        ...process.env,
+        ...shellEnv.env,
       })
 
       let output = ""

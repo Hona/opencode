@@ -30,7 +30,7 @@ describe("tool.bash", () => {
         const bash = await BashTool.init()
         const result = await bash.execute(
           {
-            command: "echo 'test'",
+            command: "echo test",
             description: "Echo test message",
           },
           ctx,
