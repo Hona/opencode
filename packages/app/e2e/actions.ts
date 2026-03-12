@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
-import { terminalAttr, type E2EWindow, type TerminalProbeState } from "../src/testing/terminal"
+import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
 import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
@@ -40,7 +40,7 @@ async function terminalReady(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
   return page.evaluate((id) => {
-    const state = ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id] as TerminalProbeState | undefined
+    const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
     return !!state?.connected && (state.settled ?? 0) > 0
   }, id)
 }
@@ -50,9 +50,7 @@ async function terminalHas(page: Page, input: { term?: Locator; token: string })
   const id = await terminalID(next)
   return page.evaluate(
     (input) => {
-      const state = ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[input.id] as
-        | TerminalProbeState
-        | undefined
+      const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[input.id]
       return state?.rendered.includes(input.token) ?? false
     },
     { id, token: input.token },
