@@ -11,8 +11,6 @@ export type WslConfig = { enabled: boolean }
 
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
-  color: string
-  symbol: string
   mode: "light" | "dark"
 }
 

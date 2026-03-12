@@ -32,7 +32,7 @@ type TauriApi = {
 }
 
 type ElectronApi = {
-  setTitlebar?: (theme: { color: string; symbol: string; mode: "light" | "dark" }) => Promise<void>
+  setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
 }
 
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
@@ -125,30 +125,11 @@ export function Titlebar() {
     void win.setTheme(value).catch(() => undefined)
   })
 
-  if (windows()) {
-    const setTitlebar = electronApi()?.setTitlebar
-    if (setTitlebar) {
-      const sync = () => {
-        const root = document.documentElement
-        const css = getComputedStyle(root)
-        const mode = (
-          root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
-        ) as "light" | "dark"
-        const color = css.getPropertyValue("--background-base").trim()
-        const symbol = css.getPropertyValue("--text-base").trim()
-        void setTitlebar({ color, symbol, mode }).catch(() => undefined)
-      }
-
-      sync()
-
-      const obs = new MutationObserver(sync)
-      obs.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["data-theme", "data-color-scheme"],
-      })
-
-      onCleanup(() => obs.disconnect())
-    }
+  const setTitlebar = electronApi()?.setTitlebar
+  if (setTitlebar && windows()) {
+    createEffect(() => {
+      void setTitlebar?.({ mode: theme.mode() }).catch(() => {})
+    })
   }
 
   const interactive = (target: EventTarget | null) => {

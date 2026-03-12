@@ -25,19 +25,11 @@ function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
 }
 
-function background(mode: TitlebarTheme["mode"]) {
-  return mode === "dark" ? "#101010" : "#f8f8f8"
-}
-
-function symbols(mode: TitlebarTheme["mode"]) {
-  return mode === "dark" ? "rgba(255, 255, 255, 0.618)" : "#6f6f6f"
-}
-
 function overlay(theme: Partial<TitlebarTheme> = {}) {
   const mode = theme.mode ?? tone()
   return {
-    color: theme.color || background(mode),
-    symbolColor: theme.symbol || symbols(mode),
+    color: "#00000000",
+    symbolColor: mode === "dark" ? "white" : "black",
     height: 40,
   }
 }
@@ -75,7 +67,6 @@ export function createMainWindow(globals: Globals) {
       : {}),
     ...(process.platform === "win32"
       ? {
-          backgroundColor: background(mode),
           frame: false,
           titleBarStyle: "hidden" as const,
           titleBarOverlay: overlay({ mode }),
@@ -107,7 +98,6 @@ export function createLoadingWindow(globals: Globals) {
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
-          backgroundColor: background(mode),
           frame: false,
           titleBarStyle: "hidden" as const,
           titleBarOverlay: overlay({ mode }),
