@@ -36,12 +36,27 @@ async function terminalID(term: Locator) {
   throw new Error(`Active terminal missing ${terminalAttr}`)
 }
 
-async function terminalState(page: Page, term?: Locator) {
+async function terminalReady(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
   return page.evaluate((id) => {
-    return ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id] as TerminalProbeState | undefined
+    const state = ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id] as TerminalProbeState | undefined
+    return !!state?.connected && (state.settled ?? 0) > 0
   }, id)
+}
+
+async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
+  const next = input.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate(
+    (input) => {
+      const state = ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[input.id] as
+        | TerminalProbeState
+        | undefined
+      return state?.rendered.includes(input.token) ?? false
+    },
+    { id, token: input.token },
+  )
 }
 
 export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
@@ -50,10 +65,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
   await expect
-    .poll(async () => {
-      const state = await terminalState(page, term)
-      return !!state?.connected && (state.settled ?? 0) > 0
-    }, { timeout })
+    .poll(() => terminalReady(page, term), { timeout })
     .toBe(true)
 }
 
@@ -67,10 +79,7 @@ export async function runTerminal(page: Page, input: { cmd: string; token: strin
   await page.keyboard.type(input.cmd)
   await page.keyboard.press("Enter")
   await expect
-    .poll(async () => {
-      const state = await terminalState(page, term)
-      return state?.rendered.includes(input.token) ?? false
-    }, { timeout })
+    .poll(() => terminalHas(page, { term, token: input.token }), { timeout })
     .toBe(true)
 }
 
