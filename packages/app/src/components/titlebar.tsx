@@ -128,10 +128,10 @@ export function Titlebar() {
   if (windows()) {
     const setTitlebar = electronApi()?.setTitlebar
     if (setTitlebar) {
-      let frame = 0
+      let pending: ReturnType<typeof setTimeout> | undefined
       const sync = () => {
-        cancelAnimationFrame(frame)
-        frame = requestAnimationFrame(() => {
+        clearTimeout(pending)
+        pending = setTimeout(() => {
           const root = document.documentElement
           const css = getComputedStyle(root)
           const mode = (
@@ -148,12 +148,12 @@ export function Titlebar() {
       const obs = new MutationObserver(sync)
       obs.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme", "data-color-scheme", "style"],
+        attributeFilter: ["data-theme", "data-color-scheme"],
       })
 
       onCleanup(() => {
         obs.disconnect()
-        cancelAnimationFrame(frame)
+        clearTimeout(pending)
       })
     }
   }
