@@ -44,6 +44,22 @@ type TerminalColors = {
   selectionBackground: string
 }
 
+type E2EDriver = {
+  connected: boolean
+  received: string
+  rendered: string
+  settled: number
+}
+
+type E2EWindow = Window & {
+  __opencode_e2e?: {
+    terminal?: {
+      enabled?: boolean
+      terminals?: Record<string, E2EDriver>
+    }
+  }
+}
+
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   light: {
     background: "#fcfcfc",
@@ -189,6 +205,42 @@ export const Terminal = (props: TerminalProps) => {
   let cursor = start ?? 0
   let output: ReturnType<typeof terminalWriter> | undefined
 
+  const driver = () => {
+    if (typeof window === "undefined") return
+    const root = (window as E2EWindow).__opencode_e2e?.terminal
+    if (!root?.enabled) return
+    root.terminals ??= {}
+    return root.terminals
+  }
+
+  const seed = (): E2EDriver => ({
+    connected: false,
+    received: "",
+    rendered: "",
+    settled: 0,
+  })
+
+  const state = () => driver()?.[id]
+
+  const watch = (next: Partial<E2EDriver>) => {
+    const root = driver()
+    if (!root) return
+    root[id] = { ...(root[id] ?? seed()), ...next }
+  }
+
+  const append = (key: "received" | "rendered", data: string) => {
+    const root = driver()
+    if (!root) return
+    const prev = root[id] ?? seed()
+    root[id] = { ...prev, [key]: prev[key] + data }
+  }
+
+  const drop = () => {
+    const root = driver()
+    if (!root) return
+    delete root[id]
+  }
+
   const cleanup = () => {
     if (!cleanups.length) return
     const fns = cleanups.splice(0).reverse()
@@ -326,6 +378,9 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
+    watch(seed())
+    cleanups.push(drop)
+
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -353,7 +408,13 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
-      output = terminalWriter((data, done) => t.write(data, done))
+      output = terminalWriter((data, done) =>
+        t.write(data, () => {
+          append("rendered", data)
+          watch({ settled: (state()?.settled ?? 0) + 1 })
+          done?.()
+        }),
+      )
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -460,6 +521,7 @@ export const Terminal = (props: TerminalProps) => {
       ws = socket
 
       const handleOpen = () => {
+        watch({ connected: true })
         local.onConnect?.()
         scheduleSize(t.cols, t.rows)
       }
@@ -470,6 +532,9 @@ export const Terminal = (props: TerminalProps) => {
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
         if (closing) return
+        if (typeof event.data === "string" && event.data) {
+          append("received", event.data)
+        }
         if (event.data instanceof ArrayBuffer) {
           const bytes = new Uint8Array(event.data)
           if (bytes[0] !== 0) return
@@ -560,6 +625,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      data-pty-id={id}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

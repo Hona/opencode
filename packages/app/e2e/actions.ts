@@ -15,9 +15,25 @@ import {
   listItemSelector,
   listItemKeySelector,
   listItemKeyStartsWithSelector,
+  terminalSelector,
   workspaceItemSelector,
   workspaceMenuTriggerSelector,
 } from "./selectors"
+
+type TerminalDriver = {
+  connected: boolean
+  received: string
+  rendered: string
+  settled: number
+}
+
+type E2EWindow = Window & {
+  __opencode_e2e?: {
+    terminal?: {
+      terminals?: Record<string, TerminalDriver>
+    }
+  }
+}
 
 export async function defocus(page: Page) {
   await page
@@ -26,6 +42,50 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
+}
+
+async function terminalID(term: Locator) {
+  const id = await term.getAttribute("data-pty-id")
+  if (id) return id
+  throw new Error("Active terminal missing data-pty-id")
+}
+
+export async function terminalState(page: Page, term?: Locator) {
+  const next = term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate((id) => {
+    return ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id]
+  }, id)
+}
+
+export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const timeout = input?.timeout ?? 10_000
+  await expect(term).toBeVisible()
+  await expect(term.locator("textarea")).toHaveCount(1)
+  await expect
+    .poll(async () => {
+      const state = await terminalState(page, term)
+      return !!state?.connected && (state.settled ?? 0) > 0
+    }, { timeout })
+    .toBe(true)
+}
+
+export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
+  const term = input.term ?? page.locator(terminalSelector).first()
+  const timeout = input.timeout ?? 10_000
+  await waitTerminalReady(page, { term, timeout })
+  const textarea = term.locator("textarea")
+  await term.click()
+  await expect(textarea).toBeFocused()
+  await page.keyboard.type(input.cmd)
+  await page.keyboard.press("Enter")
+  await expect
+    .poll(async () => {
+      const state = await terminalState(page, term)
+      return state?.rendered.includes(input.token) ?? false
+    }, { timeout })
+    .toBe(true)
 }
 
 export async function openPalette(page: Page) {

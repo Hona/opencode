@@ -91,6 +91,29 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
   await page.addInitScript(() => {
+    const win = window as Window & {
+      __opencode_e2e?: {
+        terminal?: {
+          enabled?: boolean
+          terminals?: Record<
+            string,
+            {
+              connected: boolean
+              received: string
+              rendered: string
+              settled: number
+            }
+          >
+        }
+      }
+    }
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      terminal: {
+        enabled: true,
+        terminals: {},
+      },
+    }
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
