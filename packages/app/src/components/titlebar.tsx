@@ -31,14 +31,9 @@ type TauriApi = {
   }
 }
 
-type ElectronApi = {
-  setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
-}
-
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
-const electronApi = () => (window as unknown as { api?: ElectronApi }).api
 
 export function Titlebar() {
   const layout = useLayout()
@@ -124,13 +119,6 @@ export function Titlebar() {
 
     void win.setTheme(value).catch(() => undefined)
   })
-
-  const setTitlebar = electronApi()?.setTitlebar
-  if (setTitlebar && windows()) {
-    createEffect(() => {
-      void setTitlebar?.({ mode: theme.mode() }).catch(() => {})
-    })
-  }
 
   const interactive = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false
