@@ -31,6 +31,7 @@ export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  reviewSnap: boolean
   size: Sizing
 }) {
   const params = useParams()
@@ -103,7 +104,7 @@ export function SessionSidePanel(props: {
 
   const empty = (msg: string) => (
     <div class="h-full flex flex-col">
-      <div class="h-12 shrink-0" aria-hidden />
+      <div class="h-6 shrink-0" aria-hidden />
       <div class="flex-1 pb-64 flex items-center justify-center text-center">
         <div class="text-12-regular text-text-weak">{msg}</div>
       </div>
@@ -228,7 +229,7 @@ export function SessionSidePanel(props: {
         classList={{
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active(),
+            !props.size.active() && !props.reviewSnap,
         }}
         style={{ width: panelWidth() }}
       >
@@ -329,7 +330,7 @@ export function SessionSidePanel(props: {
                   <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={activeTab() === "empty"}>
                       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                        <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
                           <Mark class="w-14 opacity-10" />
                           <div class="text-14-regular text-text-weak max-w-56">
                             {language.t("session.files.selectToOpen")}
@@ -424,7 +425,11 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>{empty(language.t(reviewEmptyKey()))}</Match>
+                    <Match when={true}>
+                      {empty(
+                        language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
+                      )}
+                    </Match>
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
