@@ -10,6 +10,7 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
+import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -42,21 +43,6 @@ type TerminalColors = {
   foreground: string
   cursor: string
   selectionBackground: string
-}
-
-type E2EDriver = {
-  connected: boolean
-  rendered: string
-  settled: number
-}
-
-type E2EWindow = Window & {
-  __opencode_e2e?: {
-    terminal?: {
-      enabled?: boolean
-      terminals?: Record<string, E2EDriver>
-    }
-  }
 }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
@@ -175,6 +161,7 @@ export const Terminal = (props: TerminalProps) => {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
+  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -203,41 +190,6 @@ export const Terminal = (props: TerminalProps) => {
     typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
   let cursor = start ?? 0
   let output: ReturnType<typeof terminalWriter> | undefined
-
-  const driver = () => {
-    if (typeof window === "undefined") return
-    const root = (window as E2EWindow).__opencode_e2e?.terminal
-    if (!root?.enabled) return
-    root.terminals ??= {}
-    return root.terminals
-  }
-
-  const seed = (): E2EDriver => ({
-    connected: false,
-    rendered: "",
-    settled: 0,
-  })
-
-  const state = () => driver()?.[id]
-
-  const watch = (next: Partial<E2EDriver>) => {
-    const root = driver()
-    if (!root) return
-    root[id] = { ...(root[id] ?? seed()), ...next }
-  }
-
-  const append = (key: "rendered", data: string) => {
-    const root = driver()
-    if (!root) return
-    const prev = root[id] ?? seed()
-    root[id] = { ...prev, [key]: prev[key] + data }
-  }
-
-  const drop = () => {
-    const root = driver()
-    if (!root) return
-    delete root[id]
-  }
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -376,8 +328,8 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
-    watch(seed())
-    cleanups.push(drop)
+    probe.init()
+    cleanups.push(() => probe.drop())
 
     const run = async () => {
       const loaded = await loadGhostty()
@@ -408,8 +360,8 @@ export const Terminal = (props: TerminalProps) => {
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
-          append("rendered", data)
-          watch({ settled: (state()?.settled ?? 0) + 1 })
+          probe.render(data)
+          probe.settle()
           done?.()
         }),
       )
@@ -515,7 +467,7 @@ export const Terminal = (props: TerminalProps) => {
       ws = socket
 
       const handleOpen = () => {
-        watch({ connected: true })
+        probe.connect()
         local.onConnect?.()
         scheduleSize(t.cols, t.rows)
       }
@@ -616,7 +568,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
-      data-pty-id={id}
+      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

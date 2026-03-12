@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
+import { terminalAttr, type E2EWindow, type TerminalProbeState } from "../src/testing/terminal"
 import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
@@ -20,20 +21,6 @@ import {
   workspaceMenuTriggerSelector,
 } from "./selectors"
 
-type TerminalDriver = {
-  connected: boolean
-  rendered: string
-  settled: number
-}
-
-type E2EWindow = Window & {
-  __opencode_e2e?: {
-    terminal?: {
-      terminals?: Record<string, TerminalDriver>
-    }
-  }
-}
-
 export async function defocus(page: Page) {
   await page
     .evaluate(() => {
@@ -44,16 +31,16 @@ export async function defocus(page: Page) {
 }
 
 async function terminalID(term: Locator) {
-  const id = await term.getAttribute("data-pty-id")
+  const id = await term.getAttribute(terminalAttr)
   if (id) return id
-  throw new Error("Active terminal missing data-pty-id")
+  throw new Error(`Active terminal missing ${terminalAttr}`)
 }
 
 async function terminalState(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
   return page.evaluate((id) => {
-    return ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id]
+    return ((window as E2EWindow).__opencode_e2e?.terminal?.terminals ?? {})[id] as TerminalProbeState | undefined
   }, id)
 }
 
