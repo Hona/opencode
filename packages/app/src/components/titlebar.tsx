@@ -128,19 +128,15 @@ export function Titlebar() {
   if (windows()) {
     const setTitlebar = electronApi()?.setTitlebar
     if (setTitlebar) {
-      let pending: ReturnType<typeof setTimeout> | undefined
       const sync = () => {
-        clearTimeout(pending)
-        pending = setTimeout(() => {
-          const root = document.documentElement
-          const css = getComputedStyle(root)
-          const mode = (
-            root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
-          ) as "light" | "dark"
-          const color = css.getPropertyValue("--background-base").trim()
-          const symbol = css.getPropertyValue("--text-base").trim()
-          void setTitlebar({ color, symbol, mode }).catch(() => undefined)
-        })
+        const root = document.documentElement
+        const css = getComputedStyle(root)
+        const mode = (
+          root.dataset.colorScheme === "dark" ? "dark" : root.dataset.colorScheme === "light" ? "light" : theme.mode()
+        ) as "light" | "dark"
+        const color = css.getPropertyValue("--background-base").trim()
+        const symbol = css.getPropertyValue("--text-base").trim()
+        void setTitlebar({ color, symbol, mode }).catch(() => undefined)
       }
 
       sync()
@@ -151,10 +147,7 @@ export function Titlebar() {
         attributeFilter: ["data-theme", "data-color-scheme"],
       })
 
-      onCleanup(() => {
-        obs.disconnect()
-        clearTimeout(pending)
-      })
+      onCleanup(() => obs.disconnect())
     }
   }
 
