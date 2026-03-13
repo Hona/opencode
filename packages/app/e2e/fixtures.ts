@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test"
+import type { ComposerWindow } from "../src/testing/session-composer"
 import type { E2EWindow } from "../src/testing/terminal"
 import { cleanupSession, cleanupTestProject, createTestProject, seedProjects, sessionIDFromUrl } from "./actions"
 import { promptSelector } from "./selectors"
@@ -92,9 +93,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
   await page.addInitScript(() => {
-    const win = window as E2EWindow
+    const win = window as E2EWindow & ComposerWindow
     win.__opencode_e2e = {
       ...win.__opencode_e2e,
+      composer: {
+        enabled: true,
+        sessions: {},
+      },
       terminal: {
         enabled: true,
         terminals: {},

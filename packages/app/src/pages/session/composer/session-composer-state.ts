@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { composerDriver, composerEvent } from "@/testing/session-composer"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 export const todoState = (input: {
@@ -47,7 +48,44 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     return !!permissionRequest() || !!questionRequest()
   })
 
+  const [test, setTest] = createStore({
+    on: false,
+    live: undefined as boolean | undefined,
+    todos: undefined as Todo[] | undefined,
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) {
+      setTest({ on: false, live: undefined, todos: undefined })
+      return
+    }
+
+    const sync = () => {
+      const next = composerDriver(id)
+      if (!next) {
+        setTest({ on: false, live: undefined, todos: undefined })
+        return
+      }
+      setTest({
+        on: true,
+        live: next.live,
+        todos: next.todos?.map((todo) => ({ ...todo })),
+      })
+    }
+
+    sync()
+    const onEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionID?: string }>).detail
+      if (detail?.sessionID !== id) return
+      sync()
+    }
+    window.addEventListener(composerEvent, onEvent)
+    onCleanup(() => window.removeEventListener(composerEvent, onEvent))
+  })
+
   const todos = createMemo((): Todo[] => {
+    if (test.on && test.todos !== undefined) return test.todos
     const id = params.id
     if (!id) return []
     return globalSync.data.session_todo[id] ?? []
@@ -64,7 +102,10 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   })
 
   const busy = createMemo(() => status().type !== "idle")
-  const live = createMemo(() => busy() || blocked())
+  const live = createMemo(() => {
+    if (test.on && test.live !== undefined) return test.live
+    return busy() || blocked()
+  })
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
@@ -116,6 +157,10 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
   // Keep stale turn todos from reopening if the model never clears them.
   const clear = () => {
+    if (test.on && test.todos !== undefined) {
+      setTest("todos", [])
+      return
+    }
     const id = params.id
     if (!id) return
     globalSync.todo.set(id, [])
