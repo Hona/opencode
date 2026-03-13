@@ -44,7 +44,7 @@ jobs:
           git config --global user.name "opencode"
 
       - name: Run unit tests
-        run: bun turbo test
+        run: bun script/metrics.ts --name unit-${{ matrix.settings.name }} --out tmp/metrics/unit-${{ matrix.settings.name }}.json -- bun turbo test
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
@@ -79,7 +79,7 @@ jobs:
         run: ${{ matrix.settings.playwright }}
 
       - name: Run app e2e tests
-        run: bun --cwd packages/app test:e2e:local
+        run: bun script/metrics.ts --name e2e-${{ matrix.settings.name }} --out tmp/metrics/e2e-${{ matrix.settings.name }}.json -- bun --cwd packages/app test:e2e:local
         env:
           CI: true
         timeout-minutes: 30

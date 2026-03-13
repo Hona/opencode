@@ -11,6 +11,8 @@
     "dev:web": "bun --cwd packages/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
+    "test:unit:metrics": "bun script/metrics.ts --name unit-local --out tmp/metrics/unit-local.json -- bun turbo test",
+    "test:e2e:local:metrics": "bun script/metrics.ts --name e2e-local --out tmp/metrics/e2e-local.json -- bun --cwd packages/app test:e2e:local -- --workers 5",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
