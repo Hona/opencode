@@ -8,7 +8,6 @@ import {
   sessionComposerDockSelector,
   sessionTodoToggleButtonSelector,
 } from "../selectors"
-import { sessionPath } from "../utils"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
@@ -59,7 +58,18 @@ async function setAutoAccept(page: any, enabled: boolean) {
   await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
 }
 
-function todoDock(page: any, sessionID: string) {
+async function todoDock(page: any, sessionID: string) {
+  await page.addInitScript(() => {
+    const win = window as ComposerWindow
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      composer: {
+        enabled: true,
+        sessions: {},
+      },
+    }
+  })
+
   const write = async (driver: ComposerDriverState | undefined) => {
     await page.evaluate(
       (input) => {
@@ -446,10 +456,10 @@ test("child session permission request blocks parent dock and supports allow onc
   })
 })
 
-test("todo dock transitions and collapse behavior", async ({ page, sdk, directory, gotoSession: _gotoSession }) => {
+test("todo dock transitions and collapse behavior", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock todo", async (session) => {
-    const dock = todoDock(page, session.id)
-    await page.goto(sessionPath(directory, session.id))
+    const dock = await todoDock(page, session.id)
+    await gotoSession(session.id)
     await expect(page.locator(sessionComposerDockSelector)).toBeVisible()
 
     try {

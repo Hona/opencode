@@ -1,4 +1,4 @@
-import { createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
@@ -54,32 +54,35 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     todos: undefined as Todo[] | undefined,
   })
 
-  createEffect(() => {
+  const pull = () => {
     const id = params.id
     if (!id) {
       setTest({ on: false, live: undefined, todos: undefined })
       return
     }
 
-    const sync = () => {
-      const next = composerDriver(id)
-      if (!next) {
-        setTest({ on: false, live: undefined, todos: undefined })
-        return
-      }
-      setTest({
-        on: true,
-        live: next.live,
-        todos: next.todos?.map((todo) => ({ ...todo })),
-      })
+    const next = composerDriver(id)
+    if (!next) {
+      setTest({ on: false, live: undefined, todos: undefined })
+      return
     }
 
-    sync()
+    setTest({
+      on: true,
+      live: next.live,
+      todos: next.todos?.map((todo) => ({ ...todo })),
+    })
+  }
+
+  createEffect(on(() => params.id, pull))
+
+  onMount(() => {
     const onEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionID?: string }>).detail
-      if (detail?.sessionID !== id) return
-      sync()
+      if (detail?.sessionID !== params.id) return
+      pull()
     }
+
     window.addEventListener(composerEvent, onEvent)
     onCleanup(() => window.removeEventListener(composerEvent, onEvent))
   })
