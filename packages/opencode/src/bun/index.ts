@@ -30,17 +30,6 @@ export namespace BunProc {
         BUN_BE_BUN: "1",
       },
     })
-      .catch((err) => {
-        if (err instanceof Process.RunFailedError) {
-          log.error("failed", {
-            cmd: err.cmd,
-            code: err.code,
-            stdout: err.stdout.toString(),
-            stderr: err.stderr.toString(),
-          })
-        }
-        throw err
-      })
     log.info("done", {
       code: result.code,
       stdout: result.stdout.toString(),
