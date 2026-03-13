@@ -41,12 +41,8 @@ async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>
 
 async function clearPermissionDock(page: any, label: RegExp) {
   const dock = page.locator(permissionDockSelector)
-  for (let i = 0; i < 3; i++) {
-    const count = await dock.count()
-    if (count === 0) return
-    await dock.getByRole("button", { name: label }).click()
-    await page.waitForTimeout(150)
-  }
+  await expect(dock).toBeVisible()
+  await dock.getByRole("button", { name: label }).click()
 }
 
 async function setAutoAccept(page: any, enabled: boolean) {
@@ -56,6 +52,26 @@ async function setAutoAccept(page: any, enabled: boolean) {
   if (pressed === enabled) return
   await button.click()
   await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
+}
+
+async function expectQuestionBlocked(page: any) {
+  await expect(page.locator(questionDockSelector)).toBeVisible()
+  await expect(page.locator(promptSelector)).toHaveCount(0)
+}
+
+async function expectQuestionOpen(page: any) {
+  await expect(page.locator(questionDockSelector)).toHaveCount(0)
+  await expect(page.locator(promptSelector)).toBeVisible()
+}
+
+async function expectPermissionBlocked(page: any) {
+  await expect(page.locator(permissionDockSelector)).toBeVisible()
+  await expect(page.locator(promptSelector)).toHaveCount(0)
+}
+
+async function expectPermissionOpen(page: any) {
+  await expect(page.locator(permissionDockSelector)).toHaveCount(0)
+  await expect(page.locator(promptSelector)).toBeVisible()
 }
 
 async function todoDock(page: any, sessionID: string) {
@@ -163,7 +179,7 @@ async function withMockPermission<T>(
     always?: string[]
   },
   opts: { child?: any } | undefined,
-  fn: () => Promise<T>,
+  fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
 ) {
   let pending = [
     {
@@ -212,8 +228,14 @@ async function withMockPermission<T>(
 
   if (sessionList) await page.route("**/session?*", sessionList)
 
+  const state = {
+    async resolved() {
+      await expect.poll(() => pending.length, { timeout: 10_000 }).toBe(0)
+    },
+  }
+
   try {
-    return await fn()
+    return await fn(state)
   } finally {
     await page.unroute("**/permission", list)
     await page.unroute("**/session/*/permissions/*", reply)
@@ -266,14 +288,12 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
       })
 
       const dock = page.locator(questionDockSelector)
-      await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
-      await expect(page.locator(promptSelector)).toHaveCount(0)
+      await expectQuestionBlocked(page)
 
       await dock.locator('[data-slot="question-option"]').first().click()
       await dock.getByRole("button", { name: /submit/i }).click()
 
-      await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-      await expect(page.locator(promptSelector)).toBeVisible()
+      await expectQuestionOpen(page)
     })
   })
 })
@@ -292,15 +312,14 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
         metadata: { description: "Need permission for command" },
       },
       undefined,
-      async () => {
+      async (state) => {
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
-        await expect(page.locator(promptSelector)).toHaveCount(0)
+        await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /allow once/i)
+        await state.resolved()
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-        await expect(page.locator(promptSelector)).toBeVisible()
+        await expectPermissionOpen(page)
       },
     )
   })
@@ -319,15 +338,14 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
         patterns: ["/tmp/opencode-e2e-perm-reject"],
       },
       undefined,
-      async () => {
+      async (state) => {
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
-        await expect(page.locator(promptSelector)).toHaveCount(0)
+        await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /deny/i)
+        await state.resolved()
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-        await expect(page.locator(promptSelector)).toBeVisible()
+        await expectPermissionOpen(page)
       },
     )
   })
@@ -347,15 +365,14 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
         metadata: { description: "Need permission for command" },
       },
       undefined,
-      async () => {
+      async (state) => {
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(1)
-        await expect(page.locator(promptSelector)).toHaveCount(0)
+        await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /allow always/i)
+        await state.resolved()
         await page.goto(page.url())
-        await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-        await expect(page.locator(promptSelector)).toBeVisible()
+        await expectPermissionOpen(page)
       },
     )
   })
@@ -394,14 +411,12 @@ test("child session question request blocks parent dock and unblocks after submi
         })
 
         const dock = page.locator(questionDockSelector)
-        await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
-        await expect(page.locator(promptSelector)).toHaveCount(0)
+        await expectQuestionBlocked(page)
 
         await dock.locator('[data-slot="question-option"]').first().click()
         await dock.getByRole("button", { name: /submit/i }).click()
 
-        await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-        await expect(page.locator(promptSelector)).toBeVisible()
+        await expectQuestionOpen(page)
       })
     } finally {
       await cleanupSession({ sdk, sessionID: child.id })
@@ -437,17 +452,15 @@ test("child session permission request blocks parent dock and supports allow onc
           metadata: { description: "Need child permission" },
         },
         { child },
-        async () => {
+        async (state) => {
           await page.goto(page.url())
-          const dock = page.locator(permissionDockSelector)
-          await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
-          await expect(page.locator(promptSelector)).toHaveCount(0)
+          await expectPermissionBlocked(page)
 
           await clearPermissionDock(page, /allow once/i)
+          await state.resolved()
           await page.goto(page.url())
 
-          await expect.poll(() => page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-          await expect(page.locator(promptSelector)).toBeVisible()
+          await expectPermissionOpen(page)
         },
       )
     } finally {
@@ -502,8 +515,7 @@ test("keyboard focus stays off prompt while blocked", async ({ page, sdk, gotoSe
         ],
       })
 
-      await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(1)
-      await expect(page.locator(promptSelector)).toHaveCount(0)
+      await expectQuestionBlocked(page)
 
       await page.locator("main").click({ position: { x: 5, y: 5 } })
       await page.keyboard.type("abc")
