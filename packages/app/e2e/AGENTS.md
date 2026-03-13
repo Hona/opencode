@@ -181,11 +181,13 @@ await page.keyboard.press(`${modKey}+Comma`) // Open settings
 - Never use wall-clock waits like `page.waitForTimeout(...)` to make a test pass
 - Avoid race-prone flows that assume work is finished after an action
 - Wait or poll on observable state with `expect(...)`, `expect.poll(...)`, or existing helpers
+- Prefer locator assertions like `toBeVisible()`, `toHaveCount(0)`, and `toHaveAttribute(...)` for normal UI state, and reserve `expect.poll(...)` for probe, mock, or backend state
 
 ### Add hooks
 
 - If required state is not observable from the UI, add a small test-only driver or probe in app code instead of sleeps or fragile DOM checks
 - Keep these hooks minimal and purpose-built, following the style of `packages/app/src/testing/terminal.ts`
+- When mocking routes or APIs, expose explicit mock state and wait on that before asserting post-action UI
 
 ### Prefer helpers
 
