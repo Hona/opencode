@@ -34,10 +34,15 @@ const clone = (driver: ComposerDriverState) => ({
   todos: driver.todos?.map((todo) => ({ ...todo })),
 })
 
+export const composerEnabled = () => {
+  if (typeof window === "undefined") return false
+  return (window as ComposerWindow).__opencode_e2e?.composer?.enabled === true
+}
+
 const root = () => {
-  if (typeof window === "undefined") return
+  if (!composerEnabled()) return
   const state = (window as ComposerWindow).__opencode_e2e?.composer
-  if (!state?.enabled) return
+  if (!state) return
   state.sessions ??= {}
   return state.sessions
 }

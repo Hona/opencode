@@ -8,7 +8,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { composerDriver, composerEvent } from "@/testing/session-composer"
+import { composerDriver, composerEnabled, composerEvent } from "@/testing/session-composer"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 export const todoState = (input: {
@@ -74,9 +74,12 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     })
   }
 
-  createEffect(on(() => params.id, pull))
-
   onMount(() => {
+    if (!composerEnabled()) return
+
+    pull()
+    createEffect(on(() => params.id, pull, { defer: true }))
+
     const onEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionID?: string }>).detail
       if (detail?.sessionID !== params.id) return

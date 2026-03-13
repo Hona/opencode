@@ -187,6 +187,7 @@ await page.keyboard.press(`${modKey}+Comma`) // Open settings
 
 - If required state is not observable from the UI, add a small test-only driver or probe in app code instead of sleeps or fragile DOM checks
 - Keep these hooks minimal and purpose-built, following the style of `packages/app/src/testing/terminal.ts`
+- Test-only hooks must be inert unless explicitly enabled; do not add normal-runtime listeners, reactive subscriptions, or per-update allocations for e2e ceremony
 - When mocking routes or APIs, expose explicit mock state and wait on that before asserting post-action UI
 
 ### Prefer helpers
