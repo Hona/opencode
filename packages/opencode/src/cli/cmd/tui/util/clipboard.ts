@@ -28,6 +28,13 @@ export namespace Clipboard {
     mime: string
   }
 
+  // Checks clipboard for images first, then falls back to text.
+  //
+  // On Windows this is triggered from multiple paths in prompt/ because
+  // terminals handle Ctrl+V differently:
+  //   1. Ctrl+V keypress forwarded to app (rare, most terminals consume it)
+  //   2. Empty bracketed paste (stable WT without kitty sends this for image-only clipboard)
+  //   3. Kitty Ctrl+V release event (WT 1.25+ swallows the press but leaks the release)
   export async function read(): Promise<Content | undefined> {
     const os = platform()
 
@@ -58,6 +65,8 @@ export namespace Clipboard {
       }
     }
 
+    // Windows/WSL: probe clipboard for images via PowerShell.
+    // Bracketed paste can't carry image data so we read it directly.
     if (os === "win32" || release().includes("WSL")) {
       const script =
         "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
