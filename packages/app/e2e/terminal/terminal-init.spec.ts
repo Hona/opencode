@@ -14,7 +14,6 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
     await page.keyboard.press(terminalToggleKey)
   }
 
-  await waitTerminalReady(page, { term: terminals.first() })
   await waitTerminalFocusIdle(page, { term: terminals.first() })
   await expect(terminals).toHaveCount(1)
 
