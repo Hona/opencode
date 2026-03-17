@@ -16,7 +16,6 @@ declare global {
 export namespace Installation {
   const log = Log.create({ service: "installation" })
   const shell = process.platform === "win32"
-  const safe = /^[a-zA-Z0-9][a-zA-Z0-9._+-]*$/
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
@@ -165,10 +164,6 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
-    if (!safe.test(target)) {
-      throw new Error(`Invalid upgrade target: ${target}`)
-    }
-
     let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
     switch (method) {
       case "curl":
