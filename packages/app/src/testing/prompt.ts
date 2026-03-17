@@ -1,3 +1,5 @@
+import type { E2EWindow } from "./terminal"
+
 export type PromptProbeState = {
   popover: "at" | "slash" | null
   slash: {
@@ -8,23 +10,14 @@ export type PromptProbeState = {
   selects: number
 }
 
-export type PromptWindow = Window & {
-  __opencode_e2e?: {
-    prompt?: {
-      enabled?: boolean
-      current?: PromptProbeState
-    }
-  }
-}
-
 export const promptEnabled = () => {
   if (typeof window === "undefined") return false
-  return (window as PromptWindow).__opencode_e2e?.prompt?.enabled === true
+  return (window as E2EWindow).__opencode_e2e?.prompt?.enabled === true
 }
 
 const root = () => {
   if (!promptEnabled()) return
-  return (window as PromptWindow).__opencode_e2e?.prompt
+  return (window as E2EWindow).__opencode_e2e?.prompt
 }
 
 export const promptProbe = {

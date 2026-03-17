@@ -4,7 +4,6 @@ import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
 import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
-import type { PromptWindow } from "../src/testing/prompt"
 import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
@@ -86,7 +85,7 @@ async function terminalHas(page: Page, input: { term?: Locator; token: string })
 
 async function promptSlashActive(page: Page, id: string) {
   return page.evaluate((id) => {
-    const state = (window as PromptWindow).__opencode_e2e?.prompt?.current
+    const state = (window as E2EWindow).__opencode_e2e?.prompt?.current
     if (state?.popover !== "slash") return false
     if (!state.slash.ids.includes(id)) return false
     return state.slash.active === id
@@ -95,13 +94,13 @@ async function promptSlashActive(page: Page, id: string) {
 
 async function promptSlashSelects(page: Page) {
   return page.evaluate(() => {
-    return (window as PromptWindow).__opencode_e2e?.prompt?.current?.selects ?? 0
+    return (window as E2EWindow).__opencode_e2e?.prompt?.current?.selects ?? 0
   })
 }
 
 async function promptSlashSelected(page: Page, input: { id: string; count: number }) {
   return page.evaluate((input) => {
-    const state = (window as PromptWindow).__opencode_e2e?.prompt?.current
+    const state = (window as E2EWindow).__opencode_e2e?.prompt?.current
     if (!state) return false
     return state.selected === input.id && state.selects >= input.count
   }, input)

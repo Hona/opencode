@@ -20,6 +20,10 @@ export type E2EWindow = Window & {
       enabled?: boolean
       current?: ModelProbeState
     }
+    prompt?: {
+      enabled?: boolean
+      current?: import("./prompt").PromptProbeState
+    }
     terminal?: {
       enabled?: boolean
       terminals?: Record<string, TerminalProbeState>

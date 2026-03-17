@@ -21,6 +21,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { terminalProbe } from "@/testing/terminal"
 
 export function TerminalPanel() {
+  const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
   const language = useLanguage()
@@ -81,7 +82,7 @@ export function TerminalPanel() {
 
   const focus = (id: string) => {
     const probe = terminalProbe(id)
-    probe.focus(3)
+    probe.focus(delays.length + 1)
     focusTerminalById(id)
 
     const frame = requestAnimationFrame(() => {
@@ -91,7 +92,7 @@ export function TerminalPanel() {
       focusTerminalById(id)
     })
 
-    const timers = [120, 240].map((ms) =>
+    const timers = delays.map((ms) =>
       window.setTimeout(() => {
         probe.step()
         if (!opened()) return
