@@ -1,18 +1,10 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
-
-mock.module("../../src/plugin", () => ({
-  Plugin: {
-    list: async () => [],
-    init: async () => {},
-  },
-}))
-
-const { WriteTool } = await import("../../src/tool/write")
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),

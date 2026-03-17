@@ -1,19 +1,11 @@
-import { describe, test, expect, afterEach, mock } from "bun:test"
+import { describe, test, expect, afterEach } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
 import { SessionID } from "../../src/session/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
-
-mock.module("../../src/plugin", () => ({
-  Plugin: {
-    list: async () => [],
-    init: async () => {},
-  },
-}))
-
-const { FileTime } = await import("../../src/file/time")
 
 afterEach(() => Instance.disposeAll())
 

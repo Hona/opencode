@@ -1,19 +1,11 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { FileTime } from "../../src/file/time"
 import { SessionID, MessageID } from "../../src/session/schema"
-
-mock.module("../../src/plugin", () => ({
-  Plugin: {
-    list: async () => [],
-    init: async () => {},
-  },
-}))
-
-const { EditTool } = await import("../../src/tool/edit")
-const { FileTime } = await import("../../src/file/time")
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),

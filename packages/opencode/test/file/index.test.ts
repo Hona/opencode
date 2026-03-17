@@ -1,19 +1,11 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
+import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
-
-mock.module("../../src/plugin", () => ({
-  Plugin: {
-    list: async () => [],
-    init: async () => {},
-  },
-}))
-
-const { File } = await import("../../src/file")
 
 describe("file/index Filesystem patterns", () => {
   describe("File.read() - text content", () => {
