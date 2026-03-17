@@ -14,7 +14,7 @@ import { git } from "@/util/git"
 import { Protected } from "./protected"
 import { InstanceContext } from "@/effect/instance-context"
 import { Effect, Layer, ServiceMap } from "effect"
-import { scoped } from "@/effect/runtime"
+import { runPromiseInstance } from "@/effect/runtime"
 
 const log = Log.create({ service: "file" })
 
@@ -336,23 +336,23 @@ export namespace File {
   }
 
   export function init() {
-    return run(FileService.use((s) => s.init()))
+    return runPromiseInstance(FileService.use((s) => s.init()))
   }
 
   export async function status() {
-    return run(FileService.use((s) => s.status()))
+    return runPromiseInstance(FileService.use((s) => s.status()))
   }
 
   export async function read(file: string): Promise<Content> {
-    return run(FileService.use((s) => s.read(file)))
+    return runPromiseInstance(FileService.use((s) => s.read(file)))
   }
 
   export async function list(dir?: string) {
-    return run(FileService.use((s) => s.list(dir)))
+    return runPromiseInstance(FileService.use((s) => s.list(dir)))
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    return run(FileService.use((s) => s.search(input)))
+    return runPromiseInstance(FileService.use((s) => s.search(input)))
   }
 }
 
@@ -722,5 +722,3 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
     }),
   )
 }
-
-const run = scoped(FileService.layer)
