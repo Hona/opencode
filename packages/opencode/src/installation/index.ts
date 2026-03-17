@@ -17,6 +17,17 @@ export namespace Installation {
   const log = Log.create({ service: "installation" })
   const shell = process.platform === "win32"
 
+  function redact(url: string) {
+    if (URL.canParse(url)) {
+      const next = new URL(url)
+      next.username = ""
+      next.password = ""
+      return next.toString()
+    }
+
+    return url.replace(/\/\/[^/@]+@/, "//***@")
+  }
+
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
       cwd: opts.cwd,
@@ -265,11 +276,13 @@ export namespace Installation {
       })
       const channel = CHANNEL
       const url = `${registry}/opencode-ai/${channel}`
+      const safe = redact(registry)
+      const safeUrl = redact(url)
       log.info("checking registry", {
         method: detectedMethod,
-        registry,
+        registry: safe,
         channel,
-        url,
+        url: safeUrl,
       })
       return fetch(url)
         .then(async (res) => {
@@ -277,9 +290,9 @@ export namespace Installation {
             const body = await res.text()
             log.error("registry lookup failed", {
               method: detectedMethod,
-              registry,
+              registry: safe,
               channel,
-              url,
+              url: safeUrl,
               status: res.status,
               statusText: res.statusText,
               body,
@@ -291,9 +304,9 @@ export namespace Installation {
         .then((data: any) => {
           log.info("resolved latest from registry", {
             method: detectedMethod,
-            registry,
+            registry: safe,
             channel,
-            url,
+            url: safeUrl,
             version: data.version,
           })
           return data.version
