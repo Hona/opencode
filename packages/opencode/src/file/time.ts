@@ -2,7 +2,7 @@ import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap, Semaphore } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { scoped } from "@/effect/runtime"
 import type { SessionID } from "@/session/schema"
 
 const log = Log.create({ service: "file.time" })
@@ -96,20 +96,22 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
   )
 }
 
+const run = scoped(FileTimeService.layer)
+
 export namespace FileTime {
   export function read(sessionID: SessionID, file: string) {
-    return runPromiseInstance(FileTimeService.use((s) => s.read(sessionID, file)))
+    return run(FileTimeService.use((s) => s.read(sessionID, file)))
   }
 
   export function get(sessionID: SessionID, file: string) {
-    return runPromiseInstance(FileTimeService.use((s) => s.get(sessionID, file)))
+    return run(FileTimeService.use((s) => s.get(sessionID, file)))
   }
 
   export async function assert(sessionID: SessionID, filepath: string) {
-    return runPromiseInstance(FileTimeService.use((s) => s.assert(sessionID, filepath)))
+    return run(FileTimeService.use((s) => s.assert(sessionID, filepath)))
   }
 
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromiseInstance(FileTimeService.use((s) => s.withLock(filepath, fn)))
+    return run(FileTimeService.use((s) => s.withLock(filepath, fn)))
   }
 }

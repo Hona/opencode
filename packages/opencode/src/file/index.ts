@@ -14,7 +14,7 @@ import { git } from "@/util/git"
 import { Protected } from "./protected"
 import { InstanceContext } from "@/effect/instance-context"
 import { Effect, Layer, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { scoped } from "@/effect/runtime"
 
 const log = Log.create({ service: "file" })
 
@@ -336,23 +336,23 @@ export namespace File {
   }
 
   export function init() {
-    return runPromiseInstance(FileService.use((s) => s.init()))
+    return run(FileService.use((s) => s.init()))
   }
 
   export async function status() {
-    return runPromiseInstance(FileService.use((s) => s.status()))
+    return run(FileService.use((s) => s.status()))
   }
 
   export async function read(file: string): Promise<Content> {
-    return runPromiseInstance(FileService.use((s) => s.read(file)))
+    return run(FileService.use((s) => s.read(file)))
   }
 
   export async function list(dir?: string) {
-    return runPromiseInstance(FileService.use((s) => s.list(dir)))
+    return run(FileService.use((s) => s.list(dir)))
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    return runPromiseInstance(FileService.use((s) => s.search(input)))
+    return run(FileService.use((s) => s.search(input)))
   }
 }
 
@@ -448,7 +448,7 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
       }
 
       const init = Effect.fn("FileService.init")(function* () {
-        void kick()
+        yield* Effect.promise(() => kick())
       })
 
       const status = Effect.fn("FileService.status")(function* () {
@@ -722,3 +722,5 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
     }),
   )
 }
+
+const run = scoped(FileService.layer)

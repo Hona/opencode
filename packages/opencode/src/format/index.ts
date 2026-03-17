@@ -11,7 +11,7 @@ import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { InstanceContext } from "@/effect/instance-context"
 import { Effect, Layer, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { scoped } from "@/effect/runtime"
 
 const log = Log.create({ service: "format" })
 
@@ -28,11 +28,11 @@ export namespace Format {
   export type Status = z.infer<typeof Status>
 
   export async function init() {
-    return runPromiseInstance(FormatService.use((s) => s.init()))
+    return run(FormatService.use((s) => s.init()))
   }
 
   export async function status() {
-    return runPromiseInstance(FormatService.use((s) => s.status()))
+    return run(FormatService.use((s) => s.status()))
   }
 }
 
@@ -159,3 +159,5 @@ export class FormatService extends ServiceMap.Service<FormatService, FormatServi
     }),
   )
 }
+
+const run = scoped(FormatService.layer)
