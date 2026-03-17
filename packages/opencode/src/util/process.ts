@@ -113,6 +113,7 @@ export namespace Process {
       cwd: opts.cwd,
       env: opts.env,
       stdin: opts.stdin,
+      shell: opts.shell,
       abort: opts.abort,
       kill: opts.kill,
       timeout: opts.timeout,

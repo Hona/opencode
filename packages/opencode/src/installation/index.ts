@@ -15,12 +15,14 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const shell = process.platform === "win32"
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
       cwd: opts.cwd,
       env: opts.env,
       nothrow: true,
+      shell,
     }).then((x) => x.text)
   }
 
@@ -168,13 +170,13 @@ export namespace Installation {
         result = await upgradeCurl(target)
         break
       case "npm":
-        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
         break
       case "pnpm":
-        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
         break
       case "bun":
-        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
         break
       case "brew": {
         const formula = await getBrewFormula()
@@ -207,10 +209,10 @@ export namespace Installation {
       }
 
       case "choco":
-        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true })
+        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true, shell })
         break
       case "scoop":
-        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true })
+        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true, shell })
         break
       default:
         throw new Error(`Unknown method: ${method}`)
@@ -262,12 +264,40 @@ export namespace Installation {
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
       const channel = CHANNEL
-      return fetch(`${registry}/opencode-ai/${channel}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
+      const url = `${registry}/opencode-ai/${channel}`
+      log.info("checking registry", {
+        method: detectedMethod,
+        registry,
+        channel,
+        url,
+      })
+      return fetch(url)
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text()
+            log.error("registry lookup failed", {
+              method: detectedMethod,
+              registry,
+              channel,
+              url,
+              status: res.status,
+              statusText: res.statusText,
+              body,
+            })
+            throw new Error(res.statusText)
+          }
           return res.json()
         })
-        .then((data: any) => data.version)
+        .then((data: any) => {
+          log.info("resolved latest from registry", {
+            method: detectedMethod,
+            registry,
+            channel,
+            url,
+            version: data.version,
+          })
+          return data.version
+        })
     }
 
     if (detectedMethod === "choco") {
