@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test"
+import type { Event as AppEvent, Session as SessionInfo } from "@opencode-ai/sdk/v2/client"
 import { test, expect } from "../fixtures"
 import {
   composerEvent,
@@ -6,7 +7,7 @@ import {
   type ComposerProbeState,
   type ComposerWindow,
 } from "../../src/testing/session-composer"
-import { cleanupSession, withSession } from "../actions"
+import { cleanupSession } from "../actions"
 import {
   permissionDockSelector,
   promptSelector,
@@ -15,9 +16,39 @@ import {
   sessionTodoToggleButtonSelector,
 } from "../selectors"
 
-type Sdk = Parameters<typeof withSession>[0]
-type Child = { id: string }
+const e2eEvent = "opencode:e2e:global-event"
+
+type Sdk = NonNullable<Parameters<typeof cleanupSession>[0]["sdk"]>
+type Child = SessionInfo
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
+
+async function enableEvents(page: Page) {
+  await page.addInitScript(() => {
+    const win = window as ComposerWindow & {
+      __opencode_e2e?: {
+        event?: {
+          enabled?: boolean
+        }
+      }
+    }
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      event: {
+        ...win.__opencode_e2e?.event,
+        enabled: true,
+      },
+    }
+  })
+}
+
+async function emitEvent(page: Page, directory: string, payload: AppEvent) {
+  await page.evaluate(
+    (input) => {
+      window.dispatchEvent(new CustomEvent(input.name, { detail: input.detail }))
+    },
+    { name: e2eEvent, detail: { directory, payload } },
+  )
+}
 
 async function withDockSession<T>(
   sdk: Sdk,
@@ -169,6 +200,7 @@ async function todoDock(page: Page, sessionID: string) {
 
 async function withMockPermission<T>(
   page: Page,
+  directory: string,
   request: {
     id: string
     sessionID: string
@@ -178,7 +210,7 @@ async function withMockPermission<T>(
     always?: string[]
   },
   opts: { child?: Child } | undefined,
-  fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
+  fn: (state: { ask: () => Promise<void>; resolved: () => Promise<void> }) => Promise<T>,
 ) {
   let pending = [
     {
@@ -199,7 +231,14 @@ async function withMockPermission<T>(
   const reply = async (route: Route) => {
     const url = new URL(route.request().url())
     const id = url.pathname.split("/").pop()
+    const item = pending.find((entry) => entry.id === id)
     pending = pending.filter((item) => item.id !== id)
+    if (item) {
+      await emitEvent(page, directory, {
+        type: "permission.replied",
+        properties: { sessionID: item.sessionID, requestID: item.id },
+      })
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -210,24 +249,19 @@ async function withMockPermission<T>(
   await page.route("**/permission", list)
   await page.route("**/session/*/permissions/*", reply)
 
-  const sessionList = opts?.child
-    ? async (route: Route) => {
-        const res = await route.fetch()
-        const json = await res.json()
-        const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : undefined
-        if (Array.isArray(list) && !list.some((item) => item?.id === opts.child?.id)) list.push(opts.child)
-        await route.fulfill({
-          status: res.status(),
-          headers: res.headers(),
-          contentType: "application/json",
-          body: JSON.stringify(json),
+  const state = {
+    async ask() {
+      if (opts?.child) {
+        await emitEvent(page, directory, {
+          type: "session.created",
+          properties: { info: opts.child },
         })
       }
-    : undefined
-
-  if (sessionList) await page.route("**/session?*", sessionList)
-
-  const state = {
+      await emitEvent(page, directory, {
+        type: "permission.asked",
+        properties: pending[0],
+      })
+    },
     async resolved() {
       await expect.poll(() => pending.length, { timeout: 10_000 }).toBe(0)
     },
@@ -238,12 +272,12 @@ async function withMockPermission<T>(
   } finally {
     await page.unroute("**/permission", list)
     await page.unroute("**/session/*/permissions/*", reply)
-    if (sessionList) await page.unroute("**/session?*", sessionList)
   }
 }
 
 async function withMockQuestion<T>(
   page: Page,
+  directory: string,
   request: {
     id: string
     sessionID: string
@@ -255,7 +289,7 @@ async function withMockQuestion<T>(
     }>
   },
   opts: { child?: Child } | undefined,
-  fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
+  fn: (state: { ask: () => Promise<void>; resolved: () => Promise<void> }) => Promise<T>,
 ) {
   let pending = [request]
 
@@ -270,7 +304,14 @@ async function withMockQuestion<T>(
   const reply = async (route: Route) => {
     const url = new URL(route.request().url())
     const id = url.pathname.split("/").at(-2)
-    pending = pending.filter((item) => item.id !== id)
+    const item = pending.find((entry) => entry.id === id)
+    pending = pending.filter((entry) => entry.id !== id)
+    if (item) {
+      await emitEvent(page, directory, {
+        type: url.pathname.endsWith("/reject") ? "question.rejected" : "question.replied",
+        properties: { sessionID: item.sessionID, requestID: item.id },
+      })
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -282,24 +323,19 @@ async function withMockQuestion<T>(
   await page.route("**/question/*/reply", reply)
   await page.route("**/question/*/reject", reply)
 
-  const sessionList = opts?.child
-    ? async (route: Route) => {
-        const res = await route.fetch()
-        const json = await res.json()
-        const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : undefined
-        if (Array.isArray(list) && !list.some((item) => item?.id === opts.child?.id)) list.push(opts.child)
-        await route.fulfill({
-          status: res.status(),
-          headers: res.headers(),
-          contentType: "application/json",
-          body: JSON.stringify(json),
+  const state = {
+    async ask() {
+      if (opts?.child) {
+        await emitEvent(page, directory, {
+          type: "session.created",
+          properties: { info: opts.child },
         })
       }
-    : undefined
-
-  if (sessionList) await page.route("**/session?*", sessionList)
-
-  const state = {
+      await emitEvent(page, directory, {
+        type: "question.asked",
+        properties: pending[0],
+      })
+    },
     async resolved() {
       await expect.poll(() => pending.length, { timeout: 10_000 }).toBe(0)
     },
@@ -311,7 +347,6 @@ async function withMockQuestion<T>(
     await page.unroute("**/question", list)
     await page.unroute("**/question/*/reply", reply)
     await page.unroute("**/question/*/reject", reply)
-    if (sessionList) await page.unroute("**/session?*", sessionList)
   }
 }
 
@@ -342,9 +377,12 @@ test("auto-accept toggle works before first submit", async ({ page, gotoSession 
 
 test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock question", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await withMockQuestion(
       page,
+      directory,
       {
         id: "q_e2e_blocked",
         sessionID: session.id,
@@ -361,7 +399,7 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
       },
       undefined,
       async (state) => {
-        await page.goto(page.url())
+        await state.ask()
 
         const dock = page.locator(questionDockSelector)
         await expectQuestionBlocked(page)
@@ -369,7 +407,6 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
         await dock.locator('[data-slot="question-option"]').first().click()
         await dock.getByRole("button", { name: /submit/i }).click()
         await state.resolved()
-        await page.goto(page.url())
 
         await expectQuestionOpen(page)
       },
@@ -379,10 +416,13 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
 
 test("blocked permission flow supports allow once", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission once", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await setAutoAccept(page, false)
     await withMockPermission(
       page,
+      directory,
       {
         id: "per_e2e_once",
         sessionID: session.id,
@@ -392,12 +432,11 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
       },
       undefined,
       async (state) => {
-        await page.goto(page.url())
+        await state.ask()
         await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /allow once/i)
         await state.resolved()
-        await page.goto(page.url())
         await expectPermissionOpen(page)
       },
     )
@@ -406,10 +445,13 @@ test("blocked permission flow supports allow once", async ({ page, sdk, gotoSess
 
 test("blocked permission flow supports reject", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission reject", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await setAutoAccept(page, false)
     await withMockPermission(
       page,
+      directory,
       {
         id: "per_e2e_reject",
         sessionID: session.id,
@@ -418,12 +460,11 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
       },
       undefined,
       async (state) => {
-        await page.goto(page.url())
+        await state.ask()
         await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /deny/i)
         await state.resolved()
-        await page.goto(page.url())
         await expectPermissionOpen(page)
       },
     )
@@ -432,10 +473,13 @@ test("blocked permission flow supports reject", async ({ page, sdk, gotoSession 
 
 test("blocked permission flow supports allow always", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock permission always", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await setAutoAccept(page, false)
     await withMockPermission(
       page,
+      directory,
       {
         id: "per_e2e_always",
         sessionID: session.id,
@@ -445,12 +489,11 @@ test("blocked permission flow supports allow always", async ({ page, sdk, gotoSe
       },
       undefined,
       async (state) => {
-        await page.goto(page.url())
+        await state.ask()
         await expectPermissionBlocked(page)
 
         await clearPermissionDock(page, /allow always/i)
         await state.resolved()
-        await page.goto(page.url())
         await expectPermissionOpen(page)
       },
     )
@@ -463,6 +506,8 @@ test("child session question request blocks parent dock and unblocks after submi
   gotoSession,
 }) => {
   await withDockSession(sdk, "e2e composer dock child question parent", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
 
     const child = await sdk.session
@@ -476,6 +521,7 @@ test("child session question request blocks parent dock and unblocks after submi
     try {
       await withMockQuestion(
         page,
+        directory,
         {
           id: "q_e2e_child",
           sessionID: child.id,
@@ -492,7 +538,7 @@ test("child session question request blocks parent dock and unblocks after submi
         },
         { child },
         async (state) => {
-          await page.goto(page.url())
+          await state.ask()
 
           const dock = page.locator(questionDockSelector)
           await expectQuestionBlocked(page)
@@ -500,7 +546,6 @@ test("child session question request blocks parent dock and unblocks after submi
           await dock.locator('[data-slot="question-option"]').first().click()
           await dock.getByRole("button", { name: /submit/i }).click()
           await state.resolved()
-          await page.goto(page.url())
 
           await expectQuestionOpen(page)
         },
@@ -517,6 +562,8 @@ test("child session permission request blocks parent dock and supports allow onc
   gotoSession,
 }) => {
   await withDockSession(sdk, "e2e composer dock child permission parent", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await setAutoAccept(page, false)
 
@@ -531,6 +578,7 @@ test("child session permission request blocks parent dock and supports allow onc
     try {
       await withMockPermission(
         page,
+        directory,
         {
           id: "per_e2e_child",
           sessionID: child.id,
@@ -540,12 +588,11 @@ test("child session permission request blocks parent dock and supports allow onc
         },
         { child },
         async (state) => {
-          await page.goto(page.url())
+          await state.ask()
           await expectPermissionBlocked(page)
 
           await clearPermissionDock(page, /allow once/i)
           await state.resolved()
-          await page.goto(page.url())
 
           await expectPermissionOpen(page)
         },
@@ -588,9 +635,12 @@ test("todo dock transitions and collapse behavior", async ({ page, sdk, gotoSess
 
 test("keyboard focus stays off prompt while blocked", async ({ page, sdk, gotoSession }) => {
   await withDockSession(sdk, "e2e composer dock keyboard", async (session) => {
+    const directory = await sdk.path.get().then((x) => x.data?.directory ?? "")
+    await enableEvents(page)
     await gotoSession(session.id)
     await withMockQuestion(
       page,
+      directory,
       {
         id: "q_e2e_keyboard",
         sessionID: session.id,
@@ -603,8 +653,8 @@ test("keyboard focus stays off prompt while blocked", async ({ page, sdk, gotoSe
         ],
       },
       undefined,
-      async () => {
-        await page.goto(page.url())
+      async (state) => {
+        await state.ask()
         await expectQuestionBlocked(page)
 
         await page.locator("main").click({ position: { x: 5, y: 5 } })

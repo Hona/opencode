@@ -12,6 +12,8 @@ const abortError = z.object({
   name: z.literal("AbortError"),
 })
 
+const e2eEvent = "opencode:e2e:global-event"
+
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
   init: () => {
@@ -200,9 +202,28 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       document.addEventListener("visibilitychange", onVisibility)
     }
 
+    const onE2E = (evt: globalThis.Event) => {
+      if (!(evt instanceof CustomEvent)) return
+      const detail = evt.detail as { directory?: string; payload?: Event } | undefined
+      if (!detail?.directory || !detail.payload) return
+      const dir = detail.directory
+      const payload = detail.payload
+      batch(() => {
+        emitter.emit(dir, payload)
+      })
+    }
+    if (typeof window !== "undefined") {
+      const e2e = (window as Window & { __opencode_e2e?: { event?: { enabled?: boolean } } }).__opencode_e2e
+      if (e2e?.event?.enabled) window.addEventListener(e2eEvent, onE2E)
+    }
+
     onCleanup(() => {
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibility)
+      }
+      if (typeof window !== "undefined") {
+        const e2e = (window as Window & { __opencode_e2e?: { event?: { enabled?: boolean } } }).__opencode_e2e
+        if (e2e?.event?.enabled) window.removeEventListener(e2eEvent, onE2E)
       }
       abort.abort()
       flush()
