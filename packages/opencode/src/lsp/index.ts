@@ -5,12 +5,12 @@ import { LSPClient } from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { LSPServer } from "./server"
-import { stop } from "./stop"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { Process } from "../util/process"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -203,7 +203,7 @@ export namespace LSP {
         root,
       }).catch(async (err) => {
         s.broken.add(key)
-        await stop(handle.process)
+        await Process.stop(handle.process)
         log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
         return undefined
       })
@@ -214,7 +214,7 @@ export namespace LSP {
 
       const existing = s.clients.find((x) => x.root === root && x.serverID === server.id)
       if (existing) {
-        await stop(handle.process)
+        await Process.stop(handle.process)
         return existing
       }
 

@@ -141,6 +141,20 @@ export namespace Process {
     throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
   }
 
+  export async function stop(proc: ChildProcess) {
+    if (process.platform !== "win32" || !proc.pid) {
+      proc.kill()
+      return
+    }
+
+    const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+      nothrow: true,
+    })
+
+    if (out.code === 0) return
+    proc.kill()
+  }
+
   export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {
     const out = await run(cmd, opts)
     return {
