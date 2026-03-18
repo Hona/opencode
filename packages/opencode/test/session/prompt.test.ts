@@ -1,6 +1,8 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
+import { Bus } from "../../src/bus"
+import { PermissionNext } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -143,6 +145,136 @@ describe("session.prompt special characters", () => {
         expect(hasContent).toBe(true)
 
         await Session.remove(session.id)
+      },
+    })
+  })
+})
+
+describe("session.prompt local file permissions", () => {
+  test("asks for read permission before synthetic file reads", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "note.txt"), "classified\n")
+      },
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+            permission: {
+              read: {
+                "*": "ask",
+              },
+            },
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seen: PermissionNext.Request[] = []
+        const unsub = Bus.subscribe(PermissionNext.Event.Asked, (event) => {
+          seen.push(event.properties)
+          void PermissionNext.reply({
+            requestID: event.properties.id,
+            reply: "once",
+          })
+        })
+
+        try {
+          const msg = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            noReply: true,
+            parts: [
+              {
+                type: "file",
+                mime: "text/plain",
+                url: pathToFileURL(path.join(tmp.path, "note.txt")).href,
+                filename: "note.txt",
+              },
+            ],
+          })
+
+          if (msg.info.role !== "user") throw new Error("expected user message")
+
+          const req = seen.find((item) => item.permission === "read")
+          expect(req).toBeDefined()
+          expect(req!.patterns).toEqual([path.join(tmp.path, "note.txt")])
+          expect(msg.parts.some((part) => part.type === "text" && part.text.includes("classified"))).toBe(true)
+        } finally {
+          unsub()
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+
+  test("asks for external_directory permission before synthetic directory reads", async () => {
+    await using outer = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "shared", "a.txt"), "a\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+            permission: {
+              external_directory: {
+                "*": "ask",
+              },
+              read: "allow",
+            },
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const seen: PermissionNext.Request[] = []
+        const unsub = Bus.subscribe(PermissionNext.Event.Asked, (event) => {
+          seen.push(event.properties)
+          void PermissionNext.reply({
+            requestID: event.properties.id,
+            reply: "once",
+          })
+        })
+
+        try {
+          const dir = path.join(outer.path, "shared")
+          const msg = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            noReply: true,
+            parts: [
+              {
+                type: "file",
+                mime: "application/x-directory",
+                url: pathToFileURL(dir).href,
+                filename: "shared",
+              },
+            ],
+          })
+
+          if (msg.info.role !== "user") throw new Error("expected user message")
+
+          const req = seen.find((item) => item.permission === "external_directory")
+          expect(req).toBeDefined()
+          expect(req!.patterns).toEqual([path.join(dir, "*").replaceAll("\\", "/")])
+          expect(msg.parts.some((part) => part.type === "text" && part.text.includes("a.txt"))).toBe(true)
+        } finally {
+          unsub()
+          await Session.remove(session.id)
+        }
       },
     })
   })

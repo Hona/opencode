@@ -162,7 +162,7 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    const message = await createUserMessage(input)
+    const message = await createUserMessage(input, session)
     await Session.touch(input.sessionID)
 
     // this is backwards compatibility for allowing `tools` to be specified when
@@ -962,8 +962,9 @@ export namespace SessionPrompt {
     })
   }
 
-  async function createUserMessage(input: PromptInput) {
+  async function createUserMessage(input: PromptInput, session: Session.Info) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
 
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const full =
@@ -1151,16 +1152,20 @@ export namespace SessionPrompt {
 
                 await ReadTool.init()
                   .then(async (t) => {
-                    const model = await Provider.getModel(info.model.providerID, info.model.modelID)
                     const readCtx: Tool.Context = {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
-                      agent: input.agent!,
+                      agent: agent.name,
                       messageID: info.id,
-                      extra: { bypassCwdCheck: true, model },
                       messages: [],
                       metadata: async () => {},
-                      ask: async () => {},
+                      ask: async (req) => {
+                        await PermissionNext.ask({
+                          ...req,
+                          sessionID: input.sessionID,
+                          ruleset,
+                        })
+                      },
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1214,12 +1219,17 @@ export namespace SessionPrompt {
                 const listCtx: Tool.Context = {
                   sessionID: input.sessionID,
                   abort: new AbortController().signal,
-                  agent: input.agent!,
+                  agent: agent.name,
                   messageID: info.id,
-                  extra: { bypassCwdCheck: true },
                   messages: [],
                   metadata: async () => {},
-                  ask: async () => {},
+                  ask: async (req) => {
+                    await PermissionNext.ask({
+                      ...req,
+                      sessionID: input.sessionID,
+                      ruleset,
+                    })
+                  },
                 }
                 const result = await ReadTool.init().then((t) => t.execute(args, listCtx))
                 return [

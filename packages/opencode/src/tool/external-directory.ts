@@ -5,14 +5,11 @@ import { Instance } from "../project/instance"
 type Kind = "file" | "directory"
 
 type Options = {
-  bypass?: boolean
   kind?: Kind
 }
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
   if (!target) return
-
-  if (options?.bypass) return
 
   if (Instance.containsPath(target)) return
 

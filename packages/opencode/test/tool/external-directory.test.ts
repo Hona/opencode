@@ -107,22 +107,4 @@ describe("tool.assertExternalDirectory", () => {
     expect(req!.always).toEqual([expected])
   })
 
-  test("skips prompting when bypass=true", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
-    const ctx: Tool.Context = {
-      ...baseCtx,
-      ask: async (req) => {
-        requests.push(req)
-      },
-    }
-
-    await Instance.provide({
-      directory: "/tmp/project",
-      fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
-      },
-    })
-
-    expect(requests.length).toBe(0)
-  })
 })
