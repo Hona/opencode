@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Path } from "@/path/path"
@@ -133,14 +133,19 @@ export namespace Filesystem {
         .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
     )
   }
+
+  function inside(parent: string, child: string) {
+    if (isAbsolute(parent) !== isAbsolute(child)) return false
+    const rel = relative(parent, child)
+    return !isAbsolute(rel) && !rel.startsWith("..")
+  }
+
   export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+    return inside(a, b) || inside(b, a)
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    return inside(parent, child)
   }
 
   export async function findUp(target: string, start: string, stop?: string) {

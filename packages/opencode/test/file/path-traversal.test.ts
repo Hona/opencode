@@ -33,6 +33,21 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  test("blocks absolute-relative path mixes", () => {
+    const abs = process.platform === "win32" ? "C:\\project" : "/project"
+    const rel = process.platform === "win32" ? "project\\src\\file.ts" : "project/src/file.ts"
+
+    expect(Filesystem.contains(abs, rel)).toBe(false)
+    expect(Filesystem.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
+  })
+
+  test("blocks different roots", () => {
+    if (process.platform !== "win32") return
+
+    expect(Filesystem.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
+    expect(Filesystem.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
+  })
 })
 
 /*

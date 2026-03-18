@@ -320,6 +320,39 @@ describe("filesystem", () => {
     })
   })
 
+  describe("contains()", () => {
+    test("rejects absolute-relative path mixes", () => {
+      const abs = process.platform === "win32" ? "C:\\project" : "/project"
+      const rel = process.platform === "win32" ? "project\\src\\file.ts" : "project/src/file.ts"
+
+      expect(Filesystem.contains(abs, rel)).toBe(false)
+      expect(Filesystem.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
+    })
+
+    test("rejects different roots", () => {
+      if (process.platform !== "win32") return
+
+      expect(Filesystem.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
+      expect(Filesystem.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
+    })
+  })
+
+  describe("overlaps()", () => {
+    test("stays false for absolute-relative path mixes", () => {
+      const abs = process.platform === "win32" ? "C:\\project" : "/project"
+      const rel = process.platform === "win32" ? "project\\src" : "project/src"
+
+      expect(Filesystem.overlaps(abs, rel)).toBe(false)
+    })
+
+    test("stays false for different roots", () => {
+      if (process.platform !== "win32") return
+
+      expect(Filesystem.overlaps("C:\\project", "D:\\project")).toBe(false)
+      expect(Filesystem.overlaps("C:\\project", "\\\\server\\share\\project")).toBe(false)
+    })
+  })
+
   describe("writeStream()", () => {
     test("writes from Web ReadableStream", async () => {
       await using tmp = await tmpdir()
