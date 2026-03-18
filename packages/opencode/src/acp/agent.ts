@@ -29,7 +29,8 @@ import {
 } from "@agentclientprotocol/sdk"
 
 import { Log } from "../util/log"
-import { pathToFileURL } from "url"
+import { win32 } from "path"
+import { fileURLToPath, pathToFileURL } from "url"
 import { Filesystem } from "../util/filesystem"
 import { Hash } from "../util/hash"
 import { ACPSessionManager } from "./session"
@@ -1594,24 +1595,23 @@ export namespace ACP {
   ): { type: "file"; url: string; filename: string; mime: string } | { type: "text"; text: string } {
     try {
       if (uri.startsWith("file://")) {
-        const path = uri.slice(7)
-        const name = path.split("/").pop() || path
+        const url = new URL(uri)
+        const file = fileURLToPath(url)
         return {
           type: "file",
-          url: uri,
-          filename: name,
+          url: url.href,
+          filename: win32.basename(file),
           mime: "text/plain",
         }
       }
       if (uri.startsWith("zed://")) {
         const url = new URL(uri)
-        const path = url.searchParams.get("path")
-        if (path) {
-          const name = path.split("/").pop() || path
+        const file = url.searchParams.get("path")
+        if (file) {
           return {
             type: "file",
-            url: pathToFileURL(path).href,
-            filename: name,
+            url: pathToFileURL(file).href,
+            filename: win32.basename(file),
             mime: "text/plain",
           }
         }
