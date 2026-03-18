@@ -1,7 +1,6 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { encodeFilePath, getFilename, resolveWorkspacePath } from "@opencode-ai/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
-import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
@@ -27,13 +26,6 @@ type BuildRequestPartsInput = {
   messageID: string
   sessionID: string
   sessionDirectory: string
-}
-
-const absolute = (directory: string, path: string) => {
-  if (path.startsWith("/")) return path
-  if (/^[A-Za-z]:[\\/]/.test(path) || /^[A-Za-z]:$/.test(path)) return path
-  if (path.startsWith("\\\\") || path.startsWith("//")) return path
-  return `${directory.replace(/[\\/]+$/, "")}/${path}`
 }
 
 const fileQuery = (selection: FileSelection | undefined) =>
@@ -88,7 +80,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   ]
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
-    const path = absolute(input.sessionDirectory, attachment.path)
+    const path = resolveWorkspacePath(input.sessionDirectory, attachment.path)
     return {
       id: Identifier.ascending("part"),
       type: "file",
@@ -122,7 +114,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
   const used = new Set(files.map((part) => part.url))
   const context = input.context.flatMap((item) => {
-    const path = absolute(input.sessionDirectory, item.path)
+    const path = resolveWorkspacePath(input.sessionDirectory, item.path)
     const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
     if (!comment && used.has(url)) return []

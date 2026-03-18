@@ -17,6 +17,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
+import { filePathKey } from "@/context/file/path"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
@@ -79,11 +80,9 @@ export function SessionSidePanel(props: {
       return "mix" as const
     }
 
-    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
-
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
-      const file = normalize(diff.file)
+      const file = filePathKey(diff.file)
       const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 
       out.set(file, kind)
@@ -113,17 +112,12 @@ export function SessionSidePanel(props: {
     return file.tree.children("").length === 0
   })
 
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-
   const openReviewPanel = () => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
   const openTab = createOpenSessionFileTab({
-    normalizeTab,
+    normalizeTab: file.normalizeTab,
     openTab: tabs().open,
     pathFromTab: file.pathFromTab,
     loadFile: file.load,
@@ -134,7 +128,7 @@ export function SessionSidePanel(props: {
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
-    normalizeTab,
+    normalizeTab: file.normalizeTab,
     review: reviewTab,
     hasReview,
   })

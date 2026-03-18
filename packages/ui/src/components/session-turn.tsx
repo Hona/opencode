@@ -4,7 +4,7 @@ import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -86,6 +86,8 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 }
 
 const hidden = new Set(["todowrite", "todoread"])
+
+const key = (path: string) => pathKey(path) || path
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
@@ -233,8 +235,9 @@ export function SessionTurn(
     const seen = new Set<string>()
     return files
       .reduceRight<FileDiff[]>((result, diff) => {
-        if (seen.has(diff.file)) return result
-        seen.add(diff.file)
+        const id = key(diff.file)
+        if (seen.has(id)) return result
+        seen.add(id)
         result.push(diff)
         return result
       }, [])
@@ -247,6 +250,11 @@ export function SessionTurn(
   })
   const open = () => state.open
   const expanded = () => state.expanded
+  const visible = createMemo(() =>
+    diffs()
+      .map((diff) => diff.file)
+      .filter((file) => expanded().some((item) => pathEqual(item, file))),
+  )
 
   createEffect(
     on(
@@ -451,14 +459,14 @@ export function SessionTurn(
                           <Accordion
                             multiple
                             style={{ "--sticky-accordion-offset": "40px" }}
-                            value={expanded()}
+                            value={visible()}
                             onChange={(value) =>
                               setState("expanded", Array.isArray(value) ? value : value ? [value] : [])
                             }
                           >
                             <For each={diffs()}>
                               {(diff) => {
-                                const active = createMemo(() => expanded().includes(diff.file))
+                                const active = createMemo(() => expanded().some((item) => pathEqual(item, diff.file)))
                                 const dir = createMemo(() => getDirectory(diff.file))
                                 const [visible, setVisible] = createSignal(false)
 

@@ -168,7 +168,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const activeFileTab = createSessionTabs({
     tabs,
     pathFromTab: files.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
+    normalizeTab: files.normalizeTab,
   }).activeFileTab
 
   const commentInReview = (path: string) => {

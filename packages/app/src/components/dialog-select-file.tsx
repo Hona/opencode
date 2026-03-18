@@ -138,7 +138,7 @@ function createFileEntries(props: {
   const tabState = createSessionTabs({
     tabs: props.tabs,
     pathFromTab: props.file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? props.file.tab(tab) : tab),
+    normalizeTab: props.file.normalizeTab,
   })
   const recent = createMemo(() => {
     const all = tabState.openedTabs()

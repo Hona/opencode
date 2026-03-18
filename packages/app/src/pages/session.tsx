@@ -392,10 +392,7 @@ export default function Page() {
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
-  function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
+  const normalizeTab = file.normalizeTab
 
   function normalizeTabs(list: string[]) {
     const seen = new Set<string>()

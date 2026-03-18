@@ -3,24 +3,24 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import {
+  getDirectory,
+  getFilename,
+  getParentPath,
+  getPathDisplay,
+  getPathDisplaySeparator,
+  getPathRoot,
+  getPathScope,
+  getPathSearchText,
+  normalizePath,
+  pathKey,
+} from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
-import {
-  displayPath,
-  displaySeparator,
-  joinPath,
-  normalizeDriveRoot,
-  parentOf,
-  rootOf,
-  scopeOf,
-  searchOf,
-  trimTrailing,
-} from "./dialog-select-directory-path"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -34,21 +34,55 @@ type Row = {
   group: "recent" | "folders"
 }
 
+function trim(path: string) {
+  const normalized = normalize(path)
+  if (!normalized) return ""
+  const root = getPathRoot(normalized)
+  if (root && normalized === root) return root
+  return normalized.replace(/\/+$/, "") || root || "/"
+}
+
+function normalize(path: string) {
+  const normalized = normalizePath(path)
+  if (/^[A-Za-z]:$/.test(normalized)) return `${normalized}/`
+  return normalized
+}
+
+function join(base: string | undefined, rel: string) {
+  const root = trim(base ?? "")
+  const path = trim(rel).replace(/^\/+/, "")
+  if (!root) return path
+  if (!path) return root
+  if (root.endsWith("/")) return root + path
+  return `${root}/${path}`
+}
+
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
   return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
 }
 
 function toRow(absolute: string, home: string, group: Row["group"]): Row {
-  const full = trimTrailing(absolute)
-  return { absolute: full, search: searchOf(full, home), group }
+  const full = trim(absolute)
+  return { absolute: full, search: getPathSearchText(full, home), group }
 }
 
 function uniqueRows(rows: Row[]) {
   const seen = new Set<string>()
   return rows.filter((row) => {
-    if (seen.has(row.absolute)) return false
-    seen.add(row.absolute)
+    const key = pathKey(row.absolute) || row.absolute
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function unique(paths: string[]) {
+  const seen = new Set<string>()
+  return paths.filter((path) => {
+    const key = pathKey(path) || path
+    if (seen.has(key)) return false
+    seen.add(key)
     return true
   })
 }
@@ -62,7 +96,7 @@ function useDirectorySearch(args: {
   let current = 0
 
   const dirs = async (dir: string) => {
-    const key = trimTrailing(dir)
+    const key = trim(dir)
     const existing = cache.get(key)
     if (existing) return existing
 
@@ -75,7 +109,7 @@ function useDirectorySearch(args: {
           .filter((n) => n.type === "directory")
           .map((n) => ({
             name: n.name,
-            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
+            absolute: trim(n.absolute),
           })),
       )
 
@@ -94,12 +128,12 @@ function useDirectorySearch(args: {
     const active = () => token === current
 
     const value = cleanInput(filter)
-    const scopedInput = scopeOf(value, args.start(), args.home())
+    const scopedInput = getPathScope(value, args.start(), args.home())
     if (!scopedInput) return [] as string[]
 
-    const raw = normalizeDriveRoot(value)
-    const isPath = raw.startsWith("~") || !!rootOf(raw) || /[\\/]/.test(value)
-    const query = normalizeDriveRoot(scopedInput.path)
+    const raw = normalize(value)
+    const isPath = raw.startsWith("~") || !!getPathRoot(raw) || /[\\/]/.test(value)
+    const query = normalize(scopedInput.path)
 
     const find = () =>
       args.sdk.client.find
@@ -110,7 +144,7 @@ function useDirectorySearch(args: {
     if (!isPath) {
       const results = await find()
       if (!active()) return []
-      return results.map((rel) => joinPath(scopedInput.directory, rel)).slice(0, 50)
+      return results.map((rel) => join(scopedInput.directory, rel)).slice(0, 50)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")
@@ -123,23 +157,23 @@ function useDirectorySearch(args: {
     for (const part of head) {
       if (!active()) return []
       if (part === "..") {
-        paths = paths.map(parentOf)
+        paths = paths.map(getParentPath)
         continue
       }
 
       const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
       if (!active()) return []
-      paths = Array.from(new Set(next)).slice(0, cap)
+      paths = unique(next).slice(0, cap)
       if (paths.length === 0) return [] as string[]
     }
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
     if (!active()) return []
-    const deduped = Array.from(new Set(out))
-    const base = raw.startsWith("~") ? trimTrailing(scopedInput.directory) : ""
+    const deduped = unique(out)
+    const base = raw.startsWith("~") ? trim(scopedInput.directory) : ""
     const expand = !raw.endsWith("/")
     if (!expand || !tail) {
-      const items = base ? Array.from(new Set([base, ...deduped])) : deduped
+      const items = base ? unique([base, ...deduped]) : deduped
       return items.slice(0, 50)
     }
 
@@ -150,8 +184,8 @@ function useDirectorySearch(args: {
 
     const children = await match(target, "", 30)
     if (!active()) return []
-    const items = Array.from(new Set([...deduped, ...children]))
-    return (base ? Array.from(new Set([base, ...items])) : items).slice(0, 50)
+    const items = unique([...deduped, ...children])
+    return (base ? unique([base, ...items]) : items).slice(0, 50)
   }
 }
 
@@ -258,8 +292,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           e.preventDefault()
           e.stopPropagation()
 
-          const value = displayPath(item.absolute, filter(), home())
-          const sep = displaySeparator(value, home())
+          const value = getPathDisplay(item.absolute, filter(), home())
+          const sep = getPathDisplaySeparator(value, home())
           list?.setFilter(/[\\/]$/.test(value) ? value : value + sep)
         }}
         onSelect={(path) => {
@@ -268,9 +302,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         }}
       >
         {(item) => {
-          const path = displayPath(item.absolute, filter(), home())
+          const path = getPathDisplay(item.absolute, filter(), home())
           const dir = getDirectory(path)
-          const sep = displaySeparator(path, home())
+          const sep = getPathDisplaySeparator(path, home())
           if (path === "~") {
             return (
               <div class="w-full flex items-center justify-between rounded-md">

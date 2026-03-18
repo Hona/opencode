@@ -11,7 +11,7 @@ import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
@@ -132,6 +132,8 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
+const key = (path: string) => pathKey(path) || path
+
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
@@ -151,9 +153,10 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const open = () => props.open ?? store.open
   const files = createMemo(() => props.diffs.map((diff) => diff.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
+  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [key(diff.file), diff] as const)))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
+  const visible = createMemo(() => files().filter((file) => open().some((item) => pathEqual(item, file))))
 
   const handleChange = (open: string[]) => {
     props.onOpenChange?.(open)
@@ -162,7 +165,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   }
 
   const handleExpandOrCollapseAll = () => {
-    const next = open().length > 0 ? [] : files()
+    const next = visible().length > 0 ? [] : files()
     handleChange(next)
   }
 
@@ -188,11 +191,11 @@ export const SessionReview = (props: SessionReviewProps) => {
 
       setStore("opened", focus)
 
-      const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
+      const comment = (props.comments ?? []).find((c) => pathEqual(c.file, focus.file) && c.id === focus.id)
       if (comment) setStore("selection", { file: comment.file, range: cloneSelectedLineRange(comment.selection) })
 
       const current = open()
-      if (!current.includes(focus.file)) {
+      if (!current.some((item) => pathEqual(item, focus.file))) {
         handleChange([...current, focus.file])
       }
 
@@ -202,7 +205,7 @@ export const SessionReview = (props: SessionReviewProps) => {
         const root = scroll
         if (!root) return
 
-        const wrapper = anchors.get(focus.file)
+        const wrapper = anchors.get(key(focus.file))
         const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
         const ready =
           anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
@@ -258,7 +261,7 @@ export const SessionReview = (props: SessionReviewProps) => {
               onClick={handleExpandOrCollapseAll}
             >
               <Switch>
-                <Match when={open().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
+                <Match when={visible().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
                 <Match when={true}>{i18n.t("ui.sessionReview.expandAll")}</Match>
               </Switch>
             </Button>
@@ -281,18 +284,18 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-container" class={props.classes?.container}>
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
-              <Accordion multiple value={open()} onChange={handleChange}>
+              <Accordion multiple value={visible()} onChange={handleChange}>
                 <For each={files()}>
                   {(file) => {
                     let wrapper: HTMLDivElement | undefined
 
-                    const item = createMemo(() => diffs().get(file)!)
+                    const item = createMemo(() => diffs().get(key(file))!)
                     const dir = createMemo(() => getDirectory(file))
 
-                    const expanded = createMemo(() => open().includes(file))
+                    const expanded = createMemo(() => open().some((item) => pathEqual(item, file)))
                     const force = () => !!store.force[file]
 
-                    const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
+                    const comments = createMemo(() => (props.comments ?? []).filter((c) => pathEqual(c.file, file)))
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
                     const beforeText = () => (typeof item().before === "string" ? item().before : "")
@@ -314,13 +317,13 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     const selectedLines = createMemo(() => {
                       const current = selection()
-                      if (!current || current.file !== file) return null
+                      if (!current || !pathEqual(current.file, file)) return null
                       return current.range
                     })
 
                     const draftRange = createMemo(() => {
                       const current = commenting()
-                      if (!current || current.file !== file) return null
+                      if (!current || !pathEqual(current.file, file)) return null
                       return current.range
                     })
 
@@ -331,7 +334,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       state: {
                         opened: () => {
                           const current = opened()
-                          if (!current || current.file !== file) return null
+                          if (!current || !pathEqual(current.file, file)) return null
                           return current.id
                         },
                         setOpened: (id) => setStore("opened", id ? { file, id } : null),
@@ -378,7 +381,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                     })
 
                     onCleanup(() => {
-                      anchors.delete(file)
+                      anchors.delete(key(file))
                     })
 
                     const handleLineSelected = (range: SelectedLineRange | null) => {
@@ -397,7 +400,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                         id={diffId(file)}
                         data-file={file}
                         data-slot="session-review-accordion-item"
-                        data-selected={props.focusedFile === file ? "" : undefined}
+                        data-selected={props.focusedFile && pathEqual(props.focusedFile, file) ? "" : undefined}
                       >
                         <StickyAccordionHeader>
                           <Accordion.Trigger>
@@ -462,7 +465,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
                               wrapper = el
-                              anchors.set(file, el)
+                              anchors.set(key(file), el)
                             }}
                           >
                             <Show when={expanded()}>

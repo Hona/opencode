@@ -129,9 +129,8 @@ const sessionPath = (key: string) => {
 }
 
 const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
-  if (!tab.startsWith("file://")) return tab
   if (!path) return tab
-  return path.tab(tab)
+  return path.normalizeTab(tab)
 }
 
 const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {

@@ -63,7 +63,7 @@ export function FileTabContent(props: { tab: string }) {
   const activeFileTab = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+    normalizeTab: file.normalizeTab,
   }).activeFileTab
 
   let scroll: HTMLDivElement | undefined

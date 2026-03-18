@@ -61,14 +61,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return false
     return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
   }
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
-    normalizeTab,
+    normalizeTab: file.normalizeTab,
     review: actions.review,
     hasReview,
   })

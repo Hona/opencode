@@ -1,4 +1,5 @@
 import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@opencode-ai/sdk/v2"
+import { getWorkspaceRelativePath } from "@opencode-ai/util/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 
 type Inline =
@@ -59,20 +60,7 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
 
-  const toRelative = (path: string) => {
-    if (!directory) return path
-
-    const prefix = directory.endsWith("/") ? directory : directory + "/"
-    if (path.startsWith(prefix)) return path.slice(prefix.length)
-
-    if (path.startsWith(directory)) {
-      const next = path.slice(directory.length)
-      if (next.startsWith("/")) return next.slice(1)
-      return next
-    }
-
-    return path
-  }
+  const toRelative = (path: string) => (directory ? getWorkspaceRelativePath(path, directory) : path)
 
   const inline: Inline[] = []
   const images: ImageAttachmentPart[] = []

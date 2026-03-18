@@ -45,7 +45,7 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { getDirectory as _getDirectory, getFilename, getPathSeparator } from "@opencode-ai/util/path"
+import { getDirectory as _getDirectory, getFilename, getRelativeDisplayPath } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
@@ -192,32 +192,9 @@ function createThrottledValue(getValue: () => string) {
   return value
 }
 
-function relativizeProjectPath(path: string, directory?: string) {
-  if (!path) return ""
-  if (!directory) return path
-  if (directory === "/") return path
-  if (directory === "\\") return path
-
-  const separator = getPathSeparator(path || directory)
-  const trailing = /[\\/]+$/.test(path)
-  const full = path.replace(/[\\/]+/g, "/").replace(/\/+$/, "")
-  const root = directory.replace(/[\\/]+/g, "/").replace(/\/+$/, "")
-  if (!root) return path
-  if (full === root) return trailing ? separator : ""
-
-  const prefix = root + "/"
-  if (!full.startsWith(prefix)) return path
-
-  const rel = full.slice(root.length).replace(/^\/+/, "")
-  if (!rel) return trailing ? separator : ""
-
-  const result = separator + rel.replaceAll("/", separator)
-  return trailing ? result + separator : result
-}
-
 function getDirectory(path: string | undefined) {
   const data = useData()
-  return relativizeProjectPath(_getDirectory(path), data.directory)
+  return getRelativeDisplayPath(_getDirectory(path), data.directory)
 }
 
 import type { IconProps } from "./icon"
@@ -1468,7 +1445,7 @@ ToolRegistry.register({
             <div data-component="tool-loaded-file">
               <Icon name="enter" size="small" />
               <span>
-                {i18n.t("ui.tool.loaded")} {relativizeProjectPath(filepath, data.directory)}
+                {i18n.t("ui.tool.loaded")} {getRelativeDisplayPath(filepath, data.directory)}
               </span>
             </div>
           )}
