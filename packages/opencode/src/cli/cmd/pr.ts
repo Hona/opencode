@@ -119,14 +119,8 @@ export const PrCommand = cmd({
           stderr: "inherit",
           cwd: process.cwd(),
         })
-
-        await new Promise<void>((resolve, reject) => {
-          opencodeProcess.on("exit", (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`opencode exited with code ${code}`))
-          })
-          opencodeProcess.on("error", reject)
-        })
+        const code = await opencodeProcess.exited
+        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
       },
     })
   },

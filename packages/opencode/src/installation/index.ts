@@ -15,7 +15,6 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
-  const bodyMax = 500
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
@@ -263,38 +262,12 @@ export namespace Installation {
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
       const channel = CHANNEL
-      const url = `${registry}/opencode-ai/${channel}`
-      const host = URL.canParse(registry) ? new URL(registry).host : registry
-      log.info("checking registry", {
-        method: detectedMethod,
-        registry: host,
-        channel,
-      })
-      return fetch(url)
-        .then(async (res) => {
-          if (!res.ok) {
-            const body = await res.text()
-            log.error("registry lookup failed", {
-              method: detectedMethod,
-              registry: host,
-              channel,
-              status: res.status,
-              statusText: res.statusText,
-              body: body.length > bodyMax ? `${body.slice(0, bodyMax)}...` : body,
-            })
-            throw new Error(res.statusText)
-          }
+      return fetch(`${registry}/opencode-ai/${channel}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
           return res.json()
         })
-        .then((data: any) => {
-          log.info("resolved latest from registry", {
-            method: detectedMethod,
-            registry: host,
-            channel,
-            version: data.version,
-          })
-          return data.version
-        })
+        .then((data: any) => data.version)
     }
 
     if (detectedMethod === "choco") {
