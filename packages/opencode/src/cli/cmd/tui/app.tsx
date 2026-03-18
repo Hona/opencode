@@ -183,7 +183,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: { events: true },
+        useKittyKeyboard: { events: process.platform === "win32" },
         autoFocus: false,
         openConsoleOnError: false,
         consoleOptions: {
