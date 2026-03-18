@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
@@ -19,6 +20,10 @@ const ctx = {
   messages: [],
   metadata: () => {},
   ask: async () => {},
+}
+
+async function link(target: string, alias: string) {
+  await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
 }
 
 describe("tool.read external_directory permission", () => {
@@ -148,6 +153,38 @@ describe("tool.read external_directory permission", () => {
         await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+
+  test("asks for external_directory permission when reading through symlink escape", async () => {
+    await using outerTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "secret.txt"), "secret data")
+      },
+    })
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await link(outerTmp.path, path.join(dir, "link"))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        const result = await read.execute({ filePath: path.join(tmp.path, "link", "secret.txt") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(result.output).toContain("secret data")
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "*").replaceAll("\\", "/"))
       },
     })
   })
