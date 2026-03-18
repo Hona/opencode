@@ -145,8 +145,7 @@ export const EditTool = Tool.define("edit", {
     let output = "Edit applied successfully."
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
-    const normalizedFilePath = Filesystem.normalizePath(filePath)
-    const issues = diagnostics[normalizedFilePath] ?? []
+    const issues = LSP.diagnosticsFor(filePath, diagnostics)?.diagnostics ?? []
     const errors = issues.filter((item) => item.severity === 1)
     if (errors.length > 0) {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)

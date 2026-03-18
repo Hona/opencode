@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { Path } from "@/path/path"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Log } from "../util/log"
@@ -35,6 +35,7 @@ export namespace LSPClient {
       z.object({
         serverID: z.string(),
         path: z.string(),
+        pathKey: z.string(),
       }),
     ),
   }
@@ -48,17 +49,19 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
-    const diagnostics = new Map<string, Diagnostic[]>()
+    const diagnostics = new Map<string, { path: string; diagnostics: Diagnostic[] }>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
+      const path = String(Path.fromURI(params.uri))
+      const pathKey = String(Path.key(path))
+      const filePath = diagnostics.get(pathKey)?.path ?? files.get(pathKey)?.path ?? path
       l.info("textDocument/publishDiagnostics", {
         path: filePath,
         count: params.diagnostics.length,
       })
-      const exists = diagnostics.has(filePath)
-      diagnostics.set(filePath, params.diagnostics)
+      const exists = diagnostics.has(pathKey)
+      diagnostics.set(pathKey, { path: filePath, diagnostics: params.diagnostics })
       if (!exists && input.serverID === "typescript") return
-      Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+      Bus.publish(Event.Diagnostics, { path: filePath, pathKey, serverID: input.serverID })
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
       l.info("window/workDoneProgress/create", params)
@@ -73,7 +76,7 @@ export namespace LSPClient {
     connection.onRequest("workspace/workspaceFolders", async () => [
       {
         name: "workspace",
-        uri: pathToFileURL(input.root).href,
+        uri: String(Path.uri(input.root)),
       },
     ])
     connection.listen()
@@ -81,12 +84,12 @@ export namespace LSPClient {
     l.info("sending initialize")
     await withTimeout(
       connection.sendRequest("initialize", {
-        rootUri: pathToFileURL(input.root).href,
+        rootUri: String(Path.uri(input.root)),
         processId: input.server.process.pid,
         workspaceFolders: [
           {
             name: "workspace",
-            uri: pathToFileURL(input.root).href,
+            uri: String(Path.uri(input.root)),
           },
         ],
         initializationOptions: {
@@ -132,12 +135,11 @@ export namespace LSPClient {
       })
     }
 
-    const files: {
-      [path: string]: number
-    } = {}
+    const files = new Map<string, { path: string; version: number }>()
 
     const result = {
       root: input.root,
+      rootKey: String(Path.key(input.root)),
       get serverID() {
         return input.serverID
       },
@@ -146,32 +148,35 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
-          const text = await Filesystem.readText(input.path)
-          const extension = path.extname(input.path)
+          const file = String(Path.pretty(input.path, { cwd: Instance.directory }))
+          const pathKey = String(Path.key(file))
+          const doc = files.get(pathKey)
+          const text = await Filesystem.readText(file)
+          const extension = path.extname(file)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+          const open = doc?.path ?? file
+          const uri = String(Path.uri(open))
 
-          const version = files[input.path]
-          if (version !== undefined) {
-            log.info("workspace/didChangeWatchedFiles", input)
+          if (doc) {
+            log.info("workspace/didChangeWatchedFiles", { path: open })
             await connection.sendNotification("workspace/didChangeWatchedFiles", {
               changes: [
                 {
-                  uri: pathToFileURL(input.path).href,
+                  uri,
                   type: 2, // Changed
                 },
               ],
             })
 
-            const next = version + 1
-            files[input.path] = next
+            const next = doc.version + 1
+            files.set(pathKey, { path: open, version: next })
             log.info("textDocument/didChange", {
-              path: input.path,
+              path: open,
               version: next,
             })
             await connection.sendNotification("textDocument/didChange", {
               textDocument: {
-                uri: pathToFileURL(input.path).href,
+                uri,
                 version: next,
               },
               contentChanges: [{ text }],
@@ -179,48 +184,47 @@ export namespace LSPClient {
             return
           }
 
-          log.info("workspace/didChangeWatchedFiles", input)
+          log.info("workspace/didChangeWatchedFiles", { path: open })
           await connection.sendNotification("workspace/didChangeWatchedFiles", {
             changes: [
               {
-                uri: pathToFileURL(input.path).href,
+                uri,
                 type: 1, // Created
               },
             ],
           })
 
-          log.info("textDocument/didOpen", input)
-          diagnostics.delete(input.path)
+          log.info("textDocument/didOpen", { path: open })
+          diagnostics.delete(pathKey)
           await connection.sendNotification("textDocument/didOpen", {
             textDocument: {
-              uri: pathToFileURL(input.path).href,
+              uri,
               languageId,
               version: 0,
               text,
             },
           })
-          files[input.path] = 0
+          files.set(pathKey, { path: open, version: 0 })
           return
         },
       },
       get diagnostics() {
-        return diagnostics
+        return new Map([...diagnostics.values()].map((item) => [item.path, item.diagnostics]))
       },
       async waitForDiagnostics(input: { path: string }) {
-        const normalizedPath = Filesystem.normalizePath(
-          path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
-        )
-        log.info("waiting for diagnostics", { path: normalizedPath })
+        const path = String(Path.pretty(input.path, { cwd: Instance.directory }))
+        const pathKey = String(Path.key(path))
+        log.info("waiting for diagnostics", { path })
         let unsub: () => void
         let debounceTimer: ReturnType<typeof setTimeout> | undefined
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (event.properties.path === normalizedPath && event.properties.serverID === result.serverID) {
+              if (event.properties.pathKey === pathKey && event.properties.serverID === result.serverID) {
                 // Debounce to allow LSP to send follow-up diagnostics (e.g., semantic after syntax)
                 if (debounceTimer) clearTimeout(debounceTimer)
                 debounceTimer = setTimeout(() => {
-                  log.info("got diagnostics", { path: normalizedPath })
+                  log.info("got diagnostics", { path })
                   unsub?.()
                   resolve()
                 }, DIAGNOSTICS_DEBOUNCE_MS)

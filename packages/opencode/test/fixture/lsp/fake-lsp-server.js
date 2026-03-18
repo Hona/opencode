@@ -64,6 +64,14 @@ function handle(raw) {
   if (data.method === "workspace/didChangeConfiguration") {
     return
   }
+  if (data.method === "test/publishDiagnostics") {
+    send({
+      jsonrpc: "2.0",
+      method: "textDocument/publishDiagnostics",
+      params: data.params,
+    })
+    return
+  }
   if (data.method === "test/trigger") {
     const method = data.params && data.params.method
     if (method) sendRequest(method, {})
