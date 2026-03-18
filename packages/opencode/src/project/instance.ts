@@ -1,5 +1,7 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
+import { Path } from "@/path/path"
+import type { PathKey } from "@/path/schema"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
@@ -13,7 +15,7 @@ interface Context {
   project: Project.Info
 }
 const context = Context.create<Context>("instance")
-const cache = new Map<string, Promise<Context>>()
+const cache = new Map<PathKey, Promise<Context>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -52,26 +54,28 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<Context>) {
+function track(key: PathKey, next: Promise<Context>) {
   const task = next.catch((error) => {
-    if (cache.get(directory) === task) cache.delete(directory)
+    if (cache.get(key) === task) cache.delete(key)
     throw error
   })
-  cache.set(directory, task)
+  cache.set(key, task)
   return task
 }
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Filesystem.resolve(input.directory)
-    let existing = cache.get(directory)
+    const key = Path.key(input.directory)
+    let existing = cache.get(key)
     if (!existing) {
-      Log.Default.info("creating instance", { directory })
       existing = track(
-        directory,
-        boot({
-          directory,
-          init: input.init,
+        key,
+        Path.truecase(input.directory).then((directory) => {
+          Log.Default.info("creating instance", { directory })
+          return boot({
+            directory,
+            init: input.init,
+          })
         }),
       )
     }
@@ -117,19 +121,35 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Filesystem.resolve(input.directory)
+    const key = Path.key(input.directory)
+    const existing = cache.get(key)
+    const ctx = await existing?.catch(() => undefined)
+    const directory = ctx?.directory ?? (await Path.truecase(input.directory))
     Log.Default.info("reloading instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
-    const next = track(directory, boot({ ...input, directory }))
+    cache.delete(key)
+    const next = track(
+      key,
+      Promise.all([
+        Promise.resolve(directory),
+        input.worktree ? Path.truecase(input.worktree) : undefined,
+      ]).then(([directory, worktree]) =>
+        boot({
+          ...input,
+          directory,
+          worktree,
+        }),
+      ),
+    )
     emit(directory)
     return await next
   },
   async dispose() {
     const directory = Instance.directory
+    const key = Path.key(directory)
     Log.Default.info("disposing instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
+    cache.delete(key)
     emit(directory)
   },
   async disposeAll() {

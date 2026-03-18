@@ -5,6 +5,7 @@ import { SessionRoutes } from "../../server/routes/session"
 import { WorkspaceServerRoutes } from "./routes"
 import { WorkspaceContext } from "../workspace-context"
 import { WorkspaceID } from "../schema"
+import { Path } from "../../path/path"
 
 export namespace WorkspaceServer {
   export function App() {
@@ -30,13 +31,15 @@ export namespace WorkspaceServer {
           throw new Error("directory parameter is required")
         }
 
-        const directory = (() => {
-          try {
-            return decodeURIComponent(raw)
-          } catch {
-            return raw
-          }
-        })()
+        const directory = Path.pretty(
+          (() => {
+            try {
+              return decodeURIComponent(raw)
+            } catch {
+              return raw
+            }
+          })(),
+        )
 
         return WorkspaceContext.provide({
           workspaceID: WorkspaceID.make(rawWorkspaceID),
