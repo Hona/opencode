@@ -15,6 +15,7 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const bodyMax = 500
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
@@ -279,7 +280,7 @@ export namespace Installation {
               channel,
               status: res.status,
               statusText: res.statusText,
-              body,
+              body: body.length > bodyMax ? `${body.slice(0, bodyMax)}...` : body,
             })
             throw new Error(res.statusText)
           }
