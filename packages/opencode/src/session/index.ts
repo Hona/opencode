@@ -98,7 +98,7 @@ export namespace Session {
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
-      directory: info.directory,
+      directory: fix(info.directory),
       title: info.title,
       version: info.version,
       share_url: info.share?.url,
@@ -555,6 +555,9 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
     const dir = input?.directory ? fix(input.directory) : undefined
+    if (dir) {
+      conditions.push(eq(SessionTable.directory, dir))
+    }
 
     if (WorkspaceContext.workspaceID) {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
@@ -573,10 +576,9 @@ export namespace Session {
 
     const rows = Database.use((db) => {
       const query = db.select().from(SessionTable).where(and(...conditions)).orderBy(desc(SessionTable.time_updated))
-      return dir ? query.all() : query.limit(limit).all()
+      return query.limit(limit).all()
     })
-    const hits = dir ? rows.filter((row) => row.directory && Path.eq(row.directory, dir)).slice(0, limit) : rows
-    for (const row of hits) {
+    for (const row of rows) {
       yield fromRow(row)
     }
   }
@@ -592,6 +594,9 @@ export namespace Session {
   }) {
     const conditions: SQL[] = []
     const dir = input?.directory ? fix(input.directory) : undefined
+    if (dir) {
+      conditions.push(eq(SessionTable.directory, dir))
+    }
 
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -620,11 +625,10 @@ export namespace Session {
               .where(and(...conditions))
           : db.select().from(SessionTable)
       const sort = query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
-      return dir ? sort.all() : sort.limit(limit).all()
+      return sort.limit(limit).all()
     })
-    const hits = dir ? rows.filter((row) => row.directory && Path.eq(row.directory, dir)).slice(0, limit) : rows
 
-    const ids = [...new Set(hits.map((row) => row.project_id))]
+    const ids = [...new Set(rows.map((row) => row.project_id))]
     const projects = new Map<string, ProjectInfo>()
 
     if (ids.length > 0) {
@@ -644,7 +648,7 @@ export namespace Session {
       }
     }
 
-    for (const row of hits) {
+    for (const row of rows) {
       const project = projects.get(row.project_id) ?? null
       yield { ...fromRow(row), project }
     }

@@ -6,6 +6,7 @@ import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
+import { PathMigration } from "../../src/path/migrate"
 import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
@@ -120,7 +121,7 @@ describe("migrateFromGlobal", () => {
     expect(row!.project_id).toBe(ProjectID.global)
   })
 
-  test("migrates sessions with equivalent pretty directories", async () => {
+  test("migrates sessions after path normalization rewrites equivalent directories", async () => {
     await using tmp = await tmpdir()
     await $`git init`.cwd(tmp.path).quiet()
     await $`git config user.name "Test"`.cwd(tmp.path).quiet()
@@ -134,6 +135,8 @@ describe("migrateFromGlobal", () => {
       dir: `${tmp.path}${path.sep}work${path.sep}..`,
       project: ProjectID.global,
     })
+
+    await PathMigration.run({ force: true, marker: path.join(tmp.path, "path-migration.json") })
 
     await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
 

@@ -1,7 +1,7 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { Database, eq, inArray } from "../storage/db"
+import { Database, eq, and } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
@@ -303,24 +303,13 @@ export namespace Project {
     // Runs on every startup because sessions created before git init
     // accumulate under "global" and need migrating whenever they appear.
     if (data.id !== ProjectID.global) {
-      const ids = Database.use((db) =>
+      Database.use((db) =>
         db
-          .select({ id: SessionTable.id, directory: SessionTable.directory })
-          .from(SessionTable)
-          .where(eq(SessionTable.project_id, ProjectID.global))
-          .all()
-          .filter((row) => row.directory && same(row.directory, data.worktree))
-          .map((row) => row.id),
+          .update(SessionTable)
+          .set({ project_id: data.id })
+          .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+          .run(),
       )
-      if (ids.length) {
-        Database.use((db) =>
-          db
-            .update(SessionTable)
-            .set({ project_id: data.id })
-            .where(inArray(SessionTable.id, ids))
-            .run(),
-        )
-      }
     }
     GlobalBus.emit("event", {
       payload: {
