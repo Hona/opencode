@@ -1,4 +1,5 @@
 import { Platform, usePlatform } from "@/context/platform"
+import { pathKey } from "@opencode-ai/util/path"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -16,6 +17,7 @@ type PersistTarget = {
   storage?: string
   key: string
   legacy?: string[]
+  legacyStorage?: string[]
   migrate?: (value: unknown) => unknown
 }
 
@@ -208,10 +210,25 @@ function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) =>
   return JSON.stringify(merged)
 }
 
-function workspaceStorage(dir: string) {
+function workspaceDirectory(dir: string) {
+  return pathKey(dir) || dir
+}
+
+function workspaceStorageName(dir: string) {
   const head = (dir.slice(0, 12) || "workspace").replace(/[^a-zA-Z0-9._-]/g, "-")
   const sum = checksum(dir) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat`
+}
+
+function workspaceStorage(dir: string) {
+  return workspaceStorageName(workspaceDirectory(dir))
+}
+
+function workspaceLegacyStorage(dir: string) {
+  const legacy = workspaceStorageName(dir)
+  const current = workspaceStorage(dir)
+  if (legacy === current) return []
+  return [legacy]
 }
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
@@ -305,7 +322,10 @@ export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
   normalize,
+  workspaceDirectory,
   workspaceStorage,
+  workspaceStorageName,
+  workspaceLegacyStorage,
 }
 
 export const Persist = {
@@ -313,10 +333,20 @@ export const Persist = {
     return { storage: GLOBAL_STORAGE, key, legacy }
   },
   workspace(dir: string, key: string, legacy?: string[]): PersistTarget {
-    return { storage: workspaceStorage(dir), key: `workspace:${key}`, legacy }
+    return {
+      storage: workspaceStorage(dir),
+      key: `workspace:${key}`,
+      legacy,
+      legacyStorage: workspaceLegacyStorage(dir),
+    }
   },
   session(dir: string, session: string, key: string, legacy?: string[]): PersistTarget {
-    return { storage: workspaceStorage(dir), key: `session:${session}:${key}`, legacy }
+    return {
+      storage: workspaceStorage(dir),
+      key: `session:${session}:${key}`,
+      legacy,
+      legacyStorage: workspaceLegacyStorage(dir),
+    }
   },
   scoped(dir: string, session: string | undefined, key: string, legacy?: string[]): PersistTarget {
     if (session) return Persist.session(dir, session, key, legacy)
@@ -348,6 +378,7 @@ export function persisted<T>(
 
   const defaults = snapshot(store[0])
   const legacy = config.legacy ?? []
+  const extraLegacyStorage = config.legacyStorage ?? []
 
   const isDesktop = platform.platform === "desktop" && !!platform.storage
 
@@ -363,36 +394,49 @@ export function persisted<T>(
     return platform.storage?.(LEGACY_STORAGE)
   })()
 
+  const extraLegacyStores = (() => {
+    if (extraLegacyStorage.length === 0) return []
+    if (!isDesktop) return extraLegacyStorage.map((storage) => localStorageWithPrefix(storage))
+    return extraLegacyStorage.flatMap((storage) => {
+      const item = platform.storage?.(storage)
+      return item ? [item] : []
+    })
+  })()
+
   const storage = (() => {
     if (!isDesktop) {
       const current = currentStorage as SyncStorage
       const legacyStore = legacyStorage as SyncStorage
+      const extra = extraLegacyStores as SyncStorage[]
 
       const api: SyncStorage = {
         getItem: (key) => {
-          const raw = current.getItem(key)
-          if (raw !== null) {
-            const next = normalize(defaults, raw, config.migrate)
-            if (next === undefined) {
-              current.removeItem(key)
-              return null
-            }
-            if (raw !== next) current.setItem(key, next)
-            return next
+          const sources = [{ storage: current, keys: [key, ...legacy] }]
+          if (legacyStore) sources.push({ storage: legacyStore, keys: [key, ...legacy] })
+          for (const storage of extra) {
+            sources.push({ storage, keys: [key, ...legacy] })
           }
 
-          for (const legacyKey of legacy) {
-            const legacyRaw = legacyStore.getItem(legacyKey)
-            if (legacyRaw === null) continue
+          for (const source of sources) {
+            for (const name of source.keys) {
+              const raw = source.storage.getItem(name)
+              if (raw === null) continue
 
-            const next = normalize(defaults, legacyRaw, config.migrate)
-            if (next === undefined) {
-              legacyStore.removeItem(legacyKey)
-              continue
+              const next = normalize(defaults, raw, config.migrate)
+              if (next === undefined) {
+                source.storage.removeItem(name)
+                continue
+              }
+
+              if (source.storage !== current || name !== key) {
+                current.setItem(key, next)
+                source.storage.removeItem(name)
+                return next
+              }
+
+              if (raw !== next) current.setItem(key, next)
+              return next
             }
-            current.setItem(key, next)
-            legacyStore.removeItem(legacyKey)
-            return next
           }
 
           return null
@@ -410,34 +454,36 @@ export function persisted<T>(
 
     const current = currentStorage as AsyncStorage
     const legacyStore = legacyStorage as AsyncStorage | undefined
+    const extra = extraLegacyStores as AsyncStorage[]
 
     const api: AsyncStorage = {
       getItem: async (key) => {
-        const raw = await current.getItem(key)
-        if (raw !== null) {
-          const next = normalize(defaults, raw, config.migrate)
-          if (next === undefined) {
-            await current.removeItem(key).catch(() => undefined)
-            return null
-          }
-          if (raw !== next) await current.setItem(key, next)
-          return next
+        const sources = [{ storage: current, keys: [key, ...legacy] }]
+        if (legacyStore) sources.push({ storage: legacyStore, keys: [key, ...legacy] })
+        for (const storage of extra) {
+          sources.push({ storage, keys: [key, ...legacy] })
         }
 
-        if (!legacyStore) return null
+        for (const source of sources) {
+          for (const name of source.keys) {
+            const raw = await source.storage.getItem(name)
+            if (raw === null) continue
 
-        for (const legacyKey of legacy) {
-          const legacyRaw = await legacyStore.getItem(legacyKey)
-          if (legacyRaw === null) continue
+            const next = normalize(defaults, raw, config.migrate)
+            if (next === undefined) {
+              await source.storage.removeItem(name).catch(() => undefined)
+              continue
+            }
 
-          const next = normalize(defaults, legacyRaw, config.migrate)
-          if (next === undefined) {
-            await legacyStore.removeItem(legacyKey).catch(() => undefined)
-            continue
+            if (source.storage !== current || name !== key) {
+              await current.setItem(key, next)
+              await source.storage.removeItem(name).catch(() => undefined)
+              return next
+            }
+
+            if (raw !== next) await current.setItem(key, next)
+            return next
           }
-          await current.setItem(key, next)
-          await legacyStore.removeItem(legacyKey)
-          return next
         }
 
         return null

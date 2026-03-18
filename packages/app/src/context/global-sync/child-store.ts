@@ -1,5 +1,6 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { pathKey } from "@opencode-ai/util/path"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
@@ -31,20 +32,24 @@ export function createChildStoreManager(input: {
   const pins = new Map<string, number>()
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
+  const dir = (directory: string) => pathKey(directory) || directory
 
   const mark = (directory: string) => {
+    directory = dir(directory)
     if (!directory) return
     lifecycle.set(directory, { lastAccessAt: Date.now() })
     runEviction(directory)
   }
 
   const pin = (directory: string) => {
+    directory = dir(directory)
     if (!directory) return
     pins.set(directory, (pins.get(directory) ?? 0) + 1)
     mark(directory)
   }
 
   const unpin = (directory: string) => {
+    directory = dir(directory)
     if (!directory) return
     const next = (pins.get(directory) ?? 0) - 1
     if (next > 0) {
@@ -55,29 +60,31 @@ export function createChildStoreManager(input: {
     runEviction()
   }
 
-  const pinned = (directory: string) => (pins.get(directory) ?? 0) > 0
+  const pinned = (directory: string) => (pins.get(dir(directory)) ?? 0) > 0
 
   const pinForOwner = (directory: string) => {
+    directory = dir(directory)
     const current = getOwner()
     if (!current) return
     if (current === input.owner) return
-    const key = current as object
-    const set = ownerPins.get(key)
+    const owner = current as object
+    const set = ownerPins.get(owner)
     if (set?.has(directory)) return
     if (set) set.add(directory)
-    if (!set) ownerPins.set(key, new Set([directory]))
+    if (!set) ownerPins.set(owner, new Set([directory]))
     pin(directory)
     onCleanup(() => {
-      const set = ownerPins.get(key)
+      const set = ownerPins.get(owner)
       if (set) {
         set.delete(directory)
-        if (set.size === 0) ownerPins.delete(key)
+        if (set.size === 0) ownerPins.delete(owner)
       }
       unpin(directory)
     })
   }
 
   function disposeDirectory(directory: string) {
+    directory = dir(directory)
     if (
       !canDisposeDirectory({
         directory,
@@ -122,6 +129,7 @@ export function createChildStoreManager(input: {
   }
 
   function ensureChild(directory: string) {
+    directory = dir(directory)
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
       const vcs = runWithOwner(input.owner, () =>
@@ -217,6 +225,7 @@ export function createChildStoreManager(input: {
   }
 
   function child(directory: string, options: ChildOptions = {}) {
+    directory = dir(directory)
     const childStore = ensureChild(directory)
     pinForOwner(directory)
     const shouldBootstrap = options.bootstrap ?? true
@@ -227,6 +236,7 @@ export function createChildStoreManager(input: {
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {
+    directory = dir(directory)
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
     if (!cached) return
@@ -244,6 +254,7 @@ export function createChildStoreManager(input: {
   }
 
   function projectIcon(directory: string, value: string | undefined) {
+    directory = dir(directory)
     const [store, setStore] = ensureChild(directory)
     const cached = iconCache.get(directory)
     if (!cached) return

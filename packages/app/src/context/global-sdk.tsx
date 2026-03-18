@@ -1,5 +1,6 @@
 import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { pathKey } from "@opencode-ai/util/path"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import z from "zod"
@@ -54,6 +55,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const staleDeltas = new Set<string>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
+
+    const dir = (directory: string) => (directory === "global" ? directory : pathKey(directory) || directory)
 
     const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
@@ -148,7 +151,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           for await (const event of events.stream) {
             resetHeartbeat()
             streamErrorLogged = false
-            const directory = event.directory ?? "global"
+            const directory = dir(event.directory ?? "global")
             const payload = event.payload
             const k = key(directory, payload)
             if (k) {

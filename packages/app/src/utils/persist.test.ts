@@ -112,4 +112,11 @@ describe("persist localStorage resilience", () => {
     expect(result.endsWith(".dat")).toBeTrue()
     expect(/[:\\/]/.test(result)).toBeFalse()
   })
+
+  test("workspace storage collapses equivalent directory spellings", () => {
+    expect(persistTesting.workspaceStorage("C:\\Users\\foo\\")).toBe(
+      persistTesting.workspaceStorage("c:/users/foo"),
+    )
+    expect(persistTesting.workspaceLegacyStorage("C:\\Users\\foo\\")).toHaveLength(1)
+  })
 })

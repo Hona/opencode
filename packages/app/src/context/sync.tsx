@@ -1,5 +1,6 @@
 import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { pathKey } from "@opencode-ai/util/path"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -29,7 +30,9 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
   return promise
 }
 
-const keyFor = (directory: string, id: string) => `${directory}\n${id}`
+const dir = (directory: string) => pathKey(directory) || directory
+
+const keyFor = (directory: string, id: string) => `${dir(directory)}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -228,6 +231,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     ]
 
     const seenFor = (directory: string) => {
+      directory = dir(directory)
       const existing = seen.get(directory)
       if (existing) {
         seen.delete(directory)
@@ -309,7 +313,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     }
 
-    const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
+    const tracked = (directory: string, sessionID: string) => seen.get(dir(directory))?.has(sessionID) ?? false
 
     const loadMessages = async (input: {
       directory: string

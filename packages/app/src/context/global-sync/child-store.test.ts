@@ -35,4 +35,28 @@ describe("createChildStoreManager", () => {
 
     expect(manager.children[directory]).toBeDefined()
   })
+
+  test("reuses canonical workspace keys for equivalent directories", () => {
+    const owner = createRoot((dispose) => {
+      const current = getOwner()
+      dispose()
+      return current
+    })
+    if (!owner) throw new Error("owner required")
+
+    const manager = createChildStoreManager({
+      owner,
+      isBooting: () => false,
+      isLoadingSessions: () => false,
+      onBootstrap() {},
+      onDispose() {},
+      translate: (key) => key,
+    })
+
+    const store = child()
+    manager.children["c:/repo"] = store
+
+    expect(manager.child("C:\\Repo\\", { bootstrap: false })).toBe(store)
+    expect(Object.keys(manager.children)).toEqual(["c:/repo"])
+  })
 })

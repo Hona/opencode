@@ -1,23 +1,60 @@
 import { base64Encode } from "@opencode-ai/util/encode"
+import { pathKey } from "@opencode-ai/util/path"
+import { decode64 } from "@/utils/base64"
+
+const dir = (directory: string) => pathKey(directory) || directory
 
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID
-  return `${base64Encode(directory)}/${sessionID}`
+  return `${base64Encode(dir(directory))}/${sessionID}`
 }
 
 export function directoryAcceptKey(directory: string) {
+  return `${base64Encode(dir(directory))}/*`
+}
+
+function legacyDirectoryAcceptKey(directory: string) {
   return `${base64Encode(directory)}/*`
+}
+
+function matches(a: string | undefined, b: string) {
+  return !!a && dir(a) === dir(b)
+}
+
+function legacySessionAccept(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
+  if (!directory) return
+  for (const [key, value] of Object.entries(autoAccept)) {
+    if (!key.endsWith(`/${sessionID}`)) continue
+    const idx = key.length - sessionID.length - 1
+    if (idx <= 0) continue
+    if (!matches(decode64(key.slice(0, idx)), directory)) continue
+    return value
+  }
+}
+
+function legacyDirectoryAccept(autoAccept: Record<string, boolean>, directory: string) {
+  for (const [key, value] of Object.entries(autoAccept)) {
+    if (!key.endsWith("/*")) continue
+    if (!matches(decode64(key.slice(0, -2)), directory)) continue
+    return value
+  }
 }
 
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
   const key = acceptKey(sessionID, directory)
   const directoryKey = directory ? directoryAcceptKey(directory) : undefined
-  return autoAccept[key] ?? autoAccept[sessionID] ?? (directoryKey ? autoAccept[directoryKey] : undefined)
+  return (
+    autoAccept[key] ??
+    legacySessionAccept(autoAccept, sessionID, directory) ??
+    autoAccept[sessionID] ??
+    (directoryKey ? autoAccept[directoryKey] : undefined) ??
+    (directory ? legacyDirectoryAccept(autoAccept, directory) : undefined)
+  )
 }
 
 export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {
   const key = directoryAcceptKey(directory)
-  return autoAccept[key] ?? false
+  return autoAccept[key] ?? legacyDirectoryAccept(autoAccept, directory) ?? false
 }
 
 function sessionLineage(session: { id: string; parentID?: string }[], sessionID: string) {

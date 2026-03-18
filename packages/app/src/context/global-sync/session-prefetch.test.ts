@@ -63,6 +63,25 @@ describe("session prefetch", () => {
     expect(getSessionPrefetch("/tmp/e", "ses_1")).toEqual({ limit: 30, cursor: "c", complete: true, at: 3 })
   })
 
+  test("collapses equivalent workspace paths", () => {
+    clearSessionPrefetch("C:/Repo", ["ses_3"])
+
+    setSessionPrefetch({
+      directory: "C:\\Repo\\",
+      sessionID: "ses_3",
+      limit: 40,
+      cursor: "win",
+      complete: false,
+      at: 7,
+    })
+
+    expect(getSessionPrefetch("c:/repo", "ses_3")).toEqual({ limit: 40, cursor: "win", complete: false, at: 7 })
+
+    clearSessionPrefetchDirectory("c:/repo")
+
+    expect(getSessionPrefetch("C:\\Repo\\", "ses_3")).toBeUndefined()
+  })
+
   test("refreshes stale first-page prefetched history", () => {
     expect(
       shouldSkipSessionPrefetch({

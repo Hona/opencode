@@ -8,7 +8,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename, pathKey } from "@opencode-ai/util/path"
 import {
   createContext,
   getOwner,
@@ -80,6 +80,7 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
+  const dir = (directory: string) => pathKey(directory) || directory
 
   onCleanup(() => {
     active = false
@@ -168,6 +169,7 @@ function createGlobalSync() {
   })
 
   const sdkFor = (directory: string) => {
+    directory = dir(directory)
     const cached = sdkCache.get(directory)
     if (cached) return cached
     const sdk = globalSDK.createClient({
@@ -179,6 +181,7 @@ function createGlobalSync() {
   }
 
   async function loadSessions(directory: string) {
+    directory = dir(directory)
     const pending = sessionLoads.get(directory)
     if (pending) return pending
 
@@ -246,6 +249,7 @@ function createGlobalSync() {
   }
 
   async function bootstrapInstance(directory: string) {
+    directory = dir(directory)
     if (!directory) return
     const pending = booting.get(directory)
     if (pending) return pending
@@ -276,7 +280,7 @@ function createGlobalSync() {
   }
 
   const unsub = globalSDK.event.listen((e) => {
-    const directory = e.name
+    const directory = dir(e.name)
     const event = e.details
 
     if (directory === "global") {

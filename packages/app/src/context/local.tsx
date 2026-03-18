@@ -1,5 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { pathKey } from "@opencode-ai/util/path"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -26,7 +27,7 @@ type Saved = {
 const WORKSPACE_KEY = "__workspace__"
 const handoff = new Map<string, State>()
 
-const handoffKey = (dir: string, id: string) => `${dir}\n${id}`
+const handoffKey = (dir: string, id: string) => `${pathKey(dir) || dir}\n${id}`
 
 const migrate = (value: unknown) => {
   if (!value || typeof value !== "object") return { session: {} }

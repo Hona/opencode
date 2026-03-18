@@ -2,6 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { pathEqual } from "@opencode-ai/util/path"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { usePlatform } from "@/context/platform"
@@ -13,40 +14,14 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSound, soundSrc } from "@/utils/sound"
-
-type NotificationBase = {
-  directory?: string
-  session?: string
-  metadata?: unknown
-  time: number
-  viewed: boolean
-}
-
-type TurnCompleteNotification = NotificationBase & {
-  type: "turn-complete"
-}
-
-type ErrorNotification = NotificationBase & {
-  type: "error"
-  error: EventSessionError["properties"]["error"]
-}
-
-export type Notification = TurnCompleteNotification | ErrorNotification
-
-type NotificationIndex = {
-  session: {
-    all: Record<string, Notification[]>
-    unseen: Record<string, Notification[]>
-    unseenCount: Record<string, number>
-    unseenHasError: Record<string, boolean>
-  }
-  project: {
-    all: Record<string, Notification[]>
-    unseen: Record<string, Notification[]>
-    unseenCount: Record<string, number>
-    unseenHasError: Record<string, boolean>
-  }
-}
+import {
+  buildNotificationIndex,
+  migrateNotifications,
+  normalizeNotification,
+  projectKey,
+  type Notification,
+  type NotificationIndex,
+} from "./notification-state"
 
 const MAX_NOTIFICATIONS = 500
 const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
@@ -56,53 +31,6 @@ function pruneNotifications(list: Notification[]) {
   const pruned = list.filter((n) => n.time >= cutoff)
   if (pruned.length <= MAX_NOTIFICATIONS) return pruned
   return pruned.slice(pruned.length - MAX_NOTIFICATIONS)
-}
-
-function createNotificationIndex(): NotificationIndex {
-  return {
-    session: {
-      all: {},
-      unseen: {},
-      unseenCount: {},
-      unseenHasError: {},
-    },
-    project: {
-      all: {},
-      unseen: {},
-      unseenCount: {},
-      unseenHasError: {},
-    },
-  }
-}
-
-function buildNotificationIndex(list: Notification[]) {
-  const index = createNotificationIndex()
-
-  list.forEach((notification) => {
-    if (notification.session) {
-      const all = index.session.all[notification.session] ?? []
-      index.session.all[notification.session] = [...all, notification]
-      if (!notification.viewed) {
-        const unseen = index.session.unseen[notification.session] ?? []
-        index.session.unseen[notification.session] = [...unseen, notification]
-        index.session.unseenCount[notification.session] = unseen.length + 1
-        if (notification.type === "error") index.session.unseenHasError[notification.session] = true
-      }
-    }
-
-    if (notification.directory) {
-      const all = index.project.all[notification.directory] ?? []
-      index.project.all[notification.directory] = [...all, notification]
-      if (!notification.viewed) {
-        const unseen = index.project.unseen[notification.directory] ?? []
-        index.project.unseen[notification.directory] = [...unseen, notification]
-        index.project.unseenCount[notification.directory] = unseen.length + 1
-        if (notification.type === "error") index.project.unseenHasError[notification.directory] = true
-      }
-    }
-  })
-
-  return index
 }
 
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
@@ -118,13 +46,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const empty: Notification[] = []
 
     const currentDirectory = createMemo(() => {
-      return decode64(params.dir)
+      const value = decode64(params.dir)
+      return value ? projectKey(value) : value
     })
 
     const currentSession = createMemo(() => params.id)
 
     const [store, setStore, _, ready] = persisted(
-      Persist.global("notification", ["notification.v1"]),
+      { ...Persist.global("notification", ["notification.v1"]), migrate: migrateNotifications },
       createStore({
         list: [] as Notification[],
       }),
@@ -145,6 +74,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     }
 
     const appendToIndex = (notification: Notification) => {
+      notification = normalizeNotification(notification)
       if (notification.session) {
         setIndex("session", "all", notification.session, (all = []) => [...all, notification])
         if (!notification.viewed) {
@@ -155,16 +85,18 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }
 
       if (notification.directory) {
-        setIndex("project", "all", notification.directory, (all = []) => [...all, notification])
+        const key = projectKey(notification.directory)
+        setIndex("project", "all", key, (all = []) => [...all, notification])
         if (!notification.viewed) {
-          setIndex("project", "unseen", notification.directory, (unseen = []) => [...unseen, notification])
-          setIndex("project", "unseenCount", notification.directory, (count = 0) => count + 1)
-          if (notification.type === "error") setIndex("project", "unseenHasError", notification.directory, true)
+          setIndex("project", "unseen", key, (unseen = []) => [...unseen, notification])
+          setIndex("project", "unseenCount", key, (count = 0) => count + 1)
+          if (notification.type === "error") setIndex("project", "unseenHasError", key, true)
         }
       }
     }
 
     const removeFromIndex = (notification: Notification) => {
+      notification = normalizeNotification(notification)
       if (notification.session) {
         setIndex("session", "all", notification.session, (all = []) => all.filter((n) => n !== notification))
         if (!notification.viewed) {
@@ -174,10 +106,11 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }
 
       if (notification.directory) {
-        setIndex("project", "all", notification.directory, (all = []) => all.filter((n) => n !== notification))
+        const key = projectKey(notification.directory)
+        setIndex("project", "all", key, (all = []) => all.filter((n) => n !== notification))
         if (!notification.viewed) {
-          const unseen = (index.project.unseen[notification.directory] ?? empty).filter((n) => n !== notification)
-          updateUnseen("project", notification.directory, unseen)
+          const unseen = (index.project.unseen[key] ?? empty).filter((n) => n !== notification)
+          updateUnseen("project", key, unseen)
         }
       }
     }
@@ -194,6 +127,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     })
 
     const append = (notification: Notification) => {
+      notification = normalizeNotification(notification)
       const list = pruneNotifications([...store.list, notification])
       const keep = new Set(list)
       const removed = store.list.filter((n) => !keep.has(n))
@@ -222,7 +156,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       if (!activeDirectory) return false
       if (!activeSession) return false
       if (!sessionID) return false
-      if (directory !== activeDirectory) return false
+      if (!pathEqual(directory, activeDirectory)) return false
       return sessionID === activeSession
     }
 
@@ -328,40 +262,42 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             setStore("list", (n) => n.session === session && !n.viewed, "viewed", true)
             updateUnseen("session", session, [])
             projects.forEach((directory) => {
-              const next = (index.project.unseen[directory] ?? empty).filter(
+              const key = projectKey(directory)
+              const next = (index.project.unseen[key] ?? empty).filter(
                 (notification) => notification.session !== session,
               )
-              updateUnseen("project", directory, next)
+              updateUnseen("project", key, next)
             })
           })
         },
       },
       project: {
         all(directory: string) {
-          return index.project.all[directory] ?? empty
+          return index.project.all[projectKey(directory)] ?? empty
         },
         unseen(directory: string) {
-          return index.project.unseen[directory] ?? empty
+          return index.project.unseen[projectKey(directory)] ?? empty
         },
         unseenCount(directory: string) {
-          return index.project.unseenCount[directory] ?? 0
+          return index.project.unseenCount[projectKey(directory)] ?? 0
         },
         unseenHasError(directory: string) {
-          return index.project.unseenHasError[directory] ?? false
+          return index.project.unseenHasError[projectKey(directory)] ?? false
         },
         markViewed(directory: string) {
-          const unseen = index.project.unseen[directory] ?? empty
+          const key = projectKey(directory)
+          const unseen = index.project.unseen[key] ?? empty
           if (!unseen.length) return
 
           const sessions = [
             ...new Set(unseen.flatMap((notification) => (notification.session ? [notification.session] : []))),
           ]
           batch(() => {
-            setStore("list", (n) => n.directory === directory && !n.viewed, "viewed", true)
-            updateUnseen("project", directory, [])
+            setStore("list", (n) => !!n.directory && pathEqual(n.directory, directory) && !n.viewed, "viewed", true)
+            updateUnseen("project", key, [])
             sessions.forEach((session) => {
               const next = (index.session.unseen[session] ?? empty).filter(
-                (notification) => notification.directory !== directory,
+                (notification) => !notification.directory || !pathEqual(notification.directory, directory),
               )
               updateUnseen("session", session, next)
             })

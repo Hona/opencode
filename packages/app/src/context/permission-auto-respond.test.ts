@@ -99,4 +99,9 @@ describe("isDirectoryAutoAccepting", () => {
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
+
+  test("accepts legacy and normalized directory variants interchangeably", () => {
+    const autoAccept = { [`${base64Encode("C:/Repo")}/*`]: true }
+    expect(isDirectoryAutoAccepting(autoAccept, "c:\\repo\\")).toBe(true)
+  })
 })
