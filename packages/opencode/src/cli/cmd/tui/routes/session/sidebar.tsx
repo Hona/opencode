@@ -2,15 +2,12 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
-import { Locale } from "@/util/locale"
-import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
-import { useKeybind } from "../../context/keybind"
-import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { formatPath, splitPath } from "../../util/path"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -60,8 +57,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }
   })
 
-  const directory = useDirectory()
   const kv = useKV()
+  const dir = createMemo(() => {
+    return formatPath(sync.data.path.directory || process.cwd(), {
+      home: Global.Path.home,
+    })
+  })
+  const dirparts = createMemo(() => splitPath(dir()))
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -203,7 +205,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                         •
                       </text>
                       <text fg={theme.textMuted}>
-                        {item.id} {item.root}
+                        {item.id} {formatPath(item.root, { home: Global.Path.home })}
                       </text>
                     </box>
                   )}
@@ -304,8 +306,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </box>
           </Show>
           <text>
-            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
-            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+            <span style={{ fg: theme.textMuted }}>{dirparts().dir}</span>
+            <span style={{ fg: theme.text }}>{dirparts().base || dir()}</span>
           </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>

@@ -81,6 +81,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { formatPath } from "../../util/path"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1794,11 +1795,9 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const absolute = path.resolve(base, workdir)
     if (absolute === base) return undefined
 
-    const home = Global.Path.home
-    if (!home) return absolute
-
-    const match = absolute === home || absolute.startsWith(home + path.sep)
-    return match ? absolute.replace(home, "~") : absolute
+    return formatPath(absolute, {
+      home: Global.Path.home,
+    })
   })
 
   const title = createMemo(() => {
@@ -2250,17 +2249,11 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 }
 
 function normalizePath(input?: string) {
-  if (!input) return ""
-
-  const cwd = process.cwd()
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
-
-  if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
-
-  // outside cwd - use absolute
-  return absolute
+  return formatPath(input, {
+    cwd: process.cwd(),
+    home: Global.Path.home,
+    relative: true,
+  })
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

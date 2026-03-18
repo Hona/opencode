@@ -16,25 +16,16 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { formatPath } from "../../util/path"
 
 type PermissionStage = "permission" | "always" | "reject"
 
 function normalizePath(input?: string) {
-  if (!input) return ""
-
-  const cwd = process.cwd()
-  const home = Global.Path.home
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
-
-  if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
-
-  // outside cwd - use ~ or absolute
-  if (home && (absolute === home || absolute.startsWith(home + path.sep))) {
-    return absolute.replace(home, "~")
-  }
-  return absolute
+  return formatPath(input, {
+    cwd: process.cwd(),
+    home: Global.Path.home,
+    relative: true,
+  })
 }
 
 function filetype(input?: string) {
