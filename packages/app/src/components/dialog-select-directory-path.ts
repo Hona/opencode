@@ -1,4 +1,4 @@
-import { getPathSeparator } from "@opencode-ai/util/path"
+import { getFilename, getPathSeparator } from "@opencode-ai/util/path"
 
 export function normalizePath(input: string) {
   const v = input.replaceAll("\\", "/")
@@ -36,7 +36,16 @@ export function joinPath(base: string | undefined, rel: string) {
 
 export function rootOf(input: string) {
   const v = normalizeDriveRoot(input)
-  if (v.startsWith("//")) return "//"
+  if (v.startsWith("//")) {
+    const parts = v
+      .slice(2)
+      .replace(/^\/+/, "")
+      .split("/")
+      .filter(Boolean)
+    if (parts.length === 0) return "//"
+    if (parts.length === 1) return `//${parts[0]}`
+    return `//${parts[0]}/${parts[1]}`
+  }
   if (v.startsWith("/")) return "/"
   if (/^[A-Za-z]:\//.test(v)) return v.slice(0, 3)
   return ""
@@ -48,10 +57,16 @@ export function parentOf(input: string) {
   if (v === "//") return v
   if (/^[A-Za-z]:\/$/.test(v)) return v
 
+  const root = rootOf(v)
+  if (root && v === root) return root
+
   const i = v.lastIndexOf("/")
-  if (i <= 0) return "/"
+  if (i <= 0) return root || "/"
   if (i === 2 && /^[A-Za-z]:/.test(v)) return v.slice(0, 3)
-  return v.slice(0, i)
+
+  const next = v.slice(0, i)
+  if (root && next.length < root.length) return root
+  return next
 }
 
 export function modeOf(input: string) {
@@ -75,12 +90,59 @@ export function tildeOf(absolute: string, home: string) {
 }
 
 export function displaySeparator(path: string, home: string) {
+  if (modeOf(path) === "absolute") return getPathSeparator(path)
   return getPathSeparator(home || path)
 }
 
 function nativePath(path: string, home: string) {
   if (displaySeparator(path, home) === "/") return path
   return path.replaceAll("/", "\\")
+}
+
+function withTrailing(path: string, sep: string) {
+  if (!path) return ""
+  if (path.endsWith(sep)) return path
+  return path + sep
+}
+
+export function searchOf(absolute: string, home: string) {
+  const full = trimTrailing(absolute)
+  const tilde = tildeOf(full, home)
+  const native = nativePath(full, home)
+  const shown = tilde ? nativePath(tilde, home) : ""
+
+  return Array.from(
+    new Set(
+      [
+        full,
+        withTrailing(full, "/"),
+        native,
+        withTrailing(native, displaySeparator(native, home)),
+        tilde,
+        withTrailing(tilde, "/"),
+        shown,
+        withTrailing(shown, displaySeparator(shown, home)),
+        getFilename(full),
+      ].filter(Boolean),
+    ),
+  ).join("\n")
+}
+
+export function scopeOf(input: string, start: string | undefined, home: string) {
+  const base = start ? trimTrailing(start) : ""
+  if (!base) return
+
+  const raw = normalizeDriveRoot(input)
+  if (!raw) return { directory: base, path: "" }
+  if (raw === "~") return { directory: trimTrailing(home || base), path: "" }
+  if (raw.startsWith("~/")) return { directory: trimTrailing(home || base), path: raw.slice(2) }
+
+  const root = rootOf(raw)
+  if (!root) return { directory: base, path: raw }
+  return {
+    directory: trimTrailing(root),
+    path: raw.slice(root.length).replace(/^\/+/, ""),
+  }
 }
 
 export function displayPath(path: string, input: string, home: string) {

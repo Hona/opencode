@@ -14,11 +14,11 @@ import {
   displayPath,
   displaySeparator,
   joinPath,
-  modeOf,
   normalizeDriveRoot,
   parentOf,
   rootOf,
-  tildeOf,
+  scopeOf,
+  searchOf,
   trimTrailing,
 } from "./dialog-select-directory-path"
 
@@ -39,20 +39,9 @@ function cleanInput(value: string) {
   return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
 }
 
-
 function toRow(absolute: string, home: string, group: Row["group"]): Row {
   const full = trimTrailing(absolute)
-  const tilde = tildeOf(full, home)
-  const withSlash = (value: string) => {
-    if (!value) return ""
-    if (value.endsWith("/")) return value
-    return value + "/"
-  }
-
-  const search = Array.from(
-    new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
-  ).join("\n")
-  return { absolute: full, search, group }
+  return { absolute: full, search: searchOf(full, home), group }
 }
 
 function uniqueRows(rows: Row[]) {
@@ -71,22 +60,6 @@ function useDirectorySearch(args: {
 }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
   let current = 0
-
-  const scoped = (value: string) => {
-    const base = args.start()
-    if (!base) return
-
-    const raw = normalizeDriveRoot(value)
-    if (!raw) return { directory: trimTrailing(base), path: "" }
-
-    const h = args.home()
-    if (raw === "~") return { directory: trimTrailing(h || base), path: "" }
-    if (raw.startsWith("~/")) return { directory: trimTrailing(h || base), path: raw.slice(2) }
-
-    const root = rootOf(raw)
-    if (root) return { directory: trimTrailing(root), path: raw.slice(root.length) }
-    return { directory: trimTrailing(base), path: raw }
-  }
 
   const dirs = async (dir: string) => {
     const key = trimTrailing(dir)
@@ -121,7 +94,7 @@ function useDirectorySearch(args: {
     const active = () => token === current
 
     const value = cleanInput(filter)
-    const scopedInput = scoped(value)
+    const scopedInput = scopeOf(value, args.start(), args.home())
     if (!scopedInput) return [] as string[]
 
     const raw = normalizeDriveRoot(value)
