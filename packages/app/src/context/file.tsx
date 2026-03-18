@@ -248,6 +248,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     return {
       ready: () => view().ready(),
       normalize: path.normalize,
+      display: path.display,
       tab: path.tab,
       pathFromTab: path.pathFromTab,
       tree: {

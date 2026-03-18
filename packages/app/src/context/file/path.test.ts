@@ -21,6 +21,17 @@ describe("file path helpers", () => {
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
   })
 
+  test("renders display paths with native separators", () => {
+    const posix = createPathHelpers(() => "/repo")
+    expect(posix.display("file://src/app.ts")).toBe("src/app.ts")
+
+    const win = createPathHelpers(() => "C:\\repo")
+    expect(win.display("src/app.ts")).toBe("src\\app.ts")
+    expect(win.display("file://src/app.ts")).toBe("src\\app.ts")
+    expect(win.display("C:/repo/src/app.ts")).toBe("src\\app.ts")
+    expect(win.display("src/app/")).toBe("src\\app\\")
+  })
+
   test("keeps query/hash stripping behavior stable", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")

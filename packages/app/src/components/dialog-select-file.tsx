@@ -70,10 +70,10 @@ const createCommandEntry = (option: CommandOption, category: string): Entry => (
   option,
 })
 
-const createFileEntry = (path: string, category: string): Entry => ({
+const createFileEntry = (path: string, title: string, category: string): Entry => ({
   id: "file:" + path,
   type: "file",
-  title: path,
+  title,
   category,
   path,
 })
@@ -153,7 +153,7 @@ function createFileEntries(props: {
       if (!path) continue
       if (seen.has(path)) continue
       seen.add(path)
-      items.push(createFileEntry(path, category))
+      items.push(createFileEntry(path, props.file.display(path), category))
     }
 
     return items.slice(0, ENTRY_LIMIT)
@@ -166,7 +166,7 @@ function createFileEntries(props: {
       .filter((node) => node.type === "file")
       .map((node) => node.path)
       .sort((a, b) => a.localeCompare(b))
-    return paths.slice(0, ENTRY_LIMIT).map((path) => createFileEntry(path, category))
+    return paths.slice(0, ENTRY_LIMIT).map((path) => createFileEntry(path, props.file.display(path), category))
   })
 
   return { recent, root }
@@ -331,12 +331,12 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (filesOnly()) {
       const files = await file.searchFiles(query)
       const category = language.t("palette.group.files")
-      return files.map((path) => createFileEntry(path, category))
+      return files.map((path) => createFileEntry(path, file.display(path), category))
     }
 
     const [files, nextSessions] = await Promise.all([file.searchFiles(query), Promise.resolve(sessions(query))])
     const category = language.t("palette.group.files")
-    const entries = files.map((path) => createFileEntry(path, category))
+    const entries = files.map((path) => createFileEntry(path, file.display(path), category))
     return [...commandEntries.list(), ...nextSessions, ...entries]
   }
 
@@ -410,9 +410,9 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
                     <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(item.path ?? "")}
+                      {getDirectory(item.title)}
                     </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(item.path ?? "")}</span>
+                    <span class="text-text-strong whitespace-nowrap">{getFilename(item.title)}</span>
                   </div>
                 </div>
               </div>

@@ -70,8 +70,8 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                   }
 
                   const isDirectory = item.path.endsWith("/")
-                  const directory = isDirectory ? item.path : getDirectory(item.path)
-                  const filename = isDirectory ? "" : getFilename(item.path)
+                  const directory = isDirectory ? item.display : getDirectory(item.display)
+                  const filename = isDirectory ? "" : getFilename(item.display)
 
                   return (
                     <button

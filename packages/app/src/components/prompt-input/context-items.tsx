@@ -3,6 +3,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
+import { useFile } from "@/context/file"
 import type { ContextItem } from "@/context/prompt"
 
 type PromptContextItem = ContextItem & { key: string }
@@ -16,14 +17,17 @@ type ContextItemsProps = {
 }
 
 export const PromptContextItems: Component<ContextItemsProps> = (props) => {
+  const file = useFile()
+
   return (
     <Show when={props.items.length > 0}>
       <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
         <For each={props.items}>
           {(item) => {
-            const directory = getDirectory(item.path)
-            const filename = getFilename(item.path)
-            const label = getFilenameTruncated(item.path, 14)
+            const path = file.display(item.path)
+            const directory = getDirectory(path)
+            const filename = getFilename(path)
+            const label = getFilenameTruncated(path, 14)
             const selected = props.active(item)
 
             return (

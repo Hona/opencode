@@ -79,6 +79,11 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const label = createMemo(() => {
+    const p = path()
+    if (!p) return ""
+    return file.display(p)
+  })
   const state = createMemo(() => {
     const p = path()
     if (!p) return
@@ -404,7 +409,7 @@ export function FileTabContent(props: { tab: string }) {
         component={fileComponent}
         mode="text"
         file={{
-          name: path() ?? "",
+          name: label(),
           contents: source,
           cacheKey: cacheKey(),
         }}

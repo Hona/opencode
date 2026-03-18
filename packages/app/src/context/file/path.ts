@@ -1,3 +1,5 @@
+import { getPathSeparator } from "@opencode-ai/util/path"
+
 export function stripFileProtocol(input: string) {
   if (!input.startsWith("file://")) return input
   return input.slice("file://".length)
@@ -130,6 +132,12 @@ export function createPathHelpers(scope: () => string) {
     return path
   }
 
+  const display = (input: string) => {
+    const path = normalize(input)
+    if (getPathSeparator(scope()) === "/") return path
+    return path.replace(/\//g, "\\")
+  }
+
   const tab = (input: string) => {
     const path = normalize(input)
     return `file://${encodeFilePath(path)}`
@@ -144,6 +152,7 @@ export function createPathHelpers(scope: () => string) {
 
   return {
     normalize,
+    display,
     tab,
     pathFromTab,
     normalizeDir,
