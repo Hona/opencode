@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { pathEqual, pathKey } from "@opencode-ai/util/path"
+import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
@@ -6,13 +8,15 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  findProjectByDirectory,
   hasProjectPermissions,
   latestRootSession,
+  projectContains,
+  workspaceEqual,
   workspaceKey,
 } from "./helpers"
 
@@ -102,22 +106,41 @@ describe("layout deep links", () => {
 })
 
 describe("layout workspace helpers", () => {
-  test("normalizes trailing slash in workspace key", () => {
-    expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
-    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:\\tmp\\demo")
+  test("normalizes trailing slash, slash style, and windows case in path keys", () => {
+    expect(pathKey("/tmp/demo///")).toBe("/tmp/demo")
+    expect(pathKey("C:\\Tmp\\Demo\\\\")).toBe("c:/tmp/demo")
+    expect(pathKey("C:/tmp/demo")).toBe("c:/tmp/demo")
+    expect(pathKey("\\\\Server\\Share\\Repo\\\\")).toBe("//server/share/repo")
   })
 
-  test("preserves posix and drive roots in workspace key", () => {
+  test("preserves posix case sensitivity while folding windows paths", () => {
+    expect(pathEqual("/Tmp/Demo", "/tmp/demo")).toBe(false)
+    expect(pathEqual("C:\\Tmp\\Demo", "c:/tmp/demo")).toBe(true)
+    expect(pathEqual("\\\\Server\\Share\\Repo", "//server/share/repo")).toBe(true)
+  })
+
+  test("preserves normalized roots in workspace key", () => {
     expect(workspaceKey("/")).toBe("/")
     expect(workspaceKey("///")).toBe("/")
-    expect(workspaceKey("C:\\")).toBe("C:\\")
-    expect(workspaceKey("C:\\\\\\")).toBe("C:\\")
-    expect(workspaceKey("C:///")).toBe("C:/")
+    expect(workspaceKey("\\")).toBe("/")
+    expect(workspaceKey("C:\\")).toBe("c:/")
+    expect(workspaceKey("C:/")).toBe("c:/")
+    expect(workspaceKey("C:///")).toBe("c:/")
+    expect(workspaceKey("\\\\Server\\Share\\")).toBe("//server/share")
   })
 
   test("keeps local first while preserving known order", () => {
     const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
+  })
+
+  test("dedupes windows workspace variants in effective order", () => {
+    const result = effectiveWorkspaceOrder("C:/Root", ["c:\\root\\", "C:/ROOT/feature", "c:\\root\\FEATURE\\"], [
+      "c:/root",
+      "c:/root/feature",
+    ])
+
+    expect(result).toEqual(["C:/Root", "C:/ROOT/feature"])
   })
 
   test("finds the latest root session across workspaces", () => {
@@ -142,6 +165,38 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("matches root sessions with normalized workspace keys", () => {
+    const result = latestRootSession(
+      [
+        {
+          path: { directory: "C:/Workspace" },
+          session: [
+            session({
+              id: "win",
+              directory: "c:\\workspace\\",
+              time: { created: 10, updated: 10, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      120_000,
+    )
+
+    expect(result?.id).toBe("win")
+  })
+
+  test("matches projects by normalized worktree and workspace paths", () => {
+    const projects = [
+      { worktree: "C:/Workspace", sandboxes: ["C:/Workspace/Feature"] },
+      { worktree: "/tmp/demo", sandboxes: ["/tmp/demo/branch"] },
+    ]
+
+    expect(projectContains(projects[0], "c:\\workspace\\feature\\")).toBe(true)
+    expect(findProjectByDirectory(projects, "c:\\workspace\\")).toBe(projects[0])
+    expect(findProjectByDirectory(projects, "/tmp/demo/branch")).toBe(projects[1])
+    expect(workspaceEqual("/tmp/demo", "/Tmp/demo")).toBe(false)
   })
 
   test("detects project permissions with a filter", () => {

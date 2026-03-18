@@ -14,6 +14,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { findProjectByDirectory, workspaceEqual } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
@@ -280,7 +281,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+    return findProjectByDirectory(layout.projects.list(), directory)
   })
   const workspaces = createMemo(() => {
     const directory = projectDirectory()
@@ -288,7 +289,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (!current) return directory ? [directory] : []
 
     const dirs = [current.worktree, ...(current.sandboxes ?? [])]
-    if (directory && !dirs.includes(directory)) return [...dirs, directory]
+    if (directory && !dirs.some((dir) => workspaceEqual(dir, directory))) return [...dirs, directory]
     return dirs
   })
   const homedir = createMemo(() => globalSync.data.path.home)

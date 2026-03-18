@@ -1,11 +1,22 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 
-export const workspaceKey = (directory: string) => {
-  const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)
-  if (drive) return `${drive[1]}${directory.includes("\\") ? "\\" : "/"}`
-  if (/^[\\/]+$/.test(directory)) return directory.includes("\\") ? "\\" : "/"
-  return directory.replace(/[\\/]+$/, "")
+export const workspaceKey = pathKey
+
+export const workspaceEqual = pathEqual
+
+export const projectContains = (project: { worktree: string; sandboxes?: string[] }, directory: string | undefined) => {
+  if (!directory) return false
+  if (pathEqual(project.worktree, directory)) return true
+  return project.sandboxes?.some((sandbox) => pathEqual(sandbox, directory)) === true
+}
+
+export const findProjectByDirectory = <T extends { worktree: string; sandboxes?: string[] }>(
+  projects: T[],
+  directory: string | undefined,
+) => {
+  if (!directory) return
+  return projects.find((project) => projectContains(project, directory))
 }
 
 function sortSessions(now: number) {

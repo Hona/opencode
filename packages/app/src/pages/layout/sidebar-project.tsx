@@ -11,7 +11,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
+import { childMapByParent, displayName, projectContains, sortedRootSessions, workspaceEqual } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -38,7 +38,7 @@ export const ProjectDragOverlay = (props: {
   projects: Accessor<LocalProject[]>
   activeProject: Accessor<string | undefined>
 }): JSX.Element => {
-  const project = createMemo(() => props.projects().find((p) => p.worktree === props.activeProject()))
+  const project = createMemo(() => props.projects().find((p) => workspaceEqual(p.worktree, props.activeProject())))
   return (
     <Show when={project()}>
       {(p) => (
@@ -278,11 +278,7 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(
-    () =>
-      props.project.worktree === props.ctx.currentDir() ||
-      props.project.sandboxes?.includes(props.ctx.currentDir()) === true,
-  )
+  const selected = createMemo(() => projectContains(props.project, props.ctx.currentDir()))
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))

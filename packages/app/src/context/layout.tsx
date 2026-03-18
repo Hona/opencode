@@ -1,6 +1,7 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { pathEqual, pathKey } from "@opencode-ai/util/path"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
@@ -389,7 +390,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
-        : globalSync.data.project.find((x) => x.worktree === project.worktree)
+        : globalSync.data.project.find((x) => pathEqual(x.worktree, project.worktree))
 
       const local = childStore.projectMeta
       const localOverride =
@@ -429,7 +430,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
+          map.set(pathKey(sandbox), project.worktree)
         }
       }
       return map
@@ -446,11 +447,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = chain[chain.length - 1]
         if (!current) return directory
 
-        const next = map.get(current)
+        const key = pathKey(current)
+        const next = map.get(key)
         if (!next) return current
 
-        if (visited.has(next)) return directory
-        visited.add(next)
+        const id = pathKey(next)
+        if (visited.has(id)) return directory
+        visited.add(id)
         chain.push(next)
       }
 
@@ -459,18 +462,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     createEffect(() => {
       const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+      const seen = new Set(projects.map((project) => pathKey(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
           const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
+          if (pathEqual(root, project.worktree)) continue
 
           server.projects.close(project.worktree)
 
-          if (!seen.has(root)) {
+          const key = pathKey(root)
+          if (!seen.has(key)) {
             server.projects.open(root)
-            seen.add(root)
+            seen.add(key)
           }
 
           if (project.expanded) server.projects.expand(root)
@@ -567,7 +571,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          if (server.projects.list().some((x) => pathEqual(x.worktree, root))) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },

@@ -72,8 +72,10 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  findProjectByDirectory,
   latestRootSession,
   sortedRootSessions,
+  workspaceEqual,
   workspaceKey,
 } from "./layout/helpers"
 import {
@@ -243,13 +245,13 @@ export default function Layout(props: ParentProps) {
   const hoverProjectData = createMemo(() => {
     const id = state.hoverProject
     if (!id) return
-    return layout.projects.list().find((project) => project.worktree === id)
+    return layout.projects.list().find((project) => workspaceEqual(project.worktree, id))
   })
 
   const peekProject = createMemo(() => {
     const id = state.peek
     if (!id) return
-    return layout.projects.list().find((project) => project.worktree === id)
+    return layout.projects.list().find((project) => workspaceEqual(project.worktree, id))
   })
 
   createEffect(() => {
@@ -484,8 +486,8 @@ export default function Layout(props: ParentProps) {
         }
 
         const currentSession = params.id
-        if (directory === currentDir() && props.sessionID === currentSession) return
-        if (directory === currentDir() && session?.parentID === currentSession) return
+        if (workspaceEqual(directory, currentDir()) && props.sessionID === currentSession) return
+        if (workspaceEqual(directory, currentDir()) && session?.parentID === currentSession) return
 
         dismissSessionAlert(sessionKey)
 
@@ -546,10 +548,7 @@ export default function Layout(props: ParentProps) {
 
     const projects = layout.projects.list()
 
-    const sandbox = projects.find((p) => p.sandboxes?.includes(directory))
-    if (sandbox) return sandbox
-
-    const direct = projects.find((p) => p.worktree === directory)
+    const direct = findProjectByDirectory(projects, directory)
     if (direct) return direct
 
     const [child] = globalSync.child(directory, { bootstrap: false })
@@ -560,7 +559,7 @@ export default function Layout(props: ParentProps) {
     const root = meta?.worktree
     if (!root) return
 
-    return projects.find((p) => p.worktree === root)
+    return findProjectByDirectory(projects, root)
   })
 
   const [autoselecting] = createResource(async () => {
@@ -574,7 +573,7 @@ export default function Layout(props: ParentProps) {
       if (!last) return
       await openProject(last, true)
     } else {
-      const next = list.find((project) => project.worktree === last) ?? list[0]
+      const next = list.find((project) => workspaceEqual(project.worktree, last)) ?? list[0]
       if (!next) return
       await openProject(next.worktree, true)
     }
@@ -617,8 +616,10 @@ export default function Layout(props: ParentProps) {
 
     const activeDir = currentDir()
     return workspaceIds(project).filter((directory) => {
-      const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-      const active = directory === activeDir
+      const key = workspaceKey(directory)
+      const expanded =
+        store.workspaceExpanded[key] ?? store.workspaceExpanded[directory] ?? workspaceEqual(directory, project.worktree)
+      const active = workspaceEqual(directory, activeDir)
       return expanded || active
     })
   })
@@ -629,7 +630,7 @@ export default function Layout(props: ParentProps) {
     const projects = layout.projects.list()
     for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
       if (!expanded) continue
-      const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+      const project = findProjectByDirectory(projects, directory)
       if (!project) continue
       if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
@@ -1154,13 +1155,11 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
-    const project = layout.projects
-      .list()
-      .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+    const project = findProjectByDirectory(layout.projects.list(), directory)
     if (project) return project.worktree
 
     const known = Object.entries(store.workspaceOrder).find(
-      ([root, dirs]) => root === directory || dirs.includes(directory),
+      ([root, dirs]) => workspaceEqual(root, directory) || dirs.some((dir) => workspaceEqual(dir, directory)),
     )
     if (known) return known[0]
 
@@ -1179,7 +1178,7 @@ export default function Layout(props: ParentProps) {
   function touchProjectRoute() {
     const root = currentProject()?.worktree
     if (!root) return
-    if (server.projects.last() !== root) server.projects.touch(root)
+    if (!workspaceEqual(server.projects.last(), root)) server.projects.touch(root)
     return root
   }
 
@@ -1201,9 +1200,10 @@ export default function Layout(props: ParentProps) {
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
     notification.session.markViewed(id)
-    const expanded = untrack(() => store.workspaceExpanded[directory])
+    const key = workspaceKey(directory)
+    const expanded = untrack(() => store.workspaceExpanded[key] ?? store.workspaceExpanded[directory])
     if (expanded === false) {
-      setStore("workspaceExpanded", directory, true)
+      setStore("workspaceExpanded", key, true)
     }
     requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
     return root
@@ -1213,7 +1213,7 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
-    const project = layout.projects.list().find((item) => item.worktree === root)
+    const project = layout.projects.list().find((item) => workspaceEqual(item.worktree, root))
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
@@ -1222,7 +1222,7 @@ export default function Layout(props: ParentProps) {
       return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
     }
     const refreshDirs = async (target?: string) => {
-      if (!target || target === root || canOpen(target)) return canOpen(target)
+      if (!target || workspaceEqual(target, root) || canOpen(target)) return canOpen(target)
       const listed = await globalSDK.client.worktree
         .list({ directory: root })
         .then((x) => x.data ?? [])
@@ -1346,8 +1346,8 @@ export default function Layout(props: ParentProps) {
 
   function closeProject(directory: string) {
     const list = layout.projects.list()
-    const index = list.findIndex((x) => x.worktree === directory)
-    const active = currentProject()?.worktree === directory
+    const index = list.findIndex((x) => workspaceEqual(x.worktree, directory))
+    const active = workspaceEqual(currentProject()?.worktree, directory)
     if (index === -1) return
     const next = list[index + 1]
 
@@ -1408,7 +1408,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
-    if (directory === root) return
+    if (workspaceEqual(directory, root)) return
 
     const current = currentDir()
     const currentKey = workspaceKey(current)
@@ -1442,12 +1442,12 @@ export default function Layout(props: ParentProps) {
     globalSync.set(
       "project",
       produce((draft) => {
-        const project = draft.find((item) => item.worktree === root)
+        const project = draft.find((item) => workspaceEqual(item.worktree, root))
         if (!project) return
-        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => sandbox !== directory)
+        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => !workspaceEqual(sandbox, directory))
       }),
     )
-    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
+    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => !workspaceEqual(workspace, directory)))
 
     layout.projects.close(directory)
     layout.projects.open(root)
@@ -1456,19 +1456,19 @@ export default function Layout(props: ParentProps) {
 
     const nextCurrent = currentDir()
     const nextKey = workspaceKey(nextCurrent)
-    const project = layout.projects.list().find((item) => item.worktree === root)
+    const project = layout.projects.list().find((item) => workspaceEqual(item.worktree, root))
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
     const valid = dirs.some((item) => workspaceKey(item) === nextKey)
 
-    if (params.dir && projectRoot(nextCurrent) === root && !valid) {
+    if (params.dir && workspaceEqual(projectRoot(nextCurrent), root) && !valid) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
   }
 
   const resetWorkspace = async (root: string, directory: string) => {
-    if (directory === root) return
+    if (workspaceEqual(directory, root)) return
     setBusy(directory, true)
 
     const progress = showToast({
@@ -1760,8 +1760,8 @@ export default function Layout(props: ParentProps) {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const projects = layout.projects.list()
-      const fromIndex = projects.findIndex((p) => p.worktree === draggable.id.toString())
-      const toIndex = projects.findIndex((p) => p.worktree === droppable.id.toString())
+      const fromIndex = projects.findIndex((p) => workspaceEqual(p.worktree, draggable.id.toString()))
+      const toIndex = projects.findIndex((p) => workspaceEqual(p.worktree, droppable.id.toString()))
       if (fromIndex !== toIndex && toIndex !== -1) {
         layout.projects.move(draggable.id.toString(), toIndex)
       }
@@ -1777,8 +1777,11 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = active?.worktree === project.worktree ? currentDir() : undefined
-    const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
+    const directory = workspaceEqual(active?.worktree, project.worktree) ? currentDir() : undefined
+    const extra =
+      directory && !workspaceEqual(directory, local) && !dirs.some((dir) => workspaceEqual(dir, directory))
+        ? directory
+        : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const ordered = effectiveWorkspaceOrder(local, dirs, store.workspaceOrder[project.worktree])
@@ -1809,8 +1812,8 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     const ids = workspaceIds(project)
-    const fromIndex = ids.findIndex((dir) => dir === draggable.id.toString())
-    const toIndex = ids.findIndex((dir) => dir === droppable.id.toString())
+    const fromIndex = ids.findIndex((dir) => workspaceEqual(dir, draggable.id.toString()))
+    const toIndex = ids.findIndex((dir) => workspaceEqual(dir, droppable.id.toString()))
     if (fromIndex === -1 || toIndex === -1) return
     if (fromIndex === toIndex) return
 
@@ -1888,8 +1891,9 @@ export default function Layout(props: ParentProps) {
     setEditor,
     InlineEditor,
     isBusy,
-    workspaceExpanded: (directory, local) => store.workspaceExpanded[directory] ?? local,
-    setWorkspaceExpanded: (directory, value) => setStore("workspaceExpanded", directory, value),
+    workspaceExpanded: (directory, local) =>
+      store.workspaceExpanded[workspaceKey(directory)] ?? store.workspaceExpanded[directory] ?? local,
+    setWorkspaceExpanded: (directory, value) => setStore("workspaceExpanded", workspaceKey(directory), value),
     showResetWorkspaceDialog: (root, directory) =>
       dialog.show(() => <DialogResetWorkspace root={root} directory={directory} />),
     showDeleteWorkspaceDialog: (root, directory) =>

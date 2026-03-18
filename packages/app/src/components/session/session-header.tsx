@@ -18,6 +18,7 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { findProjectByDirectory } from "@/pages/layout/helpers"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -142,7 +143,7 @@ export function SessionHeader() {
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+    return findProjectByDirectory(layout.projects.list(), directory)
   })
   const name = createMemo(() => {
     const current = project()

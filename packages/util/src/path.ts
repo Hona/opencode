@@ -5,6 +5,36 @@ export function getFilename(path: string | undefined) {
   return parts[parts.length - 1] ?? ""
 }
 
+const normalizeSlashes = (path: string) => path.replace(/[\\/]+/g, "/")
+
+const isUncPath = (path: string) => /^[\\/]{2}[^\\/]/.test(path)
+
+const isWindowsDrivePath = (path: string) => /^[A-Za-z]:([\\/]|$)/.test(path)
+
+export function pathKey(path: string) {
+  if (!path) return ""
+
+  if (isUncPath(path)) {
+    const normalized = normalizeSlashes(path).replace(/^\/+/, "").replace(/\/+$/, "")
+    return normalized ? `//${normalized.toLowerCase()}` : "//"
+  }
+
+  const normalized = normalizeSlashes(path).replace(/\/+$/, "")
+
+  if (isWindowsDrivePath(path)) {
+    const folded = normalized.toLowerCase()
+    return /^[a-z]:$/.test(folded) ? `${folded}/` : folded
+  }
+
+  if (!normalized && /[\\/]/.test(path)) return "/"
+  return normalized
+}
+
+export function pathEqual(a: string | undefined, b: string | undefined) {
+  if (!a || !b) return a === b
+  return pathKey(a) === pathKey(b)
+}
+
 export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[\/\\]+$/, "")
