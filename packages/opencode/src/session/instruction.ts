@@ -3,6 +3,7 @@ import os from "os"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Path } from "../path/path"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
@@ -166,22 +167,23 @@ export namespace InstructionPrompt {
   }
 
   export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
-    const system = await systemPaths()
-    const already = loaded(messages)
+    const system = new Set(Array.from(await systemPaths(), (item) => Filesystem.resolve(item)))
+    const already = new Set(Array.from(loaded(messages), (item) => Filesystem.resolve(item)))
     const results: { filepath: string; content: string }[] = []
 
-    const target = path.resolve(filepath)
+    const target = Filesystem.resolve(filepath)
     let current = path.dirname(target)
-    const root = path.resolve(Instance.directory)
+    const root = Filesystem.resolve(Instance.directory)
 
-    while (current.startsWith(root) && current !== root) {
+    while (Filesystem.contains(root, current) && !Path.eq(current, root)) {
       const found = await find(current)
+      const hit = found ? Filesystem.resolve(found) : undefined
 
-      if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
-        claim(messageID, found)
-        const content = await Filesystem.readText(found).catch(() => undefined)
+      if (hit && !Path.eq(hit, target) && !system.has(hit) && !already.has(hit) && !isClaimed(messageID, hit)) {
+        claim(messageID, hit)
+        const content = await Filesystem.readText(hit).catch(() => undefined)
         if (content) {
-          results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
+          results.push({ filepath: hit, content: "Instructions from: " + hit + "\n" + content })
         }
       }
       current = path.dirname(current)

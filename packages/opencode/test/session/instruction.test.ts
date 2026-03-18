@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { InstructionPrompt } from "../../src/session/instruction"
 import { Instance } from "../../src/project/instance"
@@ -67,6 +68,27 @@ describe("InstructionPrompt.resolve", () => {
         expect(results).toEqual([])
       },
     })
+  })
+
+  test("ignores AGENTS.md in prefix-collision siblings outside project", async () => {
+    await using tmp = await tmpdir()
+    const other = tmp.path + "-other"
+
+    try {
+      await fs.mkdir(path.join(other, "src"), { recursive: true })
+      await Bun.write(path.join(other, "AGENTS.md"), "# Other Instructions")
+      await Bun.write(path.join(other, "src", "file.ts"), "const x = 1")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const results = await InstructionPrompt.resolve([], path.join(other, "src", "file.ts"), "test-message-3")
+          expect(results).toEqual([])
+        },
+      })
+    } finally {
+      await fs.rm(other, { recursive: true, force: true })
+    }
   })
 })
 

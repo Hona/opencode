@@ -13,6 +13,7 @@ import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
+import { Path } from "../path/path"
 
 const spawn = ((cmd, args, opts) => {
   if (Array.isArray(args)) return launch(cmd, [...args], { ...(opts ?? {}), windowsHide: true })
@@ -860,9 +861,10 @@ export namespace LSPServer {
       if (crateRoot === undefined) {
         return undefined
       }
-      let currentDir = crateRoot
+      const worktree = Filesystem.resolve(Instance.worktree)
+      let currentDir = Filesystem.resolve(crateRoot)
 
-      while (currentDir !== path.dirname(currentDir)) {
+      while (!Path.eq(currentDir, path.dirname(currentDir))) {
         // Stop at filesystem root
         const cargoTomlPath = path.join(currentDir, "Cargo.toml")
         try {
@@ -875,11 +877,11 @@ export namespace LSPServer {
         }
 
         const parentDir = path.dirname(currentDir)
-        if (parentDir === currentDir) break // Reached filesystem root
+        if (Path.eq(parentDir, currentDir)) break // Reached filesystem root
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(Instance.worktree)) break
+        if (!Filesystem.contains(worktree, currentDir)) break
       }
 
       return crateRoot
