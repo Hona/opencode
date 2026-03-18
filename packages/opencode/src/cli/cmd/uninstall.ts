@@ -144,7 +144,6 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
 async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
   const spinner = prompts.spinner()
   const errors: string[] = []
-  const shell = process.platform === "win32"
 
   for (const dir of targets.directories) {
     if (dir.keep) {
@@ -195,7 +194,6 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       spinner.start(`Running ${cmd.join(" ")}...`)
       const result = await Process.run(method === "choco" ? ["choco", "uninstall", "opencode", "-y", "-r"] : cmd, {
         nothrow: true,
-        shell,
       })
       if (result.code !== 0) {
         spinner.stop(`Package manager uninstall failed: exit code ${result.code}`, 1)

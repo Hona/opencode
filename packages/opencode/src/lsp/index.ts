@@ -7,10 +7,10 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
-import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util/process"
+import { spawn as lspspawn } from "./launch"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -113,9 +113,8 @@ export namespace LSP {
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
-              process: spawn(item.command[0], item.command.slice(1), {
+              process: lspspawn(item.command[0], item.command.slice(1), {
                 cwd: root,
-                windowsHide: true,
                 env: {
                   ...process.env,
                   ...item.env,

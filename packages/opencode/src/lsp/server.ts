@@ -1,4 +1,4 @@
-import { spawn as launch, type ChildProcessWithoutNullStreams, type SpawnOptions } from "child_process"
+import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -13,28 +13,17 @@ import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
-
-const spawn = ((cmd, args, opts) => {
-  if (Array.isArray(args)) {
-    return launch(cmd, [...args], { ...(opts ?? {}), shell: opts?.shell ?? (process.platform === "win32"), windowsHide: true })
-  }
-
-  const cfg = args as SpawnOptions | undefined
-  return launch(cmd, { ...(cfg ?? {}), shell: cfg?.shell ?? (process.platform === "win32"), windowsHide: true })
-}) as typeof launch
+import { spawn } from "./launch"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
-  const shell = process.platform === "win32"
   const pathExists = async (p: string) =>
     fs
       .stat(p)
       .then(() => true)
       .catch(() => false)
-  const run = (cmd: string[], opts: Process.RunOptions = {}) =>
-    Process.run(cmd, { ...opts, nothrow: true, shell: opts.shell ?? shell })
-  const output = (cmd: string[], opts: Process.RunOptions = {}) =>
-    Process.text(cmd, { ...opts, nothrow: true, shell: opts.shell ?? shell })
+  const run = (cmd: string[], opts: Process.RunOptions = {}) => Process.run(cmd, { ...opts, nothrow: true })
+  const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cmd, { ...opts, nothrow: true })
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -219,8 +208,8 @@ export namespace LSPServer {
         await fs.rename(extractedPath, finalPath)
 
         const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
-        await Process.run([npmCmd, "install"], { cwd: finalPath, shell })
-        await Process.run([npmCmd, "run", "compile"], { cwd: finalPath, shell })
+        await Process.run([npmCmd, "install"], { cwd: finalPath })
+        await Process.run([npmCmd, "run", "compile"], { cwd: finalPath })
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
@@ -280,7 +269,7 @@ export namespace LSPServer {
       }
 
       if (lintBin) {
-        const proc = Process.spawn([lintBin, "--help"], { stdout: "pipe", shell })
+        const proc = spawn(lintBin, ["--help"])
         await proc.exited
         if (proc.stdout) {
           const help = await text(proc.stdout)
@@ -618,9 +607,9 @@ export namespace LSPServer {
 
           const cwd = path.join(Global.Path.bin, "elixir-ls-master")
           const env = { MIX_ENV: "prod", ...process.env }
-          await Process.run(["mix", "deps.get"], { cwd, env, shell })
-          await Process.run(["mix", "compile"], { cwd, env, shell })
-          await Process.run(["mix", "elixir_ls.release2", "-o", "release"], { cwd, env, shell })
+          await Process.run(["mix", "deps.get"], { cwd, env })
+          await Process.run(["mix", "compile"], { cwd, env })
+          await Process.run(["mix", "elixir_ls.release2", "-o", "release"], { cwd, env })
 
           log.info(`installed elixir-ls`, {
             path: elixirLsPath,

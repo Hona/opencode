@@ -15,14 +15,12 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
-  const shell = process.platform === "win32"
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
       cwd: opts.cwd,
       env: opts.env,
       nothrow: true,
-      shell,
     }).then((x) => x.text)
   }
 
@@ -170,13 +168,13 @@ export namespace Installation {
         result = await upgradeCurl(target)
         break
       case "npm":
-        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
+        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
         break
       case "pnpm":
-        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
+        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
         break
       case "bun":
-        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell })
+        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
         break
       case "brew": {
         const formula = await getBrewFormula()
@@ -209,10 +207,10 @@ export namespace Installation {
       }
 
       case "choco":
-        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true, shell })
+        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true })
         break
       case "scoop":
-        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true, shell })
+        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true })
         break
       default:
         throw new Error(`Unknown method: ${method}`)

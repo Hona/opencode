@@ -1,4 +1,5 @@
-import { spawn as launch, type ChildProcess } from "child_process"
+import { type ChildProcess } from "child_process"
+import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
 
 export namespace Process {

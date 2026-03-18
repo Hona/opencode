@@ -54,7 +54,6 @@ export namespace Ide {
 
     const p = await Process.run([cmd, "--install-extension", "sst-dev.opencode"], {
       nothrow: true,
-      shell: process.platform === "win32",
     })
     const stdout = p.stdout.toString()
     const stderr = p.stderr.toString()
