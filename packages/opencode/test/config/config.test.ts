@@ -2075,4 +2075,32 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
       }
     }
   })
+
+  test("substitutes {file:~/...} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+    const home = process.env.OPENCODE_TEST_HOME!
+
+    try {
+      await Filesystem.write(path.join(home, "api_key.txt"), "secret_key_from_home")
+      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        username: "{file:~/api_key.txt}",
+      })
+
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.username).toBe("secret_key_from_home")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
 })

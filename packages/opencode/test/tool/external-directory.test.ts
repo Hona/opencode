@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { Path } from "../../src/path/path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
@@ -23,6 +24,10 @@ async function link(target: string, alias: string) {
 }
 
 describe("tool.assertExternalDirectory", () => {
+  test("normalizes Windows-style directory globs", () => {
+    expect(Path.externalGlob("C:\\Users\\Dev\\tmp\\", { platform: "win32" })).toBe("C:/Users/Dev/tmp/*")
+  })
+
   test("no-ops for empty target", async () => {
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
@@ -72,7 +77,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside/file.txt"
-    const expected = path.join(path.resolve(path.dirname(target)), "*").replaceAll("\\", "/")
+    const expected = Path.externalGlob(path.resolve(path.dirname(target)))
 
     await Instance.provide({
       directory,
@@ -98,7 +103,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside"
-    const expected = path.join(path.resolve(target), "*").replaceAll("\\", "/")
+    const expected = Path.externalGlob(path.resolve(target))
 
     await Instance.provide({
       directory,
@@ -142,7 +147,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const req = requests.find((r) => r.permission === "external_directory")
     expect(req).toBeDefined()
-    expect(req!.patterns).toEqual([path.join(outer.path, "*").replaceAll("\\", "/")])
+    expect(req!.patterns).toEqual([Path.externalGlob(outer.path)])
   })
 
   test("uses physical parent for missing file paths through symlink", async () => {
@@ -170,7 +175,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const req = requests.find((r) => r.permission === "external_directory")
     expect(req).toBeDefined()
-    expect(req!.patterns).toEqual([path.join(outer.path, "*").replaceAll("\\", "/")])
+    expect(req!.patterns).toEqual([Path.externalGlob(outer.path)])
   })
 
   test("uses physical target for missing directories through symlink", async () => {
@@ -198,7 +203,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const req = requests.find((r) => r.permission === "external_directory")
     expect(req).toBeDefined()
-    expect(req!.patterns).toEqual([path.join(outer.path, "newdir", "*").replaceAll("\\", "/")])
+    expect(req!.patterns).toEqual([Path.externalGlob(path.join(outer.path, "newdir"))])
   })
 
 })

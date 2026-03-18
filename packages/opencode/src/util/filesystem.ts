@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, isAbsolute, join, relative, resolve as pathResolve } from "path"
+import { dirname, join } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Path } from "@/path/path"
@@ -117,7 +117,7 @@ export namespace Filesystem {
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
   // Keep logical alias roots stable while best-effort true-casing on Windows.
   export function resolve(p: string): string {
-    return Path.truecaseSync(pathResolve(windowsPath(p)))
+    return Path.truecaseSync(p)
   }
 
   export function windowsPath(p: string): string {
@@ -134,18 +134,12 @@ export namespace Filesystem {
     )
   }
 
-  function inside(parent: string, child: string) {
-    if (isAbsolute(parent) !== isAbsolute(child)) return false
-    const rel = relative(parent, child)
-    return !isAbsolute(rel) && !rel.startsWith("..")
-  }
-
   export function overlaps(a: string, b: string) {
-    return inside(a, b) || inside(b, a)
+    return Path.contains(a, b) || Path.contains(b, a)
   }
 
   export function contains(parent: string, child: string) {
-    return inside(parent, child)
+    return Path.contains(parent, child)
   }
 
   export async function findUp(target: string, start: string, stop?: string) {

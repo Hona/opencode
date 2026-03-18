@@ -16,35 +16,14 @@ function lib(platform: NodeJS.Platform) {
   return platform === "win32" ? path.win32 : path.posix
 }
 
-function pretty(input: string, opts: Opts = {}) {
-  return String(Path.pretty(input, { cwd: opts.cwd, platform: pf(opts) }))
-}
-
-function inside(parent: string, child: string, platform: NodeJS.Platform) {
-  const mod = lib(platform)
-  const rel = mod.relative(parent, child)
-  if (!rel) return true
-  if (mod.isAbsolute(rel)) return false
-  return !rel.startsWith("..")
-}
-
 export function formatPath(input?: string, opts: Opts = {}) {
   if (!input) return ""
-
-  const platform = pf(opts)
-  const mod = lib(platform)
-  const text = pretty(input, opts)
-  if (opts.relative) {
-    const cwd = pretty(opts.cwd ?? process.cwd(), { platform })
-    if (inside(cwd, text, platform)) return mod.relative(cwd, text) || "."
-  }
-
-  const home = opts.home ? pretty(opts.home, { platform }) : undefined
-  if (!home) return text
-  if (text === home) return "~"
-  if (!inside(home, text, platform)) return text
-
-  return `~${mod.sep}${mod.relative(home, text)}`
+  return Path.display(input, {
+    cwd: opts.cwd,
+    home: opts.home ?? false,
+    platform: pf(opts),
+    relative: opts.relative,
+  })
 }
 
 export function splitPath(input: string, opts: Pick<Opts, "platform"> = {}) {

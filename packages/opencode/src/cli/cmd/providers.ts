@@ -5,7 +5,6 @@ import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
-import os from "os"
 import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
@@ -13,6 +12,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { Path } from "../../path/path"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -208,8 +208,7 @@ export const ProvidersListCommand = cmd({
   async handler(_args) {
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
-    const homedir = os.homedir()
-    const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
+    const displayPath = Path.display(authPath)
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()

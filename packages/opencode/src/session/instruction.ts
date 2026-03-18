@@ -1,5 +1,4 @@
 import path from "path"
-import os from "os"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
@@ -25,7 +24,7 @@ function globalFiles() {
   }
   files.push(path.join(Global.Path.config, "AGENTS.md"))
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    files.push(Path.expand("~/.claude/CLAUDE.md"))
   }
   return files
 }
@@ -96,9 +95,7 @@ export namespace InstructionPrompt {
     if (config.instructions) {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
-        if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
-        }
+        instruction = Path.expand(instruction)
         const matches = path.isAbsolute(instruction)
           ? await Glob.scan(path.basename(instruction), {
               cwd: path.dirname(instruction),

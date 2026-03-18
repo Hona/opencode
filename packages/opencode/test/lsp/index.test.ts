@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
 import path from "path"
 
 import { Config } from "../../src/config/config"
+import { LSPClient } from "../../src/lsp/client"
+import { LSPServer } from "../../src/lsp/server"
 import { Path } from "../../src/path/path"
 import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
@@ -13,51 +15,44 @@ let roots: string[] = []
 let calls: string[] = []
 let opens: string[] = []
 let getSpy: ReturnType<typeof spyOn> | undefined
-
-mock.module("../../src/lsp/server", () => ({
-  LSPServer: {
-    Fake: {
-      id: "fake",
-      extensions: [".ts"],
-      root: async (file: string) => (path.basename(file) === "first.ts" ? roots[0] : roots[1]),
-      spawn: async () => ({
-        process: {
-          pid: 1,
-          kill() {},
-        },
-      }),
-    },
-  },
-}))
-
-mock.module("../../src/lsp/client", () => ({
-  LSPClient: {
-    create: async (input: { serverID: string; root: string }) => {
-      calls.push(input.root)
-      return {
-        root: input.root,
-        rootKey: String(Path.key(input.root)),
-        serverID: input.serverID,
-        connection: {
-          sendRequest: async () => null,
-        },
-        notify: {
-          open: async (input: { path: string }) => {
-            opens.push(input.path)
-          },
-        },
-        diagnostics: new Map(),
-        waitForDiagnostics: async () => {},
-        shutdown: async () => {},
-      }
-    },
-  },
-}))
+let createSpy: ReturnType<typeof spyOn> | undefined
+let fake: unknown
 
 const { LSP } = await import("../../src/lsp/index")
 
 beforeEach(() => {
   getSpy = spyOn(Config, "get").mockResolvedValue({})
+  fake = {
+    id: "fake",
+    extensions: [".ts"],
+    root: async (file: string) => (path.basename(file) === "first.ts" ? roots[0] : roots[1]),
+    spawn: async () => ({
+      process: {
+        pid: 1,
+        kill() {},
+      },
+    }),
+  }
+  ;(LSPServer as Record<string, unknown>)["Fake"] = fake
+  createSpy = spyOn(LSPClient, "create").mockImplementation(async (input) => {
+    calls.push(input.root)
+    return {
+      root: input.root,
+      rootKey: String(Path.key(input.root)),
+      serverID: input.serverID,
+      connection: {
+        sendRequest: async () => null,
+      },
+      notify: {
+        open: async (input: { path: string }) => {
+          opens.push(input.path)
+        },
+      },
+      diagnostics: new Map(),
+      waitForDiagnostics: async () => {},
+      shutdown: async () => {},
+    } as unknown as NonNullable<Awaited<ReturnType<typeof LSPClient.create>>>
+  })
 })
 
 afterEach(async () => {
@@ -66,6 +61,10 @@ afterEach(async () => {
   opens = []
   getSpy?.mockRestore()
   getSpy = undefined
+  createSpy?.mockRestore()
+  createSpy = undefined
+  delete (LSPServer as Record<string, unknown>)["Fake"]
+  fake = undefined
   await Instance.disposeAll()
 })
 

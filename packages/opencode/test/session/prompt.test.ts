@@ -148,6 +148,24 @@ describe("session.prompt special characters", () => {
       },
     })
   })
+
+  test("resolves home-relative prompt file references with test home semantics", async () => {
+    const home = process.env.OPENCODE_TEST_HOME!
+    await Bun.write(path.join(home, "prompt-home.txt"), "home content\n")
+
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parts = await SessionPrompt.resolvePromptParts("Read @~/prompt-home.txt")
+        const file = parts.find((part) => part.type === "file")
+        if (!file || file.type !== "file") throw new Error("expected file part")
+
+        expect(file.filename).toBe("~/prompt-home.txt")
+        expect(fileURLToPath(file.url)).toBe(path.join(home, "prompt-home.txt"))
+      },
+    })
+  })
 })
 
 describe("session.prompt local file permissions", () => {

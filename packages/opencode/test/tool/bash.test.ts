@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { resolveExternalDirectory } from "../../src/tool/external-directory"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -146,8 +147,9 @@ describe("tool.bash permissions", () => {
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
+        const expected = (await resolveExternalDirectory(os.tmpdir(), { kind: "directory" })).glob
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(path.join(os.tmpdir(), "*"))
+        expect(extDirReq!.patterns).toContain(expected)
       },
     })
   })
@@ -179,7 +181,7 @@ describe("tool.bash permissions", () => {
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
-        const expected = path.join(outerTmp.path, "*")
+        const expected = (await resolveExternalDirectory(filepath)).glob
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(expected)
         expect(extDirReq!.always).toContain(expected)

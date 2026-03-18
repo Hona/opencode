@@ -1,6 +1,5 @@
 import z from "zod"
 import path from "path"
-import os from "os"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -18,6 +17,7 @@ import { PermissionNext } from "@/permission"
 import { InstanceContext } from "@/effect/instance-context"
 import { Effect, Layer, ServiceMap } from "effect"
 import { runPromiseInstance } from "@/effect/runtime"
+import { Path } from "@/path/path"
 
 const log = Log.create({ service: "skill" })
 
@@ -198,7 +198,7 @@ export class SkillService extends ServiceMap.Service<SkillService, SkillService.
           // Scan additional skill paths from config
           const config = await Config.get()
           for (const skillPath of config.skills?.paths ?? []) {
-            const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
+            const expanded = Path.expand(skillPath)
             const resolved = path.isAbsolute(expanded) ? expanded : path.join(instance.directory, expanded)
             if (!(await Filesystem.isDir(resolved))) {
               log.warn("skill path not found", { path: resolved })

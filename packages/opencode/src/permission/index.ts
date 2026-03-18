@@ -1,17 +1,13 @@
 import { runPromiseInstance } from "@/effect/runtime"
 import { Config } from "@/config/config"
+import { Path } from "@/path/path"
 import { fn } from "@/util/fn"
 import { Wildcard } from "@/util/wildcard"
-import os from "os"
 import { PermissionEffect as S } from "./service"
 
 export namespace PermissionNext {
   function expand(pattern: string): string {
-    if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
-    if (pattern === "~") return os.homedir()
-    if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
-    if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
-    return pattern
+    return Path.expand(pattern)
   }
 
   export const Action = S.Action

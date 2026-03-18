@@ -8,6 +8,7 @@ import path from "path"
 import os from "os"
 import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
+import { Path } from "../../path/path"
 
 interface UninstallArgs {
   keepConfig: boolean
@@ -345,9 +346,5 @@ function formatSize(bytes: number): string {
 }
 
 function shortenPath(p: string): string {
-  const home = os.homedir()
-  if (p.startsWith(home)) {
-    return p.replace(home, "~")
-  }
-  return p
+  return Path.display(p)
 }

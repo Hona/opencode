@@ -1,11 +1,11 @@
 import path from "path"
-import os from "os"
 import z from "zod"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { NamedError } from "@opencode-ai/util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
+import { Path } from "@/path/path"
 
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
@@ -108,10 +108,7 @@ export namespace ConfigPaths {
         continue
       }
 
-      let filePath = token.replace(/^\{file:/, "").replace(/\}$/, "")
-      if (filePath.startsWith("~/")) {
-        filePath = path.join(os.homedir(), filePath.slice(2))
-      }
+      const filePath = Path.expand(token.replace(/^\{file:/, "").replace(/\}$/, ""))
 
       const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
       const fileContent = (

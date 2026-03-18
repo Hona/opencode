@@ -7,7 +7,6 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
-import fs from "fs/promises"
 
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
@@ -17,6 +16,8 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { Path } from "@/path/path"
+import { resolveExternalDirectory } from "./external-directory"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -85,8 +86,8 @@ export const BashTool = Tool.define("bash", async () => {
       if (!tree) {
         throw new Error("Failed to parse command")
       }
-      const directories = new Set<string>()
-      if (!Instance.containsPath(cwd)) directories.add(cwd)
+      const dirs = new Set<string>()
+      if (!Instance.containsPath(cwd)) dirs.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -116,15 +117,11 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
+            const resolved = await Path.physical(arg, { cwd })
             log.info("resolved path", { arg, resolved })
-            if (resolved) {
-              const normalized =
-                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
-              if (!Instance.containsPath(normalized)) {
-                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
-                directories.add(dir)
-              }
+            if (!Instance.containsPath(resolved)) {
+              const dir = (await Filesystem.isDir(resolved)) ? resolved : path.dirname(resolved)
+              dirs.add(dir)
             }
           }
         }
@@ -136,12 +133,14 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
-      if (directories.size > 0) {
-        const globs = Array.from(directories).map((dir) => {
-          // Preserve POSIX-looking paths with /s, even on Windows
-          if (dir.startsWith("/")) return `${dir.replace(/[\\/]+$/, "")}/*`
-          return path.join(dir, "*")
-        })
+      if (dirs.size > 0) {
+        const globs = Array.from(
+          new Set(
+            await Promise.all(
+              Array.from(dirs).map((dir) => resolveExternalDirectory(dir, { kind: "directory" }).then((x) => x.glob)),
+            ),
+          ),
+        )
         await ctx.ask({
           permission: "external_directory",
           patterns: globs,
