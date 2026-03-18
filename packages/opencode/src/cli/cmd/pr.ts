@@ -17,6 +17,7 @@ export const PrCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
+        const shell = process.platform === "win32"
         const project = Instance.project
         if (project.vcs !== "git") {
           UI.error("Could not find git repository. Please run this command from a git repository.")
@@ -92,6 +93,7 @@ export const PrCommand = cmd({
 
                 const importResult = await Process.text(["opencode", "import", sessionUrl], {
                   nothrow: true,
+                  shell,
                 })
                 if (importResult.code === 0) {
                   const importOutput = importResult.text.trim()
@@ -118,6 +120,7 @@ export const PrCommand = cmd({
         const opencodeProcess = spawn("opencode", opencodeArgs, {
           stdio: "inherit",
           cwd: process.cwd(),
+          shell,
         })
 
         await new Promise<void>((resolve, reject) => {
