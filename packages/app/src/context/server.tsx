@@ -3,6 +3,7 @@ import { pathEqual, pathKey } from "@opencode-ai/util/path"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
+import { migrateServerState } from "@/utils/persist-path"
 import { useCheckServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
@@ -33,6 +34,8 @@ function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
+
+const dir = (input: string) => pathKey(input) || input
 
 export namespace ServerConnection {
   type Base = { displayName?: string }
@@ -99,7 +102,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const checkServerHealth = useCheckServerHealth()
 
     const [store, setStore, _, ready] = persisted(
-      Persist.global("server", ["server.v3"]),
+      { ...Persist.global("server", ["server.v3"]), migrate: migrateServerState },
       createStore({
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
@@ -251,8 +254,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          if (current.some((x) => pathEqual(x.worktree, directory))) return
-          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
+          const worktree = dir(directory)
+          if (current.some((x) => pathEqual(x.worktree, worktree))) return
+          setStore("projects", key, [{ worktree, expanded: true }, ...current])
         },
         close(directory: string) {
           const key = origin()
@@ -297,7 +301,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         touch(directory: string) {
           const key = origin()
           if (!key) return
-          setStore("lastProject", key, directory)
+          setStore("lastProject", key, dir(directory))
         },
       },
     }

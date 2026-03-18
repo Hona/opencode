@@ -8,6 +8,7 @@ import { useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { migrateLayoutPaths } from "@/utils/persist-path"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -162,19 +163,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
 
-    const migrate = (value: unknown) => {
+    const migrate = (input: unknown) => {
+      const value = migrateLayoutPaths(input)
       if (!isRecord(value)) return value
-
-      const sidebar = value.sidebar
-      const migratedSidebar = (() => {
-        if (!isRecord(sidebar)) return sidebar
-        if (typeof sidebar.workspaces !== "boolean") return sidebar
-        return {
-          ...sidebar,
-          workspaces: {},
-          workspacesDefault: sidebar.workspaces,
-        }
-      })()
 
       const review = value.review
       const fileTree = value.fileTree
@@ -227,18 +218,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
-      if (
-        migratedSidebar === sidebar &&
-        migratedReview === review &&
-        migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs
-      ) {
+      if (migratedReview === review && migratedFileTree === fileTree && migratedSessionTabs === sessionTabs) {
         return value
       }
 
       return {
         ...value,
-        sidebar: migratedSidebar,
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
