@@ -6,7 +6,6 @@ import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
-import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global"
@@ -268,6 +267,28 @@ function shouldEncode(mimeType: string): boolean {
   return false
 }
 
+function within(parent: string, child: string) {
+  const rel = path.relative(parent, child)
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+}
+
+async function real(input: string) {
+  const hit = await fs.promises.realpath(input).catch(() => undefined)
+  if (hit) return hit
+
+  const rest: string[] = []
+  let dir = input
+
+  while (true) {
+    const parent = path.dirname(dir)
+    if (parent === dir) return input
+    rest.unshift(path.basename(dir))
+    const next = await fs.promises.realpath(parent).catch(() => undefined)
+    if (next) return path.join(next, ...rest)
+    dir = parent
+  }
+}
+
 export namespace File {
   export const Info = z
     .object({
@@ -376,11 +397,20 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
     FileService,
     Effect.gen(function* () {
       const instance = yield* InstanceContext
+      const root = real(instance.directory)
+      const worktree = instance.worktree === "/" ? undefined : real(instance.worktree)
 
       // File cache state
       type Entry = { files: string[]; dirs: string[] }
       let cache: Entry = { files: [], dirs: [] }
       let task: Promise<void> | undefined
+
+      const allow = async (input: string) => {
+        const file = await real(input)
+        if (within(await root, file)) return true
+        if (!worktree) return false
+        return within(await worktree, file)
+      }
 
       const isGlobalHome = instance.directory === Global.Path.home && instance.project.id === "global"
 
@@ -557,7 +587,7 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
           using _ = log.time("read", { file })
           const full = path.join(instance.directory, file)
 
-          if (!Instance.containsPath(full)) {
+          if (!(await allow(full))) {
             throw new Error(`Access denied: path escapes project directory`)
           }
 
@@ -638,7 +668,7 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
           }
           const resolved = dir ? path.join(instance.directory, dir) : instance.directory
 
-          if (!Instance.containsPath(resolved)) {
+          if (!(await allow(resolved))) {
             throw new Error(`Access denied: path escapes project directory`)
           }
 

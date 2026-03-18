@@ -6,6 +6,10 @@ import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
+async function link(target: string, alias: string) {
+  await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
+}
+
 describe("Filesystem.contains", () => {
   test("allows paths within project", () => {
     expect(Filesystem.contains("/project", "/project/src")).toBe(true)
@@ -84,6 +88,56 @@ describe("File.read path traversal protection", () => {
       },
     })
   })
+
+  test("returns empty content for missing paths within project", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.read("missing.txt")).resolves.toMatchObject({
+          type: "text",
+          content: "",
+        })
+      },
+    })
+  })
+
+  test("rejects symlink escape for existing files", async () => {
+    await using outer = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "secret.txt"), "secret")
+      },
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await link(outer.path, path.join(dir, "link"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.read("link/secret.txt")).rejects.toThrow("Access denied: path escapes project directory")
+      },
+    })
+  })
+
+  test("rejects symlink escape for missing files", async () => {
+    await using outer = await tmpdir()
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await link(outer.path, path.join(dir, "link"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.read("link/missing.txt")).rejects.toThrow("Access denied: path escapes project directory")
+      },
+    })
+  })
 })
 
 describe("File.list path traversal protection", () => {
@@ -110,6 +164,26 @@ describe("File.list path traversal protection", () => {
       fn: async () => {
         const result = await File.list("subdir")
         expect(Array.isArray(result)).toBe(true)
+      },
+    })
+  })
+
+  test("rejects symlink escape for directory listings", async () => {
+    await using outer = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, "nested"), { recursive: true })
+      },
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await link(outer.path, path.join(dir, "link"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.list("link/nested")).rejects.toThrow("Access denied: path escapes project directory")
       },
     })
   })
