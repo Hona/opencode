@@ -134,8 +134,8 @@ describe("tui thread", () => {
       process.chdir(tmp.path)
       process.env.PWD = link
       await expect(call(project)).rejects.toBe(stop)
-      expect(seen.inst[0]).toBe(tmp.path)
-      expect(seen.tui[0]).toBe(tmp.path)
+      expect(seen.inst[0]).toBe(link)
+      expect(seen.tui[0]).toBe(link)
     } finally {
       process.chdir(cwd)
       if (pwd === undefined) delete process.env.PWD
@@ -147,11 +147,11 @@ describe("tui thread", () => {
     }
   }
 
-  test("uses the real cwd when PWD points at a symlink", async () => {
+  test("keeps the logical PWD when it points at a symlink", async () => {
     await check()
   })
 
-  test("uses the real cwd after resolving a relative project from PWD", async () => {
+  test("keeps the logical PWD when resolving a relative project", async () => {
     await check(".")
   })
 })

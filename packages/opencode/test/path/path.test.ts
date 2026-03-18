@@ -103,4 +103,40 @@ describe("path", () => {
       expect(String(await Path.truecase(file, { platform: "linux" }))).toBe(file)
     })
   })
+
+  describe("truecaseSync()", () => {
+    test("keeps missing tails as typed on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+
+      const dir = path.join(tmp.path, "CaseDir")
+      const child = path.join(dir, "Leaf")
+      await fs.mkdir(child, { recursive: true })
+
+      const input = path.join(tmp.path.toLowerCase(), "casedir", "leaf", "Miss", "Tail.ts")
+      const result = String(Path.truecaseSync(input))
+
+      expect(result).toBe(path.join(tmp.path, "CaseDir", "Leaf", "Miss", "Tail.ts"))
+    })
+
+    test("preserves alias roots while true-casing Windows paths", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+
+      const real = path.join(tmp.path, "Target")
+      await fs.mkdir(path.join(real, "Leaf"), { recursive: true })
+      const alias = path.join(tmp.path, "Alias")
+      await fs.symlink(real, alias, "junction")
+
+      const input = path.join(tmp.path.toLowerCase(), "alias", "leaf")
+      const result = String(Path.truecaseSync(input))
+
+      expect(result).toBe(path.join(tmp.path, "Alias", "Leaf"))
+    })
+
+    test("is a no-op off Windows", () => {
+      const file = "/tmp/test.txt"
+      expect(String(Path.truecaseSync(file, { platform: "linux" }))).toBe(file)
+    })
+  })
 })

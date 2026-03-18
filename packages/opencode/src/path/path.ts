@@ -1,3 +1,4 @@
+import { readdirSync } from "fs"
 import { readdir } from "fs/promises"
 import path from "path"
 
@@ -138,6 +139,33 @@ export namespace Path {
     for (const [idx, seg] of rest.entries()) {
       const list = await readdir(out).catch(() => undefined)
       if (!list) return PrettyPath.make(clean(mod.join(out, ...rest.slice(idx)), platform))
+
+      const hit = list.find((item) => item.toLowerCase() === seg.toLowerCase())
+      if (!hit) return PrettyPath.make(clean(mod.join(out, ...rest.slice(idx)), platform))
+
+      out = mod.join(out, hit)
+    }
+
+    return PrettyPath.make(clean(out, platform))
+  }
+
+  export function truecaseSync(input: string, opts: Omit<Opts, "cwd"> = {}) {
+    const platform = pf(opts)
+    const text = pretty(input, opts)
+    if (platform !== "win32") return text
+
+    const mod = path.win32
+    const root = mod.parse(text).root
+    const rest = text.slice(root.length).split("\\").filter(Boolean)
+    let out = root
+
+    for (const [idx, seg] of rest.entries()) {
+      let list: string[] | undefined
+      try {
+        list = readdirSync(out)
+      } catch {
+        return PrettyPath.make(clean(mod.join(out, ...rest.slice(idx)), platform))
+      }
 
       const hit = list.find((item) => item.toLowerCase() === seg.toLowerCase())
       if (!hit) return PrettyPath.make(clean(mod.join(out, ...rest.slice(idx)), platform))
