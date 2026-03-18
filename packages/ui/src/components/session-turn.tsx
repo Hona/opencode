@@ -459,6 +459,7 @@ export function SessionTurn(
                             <For each={diffs()}>
                               {(diff) => {
                                 const active = createMemo(() => expanded().includes(diff.file))
+                                const dir = createMemo(() => getDirectory(diff.file))
                                 const [visible, setVisible] = createSignal(false)
 
                                 createEffect(
@@ -485,10 +486,8 @@ export function SessionTurn(
                                       <Accordion.Trigger>
                                         <div data-slot="session-turn-diff-trigger">
                                           <span data-slot="session-turn-diff-path">
-                                            <Show when={diff.file.includes("/")}>
-                                              <span data-slot="session-turn-diff-directory">
-                                                {`\u202A${getDirectory(diff.file)}\u202C`}
-                                              </span>
+                                            <Show when={dir()}>
+                                              <span data-slot="session-turn-diff-directory">{`\u202A${dir()}\u202C`}</span>
                                             </Show>
                                             <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
                                           </span>

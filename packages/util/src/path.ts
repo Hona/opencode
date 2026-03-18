@@ -11,6 +11,12 @@ const isUncPath = (path: string) => /^[\\/]{2}[^\\/]/.test(path)
 
 const isWindowsDrivePath = (path: string) => /^[A-Za-z]:([\\/]|$)/.test(path)
 
+export function getPathSeparator(path: string | undefined) {
+  if (!path) return "/"
+  if (path.includes("\\") || isWindowsDrivePath(path) || isUncPath(path)) return "\\"
+  return "/"
+}
+
 export function pathKey(path: string) {
   if (!path) return ""
 
@@ -38,8 +44,9 @@ export function pathEqual(a: string | undefined, b: string | undefined) {
 export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[\/\\]+$/, "")
-  const parts = trimmed.split(/[\/\\]/)
-  return parts.slice(0, parts.length - 1).join("/") + "/"
+  const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+  if (idx < 0) return ""
+  return trimmed.slice(0, idx + 1) || getPathSeparator(path)
 }
 
 export function getFileExtension(path: string | undefined) {

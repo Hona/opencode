@@ -45,7 +45,7 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory as _getDirectory, getFilename, getPathSeparator } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
@@ -197,12 +197,22 @@ function relativizeProjectPath(path: string, directory?: string) {
   if (!directory) return path
   if (directory === "/") return path
   if (directory === "\\") return path
-  if (path === directory) return ""
 
-  const separator = directory.includes("\\") ? "\\" : "/"
-  const prefix = directory.endsWith(separator) ? directory : directory + separator
-  if (!path.startsWith(prefix)) return path
-  return path.slice(directory.length)
+  const separator = getPathSeparator(path || directory)
+  const trailing = /[\\/]+$/.test(path)
+  const full = path.replace(/[\\/]+/g, "/").replace(/\/+$/, "")
+  const root = directory.replace(/[\\/]+/g, "/").replace(/\/+$/, "")
+  if (!root) return path
+  if (full === root) return trailing ? separator : ""
+
+  const prefix = root + "/"
+  if (!full.startsWith(prefix)) return path
+
+  const rel = full.slice(root.length).replace(/^\/+/, "")
+  if (!rel) return trailing ? separator : ""
+
+  const result = separator + rel.replaceAll("/", separator)
+  return trailing ? result + separator : result
 }
 
 function getDirectory(path: string | undefined) {
@@ -1172,6 +1182,7 @@ export const ToolRegistry = {
 
 function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element }) {
   const value = createMemo(() => props.path || "tool-file")
+  const dir = createMemo(() => getDirectory(props.path))
 
   return (
     <Accordion
@@ -1187,8 +1198,8 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
               <div data-slot="apply-patch-file-info">
                 <FileIcon node={{ path: props.path, type: "file" }} />
                 <div data-slot="apply-patch-file-name-container">
-                  <Show when={props.path.includes("/")}>
-                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
+                  <Show when={dir()}>
+                    <span data-slot="apply-patch-directory">{`\u202A${dir()}\u202C`}</span>
                   </Show>
                   <span data-slot="apply-patch-filename">{getFilename(props.path)}</span>
                 </div>
@@ -1783,7 +1794,7 @@ ToolRegistry.register({
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
                 </div>
-                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                <Show when={!pending() && getDirectory(props.input.filePath)}>
                   <div data-slot="message-part-path">
                     <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                   </div>
@@ -1855,7 +1866,7 @@ ToolRegistry.register({
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
                 </div>
-                <Show when={!pending() && props.input.filePath?.includes("/")}>
+                <Show when={!pending() && getDirectory(props.input.filePath)}>
                   <div data-slot="message-part-path">
                     <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                   </div>
@@ -1976,7 +1987,7 @@ ToolRegistry.register({
                                 <div data-slot="apply-patch-file-info">
                                   <FileIcon node={{ path: file.relativePath, type: "file" }} />
                                   <div data-slot="apply-patch-file-name-container">
-                                    <Show when={file.relativePath.includes("/")}>
+                                    <Show when={getDirectory(file.relativePath)}>
                                       <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
                                     </Show>
                                     <span data-slot="apply-patch-filename">{getFilename(file.relativePath)}</span>
@@ -2046,7 +2057,7 @@ ToolRegistry.register({
                       <span data-slot="message-part-title-filename">{getFilename(single()!.relativePath)}</span>
                     </Show>
                   </div>
-                  <Show when={!pending() && single()!.relativePath.includes("/")}>
+                  <Show when={!pending() && getDirectory(single()!.relativePath)}>
                     <div data-slot="message-part-path">
                       <span data-slot="message-part-directory">{getDirectory(single()!.relativePath)}</span>
                     </div>

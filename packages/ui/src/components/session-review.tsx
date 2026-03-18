@@ -287,6 +287,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                     let wrapper: HTMLDivElement | undefined
 
                     const item = createMemo(() => diffs().get(file)!)
+                    const dir = createMemo(() => getDirectory(file))
 
                     const expanded = createMemo(() => open().includes(file))
                     const force = () => !!store.force[file]
@@ -404,8 +405,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                               <div data-slot="session-review-file-info">
                                 <FileIcon node={{ path: file, type: "file" }} />
                                 <div data-slot="session-review-file-name-container">
-                                  <Show when={file.includes("/")}>
-                                    <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
+                                  <Show when={dir()}>
+                                    <span data-slot="session-review-directory">{`\u202A${dir()}\u202C`}</span>
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
                                   <Show when={props.onViewFile}>
