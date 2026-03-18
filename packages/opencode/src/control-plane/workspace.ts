@@ -11,6 +11,7 @@ import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
+import { Path } from "@/path/path"
 
 export namespace Workspace {
   export const Event = {
@@ -33,13 +34,18 @@ export namespace Workspace {
   })
   export type Info = z.infer<typeof Info>
 
+  function fix(input: string) {
+    if (!input) return input
+    return Path.truecaseSync(input)
+  }
+
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
       id: row.id,
       type: row.type,
       branch: row.branch,
       name: row.name,
-      directory: row.directory,
+      directory: row.directory ? fix(row.directory) : null,
       extra: row.extra,
       projectID: row.project_id,
     }
@@ -58,13 +64,14 @@ export namespace Workspace {
     const adaptor = await getAdaptor(input.type)
 
     const config = await adaptor.configure({ ...input, id, name: null, directory: null })
+    const dir = config.directory ? await Path.truecase(config.directory) : null
 
     const info: Info = {
       id,
       type: config.type,
       branch: config.branch ?? null,
       name: config.name ?? null,
-      directory: config.directory ?? null,
+      directory: dir,
       extra: config.extra ?? null,
       projectID: input.projectID,
     }

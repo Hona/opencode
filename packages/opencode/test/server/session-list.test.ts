@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { Database, eq } from "../../src/storage/db"
+import { SessionTable } from "../../src/session/session.sql"
 import { Log } from "../../src/util/log"
 
 const projectRoot = path.join(__dirname, "../..")
@@ -25,6 +27,47 @@ describe("Session.list", () => {
 
         expect(ids).toContain(first.id)
         expect(ids).not.toContain(second.id)
+      },
+    })
+  })
+
+  test("filters by equivalent pretty paths", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const first = await Session.create({})
+
+        const otherDir = path.join(projectRoot, "..", "__session_list_equivalent_other")
+        const second = await Instance.provide({
+          directory: otherDir,
+          fn: async () => Session.create({}),
+        })
+
+        const sessions = [...Session.list({ directory: `${projectRoot}${path.sep}work${path.sep}..` })]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(first.id)
+        expect(ids).not.toContain(second.id)
+      },
+    })
+  })
+
+  test("reads stored directories back in true case", async () => {
+    if (process.platform !== "win32") return
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        Database.use((db) =>
+          db
+            .update(SessionTable)
+            .set({ directory: projectRoot.toUpperCase() })
+            .where(eq(SessionTable.id, session.id))
+            .run(),
+        )
+
+        const result = await Session.get(session.id)
+        expect(result.directory).toBe(projectRoot)
       },
     })
   })

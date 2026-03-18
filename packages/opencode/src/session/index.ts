@@ -32,12 +32,18 @@ import { PermissionNext } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { Path } from "@/path/path"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
+
+  function fix(input: string) {
+    if (!input) return input
+    return Path.truecaseSync(input)
+  }
 
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
@@ -68,7 +74,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: row.directory,
+      directory: fix(row.directory),
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -302,12 +308,13 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
+    const dir = await Path.truecase(input.directory)
     const result: Info = {
       id: SessionID.descending(input.id),
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
-      directory: input.directory,
+      directory: dir,
       workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -547,12 +554,10 @@ export namespace Session {
   }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
+    const dir = input?.directory ? fix(input.directory) : undefined
 
     if (WorkspaceContext.workspaceID) {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
-    }
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -566,16 +571,12 @@ export namespace Session {
 
     const limit = input?.limit ?? 100
 
-    const rows = Database.use((db) =>
-      db
-        .select()
-        .from(SessionTable)
-        .where(and(...conditions))
-        .orderBy(desc(SessionTable.time_updated))
-        .limit(limit)
-        .all(),
-    )
-    for (const row of rows) {
+    const rows = Database.use((db) => {
+      const query = db.select().from(SessionTable).where(and(...conditions)).orderBy(desc(SessionTable.time_updated))
+      return dir ? query.all() : query.limit(limit).all()
+    })
+    const hits = dir ? rows.filter((row) => row.directory && Path.eq(row.directory, dir)).slice(0, limit) : rows
+    for (const row of hits) {
       yield fromRow(row)
     }
   }
@@ -590,10 +591,8 @@ export namespace Session {
     archived?: boolean
   }) {
     const conditions: SQL[] = []
+    const dir = input?.directory ? fix(input.directory) : undefined
 
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
-    }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
     }
@@ -620,10 +619,12 @@ export namespace Session {
               .from(SessionTable)
               .where(and(...conditions))
           : db.select().from(SessionTable)
-      return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+      const sort = query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+      return dir ? sort.all() : sort.limit(limit).all()
     })
+    const hits = dir ? rows.filter((row) => row.directory && Path.eq(row.directory, dir)).slice(0, limit) : rows
 
-    const ids = [...new Set(rows.map((row) => row.project_id))]
+    const ids = [...new Set(hits.map((row) => row.project_id))]
     const projects = new Map<string, ProjectInfo>()
 
     if (ids.length > 0) {
@@ -638,12 +639,12 @@ export namespace Session {
         projects.set(item.id, {
           id: item.id,
           name: item.name ?? undefined,
-          worktree: item.worktree,
+          worktree: item.worktree === "/" ? item.worktree : Path.truecaseSync(item.worktree),
         })
       }
     }
 
-    for (const row of rows) {
+    for (const row of hits) {
       const project = projects.get(row.project_id) ?? null
       yield { ...fromRow(row), project }
     }

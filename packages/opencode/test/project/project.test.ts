@@ -100,6 +100,17 @@ describe("Project.fromDirectory", () => {
     expect(fileExists).toBe(true)
   })
 
+  test("truecases authoritative git paths before persisting", async () => {
+    if (process.platform !== "win32") return
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const { project, sandbox } = await p.fromDirectory(tmp.path.toUpperCase())
+
+    expect(project.worktree).toBe(tmp.path)
+    expect(sandbox).toBe(tmp.path)
+  })
+
   test("keeps git vcs when rev-list exits non-zero with empty output", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir()
@@ -391,5 +402,31 @@ describe("Project.update", () => {
     expect(updated.icon?.url).toBe("https://example.com/favicon.ico")
     expect(updated.icon?.color).toBe("#00ff00")
     expect(updated.commands?.start).toBe("make start")
+  })
+})
+
+describe("Project sandbox paths", () => {
+  test("dedupes equivalent sandbox paths", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+    const dir = path.join(tmp.path, "sandbox")
+    await Filesystem.write(path.join(dir, ".keep"), "ok")
+
+    await Project.addSandbox(project.id, dir)
+    const updated = await Project.addSandbox(project.id, `${dir}${path.sep}child${path.sep}..`)
+
+    expect(updated.sandboxes.filter((item) => item === dir)).toHaveLength(1)
+  })
+
+  test("removes equivalent sandbox paths", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+    const dir = path.join(tmp.path, "sandbox")
+    await Filesystem.write(path.join(dir, ".keep"), "ok")
+
+    await Project.addSandbox(project.id, dir)
+    const updated = await Project.removeSandbox(project.id, `${dir}${path.sep}child${path.sep}..`)
+
+    expect(updated.sandboxes).not.toContain(dir)
   })
 })

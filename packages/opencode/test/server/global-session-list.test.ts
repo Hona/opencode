@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { Session } from "../../src/session"
@@ -82,6 +83,26 @@ describe("Session.listGlobal", () => {
 
     const next = [...Session.listGlobal({ directory: tmp.path, limit: 10, cursor: page[0].time.updated })]
     const ids = next.map((session) => session.id)
+
+    expect(ids).toContain(first.id)
+    expect(ids).not.toContain(second.id)
+  })
+
+  test("filters by equivalent pretty paths", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await using tmp2 = await tmpdir({ git: true })
+
+    const first = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => Session.create({ title: "global-pretty-match" }),
+    })
+    const second = await Instance.provide({
+      directory: tmp2.path,
+      fn: async () => Session.create({ title: "global-pretty-other" }),
+    })
+
+    const sessions = [...Session.listGlobal({ directory: `${tmp.path}${path.sep}work${path.sep}..`, limit: 200 })]
+    const ids = sessions.map((session) => session.id)
 
     expect(ids).toContain(first.id)
     expect(ids).not.toContain(second.id)

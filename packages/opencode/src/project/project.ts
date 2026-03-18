@@ -1,7 +1,7 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { and, Database, eq } from "../storage/db"
+import { Database, eq, inArray } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
@@ -15,11 +15,35 @@ import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
+import { Path } from "@/path/path"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
 
-  function gitpath(cwd: string, name: string) {
+  function fix(input: string) {
+    if (!input || input === "/") return input
+    return Path.truecaseSync(input)
+  }
+
+  function same(a: string, b: string) {
+    if (a === "/" || b === "/") return a === b
+    return Path.eq(a, b)
+  }
+
+  function uniq(list: string[]) {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const item of list) {
+      const dir = fix(item)
+      const key = dir === "/" ? dir : Path.key(dir)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(dir)
+    }
+    return out
+  }
+
+  async function gitpath(cwd: string, name: string) {
     if (!name) return cwd
     // git output includes trailing newlines; keep path whitespace intact.
     name = name.replace(/[\r\n]+$/, "")
@@ -27,8 +51,8 @@ export namespace Project {
 
     name = Filesystem.windowsPath(name)
 
-    if (path.isAbsolute(name)) return path.normalize(name)
-    return path.resolve(cwd, name)
+    if (path.isAbsolute(name)) return await Path.truecase(name)
+    return await Path.truecase(Path.pretty(name, { cwd }))
   }
 
   export const Info = z
@@ -74,7 +98,7 @@ export namespace Project {
         : undefined
     return {
       id: ProjectID.make(row.id),
-      worktree: row.worktree,
+      worktree: fix(row.worktree),
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -83,7 +107,7 @@ export namespace Project {
         updated: row.time_updated,
         initialized: row.time_initialized ?? undefined,
       },
-      sandboxes: row.sandboxes,
+      sandboxes: uniq(row.sandboxes),
       commands: row.commands ?? undefined,
     }
   }
@@ -96,6 +120,7 @@ export namespace Project {
   }
 
   export async function fromDirectory(directory: string) {
+    directory = await Path.truecase(directory)
     log.info("fromDirectory", { directory })
 
     const data = await iife(async () => {
@@ -103,7 +128,7 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+        let sandbox: string = await Path.truecase(path.dirname(dotgit))
 
         const gitBinary = which("git")
 
@@ -123,9 +148,9 @@ export namespace Project {
           cwd: sandbox,
         })
           .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
+            const common = await gitpath(sandbox, await result.text())
             // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
+            return same(common, sandbox) ? sandbox : fix(path.dirname(common))
           })
           .catch(() => undefined)
 
@@ -236,15 +261,17 @@ export namespace Project {
     const result: Info = {
       ...existing,
       worktree: data.worktree,
+      sandboxes: uniq(existing.sandboxes),
       vcs: data.vcs as Info["vcs"],
       time: {
         ...existing.time,
         updated: Date.now(),
       },
     }
-    if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-      result.sandboxes.push(data.sandbox)
-    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
+    if (!same(data.sandbox, result.worktree) && !result.sandboxes.some((item) => same(item, data.sandbox))) {
+      result.sandboxes.push(fix(data.sandbox))
+    }
+    result.sandboxes = uniq(result.sandboxes).filter((item) => existsSync(item))
     const insert = {
       id: result.id,
       worktree: result.worktree,
@@ -276,13 +303,24 @@ export namespace Project {
     // Runs on every startup because sessions created before git init
     // accumulate under "global" and need migrating whenever they appear.
     if (data.id !== ProjectID.global) {
-      Database.use((db) =>
+      const ids = Database.use((db) =>
         db
-          .update(SessionTable)
-          .set({ project_id: data.id })
-          .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
-          .run(),
+          .select({ id: SessionTable.id, directory: SessionTable.directory })
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, ProjectID.global))
+          .all()
+          .filter((row) => row.directory && same(row.directory, data.worktree))
+          .map((row) => row.id),
       )
+      if (ids.length) {
+        Database.use((db) =>
+          db
+            .update(SessionTable)
+            .set({ project_id: data.id })
+            .where(inArray(SessionTable.id, ids))
+            .run(),
+        )
+      }
     }
     GlobalBus.emit("event", {
       payload: {
@@ -402,7 +440,7 @@ export namespace Project {
     const valid: string[] = []
     for (const dir of data.sandboxes) {
       const s = Filesystem.stat(dir)
-      if (s?.isDirectory()) valid.push(dir)
+      if (s?.isDirectory() && !valid.some((item) => same(item, dir))) valid.push(dir)
     }
     return valid
   }
@@ -410,8 +448,9 @@ export namespace Project {
   export async function addSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    const sandboxes = [...row.sandboxes]
-    if (!sandboxes.includes(directory)) sandboxes.push(directory)
+    const dir = fix(directory)
+    const sandboxes = uniq(row.sandboxes)
+    if (!sandboxes.some((item) => same(item, dir))) sandboxes.push(dir)
     const result = Database.use((db) =>
       db
         .update(ProjectTable)
@@ -434,7 +473,8 @@ export namespace Project {
   export async function removeSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    const sandboxes = row.sandboxes.filter((s) => s !== directory)
+    const dir = fix(directory)
+    const sandboxes = uniq(row.sandboxes).filter((item) => !same(item, dir))
     const result = Database.use((db) =>
       db
         .update(ProjectTable)

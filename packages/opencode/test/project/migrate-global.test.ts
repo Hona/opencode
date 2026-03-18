@@ -8,6 +8,7 @@ import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
+import path from "path"
 
 Log.init({ print: false })
 
@@ -117,6 +118,31 @@ describe("migrateFromGlobal", () => {
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
     expect(row!.project_id).toBe(ProjectID.global)
+  })
+
+  test("migrates sessions with equivalent pretty directories", async () => {
+    await using tmp = await tmpdir()
+    await $`git init`.cwd(tmp.path).quiet()
+    await $`git config user.name "Test"`.cwd(tmp.path).quiet()
+    await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
+    const { project: pre } = await Project.fromDirectory(tmp.path)
+    expect(pre.id).toBe(ProjectID.global)
+
+    const id = uid()
+    seed({
+      id,
+      dir: `${tmp.path}${path.sep}work${path.sep}..`,
+      project: ProjectID.global,
+    })
+
+    await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
+
+    const { project } = await Project.fromDirectory(tmp.path)
+    expect(project.id).not.toBe(ProjectID.global)
+
+    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    expect(row).toBeDefined()
+    expect(row!.project_id).toBe(project.id)
   })
 
   test("does not steal sessions from unrelated directories", async () => {
