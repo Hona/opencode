@@ -39,6 +39,10 @@ describe("prompt-input history", () => {
 
     const dedupedComments = prependHistoryEntry(commentsOnly, DEFAULT_PROMPT, [comment("c1")])
     expect(dedupedComments).toBe(commentsOnly)
+
+    const withSlash = prependHistoryEntry([], [{ type: "file", path: "src\\a.ts", content: "@a", start: 0, end: 2 }])
+    const dedupedSlash = prependHistoryEntry(withSlash, [{ type: "file", path: "src/a.ts", content: "@a", start: 0, end: 2 }])
+    expect(dedupedSlash).toBe(withSlash)
   })
 
   test("navigatePromptHistory restores saved prompt when moving down from newest", () => {
@@ -93,6 +97,12 @@ describe("prompt-input history", () => {
     if (!up.handled) throw new Error("expected handled")
     expect(up.entry.prompt[0]?.type === "text" ? up.entry.prompt[0].content : "").toBe("with comment")
     expect(up.entry.comments).toEqual([comment("c1")])
+  })
+
+  test("comment equality ignores slash variants", () => {
+    const first = prependHistoryEntry([], DEFAULT_PROMPT, [comment("c1")])
+    const second = prependHistoryEntry(first, DEFAULT_PROMPT, [{ ...comment("c1"), path: "src\\a.ts" }])
+    expect(second).toBe(first)
   })
 
   test("normalizePromptHistoryEntry supports legacy prompt arrays", () => {

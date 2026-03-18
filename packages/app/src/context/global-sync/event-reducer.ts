@@ -14,6 +14,20 @@ import type {
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
+import { filePathKey } from "@/context/file/path"
+
+export function normalizeSessionDiffs(diffs: FileDiff[]) {
+  const order: string[] = []
+  const map = new Map<string, FileDiff>()
+
+  for (const diff of diffs) {
+    const file = filePathKey(diff.file) || diff.file
+    if (!map.has(file)) order.push(file)
+    map.set(file, { ...diff, file })
+  }
+
+  return order.map((file) => map.get(file)!)
+}
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
@@ -160,7 +174,7 @@ export function applyDirectoryEvent(input: {
     }
     case "session.diff": {
       const props = event.properties as { sessionID: string; diff: FileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
+      input.setStore("session_diff", props.sessionID, reconcile(normalizeSessionDiffs(props.diff), { key: "file" }))
       break
     }
     case "todo.updated": {

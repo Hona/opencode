@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createPathHelpers, stripQueryAndHash, unquoteGitPath, encodeFilePath } from "./path"
+import { createPathHelpers, dedupeFilePaths, filePathEqual, filePathKey, stripQueryAndHash, unquoteGitPath, encodeFilePath } from "./path"
 
 describe("file path helpers", () => {
   test("normalizes file inputs against workspace root", () => {
@@ -42,6 +42,12 @@ describe("file path helpers", () => {
     expect(unquoteGitPath('"a/\\303\\251.txt"')).toBe("a/\u00e9.txt")
     expect(unquoteGitPath('"plain\\nname"')).toBe("plain\nname")
     expect(unquoteGitPath("a/b/c.ts")).toBe("a/b/c.ts")
+  })
+
+  test("normalizes app file keys across slash variants", () => {
+    expect(filePathKey("src\\app.ts")).toBe("src/app.ts")
+    expect(filePathEqual("src\\app.ts", "src/app.ts")).toBe(true)
+    expect(dedupeFilePaths(["src\\app.ts", "src/app.ts", "src/util.ts"])).toEqual(["src/app.ts", "src/util.ts"])
   })
 })
 

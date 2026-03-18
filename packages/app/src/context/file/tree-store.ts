@@ -1,5 +1,6 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { FileNode } from "@opencode-ai/sdk/v2"
+import { filePathKey } from "./path"
 
 type DirectoryState = {
   expanded: boolean
@@ -26,6 +27,11 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   })
 
   const inflight = new Map<string, Promise<void>>()
+  const key = (path: string) => filePathKey(options.normalizeDir(path)) || path
+  const normalizeNode = (node: FileNode): FileNode => ({
+    ...node,
+    path: key(node.path),
+  })
 
   const reset = () => {
     inflight.clear()
@@ -35,12 +41,13 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   }
 
   const ensureDir = (path: string) => {
-    if (tree.dir[path]) return
-    setTree("dir", path, { expanded: false })
+    const dir = key(path)
+    if (tree.dir[dir]) return
+    setTree("dir", dir, { expanded: false })
   }
 
   const listDir = (input: string, opts?: { force?: boolean }) => {
-    const dir = options.normalizeDir(input)
+    const dir = key(input)
     ensureDir(dir)
 
     const current = tree.dir[dir]
@@ -62,8 +69,9 @@ export function createFileTreeStore(options: TreeStoreOptions) {
 
     const promise = options
       .list(dir)
-      .then((nodes) => {
+      .then((items) => {
         if (options.scope() !== directory) return
+        const nodes = items.map(normalizeNode)
         const prevChildren = tree.dir[dir]?.children ?? []
         const nextChildren = nodes.map((node) => node.path)
         const nextSet = new Set(nextChildren)
@@ -128,25 +136,25 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   }
 
   const expandDir = (input: string) => {
-    const dir = options.normalizeDir(input)
+    const dir = key(input)
     ensureDir(dir)
     setTree("dir", dir, "expanded", true)
     void listDir(dir)
   }
 
   const collapseDir = (input: string) => {
-    const dir = options.normalizeDir(input)
+    const dir = key(input)
     ensureDir(dir)
     setTree("dir", dir, "expanded", false)
   }
 
   const dirState = (input: string) => {
-    const dir = options.normalizeDir(input)
+    const dir = key(input)
     return tree.dir[dir]
   }
 
   const children = (input: string) => {
-    const dir = options.normalizeDir(input)
+    const dir = key(input)
     const ids = tree.dir[dir]?.children
     if (!ids) return []
     const out: FileNode[] = []
@@ -163,8 +171,8 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     collapseDir,
     dirState,
     children,
-    node: (path: string) => tree.node[path],
-    isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
+    node: (path: string) => tree.node[key(path)],
+    isLoaded: (path: string) => Boolean(tree.dir[key(path)]?.loaded),
     reset,
   }
 }

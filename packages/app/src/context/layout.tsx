@@ -17,6 +17,26 @@ const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] a
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const reviewPath = (path: string) => pathKey(path) || path
+const reviewPaths = (paths: readonly string[]) => {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const path of paths) {
+    const key = reviewPath(path)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(key)
+  }
+
+  return out
+}
+const sameReviewPaths = (a: readonly string[] | undefined, b: readonly string[] | undefined) => {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((path, idx) => pathEqual(path, b[idx]))
+}
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -797,10 +817,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
           },
           review: {
-            open: createMemo(() => s().reviewOpen ?? []),
+            open: createMemo(() => reviewPaths(s().reviewOpen ?? [])),
             setOpen(open: string[]) {
               const session = key()
-              const next = Array.from(new Set(open))
+              const next = reviewPaths(open)
               const current = store.sessionView[session]
               if (!current) {
                 setStore("sessionView", session, {
@@ -810,10 +830,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 return
               }
 
-              if (same(current.reviewOpen, next)) return
+              if (sameReviewPaths(current.reviewOpen, next)) return
               setStore("sessionView", session, "reviewOpen", next)
             },
             openPath(path: string) {
+              path = reviewPath(path)
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
@@ -829,7 +850,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 return
               }
 
-              if (current.reviewOpen.includes(path)) return
+              if (current.reviewOpen.some((item) => pathEqual(item, path))) return
               setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
             },
             closePath(path: string) {
@@ -837,7 +858,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               const current = store.sessionView[session]?.reviewOpen
               if (!current) return
 
-              const index = current.indexOf(path)
+              const index = current.findIndex((item) => pathEqual(item, path))
               if (index === -1) return
               setStore(
                 "sessionView",
@@ -852,7 +873,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             togglePath(path: string) {
               const session = key()
               const current = store.sessionView[session]?.reviewOpen
-              if (!current || !current.includes(path)) {
+              if (!current || !current.some((item) => pathEqual(item, path))) {
                 this.openPath(path)
                 return
               }

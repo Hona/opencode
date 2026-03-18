@@ -2,8 +2,9 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { checksum } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
+import { filePathEqual, filePathKey } from "@/context/file/path"
 import { Persist, persisted } from "@/utils/persist"
 
 interface PartBase {
@@ -65,7 +66,7 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "text":
       return partB.type === "text" && partA.content === partB.content
     case "file":
-      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+      return partB.type === "file" && filePathEqual(partA.path, partB.path) && isSelectionEqual(partA.selection, partB.selection)
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
     case "image":
@@ -104,7 +105,7 @@ function contextItemKey(item: ContextItem) {
   if (item.type !== "file") return item.type
   const start = item.selection?.startLine
   const end = item.selection?.endLine
-  const key = `${item.type}:${item.path}:${start}:${end}`
+  const key = `${item.type}:${filePathKey(item.path)}:${start}:${end}`
 
   if (item.commentID) {
     return `${key}:c=${item.commentID}`
@@ -120,14 +121,16 @@ function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
 
+type PromptStore = {
+  prompt: Prompt
+  cursor?: number
+  context: {
+    items: (ContextItem & { key: string })[]
+  }
+}
+
 function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
+  setStore: SetStoreFunction<PromptStore>,
 ) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
@@ -161,30 +164,10 @@ type PromptCacheEntry = {
   dispose: VoidFunction
 }
 
-function createPromptSession(dir: string, id: string | undefined) {
-  const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
-
-  const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
-    createStore<{
-      prompt: Prompt
-      cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
-    }>({
-      prompt: clonePrompt(DEFAULT_PROMPT),
-      cursor: undefined,
-      context: {
-        items: [],
-      },
-    }),
-  )
-
+function createPromptSessionState(store: Store<PromptStore>, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
   return {
-    ready,
     current: createMemo(() => store.prompt),
     cursor: createMemo(() => store.cursor),
     dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
@@ -200,13 +183,13 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
       removeComment(path: string, commentID: string) {
         setStore("context", "items", (items) =>
-          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
+          items.filter((item) => !(item.type === "file" && filePathEqual(item.path, path) && item.commentID === commentID)),
         )
       },
       updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
         setStore("context", "items", (items) =>
           items.map((item) => {
-            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            if (item.type !== "file" || !filePathEqual(item.path, path) || item.commentID !== commentID) return item
             const value = { ...item, ...next }
             return { ...value, key: contextItemKey(value) }
           }),
@@ -221,6 +204,51 @@ function createPromptSession(dir: string, id: string | undefined) {
     },
     set: actions.set,
     reset: actions.reset,
+  }
+}
+
+export function createPromptSessionForTest(input?: Partial<PromptStore>) {
+  const [store, setStore] = createStore<PromptStore>({
+    prompt: clonePrompt(input?.prompt ?? DEFAULT_PROMPT),
+    cursor: input?.cursor,
+    context: {
+      items: input?.context?.items?.map((item) => ({ ...item })) ?? [],
+    },
+  })
+
+  const session = createPromptSessionState(store, setStore)
+
+  return {
+    ...session,
+    current: () => store.prompt,
+    cursor: () => store.cursor,
+    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
+    context: {
+      ...session.context,
+      items: () => store.context.items,
+    },
+  }
+}
+
+function createPromptSession(dir: string, id: string | undefined) {
+  const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
+
+  const [store, setStore, _, ready] = persisted(
+    Persist.scoped(dir, id, "prompt", [legacy]),
+    createStore<PromptStore>({
+      prompt: clonePrompt(DEFAULT_PROMPT),
+      cursor: undefined,
+      context: {
+        items: [],
+      },
+    }),
+  )
+
+  const session = createPromptSessionState(store, setStore)
+
+  return {
+    ready,
+    ...session,
   }
 }
 

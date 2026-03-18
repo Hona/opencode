@@ -12,6 +12,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { filePathEqual } from "@/context/file/path"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
@@ -116,7 +117,7 @@ export function FileTabContent(props: { tab: string }) {
     const preview =
       input.preview ??
       (() => {
-        if (input.file === path()) return selectionPreview(contents(), selection)
+        if (filePathEqual(input.file, path())) return selectionPreview(contents(), selection)
         const source = file.get(input.file)?.content?.content
         if (!source) return undefined
         return selectionPreview(source, selection)
@@ -146,7 +147,7 @@ export function FileTabContent(props: { tab: string }) {
   }) => {
     comments.update(input.file, input.id, input.comment)
     const preview =
-      input.file === path() ? selectionPreview(contents(), selectionFromLines(input.selection)) : undefined
+      filePathEqual(input.file, path()) ? selectionPreview(contents(), selectionFromLines(input.selection)) : undefined
     prompt.context.updateComment(input.file, input.id, {
       comment: input.comment,
       ...(preview ? { preview } : {}),

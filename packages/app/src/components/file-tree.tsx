@@ -1,5 +1,5 @@
 import { useFile } from "@/context/file"
-import { encodeFilePath } from "@/context/file/path"
+import { encodeFilePath, filePathEqual, filePathKey } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -80,9 +80,10 @@ const kindDotColor = (kind: Kind) => {
 }
 
 const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
-  const kind = kinds?.get(node.path)
+  const key = filePathKey(node.path)
+  const kind = kinds?.get(key)
   if (!kind) return
-  if (!marks?.has(node.path)) return
+  if (!marks?.has(key)) return
   return kind
 }
 
@@ -148,7 +149,7 @@ const FileTreeNode = (
       component={local.as ?? "div"}
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
-        "bg-surface-base-active": local.node.path === local.active,
+        "bg-surface-base-active": filePathEqual(local.node.path, local.active),
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -214,10 +215,7 @@ export default function FileTree(props: {
   const draggable = () => props.draggable ?? true
 
   const key = (p: string) =>
-    file
-      .normalize(p)
-      .replace(/[\\/]+$/, "")
-      .replaceAll("\\", "/")
+    filePathKey(file.normalize(p)) || file.normalize(p)
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
 
   const filter = createMemo(() => {
@@ -226,11 +224,12 @@ export default function FileTree(props: {
     const allowed = props.allowed
     if (!allowed) return
 
-    const files = new Set(allowed)
+    const files = new Set(allowed.map((item) => filePathKey(item) || item))
     const dirs = new Set<string>()
 
     for (const item of allowed) {
-      const parts = item.split("/")
+      const path = filePathKey(item) || item
+      const parts = path.split("/")
       const parents = parts.slice(0, -1)
       for (const [idx] of parents.entries()) {
         const dir = parents.slice(0, idx + 1).join("/")
@@ -245,8 +244,8 @@ export default function FileTree(props: {
     if (props._marks) return props._marks
 
     const out = new Set<string>()
-    for (const item of props.modified ?? []) out.add(item)
-    for (const item of props.kinds?.keys() ?? []) out.add(item)
+    for (const item of props.modified ?? []) out.add(filePathKey(item) || item)
+    for (const item of props.kinds?.keys() ?? []) out.add(filePathKey(item) || item)
     if (out.size === 0) return
     return out
   })
@@ -342,15 +341,16 @@ export default function FileTree(props: {
     }
 
     const out = nodes.filter((node) => {
-      if (node.type === "file") return current.files.has(node.path)
-      return current.dirs.has(node.path)
+      if (node.type === "file") return current.files.has(filePathKey(node.path))
+      return current.dirs.has(filePathKey(node.path))
     })
 
-    const seen = new Set(out.map((node) => node.path))
+    const seen = new Set(out.map((node) => filePathKey(node.path)))
 
     for (const dir of current.dirs) {
       if (parent(dir) !== props.path) continue
-      if (seen.has(dir)) continue
+      const key = filePathKey(dir)
+      if (seen.has(key)) continue
       out.push({
         name: leaf(dir),
         path: dir,
@@ -358,12 +358,13 @@ export default function FileTree(props: {
         type: "directory",
         ignored: false,
       })
-      seen.add(dir)
+      seen.add(key)
     }
 
     for (const item of current.files) {
       if (parent(item) !== props.path) continue
-      if (seen.has(item)) continue
+      const key = filePathKey(item)
+      if (seen.has(key)) continue
       out.push({
         name: leaf(item),
         path: item,
@@ -371,7 +372,7 @@ export default function FileTree(props: {
         type: "file",
         ignored: false,
       })
-      seen.add(item)
+      seen.add(key)
     }
 
     out.sort((a, b) => {

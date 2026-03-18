@@ -1,4 +1,22 @@
-import { getPathSeparator } from "@opencode-ai/util/path"
+import { getPathSeparator, pathEqual, pathKey } from "@opencode-ai/util/path"
+
+export const filePathKey = (input: string) => pathKey(input)
+
+export const filePathEqual = (a: string | undefined, b: string | undefined) => pathEqual(a, b)
+
+export function dedupeFilePaths(paths: readonly string[]) {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const path of paths) {
+    const key = filePathKey(path)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(key || path)
+  }
+
+  return out
+}
 
 export function stripFileProtocol(input: string) {
   if (!input.startsWith("file://")) return input

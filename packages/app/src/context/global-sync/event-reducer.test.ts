@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { FileDiff, Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
+import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches, normalizeSessionDiffs } from "./event-reducer"
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -513,6 +513,15 @@ describe("applyDirectoryEvent", () => {
 
     expect(store.vcs).toEqual({ branch: "feature/test" })
     expect(cacheStore.value).toEqual({ branch: "feature/test" })
+  })
+
+  test("normalizes session diff file keys across slash variants", () => {
+    const diff = normalizeSessionDiffs([
+      { file: "src\\app.ts", status: "modified", before: "a", after: "b", additions: 1, deletions: 0 },
+      { file: "src/app.ts", status: "deleted", before: "a", after: "", additions: 0, deletions: 1 },
+    ] as FileDiff[])
+
+    expect(diff).toEqual([{ file: "src/app.ts", status: "deleted", before: "a", after: "", additions: 0, deletions: 1 }])
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {

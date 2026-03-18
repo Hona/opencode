@@ -6,6 +6,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
+import { filePathEqual, filePathKey } from "@/context/file/path"
 
 export type LineComment = {
   id: string
@@ -37,9 +38,15 @@ type CommentStore = {
   comments: Record<string, LineComment[]>
 }
 
+const commentFile = (file: string) => filePathKey(file) || file
+
+function matchFile(comments: Record<string, LineComment[]>, file: string) {
+  return Object.keys(comments).find((key) => filePathEqual(key, file))
+}
+
 function aggregate(comments: Record<string, LineComment[]>) {
-  return Object.keys(comments)
-    .flatMap((file) => comments[file] ?? [])
+  return Object.values(comments)
+    .flatMap((items) => items.map(cloneComment))
     .slice()
     .sort((a, b) => a.time - b.time)
 }
@@ -58,19 +65,21 @@ function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
 function cloneComment(comment: LineComment): LineComment {
   return {
     ...comment,
+    file: commentFile(comment.file),
     selection: cloneSelection(comment.selection),
   }
 }
 
 function group(comments: LineComment[]) {
   return comments.reduce<Record<string, LineComment[]>>((acc, comment) => {
-    const list = acc[comment.file]
-    const next = cloneComment(comment)
+    const file = commentFile(comment.file)
+    const list = acc[file]
+    const next = cloneComment({ ...comment, file })
     if (list) {
       list.push(next)
       return acc
     }
-    acc[comment.file] = [next]
+    acc[file] = [next]
     return acc
   }, {})
 }
@@ -83,10 +92,13 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 
   const all = () => aggregate(store.comments)
 
+  const normalizeFocus = (value: CommentFocus | null) => (value ? { ...value, file: commentFile(value.file) } : null)
+
   const setRef = (
     key: "focus" | "active",
     value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null),
-  ) => setState(key, value)
+  ) =>
+    setState(key, (current) => normalizeFocus(typeof value === "function" ? value(current) : value))
 
   const setFocus = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
     setRef("focus", value)
@@ -94,33 +106,44 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
   const setActive = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
     setRef("active", value)
 
-  const list = (file: string) => store.comments[file] ?? []
+  const list = (file: string) => {
+    const key = matchFile(store.comments, file)
+    return (key ? store.comments[key] : undefined)?.map(cloneComment) ?? []
+  }
 
   const add = (input: Omit<LineComment, "id" | "time">) => {
+    const file = matchFile(store.comments, input.file) ?? commentFile(input.file)
     const next: LineComment = {
       id: uuid(),
       time: Date.now(),
       ...input,
+      file,
       selection: cloneSelection(input.selection),
     }
 
     batch(() => {
-      setStore("comments", input.file, (items) => [...(items ?? []), next])
-      setFocus({ file: input.file, id: next.id })
+      setStore("comments", file, (items) => [...(items ?? []), next])
+      setFocus({ file, id: next.id })
     })
 
     return next
   }
 
   const remove = (file: string, id: string) => {
+    const key = matchFile(store.comments, file)
+    if (!key) return
+
     batch(() => {
-      setStore("comments", file, (items) => (items ?? []).filter((item) => item.id !== id))
-      setFocus((current) => (current?.file === file && current.id === id ? null : current))
+      setStore("comments", key, (items) => (items ?? []).filter((item) => item.id !== id))
+      setFocus((current) => (current && filePathEqual(current.file, file) && current.id === id ? null : current))
     })
   }
 
   const update = (file: string, id: string, comment: string) => {
-    setStore("comments", file, (items) =>
+    const key = matchFile(store.comments, file)
+    if (!key) return
+
+    setStore("comments", key, (items) =>
       (items ?? []).map((item) => {
         if (item.id !== id) return item
         return { ...item, comment }

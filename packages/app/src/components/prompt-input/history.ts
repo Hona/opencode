@@ -1,5 +1,6 @@
 import type { Prompt } from "@/context/prompt"
 import type { SelectedLineRange } from "@/context/file"
+import { filePathEqual } from "@/context/file/path"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -101,7 +102,7 @@ export function prependHistoryEntry(
 
 function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryComment) {
   return (
-    commentA.path === commentB.path &&
+    filePathEqual(commentA.path, commentB.path) &&
     commentA.comment === commentB.comment &&
     commentA.origin === commentB.origin &&
     commentA.preview === commentB.preview &&
@@ -122,7 +123,7 @@ function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistory
     if (partA.type !== partB.type) return false
     if (partA.type === "text" && partA.content !== (partB.type === "text" ? partB.content : "")) return false
     if (partA.type === "file") {
-      if (partA.path !== (partB.type === "file" ? partB.path : "")) return false
+      if (!filePathEqual(partA.path, partB.type === "file" ? partB.path : "")) return false
       const a = partA.selection
       const b = partB.type === "file" ? partB.selection : undefined
       const sameSelection =

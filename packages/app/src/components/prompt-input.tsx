@@ -37,6 +37,7 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { filePathEqual, filePathKey } from "@/context/file/path"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -176,7 +177,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const diffs = sync.data.session_diff[sessionID]
     if (!diffs) return false
-    return diffs.some((diff) => diff.file === path)
+    return diffs.some((diff) => filePathEqual(diff.file, path))
   }
 
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
@@ -193,7 +194,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           requestAnimationFrame(() => {
             const current = comments.focus()
             if (!current) return
-            if (current.file !== focus.file || current.id !== focus.id) return
+            if (!filePathEqual(current.file, focus.file) || current.id !== focus.id) return
             schedule(left - 1)
           })
         })
@@ -229,8 +230,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     for (const tab of order) {
       const path = files.pathFromTab(tab)
       if (!path) continue
-      if (seen.has(path)) continue
-      seen.add(path)
+      const key = filePathKey(path)
+      if (seen.has(key)) continue
+      seen.add(key)
       paths.push(path)
     }
 
@@ -343,13 +345,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const historyComments = () => {
-    const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+    const byID = new Map(comments.all().map((item) => [`${filePathKey(item.file)}\n${item.id}`, item] as const))
     return prompt.context.items().flatMap((item) => {
       if (item.type !== "file") return []
       const comment = item.comment?.trim()
       if (!comment) return []
 
-      const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+      const selection = item.commentID ? byID.get(`${filePathKey(item.path)}\n${item.commentID}`)?.selection : undefined
       const nextSelection =
         selection ??
         (item.selection
@@ -366,7 +368,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           path: item.path,
           selection: { ...nextSelection },
           comment,
-          time: item.commentID ? (byID.get(`${item.path}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
+          time: item.commentID ? (byID.get(`${filePathKey(item.path)}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
           origin: item.commentOrigin,
           preview: item.preview,
         } satisfies PromptHistoryComment,
@@ -557,7 +559,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const atKey = (x: AtOption | undefined) => {
     if (!x) return ""
-    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
+    return x.type === "agent" ? `agent:${x.name}` : `file:${filePathKey(x.path)}`
   }
 
   const {
@@ -570,7 +572,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     items: async (query) => {
       const agents = agentList()
       const open = recent()
-      const seen = new Set(open)
+      const seen = new Set(open.map(filePathKey))
       const pinned: AtOption[] = open.map((path) => ({
         type: "file",
         path,
@@ -579,7 +581,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }))
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
-        .filter((path) => !seen.has(path))
+        .filter((path) => !seen.has(filePathKey(path)))
         .map((path) => ({ type: "file", path, display: files.display(path) }))
       return [...agents, ...pinned, ...fileOptions]
     },
@@ -1284,7 +1286,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           items={contextItems()}
           active={(item) => {
             const active = comments.active()
-            return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+            return !!item.commentID && item.commentID === active?.id && filePathEqual(item.path, active?.file)
           }}
           openComment={openComment}
           remove={(item) => {

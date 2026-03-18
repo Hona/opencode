@@ -183,4 +183,25 @@ describe("comments session indexing", () => {
       dispose()
     })
   })
+
+  test("matches list, update, and remove across slash variants", () => {
+    createRoot((dispose) => {
+      const comments = createCommentSessionForTest({
+        "src\\a.ts": [line("src\\a.ts", "a1", 10)],
+      })
+
+      expect(comments.list("src/a.ts").map((item) => item.file)).toEqual(["src/a.ts"])
+
+      comments.update("src/a.ts", "a1", "edited")
+      expect(comments.list("src\\a.ts")[0]?.comment).toBe("edited")
+
+      comments.setFocus({ file: "src/a.ts", id: "a1" })
+      comments.remove("src/a.ts", "a1")
+
+      expect(comments.list("src\\a.ts")).toEqual([])
+      expect(comments.focus()).toBeNull()
+
+      dispose()
+    })
+  })
 })
