@@ -3,6 +3,7 @@ import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
+import { Path } from "../../src/path/path"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -627,8 +628,21 @@ describe("file/index Filesystem patterns", () => {
           const nodes = await File.list("sub")
           expect(nodes.length).toBe(2)
           expect(nodes.map((n) => n.name).sort()).toEqual(["a.txt", "b.txt"])
-          // Paths should be relative to project root (normalize for Windows)
-          expect(nodes[0].path.replaceAll("\\", "/").startsWith("sub/")).toBe(true)
+          expect(nodes.every((n) => n.path.startsWith("sub/"))).toBe(true)
+        },
+      })
+    })
+
+    test("returns repo-normalized paths for nested entries", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await fs.mkdir(path.join(tmp.path, "src"))
+      await fs.writeFile(path.join(tmp.path, "src", "main.ts"), "", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const nodes = await File.list()
+          expect(nodes.find((n) => n.name === "src")?.path).toBe("src")
         },
       })
     })
@@ -669,8 +683,10 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "utils.ts"), "utils", "utf-8")
       await fs.writeFile(path.join(tmp.path, "readme.md"), "readme", "utf-8")
       await fs.mkdir(path.join(tmp.path, "src"))
+      await fs.mkdir(path.join(tmp.path, "src", ".cache"))
       await fs.mkdir(path.join(tmp.path, ".hidden"))
       await fs.writeFile(path.join(tmp.path, "src", "main.ts"), "main", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "src", ".cache", "tmp.ts"), "tmp", "utf-8")
       await fs.writeFile(path.join(tmp.path, ".hidden", "secret.ts"), "secret", "utf-8")
       return tmp
     }
@@ -699,9 +715,8 @@ describe("file/index Filesystem patterns", () => {
 
           const result = await File.search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
-          // Find first hidden dir index
-          const firstHidden = result.findIndex((d) => d.split("/").some((p) => p.startsWith(".") && p.length > 1))
-          const lastVisible = result.findLastIndex((d) => !d.split("/").some((p) => p.startsWith(".") && p.length > 1))
+          const firstHidden = result.findIndex((d) => Path.hidden(d))
+          const lastVisible = result.findLastIndex((d) => !Path.hidden(d))
           if (firstHidden >= 0 && lastVisible >= 0) {
             expect(firstHidden).toBeGreaterThan(lastVisible)
           }
@@ -782,6 +797,21 @@ describe("file/index Filesystem patterns", () => {
           const result = await File.search({ query: ".hidden", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
           expect(result[0]).toContain(".hidden")
+        },
+      })
+    })
+
+    test("query with a hidden prefix keeps hidden results first", async () => {
+      await using tmp = await setupSearchableRepo()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await File.init()
+
+          const result = await File.search({ query: "src/.", type: "directory" })
+          expect(result.length).toBeGreaterThan(0)
+          expect(result[0]).toContain("src/.cache")
         },
       })
     })

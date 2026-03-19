@@ -3,18 +3,23 @@ import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import { ServerConnection } from "./server"
 
+export type OS = "macos" | "windows" | "linux"
+
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
 
+type KnownOS = OS | "unknown"
+type ServerPath = { os?: OS | null }
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
 
   /** Desktop OS (Tauri only) */
-  os?: "macos" | "windows" | "linux"
+  os?: OS
 
   /** App version */
   version?: string
@@ -90,6 +95,20 @@ export type Platform = {
 }
 
 export type DisplayBackend = "auto" | "wayland"
+
+export function clientOS(platform?: Pick<Platform, "platform" | "os">): KnownOS {
+  if (platform?.platform === "desktop" && platform.os) return platform.os
+  if (typeof navigator !== "object") return "unknown"
+  const value = navigator.platform || navigator.userAgent
+  if (/Mac/i.test(value)) return "macos"
+  if (/Win/i.test(value)) return "windows"
+  if (/Linux/i.test(value)) return "linux"
+  return "unknown"
+}
+
+export function serverOS(path?: ServerPath | null, platform?: Pick<Platform, "platform" | "os">): KnownOS {
+  return path?.os ?? clientOS(platform)
+}
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",

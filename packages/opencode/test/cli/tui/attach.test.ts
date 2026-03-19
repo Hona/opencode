@@ -47,12 +47,12 @@ describe("tui attach", () => {
     seen.inst.length = 0
   })
 
-  async function call(dir?: string) {
+  async function call(dir?: string, url = "http://localhost:4096") {
     const { AttachCommand } = await import("../../../src/cli/cmd/tui/attach")
     const args: Parameters<NonNullable<typeof AttachCommand.handler>>[0] = {
       _: [],
       $0: "opencode",
-      url: "http://localhost:4096",
+      url,
       dir,
       continue: false,
       session: undefined,
@@ -88,6 +88,62 @@ describe("tui attach", () => {
       await call("remote/app")
       expect(seen.inst[0]).toBe(tmp.path)
       expect(seen.tui[0]).toBe("remote/app")
+    } finally {
+      process.chdir(cwd)
+      if (pwd === undefined) delete process.env.PWD
+      else process.env.PWD = pwd
+    }
+  })
+
+  test("keeps remote absolute directories off the local filesystem", async () => {
+    await using tmp = await tmpdir()
+    const cwd = process.cwd()
+    const pwd = process.env.PWD
+    const child = path.join(tmp.path, "child")
+
+    try {
+      await fs.mkdir(child)
+      process.chdir(tmp.path)
+      process.env.PWD = tmp.path
+      await call(child, "http://10.0.0.8:4096")
+      expect(seen.inst[0]).toBe(tmp.path)
+      expect(seen.tui[0]).toBe(child)
+    } finally {
+      process.chdir(cwd)
+      if (pwd === undefined) delete process.env.PWD
+      else process.env.PWD = pwd
+    }
+  })
+
+  test("passes remote UNC directories through without using them for the local instance", async () => {
+    await using tmp = await tmpdir()
+    const cwd = process.cwd()
+    const pwd = process.env.PWD
+
+    try {
+      process.chdir(tmp.path)
+      process.env.PWD = tmp.path
+      await call("file://server/share/code/../repo", "http://10.0.0.8:4096")
+      expect(seen.inst[0]).toBe(tmp.path)
+      expect(seen.tui[0]).toBe("\\\\server\\share\\repo")
+    } finally {
+      process.chdir(cwd)
+      if (pwd === undefined) delete process.env.PWD
+      else process.env.PWD = pwd
+    }
+  })
+
+  test("preserves undecodable remote file URI segments across the attach boundary", async () => {
+    await using tmp = await tmpdir()
+    const cwd = process.cwd()
+    const pwd = process.env.PWD
+
+    try {
+      process.chdir(tmp.path)
+      process.env.PWD = tmp.path
+      await call("file:///tmp/%ZZ/repo", "http://10.0.0.8:4096")
+      expect(seen.inst[0]).toBe(tmp.path)
+      expect(seen.tui[0]).toBe("/tmp/%ZZ/repo")
     } finally {
       process.chdir(cwd)
       if (pwd === undefined) delete process.env.PWD

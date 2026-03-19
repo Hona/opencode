@@ -3,8 +3,8 @@ import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
-import { Global } from "@/global"
 import { Installation } from "@/installation"
+import { Path } from "@/path/path"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 import { formatPath, splitPath } from "../../util/path"
@@ -26,6 +26,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
+  const platform = createMemo(() => Path.platform(sync.data.path.os))
 
   // Count connected and error MCP servers for collapsed header display
   const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
@@ -60,7 +61,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const kv = useKV()
   const dir = createMemo(() => {
     return formatPath(sync.data.path.directory || process.cwd(), {
-      home: Global.Path.home,
+      home: sync.data.path.home,
+      platform: platform(),
     })
   })
   const dirparts = createMemo(() => splitPath(dir()))
@@ -205,7 +207,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                         •
                       </text>
                       <text fg={theme.textMuted}>
-                        {item.id} {formatPath(item.root, { home: Global.Path.home })}
+                        {item.id} {formatPath(item.root, { home: sync.data.path.home, platform: platform() })}
                       </text>
                     </box>
                   )}

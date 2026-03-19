@@ -7,6 +7,15 @@ import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 import * as Dir from "../dir"
 
+function local(url: string) {
+  try {
+    const host = new URL(url).hostname
+    return host === "localhost" || host === "127.0.0.1" || host === "::1"
+  } catch {
+    return false
+  }
+}
+
 export const AttachCommand = cmd({
   command: "attach <url>",
   describe: "attach to a running opencode server",
@@ -45,6 +54,7 @@ export const AttachCommand = cmd({
     try {
       win32DisableProcessedInput()
       const root = Dir.cwd()
+      const nearby = local(args.url)
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -54,7 +64,8 @@ export const AttachCommand = cmd({
 
       const directory = (() => {
         if (!args.dir) return undefined
-        const next = Dir.dir(args.dir, { cwd: root })
+        const next = Dir.dir(args.dir, { cwd: root, remote: !nearby })
+        if (!nearby) return next
         try {
           process.chdir(next)
           return next
@@ -70,7 +81,7 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
       const config = await Instance.provide({
-        directory: directory && existsSync(directory) ? directory : root,
+        directory: nearby && directory && existsSync(directory) ? directory : root,
         fn: () => TuiConfig.get(),
       })
       await tui({

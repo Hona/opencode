@@ -4,12 +4,12 @@ import { Path } from "@/path/path"
 type Opts = {
   cwd?: string
   home?: string
-  platform?: NodeJS.Platform
+  platform?: NodeJS.Platform | "windows" | "macos" | "linux"
   relative?: boolean
 }
 
 function pf(opts: Opts = {}) {
-  return opts.platform ?? process.platform
+  return Path.platform(opts.platform)
 }
 
 function lib(platform: NodeJS.Platform) {

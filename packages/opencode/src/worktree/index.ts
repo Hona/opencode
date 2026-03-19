@@ -15,6 +15,7 @@ import { Process } from "../util/process"
 import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { Path } from "@/path/path"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -238,12 +239,12 @@ export namespace Worktree {
   }
 
   async function prune(root: string, entries: string[]) {
-    const base = await canonical(root)
+    const base = await Path.physical(root)
     await Promise.all(
       entries.map(async (entry) => {
-        const target = await canonical(path.resolve(root, entry))
-        if (target === base) return
-        if (!target.startsWith(`${base}${path.sep}`)) return
+        const target = await Path.physical(path.resolve(root, entry))
+        if (Path.eq(target, base)) return
+        if (!Path.contains(base, target)) return
         await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
       }),
     )
@@ -260,11 +261,8 @@ export namespace Worktree {
     return git(["clean", "-ffdx"], { cwd: root })
   }
 
-  async function canonical(input: string) {
-    const abs = path.resolve(input)
-    const real = await fs.realpath(abs).catch(() => abs)
-    const normalized = path.normalize(real)
-    return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  async function key(input: string) {
+    return Path.key(await Path.physical(input))
   }
 
   async function candidate(root: string, base?: string) {
@@ -436,7 +434,8 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = await canonical(input.directory)
+    const target = await Path.physical(input.directory)
+    const directory = Path.key(target)
     const locate = async (stdout: Uint8Array | undefined) => {
       const lines = outputText(stdout)
         .split("\n")
@@ -458,8 +457,7 @@ export namespace Worktree {
       return (async () => {
         for (const item of entries) {
           if (!item.path) continue
-          const key = await canonical(item.path)
-          if (key === directory) return item
+          if ((await key(item.path)) === directory) return item
         }
       })()
     }
@@ -490,10 +488,10 @@ export namespace Worktree {
     const entry = await locate(list.stdout)
 
     if (!entry?.path) {
-      const directoryExists = await exists(directory)
+      const directoryExists = await exists(target)
       if (directoryExists) {
-        await stop(directory)
-        await clean(directory)
+        await stop(target)
+        await clean(target)
       }
       return true
     }
@@ -534,8 +532,8 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = await canonical(input.directory)
-    const primary = await canonical(Instance.worktree)
+    const directory = await key(input.directory)
+    const primary = await key(Instance.worktree)
     if (directory === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
@@ -565,8 +563,7 @@ export namespace Worktree {
     const entry = await (async () => {
       for (const item of entries) {
         if (!item.path) continue
-        const key = await canonical(item.path)
-        if (key === directory) return item
+        if ((await key(item.path)) === directory) return item
       }
     })()
     if (!entry?.path) {

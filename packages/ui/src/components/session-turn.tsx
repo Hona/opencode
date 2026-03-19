@@ -4,7 +4,7 @@ import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { getDirectory, getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getRelativeDisplayPath, pathEqual, pathKey } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -467,7 +467,7 @@ export function SessionTurn(
                             <For each={diffs()}>
                               {(diff) => {
                                 const active = createMemo(() => expanded().some((item) => pathEqual(item, diff.file)))
-                                const dir = createMemo(() => getDirectory(diff.file))
+                                const dir = createMemo(() => getDirectory(getRelativeDisplayPath(diff.file, data.directory)))
                                 const [visible, setVisible] = createSignal(false)
 
                                 createEffect(

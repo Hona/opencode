@@ -58,27 +58,24 @@ export const ListTool = Tool.define("list", {
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []
     for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, signal: ctx.abort })) {
-      files.push(file)
+      files.push(String(Path.repo(file)))
       if (files.length >= LIMIT) break
     }
 
-    // Build directory structure
-    const dirs = new Set<string>()
+    const dirs = new Set<string>(["."])
     const filesByDir = new Map<string, string[]>()
 
     for (const file of files) {
-      const dir = path.dirname(file)
-      const parts = dir === "." ? [] : dir.split("/")
-
-      // Add all parent directories
-      for (let i = 0; i <= parts.length; i++) {
-        const dirPath = i === 0 ? "." : parts.slice(0, i).join("/")
-        dirs.add(dirPath)
+      const dir = String(Path.repoParent(file))
+      let current = dir
+      while (true) {
+        dirs.add(current)
+        if (current === ".") break
+        current = String(Path.repoParent(current))
       }
 
-      // Add file to its directory
       if (!filesByDir.has(dir)) filesByDir.set(dir, [])
-      filesByDir.get(dir)!.push(path.basename(file))
+      filesByDir.get(dir)!.push(Path.repoName(file))
     }
 
     function renderDir(dirPath: string, depth: number): string {
@@ -86,20 +83,18 @@ export const ListTool = Tool.define("list", {
       let output = ""
 
       if (depth > 0) {
-        output += `${indent}${path.basename(dirPath)}/\n`
+        output += `${indent}${Path.repoName(dirPath)}/\n`
       }
 
       const childIndent = "  ".repeat(depth + 1)
       const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
+        .filter((d) => d !== "." && d !== dirPath && String(Path.repoParent(d)) === dirPath)
         .sort()
 
-      // Render subdirectories first
       for (const child of children) {
         output += renderDir(child, depth + 1)
       }
 
-      // Render files
       const files = filesByDir.get(dirPath) || []
       for (const file of files.sort()) {
         output += `${childIndent}${file}\n`
@@ -108,7 +103,8 @@ export const ListTool = Tool.define("list", {
       return output
     }
 
-    const output = `${searchPath}/\n` + renderDir(".", 0)
+    const root = searchPath.endsWith(path.sep) ? searchPath : searchPath + path.sep
+    const output = `${root}\n` + renderDir(".", 0)
 
     return {
       title: String(Path.rel(Instance.worktree, searchPath)),

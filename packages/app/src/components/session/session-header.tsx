@@ -14,7 +14,7 @@ import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePlatform } from "@/context/platform"
+import { serverOS, usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -44,7 +44,6 @@ const OPEN_APPS = [
 ] as const
 
 type OpenApp = (typeof OPEN_APPS)[number]
-type OS = "macos" | "windows" | "linux" | "unknown"
 
 const MAC_APPS = [
   {
@@ -111,16 +110,6 @@ const LINUX_APPS = [
   },
 ] as const
 
-const detectOS = (platform: ReturnType<typeof usePlatform>): OS => {
-  if (platform.platform === "desktop" && platform.os) return platform.os
-  if (typeof navigator !== "object") return "unknown"
-  const value = navigator.platform || navigator.userAgent
-  if (/Mac/i.test(value)) return "macos"
-  if (/Win/i.test(value)) return "windows"
-  if (/Linux/i.test(value)) return "linux"
-  return "unknown"
-}
-
 const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown) => {
   showToast({
     variant: "error",
@@ -151,7 +140,10 @@ export function SessionHeader() {
     return getFilename(projectDirectory())
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
-  const os = createMemo(() => detectOS(platform))
+  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
+  const os = createMemo(() =>
+    serverOS(sync.data.path.directory ? sync.data.path : undefined, canOpen() ? platform : undefined),
+  )
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -170,7 +162,7 @@ export function SessionHeader() {
   })
 
   createEffect(() => {
-    if (platform.platform !== "desktop") return
+    if (!canOpen()) return
     if (!platform.checkAppExists) return
 
     const list = apps()
@@ -214,7 +206,6 @@ export function SessionHeader() {
     app: undefined as OpenApp | undefined,
   })
 
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(
     () =>
       options().find((o) => o.id === prefs.app) ??

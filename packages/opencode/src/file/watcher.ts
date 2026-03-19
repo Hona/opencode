@@ -11,7 +11,6 @@ import { Cause, Effect, Layer, ServiceMap } from "effect"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { readdir } from "fs/promises"
-import path from "path"
 import z from "zod"
 import { Config } from "../config/config"
 import { FileIgnore } from "./ignore"
@@ -53,10 +52,7 @@ export namespace FileWatcher {
   }
 
   function protecteds(dir: string) {
-    return Protected.paths().filter((item) => {
-      const rel = path.relative(dir, item)
-      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
-    })
+    return Protected.paths().filter((item) => Path.contains(dir, item) && !Path.eq(dir, item))
   }
 
   export const hasNativeBinding = () => !!watcher()

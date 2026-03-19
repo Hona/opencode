@@ -10,8 +10,8 @@ export function cwd(input?: string) {
 }
 
 export function dir(input: string, opts: Opts = {}) {
-  const root = cwd(opts.cwd)
-  const next = Path.pretty(input, { cwd: root })
-  if (!opts.remote || Path.isAbsolute(input)) return next
-  return input
+  if (!opts.remote) return Path.pretty(input, { cwd: cwd(opts.cwd) })
+  const pf = Path.guess(input)
+  if (!pf) return input
+  return Path.pretty(input, { platform: pf })
 }

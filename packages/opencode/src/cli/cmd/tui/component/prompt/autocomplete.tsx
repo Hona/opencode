@@ -1,5 +1,4 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
-import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
@@ -11,6 +10,7 @@ import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
+import { Path } from "@/path/path"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 
@@ -238,21 +238,28 @@ export function Autocomplete(props: {
           const aScore = frecency.getFrecency(a)
           const bScore = frecency.getFrecency(b)
           if (aScore !== bScore) return bScore - aScore
-          const aDepth = a.split("/").length
-          const bDepth = b.split("/").length
+          const aDepth = Path.repoDepth(a)
+          const bDepth = Path.repoDepth(b)
           if (aDepth !== bDepth) return aDepth - bDepth
           return a.localeCompare(b)
         })
 
-        const width = props.anchor().width - 4
-        options.push(
-          ...sortedFiles.map((item): AutocompleteOption => {
-            const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
-            const fullPath = `${baseDir}/${item}`
-            const urlObj = pathToFileURL(fullPath)
-            let filename = item
-            if (lineRange && !item.endsWith("/")) {
-              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+          const width = props.anchor().width - 4
+          options.push(
+            ...sortedFiles.map((item): AutocompleteOption => {
+              const urlObj = new URL(
+                String(
+                  Path.uri(item, {
+                    cwd: sync.data.path.directory || process.cwd(),
+                    platform: sync.data.path.os,
+                  }),
+                ),
+              )
+              const key = String(Path.repo(item))
+              const isDir = Path.repoIsDir(key)
+            let filename = key
+            if (lineRange && !isDir) {
+              filename = `${key}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
@@ -260,12 +267,11 @@ export function Autocomplete(props: {
             }
             const url = urlObj.href
 
-            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
               isDirectory: isDir,
-              path: item,
+              path: key,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -279,7 +285,7 @@ export function Autocomplete(props: {
                       end: 0,
                       value: "",
                     },
-                    path: item,
+                    path: key,
                   },
                 })
               },
@@ -461,8 +467,8 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const displayText = selected.display.trimEnd()
-    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+    const value = (selected.value ?? selected.display).trimEnd()
+    const path = value.startsWith("@") ? value.slice(1) : value
 
     input.cursorOffset = store.index
     const startCursor = input.logicalCursor

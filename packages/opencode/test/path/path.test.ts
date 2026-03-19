@@ -32,6 +32,18 @@ describe("path", () => {
         expect(String(Path.pretty(item.path, { platform: "win32" }))).toBe(file)
       }
     })
+
+    test("normalizes Windows UNC alias forms", () => {
+      const file = "\\\\server\\share\\tmp\\file.txt"
+      for (const input of [file, "//server/share/tmp/file.txt", "file://server/share/tmp/file.txt"]) {
+        expect(String(Path.pretty(input, { platform: "win32" }))).toBe(file)
+      }
+    })
+
+    test("treats localhost file URIs as local files", () => {
+      expect(String(Path.pretty("file://localhost/C:/tmp/file.txt", { platform: "win32" }))).toBe("C:\\tmp\\file.txt")
+      expect(String(Path.pretty("file://localhost/tmp/file.txt", { platform: "linux" }))).toBe("/tmp/file.txt")
+    })
   })
 
   describe("isAbsolute()", () => {
@@ -44,6 +56,12 @@ describe("path", () => {
       for (const item of alias("C:\\Users\\Dev\\tmp\\file.txt")) {
         expect(Path.isAbsolute(item.path, { platform: "win32" })).toBe(true)
       }
+    })
+
+    test("treats UNC paths as absolute on Windows", () => {
+      expect(Path.isAbsolute("\\\\server\\share\\repo", { platform: "win32" })).toBe(true)
+      expect(Path.isAbsolute("//server/share/repo", { platform: "win32" })).toBe(true)
+      expect(Path.isAbsolute("file://server/share/repo", { platform: "win32" })).toBe(true)
     })
 
     test("keeps relative inputs relative", () => {
@@ -70,6 +88,16 @@ describe("path", () => {
         expect(Path.match(item.path, key, { platform: "win32" })).toBe(true)
       }
     })
+
+    test("matches UNC alias forms on Windows", () => {
+      const file = "\\\\server\\share\\tmp\\file.txt"
+      const key = Path.key(file, { platform: "win32" })
+      for (const input of ["//server/share/tmp/file.txt", "file://server/share/tmp/file.txt"]) {
+        expect(Path.key(input, { platform: "win32" })).toBe(key)
+        expect(Path.eq(file, input, { platform: "win32" })).toBe(true)
+        expect(Path.match(input, key, { platform: "win32" })).toBe(true)
+      }
+    })
   })
 
   describe("contains()", () => {
@@ -85,6 +113,18 @@ describe("path", () => {
           expect(Path.contains(dir.path, file.path, { platform: "win32" })).toBe(true)
         }
       }
+    })
+
+    test("matches UNC parents across alias forms on Windows", () => {
+      const dir = "\\\\server\\share\\repo"
+      for (const file of ["//server/share/repo/src/file.ts", "file://server/share/repo/src/file.ts"]) {
+        expect(Path.contains(dir, file, { platform: "win32" })).toBe(true)
+      }
+    })
+
+    test("rejects Windows cross-drive and cross-share mixes", () => {
+      expect(Path.contains("C:\\repo", "D:\\repo\\file.ts", { platform: "win32" })).toBe(false)
+      expect(Path.contains("\\\\server\\share\\repo", "\\\\server\\other\\repo\\file.ts", { platform: "win32" })).toBe(false)
     })
 
     test("rejects absolute-relative path mixes", () => {
@@ -103,6 +143,10 @@ describe("path", () => {
         expect(Path.externalGlob(item.path, { platform: "win32" })).toBe("C:/Users/Dev/tmp/*")
       }
     })
+
+    test("normalizes UNC directory globs", () => {
+      expect(Path.externalGlob("\\\\server\\share\\tmp\\", { platform: "win32" })).toBe("//server/share/tmp/*")
+    })
   })
 
   describe("canonical()", () => {
@@ -116,6 +160,20 @@ describe("path", () => {
         expect(Path.canonical(item.path, { platform: "win32" })).toBe("C:/Users/Dev/tmp/file.txt")
         expect(Path.canonical(item.glob, { platform: "win32" })).toBe("C:/Users/Dev/tmp/file.txt/*")
       }
+    })
+
+    test("canonicalizes UNC alias paths to posix form", () => {
+      expect(Path.canonical("\\\\server\\share\\tmp\\file.txt", { platform: "win32" })).toBe("//server/share/tmp/file.txt")
+      expect(Path.canonical("file://server/share/tmp/file.txt", { platform: "win32" })).toBe("//server/share/tmp/file.txt")
+    })
+  })
+
+  describe("guess()", () => {
+    test("detects remote Windows roots across slash variants", () => {
+      expect(Path.guess("C:\\repo\\file.ts")).toBe("win32")
+      expect(Path.guess("\\\\server\\share\\repo")).toBe("win32")
+      expect(Path.guess("/mnt/c/repo/file.ts")).toBe("win32")
+      expect(Path.guess("/srv/repo/file.ts")).toBe("linux")
     })
   })
 
@@ -133,6 +191,21 @@ describe("path", () => {
       expect(String(uri)).toBe("file:///C:/tmp/dir/a%20b.txt")
       expect(String(Path.fromURI(uri, { platform: "win32" }))).toBe(file)
     })
+
+    test("round-trips Windows UNC file URIs", () => {
+      const file = "\\\\server\\share\\tmp\\a b.txt"
+      const uri = Path.uri(file, { platform: "win32" })
+      expect(String(uri)).toBe("file://server/share/tmp/a%20b.txt")
+      expect(String(Path.fromURI(uri, { platform: "win32" }))).toBe(file)
+    })
+
+    test("resolves repo-relative Windows paths with Windows URI rules", () => {
+      expect(String(Path.uri("src/file.ts", { cwd: "C:\\repo", platform: "windows" }))).toBe("file:///C:/repo/src/file.ts")
+    })
+
+    test("preserves undecodable URI segments", () => {
+      expect(String(Path.fromURI("file:///tmp/%ZZ/file.txt", { platform: "linux" }))).toBe("/tmp/%ZZ/file.txt")
+    })
   })
 
   describe("posix()", () => {
@@ -148,6 +221,55 @@ describe("path", () => {
   describe("rel()", () => {
     test("returns branded relative paths", () => {
       expect(String(Path.rel("/repo", "/repo/src/file.ts", { platform: "linux" }))).toBe("src/file.ts")
+    })
+
+    test("falls back to the absolute target across Windows drives", () => {
+      expect(String(Path.rel("C:\\repo", "D:\\repo\\file.ts", { platform: "win32" }))).toBe("D:\\repo\\file.ts")
+    })
+  })
+
+  describe("repo()", () => {
+    test("normalizes repo keys to forward slashes", () => {
+      expect(String(Path.repo("src\\nested\\file.ts"))).toBe("src/nested/file.ts")
+      expect(String(Path.repo("./src//nested/"))).toBe("src/nested/")
+    })
+
+    test("preserves directory markers", () => {
+      expect(Path.repoIsDir("src\\nested\\")).toBe(true)
+      expect(Path.repoIsDir("src\\nested")).toBe(false)
+    })
+  })
+
+  describe("repoParent()", () => {
+    test("returns repo parents with root dot", () => {
+      expect(String(Path.repoParent("src\\nested\\file.ts"))).toBe("src/nested")
+      expect(String(Path.repoParent("src\\nested\\"))).toBe("src")
+      expect(String(Path.repoParent("file.ts"))).toBe(".")
+    })
+  })
+
+  describe("repoName()", () => {
+    test("returns repo basenames for files and directories", () => {
+      expect(Path.repoName("src\\nested\\file.ts")).toBe("file.ts")
+      expect(Path.repoName("src\\nested\\")).toBe("nested")
+    })
+  })
+
+  describe("repoDepth()", () => {
+    test("counts repo path segments", () => {
+      expect(Path.repoDepth("src\\nested\\file.ts")).toBe(3)
+      expect(Path.repoDepth("src\\nested\\")).toBe(2)
+      expect(Path.repoDepth(".")).toBe(0)
+    })
+  })
+
+  describe("hidden()", () => {
+    test("detects hidden segments across slash variants", () => {
+      expect(Path.hidden(".env")).toBe(true)
+      expect(Path.hidden("src/.git/config")).toBe(true)
+      expect(Path.hidden("src/.")).toBe(true)
+      expect(Path.hidden("src\\.cache\\tmp")).toBe(true)
+      expect(Path.hidden("src/visible/file.ts")).toBe(false)
     })
   })
 

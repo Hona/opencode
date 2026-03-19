@@ -49,6 +49,12 @@ describe("path display helpers", () => {
     expect(getParentPath("\\\\server\\share")).toBe("//server/share")
   })
 
+  test("keeps windows root forms stable for lexical navigation", () => {
+    expect(getPathRoot("C:")).toBe("C:/")
+    expect(getParentPath("C:")).toBe("C:/")
+    expect(getParentPath("C:/")).toBe("C:/")
+  })
+
   test("builds picker display text with tilde and native separators", () => {
     expect(getPathDisplay("/Users/dev/repo", "", "/Users/dev")).toBe("~/repo")
     expect(getPathDisplaySeparator("~/repo", "/Users/dev")).toBe("/")
@@ -79,17 +85,22 @@ describe("path display helpers", () => {
   test("relativizes display paths from the workspace root", () => {
     expect(getRelativeDisplayPath("/repo/src/app.ts", "/repo")).toBe("/src/app.ts")
     expect(getRelativeDisplayPath("C:\\repo\\src\\", "C:\\repo")).toBe("\\src\\")
+    expect(getRelativeDisplayPath("src/app.ts", "C:\\repo")).toBe("src\\app.ts")
+    expect(getRelativeDisplayPath("src\\app.ts", "/repo")).toBe("src/app.ts")
+    expect(getRelativeDisplayPath("C:/other/app.ts", "C:\\repo")).toBe("C:\\other\\app.ts")
     expect(getRelativeDisplayPath("/other/app.ts", "/repo")).toBe("/other/app.ts")
   })
 
   test("resolves and relativizes workspace paths across platforms", () => {
     expect(resolveWorkspacePath("/repo", "src/app.ts")).toBe("/repo/src/app.ts")
     expect(resolveWorkspacePath("C:\\repo", "src\\app.ts")).toBe("C:\\repo\\src\\app.ts")
+    expect(resolveWorkspacePath("\\\\server\\share\\repo", "src\\app.ts")).toBe("\\\\server\\share\\repo\\src\\app.ts")
     expect(resolveWorkspacePath("/repo", "/tmp/app.ts")).toBe("/tmp/app.ts")
 
     expect(getWorkspaceRelativePath("/repo/src/app.ts", "/repo")).toBe("src/app.ts")
     expect(getWorkspaceRelativePath("C:/repo/src/app.ts", "C:\\repo")).toBe("src/app.ts")
     expect(getWorkspaceRelativePath("c:\\repo\\src\\app.ts", "C:\\repo")).toBe("src\\app.ts")
+    expect(getWorkspaceRelativePath("//server/share/repo/src/app.ts", "\\\\server\\share\\repo")).toBe("src/app.ts")
     expect(getWorkspaceRelativePath("/tmp/app.ts", "/repo")).toBe("/tmp/app.ts")
   })
 
@@ -98,6 +109,7 @@ describe("path display helpers", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")
     expect(decodeFilePath("src/file%23name%20here.ts")).toBe("src/file#name here.ts")
+    expect(decodeFilePath("src/%ZZ/file.ts")).toBe("src/%ZZ/file.ts")
     expect(unquoteGitPath('"a/\\303\\251.txt"')).toBe("a/\u00e9.txt")
     expect(unquoteGitPath('"plain\\nname"')).toBe("plain\nname")
   })

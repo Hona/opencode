@@ -18,6 +18,13 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type Project = {
   id: string
   worktree: string
@@ -45,13 +52,6 @@ export type Project = {
 export type EventProjectUpdated = {
   type: "project.updated"
   properties: Project
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
 }
 
 export type EventServerInstanceDisposed = {
@@ -195,6 +195,7 @@ export type EventLspClientDiagnostics = {
   properties: {
     serverID: string
     path: string
+    pathKey: string
   }
 }
 
@@ -960,8 +961,8 @@ export type EventWorktreeFailed = {
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
-  | EventProjectUpdated
   | EventFileEdited
+  | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventFileWatcherUpdated
   | EventPermissionAsked
@@ -1881,6 +1882,7 @@ export type McpStatus =
   | McpStatusNeedsClientRegistration
 
 export type Path = {
+  os: "macos" | "windows" | "linux"
   home: string
   state: string
   config: string

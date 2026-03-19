@@ -31,4 +31,37 @@ describe("cli dir", () => {
 
     expect(dir(String(Path.uri(child)), { remote: true })).toBe(child)
   })
+
+  test("normalizes remote UNC file uris without using the local os", () => {
+    expect(dir("file://server/share/code/../repo", { remote: true })).toBe("\\\\server\\share\\repo")
+  })
+
+  test("treats localhost remote file uris as local roots", () => {
+    expect(dir("file://localhost/C:/Users/me/code/../repo", { remote: true })).toBe("C:\\Users\\me\\repo")
+    expect(dir("file://localhost/srv/code/../repo", { remote: true })).toBe("/srv/repo")
+  })
+
+  test("preserves undecodable segments in remote file uris", () => {
+    expect(dir("file:///tmp/%ZZ/repo", { remote: true })).toBe("/tmp/%ZZ/repo")
+  })
+
+  test("normalizes remote windows absolute paths without using the local os", () => {
+    expect(dir("/C:/Users/me/code/../repo", { remote: true })).toBe("C:\\Users\\me\\repo")
+  })
+
+  test("normalizes remote native windows absolute paths without using the local os", () => {
+    expect(dir("C:\\Users\\me\\code\\..\\repo", { remote: true })).toBe("C:\\Users\\me\\repo")
+  })
+
+  test("normalizes remote windows drive roots without using the local os", () => {
+    expect(dir("/C:", { remote: true })).toBe("C:\\")
+  })
+
+  test("normalizes remote UNC backslash paths without using the local os", () => {
+    expect(dir("\\\\server\\share\\code\\..\\repo", { remote: true })).toBe("\\\\server\\share\\repo")
+  })
+
+  test("preserves remote posix absolute paths without using the local os", () => {
+    expect(dir("/srv/code/../repo", { remote: true })).toBe("/srv/repo")
+  })
 })

@@ -9,9 +9,10 @@ import { IconButton } from "./icon-button"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
+import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getRelativeDisplayPath, pathEqual, pathKey } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
@@ -137,6 +138,7 @@ const key = (path: string) => pathKey(path) || path
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
+  const data = useData()
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
@@ -290,7 +292,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                     let wrapper: HTMLDivElement | undefined
 
                     const item = createMemo(() => diffs().get(key(file))!)
-                    const dir = createMemo(() => getDirectory(file))
+                    const dir = createMemo(() => getDirectory(getRelativeDisplayPath(file, data.directory)))
 
                     const expanded = createMemo(() => open().some((item) => pathEqual(item, file)))
                     const force = () => !!store.force[file]

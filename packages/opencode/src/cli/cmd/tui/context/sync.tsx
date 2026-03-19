@@ -16,6 +16,7 @@ import type {
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
+  Path,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -27,7 +28,6 @@ import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
-import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
@@ -101,7 +101,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
-      path: { state: "", config: "", worktree: "", directory: "" },
+      path: {
+        os: process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux",
+        home: "",
+        state: "",
+        config: "",
+        worktree: "",
+        directory: "",
+      },
       workspaceList: [],
     })
 

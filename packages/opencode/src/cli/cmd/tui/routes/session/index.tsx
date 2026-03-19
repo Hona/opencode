@@ -16,6 +16,7 @@ import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { Path } from "@/path/path"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
@@ -1780,6 +1781,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
+  const platform = createMemo(() => Path.platform(sync.data.path.os))
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
@@ -1792,11 +1794,15 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const base = sync.data.path.directory
     if (!base) return undefined
 
-    const absolute = path.resolve(base, workdir)
+    const absolute = Path.pretty(workdir, {
+      cwd: base,
+      platform: platform(),
+    })
     if (absolute === base) return undefined
 
     return formatPath(absolute, {
-      home: Global.Path.home,
+      home: sync.data.path.home,
+      platform: platform(),
     })
   })
 

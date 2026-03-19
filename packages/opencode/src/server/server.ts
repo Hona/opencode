@@ -52,6 +52,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  const os = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"
 
   export const Default = lazy(() => createApp({}))
 
@@ -289,6 +290,7 @@ export namespace Server {
                   schema: resolver(
                     z
                       .object({
+                        os: z.enum(["macos", "windows", "linux"]),
                         home: z.string(),
                         state: z.string(),
                         config: z.string(),
@@ -306,6 +308,7 @@ export namespace Server {
         }),
         async (c) => {
           return c.json({
+            os,
             home: Global.Path.home,
             state: Global.Path.state,
             config: Global.Path.config,

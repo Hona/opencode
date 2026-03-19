@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
-import { Global } from "@/global"
+import { Path } from "@/path/path"
 import { formatPath, plugin } from "../util/path"
 
 export type DialogStatusProps = {}
@@ -12,6 +12,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const platform = createMemo(() => Path.platform(sync.data.path.os))
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -92,7 +93,10 @@ export function DialogStatus() {
                   •
                 </text>
                 <text fg={theme.text} wrapMode="word">
-                  <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{formatPath(item.root, { home: Global.Path.home })}</span>
+                  <b>{item.id}</b>{" "}
+                  <span style={{ fg: theme.textMuted }}>
+                    {formatPath(item.root, { home: sync.data.path.home, platform: platform() })}
+                  </span>
                 </text>
               </box>
             )}

@@ -1,3 +1,12 @@
+/**
+ * UI/string-oriented path helpers shared across packages.
+ *
+ * This file normalizes separators, display text, and lightweight comparisons,
+ * but it is not the source of truth for filesystem-aware resolution,
+ * `file://` parsing, or Windows alias handling. Those semantics live in
+ * `packages/opencode/src/path/path.ts`.
+ */
+
 export function getFilename(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[\/\\]+$/, "")
@@ -48,6 +57,13 @@ const trailing = (path: string, home: string) => {
   const separator = getPathDisplaySeparator(path, home)
   if (path.endsWith(separator)) return path
   return path + separator
+}
+
+const resep = (path: string, separator: "/" | "\\", trailing: boolean) => {
+  const text = normalizePath(path).replace(/\/+$/, "")
+  if (!text) return trailing ? separator : ""
+  const value = separator === "/" ? text : text.replaceAll("/", "\\")
+  return trailing ? value + separator : value
 }
 
 export function normalizePath(path: string) {
@@ -300,17 +316,18 @@ export function getPathScope(input: string, start: string | undefined, home: str
 export function getRelativeDisplayPath(path: string, root?: string) {
   if (!path) return ""
   if (!root) return path
-  if (root === "/" || root === "\\") return path
+  if (root === "/" || root === "\\") return resep(path, getPathSeparator(root), /[\\/]+$/.test(path))
 
-  const separator = getPathSeparator(path || root)
+  const separator = getPathSeparator(root)
   const trailing = /[\\/]+$/.test(path)
   const full = normalizePath(path).replace(/\/+$/, "")
   const base = normalizePath(root).replace(/\/+$/, "")
-  if (!base) return path
+  if (!base) return resep(path, separator, trailing)
+  if (!getPathRoot(full)) return resep(full, separator, trailing)
   if (fold(full) === fold(base)) return trailing ? separator : ""
 
   const prefix = `${base}/`
-  if (!fold(full).startsWith(fold(prefix))) return path
+  if (!fold(full).startsWith(fold(prefix))) return resep(full, separator, trailing)
 
   const relative = full.slice(base.length).replace(/^\/+/, "")
   if (!relative) return trailing ? separator : ""

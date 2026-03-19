@@ -41,6 +41,7 @@ test("server ingress keeps alias directories", async () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
+      os: process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux",
       directory: alias,
     })
   } finally {

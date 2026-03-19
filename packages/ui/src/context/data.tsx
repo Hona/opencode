@@ -1,8 +1,9 @@
-import type { Message, Session, Part, FileDiff, SessionStatus, ProviderListResponse } from "@opencode-ai/sdk/v2"
+import type { FileDiff, Message, Part, Path, ProviderListResponse, Session, SessionStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
+  path?: Path
   provider?: ProviderListResponse
   session: Session[]
   session_status: {
@@ -40,6 +41,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       get directory() {
         return props.directory
+      },
+      get path() {
+        return props.data.path
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

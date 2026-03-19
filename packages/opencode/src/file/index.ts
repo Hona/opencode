@@ -331,17 +331,12 @@ export namespace File {
     return ["image", "audio", "video", "font", "model", "multipart"].includes(top)
   }
 
-  const hidden = (item: string) => {
-    const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
-    return normalized.split("/").some((part) => part.startsWith(".") && part.length > 1)
-  }
-
   const sortHiddenLast = (items: string[], prefer: boolean) => {
     if (prefer) return items
     const visible: string[] = []
     const hiddenItems: string[] = []
     for (const item of items) {
-      if (hidden(item)) hiddenItems.push(item)
+      if (Path.hidden(item)) hiddenItems.push(item)
       else visible.push(item)
     }
     return [...visible, ...hiddenItems]
@@ -389,21 +384,19 @@ export namespace File {
             const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
             const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
             const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-            const top = await fs.promises
-              .readdir(instance.directory, { withFileTypes: true })
-              .catch(() => [] as fs.Dirent[])
+            const top = await fs.promises.readdir(instance.directory, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
 
             for (const entry of top) {
               if (!entry.isDirectory()) continue
               if (shouldIgnoreName(entry.name)) continue
-              dirs.add(entry.name + "/")
+              dirs.add(String(Path.repo(`${entry.name}/`)))
 
               const base = path.join(instance.directory, entry.name)
               const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
               for (const child of children) {
                 if (!child.isDirectory()) continue
                 if (shouldIgnoreNested(child.name)) continue
-                dirs.add(entry.name + "/" + child.name + "/")
+                dirs.add(String(Path.repo(`${entry.name}/${child.name}/`)))
               }
             }
 
@@ -411,16 +404,18 @@ export namespace File {
           } else {
             const seen = new Set<string>()
             for await (const file of Ripgrep.files({ cwd: instance.directory })) {
-              next.files.push(file)
-              let current = file
-              while (true) {
-                const dir = path.dirname(current)
-                if (dir === ".") break
-                if (dir === current) break
-                current = dir
-                if (seen.has(dir)) continue
-                seen.add(dir)
-                next.dirs.push(dir + "/")
+              const key = String(Path.repo(file))
+              next.files.push(key)
+              let dir = String(Path.repoParent(key))
+              while (dir !== ".") {
+                const item = String(Path.repo(`${dir}/`))
+                if (seen.has(item)) {
+                  dir = String(Path.repoParent(dir))
+                  continue
+                }
+                seen.add(item)
+                next.dirs.push(item)
+                dir = String(Path.repoParent(dir))
               }
             }
           }
@@ -531,10 +526,10 @@ export namespace File {
           }
 
           return changed.map((item) => {
-            const full = path.isAbsolute(item.path) ? item.path : path.join(instance.directory, item.path)
+            const full = Path.pretty(item.path, { cwd: instance.directory })
             return {
               ...item,
-              path: path.relative(instance.directory, full),
+              path: String(Path.repo(Path.rel(instance.directory, full))),
             }
           })
         })
@@ -647,14 +642,14 @@ export namespace File {
           for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
             if (exclude.includes(entry.name)) continue
             const absolute = path.join(resolved, entry.name)
-            const file = path.relative(instance.directory, absolute)
+            const file = String(Path.repo(Path.rel(instance.directory, absolute)))
             const type = entry.isDirectory() ? "directory" : "file"
             nodes.push({
               name: entry.name,
               path: file,
               absolute,
               type,
-              ignored: ignored(type === "directory" ? file + "/" : file),
+              ignored: ignored(type === "directory" ? String(Path.repo(`${file}/`)) : file),
             })
           }
 
@@ -678,7 +673,7 @@ export namespace File {
           log.info("search", { query, kind })
 
           const result = getFiles()
-          const preferHidden = query.startsWith(".") || query.includes("/.")
+          const preferHidden = query.startsWith(".") || Path.hidden(query)
 
           if (!query) {
             if (kind === "file") return result.files.slice(0, limit)

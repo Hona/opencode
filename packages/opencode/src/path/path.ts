@@ -3,16 +3,19 @@ import { readdir, realpath } from "fs/promises"
 import os from "os"
 import path from "path"
 
-import { FileURI, PathKey, PosixPath, PrettyPath, RelativePath } from "./schema"
+import { FileURI, PathKey, PosixPath, PrettyPath, RelativePath, RepoPath } from "./schema"
+
+type OS = "windows" | "macos" | "linux"
+type Platform = NodeJS.Platform | OS
 
 type Opts = {
   cwd?: string
-  platform?: NodeJS.Platform
+  platform?: Platform
 }
 
 type HomeOpts = {
   home?: string
-  platform?: NodeJS.Platform
+  platform?: Platform
 }
 
 type DisplayOpts = Opts & {
@@ -20,10 +23,34 @@ type DisplayOpts = Opts & {
   relative?: boolean
 }
 
+/**
+ * Path exposes a few intentionally different string forms instead of one
+ * "normalized" answer.
+ *
+ * - `pretty` is the main absolute, native-separator form used inside the app.
+ * - `key` is the same path folded for equality and map/set lookups.
+ * - `canonical` keeps repo and protocol-facing values stable by using POSIX form
+ *   for Windows absolute paths while leaving relative inputs alone.
+ * - `physical` asks the filesystem for the real on-disk path and best-effort
+ *   casing, even when some trailing segments do not exist yet.
+ *
+ * Windows support also accepts common drive aliases like `/c/...`,
+ * `/cygdrive/c/...`, `/mnt/c/...`, plus `file://` URIs, so callers can feed in
+ * editor, shell, and URI-derived values without pre-normalizing them first.
+ */
+
 type Lib = typeof path.posix
 
-function pf(opts?: { platform?: NodeJS.Platform }) {
-  return opts?.platform ?? process.platform
+function platformText(input?: Platform) {
+  if (!input) return process.platform
+  if (input === "windows") return "win32"
+  if (input === "macos") return "darwin"
+  if (input === "linux") return "linux"
+  return input
+}
+
+function pf(opts?: { platform?: Platform }) {
+  return platformText(opts?.platform)
 }
 
 function lib(platform: NodeJS.Platform): Lib {
@@ -57,11 +84,27 @@ function raw(input: string, platform: NodeJS.Platform) {
 function winabs(input: string) {
   return (
     input.startsWith("file://") ||
-    /^[a-zA-Z]:/.test(input) ||
+    /^[\\/]{2}[^\\/]/.test(input) ||
+    /^[a-zA-Z]:(?:[\\/]|$)/.test(input) ||
     /^\/([a-zA-Z]:|[a-zA-Z])(?:[\\/]|$)/.test(input) ||
     /^\/cygdrive\/[a-zA-Z](?:[\\/]|$)/.test(input) ||
     /^\/mnt\/[a-zA-Z](?:[\\/]|$)/.test(input)
   )
+}
+
+function guessText(input: string): NodeJS.Platform | undefined {
+  if (input.startsWith("file://")) {
+    try {
+      const url = new URL(input)
+      const host = url.hostname.toLowerCase()
+      if (host && host !== "localhost") return "win32"
+      if (/^\/([A-Za-z]:|[A-Za-z])(?:[\/]|$)/.test(url.pathname)) return "win32"
+      if (/^\/(?:cygdrive|mnt)\/[A-Za-z](?:[\/]|$)/.test(url.pathname)) return "win32"
+      return "linux"
+    } catch {}
+  }
+  if (winabs(input)) return "win32"
+  if (input.startsWith("/")) return "linux"
 }
 
 function base(input: string, platform: NodeJS.Platform) {
@@ -120,14 +163,51 @@ function encode(input: string) {
   return encodeURIComponent(input)
 }
 
+function decode(input: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
+  }
+}
+
+function repoText(input: string) {
+  const dir = /[\\/]$/.test(input)
+  const text = path.posix.normalize(input.replaceAll("\\", "/") || ".").replace(/^(?:\.\/)+/, "")
+  if (text === ".") return "."
+  const clean = text.replace(/\/+$/, "")
+  return dir ? `${clean}/` : clean
+}
+
+function repoLeaf(input: string) {
+  const text = repoText(input).replace(/\/+$/, "")
+  if (text === ".") return "."
+  return path.posix.basename(text)
+}
+
+function repoParentText(input: string) {
+  const text = repoText(input).replace(/\/+$/, "")
+  if (text === ".") return "."
+  return repoText(path.posix.dirname(text) || ".")
+}
+
+function hiddenText(input: string) {
+  const parts = input.replaceAll("\\", "/").replace(/\/+$/, "").split("/")
+  return parts.some(
+    (part, idx) => (part.startsWith(".") && part.length > 1) || (part === "." && idx > 0 && idx === parts.length - 1),
+  )
+}
+
 function fromURIText(input: string, platform: NodeJS.Platform) {
   const url = new URL(input)
   if (url.protocol !== "file:") throw new TypeError(`Expected file URI: ${input}`)
-  const text = decodeURIComponent(url.pathname)
+  const host = url.hostname.toLowerCase()
+  const text = decode(url.pathname)
+  const local = !host || host === "localhost"
   if (platform !== "win32") {
-    return `${url.host ? `//${url.host}` : ""}${text}`
+    return `${local ? "" : `//${url.host}`}${text}`
   }
-  if (url.host) {
+  if (!local) {
     return `\\\\${url.host}${text.replaceAll("/", "\\")}`
   }
   return fixDrive(text.replace(/^\/([a-zA-Z]:)/, "$1").replaceAll("/", "\\"))
@@ -175,15 +255,35 @@ async function physicalAsync(input: string, opts: Opts = {}) {
 export namespace Path {
   export type Options = Opts
 
+  export function platform(input?: Platform) {
+    return platformText(input)
+  }
+
+  export function guess(input: string) {
+    return guessText(input)
+  }
+
   export function isAbsolute(input: string, opts: Omit<Opts, "cwd"> = {}) {
     const platform = pf(opts)
     return lib(platform).isAbsolute(raw(input, platform))
   }
 
+  /**
+   * Returns the absolute app-facing path form.
+   *
+   * This resolves relative input against `cwd`, expands accepted Windows drive
+   * aliases, and preserves the host platform's separator style.
+   */
   export function pretty(input: string, opts: Opts = {}) {
     return PrettyPath.make(prettyText(input, opts))
   }
 
+  /**
+   * Returns the lookup/equality form for a path.
+   *
+   * On Windows the key is lower-cased so path comparisons match the
+   * filesystem's case-insensitive behavior.
+   */
   export function key(input: string, opts: Opts = {}) {
     const platform = pf(opts)
     const text = pretty(input, opts)
@@ -195,6 +295,13 @@ export namespace Path {
     return PosixPath.make(pretty(input, opts).replaceAll("\\", "/"))
   }
 
+  /**
+   * Returns a stable serialized form.
+   *
+   * Windows absolute paths are rewritten to POSIX-style text so values can move
+   * across shells, config files, and URIs without backslash ambiguity. Relative
+   * paths are left unchanged because their meaning depends on the caller's base.
+   */
   export function canonical(input: string, opts: Opts = {}) {
     const platform = pf(opts)
     if (platform !== "win32") return input
@@ -206,6 +313,12 @@ export namespace Path {
     return expandText(input, opts)
   }
 
+  /**
+   * Returns a user-facing path string.
+   *
+   * This optionally collapses paths under home to `~` and can render paths
+   * relative to `cwd`, but it never changes the underlying filesystem target.
+   */
   export function display(input: string, opts: DisplayOpts = {}) {
     return displayText(input, opts)
   }
@@ -217,10 +330,45 @@ export namespace Path {
     return RelativePath.make(text)
   }
 
+  export function repo(input: string) {
+    return RepoPath.make(repoText(input))
+  }
+
+  export function repoParent(input: string) {
+    return RepoPath.make(repoParentText(input))
+  }
+
+  export function repoName(input: string) {
+    return repoLeaf(input)
+  }
+
+  export function repoDepth(input: string) {
+    const text = repoText(input).replace(/\/+$/, "")
+    if (text === ".") return 0
+    return text.split("/").filter(Boolean).length
+  }
+
+  export function repoIsDir(input: string) {
+    const text = repoText(input)
+    return text !== "." && text.endsWith("/")
+  }
+
+  export function hidden(input: string) {
+    return hiddenText(input)
+  }
+
+  /**
+   * Converts a path to a `file://` URI after first normalizing it with
+   * `pretty`, including UNC and Windows drive handling.
+   */
   export function uri(input: string, opts: Opts = {}) {
     return FileURI.make(toURIText(pretty(input, opts), pf(opts)))
   }
 
+  /**
+   * Parses a `file://` URI into the same absolute native form returned by
+   * `pretty`, restoring UNC hosts and Windows drive letters when needed.
+   */
   export function fromURI(input: string, opts: Omit<Opts, "cwd"> = {}) {
     return PrettyPath.make(clean(fromURIText(input, pf(opts)), pf(opts)))
   }
@@ -229,6 +377,10 @@ export namespace Path {
     return key(a, opts) === key(b, opts)
   }
 
+  /**
+   * Checks directory containment after normalizing both inputs into the same
+   * platform rules. Relative and absolute paths never match each other.
+   */
   export function contains(parent: string, child: string, opts: Opts = {}) {
     const platform = pf(opts)
     const mod = lib(platform)
@@ -247,6 +399,12 @@ export namespace Path {
     return key(input, opts) === value
   }
 
+  /**
+   * Rebuilds the path using the filesystem's recorded casing on Windows.
+   *
+   * Unlike `physical`, this does not resolve symlinks; it walks segments and
+   * keeps any missing tail as provided once the walk can no longer continue.
+   */
   export async function truecase(input: string, opts: Omit<Opts, "cwd"> = {}) {
     const platform = pf(opts)
     const text = pretty(input, opts)
@@ -297,5 +455,12 @@ export namespace Path {
     return PrettyPath.make(clean(out, platform))
   }
 
+  /**
+   * Returns the best available on-disk path.
+   *
+   * This resolves symlinks via `realpath()` when possible, then falls back to
+   * resolving the deepest existing parent so callers still get a useful path for
+   * files or directories that are about to be created.
+   */
   export const physical = physicalAsync
 }
