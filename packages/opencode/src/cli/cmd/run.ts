@@ -27,6 +27,7 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
 import { Path } from "@/path/path"
+import * as Dir from "./dir"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -303,18 +304,20 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
+    const root = Dir.cwd()
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
 
     const directory = (() => {
       if (!args.dir) return undefined
-      if (args.attach) return args.dir
+      const next = Dir.dir(args.dir, { cwd: root, remote: !!args.attach })
+      if (args.attach) return next
       try {
-        process.chdir(args.dir)
-        return process.cwd()
+        process.chdir(next)
+        return next
       } catch {
-        UI.error("Failed to change directory to " + args.dir)
+        UI.error("Failed to change directory to " + next)
         process.exit(1)
       }
     })()
@@ -324,7 +327,7 @@ export const RunCommand = cmd({
       const list = Array.isArray(args.file) ? args.file : [args.file]
 
       for (const filePath of list) {
-        const resolvedPath = Path.pretty(filePath, { cwd: process.cwd() })
+        const resolvedPath = Path.pretty(filePath, { cwd: args.attach ? root : directory ?? process.cwd() })
         if (!(await Filesystem.exists(resolvedPath))) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
@@ -663,7 +666,7 @@ export const RunCommand = cmd({
       return await execute(sdk)
     }
 
-    await bootstrap(process.cwd(), async () => {
+    await bootstrap(directory ?? process.cwd(), async () => {
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         return Server.Default().fetch(request)

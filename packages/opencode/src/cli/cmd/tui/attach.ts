@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import * as Dir from "../dir"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -43,6 +44,7 @@ export const AttachCommand = cmd({
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
+      const root = Dir.cwd()
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -52,12 +54,13 @@ export const AttachCommand = cmd({
 
       const directory = (() => {
         if (!args.dir) return undefined
+        const next = Dir.dir(args.dir, { cwd: root })
         try {
-          process.chdir(args.dir)
-          return process.cwd()
+          process.chdir(next)
+          return next
         } catch {
           // If the directory doesn't exist locally (remote attach), pass it through.
-          return args.dir
+          return Dir.dir(args.dir, { cwd: root, remote: true })
         }
       })()
       const headers = (() => {
@@ -67,7 +70,7 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
       const config = await Instance.provide({
-        directory: directory && existsSync(directory) ? directory : process.cwd(),
+        directory: directory && existsSync(directory) ? directory : root,
         fn: () => TuiConfig.get(),
       })
       await tui({
