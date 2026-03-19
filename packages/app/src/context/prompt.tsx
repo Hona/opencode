@@ -4,8 +4,9 @@ import { useParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
-import { filePathEqual, filePathKey, type FilePath } from "@/context/file/path"
+import { filePathEqual, filePathKey, normalizeFilePath, type FilePath } from "@/context/file/path"
 import { Persist, persisted } from "@/utils/persist"
+import { sessionScopeKey } from "@/utils/session-key"
 
 interface PartBase {
   content: string
@@ -102,7 +103,6 @@ function clonePrompt(prompt: Prompt): Prompt {
 }
 
 function contextItemKey(item: ContextItem) {
-  if (item.type !== "file") return item.type
   const start = item.selection?.startLine
   const end = item.selection?.endLine
   const key = `${item.type}:${filePathKey(item.path)}:${start}:${end}`
@@ -117,14 +117,13 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
-function normalizeContextItem(item: ContextItem | (ContextItem & { key?: string })) {
-  if (item.type !== "file") return { ...item, key: contextItemKey(item) }
-  const path = filePathKey(item.path) as FilePath
+function normalizeContextItem(item: ContextItem & { key?: string }) {
+  const path = normalizeFilePath(item.path)
   const next = { ...item, path }
   return { ...next, key: contextItemKey(next) }
 }
 
-function isContextItem(value: unknown): value is ContextItem | (ContextItem & { key?: string }) {
+function isContextItem(value: unknown): value is ContextItem & { key?: string } {
   return (
     !!value &&
     typeof value === "object" &&
@@ -141,16 +140,16 @@ function migratePromptStore(value: unknown) {
   const context = (value as { context?: { items?: unknown } }).context
   if (!context || !Array.isArray(context.items)) return value
   return {
-      ...value,
-      context: {
-        ...context,
-        items: context.items.filter(isContextItem).map(normalizeContextItem),
-      },
+    ...value,
+    context: {
+      ...context,
+      items: context.items.filter(isContextItem).map(normalizeContextItem),
+    },
   }
 }
 
-function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return item.type === "file" && !!item.comment?.trim()
+function isCommentItem(item: ContextItem & { key: string }) {
+  return !!item.comment?.trim()
 }
 
 type PromptStore = {
@@ -181,7 +180,6 @@ function createPromptActions(
   }
 }
 
-const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
@@ -215,16 +213,16 @@ function createPromptSessionState(store: Store<PromptStore>, setStore: SetStoreF
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
       removeComment(path: FilePath, commentID: string) {
-        const key = filePathKey(path)
+        const file = normalizeFilePath(path)
         setStore("context", "items", (items) =>
-          items.filter((item) => !(item.type === "file" && filePathKey(item.path) === key && item.commentID === commentID)),
+          items.filter((item) => !(item.path === file && item.commentID === commentID)),
         )
       },
       updateComment(path: FilePath, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
-        const key = filePathKey(path)
+        const file = normalizeFilePath(path)
         setStore("context", "items", (items) =>
           items.map((item) => {
-            if (item.type !== "file" || filePathKey(item.path) !== key || item.commentID !== commentID) return item
+            if (item.path !== file || item.commentID !== commentID) return item
             return normalizeContextItem({ ...item, ...next })
           }),
         )
@@ -315,7 +313,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
 
     const owner = getOwner()
     const load = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+      const key = sessionScopeKey(dir, id)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)

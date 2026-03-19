@@ -4,9 +4,10 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
 import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
+import { sessionScopeKey, sessionScopeParts } from "@/utils/session-key"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
-import { filePathKey, type FilePath, type FilePathKey } from "@/context/file/path"
+import { filePathKey, normalizeFilePath, type FilePath, type FilePathKey } from "@/context/file/path"
 
 export type LineComment = {
   id: string
@@ -18,21 +19,7 @@ export type LineComment = {
 
 type CommentFocus = { file: FilePath; id: string }
 
-const WORKSPACE_KEY = "__workspace__"
 const MAX_COMMENT_SESSIONS = 20
-
-function sessionKey(dir: string, id: string | undefined) {
-  return `${dir}\n${id ?? WORKSPACE_KEY}`
-}
-
-function decodeSessionKey(key: string) {
-  const split = key.lastIndexOf("\n")
-  if (split < 0) return { dir: key, id: WORKSPACE_KEY }
-  return {
-    dir: key.slice(0, split),
-    id: key.slice(split + 1),
-  }
-}
 
 type CommentStore = {
   comments: Record<FilePathKey, LineComment[]>
@@ -45,7 +32,7 @@ const text = (value: unknown) => (typeof value === "string" ? value : undefined)
 
 const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)
 
-const normalizeFile = (file: FilePath) => filePathKey(file) as FilePath
+const normalizeFile = (file: FilePath) => normalizeFilePath(file)
 
 const commentKey = (file: FilePath) => filePathKey(file)
 
@@ -280,9 +267,9 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
     const params = useParams()
     const cache = createScopedCache(
       (key) => {
-        const decoded = decodeSessionKey(key)
+        const decoded = sessionScopeParts(key)
         return createRoot((dispose) => ({
-          value: createCommentSession(decoded.dir, decoded.id === WORKSPACE_KEY ? undefined : decoded.id),
+          value: createCommentSession(decoded.dir, decoded.id),
           dispose,
         }))
       },
@@ -295,7 +282,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
     onCleanup(() => cache.clear())
 
     const load = (dir: string, id: string | undefined) => {
-      const key = sessionKey(dir, id)
+      const key = sessionScopeKey(dir, id)
       return cache.get(key).value
     }
 

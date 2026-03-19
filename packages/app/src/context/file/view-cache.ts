@@ -2,10 +2,10 @@ import { createEffect, createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
+import { sessionScopeKey, sessionScopeParts } from "@/utils/session-key"
 import { createPathHelpers, filePathKey, type FilePath, type FilePathKey, type WorkspacePath } from "./path"
 import type { FileViewState, SelectedLineRange } from "./types"
 
-const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 const fileKey = (path: FilePath) => filePathKey(path)
@@ -178,11 +178,9 @@ function createViewSession(dir: WorkspacePath, id: string | undefined) {
 export function createFileViewCache() {
   const cache = createScopedCache(
     (key) => {
-      const split = key.lastIndexOf("\n")
-      const dir = split >= 0 ? key.slice(0, split) : key
-      const id = split >= 0 ? key.slice(split + 1) : WORKSPACE_KEY
+      const scope = sessionScopeParts(key)
       return createRoot((dispose) => ({
-        value: createViewSession(dir, id === WORKSPACE_KEY ? undefined : id),
+        value: createViewSession(scope.dir, scope.id),
         dispose,
       }))
     },
@@ -194,7 +192,7 @@ export function createFileViewCache() {
 
   return {
     load: (dir: WorkspacePath, id: string | undefined) => {
-      const key = `${dir}\n${id ?? WORKSPACE_KEY}`
+      const key = sessionScopeKey(dir, id)
       return cache.get(key).value
     },
     clear: () => cache.clear(),

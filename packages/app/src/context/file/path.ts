@@ -52,6 +52,8 @@ export const filePathEqual = (a: FilePath | undefined, b: FilePath | undefined) 
 
 export const filePathFromKey = (input: FilePathKey) => input as FilePath
 
+export const normalizeFilePath = (input: string) => filePathFromKey(pathKey(input) as FilePathKey)
+
 export function filePathParentKey(input: FilePathKey) {
   const split = input.lastIndexOf("/")
   if (split === -1) return ROOT_FILE_PATH_KEY

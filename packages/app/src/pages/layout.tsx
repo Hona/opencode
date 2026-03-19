@@ -1437,9 +1437,7 @@ export default function Layout(props: ParentProps) {
     if (workspaceEqual(directory, root)) return
 
     const current = currentDir()
-    const currentKey = workspacePathKey(current)
-    const deletedKey = workspacePathKey(directory)
-    const shouldLeave = leaveDeletedWorkspace || (!!params.dir && currentKey === deletedKey)
+    const shouldLeave = leaveDeletedWorkspace || (!!params.dir && workspaceEqual(current, directory))
     if (!leaveDeletedWorkspace && shouldLeave) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
@@ -1461,9 +1459,8 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
-    if (
-      workspacePathKey(routeFor(root)?.directory ?? "") === workspacePathKey(directory)
-    ) {
+    const saved = routeFor(root)?.directory
+    if (saved && workspaceEqual(saved, directory)) {
       clearLastProjectSession(root)
     }
 
@@ -1485,10 +1482,9 @@ export default function Layout(props: ParentProps) {
     if (shouldLeave) return
 
     const nextCurrent = currentDir()
-    const nextKey = workspacePathKey(nextCurrent)
     const project = layout.projects.list().find((item) => workspaceEqual(item.worktree, root))
     const dirs = project ? orderFor(root, [root, ...(project.sandboxes ?? [])]) : [root]
-    const valid = dirs.some((item) => workspacePathKey(item) === nextKey)
+    const valid = includes(dirs, nextCurrent)
 
     if (params.dir && workspaceEqual(projectRoot(nextCurrent), root) && !valid) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
@@ -1594,7 +1590,7 @@ export default function Layout(props: ParentProps) {
     })
 
     const handleDelete = () => {
-      const leaveDeletedWorkspace = !!params.dir && workspacePathKey(currentDir()) === workspacePathKey(props.directory)
+      const leaveDeletedWorkspace = !!params.dir && workspaceEqual(currentDir(), props.directory)
       if (leaveDeletedWorkspace) {
         navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
       }
@@ -1854,7 +1850,7 @@ export default function Layout(props: ParentProps) {
       keyOf(project.worktree),
       mergeWorkspaceOrder(
         project.worktree,
-        result.filter((directory) => workspacePathKey(directory) !== workspacePathKey(project.worktree)),
+        result.filter((directory) => !workspaceEqual(directory, project.worktree)),
       ),
     )
   }
