@@ -4,7 +4,6 @@
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
 import z from "zod"
-import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -17,6 +16,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { Path } from "@/path/path"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -50,7 +50,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filePath = Path.pretty(params.filePath, { cwd: Instance.directory })
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
@@ -63,7 +63,7 @@ export const EditTool = Tool.define("edit", {
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
-          patterns: [path.relative(Instance.worktree, filePath)],
+          patterns: [String(Path.rel(Instance.worktree, filePath))],
           always: ["*"],
           metadata: {
             filepath: filePath,
@@ -99,7 +99,7 @@ export const EditTool = Tool.define("edit", {
       )
       await ctx.ask({
         permission: "edit",
-        patterns: [path.relative(Instance.worktree, filePath)],
+        patterns: [String(Path.rel(Instance.worktree, filePath))],
         always: ["*"],
         metadata: {
           filepath: filePath,
@@ -160,7 +160,7 @@ export const EditTool = Tool.define("edit", {
         diff,
         filediff,
       },
-      title: `${path.relative(Instance.worktree, filePath)}`,
+      title: String(Path.rel(Instance.worktree, filePath)),
       output,
     }
   },

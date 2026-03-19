@@ -4,6 +4,7 @@ import { GrepTool } from "../../src/tool/grep"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { win } from "../lib/windows-path"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -81,6 +82,34 @@ describe("tool.grep", () => {
           ctx,
         )
         expect(result.metadata.matches).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("accepts Windows alias directories and reports canonical file paths", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "nested", "hit.txt"), "hello alias")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const grep = await GrepTool.init()
+        for (const item of win(tmp.path)) {
+          const result = await grep.execute(
+            {
+              pattern: "hello",
+              path: item.path,
+            },
+            ctx,
+          )
+
+          expect(result.metadata.matches).toBe(1)
+          expect(result.output).toContain(path.join(tmp.path, "nested", "hit.txt"))
+        }
       },
     })
   })

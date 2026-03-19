@@ -7,8 +7,8 @@ import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
-import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Path } from "@/path/path"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -35,8 +35,7 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    const searchPath = Path.pretty(params.path ?? ".", { cwd: Instance.directory })
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
@@ -90,11 +89,12 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const stats = Filesystem.stat(filePath)
+      const file = Path.pretty(filePath, { cwd: searchPath })
+      const stats = Filesystem.stat(file)
       if (!stats) continue
 
       matches.push({
-        path: filePath,
+        path: file,
         modTime: stats.mtime.getTime(),
         lineNum,
         lineText,

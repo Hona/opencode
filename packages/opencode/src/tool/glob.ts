@@ -1,11 +1,11 @@
 import z from "zod"
-import path from "path"
 import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { Path } from "@/path/path"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -29,8 +29,7 @@ export const GlobTool = Tool.define("glob", {
       },
     })
 
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    const search = Path.pretty(params.path ?? ".", { cwd: Instance.directory })
     await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
@@ -45,7 +44,7 @@ export const GlobTool = Tool.define("glob", {
         truncated = true
         break
       }
-      const full = path.resolve(search, file)
+      const full = Path.pretty(file, { cwd: search })
       const stats = Filesystem.stat(full)?.mtime.getTime() ?? 0
       files.push({
         path: full,
@@ -67,7 +66,7 @@ export const GlobTool = Tool.define("glob", {
     }
 
     return {
-      title: path.relative(Instance.worktree, search),
+      title: String(Path.rel(Instance.worktree, search)),
       metadata: {
         count: files.length,
         truncated,

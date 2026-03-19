@@ -1,12 +1,11 @@
 import z from "zod"
 import { Tool } from "./tool"
-import path from "path"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
-import { pathToFileURL } from "url"
 import { assertExternalDirectory } from "./external-directory"
 import { Filesystem } from "../util/filesystem"
+import { Path } from "@/path/path"
 
 const operations = [
   "goToDefinition",
@@ -29,7 +28,7 @@ export const LspTool = Tool.define("lsp", {
     character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
   }),
   execute: async (args, ctx) => {
-    const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+    const file = Path.pretty(args.filePath, { cwd: Instance.directory })
     await assertExternalDirectory(ctx, file)
 
     await ctx.ask({
@@ -38,14 +37,14 @@ export const LspTool = Tool.define("lsp", {
       always: ["*"],
       metadata: {},
     })
-    const uri = pathToFileURL(file).href
+    const uri = String(Path.uri(file))
     const position = {
       file,
       line: args.line - 1,
       character: args.character - 1,
     }
 
-    const relPath = path.relative(Instance.worktree, file)
+    const relPath = String(Path.rel(Instance.worktree, file))
     const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
     const exists = await Filesystem.exists(file)

@@ -12,6 +12,7 @@ import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { Path } from "@/path/path"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -55,9 +56,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }> = []
 
     let totalDiff = ""
+    const rel = (input: string) => String(Path.rel(Instance.worktree, input)).replaceAll("\\", "/")
 
     for (const hunk of hunks) {
-      const filePath = path.resolve(Instance.directory, hunk.path)
+      const filePath = Path.pretty(hunk.path, { cwd: Instance.directory })
       await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
@@ -115,7 +117,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             if (change.removed) deletions += change.count || 0
           }
 
-          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          const movePath = hunk.move_path ? Path.pretty(hunk.move_path, { cwd: Instance.directory }) : undefined
           await assertExternalDirectory(ctx, movePath)
 
           fileChanges.push({
@@ -160,7 +162,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Build per-file metadata for UI rendering (used for both permission and result)
     const files = fileChanges.map((change) => ({
       filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
+      relativePath: rel(change.movePath ?? change.filePath),
       type: change.type,
       diff: change.diff,
       before: change.oldContent,
@@ -174,7 +176,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     const relativePaths = [...new Set(fileChanges.flatMap((change) => {
       const items = [change.filePath]
       if (change.movePath) items.push(change.movePath)
-      return items.map((item) => path.relative(Instance.worktree, item).replaceAll("\\", "/"))
+      return items.map(rel)
     }))]
     await ctx.ask({
       permission: "edit",
@@ -245,13 +247,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     // Generate output summary
     const summaryLines = fileChanges.map((change) => {
       if (change.type === "add") {
-        return `A ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
+        return `A ${rel(change.filePath)}`
       }
       if (change.type === "delete") {
-        return `D ${path.relative(Instance.worktree, change.filePath).replaceAll("\\", "/")}`
+        return `D ${rel(change.filePath)}`
       }
       const target = change.movePath ?? change.filePath
-      return `M ${path.relative(Instance.worktree, target).replaceAll("\\", "/")}`
+      return `M ${rel(target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
@@ -266,7 +268,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =
           errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-        output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target).replaceAll("\\", "/")}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+        output += `\n\nLSP errors detected in ${rel(target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
 
