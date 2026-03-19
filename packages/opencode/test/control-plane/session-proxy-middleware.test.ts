@@ -11,6 +11,7 @@ import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
 import { Flag } from "../../src/flag/flag"
+import { PrettyPath } from "../../src/path/schema"
 
 afterEach(async () => {
   mock.restore()
@@ -83,7 +84,7 @@ async function setup(state: State) {
           branch: "main",
           project_id: project.id,
           type: "worktree",
-          directory: tmp.path,
+          directory: PrettyPath.make(tmp.path),
           name: "local",
         },
       ])

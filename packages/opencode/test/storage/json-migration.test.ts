@@ -126,9 +126,9 @@ describe("JSON to SQLite migration", () => {
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
     expect(projects[0].id).toBe(ProjectID.make("proj_test123abc"))
-    expect(projects[0].worktree).toBe("/test/path")
+    expect(String(projects[0].worktree)).toBe("/test/path")
     expect(projects[0].name).toBe("Test Project")
-    expect(projects[0].sandboxes).toEqual(["/test/sandbox"])
+    expect(projects[0].sandboxes.map(String)).toEqual(["/test/sandbox"])
   })
 
   test("uses filename for project id when JSON has different value", async () => {

@@ -15,6 +15,7 @@ import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+import type { PrettyPath, RepoPath } from "@/path/schema"
 
 export namespace File {
   export const Info = z
@@ -28,7 +29,9 @@ export namespace File {
       ref: "File",
     })
 
-  export type Info = z.infer<typeof Info>
+  export type Info = Omit<z.infer<typeof Info>, "path"> & {
+    path: RepoPath
+  }
 
   export const Node = z
     .object({
@@ -41,7 +44,10 @@ export namespace File {
     .meta({
       ref: "FileNode",
     })
-  export type Node = z.infer<typeof Node>
+  export type Node = Omit<z.infer<typeof Node>, "path" | "absolute"> & {
+    path: RepoPath
+    absolute: PrettyPath
+  }
 
   export const Content = z
     .object({
@@ -91,11 +97,11 @@ export namespace File {
     return runPromiseInstance(Service.use((svc) => svc.status()))
   }
 
-  export async function read(file: string): Promise<Content> {
+  export async function read(file: RepoPath | string): Promise<Content> {
     return runPromiseInstance(Service.use((svc) => svc.read(file)))
   }
 
-  export async function list(dir?: string) {
+  export async function list(dir?: RepoPath | string) {
     return runPromiseInstance(Service.use((svc) => svc.list(dir)))
   }
 
@@ -310,7 +316,7 @@ export namespace File {
     heif: "image/heif",
   }
 
-  type Entry = { files: string[]; dirs: string[] }
+  type Entry = { files: RepoPath[]; dirs: RepoPath[] }
 
   const ext = (file: string) => path.extname(file).toLowerCase().slice(1)
   const name = (file: string) => path.basename(file).toLowerCase()
@@ -331,10 +337,10 @@ export namespace File {
     return ["image", "audio", "video", "font", "model", "multipart"].includes(top)
   }
 
-  const sortHiddenLast = (items: string[], prefer: boolean) => {
+  const sortHiddenLast = <T extends string>(items: T[], prefer: boolean) => {
     if (prefer) return items
-    const visible: string[] = []
-    const hiddenItems: string[] = []
+    const visible: T[] = []
+    const hiddenItems: T[] = []
     for (const item of items) {
       if (Path.hidden(item)) hiddenItems.push(item)
       else visible.push(item)
@@ -345,14 +351,14 @@ export namespace File {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<File.Info[]>
-    readonly read: (file: string) => Effect.Effect<File.Content>
-    readonly list: (dir?: string) => Effect.Effect<File.Node[]>
+      readonly read: (file: RepoPath | string) => Effect.Effect<File.Content>
+      readonly list: (dir?: RepoPath | string) => Effect.Effect<File.Node[]>
     readonly search: (input: {
       query: string
       limit?: number
       dirs?: boolean
       type?: "file" | "directory"
-    }) => Effect.Effect<string[]>
+      }) => Effect.Effect<RepoPath[]>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/File") {}
@@ -379,7 +385,7 @@ export namespace File {
 
         yield* Effect.promise(async () => {
           if (isGlobalHome) {
-            const dirs = new Set<string>()
+            const dirs = new Set<RepoPath>()
             const protectedNames = Protected.names()
             const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
             const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
@@ -389,14 +395,14 @@ export namespace File {
             for (const entry of top) {
               if (!entry.isDirectory()) continue
               if (shouldIgnoreName(entry.name)) continue
-              dirs.add(String(Path.repo(`${entry.name}/`)))
+              dirs.add(Path.repo(`${entry.name}/`))
 
               const base = path.join(instance.directory, entry.name)
               const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
               for (const child of children) {
                 if (!child.isDirectory()) continue
                 if (shouldIgnoreNested(child.name)) continue
-                dirs.add(String(Path.repo(`${entry.name}/${child.name}/`)))
+                dirs.add(Path.repo(`${entry.name}/${child.name}/`))
               }
             }
 
@@ -404,18 +410,18 @@ export namespace File {
           } else {
             const seen = new Set<string>()
             for await (const file of Ripgrep.files({ cwd: instance.directory })) {
-              const key = String(Path.repo(file))
+              const key = Path.repo(file)
               next.files.push(key)
-              let dir = String(Path.repoParent(key))
+              let dir = Path.repoParent(key)
               while (dir !== ".") {
-                const item = String(Path.repo(`${dir}/`))
+                const item = Path.repo(`${dir}/`)
                 if (seen.has(item)) {
-                  dir = String(Path.repoParent(dir))
+                  dir = Path.repoParent(dir)
                   continue
                 }
                 seen.add(item)
                 next.dirs.push(item)
-                dir = String(Path.repoParent(dir))
+                dir = Path.repoParent(dir)
               }
             }
           }
@@ -449,7 +455,7 @@ export namespace File {
             })
           ).text()
 
-          const changed: File.Info[] = []
+          const changed: Array<Omit<File.Info, "path"> & { path: string }> = []
 
           if (diffOutput.trim()) {
             for (const line of diffOutput.trim().split("\n")) {
@@ -529,13 +535,13 @@ export namespace File {
             const full = Path.pretty(item.path, { cwd: instance.directory })
             return {
               ...item,
-              path: String(Path.repo(Path.rel(instance.directory, full))),
+              path: Path.repo(Path.rel(instance.directory, full)),
             }
           })
         })
       })
 
-      const read = Effect.fn("File.read")(function* (file: string) {
+      const read = Effect.fn("File.read")(function* (file: RepoPath | string) {
         return yield* Effect.promise(async (): Promise<File.Content> => {
           using _ = log.time("read", { file })
           const full = path.join(instance.directory, file)
@@ -616,7 +622,7 @@ export namespace File {
         })
       })
 
-      const list = Effect.fn("File.list")(function* (dir?: string) {
+      const list = Effect.fn("File.list")(function* (dir?: RepoPath | string) {
         return yield* Effect.promise(async () => {
           const exclude = [".git", ".DS_Store"]
           let ignored = (_: string) => false
@@ -641,15 +647,15 @@ export namespace File {
           const nodes: File.Node[] = []
           for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
             if (exclude.includes(entry.name)) continue
-            const absolute = path.join(resolved, entry.name)
-            const file = String(Path.repo(Path.rel(instance.directory, absolute)))
+            const absolute = Path.pretty(path.join(resolved, entry.name))
+            const file = Path.repo(Path.rel(instance.directory, absolute))
             const type = entry.isDirectory() ? "directory" : "file"
             nodes.push({
               name: entry.name,
               path: file,
               absolute,
               type,
-              ignored: ignored(type === "directory" ? String(Path.repo(`${file}/`)) : file),
+              ignored: ignored(type === "directory" ? Path.repo(`${file}/`) : file),
             })
           }
 
@@ -685,10 +691,13 @@ export namespace File {
 
           const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
           const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
-          const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
+          const output =
+            kind === "directory"
+              ? sortHiddenLast(sorted, preferHidden).slice(0, limit)
+              : sorted
 
           log.info("search", { query, kind, results: output.length })
-          return output
+          return output as RepoPath[]
         })
       })
 

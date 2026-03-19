@@ -1,4 +1,5 @@
 import z from "zod"
+import { Path } from "@/path/path"
 import { Worktree } from "@/worktree"
 import { type Adaptor, WorkspaceInfo } from "../types"
 
@@ -17,7 +18,7 @@ export const WorktreeAdaptor: Adaptor = {
       ...info,
       name: worktree.name,
       branch: worktree.branch,
-      directory: worktree.directory,
+      directory: await Path.truecase(worktree.directory),
     }
   },
   async create(info) {

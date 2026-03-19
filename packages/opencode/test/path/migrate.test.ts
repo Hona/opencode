@@ -11,6 +11,7 @@ import { SessionID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { PathMigration } from "../../src/path/migrate"
+import { PrettyPath } from "../../src/path/schema"
 import { Filesystem } from "../../src/util/filesystem"
 
 afterEach(async () => {
@@ -45,7 +46,7 @@ describe("PathMigration.run", () => {
           id: sessionID,
           project_id: project.id,
           slug: sessionID,
-          directory: raw(tmp.path),
+          directory: PrettyPath.make(raw(tmp.path)),
           title: "test",
           version: "0.0.0-test",
           time_created: now,
@@ -59,7 +60,7 @@ describe("PathMigration.run", () => {
           type: "worktree",
           branch: null,
           name: "local",
-          directory: raw(tmp.path),
+          directory: PrettyPath.make(raw(tmp.path)),
           extra: null,
           project_id: project.id,
         })
@@ -68,8 +69,8 @@ describe("PathMigration.run", () => {
       db
         .update(ProjectTable)
         .set({
-          worktree: raw(tmp.path),
-          sandboxes: [raw(box), path.join(raw(box), "again", ".."), raw(tmp.path)],
+          worktree: PrettyPath.make(raw(tmp.path)),
+          sandboxes: [PrettyPath.make(raw(box)), PrettyPath.make(path.join(raw(box), "again", "..")), PrettyPath.make(raw(tmp.path))],
         })
         .where(eq(ProjectTable.id, project.id))
         .run()
@@ -89,10 +90,10 @@ describe("PathMigration.run", () => {
     const srow = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
     const wrow = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get())
 
-    expect(prow?.worktree).toBe(tmp.path)
-    expect(prow?.sandboxes).toEqual([box])
-    expect(srow?.directory).toBe(tmp.path)
-    expect(wrow?.directory).toBe(tmp.path)
+    expect(String(prow?.worktree)).toBe(tmp.path)
+    expect(prow?.sandboxes.map(String)).toEqual([box])
+    expect(String(srow?.directory)).toBe(tmp.path)
+    expect(String(wrow?.directory)).toBe(tmp.path)
   })
 
   test("normalizes new session rows on write", async () => {
@@ -111,7 +112,7 @@ describe("PathMigration.run", () => {
       },
     })
 
-    expect(row.directory).toBe(tmp.path)
+    expect(String(row.directory)).toBe(tmp.path)
   })
 
   test("is idempotent and only reruns when forced", async () => {
@@ -122,7 +123,7 @@ describe("PathMigration.run", () => {
     Database.use((db) =>
       db
         .update(ProjectTable)
-        .set({ worktree: raw(tmp.path) })
+        .set({ worktree: PrettyPath.make(raw(tmp.path)) })
         .where(eq(ProjectTable.id, project.id))
         .run(),
     )
@@ -140,7 +141,7 @@ describe("PathMigration.run", () => {
     Database.use((db) =>
       db
         .update(ProjectTable)
-        .set({ worktree: raw(tmp.path) })
+        .set({ worktree: PrettyPath.make(raw(tmp.path)) })
         .where(eq(ProjectTable.id, project.id))
         .run(),
     )
@@ -155,6 +156,6 @@ describe("PathMigration.run", () => {
     const next = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, project.id)).get())
 
     expect(forced.change.project).toBe(1)
-    expect(next?.worktree).toBe(tmp.path)
+    expect(String(next?.worktree)).toBe(tmp.path)
   })
 })

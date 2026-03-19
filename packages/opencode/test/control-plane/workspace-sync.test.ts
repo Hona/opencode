@@ -9,6 +9,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
+import { PrettyPath } from "../../src/path/schema"
 
 afterEach(async () => {
   mock.restore()
@@ -71,7 +72,7 @@ describe("control-plane/workspace.startSyncing", () => {
             branch: "main",
             project_id: project.id,
             type: "worktree",
-            directory: tmp.path,
+            directory: PrettyPath.make(tmp.path),
             name: "local",
           },
         ])

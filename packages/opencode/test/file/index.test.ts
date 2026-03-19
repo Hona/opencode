@@ -642,7 +642,7 @@ describe("file/index Filesystem patterns", () => {
         directory: tmp.path,
         fn: async () => {
           const nodes = await File.list()
-          expect(nodes.find((n) => n.name === "src")?.path).toBe("src")
+          expect(String(nodes.find((n) => n.name === "src")?.path)).toBe("src")
         },
       })
     })

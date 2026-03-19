@@ -1,6 +1,7 @@
 import path from "path"
 import { ProjectTable } from "@/project/project.sql"
 import { Path } from "@/path/path"
+import { PrettyPath } from "@/path/schema"
 import { Global } from "@/global"
 import { Database, eq } from "@/storage/db"
 import { Filesystem } from "@/util/filesystem"
@@ -35,7 +36,7 @@ export namespace PathMigration {
   }
 
   function fix(input: string) {
-    if (!input || input === "/") return input
+    if (!input || input === "/") return PrettyPath.make(input)
     return Path.truecaseSync(input)
   }
 
@@ -50,7 +51,7 @@ export namespace PathMigration {
 
   function uniq(list: string[], worktree?: string) {
     const seen = new Set<string>()
-    const out: string[] = []
+    const out: PrettyPath[] = []
     for (const item of list) {
       const dir = fix(item)
       if (dir && worktree && Path.eq(dir, worktree)) continue

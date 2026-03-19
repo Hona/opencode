@@ -1,4 +1,5 @@
 import z from "zod"
+import type { PrettyPath } from "@/path/schema"
 import { ProjectID } from "@/project/schema"
 import { WorkspaceID } from "./schema"
 
@@ -11,7 +12,9 @@ export const WorkspaceInfo = z.object({
   extra: z.unknown().nullable(),
   projectID: ProjectID.zod,
 })
-export type WorkspaceInfo = z.infer<typeof WorkspaceInfo>
+export type WorkspaceInfo = Omit<z.infer<typeof WorkspaceInfo>, "directory"> & {
+  directory: PrettyPath | null
+}
 
 export type Adaptor = {
   configure(input: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>

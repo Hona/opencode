@@ -33,6 +33,7 @@ import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
 import { Path } from "@/path/path"
+import { PrettyPath } from "@/path/schema"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -41,7 +42,7 @@ export namespace Session {
   const childTitlePrefix = "Child session - "
 
   function fix(input: string) {
-    if (!input) return input
+    if (!input) return PrettyPath.make(input)
     return Path.truecaseSync(input)
   }
 
@@ -56,6 +57,7 @@ export namespace Session {
   }
 
   type SessionRow = typeof SessionTable.$inferSelect
+  type SessionInsert = typeof SessionTable.$inferInsert
 
   export function fromRow(row: SessionRow): Info {
     const summary =
@@ -91,7 +93,7 @@ export namespace Session {
     }
   }
 
-  export function toRow(info: Info) {
+  export function toRow(info: z.output<typeof Info> | Info): SessionInsert {
     return {
       id: info.id,
       project_id: info.projectID,
@@ -167,7 +169,9 @@ export namespace Session {
     .meta({
       ref: "Session",
     })
-  export type Info = z.output<typeof Info>
+  export type Info = Omit<z.output<typeof Info>, "directory"> & {
+    directory: PrettyPath
+  }
 
   export const ProjectInfo = z
     .object({
@@ -178,14 +182,18 @@ export namespace Session {
     .meta({
       ref: "ProjectSummary",
     })
-  export type ProjectInfo = z.output<typeof ProjectInfo>
+  export type ProjectInfo = Omit<z.output<typeof ProjectInfo>, "worktree"> & {
+    worktree: PrettyPath
+  }
 
   export const GlobalInfo = Info.extend({
     project: ProjectInfo.nullable(),
   }).meta({
     ref: "GlobalSession",
   })
-  export type GlobalInfo = z.output<typeof GlobalInfo>
+  export type GlobalInfo = Omit<z.output<typeof GlobalInfo>, "project"> & {
+    project: ProjectInfo | null
+  }
 
   export const Event = {
     Created: BusEvent.define(

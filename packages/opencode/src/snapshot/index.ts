@@ -6,6 +6,7 @@ import z from "zod"
 import { InstanceContext } from "@/effect/instance-context"
 import { runPromiseInstance } from "@/effect/runtime"
 import { AppFileSystem } from "@/filesystem"
+import { Path } from "@/path/path"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -314,7 +315,7 @@ export namespace Snapshot {
           const additions = binary ? 0 : parseInt(adds)
           const deletions = binary ? 0 : parseInt(dels)
           result.push({
-            file,
+            file: Path.repo(file),
             before,
             after,
             additions: Number.isFinite(additions) ? additions : 0,

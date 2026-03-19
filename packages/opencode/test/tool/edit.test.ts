@@ -5,6 +5,7 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { Path } from "../../src/path/path"
 import { SessionID, MessageID } from "../../src/session/schema"
 import type { PermissionNext } from "../../src/permission"
 import { win } from "../lib/windows-path"
@@ -451,7 +452,7 @@ describe("tool.edit", () => {
           )
 
           expect(result.metadata.filediff).toBeDefined()
-          expect(result.metadata.filediff.file).toBe(filepath)
+          expect(String(result.metadata.filediff.file)).toBe(String(Path.repo(path.basename(filepath))))
           expect(result.metadata.filediff.additions).toBeGreaterThan(0)
         },
       })

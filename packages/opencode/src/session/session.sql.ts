@@ -6,6 +6,7 @@ import type { PermissionNext } from "../permission"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
+import type { PrettyPath } from "../path/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -22,7 +23,7 @@ export const SessionTable = sqliteTable(
     workspace_id: text().$type<WorkspaceID>(),
     parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
-    directory: text().notNull(),
+    directory: text().$type<PrettyPath>().notNull(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),

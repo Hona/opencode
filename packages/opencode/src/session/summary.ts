@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
+import { Path } from "@/path/path"
 
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
@@ -124,7 +125,7 @@ export namespace SessionSummary {
         if (file === item.file) return item
         return {
           ...item,
-          file,
+          file: Path.repo(file),
         }
       })
       const changed = next.some((item, i) => item.file !== diffs[i]?.file)

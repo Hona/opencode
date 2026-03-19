@@ -5,6 +5,7 @@ import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionID } from "../../src/session/schema"
+import { PrettyPath } from "../../src/path/schema"
 import { Log } from "../../src/util/log"
 import { PathMigration } from "../../src/path/migrate"
 import { $ } from "bun"
@@ -26,7 +27,7 @@ function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
         id: opts.id,
         project_id: opts.project,
         slug: opts.id,
-        directory: opts.dir,
+        directory: PrettyPath.make(opts.dir),
         title: "test",
         version: "0.0.0-test",
         time_created: now,
@@ -40,12 +41,12 @@ function ensureGlobal() {
   Database.use((db) =>
     db
       .insert(ProjectTable)
-      .values({
-        id: ProjectID.global,
-        worktree: "/",
-        time_created: Date.now(),
-        time_updated: Date.now(),
-        sandboxes: [],
+        .values({
+          id: ProjectID.global,
+          worktree: PrettyPath.make("/"),
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
       })
       .onConflictDoNothing()
       .run(),

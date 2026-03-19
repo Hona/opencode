@@ -16,12 +16,13 @@ import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
 import { Path } from "@/path/path"
+import { PrettyPath } from "@/path/schema"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
 
   function fix(input: string) {
-    if (!input || input === "/") return input
+    if (!input || input === "/") return PrettyPath.make(input)
     return Path.truecaseSync(input)
   }
 
@@ -30,9 +31,9 @@ export namespace Project {
     return Path.eq(a, b)
   }
 
-  function uniq(list: string[]) {
+  function uniq(list: readonly string[]) {
     const seen = new Set<string>()
-    const out: string[] = []
+    const out: PrettyPath[] = []
     for (const item of list) {
       const dir = fix(item)
       const key = dir === "/" ? dir : Path.key(dir)
@@ -44,10 +45,10 @@ export namespace Project {
   }
 
   async function gitpath(cwd: string, name: string) {
-    if (!name) return cwd
+    if (!name) return fix(cwd)
     // git output includes trailing newlines; keep path whitespace intact.
     name = name.replace(/[\r\n]+$/, "")
-    if (!name) return cwd
+    if (!name) return fix(cwd)
 
     name = Filesystem.windowsPath(name)
 
@@ -83,7 +84,10 @@ export namespace Project {
     .meta({
       ref: "Project",
     })
-  export type Info = z.infer<typeof Info>
+  export type Info = Omit<z.infer<typeof Info>, "worktree" | "sandboxes"> & {
+    worktree: PrettyPath
+    sandboxes: PrettyPath[]
+  }
 
   export const Event = {
     Updated: BusEvent.define("project.updated", Info),
@@ -123,12 +127,12 @@ export namespace Project {
     directory = await Path.truecase(directory)
     log.info("fromDirectory", { directory })
 
-    const data = await iife(async () => {
+    const data: { id: ProjectID; worktree: PrettyPath; sandbox: PrettyPath; vcs: Info["vcs"] } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox: string = await Path.truecase(path.dirname(dotgit))
+        let sandbox = await Path.truecase(path.dirname(dotgit))
 
         const gitBinary = which("git")
 
@@ -236,20 +240,20 @@ export namespace Project {
 
       return {
         id: ProjectID.global,
-        worktree: "/",
-        sandbox: "/",
+        worktree: PrettyPath.make("/"),
+        sandbox: PrettyPath.make("/"),
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
       }
     })
 
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-    const existing = row
+    const existing: Info = row
       ? fromRow(row)
       : {
           id: data.id,
           worktree: data.worktree,
-          vcs: data.vcs as Info["vcs"],
-          sandboxes: [] as string[],
+          vcs: data.vcs,
+          sandboxes: [],
           time: {
             created: Date.now(),
             updated: Date.now(),
@@ -262,7 +266,7 @@ export namespace Project {
       ...existing,
       worktree: data.worktree,
       sandboxes: uniq(existing.sandboxes),
-      vcs: data.vcs as Info["vcs"],
+      vcs: data.vcs,
       time: {
         ...existing.time,
         updated: Date.now(),
@@ -426,7 +430,7 @@ export namespace Project {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return []
     const data = fromRow(row)
-    const valid: string[] = []
+    const valid: PrettyPath[] = []
     for (const dir of data.sandboxes) {
       const s = Filesystem.stat(dir)
       if (s?.isDirectory() && !valid.some((item) => same(item, dir))) valid.push(dir)

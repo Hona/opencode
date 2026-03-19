@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { Database, eq } from "../../src/storage/db"
 import { SessionTable } from "../../src/session/session.sql"
+import { PrettyPath } from "../../src/path/schema"
 import { Log } from "../../src/util/log"
 
 const projectRoot = path.join(__dirname, "../..")
@@ -61,13 +62,13 @@ describe("Session.list", () => {
         Database.use((db) =>
           db
             .update(SessionTable)
-            .set({ directory: projectRoot.toUpperCase() })
+            .set({ directory: PrettyPath.make(projectRoot.toUpperCase()) })
             .where(eq(SessionTable.id, session.id))
             .run(),
         )
 
         const result = await Session.get(session.id)
-        expect(result.directory).toBe(projectRoot)
+        expect(String(result.directory)).toBe(projectRoot)
       },
     })
   })

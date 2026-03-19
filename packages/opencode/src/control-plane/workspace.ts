@@ -12,6 +12,7 @@ import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
 import { Path } from "@/path/path"
+import { PrettyPath } from "@/path/schema"
 
 export namespace Workspace {
   export const Event = {
@@ -32,10 +33,10 @@ export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
     ref: "Workspace",
   })
-  export type Info = z.infer<typeof Info>
+  export type Info = WorkspaceInfo
 
   function fix(input: string) {
-    if (!input) return input
+    if (!input) return PrettyPath.make(input)
     return Path.truecaseSync(input)
   }
 
