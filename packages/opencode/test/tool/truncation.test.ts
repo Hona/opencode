@@ -4,12 +4,18 @@ import { Effect, FileSystem, Layer } from "effect"
 import { Truncate } from "../../src/tool/truncate"
 import { TruncateEffect } from "../../src/tool/truncate-effect"
 import { Identifier } from "../../src/id/id"
+import { Process } from "../../src/util/process"
 import { Filesystem } from "../../src/util/filesystem"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
+const ROOT = path.resolve(import.meta.dir, "..", "..")
+
+function bun(script: string) {
+  return [process.execPath, "-e", script]
+}
 
 describe("Truncate", () => {
   describe("output", () => {
@@ -124,6 +130,19 @@ describe("Truncate", () => {
       expect(result.truncated).toBe(false)
       if (result.truncated) throw new Error("expected not truncated")
       expect("outputPath" in result).toBe(false)
+    })
+
+    test("loads truncate output in a fresh process", async () => {
+      const script = [
+        'const { Truncate } = await import("./src/tool/truncate.ts")',
+        'const { runtime } = await import("./src/effect/runtime.ts")',
+        'const out = await Truncate.output("ok")',
+        'if (out.truncated || out.content !== "ok") throw new Error("unexpected truncate result")',
+        "await runtime.dispose()",
+      ].join(";")
+
+      const out = await Process.run(bun(script), { cwd: ROOT })
+      expect(out.code).toBe(0)
     })
   })
 
