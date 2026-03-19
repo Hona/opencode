@@ -1,7 +1,7 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
 import { Path } from "@/path/path"
-import type { PathKey } from "@/path/schema"
+import type { PathKey, PrettyPath } from "@/path/schema"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
@@ -10,8 +10,8 @@ import { Project } from "./project"
 import { State } from "./state"
 
 interface Context {
-  directory: string
-  worktree: string
+  directory: PrettyPath
+  worktree: PrettyPath
   project: Project.Info
 }
 const context = Context.create<Context>("instance")
@@ -21,7 +21,7 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function emit(directory: string) {
+function emit(directory: PrettyPath | string) {
   GlobalBus.emit("event", {
     directory,
     payload: {
@@ -33,7 +33,7 @@ function emit(directory: string) {
   })
 }
 
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function boot(input: { directory: PrettyPath; init?: () => Promise<any>; project?: Project.Info; worktree?: PrettyPath }) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -87,10 +87,10 @@ export const Instance = {
   get current() {
     return context.use()
   },
-  get directory() {
+  get directory(): PrettyPath | string {
     return context.use().directory
   },
-  get worktree() {
+  get worktree(): PrettyPath | string {
     return context.use().worktree
   },
   get project() {

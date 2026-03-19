@@ -4,6 +4,7 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Path } from "../path/path"
 import { Instance } from "../project/instance"
+import type { PathKey, PrettyPath } from "@/path/schema"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
 import { Glob } from "../util/glob"
@@ -45,24 +46,24 @@ async function resolveRelative(instruction: string): Promise<string[]> {
 export namespace InstructionPrompt {
   const state = Instance.state(() => {
     return {
-      claims: new Map<string, Set<string>>(),
+      claims: new Map<string, Set<PathKey>>(),
     }
   })
 
-  function isClaimed(messageID: string, filepath: string) {
+  function isClaimed(messageID: string, filepath: PrettyPath | string) {
     const claimed = state().claims.get(messageID)
     if (!claimed) return false
-    return claimed.has(filepath)
+    return claimed.has(Path.key(filepath))
   }
 
-  function claim(messageID: string, filepath: string) {
+  function claim(messageID: string, filepath: PrettyPath | string) {
     const current = state()
     let claimed = current.claims.get(messageID)
     if (!claimed) {
       claimed = new Set()
       current.claims.set(messageID, claimed)
     }
-    claimed.add(filepath)
+    claimed.add(Path.key(filepath))
   }
 
   export function clear(messageID: string) {
@@ -149,7 +150,7 @@ export namespace InstructionPrompt {
           const loaded = part.state.metadata?.loaded
           if (!loaded || !Array.isArray(loaded)) continue
           for (const p of loaded) {
-            if (typeof p === "string") paths.add(p)
+            if (typeof p === "string") paths.add(Path.pretty(p))
           }
         }
       }
@@ -164,7 +165,7 @@ export namespace InstructionPrompt {
     }
   }
 
-  export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
+  export async function resolve(messages: MessageV2.WithParts[], filepath: PrettyPath | string, messageID: string) {
     const system = new Set(Array.from(await systemPaths(), (item) => Filesystem.resolve(item)))
     const already = new Set(Array.from(loaded(messages), (item) => Filesystem.resolve(item)))
     const results: { filepath: string; content: string }[] = []
@@ -181,7 +182,7 @@ export namespace InstructionPrompt {
         claim(messageID, hit)
         const content = await Filesystem.readText(hit).catch(() => undefined)
         if (content) {
-          results.push({ filepath: hit, content: "Instructions from: " + hit + "\n" + content })
+          results.push({ filepath: Path.pretty(hit), content: "Instructions from: " + hit + "\n" + content })
         }
       }
       current = path.dirname(current)

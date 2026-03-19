@@ -25,7 +25,7 @@ export const WorktreeAdaptor: Adaptor = {
     const config = Config.parse(info)
     const bootstrap = await Worktree.createFromInfo({
       name: config.name,
-      directory: config.directory,
+      directory: Path.pretty(config.directory),
       branch: config.branch,
     })
     return bootstrap()

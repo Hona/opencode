@@ -7,10 +7,9 @@ import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
-// Git always outputs /-separated paths internally. Snapshot.patch() joins them
-// with path.join (which produces \ on Windows) then normalizes back to /.
-// This helper does the same for expected values so assertions match cross-platform.
-const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+// Snapshot.patch() now returns native pretty paths, so expected values should
+// match the host separator and casing rules.
+const fwd = (...parts: string[]) => path.join(...parts)
 
 async function bootstrap() {
   return tmpdir({

@@ -1,5 +1,6 @@
 import { ConfigProvider, Layer, ManagedRuntime } from "effect"
 import { InstanceContext } from "../../src/effect/instance-context"
+import { Path } from "../../src/path/path"
 import { Instance } from "../../src/project/instance"
 
 /** ConfigProvider that enables the experimental file watcher. */
@@ -29,8 +30,8 @@ export function withServices<S>(
     fn: async () => {
       const ctx = Layer.sync(InstanceContext, () =>
         InstanceContext.of({
-          directory: Instance.directory,
-          worktree: Instance.worktree,
+          directory: Path.pretty(Instance.directory),
+          worktree: Path.pretty(Instance.worktree),
           project: Instance.project,
         }),
       )

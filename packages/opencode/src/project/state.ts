@@ -1,3 +1,5 @@
+import { Path } from "@/path/path"
+import type { PathKey, PrettyPath } from "@/path/schema"
 import { Log } from "@/util/log"
 
 export namespace State {
@@ -7,14 +9,14 @@ export namespace State {
   }
 
   const log = Log.create({ service: "state" })
-  const recordsByKey = new Map<string, Map<any, Entry>>()
+  const recordsByKey = new Map<PathKey, Map<any, Entry>>()
 
-  export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
+  export function create<S>(root: () => PrettyPath | string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
     return () => {
-      const key = root()
+      const key = Path.key(root())
       let entries = recordsByKey.get(key)
       if (!entries) {
-        entries = new Map<string, Entry>()
+        entries = new Map<any, Entry>()
         recordsByKey.set(key, entries)
       }
       const exists = entries.get(init)
@@ -28,7 +30,8 @@ export namespace State {
     }
   }
 
-  export async function dispose(key: string) {
+  export async function dispose(directory: PrettyPath | string) {
+    const key = Path.key(directory)
     const entries = recordsByKey.get(key)
     if (!entries) return
 

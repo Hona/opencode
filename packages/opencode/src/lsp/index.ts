@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Path } from "@/path/path"
+import type { PathKey, PrettyPath } from "@/path/schema"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
@@ -15,15 +16,15 @@ import { spawn as lspspawn } from "./launch"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
-  function pretty(input: string) {
-    return String(Path.pretty(input, { cwd: Instance.directory }))
+  function pretty(input: string): PrettyPath {
+    return Path.pretty(input, { cwd: Instance.directory })
   }
 
   function uri(input: string) {
-    return String(Path.uri(pretty(input)))
+    return Path.uri(pretty(input))
   }
 
-  function key(serverID: string, root: string) {
+  function key(serverID: string, root: PrettyPath) {
     return `${serverID}:${Path.key(root)}`
   }
 
@@ -193,7 +194,7 @@ export namespace LSP {
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
 
-    async function schedule(server: LSPServer.Info, root: string, key: string) {
+    async function schedule(server: LSPServer.Info, root: PrettyPath, key: string) {
       const handle = await server
         .spawn(root)
         .then((value) => {
@@ -243,7 +244,8 @@ export namespace LSP {
       const id = key(server.id, dir)
       if (s.broken.has(id)) continue
 
-      const match = s.clients.find((x) => x.rootKey === Path.key(dir) && x.serverID === server.id)
+      const rootKey = Path.key(dir)
+      const match = s.clients.find((x) => x.rootKey === rootKey && x.serverID === server.id)
       if (match) {
         result.push(match)
         continue
@@ -305,13 +307,13 @@ export namespace LSP {
   }
 
   export async function diagnostics() {
-    const results = new Map<string, { path: string; diagnostics: LSPClient.Diagnostic[] }>()
+    const results = new Map<PathKey, { path: PrettyPath; diagnostics: LSPClient.Diagnostic[] }>()
     for (const result of await runAll(async (client) => client.diagnostics)) {
       for (const [path, diagnostics] of result.entries()) {
-        const key = String(Path.key(path))
+        const key = Path.key(path)
         const item = results.get(key)
         if (!item) {
-          results.set(key, { path, diagnostics: [...diagnostics] })
+          results.set(key, { path: Path.pretty(path), diagnostics: [...diagnostics] })
           continue
         }
         item.diagnostics.push(...diagnostics)

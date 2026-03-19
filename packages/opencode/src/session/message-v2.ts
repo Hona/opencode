@@ -11,6 +11,7 @@ import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
+import type { FileURI, PrettyPath } from "@/path/schema"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
@@ -149,6 +150,9 @@ export namespace MessageV2 {
   }).meta({
     ref: "FileSource",
   })
+  export type FileSource = Omit<z.infer<typeof FileSource>, "path"> & {
+    path: PrettyPath
+  }
 
   export const SymbolSource = FilePartSourceBase.extend({
     type: z.literal("symbol"),
@@ -159,6 +163,9 @@ export namespace MessageV2 {
   }).meta({
     ref: "SymbolSource",
   })
+  export type SymbolSource = Omit<z.infer<typeof SymbolSource>, "path"> & {
+    path: PrettyPath
+  }
 
   export const ResourceSource = FilePartSourceBase.extend({
     type: z.literal("resource"),
@@ -167,10 +174,14 @@ export namespace MessageV2 {
   }).meta({
     ref: "ResourceSource",
   })
+  export type ResourceSource = Omit<z.infer<typeof ResourceSource>, "uri"> & {
+    uri: string | FileURI
+  }
 
   export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
+  export type FilePartSource = FileSource | SymbolSource | ResourceSource
 
   export const FilePart = PartBase.extend({
     type: z.literal("file"),
@@ -441,7 +452,12 @@ export namespace MessageV2 {
   }).meta({
     ref: "AssistantMessage",
   })
-  export type Assistant = z.infer<typeof Assistant>
+  export type Assistant = Omit<z.infer<typeof Assistant>, "path"> & {
+    path: {
+      cwd: PrettyPath | string
+      root: PrettyPath | string
+    }
+  }
 
   export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
     ref: "Message",

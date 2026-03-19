@@ -7,6 +7,7 @@ import { InstanceContext } from "@/effect/instance-context"
 import { runPromiseInstance } from "@/effect/runtime"
 import { AppFileSystem } from "@/filesystem"
 import { Path } from "@/path/path"
+import type { PathKey, PrettyPath } from "@/path/schema"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -102,7 +103,7 @@ export namespace Snapshot {
       const args = (cmd: string[]) => ["--git-dir", gitdir, "--work-tree", worktree, ...cmd]
 
       const git = Effect.fnUntraced(
-        function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+        function* (cmd: string[], opts?: { cwd?: PrettyPath; env?: Record<string, string> }) {
           const proc = ChildProcess.make("git", cmd, {
             cwd: opts?.cwd,
             env: opts?.env,
@@ -127,9 +128,9 @@ export namespace Snapshot {
       )
 
       // Snapshot-specific error handling on top of AppFileSystem
-      const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
-      const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
-      const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
+      const exists = (file: PrettyPath | string) => fs.exists(file).pipe(Effect.orDie)
+      const read = (file: PrettyPath | string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
+      const remove = (file: PrettyPath | string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
 
       const enabled = Effect.fnUntraced(function* () {
         if (project.vcs !== "git") return false
@@ -213,7 +214,7 @@ export namespace Snapshot {
             .split("\n")
             .map((x) => x.trim())
             .filter(Boolean)
-            .map((x) => path.join(worktree, x).replaceAll("\\", "/")),
+            .map((x) => Path.pretty(x, { cwd: worktree })),
         }
       })
 
@@ -238,15 +239,16 @@ export namespace Snapshot {
       })
 
       const revert = Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
-        const seen = new Set<string>()
+        const seen = new Set<PathKey>()
         for (const item of patches) {
           for (const file of item.files) {
-            if (seen.has(file)) continue
-            seen.add(file)
+            const id = Path.key(file)
+            if (seen.has(id)) continue
+            seen.add(id)
+            const rel = Path.rel(worktree, file)
             log.info("reverting", { file, hash: item.hash })
-            const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], { cwd: worktree })
+            const result = yield* git([...core, ...args(["checkout", item.hash, "--", rel])], { cwd: worktree })
             if (result.code !== 0) {
-              const rel = path.relative(worktree, file)
               const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], { cwd: worktree })
               if (tree.code === 0 && tree.text.trim()) {
                 log.info("file existed in snapshot but checkout failed, keeping", { file })

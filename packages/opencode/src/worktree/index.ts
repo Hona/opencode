@@ -16,6 +16,7 @@ import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Path } from "@/path/path"
+import type { PathKey, PrettyPath } from "@/path/schema"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -46,7 +47,9 @@ export namespace Worktree {
       ref: "Worktree",
     })
 
-  export type Info = z.infer<typeof Info>
+  export type Info = Omit<z.infer<typeof Info>, "directory"> & {
+    directory: PrettyPath | string
+  }
 
   export const CreateInput = z
     .object({
@@ -70,7 +73,9 @@ export namespace Worktree {
       ref: "WorktreeRemoveInput",
     })
 
-  export type RemoveInput = z.infer<typeof RemoveInput>
+  export type RemoveInput = Omit<z.infer<typeof RemoveInput>, "directory"> & {
+    directory: PrettyPath | string
+  }
 
   export const ResetInput = z
     .object({
@@ -80,7 +85,9 @@ export namespace Worktree {
       ref: "WorktreeResetInput",
     })
 
-  export type ResetInput = z.infer<typeof ResetInput>
+  export type ResetInput = Omit<z.infer<typeof ResetInput>, "directory"> & {
+    directory: PrettyPath | string
+  }
 
   export const NotGitError = NamedError.create(
     "WorktreeNotGitError",
@@ -261,7 +268,7 @@ export namespace Worktree {
     return git(["clean", "-ffdx"], { cwd: root })
   }
 
-  async function key(input: string) {
+  async function key(input: string): Promise<PathKey> {
     return Path.key(await Path.physical(input))
   }
 
@@ -269,7 +276,7 @@ export namespace Worktree {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
       const branch = `opencode/${name}`
-      const directory = path.join(root, name)
+      const directory = Path.pretty(path.join(root, name))
 
       if (await exists(directory)) continue
 
@@ -279,7 +286,7 @@ export namespace Worktree {
       })
       if (branchCheck.exitCode === 0) continue
 
-      return Info.parse({ name, branch, directory })
+      return Info.parse({ name, branch, directory }) as Info
     }
 
     throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
@@ -440,10 +447,10 @@ export namespace Worktree {
       const lines = outputText(stdout)
         .split("\n")
         .map((line) => line.trim())
-      const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+      const entries = lines.reduce<{ path?: PrettyPath; branch?: string }[]>((acc, line) => {
         if (!line) return acc
         if (line.startsWith("worktree ")) {
-          acc.push({ path: line.slice("worktree ".length).trim() })
+          acc.push({ path: Path.pretty(line.slice("worktree ".length).trim()) })
           return acc
         }
         const current = acc[acc.length - 1]
@@ -462,7 +469,7 @@ export namespace Worktree {
       })()
     }
 
-    const clean = (target: string) =>
+    const clean = (target: PrettyPath) =>
       fs
         .rm(target, {
           recursive: true,
@@ -475,7 +482,7 @@ export namespace Worktree {
           throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
         })
 
-    const stop = async (target: string) => {
+    const stop = async (target: PrettyPath) => {
       if (!(await exists(target))) return
       await git(["fsmonitor--daemon", "stop"], { cwd: target })
     }
@@ -546,10 +553,10 @@ export namespace Worktree {
     const lines = outputText(list.stdout)
       .split("\n")
       .map((line) => line.trim())
-    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+    const entries = lines.reduce<{ path?: PrettyPath; branch?: string }[]>((acc, line) => {
       if (!line) return acc
       if (line.startsWith("worktree ")) {
-        acc.push({ path: line.slice("worktree ".length).trim() })
+        acc.push({ path: Path.pretty(line.slice("worktree ".length).trim()) })
         return acc
       }
       const current = acc[acc.length - 1]

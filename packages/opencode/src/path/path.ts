@@ -232,7 +232,7 @@ function toURIText(input: string, platform: NodeJS.Platform) {
   return `file:///${fixDrive(text.slice(0, 2))}${body}`
 }
 
-async function physicalAsync(input: string, opts: Opts = {}) {
+async function physicalAsync(input: string, opts: Opts = {}): Promise<PrettyPath> {
   const platform = pf(opts)
   const mod = lib(platform)
   const text = prettyText(input, opts)
@@ -244,7 +244,7 @@ async function physicalAsync(input: string, opts: Opts = {}) {
 
   while (true) {
     const parent = mod.dirname(dir)
-    if (parent === dir) return text
+    if (parent === dir) return PrettyPath.make(text)
     parts.unshift(mod.basename(dir))
     const next = await realpath(parent).catch(() => undefined)
     if (next) return PrettyPath.make(clean(mod.join(next, ...parts), platform))

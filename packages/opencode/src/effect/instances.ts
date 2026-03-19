@@ -4,6 +4,7 @@ import { FileTime } from "@/file/time"
 import { FileWatcher } from "@/file/watcher"
 import { Format } from "@/format"
 import { PermissionNext } from "@/permission"
+import { Path } from "@/path/path"
 import { Instance } from "@/project/instance"
 import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
@@ -63,6 +64,6 @@ export class Instances extends ServiceMap.Service<Instances, LayerMap.LayerMap<s
   )
 
   static get(directory: string): Layer.Layer<InstanceServices, never, Instances> {
-    return Layer.unwrap(Instances.use((map) => Effect.succeed(map.get(directory))))
+    return Layer.unwrap(Instances.use((map) => Effect.succeed(map.get(Path.pretty(directory)))))
   }
 }
