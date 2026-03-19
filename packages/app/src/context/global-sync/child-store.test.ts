@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
+import { workspacePathKey } from "@/context/file/path"
 import type { State } from "./types"
 import { createChildStoreManager } from "./child-store"
 
@@ -25,15 +26,15 @@ describe("createChildStoreManager", () => {
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {
-      manager.children[directory] = child()
-      manager.pin(directory)
+      manager.children[workspacePathKey(directory)] = child()
+      manager.pin(workspacePathKey(directory))
     })
 
     const directory = "/active"
-    manager.children[directory] = child()
-    manager.mark(directory)
+    manager.children[workspacePathKey(directory)] = child()
+    manager.mark(workspacePathKey(directory))
 
-    expect(manager.children[directory]).toBeDefined()
+    expect(manager.children[workspacePathKey(directory)]).toBeDefined()
   })
 
   test("reuses canonical workspace keys for equivalent directories", () => {
@@ -54,9 +55,9 @@ describe("createChildStoreManager", () => {
     })
 
     const store = child()
-    manager.children["c:/repo"] = store
+    manager.children[workspacePathKey("c:/repo")] = store
 
-    expect(manager.child("C:\\Repo\\", { bootstrap: false })).toBe(store)
-    expect(Object.keys(manager.children)).toEqual(["c:/repo"])
+    expect(manager.child(workspacePathKey("C:\\Repo\\"), { bootstrap: false })).toBe(store)
+    expect(Object.keys(manager.children)).toEqual([workspacePathKey("c:/repo")])
   })
 })

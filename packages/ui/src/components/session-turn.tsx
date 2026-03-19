@@ -87,7 +87,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 const hidden = new Set(["todowrite", "todoread"])
 
-const key = (path: string) => pathKey(path) || path
+const key = (path: string) => pathKey(path)
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {

@@ -74,7 +74,6 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -2233,7 +2232,7 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
-    const normalized = Filesystem.normalizePath(props.filePath)
+    const normalized = Path.truecaseSync(props.filePath)
     const arr = props.diagnostics?.[normalized] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })

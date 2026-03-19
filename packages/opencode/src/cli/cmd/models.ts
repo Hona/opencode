@@ -51,13 +51,21 @@ export const ModelsCommand = cmd({
         }
 
         if (args.provider) {
-          const provider = providers[ProviderID.make(args.provider)]
+          let providerID: ProviderID
+          try {
+            providerID = ProviderID.parse(args.provider)
+          } catch (err) {
+            UI.error(err instanceof Error ? err.message : `Invalid provider id: ${args.provider}`)
+            return
+          }
+
+          const provider = providers[providerID]
           if (!provider) {
             UI.error(`Provider not found: ${args.provider}`)
             return
           }
 
-          printModels(ProviderID.make(args.provider), args.verbose)
+          printModels(providerID, args.verbose)
           return
         }
 
@@ -70,7 +78,7 @@ export const ModelsCommand = cmd({
         })
 
         for (const providerID of providerIDs) {
-          printModels(ProviderID.make(providerID), args.verbose)
+          printModels(ProviderID.parse(providerID), args.verbose)
         }
       },
     })

@@ -1,8 +1,8 @@
 import { base64Encode } from "@opencode-ai/util/encode"
-import { pathKey } from "@opencode-ai/util/path"
+import { workspacePathKey } from "@/context/file/path"
 import { decode64 } from "@/utils/base64"
 
-const dir = (directory: string) => pathKey(directory) || directory
+const dir = (directory: string) => workspacePathKey(directory)
 
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID

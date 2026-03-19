@@ -11,6 +11,7 @@ import { SessionID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { PathMigration } from "../../src/path/migrate"
+import { Path } from "../../src/path/path"
 import { PrettyPath } from "../../src/path/schema"
 import { Filesystem } from "../../src/util/filesystem"
 
@@ -103,7 +104,7 @@ describe("PathMigration.run", () => {
       id: sid(),
       slug: "slug",
       projectID: project.id,
-      directory: raw(tmp.path),
+        directory: Path.pretty(raw(tmp.path)),
       title: "test",
       version: "0.0.0-test",
       time: {

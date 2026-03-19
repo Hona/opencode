@@ -133,7 +133,7 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
-const key = (path: string) => pathKey(path) || path
+const key = (path: string) => pathKey(path)
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined

@@ -1,8 +1,8 @@
-import { workspacePathKey, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
+import { workspacePathKey, type WorkspacePath } from "@/context/file/path"
 
-const dir = (directory: WorkspacePath | WorkspaceKey) => workspacePathKey(directory as WorkspacePath)
+const dir = (directory: WorkspacePath) => workspacePathKey(directory)
 
-const key = (directory: WorkspacePath | WorkspaceKey, sessionID: string) => `${dir(directory)}\n${sessionID}`
+const key = (directory: WorkspacePath, sessionID: string) => `${dir(directory)}\n${sessionID}`
 
 export const SESSION_PREFETCH_TTL = 15_000
 

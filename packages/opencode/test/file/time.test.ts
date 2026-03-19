@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
 import { SessionID } from "../../src/session/schema"
+import { Path } from "../../src/path/path"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
@@ -34,12 +35,12 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const before = await FileTime.get(sessionID, filepath)
+          const before = await FileTime.get(sessionID, Path.pretty(filepath))
           expect(before).toBeUndefined()
 
-          await FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
 
-          const after = await FileTime.get(sessionID, filepath)
+          const after = await FileTime.get(sessionID, Path.pretty(filepath))
           expect(after).toBeInstanceOf(Date)
           expect(after!.getTime()).toBeGreaterThan(0)
         },
@@ -54,11 +55,11 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(SessionID.make("ses_00000000000000000000000002"), filepath)
-          await FileTime.read(SessionID.make("ses_00000000000000000000000003"), filepath)
+          await FileTime.read(SessionID.make("ses_00000000000000000000000002"), Path.pretty(filepath))
+          await FileTime.read(SessionID.make("ses_00000000000000000000000003"), Path.pretty(filepath))
 
-          const time1 = await FileTime.get(SessionID.make("ses_00000000000000000000000002"), filepath)
-          const time2 = await FileTime.get(SessionID.make("ses_00000000000000000000000003"), filepath)
+          const time1 = await FileTime.get(SessionID.make("ses_00000000000000000000000002"), Path.pretty(filepath))
+          const time2 = await FileTime.get(SessionID.make("ses_00000000000000000000000003"), Path.pretty(filepath))
 
           expect(time1).toBeDefined()
           expect(time2).toBeDefined()
@@ -74,11 +75,11 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
-          const first = await FileTime.get(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
+          const first = await FileTime.get(sessionID, Path.pretty(filepath))
 
-          await FileTime.read(sessionID, filepath)
-          const second = await FileTime.get(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
+          const second = await FileTime.get(sessionID, Path.pretty(filepath))
 
           expect(second!.getTime()).toBeGreaterThanOrEqual(first!.getTime())
         },
@@ -96,8 +97,8 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
-          await FileTime.assert(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
+          await FileTime.assert(sessionID, Path.pretty(filepath))
         },
       })
     })
@@ -110,7 +111,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("You must read file")
+          await expect(FileTime.assert(sessionID, Path.pretty(filepath))).rejects.toThrow("You must read file")
         },
       })
     })
@@ -124,10 +125,10 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
           await fs.writeFile(filepath, "modified content", "utf-8")
           await touch(filepath, 2_000)
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("modified since it was last read")
+          await expect(FileTime.assert(sessionID, Path.pretty(filepath))).rejects.toThrow("modified since it was last read")
         },
       })
     })
@@ -141,13 +142,13 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
           await fs.writeFile(filepath, "modified", "utf-8")
           await touch(filepath, 2_000)
 
           let error: Error | undefined
           try {
-            await FileTime.assert(sessionID, filepath)
+            await FileTime.assert(sessionID, Path.pretty(filepath))
           } catch (e) {
             error = e as Error
           }
@@ -168,7 +169,7 @@ describe("file/time", () => {
         directory: tmp.path,
         fn: async () => {
           let executed = false
-          await FileTime.withLock(filepath, async () => {
+          await FileTime.withLock(Path.pretty(filepath), async () => {
             executed = true
             return "result"
           })
@@ -184,7 +185,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await FileTime.withLock(filepath, async () => {
+          const result = await FileTime.withLock(Path.pretty(filepath), async () => {
             return "success"
           })
           expect(result).toBe("success")
@@ -203,7 +204,7 @@ describe("file/time", () => {
           const hold = gate()
           const ready = gate()
 
-          const op1 = FileTime.withLock(filepath, async () => {
+          const op1 = FileTime.withLock(Path.pretty(filepath), async () => {
             order.push(1)
             ready.open()
             await hold.wait
@@ -212,7 +213,7 @@ describe("file/time", () => {
 
           await ready.wait
 
-          const op2 = FileTime.withLock(filepath, async () => {
+          const op2 = FileTime.withLock(Path.pretty(filepath), async () => {
             order.push(3)
             order.push(4)
           })
@@ -238,7 +239,7 @@ describe("file/time", () => {
           const hold = gate()
           const ready = gate()
 
-          const op1 = FileTime.withLock(filepath1, async () => {
+          const op1 = FileTime.withLock(Path.pretty(filepath1), async () => {
             started1 = true
             ready.open()
             await hold.wait
@@ -247,7 +248,7 @@ describe("file/time", () => {
 
           await ready.wait
 
-          const op2 = FileTime.withLock(filepath2, async () => {
+          const op2 = FileTime.withLock(Path.pretty(filepath2), async () => {
             started2 = true
             hold.open()
           })
@@ -267,13 +268,13 @@ describe("file/time", () => {
         directory: tmp.path,
         fn: async () => {
           await expect(
-            FileTime.withLock(filepath, async () => {
+            FileTime.withLock(Path.pretty(filepath), async () => {
               throw new Error("Test error")
             }),
           ).rejects.toThrow("Test error")
 
           let executed = false
-          await FileTime.withLock(filepath, async () => {
+          await FileTime.withLock(Path.pretty(filepath), async () => {
             executed = true
           })
           expect(executed).toBe(true)
@@ -292,13 +293,13 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
 
           const stats = Filesystem.stat(filepath)
           expect(stats?.mtime).toBeInstanceOf(Date)
           expect(stats!.mtime.getTime()).toBeGreaterThan(0)
 
-          await FileTime.assert(sessionID, filepath)
+          await FileTime.assert(sessionID, Path.pretty(filepath))
         },
       })
     })
@@ -312,7 +313,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, Path.pretty(filepath))
 
           const originalStat = Filesystem.stat(filepath)
 
@@ -322,7 +323,7 @@ describe("file/time", () => {
           const newStat = Filesystem.stat(filepath)
           expect(newStat!.mtime.getTime()).toBeGreaterThan(originalStat!.mtime.getTime())
 
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow()
+          await expect(FileTime.assert(sessionID, Path.pretty(filepath))).rejects.toThrow()
         },
       })
     })

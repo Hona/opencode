@@ -1,5 +1,4 @@
-import type { FileNode } from "@opencode-ai/sdk/v2"
-import { getParentPath, pathKey } from "@opencode-ai/util/path"
+import { filePathKey, filePathParentKey, type FilePath, type FilePathKey } from "./path"
 
 type WatcherEvent = {
   type: string
@@ -7,13 +6,12 @@ type WatcherEvent = {
 }
 
 type WatcherOps = {
-  normalize: (input: string) => string
-  hasFile: (path: string) => boolean
-  isOpen?: (path: string) => boolean
-  loadFile: (path: string) => void
-  node: (path: string) => FileNode | undefined
-  isDirLoaded: (path: string) => boolean
-  refreshDir: (path: string) => void
+  normalize: (input: string) => FilePath
+  file: (key: FilePathKey) => FilePath | undefined
+  open?: (key: FilePathKey) => FilePath | undefined
+  dir: (key: FilePathKey) => FilePath | undefined
+  loadFile: (path: FilePath) => void
+  refreshDir: (path: FilePath) => void
 }
 
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
@@ -26,36 +24,21 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (!kind) return
 
   const path = ops.normalize(rawPath)
-  if (!path) return
-  const key = pathKey(path) || path
+  const key = filePathKey(path)
   if (key.startsWith(".git/")) return
 
-  const file = (() => {
-    if (ops.hasFile(path) || ops.isOpen?.(path)) return path
-    if (key === path) return
-    if (ops.hasFile(key) || ops.isOpen?.(key)) return key
-  })()
-
-  if (file) {
-    ops.loadFile(file)
-  }
+  const file = ops.file(key) ?? ops.open?.(key)
+  if (file) ops.loadFile(file)
 
   if (kind === "change") {
-    const dir = (() => {
-      if (path === "") return ""
-      const node = ops.node(path) ?? (key === path ? undefined : ops.node(key))
-      if (node?.type !== "directory") return
-      return node.path
-    })()
-    if (dir === undefined) return
-    if (!ops.isDirLoaded(dir)) return
+    const dir = ops.dir(key)
+    if (!dir) return
     ops.refreshDir(dir)
     return
   }
   if (kind !== "add" && kind !== "unlink") return
 
-  const parent = getParentPath(key)
-  if (!ops.isDirLoaded(parent)) return
-
+  const parent = ops.dir(filePathParentKey(key))
+  if (!parent) return
   ops.refreshDir(parent)
 }

@@ -22,9 +22,14 @@ export type FilePathKey = string & { _brand: "FilePathKey" }
 type LegacyFileTabId = FileUri
 export const FILE_TAB_PREFIX = "tab:file:" as const
 export type FileTabId = `${typeof FILE_TAB_PREFIX}${string}`
-export type SessionTabId = "context" | "review" | FileTabId | FileUri
+export type SessionTabId = "context" | "review" | FileTabId
+export type StoredSessionTabId = SessionTabId | FileUri
+export const ROOT_FILE_PATH = "" as FilePath
+export const ROOT_FILE_PATH_KEY = "" as FilePathKey
 
-export const workspacePathKey = (input: WorkspacePath) => (pathKey(input) || input) as WorkspaceKey
+export const workspacePathKey = (input: WorkspacePath) => pathKey(input) as WorkspaceKey
+
+export const reviewPathKey = (input: ReviewPath) => pathKey(input)
 
 export const filePathKey = (input: FilePath) => pathKey(input) as FilePathKey
 
@@ -45,6 +50,35 @@ export const isFileTab = (input: string): input is FileTabId | LegacyFileTabId =
 
 export const filePathEqual = (a: FilePath | undefined, b: FilePath | undefined) => pathEqual(a, b)
 
+export const filePathFromKey = (input: FilePathKey) => input as FilePath
+
+export function filePathParentKey(input: FilePathKey) {
+  const split = input.lastIndexOf("/")
+  if (split === -1) return ROOT_FILE_PATH_KEY
+  return input.slice(0, split) as FilePathKey
+}
+
+export function filePathName(input: FilePathKey) {
+  const split = input.lastIndexOf("/")
+  if (split === -1) return input
+  return input.slice(split + 1)
+}
+
+export function filePathAncestorKeys(input: FilePathKey) {
+  const out: FilePathKey[] = []
+
+  for (let key = filePathParentKey(input); key !== ROOT_FILE_PATH_KEY; key = filePathParentKey(key)) {
+    out.unshift(key)
+  }
+
+  return out
+}
+
+export function filePathDescendsFrom(input: FilePathKey, parent: FilePathKey) {
+  if (parent === ROOT_FILE_PATH_KEY) return input !== ROOT_FILE_PATH_KEY
+  return input.startsWith(parent + "/")
+}
+
 export function dedupeFilePaths(paths: readonly FilePath[]) {
   const seen = new Set<FilePathKey>()
   const out: FilePath[] = []
@@ -53,7 +87,7 @@ export function dedupeFilePaths(paths: readonly FilePath[]) {
     const key = filePathKey(path)
     if (seen.has(key)) continue
     seen.add(key)
-    out.push(key || path)
+    out.push(path)
   }
 
   return out
@@ -87,6 +121,10 @@ export function createPathHelpers(scope: () => WorkspacePath) {
     return `${FILE_TAB_PREFIX}${encodeFilePath(path)}`
   }
 
+  const key = (input: string) => filePathKey(normalize(input))
+
+  const dirKey = (input: string) => filePathKey(normalizeDir(input))
+
   const normalizeTab = (input: string) => {
     const path = pathFromTab(input)
     if (!path) return input
@@ -103,6 +141,8 @@ export function createPathHelpers(scope: () => WorkspacePath) {
   return {
     normalize,
     display,
+    key,
+    dirKey,
     tab,
     normalizeTab,
     pathFromTab,

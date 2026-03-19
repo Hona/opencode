@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Path } from "../../src/path/path"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -133,7 +134,7 @@ describe("structured-output.AssistantMessage", () => {
     providerID: "anthropic",
     mode: "default",
     agent: "default",
-    path: { cwd: "/test", root: "/test" },
+    path: { cwd: Path.pretty("/test"), root: Path.pretty("/test") },
     cost: 0.001,
     tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: Date.now() },

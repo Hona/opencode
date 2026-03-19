@@ -1,6 +1,5 @@
-import { pathKey } from "@opencode-ai/util/path"
-import { createPathHelpers, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
-import { sessionDirKey, sessionParts } from "@/utils/session-key"
+import { workspacePathKey, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
+import { normalizeSessionKey, sessionDirKey, sessionPathHelpers } from "@/utils/session-key"
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -11,12 +10,10 @@ const num = (value: unknown) => (typeof value === "number" && Number.isFinite(va
 
 const flag = (value: unknown) => (typeof value === "boolean" ? value : undefined)
 
-const pathId = (value: WorkspacePath) => (pathKey(value) || value) as WorkspaceKey
-
 function paths(value: unknown, skip?: string) {
   if (!Array.isArray(value)) return
 
-  const omit = skip ? pathId(skip) : undefined
+  const omit = skip ? workspacePathKey(skip) : undefined
   const seen = new Set<string>()
   const out: string[] = []
 
@@ -24,7 +21,7 @@ function paths(value: unknown, skip?: string) {
     const cur = text(item)
     if (!cur) continue
 
-    const id = pathId(cur)
+    const id = workspacePathKey(cur)
     if (id === omit || seen.has(id)) continue
     seen.add(id)
     out.push(cur)
@@ -42,7 +39,7 @@ function byKey<T>(
 
   const out: Record<WorkspaceKey, T> = {}
   for (const [name, item] of Object.entries(value)) {
-    const id = pathId(name)
+    const id = workspacePathKey(name)
     const next = move(item, id)
     if (next === undefined) continue
 
@@ -58,7 +55,7 @@ function bySession<T>(value: unknown, move: (value: unknown, key: string) => T |
 
   const out: Record<string, T> = {}
   for (const [name, item] of Object.entries(value)) {
-    const key = sessionParts(name).key
+    const key = normalizeSessionKey(name)
     const next = move(item, key)
     if (next === undefined) continue
 
@@ -82,14 +79,7 @@ function list(value: readonly string[]) {
   return out
 }
 
-const sessionPath = (key: string) => {
-  const dir = sessionParts(key).directory
-  if (!dir) return
-  return createPathHelpers(() => dir)
-}
-
-function tabs(value: readonly string[], key: string) {
-  const path = sessionPath(key)
+function tabs(value: readonly string[], path: ReturnType<typeof sessionPathHelpers>) {
   if (!path) return list(value)
 
   const seen = new Set<string>()
@@ -105,10 +95,9 @@ function tabs(value: readonly string[], key: string) {
   return out
 }
 
-function scroll(value: unknown, key: string) {
+function scroll(value: unknown, path: ReturnType<typeof sessionPathHelpers>) {
   if (!record(value)) return {}
 
-  const path = sessionPath(key)
   if (!path) return value
 
   return Object.fromEntries(Object.entries(value).map(([name, item]) => [path.normalizeTab(name), item]))
@@ -176,7 +165,7 @@ function projects(value: unknown) {
     const next = project(item)
     if (!next) continue
 
-    const id = pathId(next.worktree)
+    const id = workspacePathKey(next.worktree)
     const at = seen.get(id)
     if (at === undefined) {
       seen.set(id, out.length)
@@ -194,12 +183,13 @@ function sessionTabs(value: unknown, key: string): SessionTabs | undefined {
   if (!record(value)) return
   if (!Array.isArray(value.all)) return
 
-  const all = tabs(value.all.filter((item): item is string => typeof item === "string"), key)
+  const path = sessionPathHelpers(key)
+  const all = tabs(value.all.filter((item): item is string => typeof item === "string"), path)
   const active = text(value.active)
 
   return {
     all,
-    active: active ? sessionPath(key)?.normalizeTab(active) ?? active : undefined,
+    active: active ? path?.normalizeTab(active) ?? active : undefined,
   }
 }
 
@@ -212,10 +202,11 @@ function mergeSessionTabs(prev: SessionTabs, next: SessionTabs): SessionTabs {
 
 function sessionView(value: unknown, key: string): SessionView | undefined {
   if (!record(value)) return
+  const path = sessionPathHelpers(key)
 
   return {
     ...value,
-    scroll: scroll(value.scroll, key),
+    scroll: scroll(value.scroll, path),
     ...(Array.isArray(value.reviewOpen)
       ? { reviewOpen: value.reviewOpen.filter((item): item is string => typeof item === "string") }
       : {}),

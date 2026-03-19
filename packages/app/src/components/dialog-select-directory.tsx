@@ -14,13 +14,13 @@ import {
   getPathRoot,
   getPathScope,
   getPathSearchText,
-  pathKey,
   trimPrettyPath,
 } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { workspacePathKey } from "@/context/file/path"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 
@@ -49,7 +49,7 @@ function toRow(absolute: string, home: string, group: Row["group"]): Row {
 function uniqueRows(rows: Row[]) {
   const seen = new Set<string>()
   return rows.filter((row) => {
-    const key = pathKey(row.absolute) || row.absolute
+    const key = workspacePathKey(row.absolute)
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -59,7 +59,7 @@ function uniqueRows(rows: Row[]) {
 function unique(paths: string[]) {
   const seen = new Set<string>()
   return paths.filter((path) => {
-    const key = pathKey(path) || path
+    const key = workspacePathKey(path)
     if (seen.has(key)) return false
     seen.add(key)
     return true
@@ -76,7 +76,7 @@ function useDirectorySearch(args: {
 
   const dirs = async (dir: string) => {
     const path = trimPrettyPath(dir)
-    const key = pathKey(path) || path
+    const key = workspacePathKey(path)
     const existing = cache.get(key)
     if (existing) return existing
 

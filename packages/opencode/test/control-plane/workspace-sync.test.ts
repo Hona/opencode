@@ -8,7 +8,7 @@ import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
-import type { Adaptor } from "../../src/control-plane/types"
+import type { Adaptor, WorkspaceFetchInput } from "../../src/control-plane/types"
 import { PrettyPath } from "../../src/path/schema"
 
 afterEach(async () => {
@@ -28,7 +28,7 @@ const TestAdaptor: Adaptor = {
     throw new Error("not used")
   },
   async remove() {},
-  async fetch(_config: unknown, _input: RequestInfo | URL, _init?: RequestInit) {
+  async fetch(_config: unknown, _input: WorkspaceFetchInput, _init?: RequestInit) {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         const encoder = new TextEncoder()

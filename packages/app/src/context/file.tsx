@@ -63,7 +63,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => sessionKey(params.dir ?? "", params.id))
-    const fileKey = (file: FilePath) => (filePathKey(file) || file) as FilePathKey
+    const fileKey = (file: FilePath) => filePathKey(file)
     const loadKey = (directory: string, file: FilePath) => `${workspacePathKey(directory)}\n${fileKey(file)}`
 
     const inflight = new Map<string, Promise<void>>()
@@ -164,10 +164,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    const load = (input: string, options?: { force?: boolean }) => {
-      const file = path.normalize(input)
-      if (!file) return Promise.resolve()
-
+    const loadFile = (file: FilePath, options?: { force?: boolean }) => {
       const directory = scope()
       const key = loadKey(directory, file)
       ensure(file)
@@ -203,30 +200,38 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
+    const load = (input: string, options?: { force?: boolean }) => loadFile(path.normalize(input), options)
+
     const search = (query: string, dirs: "true" | "false") =>
       sdk.client.find.files({ query, dirs }).then(
         (x) => (x.data ?? []).map(path.normalize),
         () => [],
       )
 
+    const openFile = (key: FilePathKey) => {
+      for (const tab of tabs.all()) {
+        const file = path.pathFromTab(tab)
+        if (!file || fileKey(file) !== key) continue
+        return file
+      }
+    }
+
     const stop = sdk.event.listen((e) => {
-        invalidateFromWatcher(e.details, {
-          normalize: path.normalize,
-          hasFile: (file) => Boolean(store.file[fileKey(file)]),
-          isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
-          loadFile: (file) => {
-            void load(file, { force: true })
+      invalidateFromWatcher(e.details, {
+        normalize: path.normalize,
+        file: (key) => store.file[key]?.path,
+        open: openFile,
+        dir: tree.dirPathByKey,
+        loadFile: (file) => {
+          void loadFile(file, { force: true })
         },
-        node: tree.node,
-        isDirLoaded: tree.isLoaded,
         refreshDir: (dir) => {
           void tree.listDir(dir, { force: true })
         },
       })
     })
 
-    const get = (input: string) => {
-      const file = path.normalize(input)
+    const getFile = (file: FilePath) => {
       const state = store.file[fileKey(file)]
       const content = state?.content
       if (!content) return state
@@ -238,16 +243,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return state
     }
 
-    function withPath(input: string, action: (file: FilePath) => unknown) {
+    const get = (input: string) => getFile(path.normalize(input))
+
+    function withFile<T>(input: string, action: (file: FilePath) => T) {
       return action(path.normalize(input))
     }
-    const scrollTop = (input: string) => withPath(input, (file) => view().scrollTop(file))
-    const scrollLeft = (input: string) => withPath(input, (file) => view().scrollLeft(file))
-    const selectedLines = (input: string) => withPath(input, (file) => view().selectedLines(file))
-    const setScrollTop = (input: string, top: number) => withPath(input, (file) => view().setScrollTop(file, top))
-    const setScrollLeft = (input: string, left: number) => withPath(input, (file) => view().setScrollLeft(file, left))
+    const scrollTop = (input: string) => withFile(input, (file) => view().scrollTop(file))
+    const scrollLeft = (input: string) => withFile(input, (file) => view().scrollLeft(file))
+    const selectedLines = (input: string) => withFile(input, (file) => view().selectedLines(file))
+    const setScrollTop = (input: string, top: number) => withFile(input, (file) => view().setScrollTop(file, top))
+    const setScrollLeft = (input: string, left: number) => withFile(input, (file) => view().setScrollLeft(file, left))
     const setSelectedLines = (input: string, range: SelectedLineRange | null) =>
-      withPath(input, (file) => view().setSelectedLines(file, range))
+      withFile(input, (file) => view().setSelectedLines(file, range))
 
     onCleanup(() => {
       stop()

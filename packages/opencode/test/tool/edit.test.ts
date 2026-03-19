@@ -21,6 +21,8 @@ const ctx = {
   ask: async () => {},
 }
 
+const pretty = (file: string) => Path.pretty(file)
+
 async function touch(file: string, time: number) {
   const date = new Date(time)
   await fs.utimes(file, date, date)
@@ -119,7 +121,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           const result = await edit.execute(
@@ -146,7 +148,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           await expect(
@@ -194,7 +196,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           await expect(
@@ -244,7 +246,7 @@ describe("tool.edit", () => {
         directory: tmp.path,
         fn: async () => {
           // Read first
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           // Simulate external modification
           await fs.writeFile(filepath, "modified externally", "utf-8")
@@ -274,7 +276,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -301,7 +303,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const { Bus } = await import("../../src/bus")
           const { File } = await import("../../src/file")
@@ -339,7 +341,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -365,7 +367,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -414,7 +416,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, dirpath)
+          await FileTime.read(ctx.sessionID, pretty(dirpath))
 
           const edit = await EditTool.init()
           await expect(
@@ -439,7 +441,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
           const result = await edit.execute(
@@ -510,7 +512,7 @@ describe("tool.edit", () => {
         fn: async () => {
           const edit = await EditTool.init()
           const filePath = path.join(tmp.path, "test.txt")
-          await FileTime.read(ctx.sessionID, filePath)
+          await FileTime.read(ctx.sessionID, pretty(filePath))
           await edit.execute(
             {
               filePath,
@@ -651,7 +653,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const edit = await EditTool.init()
 
@@ -666,7 +668,7 @@ describe("tool.edit", () => {
           )
 
           // Need to read again since FileTime tracks per-session
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const promise2 = edit.execute(
             {

@@ -18,7 +18,15 @@ export const ExportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
+      let sessionID = (() => {
+        if (!args.sessionID) return
+        try {
+          return SessionID.parse(args.sessionID)
+        } catch (err) {
+          UI.error(err instanceof Error ? err.message : `Invalid session id: ${args.sessionID}`)
+          process.exit(1)
+        }
+      })()
       process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
 
       if (!sessionID) {

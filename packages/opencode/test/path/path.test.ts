@@ -71,6 +71,12 @@ describe("path", () => {
   })
 
   describe("key()", () => {
+    test("keeps the global slash sentinel stable", () => {
+      expect(String(Path.key("/"))).toBe("/")
+      expect(Path.eq("/", "/")).toBe(true)
+      expect(Path.eq("/", process.platform === "win32" ? "C:\\" : "/tmp")).toBe(false)
+    })
+
     test("matches slash and case variants on Windows", () => {
       const a = Path.key("C:\\Repo\\File.ts", { platform: "win32" })
       const b = Path.key("c:/repo/file.ts", { platform: "win32" })
@@ -301,6 +307,38 @@ describe("path", () => {
     })
   })
 
+  describe("join()", () => {
+    test("joins child paths against an existing pretty root", () => {
+      expect(String(Path.join("/repo", "src/file.ts", { platform: "linux" }))).toBe("/repo/src/file.ts")
+    })
+  })
+
+  describe("parent()", () => {
+    test("returns the normalized parent directory", () => {
+      expect(String(Path.parent("/repo/src/file.ts", { platform: "linux" }))).toBe("/repo/src")
+    })
+  })
+
+  describe("repoFrom()", () => {
+    test("converts absolute paths back into repo paths", () => {
+      expect(String(Path.repoFrom("/repo", "/repo/src/file.ts", { platform: "linux" }))).toBe("src/file.ts")
+    })
+  })
+
+  describe("up()", () => {
+    test("walks to the bounded ancestor inclusively", () => {
+      expect(Array.from(Path.up("/repo/src/nested", { stop: "/repo", platform: "linux" }), String)).toEqual([
+        "/repo/src/nested",
+        "/repo/src",
+        "/repo",
+      ])
+    })
+
+    test("returns nothing when start is outside the bound", () => {
+      expect(Array.from(Path.up("/repo-other/src", { stop: "/repo", platform: "linux" }), String)).toEqual([])
+    })
+  })
+
   describe("truecase()", () => {
     test("keeps missing tails as typed on Windows", async () => {
       if (process.platform !== "win32") return
@@ -351,6 +389,10 @@ describe("path", () => {
   })
 
   describe("truecaseSync()", () => {
+    test("keeps the global slash sentinel stable", () => {
+      expect(String(Path.truecaseSync("/"))).toBe("/")
+    })
+
     test("keeps missing tails as typed on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()

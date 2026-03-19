@@ -72,13 +72,13 @@ export const ExperimentalRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          provider: z.string(),
-          model: z.string(),
+          provider: ProviderID.zod,
+          model: ModelID.zod,
         }),
       ),
       async (c) => {
         const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({ providerID: ProviderID.make(provider), modelID: ModelID.make(model) })
+        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model })
         return c.json(
           tools.map((t) => ({
             id: t.id,

@@ -16,7 +16,7 @@ import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Path } from "@/path/path"
-import type { PathKey, PrettyPath } from "@/path/schema"
+import { PrettyPath } from "@/path/schema"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -41,15 +41,13 @@ export namespace Worktree {
     .object({
       name: z.string(),
       branch: z.string(),
-      directory: z.string(),
+      directory: PrettyPath.zod,
     })
     .meta({
       ref: "Worktree",
     })
 
-  export type Info = Omit<z.infer<typeof Info>, "directory"> & {
-    directory: PrettyPath | string
-  }
+  export type Info = z.infer<typeof Info>
 
   export const CreateInput = z
     .object({
@@ -73,9 +71,7 @@ export namespace Worktree {
       ref: "WorktreeRemoveInput",
     })
 
-  export type RemoveInput = Omit<z.infer<typeof RemoveInput>, "directory"> & {
-    directory: PrettyPath | string
-  }
+  export type RemoveInput = z.infer<typeof RemoveInput>
 
   export const ResetInput = z
     .object({
@@ -85,9 +81,7 @@ export namespace Worktree {
       ref: "WorktreeResetInput",
     })
 
-  export type ResetInput = Omit<z.infer<typeof ResetInput>, "directory"> & {
-    directory: PrettyPath | string
-  }
+  export type ResetInput = z.infer<typeof ResetInput>
 
   export const NotGitError = NamedError.create(
     "WorktreeNotGitError",
@@ -245,11 +239,40 @@ export namespace Worktree {
     )
   }
 
-  async function prune(root: string, entries: string[]) {
+  type Entry = {
+    path: PrettyPath
+    branch?: string
+  }
+
+  function entries(stdout: Uint8Array | undefined) {
+    return outputText(stdout)
+      .split("\n")
+      .map((line) => line.trim())
+      .reduce<Entry[]>((acc, line) => {
+        if (!line) return acc
+        if (line.startsWith("worktree ")) {
+          acc.push({ path: Path.from(line.slice("worktree ".length).trim(), { label: "git worktree path" }) })
+          return acc
+        }
+        const item = acc[acc.length - 1]
+        if (!item) return acc
+        if (line.startsWith("branch ")) item.branch = line.slice("branch ".length).trim()
+        return acc
+      }, [])
+  }
+
+  async function locate(stdout: Uint8Array | undefined, target: PrettyPath) {
+    const key = await Path.physicalKey(target)
+    for (const item of entries(stdout)) {
+      if ((await Path.physicalKey(item.path)) === key) return item
+    }
+  }
+
+  async function prune(root: PrettyPath, entries: string[]) {
     const base = await Path.physical(root)
     await Promise.all(
       entries.map(async (entry) => {
-        const target = await Path.physical(path.resolve(root, entry))
+        const target = await Path.physical(Path.join(root, entry))
         if (Path.eq(target, base)) return
         if (!Path.contains(base, target)) return
         await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
@@ -257,7 +280,7 @@ export namespace Worktree {
     )
   }
 
-  async function sweep(root: string) {
+  async function sweep(root: PrettyPath) {
     const first = await git(["clean", "-ffdx"], { cwd: root })
     if (first.exitCode === 0) return first
 
@@ -268,15 +291,11 @@ export namespace Worktree {
     return git(["clean", "-ffdx"], { cwd: root })
   }
 
-  async function key(input: string): Promise<PathKey> {
-    return Path.key(await Path.physical(input))
-  }
-
-  async function candidate(root: string, base?: string) {
+  async function candidate(root: PrettyPath, base?: string) {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
       const branch = `opencode/${name}`
-      const directory = Path.pretty(path.join(root, name))
+      const directory = Path.join(root, name)
 
       if (await exists(directory)) continue
 
@@ -286,7 +305,7 @@ export namespace Worktree {
       })
       if (branchCheck.exitCode === 0) continue
 
-      return Info.parse({ name, branch, directory }) as Info
+      return { name, branch, directory }
     }
 
     throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
@@ -345,7 +364,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const root = path.join(Global.Path.data, "worktree", Instance.project.id)
+    const root = Path.join(Global.Path.data, path.join("worktree", Instance.project.id))
     await fs.mkdir(root, { recursive: true })
 
     const base = name ? slug(name) : ""
@@ -441,33 +460,8 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const target = await Path.physical(input.directory)
-    const directory = Path.key(target)
-    const locate = async (stdout: Uint8Array | undefined) => {
-      const lines = outputText(stdout)
-        .split("\n")
-        .map((line) => line.trim())
-      const entries = lines.reduce<{ path?: PrettyPath; branch?: string }[]>((acc, line) => {
-        if (!line) return acc
-        if (line.startsWith("worktree ")) {
-          acc.push({ path: Path.pretty(line.slice("worktree ".length).trim()) })
-          return acc
-        }
-        const current = acc[acc.length - 1]
-        if (!current) return acc
-        if (line.startsWith("branch ")) {
-          current.branch = line.slice("branch ".length).trim()
-        }
-        return acc
-      }, [])
-
-      return (async () => {
-        for (const item of entries) {
-          if (!item.path) continue
-          if ((await key(item.path)) === directory) return item
-        }
-      })()
-    }
+    const directory = Path.from(input.directory, { label: "worktree directory" })
+    const target = await Path.physical(directory)
 
     const clean = (target: PrettyPath) =>
       fs
@@ -492,9 +486,9 @@ export namespace Worktree {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
 
-    const entry = await locate(list.stdout)
+    const entry = await locate(list.stdout, target)
 
-    if (!entry?.path) {
+    if (!entry) {
       const directoryExists = await exists(target)
       if (directoryExists) {
         await stop(target)
@@ -515,8 +509,8 @@ export namespace Worktree {
         })
       }
 
-      const stale = await locate(next.stdout)
-      if (stale?.path) {
+      const stale = await locate(next.stdout, target)
+      if (stale) {
         throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
       }
     }
@@ -539,9 +533,10 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = await key(input.directory)
-    const primary = await key(Instance.worktree)
-    if (directory === primary) {
+    const directory = Path.from(input.directory, { label: "worktree directory" })
+    const targetKey = await Path.physicalKey(directory)
+    const primary = await Path.physicalKey(Instance.worktree)
+    if (targetKey === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
@@ -550,30 +545,8 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
 
-    const lines = outputText(list.stdout)
-      .split("\n")
-      .map((line) => line.trim())
-    const entries = lines.reduce<{ path?: PrettyPath; branch?: string }[]>((acc, line) => {
-      if (!line) return acc
-      if (line.startsWith("worktree ")) {
-        acc.push({ path: Path.pretty(line.slice("worktree ".length).trim()) })
-        return acc
-      }
-      const current = acc[acc.length - 1]
-      if (!current) return acc
-      if (line.startsWith("branch ")) {
-        current.branch = line.slice("branch ".length).trim()
-      }
-      return acc
-    }, [])
-
-    const entry = await (async () => {
-      for (const item of entries) {
-        if (!item.path) continue
-        if ((await key(item.path)) === directory) return item
-      }
-    })()
-    if (!entry?.path) {
+    const entry = await locate(list.stdout, directory)
+    if (!entry) {
       throw new ResetFailedError({ message: "Worktree not found" })
     }
 
@@ -621,10 +594,6 @@ export namespace Worktree {
       if (fetch.exitCode !== 0) {
         throw new ResetFailedError({ message: errorText(fetch) || `Failed to fetch ${target}` })
       }
-    }
-
-    if (!entry.path) {
-      throw new ResetFailedError({ message: "Worktree path not found" })
     }
 
     const worktreePath = entry.path

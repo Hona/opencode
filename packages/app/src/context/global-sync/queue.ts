@@ -1,13 +1,13 @@
-import type { WorkspacePath } from "@/context/file/path"
+import type { WorkspaceKey } from "@/context/file/path"
 
 type QueueInput = {
   paused: () => boolean
   bootstrap: () => Promise<void>
-  bootstrapInstance: (directory: WorkspacePath) => Promise<void> | void
+  bootstrapInstance: (directory: WorkspaceKey) => Promise<void> | void
 }
 
 export function createRefreshQueue(input: QueueInput) {
-  const queued = new Set<string>()
+  const queued = new Set<WorkspaceKey>()
   let root = false
   let running = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -15,8 +15,8 @@ export function createRefreshQueue(input: QueueInput) {
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   const take = (count: number) => {
-    if (queued.size === 0) return [] as string[]
-    const items: string[] = []
+    if (queued.size === 0) return [] as WorkspaceKey[]
+    const items: WorkspaceKey[] = []
     for (const item of queued) {
       queued.delete(item)
       items.push(item)
@@ -33,8 +33,7 @@ export function createRefreshQueue(input: QueueInput) {
     }, 0)
   }
 
-  const push = (directory: string) => {
-    if (!directory) return
+  const push = (directory: WorkspaceKey) => {
     queued.add(directory)
     if (input.paused()) return
     schedule()
@@ -73,7 +72,7 @@ export function createRefreshQueue(input: QueueInput) {
   return {
     push,
     refresh,
-    clear(directory: string) {
+    clear(directory: WorkspaceKey) {
       queued.delete(directory)
     },
     dispose() {

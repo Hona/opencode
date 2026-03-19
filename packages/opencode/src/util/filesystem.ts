@@ -1,7 +1,6 @@
 import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
-import { realpathSync } from "fs"
 import { dirname, join } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
@@ -100,84 +99,30 @@ export namespace Filesystem {
     return lookup(p) || "application/octet-stream"
   }
 
-  /**
-   * On Windows, normalize a path to its canonical casing using the filesystem.
-   * This is needed because Windows paths are case-insensitive but LSP servers
-   * may return paths with different casing than what we send them.
-   */
-  export function normalizePath(p: string): string {
-    if (process.platform !== "win32") return p
-    try {
-      return realpathSync.native(p)
-    } catch {
-      return p
-    }
-  }
-
-  // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
-  // Keep logical alias roots stable while best-effort true-casing on Windows.
-  export function resolve(p: string): string {
-    return Path.truecaseSync(p)
-  }
-
-  export function windowsPath(p: string): string {
-    if (process.platform !== "win32") return p
-    return (
-      p
-        .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Git Bash for Windows paths are typically /<drive>/...
-        .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Cygwin git paths are typically /cygdrive/<drive>/...
-        .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // WSL paths are typically /mnt/<drive>/...
-        .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-    )
-  }
-
-  export function overlaps(a: string, b: string) {
-    return Path.contains(a, b) || Path.contains(b, a)
-  }
-
-  export function contains(parent: string, child: string) {
-    return Path.contains(parent, child)
-  }
-
   export async function findUp(target: string, start: string, stop?: string) {
-    let current = start
     const result = []
-    while (true) {
-      const search = join(current, target)
+    for (const dir of Path.up(start, { stop })) {
+      const search = join(dir, target)
       if (await exists(search)) result.push(search)
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
     }
     return result
   }
 
   export async function* up(options: { targets: string[]; start: string; stop?: string }) {
-    const { targets, start, stop } = options
-    let current = start
-    while (true) {
-      for (const target of targets) {
-        const search = join(current, target)
+    for (const dir of Path.up(options.start, { stop: options.stop })) {
+      for (const target of options.targets) {
+        const search = join(dir, target)
         if (await exists(search)) yield search
       }
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
     }
   }
 
   export async function globUp(pattern: string, start: string, stop?: string) {
-    let current = start
     const result = []
-    while (true) {
+    for (const dir of Path.up(start, { stop })) {
       try {
         const matches = await Glob.scan(pattern, {
-          cwd: current,
+          cwd: dir,
           absolute: true,
           include: "file",
           dot: true,
@@ -186,10 +131,6 @@ export namespace Filesystem {
       } catch {
         // Skip invalid glob patterns
       }
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
     }
     return result
   }

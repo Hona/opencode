@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import z from "zod"
 
 /**
  * Attach static methods to a schema object. Designed to be used with `.pipe()`:
@@ -15,6 +16,20 @@ export const withStatics =
   <S extends object, M extends Record<string, unknown>>(methods: (schema: S) => M) =>
   (schema: S): S & M =>
     Object.assign(schema, methods(schema))
+
+export function zodFrom<T>(parse: (input: string) => T): z.ZodType<T> {
+  return z.string().transform((input, ctx) => {
+    try {
+      return parse(input)
+    } catch (err) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: err instanceof Error ? err.message : String(err),
+      })
+      return z.NEVER
+    }
+  })
+}
 
 declare const NewtypeBrand: unique symbol
 type NewtypeBrand<Tag extends string> = { readonly [NewtypeBrand]: Tag }

@@ -1,7 +1,7 @@
 import path from "path"
 import { ProjectTable } from "@/project/project.sql"
 import { Path } from "@/path/path"
-import { PrettyPath } from "@/path/schema"
+import type { PrettyPath } from "@/path/schema"
 import { Global } from "@/global"
 import { Database, eq } from "@/storage/db"
 import { Filesystem } from "@/util/filesystem"
@@ -35,15 +35,7 @@ export namespace PathMigration {
     }
   }
 
-  function fix(input: string) {
-    if (!input || input === "/") return PrettyPath.make(input)
-    return Path.truecaseSync(input)
-  }
-
-  function key(input: string) {
-    if (!input || input === "/") return input
-    return Path.key(input)
-  }
+  const stored = Path.truecaseSync
 
   function same(a: string[], b: string[]) {
     return a.length === b.length && a.every((item, idx) => item === b[idx])
@@ -53,9 +45,9 @@ export namespace PathMigration {
     const seen = new Set<string>()
     const out: PrettyPath[] = []
     for (const item of list) {
-      const dir = fix(item)
+      const dir = stored(item)
       if (dir && worktree && Path.eq(dir, worktree)) continue
-      const id = key(dir)
+      const id = Path.key(dir)
       if (seen.has(id)) continue
       seen.add(id)
       out.push(dir)
@@ -115,7 +107,7 @@ export namespace PathMigration {
       }
 
       for (const row of db.select().from(ProjectTable).all()) {
-        const worktree = fix(row.worktree)
+        const worktree = stored(row.worktree)
         const sandboxes = uniq(row.sandboxes, worktree)
         if (worktree === row.worktree && same(sandboxes, row.sandboxes)) continue
         db.update(ProjectTable).set({ worktree, sandboxes }).where(eq(ProjectTable.id, row.id)).run()
@@ -123,14 +115,14 @@ export namespace PathMigration {
       }
 
       for (const row of db.select().from(SessionTable).all()) {
-        const directory = fix(row.directory)
+        const directory = stored(row.directory)
         if (directory === row.directory) continue
         db.update(SessionTable).set({ directory }).where(eq(SessionTable.id, row.id)).run()
         change.session++
       }
 
       for (const row of db.select().from(WorkspaceTable).all()) {
-        const directory = row.directory ? fix(row.directory) : null
+        const directory = row.directory ? stored(row.directory) : null
         if (directory === row.directory) continue
         db.update(WorkspaceTable).set({ directory }).where(eq(WorkspaceTable.id, row.id)).run()
         change.workspace++

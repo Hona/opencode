@@ -47,7 +47,7 @@ async function check(map: (dir: string) => string) {
       fn: async () => {
         const cfg = await Config.get()
         expect(cfg.snapshot).toBe(true)
-        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(Instance.directory).toBe(Path.truecaseSync(tmp.path))
         expect(Instance.project.id).not.toBe(ProjectID.global)
       },
     })

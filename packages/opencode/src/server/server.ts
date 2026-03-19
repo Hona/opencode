@@ -50,6 +50,12 @@ import { lazy } from "@/util/lazy"
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+function badInput(err: unknown) {
+  return new HTTPException(400, {
+    message: err instanceof Error ? err.message : "Invalid request",
+  })
+}
+
 export namespace Server {
   const log = Log.create({ service: "server" })
   const os = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"
@@ -196,19 +202,25 @@ export namespace Server {
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-        const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-        const directory = Path.pretty(
-          (() => {
-            try {
-              return decodeURIComponent(raw)
-            } catch {
-              return raw
-            }
-          })(),
-        )
+        const rawDirectory = c.req.query("directory") || c.req.header("x-opencode-directory")
+        const workspaceID = (() => {
+          try {
+            return rawWorkspaceID ? WorkspaceID.parse(rawWorkspaceID) : undefined
+          } catch (err) {
+            throw badInput(err)
+          }
+        })()
+        const directory = (() => {
+          try {
+            if (!rawDirectory) return Path.pretty(process.cwd())
+            return Path.from(rawDirectory, { encoded: true, label: "directory parameter" })
+          } catch (err) {
+            throw badInput(err)
+          }
+        })()
 
         return WorkspaceContext.provide({
-          workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
+          workspaceID,
           async fn() {
             return Instance.provide({
               directory,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { filePathKey } from "./path"
 import { invalidateFromWatcher } from "./watcher"
 
 describe("file watcher invalidation", () => {
@@ -15,10 +16,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: (path) => path === "src/new.ts",
+        file: (key) => (key === filePathKey("src/new.ts") ? "src/new.ts" : undefined),
+        dir: (key) => (key === filePathKey("src") ? "src" : undefined),
         loadFile: (path) => loads.push(path),
-        node: () => undefined,
-        isDirLoaded: (path) => path === "src",
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -41,10 +41,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: (path) => path === "src/new.ts",
+        file: (key) => (key === filePathKey("src/new.ts") ? "src/new.ts" : undefined),
+        dir: (key) => (key === filePathKey("src") ? "src" : undefined),
         loadFile: (path) => loads.push(path),
-        node: () => undefined,
-        isDirLoaded: (path) => path === "src",
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -66,17 +65,10 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => false,
-        isOpen: (path) => path === "src/open.ts",
+        file: () => undefined,
+        open: (key) => (key === filePathKey("src/open.ts") ? "src/open.ts" : undefined),
+        dir: () => undefined,
         loadFile: (path) => loads.push(path),
-        node: () => ({
-          path: "src/open.ts",
-          type: "file",
-          name: "open.ts",
-          absolute: "/repo/src/open.ts",
-          ignored: false,
-        }),
-        isDirLoaded: () => false,
         refreshDir: () => {},
       },
     )
@@ -97,10 +89,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => false,
+        file: () => undefined,
+        dir: (key) => (key === filePathKey("src") ? "src" : undefined),
         loadFile: () => {},
-        node: () => ({ path: "src", type: "directory", name: "src", absolute: "/repo/src", ignored: false }),
-        isDirLoaded: (path) => path === "src",
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -115,16 +106,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => false,
+        file: () => undefined,
+        dir: () => undefined,
         loadFile: () => {},
-        node: () => ({
-          path: "src/file.ts",
-          type: "file",
-          name: "file.ts",
-          absolute: "/repo/src/file.ts",
-          ignored: false,
-        }),
-        isDirLoaded: () => true,
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -145,13 +129,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => false,
+        file: () => undefined,
+        dir: (key) => (key === filePathKey("src/nested") ? "src/nested" : undefined),
         loadFile: () => {},
-        node: (path) =>
-          path === "src/nested"
-            ? { path: "src/nested", type: "directory", name: "nested", absolute: "/repo/src/nested", ignored: false }
-            : undefined,
-        isDirLoaded: (path) => path === "src/nested",
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -172,12 +152,11 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => true,
+        file: () => "src/a.ts",
+        dir: () => "src",
         loadFile: () => {
           throw new Error("should not load")
         },
-        node: () => undefined,
-        isDirLoaded: () => true,
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -192,12 +171,11 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => true,
+        file: () => "src/a.ts",
+        dir: () => "src",
         loadFile: () => {
           throw new Error("should not load")
         },
-        node: () => undefined,
-        isDirLoaded: () => true,
         refreshDir: (path) => refresh.push(path),
       },
     )
@@ -209,10 +187,9 @@ describe("file watcher invalidation", () => {
       },
       {
         normalize: (input) => input,
-        hasFile: () => false,
+        file: () => undefined,
+        dir: () => "src",
         loadFile: () => {},
-        node: () => undefined,
-        isDirLoaded: () => true,
         refreshDir: (path) => refresh.push(path),
       },
     )

@@ -48,3 +48,27 @@ test("server ingress keeps alias directories", async () => {
     await fs.rm(alias, { recursive: true, force: true }).catch(() => undefined)
   }
 })
+
+test("server ingress rejects invalid workspace ids", async () => {
+  const app = Server.createApp({})
+  const response = await app.request("/path", {
+    headers: {
+      "x-opencode-workspace": "workspace_test",
+    },
+  })
+
+  expect(response.status).toBe(400)
+  expect(await response.text()).toContain('Expected workspace id starting with "wrk"')
+})
+
+test("server ingress rejects invalid encoded directories", async () => {
+  const app = Server.createApp({})
+  const response = await app.request("/path", {
+    headers: {
+      "x-opencode-directory": "%E0%A4%A",
+    },
+  })
+
+  expect(response.status).toBe(400)
+  expect(await response.text()).toContain("Invalid percent-encoding in directory parameter")
+})

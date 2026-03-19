@@ -35,11 +35,14 @@ export namespace LSPServer {
 
   const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
     return async (file) => {
+      const start = path.dirname(file)
+      const stop = Instance.directory
+
       if (excludePatterns) {
         const excludedFiles = Filesystem.up({
           targets: excludePatterns,
-          start: path.dirname(file),
-          stop: Instance.directory,
+          start,
+          stop,
         })
         const excluded = await excludedFiles.next()
         await excludedFiles.return()
@@ -47,12 +50,12 @@ export namespace LSPServer {
       }
       const files = Filesystem.up({
         targets: includePatterns,
-        start: path.dirname(file),
-        stop: Instance.directory,
+        start,
+        stop,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return Instance.directory
+      if (!first.value) return stop
       return path.dirname(first.value)
     }
   }
@@ -852,32 +855,27 @@ export namespace LSPServer {
 
   export const RustAnalyzer: Info = {
     id: "rust",
-    root: async (root) => {
-      const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(root)
-      if (crateRoot === undefined) {
-        return undefined
-      }
-      const worktree = Filesystem.resolve(Instance.worktree)
-      let currentDir = Filesystem.resolve(crateRoot)
+    root: async (file) => {
+      const crates = Filesystem.up({
+        targets: ["Cargo.toml", "Cargo.lock"],
+        start: path.dirname(file),
+      })
+      const first = await crates.next()
+      await crates.return()
 
-      while (!Path.eq(currentDir, path.dirname(currentDir))) {
-        // Stop at filesystem root
-        const cargoTomlPath = path.join(currentDir, "Cargo.toml")
+      const crateRoot = first.value ? path.dirname(first.value) : Instance.directory
+      const worktree = Instance.worktree === "/" ? undefined : Path.truecaseSync(Instance.worktree)
+
+      for (const dir of Path.up(crateRoot, { stop: worktree })) {
+        const cargoTomlPath = path.join(dir, "Cargo.toml")
         try {
           const cargoTomlContent = await Filesystem.readText(cargoTomlPath)
           if (cargoTomlContent.includes("[workspace]")) {
-            return currentDir
+            return dir
           }
         } catch (err) {
           // File doesn't exist or can't be read, continue searching up
         }
-
-        const parentDir = path.dirname(currentDir)
-        if (Path.eq(parentDir, currentDir)) break // Reached filesystem root
-        currentDir = parentDir
-
-        // Stop if we've gone above the app root
-        if (!Filesystem.contains(worktree, currentDir)) break
       }
 
       return crateRoot

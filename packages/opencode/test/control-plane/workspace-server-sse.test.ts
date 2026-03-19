@@ -109,4 +109,17 @@ describe("control-plane/workspace-server SSE", () => {
       await fs.rm(alias, { recursive: true, force: true }).catch(() => undefined)
     }
   })
+
+  test("rejects invalid workspace ids before bootstrapping", async () => {
+    const app = WorkspaceServer.App()
+    const response = await app.request("/event", {
+      headers: {
+        "x-opencode-workspace": "workspace_test_workspace",
+        "x-opencode-directory": process.cwd(),
+      },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('Expected workspace id starting with "wrk"')
+  })
 })

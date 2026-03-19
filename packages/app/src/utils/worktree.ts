@@ -1,4 +1,4 @@
-const normalize = (directory: string) => directory.replace(/[\\/]+$/, "")
+import { workspacePathKey, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
 
 type State =
   | {
@@ -12,9 +12,11 @@ type State =
       message: string
     }
 
-const state = new Map<string, State>()
+const key = (directory: WorkspacePath) => workspacePathKey(directory)
+
+const state = new Map<WorkspaceKey, State>()
 const waiters = new Map<
-  string,
+  WorkspaceKey,
   {
     promise: Promise<State>
     resolve: (state: State) => void
@@ -29,45 +31,43 @@ function deferred() {
   return { promise, resolve: box.resolve }
 }
 
+function settle(directory: WorkspacePath, next: Extract<State, { status: "ready" | "failed" }>) {
+  const id = key(directory)
+  state.set(id, next)
+
+  const waiter = waiters.get(id)
+  if (!waiter) return
+  waiters.delete(id)
+  waiter.resolve(next)
+}
+
 export const Worktree = {
-  get(directory: string) {
-    return state.get(normalize(directory))
+  get(directory: WorkspacePath) {
+    return state.get(key(directory))
   },
-  pending(directory: string) {
-    const key = normalize(directory)
-    const current = state.get(key)
+  pending(directory: WorkspacePath) {
+    const id = key(directory)
+    const current = state.get(id)
     if (current && current.status !== "pending") return
-    state.set(key, { status: "pending" })
+    state.set(id, { status: "pending" })
   },
-  ready(directory: string) {
-    const key = normalize(directory)
-    const next = { status: "ready" } as const
-    state.set(key, next)
-    const waiter = waiters.get(key)
-    if (!waiter) return
-    waiters.delete(key)
-    waiter.resolve(next)
+  ready(directory: WorkspacePath) {
+    settle(directory, { status: "ready" })
   },
-  failed(directory: string, message: string) {
-    const key = normalize(directory)
-    const next = { status: "failed", message } as const
-    state.set(key, next)
-    const waiter = waiters.get(key)
-    if (!waiter) return
-    waiters.delete(key)
-    waiter.resolve(next)
+  failed(directory: WorkspacePath, message: string) {
+    settle(directory, { status: "failed", message })
   },
-  wait(directory: string) {
-    const key = normalize(directory)
-    const current = state.get(key)
+  wait(directory: WorkspacePath) {
+    const id = key(directory)
+    const current = state.get(id)
     if (current && current.status !== "pending") return Promise.resolve(current)
 
-    const existing = waiters.get(key)
+    const existing = waiters.get(id)
     if (existing) return existing.promise
 
     const waiter = deferred()
 
-    waiters.set(key, waiter)
+    waiters.set(id, waiter)
     return waiter.promise
   },
 }

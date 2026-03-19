@@ -12,7 +12,6 @@ import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
 import { Path } from "@/path/path"
-import { PrettyPath } from "@/path/schema"
 
 export namespace Workspace {
   export const Event = {
@@ -35,18 +34,13 @@ export namespace Workspace {
   })
   export type Info = WorkspaceInfo
 
-  function fix(input: string) {
-    if (!input) return PrettyPath.make(input)
-    return Path.truecaseSync(input)
-  }
-
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
       id: row.id,
       type: row.type,
       branch: row.branch,
       name: row.name,
-      directory: row.directory ? fix(row.directory) : null,
+      directory: row.directory ? Path.truecaseSync(row.directory) : null,
       extra: row.extra,
       projectID: row.project_id,
     }
@@ -113,7 +107,7 @@ export namespace Workspace {
     if (row) {
       const info = fromRow(row)
       const adaptor = await getAdaptor(row.type)
-      adaptor.remove(info)
+      await adaptor.remove(info)
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
       return info
     }

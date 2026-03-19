@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { filePathKey } from "@/context/file/path"
 
 let shouldListRoot: typeof import("./file-tree").shouldListRoot
 let shouldListExpanded: typeof import("./file-tree").shouldListExpanded
@@ -53,8 +54,8 @@ describe("file tree fetch discipline", () => {
   })
 
   test("allowed auto-expand picks only collapsed dirs", () => {
-    const expanded = new Set<string>()
-    const filter = { dirs: new Set(["src", "src/components"]) }
+    const expanded = new Set<ReturnType<typeof filePathKey>>()
+    const filter = { dirs: new Set([filePathKey("src"), filePathKey("src/components")]) }
 
     const first = dirsToExpand({
       level: 0,
@@ -62,7 +63,7 @@ describe("file tree fetch discipline", () => {
       expanded: (dir) => expanded.has(dir),
     })
 
-    expect(first).toEqual(["src", "src/components"])
+    expect(first.map(String)).toEqual(["src", "src/components"])
 
     for (const dir of first) expanded.add(dir)
 

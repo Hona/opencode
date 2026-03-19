@@ -1,6 +1,6 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FilePath, type FileTabId } from "@/context/file/path"
+import { FILE_TAB_PREFIX, type FilePath, type FileTabId } from "@/context/file/path"
 import { same } from "@/utils/same"
 
 const emptyTabs: FileTabId[] = []
@@ -23,6 +23,12 @@ export const getSessionKey = (dir: string | undefined, id: string | undefined) =
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
+  const fileTab = (tab: string) => {
+    if (!input.pathFromTab(tab)) return
+    const next = input.normalizeTab(tab)
+    if (!next.startsWith(FILE_TAB_PREFIX)) return
+    return next as FileTabId
+  }
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openedTabs = createMemo(
     () => {
@@ -32,7 +38,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .all()
         .flatMap((tab) => {
           if (tab === "context" || tab === "review") return []
-          const value = input.pathFromTab(tab) ? (input.normalizeTab(tab) as FileTabId) : undefined
+          const value = fileTab(tab)
           if (!value) return []
           if (seen.has(value)) return []
           seen.add(value)
@@ -46,7 +52,9 @@ export const createSessionTabs = (input: TabsInput) => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === "review" && review()) return active
-    if (active && input.pathFromTab(active)) return input.normalizeTab(active)
+
+    const file = active ? fileTab(active) : undefined
+    if (file) return file
 
     const first = openedTabs()[0]
     if (first) return first
@@ -57,18 +65,16 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeFileTab = createMemo(() => {
     const active = activeTab()
     if (active === "context" || active === "review" || active === "empty") return
-    const tab = active as FileTabId
-    if (!openedTabs().includes(tab)) return
-    return tab
-  }) as Accessor<FileTabId | undefined>
+    if (!openedTabs().includes(active)) return
+    return active
+  })
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
     if (active === "review" || active === "empty") return
-    const tab = active as FileTabId
-    if (!openedTabs().includes(tab)) return
-    return tab
-  }) as Accessor<"context" | FileTabId | undefined>
+    if (!openedTabs().includes(active)) return
+    return active
+  })
 
   return {
     contextOpen,

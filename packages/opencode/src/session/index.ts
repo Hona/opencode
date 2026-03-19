@@ -41,11 +41,6 @@ export namespace Session {
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
 
-  function fix(input: string) {
-    if (!input) return PrettyPath.make(input)
-    return Path.truecaseSync(input)
-  }
-
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
@@ -76,7 +71,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: fix(row.directory),
+      directory: Path.truecaseSync(row.directory),
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -93,14 +88,14 @@ export namespace Session {
     }
   }
 
-  export function toRow(info: z.output<typeof Info> | Info): SessionInsert {
+  export function toRow(info: Info): SessionInsert {
     return {
       id: info.id,
       project_id: info.projectID,
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
-      directory: fix(info.directory),
+      directory: Path.truecaseSync(info.directory),
       title: info.title,
       version: info.version,
       share_url: info.share?.url,
@@ -133,7 +128,7 @@ export namespace Session {
       slug: z.string(),
       projectID: ProjectID.zod,
       workspaceID: WorkspaceID.zod.optional(),
-      directory: z.string(),
+      directory: PrettyPath.zod,
       parentID: SessionID.zod.optional(),
       summary: z
         .object({
@@ -169,22 +164,18 @@ export namespace Session {
     .meta({
       ref: "Session",
     })
-  export type Info = Omit<z.output<typeof Info>, "directory"> & {
-    directory: PrettyPath
-  }
+  export type Info = z.output<typeof Info>
 
   export const ProjectInfo = z
     .object({
       id: ProjectID.zod,
       name: z.string().optional(),
-      worktree: z.string(),
+      worktree: PrettyPath.zod,
     })
     .meta({
       ref: "ProjectSummary",
     })
-  export type ProjectInfo = Omit<z.output<typeof ProjectInfo>, "worktree"> & {
-    worktree: PrettyPath
-  }
+  export type ProjectInfo = z.output<typeof ProjectInfo>
 
   export const GlobalInfo = Info.extend({
     project: ProjectInfo.nullable(),
@@ -313,7 +304,7 @@ export namespace Session {
     title?: string
     parentID?: SessionID
     workspaceID?: WorkspaceID
-    directory: string
+    directory: PrettyPath
     permission?: PermissionNext.Ruleset
   }) {
     const dir = await Path.truecase(input.directory)
@@ -562,7 +553,7 @@ export namespace Session {
   }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
-    const dir = input?.directory ? fix(input.directory) : undefined
+    const dir = input?.directory ? Path.truecaseSync(input.directory) : undefined
     if (dir) {
       conditions.push(eq(SessionTable.directory, dir))
     }
@@ -601,7 +592,7 @@ export namespace Session {
     archived?: boolean
   }) {
     const conditions: SQL[] = []
-    const dir = input?.directory ? fix(input.directory) : undefined
+    const dir = input?.directory ? Path.truecaseSync(input.directory) : undefined
     if (dir) {
       conditions.push(eq(SessionTable.directory, dir))
     }

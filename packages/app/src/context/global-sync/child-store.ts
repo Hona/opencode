@@ -2,7 +2,7 @@ import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
-import { workspacePathKey, type WorkspacePath } from "@/context/file/path"
+import type { WorkspaceKey } from "@/context/file/path"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -18,39 +18,34 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 
 export function createChildStoreManager(input: {
   owner: Owner
-  isBooting: (directory: string) => boolean
-  isLoadingSessions: (directory: string) => boolean
-  onBootstrap: (directory: string) => void
-  onDispose: (directory: string) => void
+  isBooting: (directory: WorkspaceKey) => boolean
+  isLoadingSessions: (directory: WorkspaceKey) => boolean
+  onBootstrap: (directory: WorkspaceKey) => void
+  onDispose: (directory: WorkspaceKey) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
-  const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
-  const vcsCache = new Map<string, VcsCache>()
-  const metaCache = new Map<string, MetaCache>()
-  const iconCache = new Map<string, IconCache>()
-  const lifecycle = new Map<string, DirState>()
-  const pins = new Map<string, number>()
-  const ownerPins = new WeakMap<object, Set<string>>()
-  const disposers = new Map<string, () => void>()
-  const dir = (directory: WorkspacePath | string) => workspacePathKey(directory as WorkspacePath)
+  type ChildStore = [Store<State>, SetStoreFunction<State>]
 
-  const mark = (directory: WorkspacePath | string) => {
-    directory = dir(directory)
-    if (!directory) return
+  const children: Record<WorkspaceKey, ChildStore> = {} as Record<WorkspaceKey, ChildStore>
+  const vcsCache = new Map<WorkspaceKey, VcsCache>()
+  const metaCache = new Map<WorkspaceKey, MetaCache>()
+  const iconCache = new Map<WorkspaceKey, IconCache>()
+  const lifecycle = new Map<WorkspaceKey, DirState>()
+  const pins = new Map<WorkspaceKey, number>()
+  const ownerPins = new WeakMap<object, Set<WorkspaceKey>>()
+  const disposers = new Map<WorkspaceKey, () => void>()
+
+  const mark = (directory: WorkspaceKey) => {
     lifecycle.set(directory, { lastAccessAt: Date.now() })
     runEviction(directory)
   }
 
-  const pin = (directory: WorkspacePath | string) => {
-    directory = dir(directory)
-    if (!directory) return
+  const pin = (directory: WorkspaceKey) => {
     pins.set(directory, (pins.get(directory) ?? 0) + 1)
     mark(directory)
   }
 
-  const unpin = (directory: WorkspacePath | string) => {
-    directory = dir(directory)
-    if (!directory) return
+  const unpin = (directory: WorkspaceKey) => {
     const next = (pins.get(directory) ?? 0) - 1
     if (next > 0) {
       pins.set(directory, next)
@@ -60,10 +55,9 @@ export function createChildStoreManager(input: {
     runEviction()
   }
 
-  const pinned = (directory: WorkspacePath | string) => (pins.get(dir(directory)) ?? 0) > 0
+  const pinned = (directory: WorkspaceKey) => (pins.get(directory) ?? 0) > 0
 
-  const pinForOwner = (directory: WorkspacePath | string) => {
-    directory = dir(directory)
+  const pinForOwner = (directory: WorkspaceKey) => {
     const current = getOwner()
     if (!current) return
     if (current === input.owner) return
@@ -83,8 +77,7 @@ export function createChildStoreManager(input: {
     })
   }
 
-  function disposeDirectory(directory: WorkspacePath | string) {
-    directory = dir(directory)
+  function dispose(directory: WorkspaceKey) {
     if (
       !canDisposeDirectory({
         directory,
@@ -111,8 +104,8 @@ export function createChildStoreManager(input: {
     return true
   }
 
-  function runEviction(skip?: string) {
-    const stores = Object.keys(children)
+  function runEviction(skip?: WorkspaceKey) {
+    const stores = Object.keys(children) as WorkspaceKey[]
     if (stores.length === 0) return
     const list = pickDirectoriesToEvict({
       stores,
@@ -124,13 +117,11 @@ export function createChildStoreManager(input: {
     }).filter((directory) => directory !== skip)
     if (list.length === 0) return
     for (const directory of list) {
-      if (!disposeDirectory(directory)) continue
+      if (!dispose(directory)) continue
     }
   }
 
-  function ensureChild(directory: WorkspacePath | string) {
-    directory = dir(directory)
-    if (!directory) console.error("No directory provided")
+  function ensureChild(directory: WorkspaceKey) {
     if (!children[directory]) {
       const vcs = runWithOwner(input.owner, () =>
         persisted(
@@ -231,8 +222,7 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function child(directory: WorkspacePath | string, options: ChildOptions = {}) {
-    directory = dir(directory)
+  function child(directory: WorkspaceKey, options: ChildOptions = {}) {
     const childStore = ensureChild(directory)
     pinForOwner(directory)
     const shouldBootstrap = options.bootstrap ?? true
@@ -242,8 +232,7 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function projectMeta(directory: WorkspacePath | string, patch: ProjectMeta) {
-    directory = dir(directory)
+  function projectMeta(directory: WorkspaceKey, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
     if (!cached) return
@@ -260,8 +249,7 @@ export function createChildStoreManager(input: {
     setStore("projectMeta", next)
   }
 
-  function projectIcon(directory: WorkspacePath | string, value: string | undefined) {
-    directory = dir(directory)
+  function projectIcon(directory: WorkspaceKey, value: string | undefined) {
     const [store, setStore] = ensureChild(directory)
     const cached = iconCache.get(directory)
     if (!cached) return
@@ -280,7 +268,7 @@ export function createChildStoreManager(input: {
     pin,
     unpin,
     pinned,
-    disposeDirectory,
+    dispose,
     runEviction,
     vcsCache,
     metaCache,

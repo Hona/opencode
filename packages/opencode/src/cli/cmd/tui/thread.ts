@@ -14,6 +14,7 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { Path } from "@/path/path"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -115,9 +116,9 @@ export const TuiThreadCommand = cmd({
 
       // Resolve relative --project paths from the logical shell root so alias
       // roots from PWD or --project stay intact.
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
+      const root = Path.truecaseSync(process.env.PWD ?? process.cwd())
       const next = args.project
-        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
+        ? Path.truecaseSync(Path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
         : root
       const file = await target()
       try {

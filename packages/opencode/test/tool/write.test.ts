@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Path } from "../../src/path/path"
 import { win } from "../lib/windows-path"
 
 const ctx = {
@@ -18,6 +19,8 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+const pretty = (file: string) => Path.pretty(file)
 
 async function link(target: string, alias: string) {
   await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
@@ -179,7 +182,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -208,7 +211,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          await FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, pretty(filepath))
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -386,7 +389,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          await FileTime.read(ctx.sessionID, readonlyPath)
+          await FileTime.read(ctx.sessionID, pretty(readonlyPath))
 
           const write = await WriteTool.init()
           await expect(

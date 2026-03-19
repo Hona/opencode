@@ -39,7 +39,7 @@ test("Instance keeps alias directories and reload disposes stored state", async 
       fn: async () => state(),
     })
 
-    expect(a.dir).toBe(alias)
+    expect(String(a.dir)).toBe(alias)
 
     await Instance.reload({
       directory: `${alias}${path.sep}.${path.sep}`,
@@ -51,8 +51,8 @@ test("Instance keeps alias directories and reload disposes stored state", async 
     })
 
     expect(b).not.toBe(a)
-    expect(b.dir).toBe(alias)
-    expect(seen).toEqual([alias])
+    expect(String(b.dir)).toBe(alias)
+    expect(seen.map(String)).toEqual([alias])
   } finally {
     await fs.rm(alias, { recursive: true, force: true }).catch(() => undefined)
   }
@@ -83,8 +83,8 @@ test("Instance dedupes concurrent equivalent directories by key", async () => {
       }),
     ])
 
-    expect(a).toBe(alias)
-    expect(b).toBe(alias)
+    expect(String(a)).toBe(alias)
+    expect(String(b)).toBe(alias)
     expect(n).toBe(1)
   } finally {
     await fs.rm(alias, { recursive: true, force: true }).catch(() => undefined)

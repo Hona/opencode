@@ -19,7 +19,7 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
-import type { WorkspacePath } from "@/context/file/path"
+import type { WorkspaceKey, WorkspacePath } from "@/context/file/path"
 
 export type ProjectMeta = {
   name?: string
@@ -100,16 +100,16 @@ export type DirState = {
 }
 
 export type EvictPlan = {
-  stores: string[]
-  state: Map<string, DirState>
-  pins: Set<string>
+  stores: WorkspaceKey[]
+  state: Map<WorkspaceKey, DirState>
+  pins: Set<WorkspaceKey>
   max: number
   ttl: number
   now: number
 }
 
 export type DisposeCheck = {
-  directory: string
+  directory: WorkspaceKey
   hasStore: boolean
   pinned: boolean
   booting: boolean

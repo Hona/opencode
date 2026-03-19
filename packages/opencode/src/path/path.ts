@@ -23,6 +23,15 @@ type DisplayOpts = Opts & {
   relative?: boolean
 }
 
+type ParseOpts = Opts & {
+  encoded?: boolean
+  label?: string
+}
+
+type UpOpts = Opts & {
+  stop?: string
+}
+
 /**
  * Path exposes a few intentionally different string forms instead of one
  * "normalized" answer.
@@ -69,6 +78,10 @@ function clean(input: string, platform: NodeJS.Platform) {
   const text = lib(platform).normalize(input)
   if (platform !== "win32") return text
   return fixDrive(text).replaceAll("/", "\\")
+}
+
+function sentinel(input: string) {
+  return input === "/"
 }
 
 function raw(input: string, platform: NodeJS.Platform) {
@@ -171,6 +184,28 @@ function decode(input: string) {
   }
 }
 
+function decodeText(input: string, label: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    throw new TypeError(`Invalid percent-encoding in ${label}: ${input}`)
+  }
+}
+
+function parseText(input: string, opts: ParseOpts = {}) {
+  const label = opts.label ?? "path"
+  if (!input) throw new TypeError(`Expected ${label}, received empty string`)
+  if (input.includes("\0")) throw new TypeError(`Expected ${label} without null bytes`)
+  const text = opts.encoded ? decodeText(input, label) : input
+  return prettyText(text, opts)
+}
+
+function stopText(input: string | undefined, platform: NodeJS.Platform) {
+  if (!input) return
+  if (sentinel(input)) return input
+  return prettyText(input, { platform })
+}
+
 function repoText(input: string) {
   const dir = /[\\/]$/.test(input)
   const text = path.posix.normalize(input.replaceAll("\\", "/") || ".").replace(/^(?:\.\/)+/, "")
@@ -252,6 +287,23 @@ async function physicalAsync(input: string, opts: Opts = {}): Promise<PrettyPath
   }
 }
 
+function* upText(input: string, opts: UpOpts = {}) {
+  const platform = pf(opts)
+  const mod = lib(platform)
+  const stop = stopText(opts.stop, platform)
+  let dir = prettyText(input, opts)
+
+  if (stop && stop !== "/" && !inside(stop, dir, platform)) return
+
+  while (true) {
+    yield PrettyPath.make(dir)
+    if (stop && dir === stop) return
+    const parent = mod.dirname(dir)
+    if (parent === dir) return
+    dir = parent
+  }
+}
+
 export namespace Path {
   export type Options = Opts
 
@@ -278,6 +330,10 @@ export namespace Path {
     return PrettyPath.make(prettyText(input, opts))
   }
 
+  export function from(input: string, opts: ParseOpts = {}) {
+    return PrettyPath.make(parseText(input, opts))
+  }
+
   /**
    * Returns the lookup/equality form for a path.
    *
@@ -285,6 +341,7 @@ export namespace Path {
    * filesystem's case-insensitive behavior.
    */
   export function key(input: string, opts: Opts = {}) {
+    if (sentinel(input)) return PathKey.make(input)
     const platform = pf(opts)
     const text = pretty(input, opts)
     if (platform !== "win32") return PathKey.make(text)
@@ -323,11 +380,24 @@ export namespace Path {
     return displayText(input, opts)
   }
 
+  export function join(dir: string, child: string, opts: Omit<Opts, "cwd"> = {}) {
+    return pretty(child, { ...opts, cwd: dir })
+  }
+
+  export function parent(input: string, opts: Omit<Opts, "cwd"> = {}) {
+    const platform = pf(opts)
+    return pretty(lib(platform).dirname(pretty(input, opts)), { platform })
+  }
+
   export function rel(from: string, to: string, opts: Opts = {}) {
     const platform = pf(opts)
     const mod = lib(platform)
     const text = mod.relative(pretty(from, opts), pretty(to, opts)) || "."
     return RelativePath.make(text)
+  }
+
+  export function repoFrom(root: string, file: string, opts: Omit<Opts, "cwd"> = {}) {
+    return repo(rel(root, file, opts))
   }
 
   export function repo(input: string) {
@@ -387,8 +457,20 @@ export namespace Path {
     const a = raw(parent, platform)
     const b = raw(child, platform)
     if (mod.isAbsolute(a) !== mod.isAbsolute(b)) return false
-    const rel = mod.relative(pretty(parent, opts), pretty(child, opts))
-    return rel === "" || (!rel.startsWith("..") && !mod.isAbsolute(rel))
+    return inside(pretty(parent, opts), pretty(child, opts), platform)
+  }
+
+  export function overlaps(a: string, b: string, opts: Opts = {}) {
+    return contains(a, b, opts) || contains(b, a, opts)
+  }
+
+  /**
+   * Yields the starting directory and each parent up to `stop` or the
+   * filesystem root. When `stop` is provided, traversal is bounded to that
+   * ancestor and includes it.
+   */
+  export function up(input: string, opts: UpOpts = {}) {
+    return upText(input, opts)
   }
 
   export function externalGlob(dir: string, opts: Opts = {}) {
@@ -399,6 +481,10 @@ export namespace Path {
     return key(input, opts) === value
   }
 
+  export async function physicalKey(input: string, opts: Opts = {}) {
+    return key(await physicalAsync(input, opts), opts)
+  }
+
   /**
    * Rebuilds the path using the filesystem's recorded casing on Windows.
    *
@@ -406,6 +492,7 @@ export namespace Path {
    * keeps any missing tail as provided once the walk can no longer continue.
    */
   export async function truecase(input: string, opts: Omit<Opts, "cwd"> = {}) {
+    if (sentinel(input)) return PrettyPath.make(input)
     const platform = pf(opts)
     const text = pretty(input, opts)
     if (platform !== "win32") return text
@@ -429,6 +516,7 @@ export namespace Path {
   }
 
   export function truecaseSync(input: string, opts: Omit<Opts, "cwd"> = {}) {
+    if (sentinel(input)) return PrettyPath.make(input)
     const platform = pf(opts)
     const text = pretty(input, opts)
     if (platform !== "win32") return text

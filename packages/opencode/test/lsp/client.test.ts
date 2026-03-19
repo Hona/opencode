@@ -33,7 +33,7 @@ describe("LSPClient interop", () => {
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
+          root: Path.pretty(process.cwd()),
         }),
     })
 
@@ -57,7 +57,7 @@ describe("LSPClient interop", () => {
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
+          root: Path.pretty(process.cwd()),
         }),
     })
 
@@ -81,7 +81,7 @@ describe("LSPClient interop", () => {
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
+          root: Path.pretty(process.cwd()),
         }),
     })
 
@@ -116,7 +116,7 @@ describe("LSPClient interop", () => {
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
-          root: alias,
+          root: Path.pretty(alias),
         }),
     })
 
@@ -168,7 +168,7 @@ describe("LSPClient interop", () => {
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
+          root: Path.pretty(tmp.path),
         }),
     })
 

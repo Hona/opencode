@@ -7,7 +7,7 @@ export function pickDirectoriesToEvict(input: EvictPlan) {
     .filter((dir) => !input.pins.has(dir))
     .slice()
     .sort((a, b) => (input.state.get(a)?.lastAccessAt ?? 0) - (input.state.get(b)?.lastAccessAt ?? 0))
-  const output: string[] = []
+  const output: EvictPlan["stores"] = []
   for (const dir of sorted) {
     const last = input.state.get(dir)?.lastAccessAt ?? 0
     const idle = input.now - last >= input.ttl

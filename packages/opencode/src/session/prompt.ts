@@ -32,7 +32,6 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $ } from "bun"
-import { fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -991,7 +990,7 @@ export namespace SessionPrompt {
     type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
     const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
       ...part,
-      id: part.id ? PartID.make(part.id) : PartID.ascending(),
+      id: part.id ? PartID.parse(part.id) : PartID.ascending(),
     })
 
     const parts = await Promise.all(
@@ -1093,9 +1092,7 @@ export namespace SessionPrompt {
               break
             case "file:":
               log.info("file", { mime: part.mime })
-              // have to normalize, symbol search returns absolute paths
-              // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = fileURLToPath(part.url)
+              const filepath = Path.fromURI(part.url)
               const s = Filesystem.stat(filepath)
 
               if (s?.isDirectory()) {

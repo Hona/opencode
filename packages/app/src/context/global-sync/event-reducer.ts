@@ -21,7 +21,7 @@ export function normalizeSessionDiffs(diffs: FileDiff[]) {
   const map = new Map<string, FileDiff>()
 
   for (const diff of diffs) {
-    const file = filePathKey(diff.file) || diff.file
+    const file = filePathKey(diff.file)
     if (!map.has(file)) order.push(file)
     map.set(file, { ...diff, file })
   }

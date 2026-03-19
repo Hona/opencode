@@ -2,7 +2,7 @@ import z from "zod"
 import { randomBytes } from "crypto"
 
 export namespace Identifier {
-  const prefixes = {
+  export const prefixes = {
     session: "ses",
     message: "msg",
     permission: "per",
@@ -14,8 +14,43 @@ export namespace Identifier {
     workspace: "wrk",
   } as const
 
-  export function schema(prefix: keyof typeof prefixes) {
-    return z.string().startsWith(prefixes[prefix])
+  export type Prefix = keyof typeof prefixes
+
+  function label(prefix: Prefix) {
+    return `${prefix} id`
+  }
+
+  function issue(prefix: Prefix, input: string) {
+    if (!input) return `Expected ${label(prefix)}, received empty string`
+    if (!input.startsWith(prefixes[prefix])) {
+      return `Expected ${label(prefix)} starting with "${prefixes[prefix]}", received "${input}"`
+    }
+  }
+
+  export function is(prefix: Prefix, input: string): boolean {
+    return !issue(prefix, input)
+  }
+
+  export function assert(prefix: Prefix, input: string): asserts input is string {
+    const err = issue(prefix, input)
+    if (err) throw new TypeError(err)
+  }
+
+  export function parse(prefix: Prefix, input: string): string {
+    assert(prefix, input)
+    return input
+  }
+
+  export function schema<T extends string>(prefix: Prefix) {
+    return z.string().transform((input, ctx) => {
+      const err = issue(prefix, input)
+      if (!err) return input as T
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: err,
+      })
+      return z.NEVER
+    })
   }
 
   const LENGTH = 26
@@ -24,23 +59,17 @@ export namespace Identifier {
   let lastTimestamp = 0
   let counter = 0
 
-  export function ascending(prefix: keyof typeof prefixes, given?: string) {
+  export function ascending(prefix: Prefix, given?: string) {
     return generateID(prefix, false, given)
   }
 
-  export function descending(prefix: keyof typeof prefixes, given?: string) {
+  export function descending(prefix: Prefix, given?: string) {
     return generateID(prefix, true, given)
   }
 
-  function generateID(prefix: keyof typeof prefixes, descending: boolean, given?: string): string {
-    if (!given) {
-      return create(prefix, descending)
-    }
-
-    if (!given.startsWith(prefixes[prefix])) {
-      throw new Error(`ID ${given} does not start with ${prefixes[prefix]}`)
-    }
-    return given
+  function generateID(prefix: Prefix, descending: boolean, given?: string): string {
+    if (!given) return create(prefix, descending)
+    return parse(prefix, given)
   }
 
   function randomBase62(length: number): string {
@@ -53,7 +82,7 @@ export namespace Identifier {
     return result
   }
 
-  export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
+  export function create(prefix: Prefix, descending: boolean, timestamp?: number): string {
     const currentTimestamp = timestamp ?? Date.now()
 
     if (currentTimestamp !== lastTimestamp) {

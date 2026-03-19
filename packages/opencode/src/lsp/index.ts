@@ -20,8 +20,8 @@ export namespace LSP {
     return Path.pretty(input, { cwd: Instance.directory })
   }
 
-  function uri(input: string) {
-    return Path.uri(pretty(input))
+  function uri(input: PrettyPath) {
+    return Path.uri(input)
   }
 
   function key(serverID: string, root: PrettyPath) {
@@ -188,8 +188,7 @@ export namespace LSP {
     })
   }
 
-  async function getClients(file: string) {
-    file = pretty(file)
+  async function getClients(file: PrettyPath) {
     const s = await state()
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
@@ -279,30 +278,32 @@ export namespace LSP {
   }
 
   export async function hasClients(file: string) {
-    file = pretty(file)
+    const filePath = pretty(file)
     const s = await state()
-    const extension = path.parse(file).ext || file
+    const extension = path.parse(filePath).ext || filePath
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
-      const root = await server.root(file)
+      const root = await server.root(filePath)
       if (!root) continue
-      if (s.broken.has(key(server.id, pretty(root)))) continue
+      const dir = pretty(root)
+      if (s.broken.has(key(server.id, dir))) continue
       return true
     }
     return false
   }
 
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
-    log.info("touching file", { file: input })
-    const clients = await getClients(input)
+    const file = pretty(input)
+    log.info("touching file", { file })
+    const clients = await getClients(file)
     await Promise.all(
       clients.map(async (client) => {
-        const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
-        await client.notify.open({ path: input })
+        const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: file }) : Promise.resolve()
+        await client.notify.open({ path: file })
         return wait
       }),
     ).catch((err) => {
-      log.error("failed to touch file", { err, file: input })
+      log.error("failed to touch file", { err, file })
     })
   }
 
@@ -322,19 +323,20 @@ export namespace LSP {
     return Object.fromEntries([...results.values()].map((item) => [item.path, item.diagnostics]))
   }
 
-  export function diagnosticsFor(file: string, input: Record<string, LSPClient.Diagnostic[]>) {
-    const value = Path.key(file, { cwd: Instance.directory })
+  export function diagnosticsFor(file: PrettyPath, input: Record<string, LSPClient.Diagnostic[]>) {
+    const value = Path.key(file)
     for (const [path, diagnostics] of Object.entries(input)) {
       if (Path.match(path, value)) return { path, diagnostics }
     }
   }
 
   export async function hover(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) => {
+    const file = pretty(input.file)
+    return run(file, (client) => {
       return client.connection
         .sendRequest("textDocument/hover", {
           textDocument: {
-            uri: uri(input.file),
+            uri: uri(file),
           },
           position: {
             line: input.line,
@@ -398,7 +400,7 @@ export namespace LSP {
   }
 
   export async function documentSymbol(uri: string) {
-    const file = String(Path.fromURI(uri))
+    const file = Path.fromURI(uri)
     return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/documentSymbol", {
@@ -413,10 +415,11 @@ export namespace LSP {
   }
 
   export async function definition(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = pretty(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/definition", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
         })
         .catch(() => null),
@@ -424,10 +427,11 @@ export namespace LSP {
   }
 
   export async function references(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = pretty(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/references", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
           context: { includeDeclaration: true },
         })
@@ -436,10 +440,11 @@ export namespace LSP {
   }
 
   export async function implementation(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = pretty(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/implementation", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
         })
         .catch(() => null),
@@ -447,10 +452,11 @@ export namespace LSP {
   }
 
   export async function prepareCallHierarchy(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = pretty(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
         })
         .catch(() => []),
@@ -458,10 +464,11 @@ export namespace LSP {
   }
 
   export async function incomingCalls(input: { file: string; line: number; character: number }) {
-    return run(input.file, async (client) => {
+    const file = pretty(input.file)
+    return run(file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
         })
         .catch(() => [])) as any[]
@@ -471,10 +478,11 @@ export namespace LSP {
   }
 
   export async function outgoingCalls(input: { file: string; line: number; character: number }) {
-    return run(input.file, async (client) => {
+    const file = pretty(input.file)
+    return run(file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: uri(input.file) },
+          textDocument: { uri: uri(file) },
           position: { line: input.line, character: input.character },
         })
         .catch(() => [])) as any[]
@@ -489,7 +497,7 @@ export namespace LSP {
     return Promise.all(tasks)
   }
 
-  async function run<T>(file: string, input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
+  async function run<T>(file: PrettyPath, input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
     const clients = await getClients(file)
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)

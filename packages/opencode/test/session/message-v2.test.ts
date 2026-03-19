@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Path } from "../../src/path/path"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
@@ -108,6 +110,46 @@ function basePart(messageID: string, id: string) {
 }
 
 describe("session.message-v2.toModelMessage", () => {
+  test("normalizes assistant path fields at the schema boundary", () => {
+    const cwd = path.join(process.cwd(), ".")
+    const root = path.join(process.cwd(), "..", path.basename(process.cwd()))
+    const parsed = MessageV2.Info.parse({
+      ...assistantInfo("msg_assistant", "msg_parent"),
+      path: {
+        cwd,
+        root,
+      },
+    })
+
+    expect(parsed.role).toBe("assistant")
+    if (parsed.role !== "assistant") return
+    expect(parsed.path.cwd).toBe(Path.pretty(cwd))
+    expect(parsed.path.root).toBe(Path.pretty(root))
+  })
+
+  test("normalizes file source paths at the schema boundary", () => {
+    const sourcePath = path.join(process.cwd(), ".")
+    const parsed = MessageV2.Part.parse({
+      ...basePart("msg_user", "prt_file"),
+      type: "file",
+      mime: "image/png",
+      url: "data:image/png;base64,Zm9v",
+      source: {
+        type: "file",
+        path: sourcePath,
+        text: {
+          value: "hello",
+          start: 1,
+          end: 1,
+        },
+      },
+    })
+
+    expect(parsed.type).toBe("file")
+    if (parsed.type !== "file" || !parsed.source || parsed.source.type !== "file") return
+    expect(parsed.source.path).toBe(Path.pretty(sourcePath))
+  })
+
   test("filters out messages with no parts", () => {
     const input: MessageV2.WithParts[] = [
       {

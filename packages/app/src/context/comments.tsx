@@ -6,7 +6,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
-import { filePathEqual, filePathKey, type FilePath, type FilePathKey } from "@/context/file/path"
+import { filePathKey, type FilePath, type FilePathKey } from "@/context/file/path"
 
 export type LineComment = {
   id: string
@@ -38,13 +38,16 @@ type CommentStore = {
   comments: Record<FilePathKey, LineComment[]>
 }
 
-const normalizeFile = (file: FilePath) => (filePathKey(file) || file) as FilePath
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
 
-const commentKey = (file: FilePath) => normalizeFile(file) as FilePathKey
+const text = (value: unknown) => (typeof value === "string" ? value : undefined)
 
-function matchFile(comments: Record<FilePathKey, LineComment[]>, file: FilePath) {
-  return Object.keys(comments).find((key) => filePathEqual(key, file)) as FilePathKey | undefined
-}
+const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)
+
+const normalizeFile = (file: FilePath) => filePathKey(file) as FilePath
+
+const commentKey = (file: FilePath) => filePathKey(file)
 
 function aggregate(comments: Record<FilePathKey, LineComment[]>) {
   return Object.values(comments)
@@ -72,9 +75,58 @@ function cloneComment(comment: LineComment): LineComment {
   }
 }
 
+function lineComment(value: unknown): LineComment | undefined {
+  if (!record(value)) return
+  const id = text(value.id)
+  const file = text(value.file)
+  const comment = text(value.comment)
+  const time = num(value.time)
+  if (!id || !file || comment === undefined || time === undefined) return
+  if (!record(value.selection)) return
+  const start = num(value.selection.start)
+  const end = num(value.selection.end)
+  if (start === undefined || end === undefined) return
+  const side = value.selection.side === "additions" || value.selection.side === "deletions" ? value.selection.side : undefined
+  const endSide =
+    value.selection.endSide === "additions" || value.selection.endSide === "deletions"
+      ? value.selection.endSide
+      : undefined
+  return cloneComment({
+    id,
+    file,
+    comment,
+    time,
+    selection: { start, end, ...(side ? { side } : {}), ...(endSide ? { endSide } : {}) },
+  })
+}
+
+function normalizeCommentMap(value: unknown) {
+  if (!record(value)) return {} as Record<FilePathKey, LineComment[]>
+
+  return Object.entries(value).reduce<Record<FilePathKey, LineComment[]>>((acc, [name, items]) => {
+    if (!Array.isArray(items)) return acc
+    const key = commentKey(name)
+    const next = items.map(lineComment).filter((item): item is LineComment => !!item)
+    if (next.length === 0) return acc
+    acc[key] = [...(acc[key] ?? []), ...next]
+    return acc
+  }, {})
+}
+
+export function migrateCommentStore(value: unknown) {
+  if (!record(value)) return value
+  if (!record(value.comments)) return value
+
+  const comments = normalizeCommentMap(value.comments)
+  return {
+    ...value,
+    comments,
+  }
+}
+
 function group(comments: LineComment[]) {
   return comments.reduce<Record<FilePathKey, LineComment[]>>((acc, comment) => {
-    const key = matchFile(acc, comment.file) ?? commentKey(comment.file)
+    const key = commentKey(comment.file)
     const list = acc[key]
     const next = cloneComment(comment)
     if (list) {
@@ -109,12 +161,11 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     setRef("active", value)
 
   const list = (file: FilePath) => {
-    const key = matchFile(store.comments, file)
-    return (key ? store.comments[key] : undefined)?.map(cloneComment) ?? []
+    return store.comments[commentKey(file)]?.map(cloneComment) ?? []
   }
 
   const add = (input: Omit<LineComment, "id" | "time">) => {
-    const key = matchFile(store.comments, input.file) ?? commentKey(input.file)
+    const key = commentKey(input.file)
     const file = store.comments[key]?.[0]?.file ?? normalizeFile(input.file)
     const next: LineComment = {
       id: uuid(),
@@ -133,18 +184,18 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
   }
 
   const remove = (file: FilePath, id: string) => {
-    const key = matchFile(store.comments, file)
-    if (!key) return
+    const key = commentKey(file)
 
     batch(() => {
       setStore("comments", key, (items) => (items ?? []).filter((item) => item.id !== id))
-      setFocus((current) => (current && filePathEqual(current.file, file) && current.id === id ? null : current))
+      setFocus((current) =>
+        current && commentKey(current.file) === key && current.id === id ? null : current,
+      )
     })
   }
 
   const update = (file: FilePath, id: string, comment: string) => {
-    const key = matchFile(store.comments, file)
-    if (!key) return
+    const key = commentKey(file)
 
     setStore("comments", key, (items) =>
       (items ?? []).map((item) => {
@@ -188,13 +239,16 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 }
 
 export function createCommentSessionForTest(comments: Record<string, LineComment[]> = {}) {
-  const [store, setStore] = createStore<CommentStore>({ comments })
+  const [store, setStore] = createStore<CommentStore>({ comments: normalizeCommentMap(comments) })
   return createCommentSessionState(store, setStore)
 }
 
 function createCommentSession(dir: string, id: string | undefined) {
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "comments", Persist.legacyScoped(dir, id, "comments", "v1")),
+    {
+      ...Persist.scoped(dir, id, "comments", Persist.legacyScoped(dir, id, "comments", "v1")),
+      migrate: migrateCommentStore,
+    },
     createStore<CommentStore>({
       comments: {},
     }),

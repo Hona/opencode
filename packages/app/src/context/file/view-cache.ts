@@ -8,7 +8,7 @@ import type { FileViewState, SelectedLineRange } from "./types"
 const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
-const fileKey = (path: FilePath) => (filePathKey(path) || path) as FilePathKey
+const fileKey = (path: FilePath) => filePathKey(path)
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -74,11 +74,6 @@ export function migrateFileViewState(dir: WorkspacePath, value: unknown) {
 
     const normalized = path.normalize(name)
     const key = fileKey(normalized)
-    if (!key) {
-      changed = true
-      continue
-    }
-
     if (key !== name || file[key]) changed = true
     file[key] = file[key] ? merge(file[key], next) : next
   }

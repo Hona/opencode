@@ -50,20 +50,20 @@ export namespace InstructionPrompt {
     }
   })
 
-  function isClaimed(messageID: string, filepath: PrettyPath | string) {
+  function isClaimed(messageID: string, filepath: PathKey) {
     const claimed = state().claims.get(messageID)
     if (!claimed) return false
-    return claimed.has(Path.key(filepath))
+    return claimed.has(filepath)
   }
 
-  function claim(messageID: string, filepath: PrettyPath | string) {
+  function claim(messageID: string, filepath: PathKey) {
     const current = state()
     let claimed = current.claims.get(messageID)
     if (!claimed) {
       claimed = new Set()
       current.claims.set(messageID, claimed)
     }
-    claimed.add(Path.key(filepath))
+    claimed.add(filepath)
   }
 
   export function clear(messageID: string) {
@@ -72,7 +72,7 @@ export namespace InstructionPrompt {
 
   export async function systemPaths() {
     const config = await Config.get()
-    const paths = new Set<string>()
+    const paths = new Set<PrettyPath>()
 
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of FILES) {
@@ -142,7 +142,7 @@ export namespace InstructionPrompt {
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
-    const paths = new Set<string>()
+    const paths = new Set<PathKey>()
     for (const msg of messages) {
       for (const part of msg.parts) {
         if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
@@ -150,7 +150,7 @@ export namespace InstructionPrompt {
           const loaded = part.state.metadata?.loaded
           if (!loaded || !Array.isArray(loaded)) continue
           for (const p of loaded) {
-            if (typeof p === "string") paths.add(Path.pretty(p))
+            if (typeof p === "string") paths.add(Path.key(p))
           }
         }
       }
@@ -165,27 +165,28 @@ export namespace InstructionPrompt {
     }
   }
 
-  export async function resolve(messages: MessageV2.WithParts[], filepath: PrettyPath | string, messageID: string) {
-    const system = new Set(Array.from(await systemPaths(), (item) => Filesystem.resolve(item)))
-    const already = new Set(Array.from(loaded(messages), (item) => Filesystem.resolve(item)))
-    const results: { filepath: string; content: string }[] = []
+  export async function resolve(messages: MessageV2.WithParts[], filepath: PrettyPath, messageID: string) {
+    const system = new Set(Array.from(await systemPaths(), (item) => Path.key(item)))
+    const already = loaded(messages)
+    const results: { filepath: PrettyPath; content: string }[] = []
 
-    const target = Filesystem.resolve(filepath)
-    let current = path.dirname(target)
-    const root = Filesystem.resolve(Instance.directory)
+    const target = Path.truecaseSync(filepath)
+    const targetKey = Path.key(target)
+    const root = Path.truecaseSync(Instance.directory)
+    const rootKey = Path.key(root)
 
-    while (Filesystem.contains(root, current) && !Path.eq(current, root)) {
-      const found = await find(current)
-      const hit = found ? Filesystem.resolve(found) : undefined
+    for (const dir of Path.up(Path.parent(target), { stop: root })) {
+      if (Path.key(dir) === rootKey) break
+      const found = await find(dir)
+      if (!found) continue
+      const hit = Path.truecaseSync(found)
+      const hitKey = Path.key(hit)
 
-      if (hit && !Path.eq(hit, target) && !system.has(hit) && !already.has(hit) && !isClaimed(messageID, hit)) {
-        claim(messageID, hit)
-        const content = await Filesystem.readText(hit).catch(() => undefined)
-        if (content) {
-          results.push({ filepath: Path.pretty(hit), content: "Instructions from: " + hit + "\n" + content })
-        }
-      }
-      current = path.dirname(current)
+      if (hitKey === targetKey || system.has(hitKey) || already.has(hitKey) || isClaimed(messageID, hitKey)) continue
+      claim(messageID, hitKey)
+      const content = await Filesystem.readText(hit).catch(() => undefined)
+      if (!content) continue
+      results.push({ filepath: Path.pretty(hit), content: "Instructions from: " + hit + "\n" + content })
     }
 
     return results

@@ -123,7 +123,7 @@ export const EditTool = Tool.define("edit", {
     })
 
     const filediff: Snapshot.FileDiff = {
-      file: Path.repo(Path.rel(Instance.directory, filePath)),
+      file: Path.repoFrom(Instance.directory, filePath),
       before: contentOld,
       after: contentNew,
       additions: 0,

@@ -11,6 +11,16 @@ describe("Worktree", () => {
     expect(Worktree.get(key)).toEqual({ status: "ready" })
   })
 
+  test("dedupes windows path aliases by workspace key", () => {
+    Worktree.pending("C:\\Repo\\Feature\\")
+
+    const waiting = Worktree.wait("c:/repo/feature")
+    Worktree.ready("C:/Repo/Feature")
+
+    expect(Worktree.get("c:/repo/feature")).toEqual({ status: "ready" })
+    return expect(waiting).resolves.toEqual({ status: "ready" })
+  })
+
   test("pending does not overwrite a terminal state", () => {
     const key = dir("pending")
     Worktree.failed(key, "boom")

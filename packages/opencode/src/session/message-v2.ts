@@ -11,12 +11,13 @@ import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
-import type { FileURI, PrettyPath } from "@/path/schema"
+import { PrettyPath, type FileURI } from "@/path/schema"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Path } from "@/path/path"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
@@ -146,26 +147,22 @@ export namespace MessageV2 {
 
   export const FileSource = FilePartSourceBase.extend({
     type: z.literal("file"),
-    path: z.string(),
+    path: PrettyPath.zod,
   }).meta({
     ref: "FileSource",
   })
-  export type FileSource = Omit<z.infer<typeof FileSource>, "path"> & {
-    path: PrettyPath
-  }
+  export type FileSource = z.infer<typeof FileSource>
 
   export const SymbolSource = FilePartSourceBase.extend({
     type: z.literal("symbol"),
-    path: z.string(),
+    path: PrettyPath.zod,
     range: LSP.Range,
     name: z.string(),
     kind: z.number().int(),
   }).meta({
     ref: "SymbolSource",
   })
-  export type SymbolSource = Omit<z.infer<typeof SymbolSource>, "path"> & {
-    path: PrettyPath
-  }
+  export type SymbolSource = z.infer<typeof SymbolSource>
 
   export const ResourceSource = FilePartSourceBase.extend({
     type: z.literal("resource"),
@@ -431,8 +428,8 @@ export namespace MessageV2 {
     mode: z.string(),
     agent: z.string(),
     path: z.object({
-      cwd: z.string(),
-      root: z.string(),
+      cwd: PrettyPath.zod,
+      root: PrettyPath.zod,
     }),
     summary: z.boolean().optional(),
     cost: z.number(),
@@ -452,12 +449,7 @@ export namespace MessageV2 {
   }).meta({
     ref: "AssistantMessage",
   })
-  export type Assistant = Omit<z.infer<typeof Assistant>, "path"> & {
-    path: {
-      cwd: PrettyPath | string
-      root: PrettyPath | string
-    }
-  }
+  export type Assistant = z.infer<typeof Assistant>
 
   export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
     ref: "Message",
@@ -525,20 +517,58 @@ export namespace MessageV2 {
     },
   }
 
-  const info = (row: typeof MessageTable.$inferSelect) =>
-    ({
-      ...row.data,
+  function assistantPath(input: MessageV2.Assistant["path"]) {
+    return {
+      cwd: Path.from(input.cwd, { label: "assistant cwd" }),
+      root: Path.from(input.root, { label: "assistant root" }),
+    }
+  }
+
+  function partSource(input: MessageV2.FilePartSource): MessageV2.FilePartSource {
+    if (input.type === "resource") return input
+    return {
+      ...input,
+      path: Path.from(input.path, { label: `${input.type} source path` }),
+    }
+  }
+
+  const info = (row: typeof MessageTable.$inferSelect): MessageV2.Info => {
+    const data = row.data as MessageV2.Info
+    if (data.role === "user") {
+      return {
+        ...data,
+        id: row.id,
+        sessionID: row.session_id,
+      }
+    }
+
+    return {
+      ...data,
       id: row.id,
       sessionID: row.session_id,
-    }) as MessageV2.Info
+      path: assistantPath(data.path),
+    }
+  }
 
-  const part = (row: typeof PartTable.$inferSelect) =>
-    ({
-      ...row.data,
+  const part = (row: typeof PartTable.$inferSelect): MessageV2.Part => {
+    const data = row.data as MessageV2.Part
+    if (data.type !== "file" || !data.source) {
+      return {
+        ...data,
+        id: row.id,
+        sessionID: row.session_id,
+        messageID: row.message_id,
+      }
+    }
+
+    return {
+      ...data,
       id: row.id,
       sessionID: row.session_id,
       messageID: row.message_id,
-    }) as MessageV2.Part
+      source: partSource(data.source),
+    }
+  }
 
   const older = (row: Cursor) =>
     or(
@@ -869,9 +899,7 @@ export namespace MessageV2 {
     const rows = Database.use((db) =>
       db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
     )
-    return rows.map(
-      (row) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
-    )
+    return rows.map(part)
   })
 
   export const get = fn(

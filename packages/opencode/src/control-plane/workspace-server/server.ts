@@ -6,6 +6,13 @@ import { WorkspaceServerRoutes } from "./routes"
 import { WorkspaceContext } from "../workspace-context"
 import { WorkspaceID } from "../schema"
 import { Path } from "../../path/path"
+import { HTTPException } from "hono/http-exception"
+
+function badInput(err: unknown) {
+  return new HTTPException(400, {
+    message: err instanceof Error ? err.message : "Invalid request",
+  })
+}
 
 export namespace WorkspaceServer {
   export function App() {
@@ -25,24 +32,29 @@ export namespace WorkspaceServer {
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
         const raw = c.req.query("directory") || c.req.header("x-opencode-directory")
         if (rawWorkspaceID == null) {
-          throw new Error("workspaceID parameter is required")
+          throw new HTTPException(400, { message: "workspace parameter is required" })
         }
         if (raw == null) {
-          throw new Error("directory parameter is required")
+          throw new HTTPException(400, { message: "directory parameter is required" })
         }
 
-        const directory = Path.pretty(
-          (() => {
-            try {
-              return decodeURIComponent(raw)
-            } catch {
-              return raw
-            }
-          })(),
-        )
+        const workspaceID = (() => {
+          try {
+            return WorkspaceID.parse(rawWorkspaceID)
+          } catch (err) {
+            throw badInput(err)
+          }
+        })()
+        const directory = (() => {
+          try {
+            return Path.from(raw, { encoded: true, label: "directory parameter" })
+          } catch (err) {
+            throw badInput(err)
+          }
+        })()
 
         return WorkspaceContext.provide({
-          workspaceID: WorkspaceID.make(rawWorkspaceID),
+          workspaceID,
           async fn() {
             return Instance.provide({
               directory,

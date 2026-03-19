@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Path } from "@/path/path"
+import type { PrettyPath } from "@/path/schema"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -45,11 +46,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
     // Validate file paths and check permissions
     const fileChanges: Array<{
-      filePath: string
+      filePath: PrettyPath
       oldContent: string
       newContent: string
       type: "add" | "update" | "delete" | "move"
-      movePath?: string
+      movePath?: PrettyPath
       diff: string
       additions: number
       deletions: number

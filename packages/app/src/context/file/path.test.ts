@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createPathHelpers, dedupeFilePaths, filePathEqual, filePathKey, isFileTab } from "./path"
+import { createPathHelpers, dedupeFilePaths, filePathAncestorKeys, filePathEqual, filePathKey, filePathName, filePathParentKey, isFileTab } from "./path"
 
 describe("file path helpers", () => {
   test("normalizes file inputs against workspace root", () => {
@@ -44,6 +44,9 @@ describe("file path helpers", () => {
   test("normalizes app file keys across slash variants", () => {
     expect(String(filePathKey("src\\app.ts"))).toBe("src/app.ts")
     expect(filePathEqual("src\\app.ts", "src/app.ts")).toBe(true)
-    expect(dedupeFilePaths(["src\\app.ts", "src/app.ts", "src/util.ts"])).toEqual(["src/app.ts", "src/util.ts"])
+    expect(dedupeFilePaths(["src\\app.ts", "src/app.ts", "src/util.ts"])).toEqual(["src\\app.ts", "src/util.ts"])
+    expect(String(filePathParentKey(filePathKey("src/app.ts")))).toBe("src")
+    expect(filePathAncestorKeys(filePathKey("src/deep/app.ts")).map(String)).toEqual(["src", "src/deep"])
+    expect(filePathName(filePathKey("src/deep/app.ts"))).toBe("app.ts")
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { pathEqual, pathKey } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
+import { workspacePathKey } from "@/context/file/path"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
@@ -17,7 +18,6 @@ import {
   latestRootSession,
   projectContains,
   workspaceEqual,
-  workspaceKey,
 } from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
@@ -120,13 +120,13 @@ describe("layout workspace helpers", () => {
   })
 
   test("preserves normalized roots in workspace key", () => {
-    expect(workspaceKey("/")).toBe("/")
-    expect(workspaceKey("///")).toBe("/")
-    expect(workspaceKey("\\")).toBe("/")
-    expect(workspaceKey("C:\\")).toBe("c:/")
-    expect(workspaceKey("C:/")).toBe("c:/")
-    expect(workspaceKey("C:///")).toBe("c:/")
-    expect(workspaceKey("\\\\Server\\Share\\")).toBe("//server/share")
+    expect(String(workspacePathKey("/"))).toBe("/")
+    expect(String(workspacePathKey("///"))).toBe("/")
+    expect(String(workspacePathKey("\\"))).toBe("/")
+    expect(String(workspacePathKey("C:\\"))).toBe("c:/")
+    expect(String(workspacePathKey("C:/"))).toBe("c:/")
+    expect(String(workspacePathKey("C:///"))).toBe("c:/")
+    expect(String(workspacePathKey("\\\\Server\\Share\\"))).toBe("//server/share")
   })
 
   test("keeps local first while preserving known order", () => {

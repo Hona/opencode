@@ -1,10 +1,19 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { FileNode } from "@opencode-ai/sdk/v2"
-import { filePathKey, type FilePath, type FilePathKey, type WorkspacePath } from "./path"
+import {
+  ROOT_FILE_PATH,
+  ROOT_FILE_PATH_KEY,
+  filePathDescendsFrom,
+  filePathKey,
+  type FilePath,
+  type FilePathKey,
+  type WorkspacePath,
+} from "./path"
 
 type TreeNode = FileNode & { path: FilePath }
 
 type DirectoryState = {
+  path: FilePath
   expanded: boolean
   loaded?: boolean
   loading?: boolean
@@ -21,16 +30,15 @@ type TreeStoreOptions = {
 }
 
 export function createFileTreeStore(options: TreeStoreOptions) {
-  const ROOT = "" as FilePathKey
-  const dirKey = (path: string) => (filePathKey(options.normalizeDir(path)) || options.normalizeDir(path)) as FilePathKey
-  const nodeKey = (path: string) => (filePathKey(options.normalize(path)) || options.normalize(path)) as FilePathKey
+  const dirKey = (path: FilePath) => filePathKey(path)
+  const nodeKey = (path: FilePath) => filePathKey(path)
   const nodePath = (node: FileNode) => (node.type === "directory" ? options.normalizeDir(node.path) : options.normalize(node.path))
   const [tree, setTree] = createStore<{
     node: Record<FilePathKey, TreeNode>
     dir: Record<FilePathKey, DirectoryState>
   }>({
     node: {},
-    dir: { [ROOT]: { expanded: true } },
+    dir: { [ROOT_FILE_PATH_KEY]: { path: ROOT_FILE_PATH, expanded: true } },
   })
 
   const inflight = new Map<FilePathKey, Promise<void>>()
@@ -39,17 +47,32 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     path: nodePath(node),
   })
 
+  const dropDirs = (dirs: readonly FilePathKey[]) => {
+    if (dirs.length === 0) return
+
+    setTree(
+      "dir",
+      produce((draft) => {
+        for (const key of Object.keys(draft) as FilePathKey[]) {
+          if (key === ROOT_FILE_PATH_KEY) continue
+          if (!dirs.some((dir) => key === dir || filePathDescendsFrom(key, dir))) continue
+          delete draft[key]
+        }
+      }),
+    )
+  }
+
   const reset = () => {
     inflight.clear()
     setTree("node", reconcile({}))
     setTree("dir", reconcile({}))
-    setTree("dir", ROOT, { expanded: true })
+    setTree("dir", ROOT_FILE_PATH_KEY, { path: ROOT_FILE_PATH, expanded: true })
   }
 
-  const ensureDir = (path: string) => {
+  const ensureDir = (path: FilePath) => {
     const dir = dirKey(path)
     if (tree.dir[dir]) return
-    setTree("dir", dir, { expanded: false })
+    setTree("dir", dir, { path, expanded: false })
   }
 
   const listDir = (input: string, opts?: { force?: boolean }) => {
@@ -82,12 +105,11 @@ export function createFileTreeStore(options: TreeStoreOptions) {
         const prevChildren = tree.dir[dir]?.children ?? []
         const nextChildren = nodes.map((node) => nodeKey(node.path))
         const nextSet = new Set(nextChildren)
+        const removedDirs: FilePathKey[] = []
 
         setTree(
           "node",
           produce((draft) => {
-            const removedDirs: FilePathKey[] = []
-
             for (const child of prevChildren) {
               if (nextSet.has(child)) continue
               const existing = draft[child]
@@ -95,15 +117,9 @@ export function createFileTreeStore(options: TreeStoreOptions) {
               delete draft[child]
             }
 
-            if (removedDirs.length > 0) {
-              const keys = Object.keys(draft) as FilePathKey[]
-              for (const key of keys) {
-                for (const removed of removedDirs) {
-                  if (!key.startsWith(removed + "/")) continue
-                  delete draft[key]
-                  break
-                }
-              }
+            for (const key of Object.keys(draft) as FilePathKey[]) {
+              if (!removedDirs.some((dir) => filePathDescendsFrom(key, dir))) continue
+              delete draft[key]
             }
 
             for (const node of nodes) {
@@ -112,10 +128,13 @@ export function createFileTreeStore(options: TreeStoreOptions) {
           }),
         )
 
+        dropDirs(removedDirs)
+
         setTree(
           "dir",
           dir,
           produce((draft) => {
+            draft.path = path
             draft.loaded = true
             draft.loading = false
             draft.children = nextChildren
@@ -158,20 +177,17 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   }
 
   const dirState = (input: string) => {
-    const dir = dirKey(input)
+    const dir = dirKey(options.normalizeDir(input))
     return tree.dir[dir]
   }
 
   const children = (input: string) => {
-    const dir = dirKey(input)
-    const ids = tree.dir[dir]?.children
-    if (!ids) return []
-    const out: TreeNode[] = []
-    for (const id of ids) {
+    const dir = dirKey(options.normalizeDir(input))
+    return (tree.dir[dir]?.children ?? []).flatMap((id) => {
       const node = tree.node[id]
-      if (node) out.push(node)
-    }
-    return out
+      if (!node) return []
+      return [node]
+    })
   }
 
   return {
@@ -180,8 +196,15 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     collapseDir,
     dirState,
     children,
-    node: (path: string) => tree.node[nodeKey(path)],
-    isLoaded: (path: string) => Boolean(tree.dir[dirKey(path)]?.loaded),
+    node: (path: string) => tree.node[nodeKey(options.normalize(path))],
+    nodeByKey: (key: FilePathKey) => tree.node[key],
+    dirByKey: (key: FilePathKey) => tree.dir[key],
+    dirPathByKey: (key: FilePathKey) => {
+      const dir = tree.dir[key]
+      if (!dir?.loaded) return
+      return dir.path
+    },
+    isLoaded: (path: string) => Boolean(tree.dir[dirKey(options.normalizeDir(path))]?.loaded),
     reset,
   }
 }

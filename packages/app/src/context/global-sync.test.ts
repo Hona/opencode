@@ -1,25 +1,28 @@
 import { describe, expect, test } from "bun:test"
+import { workspacePathKey } from "@/context/file/path"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+
+const key = (input: string) => workspacePathKey(input)
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {
     const now = 5_000
     const picks = pickDirectoriesToEvict({
-      stores: ["a", "b", "c", "d"],
+      stores: [key("a"), key("b"), key("c"), key("d")],
       state: new Map([
-        ["a", { lastAccessAt: 1_000 }],
-        ["b", { lastAccessAt: 4_900 }],
-        ["c", { lastAccessAt: 4_800 }],
-        ["d", { lastAccessAt: 3_000 }],
+        [key("a"), { lastAccessAt: 1_000 }],
+        [key("b"), { lastAccessAt: 4_900 }],
+        [key("c"), { lastAccessAt: 4_800 }],
+        [key("d"), { lastAccessAt: 3_000 }],
       ]),
-      pins: new Set(["a"]),
+      pins: new Set([key("a")]),
       max: 2,
       ttl: 1_500,
       now,
     })
 
-    expect(picks).toEqual(["d", "c"])
+    expect(picks.map(String)).toEqual(["d", "c"])
   })
 })
 
@@ -81,7 +84,7 @@ describe("canDisposeDirectory", () => {
   test("rejects pinned or inflight directories", () => {
     expect(
       canDisposeDirectory({
-        directory: "dir",
+        directory: key("dir"),
         hasStore: true,
         pinned: true,
         booting: false,
@@ -90,7 +93,7 @@ describe("canDisposeDirectory", () => {
     ).toBe(false)
     expect(
       canDisposeDirectory({
-        directory: "dir",
+        directory: key("dir"),
         hasStore: true,
         pinned: false,
         booting: true,
@@ -99,7 +102,7 @@ describe("canDisposeDirectory", () => {
     ).toBe(false)
     expect(
       canDisposeDirectory({
-        directory: "dir",
+        directory: key("dir"),
         hasStore: true,
         pinned: false,
         booting: false,
@@ -111,7 +114,7 @@ describe("canDisposeDirectory", () => {
   test("accepts idle unpinned directory store", () => {
     expect(
       canDisposeDirectory({
-        directory: "dir",
+        directory: key("dir"),
         hasStore: true,
         pinned: false,
         booting: false,

@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/util/encode"
-import { pathKey } from "@opencode-ai/util/path"
+import { createPathHelpers, workspacePathKey } from "@/context/file/path"
 import { decode64 } from "./base64"
 
 function decodeDir(input: string) {
@@ -9,10 +9,19 @@ function decodeDir(input: string) {
   return value
 }
 
+const splitSessionKey = (input: string) => {
+  const split = input.indexOf("/")
+  if (split === -1) return { dir: input, id: undefined }
+  return {
+    dir: input.slice(0, split),
+    id: input.slice(split + 1),
+  }
+}
+
 export function sessionDirKey(input: string) {
   const dir = decodeDir(input)
   if (!dir) return input
-  return base64Encode(pathKey(dir) || dir)
+  return base64Encode(workspacePathKey(dir))
 }
 
 export function sessionKey(dir: string, id?: string) {
@@ -22,13 +31,19 @@ export function sessionKey(dir: string, id?: string) {
 }
 
 export function sessionParts(input: string) {
-  const split = input.indexOf("/")
-  const dir = split === -1 ? input : input.slice(0, split)
-  const id = split === -1 ? undefined : input.slice(split + 1)
+  const { dir, id } = splitSessionKey(input)
   return {
     dir: sessionDirKey(dir),
     directory: decodeDir(dir),
     id,
     key: sessionKey(dir, id),
   }
+}
+
+export const normalizeSessionKey = (input: string) => sessionParts(input).key
+
+export function sessionPathHelpers(input: string) {
+  const dir = sessionParts(input).directory
+  if (!dir) return
+  return createPathHelpers(() => dir)
 }

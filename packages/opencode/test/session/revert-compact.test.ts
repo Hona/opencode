@@ -5,6 +5,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Path } from "../../src/path/path"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -55,8 +56,8 @@ describe("revert + compact workflow", () => {
           mode: "default",
           agent: "default",
           path: {
-            cwd: tmp.path,
-            root: tmp.path,
+            cwd: Path.pretty(tmp.path),
+            root: Path.pretty(tmp.path),
           },
           cost: 0,
           tokens: {
@@ -115,8 +116,8 @@ describe("revert + compact workflow", () => {
           mode: "default",
           agent: "default",
           path: {
-            cwd: tmp.path,
-            root: tmp.path,
+            cwd: Path.pretty(tmp.path),
+            root: Path.pretty(tmp.path),
           },
           cost: 0,
           tokens: {
@@ -229,8 +230,8 @@ describe("revert + compact workflow", () => {
           mode: "default",
           agent: "default",
           path: {
-            cwd: tmp.path,
-            root: tmp.path,
+            cwd: Path.pretty(tmp.path),
+            root: Path.pretty(tmp.path),
           },
           cost: 0,
           tokens: {

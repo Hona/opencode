@@ -1,9 +1,9 @@
 import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { pathKey } from "@opencode-ai/util/path"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { workspacePathKey } from "@/context/file/path"
 import {
   clearSessionPrefetch,
   getSessionPrefetch,
@@ -30,7 +30,7 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
   return promise
 }
 
-const dir = (directory: string) => pathKey(directory) || directory
+const dir = (directory: string) => workspacePathKey(directory)
 
 const keyFor = (directory: string, id: string) => `${dir(directory)}\n${id}`
 

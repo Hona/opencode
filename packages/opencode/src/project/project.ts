@@ -21,13 +21,11 @@ import { PrettyPath } from "@/path/schema"
 export namespace Project {
   const log = Log.create({ service: "project" })
 
-  function fix(input: string) {
-    if (!input || input === "/") return PrettyPath.make(input)
+  function stored(input: string) {
     return Path.truecaseSync(input)
   }
 
   function same(a: string, b: string) {
-    if (a === "/" || b === "/") return a === b
     return Path.eq(a, b)
   }
 
@@ -35,8 +33,8 @@ export namespace Project {
     const seen = new Set<string>()
     const out: PrettyPath[] = []
     for (const item of list) {
-      const dir = fix(item)
-      const key = dir === "/" ? dir : Path.key(dir)
+      const dir = stored(item)
+      const key = Path.key(dir)
       if (seen.has(key)) continue
       seen.add(key)
       out.push(dir)
@@ -45,21 +43,19 @@ export namespace Project {
   }
 
   async function gitpath(cwd: string, name: string) {
-    if (!name) return fix(cwd)
+    if (!name) return stored(cwd)
     // git output includes trailing newlines; keep path whitespace intact.
     name = name.replace(/[\r\n]+$/, "")
-    if (!name) return fix(cwd)
+    if (!name) return stored(cwd)
 
-    name = Filesystem.windowsPath(name)
-
-    if (path.isAbsolute(name)) return await Path.truecase(name)
+    if (Path.isAbsolute(name)) return await Path.truecase(name)
     return await Path.truecase(Path.pretty(name, { cwd }))
   }
 
   export const Info = z
     .object({
       id: ProjectID.zod,
-      worktree: z.string(),
+      worktree: PrettyPath.zod,
       vcs: z.literal("git").optional(),
       name: z.string().optional(),
       icon: z
@@ -79,15 +75,12 @@ export namespace Project {
         updated: z.number(),
         initialized: z.number().optional(),
       }),
-      sandboxes: z.array(z.string()),
+      sandboxes: z.array(PrettyPath.zod),
     })
     .meta({
       ref: "Project",
     })
-  export type Info = Omit<z.infer<typeof Info>, "worktree" | "sandboxes"> & {
-    worktree: PrettyPath
-    sandboxes: PrettyPath[]
-  }
+  export type Info = z.infer<typeof Info>
 
   export const Event = {
     Updated: BusEvent.define("project.updated", Info),
@@ -101,8 +94,8 @@ export namespace Project {
         ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
         : undefined
     return {
-      id: ProjectID.make(row.id),
-      worktree: fix(row.worktree),
+      id: ProjectID.parse(row.id),
+      worktree: stored(row.worktree),
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -119,7 +112,7 @@ export namespace Project {
   function readCachedId(dir: string) {
     return Filesystem.readText(path.join(dir, "opencode"))
       .then((x) => x.trim())
-      .then(ProjectID.make)
+      .then(ProjectID.parse)
       .catch(() => undefined)
   }
 
@@ -154,7 +147,7 @@ export namespace Project {
           .then(async (result) => {
             const common = await gitpath(sandbox, await result.text())
             // Avoid going to parent of sandbox when git-common-dir is empty.
-            return same(common, sandbox) ? sandbox : fix(path.dirname(common))
+            return same(common, sandbox) ? sandbox : stored(path.dirname(common))
           })
           .catch(() => undefined)
 
@@ -197,7 +190,7 @@ export namespace Project {
             }
           }
 
-          id = roots[0] ? ProjectID.make(roots[0]) : undefined
+          id = roots[0] ? ProjectID.parse(roots[0]) : undefined
           if (id) {
             // Write to common dir so the cache is shared across worktrees.
             await Filesystem.write(path.join(worktree, ".git", "opencode"), id).catch(() => undefined)
@@ -273,7 +266,7 @@ export namespace Project {
       },
     }
     if (!same(data.sandbox, result.worktree) && !result.sandboxes.some((item) => same(item, data.sandbox))) {
-      result.sandboxes.push(fix(data.sandbox))
+      result.sandboxes.push(stored(data.sandbox))
     }
     result.sandboxes = uniq(result.sandboxes).filter((item) => existsSync(item))
     const insert = {
@@ -399,7 +392,6 @@ export namespace Project {
       commands: Info.shape.commands.optional(),
     }),
     async (input) => {
-      const id = ProjectID.make(input.projectID)
       const result = Database.use((db) =>
         db
           .update(ProjectTable)
@@ -410,7 +402,7 @@ export namespace Project {
             commands: input.commands,
             time_updated: Date.now(),
           })
-          .where(eq(ProjectTable.id, id))
+          .where(eq(ProjectTable.id, input.projectID))
           .returning()
           .get(),
       )
@@ -441,7 +433,7 @@ export namespace Project {
   export async function addSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    const dir = fix(directory)
+    const dir = stored(directory)
     const sandboxes = uniq(row.sandboxes)
     if (!sandboxes.some((item) => same(item, dir))) sandboxes.push(dir)
     const result = Database.use((db) =>
@@ -466,7 +458,7 @@ export namespace Project {
   export async function removeSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    const dir = fix(directory)
+    const dir = stored(directory)
     const sandboxes = uniq(row.sandboxes).filter((item) => !same(item, dir))
     const result = Database.use((db) =>
       db

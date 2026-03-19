@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Path } from "@/path/path"
 import { InstanceContext } from "@/effect/instance-context"
 import { runPromiseInstance } from "@/effect/runtime"
+import { Instance } from "@/project/instance"
 import { git } from "@/util/git"
 import { Effect, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
@@ -18,6 +19,8 @@ import { Ripgrep } from "./ripgrep"
 import type { PrettyPath, RepoPath } from "@/path/schema"
 
 export namespace File {
+  const repo = (input: RepoPath | string) => (Path.isAbsolute(input) ? Path.repoFrom(Instance.directory, input) : Path.repo(input))
+
   export const Info = z
     .object({
       path: z.string(),
@@ -98,11 +101,11 @@ export namespace File {
   }
 
   export async function read(file: RepoPath | string): Promise<Content> {
-    return runPromiseInstance(Service.use((svc) => svc.read(file)))
+    return runPromiseInstance(Service.use((svc) => svc.read(repo(file))))
   }
 
   export async function list(dir?: RepoPath | string) {
-    return runPromiseInstance(Service.use((svc) => svc.list(dir)))
+    return runPromiseInstance(Service.use((svc) => svc.list(dir ? repo(dir) : undefined)))
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
@@ -351,14 +354,14 @@ export namespace File {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<File.Info[]>
-      readonly read: (file: RepoPath | string) => Effect.Effect<File.Content>
-      readonly list: (dir?: RepoPath | string) => Effect.Effect<File.Node[]>
+    readonly read: (file: RepoPath) => Effect.Effect<File.Content>
+    readonly list: (dir?: RepoPath) => Effect.Effect<File.Node[]>
     readonly search: (input: {
       query: string
       limit?: number
       dirs?: boolean
       type?: "file" | "directory"
-      }) => Effect.Effect<RepoPath[]>
+    }) => Effect.Effect<RepoPath[]>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/File") {}
@@ -489,7 +492,7 @@ export namespace File {
           if (untrackedOutput.trim()) {
             for (const file of untrackedOutput.trim().split("\n")) {
               try {
-                const content = await Filesystem.readText(path.join(instance.directory, file))
+                const content = await Filesystem.readText(Path.join(instance.directory, file))
                 changed.push({
                   path: file,
                   added: content.split("\n").length,
@@ -532,19 +535,19 @@ export namespace File {
           }
 
           return changed.map((item) => {
-            const full = Path.pretty(item.path, { cwd: instance.directory })
-            return {
-              ...item,
-              path: Path.repo(Path.rel(instance.directory, full)),
-            }
-          })
+              const full = Path.join(instance.directory, item.path)
+              return {
+                ...item,
+                path: Path.repoFrom(instance.directory, full),
+              }
+            })
         })
       })
 
-      const read = Effect.fn("File.read")(function* (file: RepoPath | string) {
+      const read = Effect.fn("File.read")(function* (file: RepoPath) {
         return yield* Effect.promise(async (): Promise<File.Content> => {
           using _ = log.time("read", { file })
-          const full = path.join(instance.directory, file)
+          const full = Path.join(instance.directory, file)
 
           if (!(await allow(full))) {
             throw new Error(`Access denied: path escapes project directory`)
@@ -622,7 +625,7 @@ export namespace File {
         })
       })
 
-      const list = Effect.fn("File.list")(function* (dir?: RepoPath | string) {
+      const list = Effect.fn("File.list")(function* (dir?: RepoPath) {
         return yield* Effect.promise(async () => {
           const exclude = [".git", ".DS_Store"]
           let ignored = (_: string) => false
@@ -639,7 +642,7 @@ export namespace File {
             ignored = ig.ignores.bind(ig)
           }
 
-          const resolved = dir ? path.join(instance.directory, dir) : instance.directory
+          const resolved = dir ? Path.join(instance.directory, dir) : instance.directory
           if (!(await allow(resolved))) {
             throw new Error(`Access denied: path escapes project directory`)
           }
@@ -647,8 +650,8 @@ export namespace File {
           const nodes: File.Node[] = []
           for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
             if (exclude.includes(entry.name)) continue
-            const absolute = Path.pretty(path.join(resolved, entry.name))
-            const file = Path.repo(Path.rel(instance.directory, absolute))
+            const absolute = Path.join(resolved, entry.name)
+            const file = Path.repoFrom(instance.directory, absolute)
             const type = entry.isDirectory() ? "directory" : "file"
             nodes.push({
               name: entry.name,

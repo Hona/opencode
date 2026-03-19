@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join } from "path"
 import { Effect, FileSystem, Layer, Schema, ServiceMap } from "effect"
 import type { PlatformError } from "effect/PlatformError"
+import { Path } from "../path/path"
 import { Glob } from "../util/glob"
 import { Filesystem as LocalFilesystem } from "../util/filesystem"
 
@@ -88,46 +89,31 @@ export namespace AppFileSystem {
 
       const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
         const result: string[] = []
-        let current = start
-        while (true) {
-          const search = join(current, target)
+        for (const dir of Path.up(start, { stop })) {
+          const search = join(dir, target)
           if (yield* fs.exists(search)) result.push(search)
-          if (stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
         }
         return result
       })
 
       const up = Effect.fn("FileSystem.up")(function* (options: { targets: string[]; start: string; stop?: string }) {
         const result: string[] = []
-        let current = options.start
-        while (true) {
+        for (const dir of Path.up(options.start, { stop: options.stop })) {
           for (const target of options.targets) {
-            const search = join(current, target)
+            const search = join(dir, target)
             if (yield* fs.exists(search)) result.push(search)
           }
-          if (options.stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
         }
         return result
       })
 
       const globUp = Effect.fn("FileSystem.globUp")(function* (pattern: string, start: string, stop?: string) {
         const result: string[] = []
-        let current = start
-        while (true) {
-          const matches = yield* glob(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
+        for (const dir of Path.up(start, { stop })) {
+          const matches = yield* glob(pattern, { cwd: dir, absolute: true, include: "file", dot: true }).pipe(
             Effect.catch(() => Effect.succeed([] as string[])),
           )
           result.push(...matches)
-          if (stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
         }
         return result
       })
@@ -151,28 +137,8 @@ export namespace AppFileSystem {
 
   export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
 
-  // Pure helpers that don't need Effect (path manipulation, sync operations)
+  // Pure helper that doesn't need Effect.
   export function mimeType(p: string): string {
     return LocalFilesystem.mimeType(p)
-  }
-
-  export function normalizePath(p: string): string {
-    return LocalFilesystem.normalizePath(p)
-  }
-
-  export function resolve(p: string): string {
-    return LocalFilesystem.resolve(p)
-  }
-
-  export function windowsPath(p: string): string {
-    return LocalFilesystem.windowsPath(p)
-  }
-
-  export function overlaps(a: string, b: string) {
-    return LocalFilesystem.overlaps(a, b)
-  }
-
-  export function contains(parent: string, child: string) {
-    return LocalFilesystem.contains(parent, child)
   }
 }

@@ -1,7 +1,6 @@
-import { getFilename, pathEqual, pathKey } from "@opencode-ai/util/path"
+import { getFilename, pathEqual } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-
-export const workspaceKey = pathKey
+import { workspacePathKey } from "@/context/file/path"
 
 export const workspaceEqual = pathEqual
 
@@ -34,7 +33,7 @@ function sortSessions(now: number) {
 }
 
 const isRootVisibleSession = (session: Session, directory: string) =>
-  workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
+  workspacePathKey(session.directory) === workspacePathKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
@@ -78,11 +77,11 @@ export const errorMessage = (err: unknown, fallback: string) => {
 }
 
 export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted?: string[]) => {
-  const root = workspaceKey(local)
+  const root = workspacePathKey(local)
   const live = new Map<string, string>()
 
   for (const dir of dirs) {
-    const key = workspaceKey(dir)
+    const key = workspacePathKey(dir)
     if (key === root) continue
     if (!live.has(key)) live.set(key, dir)
   }
@@ -91,7 +90,7 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 
   const result = [local]
   for (const dir of persisted) {
-    const key = workspaceKey(dir)
+    const key = workspacePathKey(dir)
     if (key === root) continue
     const match = live.get(key)
     if (!match) continue

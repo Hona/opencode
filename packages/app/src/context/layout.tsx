@@ -1,7 +1,7 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pathEqual, pathKey } from "@opencode-ai/util/path"
+import { pathEqual } from "@opencode-ai/util/path"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
@@ -9,24 +9,21 @@ import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { migrateLayoutPaths } from "@/utils/persist-path"
-import { decode64 } from "@/utils/base64"
-import { sessionDirKey, sessionParts } from "@/utils/session-key"
+import { normalizeSessionKey, sessionDirKey, sessionParts, sessionPathHelpers } from "@/utils/session-key"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
-import { createPathHelpers, type ReviewPath, type WorkspaceKey, type WorkspacePath } from "./file/path"
+import { reviewPathKey, workspacePathKey, type ReviewPath, type WorkspaceKey, type WorkspacePath } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
-const reviewKey = (path: ReviewPath) => pathKey(path) || path
-const workspaceKey = (path: WorkspacePath) => (pathKey(path) || path) as WorkspaceKey
 const reviewPaths = (paths: readonly ReviewPath[]) => {
   const seen = new Set<string>()
   const out: ReviewPath[] = []
 
   for (const path of paths) {
-    const id = reviewKey(path)
+    const id = reviewPathKey(path)
     if (seen.has(id)) continue
     seen.add(id)
     out.push(path)
@@ -78,7 +75,7 @@ export type LocalProject = Partial<Project> & { worktree: WorkspacePath; expande
 export type ReviewDiffStyle = "unified" | "split"
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
-  const next = sessionParts(key).key
+  const next = normalizeSessionKey(key)
   touch(next)
   seed(next)
   return next
@@ -122,20 +119,12 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
   return { all, active: tab }
 }
 
-const sessionPath = (key: string) => {
-  const dir = key.split("/")[0]
-  if (!dir) return
-  const root = decode64(dir)
-  if (!root) return
-  return createPathHelpers(() => root)
-}
-
-const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
+const normalizeSessionTab = (path: ReturnType<typeof sessionPathHelpers>, tab: string) => {
   if (!path) return tab
   return path.normalizeTab(tab)
 }
 
-const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {
+const normalizeSessionTabList = (path: ReturnType<typeof sessionPathHelpers>, all: string[]) => {
   const seen = new Set<string>()
   return all.flatMap((tab) => {
     const value = normalizeSessionTab(path, tab)
@@ -146,7 +135,7 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
 }
 
 export const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
-  const path = sessionPath(key)
+  const path = sessionPathHelpers(key)
   return {
     all: normalizeSessionTabList(path, tabs.all),
     active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
@@ -437,7 +426,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(workspaceKey(sandbox), project.worktree)
+          map.set(workspacePathKey(sandbox), project.worktree)
         }
       }
       return map
@@ -454,11 +443,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = chain[chain.length - 1]
         if (!current) return directory
 
-        const key = workspaceKey(current)
+        const key = workspacePathKey(current)
         const next = map.get(key)
         if (!next) return current
 
-        const id = workspaceKey(next)
+        const id = workspacePathKey(next)
         if (visited.has(id)) return directory
         visited.add(id)
         chain.push(next)
@@ -469,7 +458,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     createEffect(() => {
       const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => pathKey(project.worktree)))
+      const seen = new Set(projects.map((project) => workspacePathKey(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
@@ -478,7 +467,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
           server.projects.close(project.worktree)
 
-          const key = pathKey(root)
+          const key = workspacePathKey(root)
           if (!seen.has(key)) {
             server.projects.open(root)
             seen.add(key)
@@ -611,13 +600,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "width", width)
         },
         workspaces(directory: WorkspacePath) {
-          return () => store.sidebar.workspaces[workspaceKey(directory)] ?? store.sidebar.workspacesDefault ?? false
+          return () => store.sidebar.workspaces[workspacePathKey(directory)] ?? store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: WorkspacePath, value: boolean) {
-          setStore("sidebar", "workspaces", workspaceKey(directory), value)
+          setStore("sidebar", "workspaces", workspacePathKey(directory), value)
         },
         toggleWorkspaces(directory: WorkspacePath) {
-          const key = workspaceKey(directory)
+          const key = workspacePathKey(directory)
           const current = store.sidebar.workspaces[key] ?? store.sidebar.workspacesDefault ?? false
           setStore("sidebar", "workspaces", key, !current)
         },
@@ -629,67 +618,39 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       review: {
-        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        diffStyle: createMemo(() => store.review.diffStyle),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
-          if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
-            return
-          }
           setStore("review", "diffStyle", diffStyle)
         },
       },
       fileTree: {
-        opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
-        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        opened: createMemo(() => store.fileTree.opened),
+        width: createMemo(() => store.fileTree.width),
+        tab: createMemo(() => store.fileTree.tab),
         setTab(tab: "changes" | "all") {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
-            return
-          }
           setStore("fileTree", "tab", tab)
         },
         open() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
-            return
-          }
           setStore("fileTree", "opened", true)
         },
         close() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
-            return
-          }
           setStore("fileTree", "opened", false)
         },
         toggle() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
-            return
-          }
           setStore("fileTree", "opened", (x) => !x)
         },
         resize(width: number) {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width, tab: "changes" })
-            return
-          }
           setStore("fileTree", "width", width)
         },
       },
       session: {
-        width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
+        width: createMemo(() => store.session.width),
         resize(width: number) {
-          if (!store.session) {
-            setStore("session", { width })
-            return
-          }
           setStore("session", "width", width)
         },
       },
       mobileSidebar: {
-        opened: createMemo(() => store.mobileSidebar?.opened ?? false),
+        opened: createMemo(() => store.mobileSidebar.opened),
         show() {
           setStore("mobileSidebar", "opened", true)
         },
@@ -702,7 +663,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       pendingMessage: {
         set(sessionKey: string, messageID: string) {
-          const key = sessionParts(sessionKey).key
+          const key = normalizeSessionKey(sessionKey)
           const at = Date.now()
           touch(key)
           const current = store.sessionView[key]
@@ -726,7 +687,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           )
         },
         consume(sessionKey: string) {
-          const key = sessionParts(sessionKey).key
+          const key = normalizeSessionKey(sessionKey)
           const current = store.sessionView[key]
           const message = current?.pendingMessage
           const at = current?.pendingMessageAt
@@ -748,30 +709,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       view(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const terminalOpened = createMemo(() => store.terminal.opened)
+        const reviewPanelOpened = createMemo(() => store.review.panelOpened)
 
         function setTerminalOpened(next: boolean) {
-          const current = store.terminal
-          if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
-            return
-          }
-
-          const value = current.opened ?? false
-          if (value === next) return
+          if (store.terminal.opened === next) return
           setStore("terminal", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean) {
-          const current = store.review
-          if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
-            return
-          }
-
-          const value = current.panelOpened ?? true
-          if (value === next) return
+          if (store.review.panelOpened === next) return
           setStore("review", "panelOpened", next)
         }
 
@@ -880,7 +827,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const path = createMemo(() => sessionPath(key()))
+        const path = createMemo(() => sessionPathHelpers(key()))
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         const normalize = (tab: string) => normalizeSessionTab(path(), tab)
         const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)

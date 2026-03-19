@@ -1,52 +1,52 @@
 import { test, expect, describe } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { Path } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
 
 async function link(target: string, alias: string) {
   await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
 }
 
-describe("Filesystem.contains", () => {
+describe("Path.contains", () => {
   test("allows paths within project", () => {
-    expect(Filesystem.contains("/project", "/project/src")).toBe(true)
-    expect(Filesystem.contains("/project", "/project/src/file.ts")).toBe(true)
-    expect(Filesystem.contains("/project", "/project")).toBe(true)
+    expect(Path.contains("/project", "/project/src")).toBe(true)
+    expect(Path.contains("/project", "/project/src/file.ts")).toBe(true)
+    expect(Path.contains("/project", "/project")).toBe(true)
   })
 
   test("blocks ../ traversal", () => {
-    expect(Filesystem.contains("/project", "/project/../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/project/src/../../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
+    expect(Path.contains("/project", "/project/../etc")).toBe(false)
+    expect(Path.contains("/project", "/project/src/../../etc")).toBe(false)
+    expect(Path.contains("/project", "/etc/passwd")).toBe(false)
   })
 
   test("blocks absolute paths outside project", () => {
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
-    expect(Filesystem.contains("/project", "/tmp/file")).toBe(false)
-    expect(Filesystem.contains("/home/user/project", "/home/user/other")).toBe(false)
+    expect(Path.contains("/project", "/etc/passwd")).toBe(false)
+    expect(Path.contains("/project", "/tmp/file")).toBe(false)
+    expect(Path.contains("/home/user/project", "/home/user/other")).toBe(false)
   })
 
   test("handles prefix collision edge cases", () => {
-    expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
-    expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
+    expect(Path.contains("/project", "/project-other/file")).toBe(false)
+    expect(Path.contains("/project", "/projectfile")).toBe(false)
   })
 
   test("blocks absolute-relative path mixes", () => {
     const abs = process.platform === "win32" ? "C:\\project" : "/project"
     const rel = process.platform === "win32" ? "project\\src\\file.ts" : "project/src/file.ts"
 
-    expect(Filesystem.contains(abs, rel)).toBe(false)
-    expect(Filesystem.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
+    expect(Path.contains(abs, rel)).toBe(false)
+    expect(Path.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
   })
 
   test("blocks different roots", () => {
     if (process.platform !== "win32") return
 
-    expect(Filesystem.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
-    expect(Filesystem.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
+    expect(Path.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
+    expect(Path.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
   })
 })
 

@@ -58,7 +58,13 @@ export const SessionDeleteCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessionID = SessionID.make(args.sessionID)
+      let sessionID: SessionID
+      try {
+        sessionID = SessionID.parse(args.sessionID)
+      } catch (err) {
+        UI.error(err instanceof Error ? err.message : `Invalid session id: ${args.sessionID}`)
+        process.exit(1)
+      }
       try {
         await Session.get(sessionID)
       } catch {

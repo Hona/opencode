@@ -117,6 +117,38 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
+function normalizeContextItem(item: ContextItem | (ContextItem & { key?: string })) {
+  if (item.type !== "file") return { ...item, key: contextItemKey(item) }
+  const path = filePathKey(item.path) as FilePath
+  const next = { ...item, path }
+  return { ...next, key: contextItemKey(next) }
+}
+
+function isContextItem(value: unknown): value is ContextItem | (ContextItem & { key?: string }) {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "type" in value &&
+    value.type === "file" &&
+    "path" in value &&
+    typeof value.path === "string"
+  )
+}
+
+function migratePromptStore(value: unknown) {
+  if (!value || typeof value !== "object") return value
+  if (!("context" in value)) return value
+  const context = (value as { context?: { items?: unknown } }).context
+  if (!context || !Array.isArray(context.items)) return value
+  return {
+      ...value,
+      context: {
+        ...context,
+        items: context.items.filter(isContextItem).map(normalizeContextItem),
+      },
+  }
+}
+
 function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
@@ -174,31 +206,33 @@ function createPromptSessionState(store: Store<PromptStore>, setStore: SetStoreF
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
-        const key = contextItemKey(item)
+        const next = normalizeContextItem(item)
+        const key = next.key
         if (store.context.items.find((x) => x.key === key)) return
-        setStore("context", "items", (items) => [...items, { key, ...item }])
+        setStore("context", "items", (items) => [...items, next])
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
       removeComment(path: FilePath, commentID: string) {
+        const key = filePathKey(path)
         setStore("context", "items", (items) =>
-          items.filter((item) => !(item.type === "file" && filePathEqual(item.path, path) && item.commentID === commentID)),
+          items.filter((item) => !(item.type === "file" && filePathKey(item.path) === key && item.commentID === commentID)),
         )
       },
       updateComment(path: FilePath, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+        const key = filePathKey(path)
         setStore("context", "items", (items) =>
           items.map((item) => {
-            if (item.type !== "file" || !filePathEqual(item.path, path) || item.commentID !== commentID) return item
-            const value = { ...item, ...next }
-            return { ...value, key: contextItemKey(value) }
+            if (item.type !== "file" || filePathKey(item.path) !== key || item.commentID !== commentID) return item
+            return normalizeContextItem({ ...item, ...next })
           }),
         )
       },
       replaceComments(items: FileContextItem[]) {
         setStore("context", "items", (current) => [
           ...current.filter((item) => !isCommentItem(item)),
-          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+          ...items.map(normalizeContextItem),
         ])
       },
     },
@@ -212,7 +246,7 @@ export function createPromptSessionForTest(input?: Partial<PromptStore>) {
     prompt: clonePrompt(input?.prompt ?? DEFAULT_PROMPT),
     cursor: input?.cursor,
     context: {
-      items: input?.context?.items?.map((item) => ({ ...item })) ?? [],
+      items: input?.context?.items?.map(normalizeContextItem) ?? [],
     },
   })
 
@@ -232,7 +266,10 @@ export function createPromptSessionForTest(input?: Partial<PromptStore>) {
 
 function createPromptSession(dir: string, id: string | undefined) {
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", Persist.legacyScoped(dir, id, "prompt", "v2")),
+    {
+      ...Persist.scoped(dir, id, "prompt", Persist.legacyScoped(dir, id, "prompt", "v2")),
+      migrate: migratePromptStore,
+    },
     createStore<PromptStore>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,

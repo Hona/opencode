@@ -1,5 +1,13 @@
 import { useFile } from "@/context/file"
-import { filePathEqual, filePathKey } from "@/context/file/path"
+import {
+  filePathAncestorKeys,
+  filePathEqual,
+  filePathFromKey,
+  filePathKey,
+  filePathName,
+  filePathParentKey,
+  type FilePathKey,
+} from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -33,8 +41,8 @@ function pathToFileUrl(filepath: string) {
 type Kind = "add" | "del" | "mix"
 
 type Filter = {
-  files: Set<string>
-  dirs: Set<string>
+  files: Set<FilePathKey>
+  dirs: Set<FilePathKey>
 }
 
 export function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
@@ -57,8 +65,8 @@ export function shouldListExpanded(input: {
 
 export function dirsToExpand(input: {
   level: number
-  filter?: { dirs: Set<string> }
-  expanded: (dir: string) => boolean
+  filter?: { dirs: Set<FilePathKey> }
+  expanded: (dir: FilePathKey) => boolean
 }) {
   if (input.level !== 0) return []
   if (!input.filter) return []
@@ -210,17 +218,16 @@ export default function FileTree(props: {
   onFileClick?: (file: FileNode) => void
 
   _filter?: Filter
-  _marks?: Set<string>
-  _deeps?: Map<string, number>
+  _marks?: Set<FilePathKey>
+  _deeps?: Map<FilePathKey, number>
   _kinds?: ReadonlyMap<string, Kind>
-  _chain?: readonly string[]
+  _chain?: readonly FilePathKey[]
 }) {
   const file = useFile()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
 
-  const key = (p: string) =>
-    filePathKey(file.normalize(p)) || file.normalize(p)
+  const key = (p: string) => filePathKey(file.normalize(p))
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
 
   const filter = createMemo(() => {
@@ -229,18 +236,8 @@ export default function FileTree(props: {
     const allowed = props.allowed
     if (!allowed) return
 
-    const files = new Set(allowed.map((item) => filePathKey(item) || item))
-    const dirs = new Set<string>()
-
-    for (const item of allowed) {
-      const path = filePathKey(item) || item
-      const parts = path.split("/")
-      const parents = parts.slice(0, -1)
-      for (const [idx] of parents.entries()) {
-        const dir = parents.slice(0, idx + 1).join("/")
-        if (dir) dirs.add(dir)
-      }
-    }
+    const files = new Set(allowed.map(filePathKey))
+    const dirs = new Set(allowed.flatMap((item) => filePathAncestorKeys(filePathKey(item))))
 
     return { files, dirs }
   })
@@ -248,9 +245,9 @@ export default function FileTree(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const out = new Set<string>()
-    for (const item of props.modified ?? []) out.add(filePathKey(item) || item)
-    for (const item of props.kinds?.keys() ?? []) out.add(filePathKey(item) || item)
+    const out = new Set<FilePathKey>()
+    for (const item of props.modified ?? []) out.add(filePathKey(item))
+    for (const item of props.kinds?.keys() ?? []) out.add(filePathKey(item))
     if (out.size === 0) return
     return out
   })
@@ -263,12 +260,12 @@ export default function FileTree(props: {
   const deeps = createMemo(() => {
     if (props._deeps) return props._deeps
 
-    const out = new Map<string, number>()
+    const out = new Map<FilePathKey, number>()
 
     const root = props.path
     if (!(file.tree.state(root)?.expanded ?? false)) return out
 
-    const seen = new Set<string>()
+    const seen = new Set<FilePathKey>()
     const stack: { dir: string; lvl: number; i: number; kids: string[]; max: number }[] = []
 
     const push = (dir: string, lvl: number) => {
@@ -296,7 +293,7 @@ export default function FileTree(props: {
         continue
       }
 
-      out.set(top.dir, top.max)
+      out.set(key(top.dir), top.max)
       stack.pop()
 
       const parent = stack[stack.length - 1]
@@ -333,17 +330,7 @@ export default function FileTree(props: {
     const nodes = file.tree.children(props.path)
     const current = filter()
     if (!current) return nodes
-
-    const parent = (path: string) => {
-      const idx = path.lastIndexOf("/")
-      if (idx === -1) return ""
-      return path.slice(0, idx)
-    }
-
-    const leaf = (path: string) => {
-      const idx = path.lastIndexOf("/")
-      return idx === -1 ? path : path.slice(idx + 1)
-    }
+    const parent = key(props.path)
 
     const out = nodes.filter((node) => {
       if (node.type === "file") return current.files.has(filePathKey(node.path))
@@ -353,31 +340,29 @@ export default function FileTree(props: {
     const seen = new Set(out.map((node) => filePathKey(node.path)))
 
     for (const dir of current.dirs) {
-      if (parent(dir) !== props.path) continue
-      const key = filePathKey(dir)
-      if (seen.has(key)) continue
+      if (filePathParentKey(dir) !== parent) continue
+      if (seen.has(dir)) continue
       out.push({
-        name: leaf(dir),
-        path: dir,
-        absolute: dir,
+        name: filePathName(dir),
+        path: filePathFromKey(dir),
+        absolute: filePathFromKey(dir),
         type: "directory",
         ignored: false,
       })
-      seen.add(key)
+      seen.add(dir)
     }
 
     for (const item of current.files) {
-      if (parent(item) !== props.path) continue
-      const key = filePathKey(item)
-      if (seen.has(key)) continue
+      if (filePathParentKey(item) !== parent) continue
+      if (seen.has(item)) continue
       out.push({
-        name: leaf(item),
-        path: item,
-        absolute: item,
+        name: filePathName(item),
+        path: filePathFromKey(item),
+        absolute: filePathFromKey(item),
         type: "file",
         ignored: false,
       })
-      seen.add(key)
+      seen.add(item)
     }
 
     out.sort((a, b) => {
@@ -395,7 +380,7 @@ export default function FileTree(props: {
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
-          const deep = () => deeps().get(node.path) ?? -1
+          const deep = () => deeps().get(key(node.path)) ?? -1
           const kind = () => visibleKind(node, kinds(), marks())
           const active = () => !!kind() && !node.ignored
 

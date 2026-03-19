@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Path } from "../../src/path/path"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
@@ -286,70 +287,36 @@ describe("filesystem", () => {
     })
   })
 
-  describe("windowsPath()", () => {
-    test("converts Git Bash paths", () => {
-      if (process.platform === "win32") {
-        expect(Filesystem.windowsPath("/c/Users/test")).toBe("C:/Users/test")
-        expect(Filesystem.windowsPath("/d/dev/project")).toBe("D:/dev/project")
-      } else {
-        expect(Filesystem.windowsPath("/c/Users/test")).toBe("/c/Users/test")
-      }
-    })
-
-    test("converts Cygwin paths", () => {
-      if (process.platform === "win32") {
-        expect(Filesystem.windowsPath("/cygdrive/c/Users/test")).toBe("C:/Users/test")
-        expect(Filesystem.windowsPath("/cygdrive/x/dev/project")).toBe("X:/dev/project")
-      } else {
-        expect(Filesystem.windowsPath("/cygdrive/c/Users/test")).toBe("/cygdrive/c/Users/test")
-      }
-    })
-
-    test("converts WSL paths", () => {
-      if (process.platform === "win32") {
-        expect(Filesystem.windowsPath("/mnt/c/Users/test")).toBe("C:/Users/test")
-        expect(Filesystem.windowsPath("/mnt/z/dev/project")).toBe("Z:/dev/project")
-      } else {
-        expect(Filesystem.windowsPath("/mnt/c/Users/test")).toBe("/mnt/c/Users/test")
-      }
-    })
-
-    test("ignores normal Windows paths", () => {
-      expect(Filesystem.windowsPath("C:/Users/test")).toBe("C:/Users/test")
-      expect(Filesystem.windowsPath("D:\\dev\\project")).toBe("D:\\dev\\project")
-    })
-  })
-
-  describe("contains()", () => {
+  describe("Path.contains()", () => {
     test("rejects absolute-relative path mixes", () => {
       const abs = process.platform === "win32" ? "C:\\project" : "/project"
       const rel = process.platform === "win32" ? "project\\src\\file.ts" : "project/src/file.ts"
 
-      expect(Filesystem.contains(abs, rel)).toBe(false)
-      expect(Filesystem.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
+      expect(Path.contains(abs, rel)).toBe(false)
+      expect(Path.contains(rel, path.join(abs, "src", "file.ts"))).toBe(false)
     })
 
     test("rejects different roots", () => {
       if (process.platform !== "win32") return
 
-      expect(Filesystem.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
-      expect(Filesystem.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
+      expect(Path.contains("C:\\project", "D:\\project\\file.ts")).toBe(false)
+      expect(Path.contains("C:\\project", "\\\\server\\share\\file.ts")).toBe(false)
     })
   })
 
-  describe("overlaps()", () => {
+  describe("Path.overlaps()", () => {
     test("stays false for absolute-relative path mixes", () => {
       const abs = process.platform === "win32" ? "C:\\project" : "/project"
       const rel = process.platform === "win32" ? "project\\src" : "project/src"
 
-      expect(Filesystem.overlaps(abs, rel)).toBe(false)
+      expect(Path.overlaps(abs, rel)).toBe(false)
     })
 
     test("stays false for different roots", () => {
       if (process.platform !== "win32") return
 
-      expect(Filesystem.overlaps("C:\\project", "D:\\project")).toBe(false)
-      expect(Filesystem.overlaps("C:\\project", "\\\\server\\share\\project")).toBe(false)
+      expect(Path.overlaps("C:\\project", "D:\\project")).toBe(false)
+      expect(Path.overlaps("C:\\project", "\\\\server\\share\\project")).toBe(false)
     })
   })
 
@@ -474,19 +441,19 @@ describe("filesystem", () => {
     })
   })
 
-  describe("resolve()", () => {
+  describe("Path.truecaseSync()", () => {
     test("resolves slash-prefixed drive paths on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const forward = tmp.path.replaceAll("\\", "/")
-      expect(Filesystem.resolve(`/${forward}`)).toBe(Filesystem.normalizePath(tmp.path))
+      expect(Path.truecaseSync(`/${forward}`)).toBe(Path.truecaseSync(tmp.path))
     })
 
     test("resolves slash-prefixed drive roots on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toUpperCase()
-      expect(Filesystem.resolve(`/${drive}:`)).toBe(Filesystem.resolve(`${drive}:/`))
+      expect(Path.truecaseSync(`/${drive}:`)).toBe(Path.truecaseSync(`${drive}:/`))
     })
 
     test("resolves Git Bash and MSYS2 paths on Windows", async () => {
@@ -495,7 +462,7 @@ describe("filesystem", () => {
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
       const rest = tmp.path.slice(2).replaceAll("\\", "/")
-      expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+      expect(Path.truecaseSync(`/${drive}${rest}`)).toBe(Path.truecaseSync(tmp.path))
     })
 
     test("resolves Git Bash and MSYS2 drive roots on Windows", async () => {
@@ -503,7 +470,7 @@ describe("filesystem", () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
-      expect(Filesystem.resolve(`/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+      expect(Path.truecaseSync(`/${drive}`)).toBe(Path.truecaseSync(`${drive.toUpperCase()}:/`))
     })
 
     test("resolves Cygwin paths on Windows", async () => {
@@ -511,14 +478,14 @@ describe("filesystem", () => {
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
       const rest = tmp.path.slice(2).replaceAll("\\", "/")
-      expect(Filesystem.resolve(`/cygdrive/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+      expect(Path.truecaseSync(`/cygdrive/${drive}${rest}`)).toBe(Path.truecaseSync(tmp.path))
     })
 
     test("resolves Cygwin drive roots on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
-      expect(Filesystem.resolve(`/cygdrive/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+      expect(Path.truecaseSync(`/cygdrive/${drive}`)).toBe(Path.truecaseSync(`${drive.toUpperCase()}:/`))
     })
 
     test("resolves WSL mount paths on Windows", async () => {
@@ -526,14 +493,14 @@ describe("filesystem", () => {
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
       const rest = tmp.path.slice(2).replaceAll("\\", "/")
-      expect(Filesystem.resolve(`/mnt/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+      expect(Path.truecaseSync(`/mnt/${drive}${rest}`)).toBe(Path.truecaseSync(tmp.path))
     })
 
     test("resolves WSL mount roots on Windows", async () => {
       if (process.platform !== "win32") return
       await using tmp = await tmpdir()
       const drive = tmp.path[0].toLowerCase()
-      expect(Filesystem.resolve(`/mnt/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+      expect(Path.truecaseSync(`/mnt/${drive}`)).toBe(Path.truecaseSync(`${drive.toUpperCase()}:/`))
     })
 
     test("preserves symlinked directory roots", async () => {
@@ -542,8 +509,8 @@ describe("filesystem", () => {
       await fs.mkdir(target)
       const link = path.join(tmp.path, "alias")
       await fs.symlink(target, link)
-      expect(Filesystem.resolve(link)).toBe(path.resolve(link))
-      expect(Filesystem.resolve(link)).not.toBe(Filesystem.resolve(target))
+      expect(String(Path.truecaseSync(link))).toBe(path.resolve(link))
+      expect(String(Path.truecaseSync(link))).not.toBe(String(Path.truecaseSync(target)))
     })
 
     test("preserves symlink roots for nested paths", async () => {
@@ -553,14 +520,14 @@ describe("filesystem", () => {
       await fs.mkdir(child, { recursive: true })
       const link = path.join(tmp.path, "alias")
       await fs.symlink(target, link)
-      expect(Filesystem.resolve(path.join(link, "child"))).toBe(path.resolve(link, "child"))
+      expect(String(Path.truecaseSync(path.join(link, "child")))).toBe(path.resolve(link, "child"))
     })
 
     test("returns unresolved path when target does not exist", async () => {
       await using tmp = await tmpdir()
       const missing = path.join(tmp.path, "does-not-exist-" + Date.now())
-      const result = Filesystem.resolve(missing)
-      expect(result).toBe(Filesystem.normalizePath(path.resolve(missing)))
+      const result = Path.truecaseSync(missing)
+      expect(result).toBe(Path.truecaseSync(path.resolve(missing)))
     })
 
     test("keeps cyclic symlink paths as typed", async () => {
@@ -569,7 +536,7 @@ describe("filesystem", () => {
       const b = path.join(tmp.path, "b")
       await fs.symlink(b, a)
       await fs.symlink(a, b)
-      expect(Filesystem.resolve(path.join(a, "child"))).toBe(path.resolve(a, "child"))
+      expect(String(Path.truecaseSync(path.join(a, "child")))).toBe(path.resolve(a, "child"))
     })
   })
 })

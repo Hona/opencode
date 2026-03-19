@@ -11,7 +11,7 @@ export namespace State {
   const log = Log.create({ service: "state" })
   const recordsByKey = new Map<PathKey, Map<any, Entry>>()
 
-  export function create<S>(root: () => PrettyPath | string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
+  export function create<S>(root: () => PrettyPath, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
     return () => {
       const key = Path.key(root())
       let entries = recordsByKey.get(key)
@@ -30,7 +30,7 @@ export namespace State {
     }
   }
 
-  export async function dispose(directory: PrettyPath | string) {
+  export async function dispose(directory: PrettyPath) {
     const key = Path.key(directory)
     const entries = recordsByKey.get(key)
     if (!entries) return

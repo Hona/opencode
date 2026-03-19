@@ -36,7 +36,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
-import { workspacePathKey, type WorkspacePath } from "@/context/file/path"
+import { workspacePathKey, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
 
 type GlobalStore = {
   ready: boolean
@@ -58,10 +58,10 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
-  const sdkCache = new Map<string, OpencodeClient>()
-  const booting = new Map<string, Promise<void>>()
-  const sessionLoads = new Map<string, Promise<void>>()
-  const sessionMeta = new Map<string, { limit: number }>()
+  const sdkCache = new Map<WorkspaceKey, OpencodeClient>()
+  const booting = new Map<WorkspaceKey, Promise<void>>()
+  const sessionLoads = new Map<WorkspaceKey, Promise<void>>()
+  const sessionMeta = new Map<WorkspaceKey, { limit: number }>()
 
   const [projectCache, setProjectCache, projectInit] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
@@ -88,7 +88,10 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
-  const dir = (directory: WorkspacePath | string) => workspacePathKey(directory as WorkspacePath)
+  const eventKey = (name: string) => {
+    if (name === "global") return "global" as const
+    return workspacePathKey(name as WorkspacePath)
+  }
 
   onCleanup(() => {
     active = false
@@ -157,7 +160,7 @@ function createGlobalSync() {
   const queue = createRefreshQueue({
     paused,
     bootstrap,
-    bootstrapInstance,
+    bootstrapInstance: bootstrapInstanceKey,
   })
 
   const children = createChildStoreManager({
@@ -165,7 +168,7 @@ function createGlobalSync() {
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
-      void bootstrapInstance(directory)
+      void bootstrapInstanceKey(directory)
     },
     onDispose: (directory) => {
       queue.clear(directory)
@@ -176,8 +179,7 @@ function createGlobalSync() {
     translate: language.t,
   })
 
-  const sdkFor = (directory: WorkspacePath | string) => {
-    directory = dir(directory)
+  const sdkFor = (directory: WorkspaceKey) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
     const sdk = globalSDK.createClient({
@@ -188,8 +190,7 @@ function createGlobalSync() {
     return sdk
   }
 
-  async function loadSessions(directory: WorkspacePath | string) {
-    directory = dir(directory)
+  async function loadSessionsKey(directory: WorkspaceKey) {
     const pending = sessionLoads.get(directory)
     if (pending) return pending
 
@@ -256,9 +257,11 @@ function createGlobalSync() {
     return promise
   }
 
-  async function bootstrapInstance(directory: WorkspacePath | string) {
-    directory = dir(directory)
-    if (!directory) return
+  function loadSessions(directory: WorkspacePath) {
+    return loadSessionsKey(workspacePathKey(directory))
+  }
+
+  async function bootstrapInstanceKey(directory: WorkspaceKey) {
     const pending = booting.get(directory)
     if (pending) return pending
 
@@ -288,7 +291,7 @@ function createGlobalSync() {
   }
 
   const unsub = globalSDK.event.listen((e) => {
-    const directory = dir(e.name)
+    const directory = eventKey(e.name)
     const event = e.details
 
     if (directory === "global") {
@@ -299,7 +302,7 @@ function createGlobalSync() {
         setGlobalProject: setProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
-        for (const directory of Object.keys(children.children)) {
+        for (const directory of Object.keys(children.children) as WorkspaceKey[]) {
           queue.push(directory)
         }
       }
@@ -315,7 +318,7 @@ function createGlobalSync() {
       directory,
       store,
       setStore,
-      push: queue.push,
+      push: (next) => queue.push(workspacePathKey(next)),
       setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
@@ -331,8 +334,8 @@ function createGlobalSync() {
     queue.dispose()
   })
   onCleanup(() => {
-    for (const directory of Object.keys(children.children)) {
-      children.disposeDirectory(directory)
+    for (const directory of Object.keys(children.children) as WorkspaceKey[]) {
+      children.dispose(directory)
     }
   })
 
@@ -354,15 +357,18 @@ function createGlobalSync() {
     void bootstrap()
   })
 
-    const projectApi = {
-      loadSessions,
-      meta(directory: WorkspacePath, patch: ProjectMeta) {
-        children.projectMeta(directory, patch)
-      },
-      icon(directory: WorkspacePath, value: string | undefined) {
-        children.projectIcon(directory, value)
-      },
+  const projectApi = {
+    loadSessions,
+    meta(directory: WorkspacePath, patch: ProjectMeta) {
+      children.projectMeta(workspacePathKey(directory), patch)
+    },
+    icon(directory: WorkspacePath, value: string | undefined) {
+      children.projectIcon(workspacePathKey(directory), value)
+    },
   }
+
+  const child = (directory: WorkspacePath, options?: { bootstrap?: boolean }) =>
+    children.child(workspacePathKey(directory), options)
 
   const updateConfig = async (config: Config) => {
     setGlobalStore("reload", "pending")
@@ -389,7 +395,7 @@ function createGlobalSync() {
     get error() {
       return globalStore.error
     },
-    child: children.child,
+    child,
     bootstrap,
     updateConfig,
     project: projectApi,

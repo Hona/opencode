@@ -2,7 +2,6 @@ import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
 import { Path } from "@/path/path"
 import type { PathKey, PrettyPath } from "@/path/schema"
-import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
@@ -21,7 +20,7 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function emit(directory: PrettyPath | string) {
+function emit(directory: PrettyPath) {
   GlobalBus.emit("event", {
     directory,
     payload: {
@@ -87,10 +86,10 @@ export const Instance = {
   get current() {
     return context.use()
   },
-  get directory(): PrettyPath | string {
+  get directory(): PrettyPath {
     return context.use().directory
   },
-  get worktree(): PrettyPath | string {
+  get worktree(): PrettyPath {
     return context.use().worktree
   },
   get project() {
@@ -102,11 +101,11 @@ export const Instance = {
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
    */
   containsPath(filepath: string) {
-    if (Filesystem.contains(Instance.directory, filepath)) return true
+    if (Path.contains(Instance.directory, filepath)) return true
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
     if (Instance.worktree === "/") return false
-    return Filesystem.contains(Instance.worktree, filepath)
+    return Path.contains(Instance.worktree, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that

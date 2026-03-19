@@ -1,8 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pathEqual } from "@opencode-ai/util/path"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type WorkspaceKey, type WorkspacePath, workspacePathKey } from "@/context/file/path"
+import { type WorkspacePath, workspacePathKey } from "@/context/file/path"
 import { Persist, persisted } from "@/utils/persist"
 import { migrateServerState } from "@/utils/persist-path"
 import { useCheckServerHealth } from "@/utils/server-health"
@@ -10,10 +9,10 @@ import { useCheckServerHealth } from "@/utils/server-health"
 type StoredProject = { worktree: WorkspacePath; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
-const worktreeKey = (input: WorkspacePath) => workspacePathKey(input) as WorkspaceKey
 
 function projectIndex(list: StoredProject[], worktree: WorkspacePath) {
-  return list.findIndex((item) => pathEqual(item.worktree, worktree))
+  const key = workspacePathKey(worktree)
+  return list.findIndex((item) => workspacePathKey(item.worktree) === key)
 }
 
 function upsertProject(list: StoredProject[], worktree: WorkspacePath) {
@@ -227,16 +226,15 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     })
 
     const origin = createMemo(() => projectsKey(state.active))
-    const projectsList = createMemo(() => {
-      const list = store.projects[origin()] ?? []
-      const seen = new Set<string>()
-      return list.filter((project) => {
-        const id = worktreeKey(project.worktree)
-        if (seen.has(id)) return false
-        seen.add(id)
-        return true
-      })
-    })
+    const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const projects = () => {
+      const key = origin()
+      if (!key) return
+      return {
+        key,
+        list: store.projects[key] ?? [],
+      }
+    }
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
@@ -267,44 +265,41 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       projects: {
         list: projectsList,
         open(directory: WorkspacePath) {
-          const key = origin()
-          if (!key) return
-          setStore("projects", key, upsertProject(store.projects[key] ?? [], directory))
+          const current = projects()
+          if (!current) return
+          setStore("projects", current.key, upsertProject(current.list, directory))
         },
         close(directory: WorkspacePath) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projects()
+          if (!current) return
+          const id = workspacePathKey(directory)
           setStore(
             "projects",
-            key,
-            current.filter((x) => !pathEqual(x.worktree, directory)),
+            current.key,
+            current.list.filter((item) => workspacePathKey(item.worktree) !== id),
           )
         },
         expand(directory: WorkspacePath) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => pathEqual(x.worktree, directory))
-          if (index !== -1) setStore("projects", key, index, "expanded", true)
+          const current = projects()
+          if (!current) return
+          const index = projectIndex(current.list, directory)
+          if (index !== -1) setStore("projects", current.key, index, "expanded", true)
         },
         collapse(directory: WorkspacePath) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => pathEqual(x.worktree, directory))
-          if (index !== -1) setStore("projects", key, index, "expanded", false)
+          const current = projects()
+          if (!current) return
+          const index = projectIndex(current.list, directory)
+          if (index !== -1) setStore("projects", current.key, index, "expanded", false)
         },
         move(directory: WorkspacePath, toIndex: number) {
-          const key = origin()
-          if (!key) return
-          const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => pathEqual(x.worktree, directory))
+          const current = projects()
+          if (!current) return
+          const fromIndex = projectIndex(current.list, directory)
           if (fromIndex === -1 || fromIndex === toIndex) return
-          const result = [...current]
+          const result = [...current.list]
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
-          setStore("projects", key, result)
+          setStore("projects", current.key, result)
         },
         last() {
           const key = origin()

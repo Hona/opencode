@@ -20,9 +20,9 @@ describe("InstructionPrompt.resolve", () => {
       directory: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+        expect(system.has(Path.pretty(path.join(tmp.path, "AGENTS.md")))).toBe(true)
 
-        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"), "test-message-1")
+        const results = await InstructionPrompt.resolve([], Path.pretty(path.join(tmp.path, "src", "file.ts")), "test-message-1")
         expect(results).toEqual([])
       },
     })
@@ -39,15 +39,15 @@ describe("InstructionPrompt.resolve", () => {
       directory: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(path.join(tmp.path, "subdir", "AGENTS.md"))).toBe(false)
+        expect(system.has(Path.pretty(path.join(tmp.path, "subdir", "AGENTS.md")))).toBe(false)
 
         const results = await InstructionPrompt.resolve(
           [],
-          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          Path.pretty(path.join(tmp.path, "subdir", "nested", "file.ts")),
           "test-message-2",
         )
         expect(results.length).toBe(1)
-        expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.md"))
+        expect(String(results[0].filepath)).toBe(path.join(tmp.path, "subdir", "AGENTS.md"))
       },
     })
   })
@@ -64,9 +64,9 @@ describe("InstructionPrompt.resolve", () => {
       fn: async () => {
         const filepath = path.join(tmp.path, "subdir", "AGENTS.md")
         const system = await InstructionPrompt.systemPaths()
-        expect(system.has(filepath)).toBe(false)
+        expect(system.has(Path.pretty(filepath))).toBe(false)
 
-        const results = await InstructionPrompt.resolve([], filepath, "test-message-2")
+        const results = await InstructionPrompt.resolve([], Path.pretty(filepath), "test-message-2")
         expect(results).toEqual([])
       },
     })
@@ -84,7 +84,7 @@ describe("InstructionPrompt.resolve", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const results = await InstructionPrompt.resolve([], path.join(other, "src", "file.ts"), "test-message-3")
+          const results = await InstructionPrompt.resolve([], Path.pretty(path.join(other, "src", "file.ts")), "test-message-3")
           expect(results).toEqual([])
         },
       })
@@ -131,8 +131,8 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(true)
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(false)
+          expect(paths.has(Path.pretty(path.join(profileTmp.path, "AGENTS.md")))).toBe(true)
+          expect(paths.has(Path.pretty(path.join(globalTmp.path, "AGENTS.md")))).toBe(false)
         },
       })
     } finally {
@@ -158,8 +158,8 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(false)
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+          expect(paths.has(Path.pretty(path.join(profileTmp.path, "AGENTS.md")))).toBe(false)
+          expect(paths.has(Path.pretty(path.join(globalTmp.path, "AGENTS.md")))).toBe(true)
         },
       })
     } finally {
@@ -184,7 +184,7 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
         directory: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
-          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+          expect(paths.has(Path.pretty(path.join(globalTmp.path, "AGENTS.md")))).toBe(true)
         },
       })
     } finally {
@@ -213,7 +213,7 @@ describe("InstructionPrompt.systemPaths instruction boundaries", () => {
       directory: tmp.path,
       fn: async () => {
         const paths = await InstructionPrompt.systemPaths()
-        expect(paths.has(path.join(tmp.path, "rules.md"))).toBe(true)
+        expect(paths.has(Path.pretty(path.join(tmp.path, "rules.md")))).toBe(true)
       },
     })
   })
@@ -239,7 +239,7 @@ describe("InstructionPrompt.systemPaths instruction boundaries", () => {
       directory: tmp.path,
       fn: async () => {
         const paths = await InstructionPrompt.systemPaths()
-        expect(paths.has(path.join(tmp.path, "rules.md"))).toBe(true)
+        expect(paths.has(Path.pretty(path.join(tmp.path, "rules.md")))).toBe(true)
       },
     })
   })

@@ -9,7 +9,7 @@ import { WorkspaceContext } from "../../src/control-plane/workspace-context"
 import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
-import type { Adaptor } from "../../src/control-plane/types"
+import type { Adaptor, WorkspaceFetchInput } from "../../src/control-plane/types"
 import { Flag } from "../../src/flag/flag"
 import { PrettyPath } from "../../src/path/schema"
 
@@ -44,7 +44,7 @@ async function setup(state: State) {
     },
     async remove() {},
 
-    async fetch(_config: unknown, input: RequestInfo | URL, init?: RequestInit) {
+    async fetch(_config: unknown, input: WorkspaceFetchInput, init?: RequestInit) {
       const url =
         input instanceof Request || input instanceof URL
           ? input.toString()

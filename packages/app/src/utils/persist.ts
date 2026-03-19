@@ -1,5 +1,5 @@
 import { Platform, usePlatform } from "@/context/platform"
-import { pathKey } from "@opencode-ai/util/path"
+import { workspacePathKey } from "@/context/file/path"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -218,7 +218,7 @@ function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) =>
 }
 
 function workspaceDirectory(dir: string) {
-  return pathKey(dir) || dir
+  return workspacePathKey(dir)
 }
 
 function trimDir(dir: string) {

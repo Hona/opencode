@@ -955,15 +955,6 @@ export const GithubRunCommand = cmd({
                 mime: f.mime,
                 url: `data:${f.mime};base64,${f.content}`,
                 filename: f.filename,
-                source: {
-                  type: "file" as const,
-                  text: {
-                    value: f.replacement,
-                    start: f.start,
-                    end: f.end,
-                  },
-                  path: f.filename,
-                },
               },
             ]),
           ],

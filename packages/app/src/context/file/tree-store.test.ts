@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { filePathKey } from "./path"
 import { createFileTreeStore } from "./tree-store"
 
 describe("file tree store path handling", () => {
@@ -25,12 +26,14 @@ describe("file tree store path handling", () => {
 
     expect(tree.children("").map((node) => node.path)).toEqual(["src/core", "src/app.ts"])
     expect(tree.node("src\\app.ts")?.path).toBe("src/app.ts")
+    expect(tree.dirPathByKey(filePathKey(""))).toBe("")
 
     tree.expandDir("src\\core")
     expect(tree.dirState("src/core")?.expanded).toBe(true)
 
     await tree.listDir("src/core")
     expect(tree.children("src\\core").map((node) => node.path)).toEqual(["src/core/util.ts"])
+    expect(tree.dirPathByKey(filePathKey("src\\core"))).toBe("src/core")
 
     tree.collapseDir("src/core")
     expect(tree.dirState("src\\core")?.expanded).toBe(false)

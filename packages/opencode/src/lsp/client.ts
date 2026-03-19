@@ -12,7 +12,6 @@ import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
-import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
@@ -52,10 +51,10 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(input: { serverID: string; server: LSPServer.Handle; root: PrettyPath | string }) {
+  export async function create(input: { serverID: string; server: LSPServer.Handle; root: PrettyPath }) {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
-    const root = Path.pretty(input.root, { cwd: Instance.directory })
+    const root = input.root
 
     const connection = createMessageConnection(
       new StreamMessageReader(input.server.process.stdout as any),
@@ -160,8 +159,8 @@ export namespace LSPClient {
         return connection
       },
       notify: {
-        async open(input: { path: PrettyPath | string }) {
-          const file = Path.pretty(input.path, { cwd: Instance.directory })
+        async open(input: { path: PrettyPath }) {
+          const file = input.path
           const pathKey = Path.key(file)
           const doc = files.get(pathKey)
           const text = await Filesystem.readText(file)
@@ -224,9 +223,9 @@ export namespace LSPClient {
       get diagnostics() {
         return new Map([...diagnostics.values()].map((item) => [String(item.path), item.diagnostics]))
       },
-      async waitForDiagnostics(input: { path: PrettyPath | string }) {
-        const path = Path.pretty(input.path, { cwd: Instance.directory })
-        const pathKey = Path.key(path)
+       async waitForDiagnostics(input: { path: PrettyPath }) {
+         const path = input.path
+         const pathKey = Path.key(path)
         log.info("waiting for diagnostics", { path })
         let unsub: () => void
         let debounceTimer: ReturnType<typeof setTimeout> | undefined

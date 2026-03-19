@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "../../src/filesystem"
+import { Path } from "../../src/path/path"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
@@ -305,15 +306,15 @@ describe("AppFileSystem", () => {
       expect(AppFileSystem.mimeType("unknown.qzx")).toBe("application/octet-stream")
     })
 
-    test("contains checks path containment", () => {
-      expect(AppFileSystem.contains("/a/b", "/a/b/c")).toBe(true)
-      expect(AppFileSystem.contains("/a/b", "/a/c")).toBe(false)
+    test("Path.contains checks path containment", () => {
+      expect(Path.contains("/a/b", "/a/b/c")).toBe(true)
+      expect(Path.contains("/a/b", "/a/c")).toBe(false)
     })
 
-    test("overlaps detects overlapping paths", () => {
-      expect(AppFileSystem.overlaps("/a/b", "/a/b/c")).toBe(true)
-      expect(AppFileSystem.overlaps("/a/b/c", "/a/b")).toBe(true)
-      expect(AppFileSystem.overlaps("/a", "/b")).toBe(false)
+    test("Path.overlaps detects overlapping paths", () => {
+      expect(Path.overlaps("/a/b", "/a/b/c")).toBe(true)
+      expect(Path.overlaps("/a/b/c", "/a/b")).toBe(true)
+      expect(Path.overlaps("/a", "/b")).toBe(false)
     })
   })
 })

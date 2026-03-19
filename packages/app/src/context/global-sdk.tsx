@@ -1,9 +1,9 @@
 import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pathKey } from "@opencode-ai/util/path"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import z from "zod"
+import { workspacePathKey } from "@/context/file/path"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
@@ -56,7 +56,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
 
-    const dir = (directory: string) => (directory === "global" ? directory : pathKey(directory) || directory)
+    const dir = (directory: string) => (directory === "global" ? directory : workspacePathKey(directory))
 
     const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
