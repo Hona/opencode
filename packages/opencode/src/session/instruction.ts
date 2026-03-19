@@ -1,4 +1,3 @@
-import path from "path"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
@@ -99,8 +98,8 @@ export namespace InstructionPrompt {
         instruction = Path.expand(instruction)
         const file = Path.isAbsolute(instruction) ? Path.pretty(instruction) : undefined
         const matches = file
-          ? await Glob.scan(path.basename(file), {
-              cwd: path.dirname(file),
+          ? await Glob.scan(Path.repoName(file), {
+              cwd: Path.parent(file),
               absolute: true,
               include: "file",
             }).catch(() => [])

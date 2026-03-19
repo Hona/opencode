@@ -239,11 +239,10 @@ export namespace LSP {
 
       const root = await server.root(file)
       if (!root) continue
-      const dir = pretty(root)
-      const id = key(server.id, dir)
+      const id = key(server.id, root)
       if (s.broken.has(id)) continue
 
-      const rootKey = Path.key(dir)
+      const rootKey = Path.key(root)
       const match = s.clients.find((x) => x.rootKey === rootKey && x.serverID === server.id)
       if (match) {
         result.push(match)
@@ -258,7 +257,7 @@ export namespace LSP {
         continue
       }
 
-      const task = schedule(server, dir, id)
+      const task = schedule(server, root, id)
       s.spawning.set(id, task)
 
       task.finally(() => {
@@ -285,8 +284,7 @@ export namespace LSP {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(filePath)
       if (!root) continue
-      const dir = pretty(root)
-      if (s.broken.has(key(server.id, dir))) continue
+      if (s.broken.has(key(server.id, root))) continue
       return true
     }
     return false

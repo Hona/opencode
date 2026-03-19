@@ -1,11 +1,20 @@
 import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
-import { dirname, join } from "path"
+import { dirname } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Path } from "@/path/path"
 import { Glob } from "./glob"
+
+async function* searchUp(targets: string[], start: string, stop?: string) {
+  for (const dir of Path.up(start, { stop })) {
+    for (const target of targets) {
+      const file = Path.join(dir, target)
+      if (await Filesystem.exists(file)) yield file
+    }
+  }
+}
 
 export namespace Filesystem {
   // Fast sync version for metadata checks
@@ -101,20 +110,12 @@ export namespace Filesystem {
 
   export async function findUp(target: string, start: string, stop?: string) {
     const result = []
-    for (const dir of Path.up(start, { stop })) {
-      const search = join(dir, target)
-      if (await exists(search)) result.push(search)
-    }
+    for await (const file of searchUp([target], start, stop)) result.push(file)
     return result
   }
 
   export async function* up(options: { targets: string[]; start: string; stop?: string }) {
-    for (const dir of Path.up(options.start, { stop: options.stop })) {
-      for (const target of options.targets) {
-        const search = join(dir, target)
-        if (await exists(search)) yield search
-      }
-    }
+    yield* searchUp(options.targets, options.start, options.stop)
   }
 
   export async function globUp(pattern: string, start: string, stop?: string) {

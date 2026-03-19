@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { LSPServer } from "../../src/lsp/server"
+import { Path } from "../../src/path/path"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
@@ -23,8 +24,8 @@ describe("LSPServer.RustAnalyzer.root", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const root = await LSPServer.RustAnalyzer.root(path.join(other, "member", "src", "lib.rs"))
-          expect(root).toBe(path.join(other, "member"))
+          const root = await LSPServer.RustAnalyzer.root(Path.pretty(path.join(other, "member", "src", "lib.rs")))
+          expect(String(root)).toBe(path.join(other, "member"))
         },
       })
     } finally {

@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, join } from "path"
+import { dirname } from "path"
 import { Effect, FileSystem, Layer, Schema, ServiceMap } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Path } from "../path/path"
@@ -87,24 +87,23 @@ export namespace AppFileSystem {
         })
       })
 
-      const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
+      const collectUp = Effect.fnUntraced(function* (targets: string[], start: string, stop?: string) {
         const result: string[] = []
         for (const dir of Path.up(start, { stop })) {
-          const search = join(dir, target)
-          if (yield* fs.exists(search)) result.push(search)
+          for (const target of targets) {
+            const file = Path.join(dir, target)
+            if (yield* fs.exists(file)) result.push(file)
+          }
         }
         return result
       })
 
+      const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
+        return yield* collectUp([target], start, stop)
+      })
+
       const up = Effect.fn("FileSystem.up")(function* (options: { targets: string[]; start: string; stop?: string }) {
-        const result: string[] = []
-        for (const dir of Path.up(options.start, { stop: options.stop })) {
-          for (const target of options.targets) {
-            const search = join(dir, target)
-            if (yield* fs.exists(search)) result.push(search)
-          }
-        }
-        return result
+        return yield* collectUp(options.targets, options.start, options.stop)
       })
 
       const globUp = Effect.fn("FileSystem.globUp")(function* (pattern: string, start: string, stop?: string) {

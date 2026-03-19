@@ -122,4 +122,17 @@ describe("control-plane/workspace-server SSE", () => {
     expect(response.status).toBe(400)
     expect(await response.text()).toContain('Expected workspace id starting with "wrk"')
   })
+
+  test("rejects invalid encoded directories before bootstrapping", async () => {
+    const app = WorkspaceServer.App()
+    const response = await app.request("/event", {
+      headers: {
+        "x-opencode-workspace": "wrk_test_workspace",
+        "x-opencode-directory": "%E0%A4%A",
+      },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain("Invalid percent-encoding in directory parameter")
+  })
 })

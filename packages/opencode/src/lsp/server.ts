@@ -14,6 +14,7 @@ import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
 import { Path } from "../path/path"
+import type { PrettyPath } from "../path/schema"
 import { spawn } from "./launch"
 
 export namespace LSPServer {
@@ -31,32 +32,24 @@ export namespace LSPServer {
     initialization?: Record<string, any>
   }
 
-  type RootFunction = (file: string) => Promise<string | undefined>
+  type RootFunction = (file: PrettyPath) => Promise<PrettyPath | undefined>
+
+  const firstUp = async (targets: string[], start: PrettyPath, stop?: PrettyPath) => {
+    const files = Filesystem.up({ targets, start, stop })
+    const first = await files.next()
+    await files.return()
+    return first.value
+  }
 
   const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
     return async (file) => {
-      const start = path.dirname(file)
+      const start = Path.parent(file)
       const stop = Instance.directory
 
-      if (excludePatterns) {
-        const excludedFiles = Filesystem.up({
-          targets: excludePatterns,
-          start,
-          stop,
-        })
-        const excluded = await excludedFiles.next()
-        await excludedFiles.return()
-        if (excluded.value) return undefined
-      }
-      const files = Filesystem.up({
-        targets: includePatterns,
-        start,
-        stop,
-      })
-      const first = await files.next()
-      await files.return()
-      if (!first.value) return stop
-      return path.dirname(first.value)
+      if (excludePatterns && (await firstUp(excludePatterns, start, stop))) return undefined
+
+      const root = await firstUp(includePatterns, start, stop)
+      return root ? Path.parent(root) : stop
     }
   }
 
@@ -71,15 +64,9 @@ export namespace LSPServer {
   export const Deno: Info = {
     id: "deno",
     root: async (file) => {
-      const files = Filesystem.up({
-        targets: ["deno.json", "deno.jsonc"],
-        start: path.dirname(file),
-        stop: Instance.directory,
-      })
-      const first = await files.next()
-      await files.return()
-      if (!first.value) return undefined
-      return path.dirname(first.value)
+      const root = await firstUp(["deno.json", "deno.jsonc"], Path.parent(file), Instance.directory)
+      if (!root) return undefined
+      return Path.parent(root)
     },
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs"],
     async spawn(root) {
@@ -856,18 +843,12 @@ export namespace LSPServer {
   export const RustAnalyzer: Info = {
     id: "rust",
     root: async (file) => {
-      const crates = Filesystem.up({
-        targets: ["Cargo.toml", "Cargo.lock"],
-        start: path.dirname(file),
-      })
-      const first = await crates.next()
-      await crates.return()
-
-      const crateRoot = first.value ? path.dirname(first.value) : Instance.directory
+      const root = await firstUp(["Cargo.toml", "Cargo.lock"], Path.parent(file))
+      const crateRoot = root ? Path.parent(root) : Instance.directory
       const worktree = Instance.worktree === "/" ? undefined : Path.truecaseSync(Instance.worktree)
 
       for (const dir of Path.up(crateRoot, { stop: worktree })) {
-        const cargoTomlPath = path.join(dir, "Cargo.toml")
+        const cargoTomlPath = Path.join(dir, "Cargo.toml")
         try {
           const cargoTomlContent = await Filesystem.readText(cargoTomlPath)
           if (cargoTomlContent.includes("[workspace]")) {
