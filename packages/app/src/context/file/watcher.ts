@@ -1,4 +1,5 @@
 import type { FileNode } from "@opencode-ai/sdk/v2"
+import { getParentPath, pathKey } from "@opencode-ai/util/path"
 
 type WatcherEvent = {
   type: string
@@ -26,18 +27,25 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   const path = ops.normalize(rawPath)
   if (!path) return
-  if (path.startsWith(".git/")) return
+  const key = pathKey(path) || path
+  if (key.startsWith(".git/")) return
 
-  if (ops.hasFile(path) || ops.isOpen?.(path)) {
-    ops.loadFile(path)
+  const file = (() => {
+    if (ops.hasFile(path) || ops.isOpen?.(path)) return path
+    if (key === path) return
+    if (ops.hasFile(key) || ops.isOpen?.(key)) return key
+  })()
+
+  if (file) {
+    ops.loadFile(file)
   }
 
   if (kind === "change") {
     const dir = (() => {
       if (path === "") return ""
-      const node = ops.node(path)
+      const node = ops.node(path) ?? (key === path ? undefined : ops.node(key))
       if (node?.type !== "directory") return
-      return path
+      return node.path
     })()
     if (dir === undefined) return
     if (!ops.isDirLoaded(dir)) return
@@ -46,7 +54,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   }
   if (kind !== "add" && kind !== "unlink") return
 
-  const parent = path.split("/").slice(0, -1).join("/")
+  const parent = getParentPath(key)
   if (!ops.isDirLoaded(parent)) return
 
   ops.refreshDir(parent)

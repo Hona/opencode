@@ -27,6 +27,32 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual(["src"])
   })
 
+  test("matches loaded files and parents across slash variants", () => {
+    const loads: string[] = []
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src\\new.ts",
+          event: "add",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: (path) => path === "src/new.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: (path) => path === "src",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(loads).toEqual(["src/new.ts"])
+    expect(refresh).toEqual(["src"])
+  })
+
   test("reloads files that are open in tabs", () => {
     const loads: string[] = []
 
@@ -106,6 +132,33 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual(["src"])
   })
 
+  test("refreshes changed directories across slash variants", () => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src\\nested",
+          event: "change",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        loadFile: () => {},
+        node: (path) =>
+          path === "src/nested"
+            ? { path: "src/nested", type: "directory", name: "nested", absolute: "/repo/src/nested", ignored: false }
+            : undefined,
+        isDirLoaded: (path) => path === "src/nested",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(refresh).toEqual(["src/nested"])
+  })
+
   test("ignores invalid or git watcher updates", () => {
     const refresh: string[] = []
 
@@ -114,6 +167,26 @@ describe("file watcher invalidation", () => {
         type: "file.watcher.updated",
         properties: {
           file: ".git/index.lock",
+          event: "change",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => true,
+        loadFile: () => {
+          throw new Error("should not load")
+        },
+        node: () => undefined,
+        isDirLoaded: () => true,
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: ".git\\index.lock",
           event: "change",
         },
       },
