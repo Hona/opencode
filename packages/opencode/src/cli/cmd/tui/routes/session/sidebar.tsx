@@ -7,7 +7,7 @@ import { Installation } from "@/installation"
 import { Path } from "@/path/path"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
-import { formatPath, splitPath } from "../../util/path"
+import { formatPath, formatServerPath, splitPath } from "../../util/path"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -60,12 +60,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const kv = useKV()
   const dir = createMemo(() => {
-    return formatPath(sync.data.path.directory || process.cwd(), {
-      home: sync.data.path.home,
-      platform: platform(),
-    })
+    return formatServerPath(sync.data.path.directory, sync.data.path)
   })
-  const dirparts = createMemo(() => splitPath(dir()))
+  const dirparts = createMemo(() => splitPath(dir(), { platform: platform() }))
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -253,7 +250,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
                           <text fg={theme.textMuted} wrapMode="none">
-                            {item.file}
+                            {formatServerPath(item.file, sync.data.path)}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>

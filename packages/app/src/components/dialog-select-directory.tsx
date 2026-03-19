@@ -6,14 +6,16 @@ import type { ListRef } from "@opencode-ai/ui/list"
 import {
   getDirectory,
   getFilename,
+  joinPath,
+  normalizeInputPath,
   getParentPath,
   getPathDisplay,
   getPathDisplaySeparator,
   getPathRoot,
   getPathScope,
   getPathSearchText,
-  normalizePath,
   pathKey,
+  trimPrettyPath,
 } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
@@ -34,36 +36,13 @@ type Row = {
   group: "recent" | "folders"
 }
 
-function trim(path: string) {
-  const normalized = normalize(path)
-  if (!normalized) return ""
-  const root = getPathRoot(normalized)
-  if (root && normalized === root) return root
-  return normalized.replace(/\/+$/, "") || root || "/"
-}
-
-function normalize(path: string) {
-  const normalized = normalizePath(path)
-  if (/^[A-Za-z]:$/.test(normalized)) return `${normalized}/`
-  return normalized
-}
-
-function join(base: string | undefined, rel: string) {
-  const root = trim(base ?? "")
-  const path = trim(rel).replace(/^\/+/, "")
-  if (!root) return path
-  if (!path) return root
-  if (root.endsWith("/")) return root + path
-  return `${root}/${path}`
-}
-
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
   return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
 }
 
 function toRow(absolute: string, home: string, group: Row["group"]): Row {
-  const full = trim(absolute)
+  const full = trimPrettyPath(absolute)
   return { absolute: full, search: getPathSearchText(full, home), group }
 }
 
@@ -96,12 +75,13 @@ function useDirectorySearch(args: {
   let current = 0
 
   const dirs = async (dir: string) => {
-    const key = trim(dir)
+    const path = trimPrettyPath(dir)
+    const key = pathKey(path) || path
     const existing = cache.get(key)
     if (existing) return existing
 
     const request = args.sdk.client.file
-      .list({ directory: key, path: "" })
+      .list({ directory: path, path })
       .then((x) => x.data ?? [])
       .catch(() => [])
       .then((nodes) =>
@@ -109,7 +89,7 @@ function useDirectorySearch(args: {
           .filter((n) => n.type === "directory")
           .map((n) => ({
             name: n.name,
-            absolute: trim(n.absolute),
+            absolute: trimPrettyPath(n.absolute),
           })),
       )
 
@@ -131,9 +111,9 @@ function useDirectorySearch(args: {
     const scopedInput = getPathScope(value, args.start(), args.home())
     if (!scopedInput) return [] as string[]
 
-    const raw = normalize(value)
+    const raw = normalizeInputPath(value)
     const isPath = raw.startsWith("~") || !!getPathRoot(raw) || /[\\/]/.test(value)
-    const query = normalize(scopedInput.path)
+    const query = normalizeInputPath(scopedInput.path)
 
     const find = () =>
       args.sdk.client.find
@@ -144,7 +124,7 @@ function useDirectorySearch(args: {
     if (!isPath) {
       const results = await find()
       if (!active()) return []
-      return results.map((rel) => join(scopedInput.directory, rel)).slice(0, 50)
+      return results.map((rel) => joinPath(scopedInput.directory, rel)).slice(0, 50)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")
@@ -170,7 +150,7 @@ function useDirectorySearch(args: {
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
     if (!active()) return []
     const deduped = unique(out)
-    const base = raw.startsWith("~") ? trim(scopedInput.directory) : ""
+    const base = raw.startsWith("~") ? scopedInput.directory : ""
     const expand = !raw.endsWith("/")
     if (!expand || !tail) {
       const items = base ? unique([base, ...deduped]) : deduped

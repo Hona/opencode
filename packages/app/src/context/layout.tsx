@@ -18,16 +18,17 @@ const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] a
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
-const reviewPath = (path: string) => pathKey(path) || path
+const reviewKey = (path: string) => pathKey(path) || path
+const workspaceKey = (path: string) => pathKey(path) || path
 const reviewPaths = (paths: readonly string[]) => {
   const seen = new Set<string>()
   const out: string[] = []
 
   for (const path of paths) {
-    const key = reviewPath(path)
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(key)
+    const id = reviewKey(path)
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(path)
   }
 
   return out
@@ -608,14 +609,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "width", width)
         },
         workspaces(directory: string) {
-          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+          return () => store.sidebar.workspaces[workspaceKey(directory)] ?? store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: string, value: boolean) {
-          setStore("sidebar", "workspaces", directory, value)
+          setStore("sidebar", "workspaces", workspaceKey(directory), value)
         },
         toggleWorkspaces(directory: string) {
-          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-          setStore("sidebar", "workspaces", directory, !current)
+          const key = workspaceKey(directory)
+          const current = store.sidebar.workspaces[key] ?? store.sidebar.workspacesDefault ?? false
+          setStore("sidebar", "workspaces", key, !current)
         },
       },
       terminal: {
@@ -818,7 +820,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               setStore("sessionView", session, "reviewOpen", next)
             },
             openPath(path: string) {
-              path = reviewPath(path)
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
@@ -834,7 +835,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 return
               }
 
-              if (current.reviewOpen.some((item) => pathEqual(item, path))) return
+              const index = current.reviewOpen.findIndex((item) => pathEqual(item, path))
+              if (index !== -1) {
+                if (current.reviewOpen[index] === path) return
+                setStore("sessionView", session, "reviewOpen", index, path)
+                return
+              }
+
               setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
             },
             closePath(path: string) {

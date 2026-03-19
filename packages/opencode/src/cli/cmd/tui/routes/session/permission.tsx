@@ -13,19 +13,15 @@ import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
-import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
-import { formatPath } from "../../util/path"
+import { formatServerPath } from "../../util/path"
 
 type PermissionStage = "permission" | "always" | "reject"
 
 function normalizePath(input?: string) {
-  return formatPath(input, {
-    cwd: process.cwd(),
-    home: Global.Path.home,
-    relative: true,
-  })
+  const sync = useSync()
+  return formatServerPath(input, sync.data.path, { relative: true })
 }
 
 function filetype(input?: string) {
@@ -158,7 +154,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                       {(pattern) => (
                         <text fg={theme.text}>
                           {"- "}
-                          {pattern}
+                          {normalizePath(pattern)}
                         </text>
                       )}
                     </For>
@@ -354,8 +350,9 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const parent = typeof meta["parentDir"] === "string" ? meta["parentDir"] : undefined
               const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
               const pattern = props.request.patterns?.[0]
+              const mod = sync.data.path.os === "windows" ? path.win32 : path.posix
               const derived =
-                typeof pattern === "string" ? (pattern.includes("*") ? path.dirname(pattern) : pattern) : undefined
+                typeof pattern === "string" ? (pattern.includes("*") ? mod.dirname(pattern) : pattern) : undefined
 
               const raw = parent ?? filepath ?? derived
               const dir = normalizePath(raw)
@@ -369,7 +366,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     <box paddingLeft={1} gap={1}>
                       <text fg={theme.textMuted}>Patterns</text>
                       <box>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + normalizePath(p)}</text>}</For>
                       </box>
                     </box>
                   </Show>

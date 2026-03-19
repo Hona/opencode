@@ -9,6 +9,23 @@ import { useCheckServerHealth } from "@/utils/server-health"
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
+const worktreeKey = (input: string) => pathKey(input) || input
+
+function projectIndex(list: StoredProject[], worktree: string) {
+  return list.findIndex((item) => pathEqual(item.worktree, worktree))
+}
+
+function upsertProject(list: StoredProject[], worktree: string) {
+  const index = projectIndex(list, worktree)
+  if (index === -1) return [{ worktree, expanded: true }, ...list]
+
+  const current = list[index]
+  if (current?.worktree === worktree && current.expanded) return list
+
+  const next = [...list]
+  next[index] = { ...current, worktree, expanded: true }
+  return next
+}
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -34,8 +51,6 @@ function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
-
-const dir = (input: string) => pathKey(input) || input
 
 export namespace ServerConnection {
   type Base = { displayName?: string }
@@ -215,9 +230,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const list = store.projects[origin()] ?? []
       const seen = new Set<string>()
       return list.filter((project) => {
-        const key = pathKey(project.worktree)
-        if (seen.has(key)) return false
-        seen.add(key)
+        const id = worktreeKey(project.worktree)
+        if (seen.has(id)) return false
+        seen.add(id)
         return true
       })
     })
@@ -253,10 +268,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         open(directory: string) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
-          const worktree = dir(directory)
-          if (current.some((x) => pathEqual(x.worktree, worktree))) return
-          setStore("projects", key, [{ worktree, expanded: true }, ...current])
+          setStore("projects", key, upsertProject(store.projects[key] ?? [], directory))
         },
         close(directory: string) {
           const key = origin()
@@ -301,7 +313,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         touch(directory: string) {
           const key = origin()
           if (!key) return
-          setStore("lastProject", key, dir(directory))
+          setStore("lastProject", key, directory)
         },
       },
     }

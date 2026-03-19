@@ -4,6 +4,8 @@ import {
   encodeFilePath,
   getDirectory,
   getFilename,
+  joinPath,
+  normalizeInputPath,
   getParentPath,
   getPathDisplay,
   getPathDisplaySeparator,
@@ -16,6 +18,8 @@ import {
   resolveWorkspacePath,
   stripFileProtocol,
   stripQueryAndHash,
+  trimPath,
+  trimPrettyPath,
   unquoteGitPath,
 } from "./path"
 
@@ -55,6 +59,20 @@ describe("path display helpers", () => {
     expect(getParentPath("C:/")).toBe("C:/")
   })
 
+  test("normalizes input paths separately from pretty stored paths", () => {
+    expect(normalizeInputPath("C:")).toBe("C:/")
+    expect(trimPath("\\\\server\\share\\repo\\")).toBe("//server/share/repo")
+    expect(trimPrettyPath("C:/Users/dev/repo/")).toBe("C:\\Users\\dev\\repo")
+    expect(trimPrettyPath("\\\\server\\share\\repo\\")).toBe("\\\\server\\share\\repo")
+  })
+
+  test("joins pretty paths with native separators", () => {
+    expect(joinPath("/Users/dev", "repo/src")).toBe("/Users/dev/repo/src")
+    expect(joinPath("C:\\Users\\dev", "repo/src")).toBe("C:\\Users\\dev\\repo\\src")
+    expect(joinPath("\\\\server\\share", "repo")).toBe("\\\\server\\share\\repo")
+    expect(joinPath("C:\\Users\\dev", "C:/tmp/demo")).toBe("C:\\tmp\\demo")
+  })
+
   test("builds picker display text with tilde and native separators", () => {
     expect(getPathDisplay("/Users/dev/repo", "", "/Users/dev")).toBe("~/repo")
     expect(getPathDisplaySeparator("~/repo", "/Users/dev")).toBe("/")
@@ -66,11 +84,11 @@ describe("path display helpers", () => {
 
   test("scopes picker input from home or absolute roots", () => {
     expect(getPathScope("\\\\server\\share\\repo", "C:/Users/dev", "C:/Users/dev")).toEqual({
-      directory: "//server/share",
+      directory: "\\\\server\\share",
       path: "repo",
     })
     expect(getPathScope("~/code", "C:/Users/dev", "C:/Users/dev")).toEqual({
-      directory: "C:/Users/dev",
+      directory: "C:\\Users\\dev",
       path: "code",
     })
   })

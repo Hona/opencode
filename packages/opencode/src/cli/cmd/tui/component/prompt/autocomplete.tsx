@@ -13,6 +13,7 @@ import { Locale } from "@/util/locale"
 import { Path } from "@/path/path"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { serverPathOpts } from "../../util/path"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -244,19 +245,22 @@ export function Autocomplete(props: {
           return a.localeCompare(b)
         })
 
-          const width = props.anchor().width - 4
-          options.push(
-            ...sortedFiles.map((item): AutocompleteOption => {
-              const urlObj = new URL(
-                String(
-                  Path.uri(item, {
-                    cwd: sync.data.path.directory || process.cwd(),
-                    platform: sync.data.path.os,
-                  }),
-                ),
-              )
-              const key = String(Path.repo(item))
-              const isDir = Path.repoIsDir(key)
+        const width = props.anchor().width - 4
+        const platform = Path.platform(sync.data.path.os)
+        const cwd = sync.data.path.directory
+        options.push(
+          ...sortedFiles.flatMap((item) => {
+            if (!cwd && !Path.isAbsolute(item, { platform })) return []
+
+            const urlObj = new URL(
+              String(
+                Path.uri(item, {
+                  ...serverPathOpts(sync.data.path),
+                }),
+              ),
+            )
+            const key = String(Path.repo(item))
+            const isDir = Path.repoIsDir(key)
             let filename = key
             if (lineRange && !isDir) {
               filename = `${key}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
@@ -267,29 +271,31 @@ export function Autocomplete(props: {
             }
             const url = urlObj.href
 
-            return {
-              display: Locale.truncateMiddle(filename, width),
-              value: filename,
-              isDirectory: isDir,
-              path: key,
-              onSelect: () => {
-                insertPart(filename, {
-                  type: "file",
-                  mime: "text/plain",
-                  filename,
-                  url,
-                  source: {
+            return [
+              {
+                display: Locale.truncateMiddle(filename, width),
+                value: filename,
+                isDirectory: isDir,
+                path: key,
+                onSelect: () => {
+                  insertPart(filename, {
                     type: "file",
-                    text: {
-                      start: 0,
-                      end: 0,
-                      value: "",
+                    mime: "text/plain",
+                    filename,
+                    url,
+                    source: {
+                      type: "file",
+                      text: {
+                        start: 0,
+                        end: 0,
+                        value: "",
+                      },
+                      path: key,
                     },
-                    path: key,
-                  },
-                })
-              },
-            }
+                  })
+                },
+              } satisfies AutocompleteOption,
+            ]
           }),
         )
       }

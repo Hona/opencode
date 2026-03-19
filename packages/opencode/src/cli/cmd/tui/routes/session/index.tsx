@@ -75,14 +75,13 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
-import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
-import { formatPath } from "../../util/path"
+import { formatPath, formatServerPath } from "../../util/path"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1118,7 +1117,7 @@ export function Session() {
                                   <For each={revert()!.diffFiles}>
                                     {(file) => (
                                       <text fg={theme.text}>
-                                        {file.filename}
+                                        {normalizePath(file.filename)}
                                         <Show when={file.additions > 0}>
                                           <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
                                         </Show>
@@ -2132,10 +2131,10 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   }
 
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
-    if (file.type === "delete") return "# Deleted " + file.relativePath
-    if (file.type === "add") return "# Created " + file.relativePath
-    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
-    return "← Patched " + file.relativePath
+    if (file.type === "delete") return "# Deleted " + normalizePath(file.relativePath)
+    if (file.type === "add") return "# Created " + normalizePath(file.relativePath)
+    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + normalizePath(file.relativePath)
+    return "← Patched " + normalizePath(file.relativePath)
   }
 
   return (
@@ -2255,11 +2254,7 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
 }
 
 function normalizePath(input?: string) {
-  return formatPath(input, {
-    cwd: process.cwd(),
-    home: Global.Path.home,
-    relative: true,
-  })
+  return formatServerPath(input, use().sync.data.path, { relative: true })
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

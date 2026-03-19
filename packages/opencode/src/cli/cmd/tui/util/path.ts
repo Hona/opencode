@@ -8,12 +8,57 @@ type Opts = {
   relative?: boolean
 }
 
+type Server = {
+  directory?: string
+  home?: string
+  os?: Opts["platform"]
+}
+
 function pf(opts: Opts = {}) {
   return Path.platform(opts.platform)
 }
 
 function lib(platform: NodeJS.Platform) {
   return platform === "win32" ? path.win32 : path.posix
+}
+
+function text(input?: string) {
+  return input || undefined
+}
+
+export function serverPathOpts(input: Server, opts: Pick<Opts, "relative"> = {}): Opts {
+  const cwd = text(input.directory)
+  return {
+    cwd,
+    home: text(input.home),
+    platform: input.os,
+    relative: opts.relative && !!cwd,
+  }
+}
+
+export function formatServerPath(input: string | undefined, server: Server, opts: Pick<Opts, "relative"> = {}) {
+  if (!input) return ""
+
+  const cfg = serverPathOpts(server, opts)
+  const platform = pf(cfg)
+  if (cfg.cwd || Path.isAbsolute(input, { platform })) {
+    return formatPath(input, cfg)
+  }
+
+  if (platform === "win32") return path.win32.normalize(input)
+  return path.posix.normalize(input.replaceAll("\\", "/"))
+}
+
+export function serverPathKey(input: string, server: Server) {
+  const opts = serverPathOpts(server)
+  const platform = pf(opts)
+  if (opts.cwd || Path.isAbsolute(input, { platform })) {
+    return String(Path.key(input, { cwd: opts.cwd, platform }))
+  }
+
+  const text = String(Path.repo(input))
+  if (platform !== "win32") return text
+  return text.toLowerCase()
 }
 
 export function formatPath(input?: string, opts: Opts = {}) {

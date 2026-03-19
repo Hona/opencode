@@ -26,11 +26,40 @@ const normalizeDrive = (path: string) => {
   return normalized
 }
 
-const trimPath = (path: string) => {
+const trimDisplay = (path: string) => {
+  const separator = getPathSeparator(path)
+  return separator === "/" ? path : path.replaceAll("/", "\\")
+}
+
+export function normalizeInputPath(path: string) {
+  return normalizeDrive(path)
+}
+
+export function trimPath(path: string) {
   const normalized = normalizeDrive(path)
   if (normalized === "/" || normalized === "//") return normalized
   if (/^[A-Za-z]:\/$/.test(normalized)) return normalized
   return normalized.replace(/\/+$/, "")
+}
+
+export function trimPrettyPath(path: string) {
+  const trimmed = trimPath(path)
+  if (!trimmed) return ""
+  return trimDisplay(trimmed)
+}
+
+export function joinPath(base: string | undefined, path: string) {
+  if (getPathRoot(path)) return trimPrettyPath(path)
+
+  const root = trimPrettyPath(base ?? "")
+  const leaf = trimPath(path).replace(/^\/+/, "")
+  if (!root) return trimDisplay(leaf)
+  if (!leaf) return root
+
+  const separator = getPathSeparator(root)
+  const value = separator === "/" ? leaf : leaf.replaceAll("/", "\\")
+  if (root.endsWith(separator)) return root + value
+  return `${root}${separator}${value}`
 }
 
 const mode = (path: string) => {
@@ -297,18 +326,18 @@ export function getPathSearchText(path: string, home: string) {
 }
 
 export function getPathScope(input: string, start: string | undefined, home: string) {
-  const base = start ? trimPath(start) : ""
+  const base = start ? trimPrettyPath(start) : ""
   if (!base) return
 
-  const normalized = normalizeDrive(input)
+  const normalized = normalizeInputPath(input)
   if (!normalized) return { directory: base, path: "" }
-  if (normalized === "~") return { directory: trimPath(home || base), path: "" }
-  if (normalized.startsWith("~/")) return { directory: trimPath(home || base), path: normalized.slice(2) }
+  if (normalized === "~") return { directory: trimPrettyPath(home || base), path: "" }
+  if (normalized.startsWith("~/")) return { directory: trimPrettyPath(home || base), path: normalized.slice(2) }
 
   const root = getPathRoot(normalized)
   if (!root) return { directory: base, path: normalized }
   return {
-    directory: trimPath(root),
+    directory: trimPrettyPath(root),
     path: normalized.slice(root.length).replace(/^\/+/, ""),
   }
 }

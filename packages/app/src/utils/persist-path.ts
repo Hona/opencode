@@ -9,12 +9,12 @@ const num = (value: unknown) => (typeof value === "number" && Number.isFinite(va
 
 const flag = (value: unknown) => (typeof value === "boolean" ? value : undefined)
 
-const dir = (value: string) => pathKey(value) || value
+const pathId = (value: string) => pathKey(value) || value
 
-function dirs(value: unknown, skip?: string) {
+function paths(value: unknown, skip?: string) {
   if (!Array.isArray(value)) return
 
-  const omit = skip ? dir(skip) : undefined
+  const omit = skip ? pathId(skip) : undefined
   const seen = new Set<string>()
   const out: string[] = []
 
@@ -22,16 +22,16 @@ function dirs(value: unknown, skip?: string) {
     const cur = text(item)
     if (!cur) continue
 
-    const next = dir(cur)
-    if (next === omit || seen.has(next)) continue
-    seen.add(next)
-    out.push(next)
+    const id = pathId(cur)
+    if (id === omit || seen.has(id)) continue
+    seen.add(id)
+    out.push(cur)
   }
 
   return out
 }
 
-function byDir<T>(
+function byKey<T>(
   value: unknown,
   move: (value: unknown, key: string) => T | undefined,
   merge?: (prev: T, next: T) => T,
@@ -39,8 +39,8 @@ function byDir<T>(
   if (!record(value)) return
 
   const out: Record<string, T> = {}
-  for (const [key, item] of Object.entries(value)) {
-    const id = dir(key)
+  for (const [name, item] of Object.entries(value)) {
+    const id = pathId(name)
     const next = move(item, id)
     if (next === undefined) continue
 
@@ -67,7 +67,7 @@ function route(value: unknown): Route | undefined {
   const at = num(value.at)
   return {
     ...value,
-    directory: dir(directory),
+    directory,
     id,
     ...(at !== undefined ? { at } : {}),
   }
@@ -86,7 +86,7 @@ function project(value: unknown): Project | undefined {
 
   return {
     ...value,
-    worktree: dir(worktree),
+    worktree,
     expanded: flag(value.expanded) ?? false,
   }
 }
@@ -101,9 +101,10 @@ function projects(value: unknown) {
     const next = project(item)
     if (!next) continue
 
-    const at = seen.get(next.worktree)
+    const id = pathId(next.worktree)
+    const at = seen.get(id)
     if (at === undefined) {
-      seen.set(next.worktree, out.length)
+      seen.set(id, out.length)
       out.push(next)
       continue
     }
@@ -131,7 +132,7 @@ export function migrateLayoutPaths(value: unknown) {
     }
   }
 
-  const workspaces = byDir(sidebar.workspaces, (item) => flag(item))
+  const workspaces = byKey(sidebar.workspaces, (item) => flag(item))
   if (!workspaces) return value
 
   return {
@@ -146,21 +147,17 @@ export function migrateLayoutPaths(value: unknown) {
 export function migrateLayoutPageState(value: unknown) {
   if (!record(value)) return value
 
-  const lastProjectSession = byDir(value.lastProjectSession, (item) => route(item), (prev, next) => {
+  const lastProjectSession = byKey(value.lastProjectSession, (item) => route(item), (prev, next) => {
     if ((next.at ?? -Infinity) >= (prev.at ?? -Infinity)) return next
     return prev
   })
 
-  const workspaceOrder = byDir(value.workspaceOrder, (item, key) => dirs(item, key) ?? [])
-  const workspaceName = byDir(value.workspaceName, (item) => text(item))
-  const workspaceExpanded = byDir(value.workspaceExpanded, (item) => flag(item))
-  const activeProject = text(value.activeProject)
-  const activeWorkspace = text(value.activeWorkspace)
+  const workspaceOrder = byKey(value.workspaceOrder, (item, id) => paths(item, id) ?? [])
+  const workspaceName = byKey(value.workspaceName, (item) => text(item))
+  const workspaceExpanded = byKey(value.workspaceExpanded, (item) => flag(item))
 
   return {
     ...value,
-    activeProject: activeProject ? dir(activeProject) : activeProject,
-    activeWorkspace: activeWorkspace ? dir(activeWorkspace) : activeWorkspace,
     ...(lastProjectSession ? { lastProjectSession } : {}),
     ...(workspaceOrder ? { workspaceOrder } : {}),
     ...(workspaceName ? { workspaceName } : {}),
@@ -176,7 +173,7 @@ export function migrateServerState(value: unknown) {
         Object.entries(value.lastProject).flatMap(([key, item]) => {
           const next = text(item)
           if (!next) return []
-          return [[key, dir(next)] as const]
+          return [[key, next] as const]
         }),
       )
     : undefined

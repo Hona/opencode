@@ -32,7 +32,7 @@ describe("migrateLayoutPaths", () => {
 })
 
 describe("migrateLayoutPageState", () => {
-  test("normalizes keyed and embedded workspace state", () => {
+  test("keeps path values while normalizing workspace keys", () => {
     expect(
       migrateLayoutPageState({
         activeProject: "C:\\Repo\\",
@@ -54,13 +54,13 @@ describe("migrateLayoutPageState", () => {
         },
       }),
     ).toEqual({
-      activeProject: "c:/repo",
-      activeWorkspace: "c:/repo/feature",
+      activeProject: "C:\\Repo\\",
+      activeWorkspace: "C:/Repo/Feature/",
       lastProjectSession: {
-        "c:/repo": { directory: "c:/repo/feature", id: "new", at: 2 },
+        "c:/repo": { directory: "c:\\repo\\feature\\", id: "new", at: 2 },
       },
       workspaceOrder: {
-        "c:/repo": ["c:/repo/feature", "c:/repo/other"],
+        "c:/repo": ["C:/Repo/Feature/", "c:\\repo\\other\\"],
       },
       workspaceName: {
         "c:/repo/feature": "feature latest",
@@ -73,7 +73,7 @@ describe("migrateLayoutPageState", () => {
 })
 
 describe("migrateServerState", () => {
-  test("normalizes persisted server project worktrees and last project values", () => {
+  test("keeps persisted server path values while deduping by key", () => {
     expect(
       migrateServerState({
         projects: {
@@ -90,12 +90,12 @@ describe("migrateServerState", () => {
     ).toEqual({
       projects: {
         local: [
-          { worktree: "c:/repo", expanded: true },
-          { worktree: "/tmp/demo", expanded: true },
+          { worktree: "C:\\Repo\\", expanded: true },
+          { worktree: "/tmp/demo///", expanded: true },
         ],
       },
       lastProject: {
-        local: "c:/repo",
+        local: "C:/Repo/",
       },
     })
   })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatPath, plugin, splitPath } from "../../../src/cli/cmd/tui/util/path"
+import { formatPath, formatServerPath, plugin, serverPathKey, splitPath } from "../../../src/cli/cmd/tui/util/path"
 
 describe("tui path", () => {
   test("formats Windows absolute paths without a leading slash", () => {
@@ -19,6 +19,37 @@ describe("tui path", () => {
         relative: true,
       }),
     ).toBe("src\\file.ts")
+  })
+
+  test("formats server-relative paths without local cwd fallback", () => {
+    expect(
+      formatServerPath("src/file.ts", {
+        os: "linux",
+      }),
+    ).toBe("src/file.ts")
+
+    expect(
+      formatServerPath("src/file.ts", {
+        directory: "C:\\Users\\me\\code\\opencode",
+        home: "C:\\Users\\me",
+        os: "windows",
+      }, { relative: true }),
+    ).toBe("src\\file.ts")
+  })
+
+  test("keys server paths with server cwd semantics", () => {
+    expect(
+      serverPathKey("src\\FILE.ts", {
+        directory: "C:\\Users\\me\\code\\opencode",
+        os: "windows",
+      }),
+    ).toBe("c:\\users\\me\\code\\opencode\\src\\file.ts")
+
+    expect(
+      serverPathKey("src\\FILE.ts", {
+        os: "windows",
+      }),
+    ).toBe("src/file.ts")
   })
 
   test("shortens home with directory boundaries", () => {

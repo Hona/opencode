@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
   getParentPath,
+  joinPath,
   getPathDisplay,
   getPathDisplaySeparator,
   getPathRoot,
   getPathScope,
   getPathSearchText,
+  trimPrettyPath,
 } from "@opencode-ai/util/path"
 
 describe("dialog select directory display", () => {
@@ -35,13 +37,19 @@ describe("dialog select directory display", () => {
 
   test("keeps UNC scoped search rooted at the share", () => {
     expect(getPathScope("\\\\server\\share", "C:/Users/dev", "C:/Users/dev")).toEqual({
-      directory: "//server/share",
+      directory: "\\\\server\\share",
       path: "",
     })
     expect(getPathScope("\\\\server\\share\\repo", "C:/Users/dev", "C:/Users/dev")).toEqual({
-      directory: "//server/share",
+      directory: "\\\\server\\share",
       path: "repo",
     })
+  })
+
+  test("keeps pretty paths native while joining search results", () => {
+    expect(trimPrettyPath("C:/Users/dev/repo/")).toBe("C:\\Users\\dev\\repo")
+    expect(joinPath("C:\\Users\\dev", "repo/src")).toBe("C:\\Users\\dev\\repo\\src")
+    expect(joinPath("\\\\server\\share", "repo")).toBe("\\\\server\\share\\repo")
   })
 
   test("indexes UNC paths in slash and native forms", () => {
