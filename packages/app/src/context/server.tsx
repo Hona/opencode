@@ -1,21 +1,22 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pathEqual, pathKey } from "@opencode-ai/util/path"
+import { pathEqual } from "@opencode-ai/util/path"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { type WorkspaceKey, type WorkspacePath, workspacePathKey } from "@/context/file/path"
 import { Persist, persisted } from "@/utils/persist"
 import { migrateServerState } from "@/utils/persist-path"
 import { useCheckServerHealth } from "@/utils/server-health"
 
-type StoredProject = { worktree: string; expanded: boolean }
+type StoredProject = { worktree: WorkspacePath; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
-const worktreeKey = (input: string) => pathKey(input) || input
+const worktreeKey = (input: WorkspacePath) => workspacePathKey(input) as WorkspaceKey
 
-function projectIndex(list: StoredProject[], worktree: string) {
+function projectIndex(list: StoredProject[], worktree: WorkspacePath) {
   return list.findIndex((item) => pathEqual(item.worktree, worktree))
 }
 
-function upsertProject(list: StoredProject[], worktree: string) {
+function upsertProject(list: StoredProject[], worktree: WorkspacePath) {
   const index = projectIndex(list, worktree)
   if (index === -1) return [{ worktree, expanded: true }, ...list]
 
@@ -121,7 +122,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       createStore({
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
-        lastProject: {} as Record<string, string>,
+        lastProject: {} as Record<string, WorkspacePath>,
       }),
     )
 
@@ -265,12 +266,12 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       remove,
       projects: {
         list: projectsList,
-        open(directory: string) {
+        open(directory: WorkspacePath) {
           const key = origin()
           if (!key) return
           setStore("projects", key, upsertProject(store.projects[key] ?? [], directory))
         },
-        close(directory: string) {
+        close(directory: WorkspacePath) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
@@ -280,21 +281,21 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
             current.filter((x) => !pathEqual(x.worktree, directory)),
           )
         },
-        expand(directory: string) {
+        expand(directory: WorkspacePath) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
           const index = current.findIndex((x) => pathEqual(x.worktree, directory))
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
-        collapse(directory: string) {
+        collapse(directory: WorkspacePath) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
           const index = current.findIndex((x) => pathEqual(x.worktree, directory))
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
-        move(directory: string, toIndex: number) {
+        move(directory: WorkspacePath, toIndex: number) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
@@ -310,7 +311,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           return store.lastProject[key]
         },
-        touch(directory: string) {
+        touch(directory: WorkspacePath) {
           const key = origin()
           if (!key) return
           setStore("lastProject", key, directory)

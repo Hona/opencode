@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
+type PersistType = typeof import("./persist").Persist
+type RemovePersistedType = typeof import("./persist").removePersisted
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -45,6 +47,8 @@ class MemoryStorage implements Storage {
 const storage = new MemoryStorage()
 
 let persistTesting: PersistTestingType
+let Persist: PersistType
+let removePersisted: RemovePersistedType
 
 beforeAll(async () => {
   mock.module("@/context/platform", () => ({
@@ -53,6 +57,8 @@ beforeAll(async () => {
 
   const mod = await import("./persist")
   persistTesting = mod.PersistTesting
+  Persist = mod.Persist
+  removePersisted = mod.removePersisted
 })
 
 beforeEach(() => {
@@ -117,6 +123,48 @@ describe("persist localStorage resilience", () => {
     expect(persistTesting.workspaceStorage("C:\\Users\\foo\\")).toBe(
       persistTesting.workspaceStorage("c:/users/foo"),
     )
-    expect(persistTesting.workspaceLegacyStorage("C:\\Users\\foo\\")).toHaveLength(1)
+    expect(persistTesting.workspaceLegacyStorage("C:\\Users\\foo\\").length).toBeGreaterThan(1)
+  })
+
+  test("workspace legacy storage probes slash and drive-letter variants", () => {
+    const names = persistTesting.workspaceLegacyStorage("C:/Users/foo")
+
+    expect(names).toContain(persistTesting.workspaceStorageName("C:\\Users\\foo"))
+    expect(names).toContain(persistTesting.workspaceStorageName("c:/Users/foo/"))
+  })
+
+  test("legacy scoped keys cover equivalent directory aliases", () => {
+    expect(persistTesting.legacyScoped("C:/Users/foo", "s1", "file", "v1")).toEqual(
+      expect.arrayContaining([
+        "C:/Users/foo/file/s1.v1",
+        "C:\\Users\\foo/file/s1.v1",
+        "c:/users/foo/file/s1.v1",
+      ]),
+    )
+  })
+
+  test("removePersisted clears current and legacy aliases across lookup stores", () => {
+    const dir = "C:/Users/foo"
+    const legacy = persistTesting.legacyScoped(dir, "s1", "terminal", "v1")
+    const target = {
+      ...Persist.workspace(dir, "terminal"),
+      legacy,
+    }
+
+    const current = persistTesting.workspaceStorage(dir)
+    const extra = persistTesting.workspaceLegacyStorage(dir)[0]!
+    const direct = persistTesting.localStorageDirect()
+
+    persistTesting.localStorageWithPrefix(current).setItem("workspace:terminal", '{"current":1}')
+    persistTesting.localStorageWithPrefix(extra).setItem(legacy[0]!, '{"extra":1}')
+    direct.setItem("workspace:terminal", '{"legacy-current":1}')
+    direct.setItem(legacy[1]!, '{"legacy":1}')
+
+    removePersisted(target)
+
+    expect(persistTesting.localStorageWithPrefix(current).getItem("workspace:terminal")).toBeNull()
+    expect(persistTesting.localStorageWithPrefix(extra).getItem(legacy[0]!)).toBeNull()
+    expect(direct.getItem("workspace:terminal")).toBeNull()
+    expect(direct.getItem(legacy[1]!)).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { migrateLayoutPageState, migrateLayoutPaths, migrateServerState } from "./persist-path"
 
 describe("migrateLayoutPaths", () => {
@@ -25,6 +26,58 @@ describe("migrateLayoutPaths", () => {
         workspaces: {
           "c:/repo": false,
           "/tmp/demo": true,
+        },
+      },
+    })
+  })
+
+  test("migrates session-keyed maps and handoff directory aliases", () => {
+    const legacy = base64Encode("C:\\Repo\\")
+    const next = base64Encode("c:/repo")
+
+    expect(
+      migrateLayoutPaths({
+        sidebar: {
+          workspaces: {},
+        },
+        sessionTabs: {
+          [legacy]: { all: ["file://src\\a.ts"], active: "file://src\\a.ts" },
+          [next]: { all: ["review"], active: "review" },
+        },
+        sessionView: {
+          [`${legacy}/one`]: { scroll: { "file://src\\a.ts": { x: 1, y: 2 } } },
+          [`${next}/one`]: { scroll: { review: { x: 3, y: 4 } }, pendingMessage: "m", pendingMessageAt: 2 },
+        },
+        handoff: {
+          tabs: {
+            dir: legacy,
+            id: "one",
+            at: 5,
+          },
+        },
+      }),
+    ).toEqual({
+      sidebar: {
+        workspaces: {},
+      },
+      sessionTabs: {
+        [next]: { all: ["review", "tab:file:src/a.ts"], active: "review" },
+      },
+      sessionView: {
+        [`${next}/one`]: {
+          scroll: {
+            review: { x: 3, y: 4 },
+            "tab:file:src/a.ts": { x: 1, y: 2 },
+          },
+          pendingMessage: "m",
+          pendingMessageAt: 2,
+        },
+      },
+      handoff: {
+        tabs: {
+          dir: next,
+          id: "one",
+          at: 5,
         },
       },
     })

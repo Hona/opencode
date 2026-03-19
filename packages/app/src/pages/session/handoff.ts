@@ -1,4 +1,5 @@
 import type { SelectedLineRange } from "@/context/file"
+import { sessionParts } from "@/utils/session-key"
 
 type HandoffSession = {
   prompt: string
@@ -23,11 +24,12 @@ const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
 }
 
 export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = store.session.get(key) ?? { prompt: "", files: {} }
-  touch(store.session, key, { ...prev, ...patch })
+  const next = sessionParts(key).key
+  const prev = store.session.get(next) ?? { prompt: "", files: {} }
+  touch(store.session, next, { ...prev, ...patch })
 }
 
-export const getSessionHandoff = (key: string) => store.session.get(key)
+export const getSessionHandoff = (key: string) => store.session.get(sessionParts(key).key)
 
 export const setTerminalHandoff = (key: string, value: string[]) => {
   touch(store.terminal, key, value)

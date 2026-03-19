@@ -231,10 +231,8 @@ export function createPromptSessionForTest(input?: Partial<PromptStore>) {
 }
 
 function createPromptSession(dir: string, id: string | undefined) {
-  const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
-
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
+    Persist.scoped(dir, id, "prompt", Persist.legacyScoped(dir, id, "prompt", "v2")),
     createStore<PromptStore>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,

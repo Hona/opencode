@@ -10,19 +10,20 @@ import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { migrateLayoutPaths } from "@/utils/persist-path"
 import { decode64 } from "@/utils/base64"
+import { sessionDirKey, sessionParts } from "@/utils/session-key"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
-import { createPathHelpers } from "./file/path"
+import { createPathHelpers, type ReviewPath, type WorkspaceKey, type WorkspacePath } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
-const reviewKey = (path: string) => pathKey(path) || path
-const workspaceKey = (path: string) => pathKey(path) || path
-const reviewPaths = (paths: readonly string[]) => {
+const reviewKey = (path: ReviewPath) => pathKey(path) || path
+const workspaceKey = (path: WorkspacePath) => (pathKey(path) || path) as WorkspaceKey
+const reviewPaths = (paths: readonly ReviewPath[]) => {
   const seen = new Set<string>()
-  const out: string[] = []
+  const out: ReviewPath[] = []
 
   for (const path of paths) {
     const id = reviewKey(path)
@@ -33,7 +34,7 @@ const reviewPaths = (paths: readonly string[]) => {
 
   return out
 }
-const sameReviewPaths = (a: readonly string[] | undefined, b: readonly string[] | undefined) => {
+const sameReviewPaths = (a: readonly ReviewPath[] | undefined, b: readonly ReviewPath[] | undefined) => {
   if (!a && !b) return true
   if (!a || !b) return false
   if (a.length !== b.length) return false
@@ -61,7 +62,7 @@ type SessionTabs = {
 
 type SessionView = {
   scroll: Record<string, SessionScroll>
-  reviewOpen?: string[]
+  reviewOpen?: ReviewPath[]
   pendingMessage?: string
   pendingMessageAt?: number
 }
@@ -72,22 +73,22 @@ type TabHandoff = {
   at: number
 }
 
-export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type LocalProject = Partial<Project> & { worktree: WorkspacePath; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
-  touch(key)
-  seed(key)
-  return key
+  const next = sessionParts(key).key
+  touch(next)
+  seed(next)
+  return next
 }
 
-export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
+export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => string) {
   const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
   return () => {
     const value = key()
-    ensure(value)
-    return value
+    return ensure(value)
   }
 }
 
@@ -144,7 +145,7 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
   })
 }
 
-const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
+export const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   const path = sessionPath(key)
   return {
     all: normalizeSessionTabList(path, tabs.all),
@@ -237,7 +238,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sidebar: {
           opened: false,
           width: DEFAULT_PANEL_WIDTH,
-          workspaces: {} as Record<string, boolean>,
+          workspaces: {} as Record<WorkspaceKey, boolean>,
           workspacesDefault: false,
         },
         terminal: {
@@ -283,17 +284,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const dropSessionState = (keys: string[]) => {
       for (const key of keys) {
-        const parts = key.split("/")
-        const dir = parts[0]
-        const session = parts[1]
+        const parts = sessionParts(key)
+        const dir = parts.directory
+        const session = parts.id
         if (!dir) continue
 
         for (const entry of SESSION_STATE_KEYS) {
           const target = session ? Persist.session(dir, session, entry.key) : Persist.workspace(dir, entry.key)
           void removePersisted(target, platform)
 
-          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
-          void removePersisted({ key: legacyKey }, platform)
+          for (const legacy of Persist.legacyScoped(dir, session, entry.legacy, entry.version)) {
+            void removePersisted({ key: legacy }, platform)
+          }
         }
       }
     }
@@ -390,7 +392,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return available[Math.floor(Math.random() * available.length)]
     }
 
-    function enrich(project: { worktree: string; expanded: boolean }) {
+    function enrich(project: { worktree: WorkspacePath; expanded: boolean }) {
       const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
@@ -431,32 +433,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     const roots = createMemo(() => {
-      const map = new Map<string, string>()
+      const map = new Map<WorkspaceKey, WorkspacePath>()
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(pathKey(sandbox), project.worktree)
+          map.set(workspaceKey(sandbox), project.worktree)
         }
       }
       return map
     })
 
-    const rootFor = (directory: string) => {
+    const rootFor = (directory: WorkspacePath) => {
       const map = roots()
       if (map.size === 0) return directory
 
-      const visited = new Set<string>()
+      const visited = new Set<WorkspaceKey>()
       const chain = [directory]
 
       while (chain.length) {
         const current = chain[chain.length - 1]
         if (!current) return directory
 
-        const key = pathKey(current)
+        const key = workspaceKey(current)
         const next = map.get(key)
         if (!next) return current
 
-        const id = pathKey(next)
+        const id = workspaceKey(next)
         if (visited.has(id)) return directory
         visited.add(id)
         chain.push(next)
@@ -565,7 +567,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { dir: sessionDirKey(dir), id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return
@@ -574,22 +576,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
-        open(directory: string) {
+        open(directory: WorkspacePath) {
           const root = rootFor(directory)
           if (server.projects.list().some((x) => pathEqual(x.worktree, root))) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
-        close(directory: string) {
+        close(directory: WorkspacePath) {
           server.projects.close(directory)
         },
-        expand(directory: string) {
+        expand(directory: WorkspacePath) {
           server.projects.expand(directory)
         },
-        collapse(directory: string) {
+        collapse(directory: WorkspacePath) {
           server.projects.collapse(directory)
         },
-        move(directory: string, toIndex: number) {
+        move(directory: WorkspacePath, toIndex: number) {
           server.projects.move(directory, toIndex)
         },
       },
@@ -608,13 +610,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           setStore("sidebar", "width", width)
         },
-        workspaces(directory: string) {
+        workspaces(directory: WorkspacePath) {
           return () => store.sidebar.workspaces[workspaceKey(directory)] ?? store.sidebar.workspacesDefault ?? false
         },
-        setWorkspaces(directory: string, value: boolean) {
+        setWorkspaces(directory: WorkspacePath, value: boolean) {
           setStore("sidebar", "workspaces", workspaceKey(directory), value)
         },
-        toggleWorkspaces(directory: string) {
+        toggleWorkspaces(directory: WorkspacePath) {
           const key = workspaceKey(directory)
           const current = store.sidebar.workspaces[key] ?? store.sidebar.workspacesDefault ?? false
           setStore("sidebar", "workspaces", key, !current)
@@ -700,22 +702,23 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       pendingMessage: {
         set(sessionKey: string, messageID: string) {
+          const key = sessionParts(sessionKey).key
           const at = Date.now()
-          touch(sessionKey)
-          const current = store.sessionView[sessionKey]
+          touch(key)
+          const current = store.sessionView[key]
           if (!current) {
-            setStore("sessionView", sessionKey, {
+            setStore("sessionView", key, {
               scroll: {},
               pendingMessage: messageID,
               pendingMessageAt: at,
             })
-            prune(usage.active ?? sessionKey)
+            prune(usage.active ?? key)
             return
           }
 
           setStore(
             "sessionView",
-            sessionKey,
+            key,
             produce((draft) => {
               draft.pendingMessage = messageID
               draft.pendingMessageAt = at
@@ -723,14 +726,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           )
         },
         consume(sessionKey: string) {
-          const current = store.sessionView[sessionKey]
+          const key = sessionParts(sessionKey).key
+          const current = store.sessionView[key]
           const message = current?.pendingMessage
           const at = current?.pendingMessageAt
           if (!message || !at) return
 
           setStore(
             "sessionView",
-            sessionKey,
+            key,
             produce((draft) => {
               delete draft.pendingMessage
               delete draft.pendingMessageAt
@@ -804,7 +808,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           review: {
             open: createMemo(() => reviewPaths(s().reviewOpen ?? [])),
-            setOpen(open: string[]) {
+            setOpen(open: ReviewPath[]) {
               const session = key()
               const next = reviewPaths(open)
               const current = store.sessionView[session]
@@ -819,7 +823,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               if (sameReviewPaths(current.reviewOpen, next)) return
               setStore("sessionView", session, "reviewOpen", next)
             },
-            openPath(path: string) {
+            openPath(path: ReviewPath) {
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
@@ -844,7 +848,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
               setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
             },
-            closePath(path: string) {
+            closePath(path: ReviewPath) {
               const session = key()
               const current = store.sessionView[session]?.reviewOpen
               if (!current) return
@@ -861,7 +865,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 }),
               )
             },
-            togglePath(path: string) {
+            togglePath(path: ReviewPath) {
               const session = key()
               const current = store.sessionView[session]?.reviewOpen
               if (!current || !current.some((item) => pathEqual(item, path))) {

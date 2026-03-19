@@ -87,8 +87,13 @@ export function getWorkspaceTerminalCacheKey(dir: string) {
 }
 
 export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: string) {
-  if (!legacySessionID) return [`${dir}/terminal.v1`]
-  return [`${dir}/terminal/${legacySessionID}.v1`, `${dir}/terminal.v1`]
+  const keys = legacySessionID
+    ? [
+        ...Persist.legacyScoped(dir, legacySessionID, "terminal", "v1"),
+        ...Persist.legacyScoped(dir, undefined, "terminal", "v1"),
+      ]
+    : Persist.legacyScoped(dir, undefined, "terminal", "v1")
+  return Array.from(new Set(keys))
 }
 
 type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
@@ -117,17 +122,20 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
     entry?.value.clear()
   }
 
-  removePersisted(Persist.workspace(dir, "terminal"), platform)
-
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
     for (const key of getLegacyTerminalStorageKeys(dir, id)) {
       legacy.add(key)
     }
   }
-  for (const key of legacy) {
-    removePersisted({ key }, platform)
-  }
+
+  removePersisted(
+    {
+      ...Persist.workspace(dir, "terminal"),
+      legacy: Array.from(legacy),
+    },
+    platform,
+  )
 }
 
 function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {

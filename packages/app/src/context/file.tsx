@@ -8,6 +8,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { sessionKey } from "@/utils/session-key"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -61,7 +62,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
-    const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+    const tabs = layout.tabs(() => sessionKey(params.dir ?? "", params.id))
 
     const inflight = new Map<string, Promise<void>>()
     const [store, setStore] = createStore<{

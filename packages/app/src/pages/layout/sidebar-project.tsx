@@ -6,6 +6,7 @@ import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createSortable } from "@thisbeyond/solid-dnd"
+import { type WorkspacePath } from "@/context/file/path"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -14,29 +15,29 @@ import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items
 import { childMapByParent, displayName, projectContains, sortedRootSessions, workspaceEqual } from "./helpers"
 
 export type ProjectSidebarContext = {
-  currentDir: Accessor<string>
+  currentDir: Accessor<WorkspacePath>
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
-  hoverProject: Accessor<string | undefined>
+  hoverProject: Accessor<WorkspacePath | undefined>
   nav: Accessor<HTMLElement | undefined>
-  onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
-  onProjectMouseLeave: (worktree: string) => void
-  onProjectFocus: (worktree: string) => void
-  navigateToProject: (directory: string) => void
+  onProjectMouseEnter: (worktree: WorkspacePath, event: MouseEvent) => void
+  onProjectMouseLeave: (worktree: WorkspacePath) => void
+  onProjectFocus: (worktree: WorkspacePath) => void
+  navigateToProject: (directory: WorkspacePath) => void
   openSidebar: () => void
-  closeProject: (directory: string) => void
+  closeProject: (directory: WorkspacePath) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
-  workspaceIds: (project: LocalProject) => string[]
-  workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
+  workspaceIds: (project: LocalProject) => WorkspacePath[]
+  workspaceLabel: (directory: WorkspacePath, branch?: string, projectId?: string) => string
   sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "children" | "mobile" | "dense" | "popover">
   setHoverSession: (id: string | undefined) => void
 }
 
 export const ProjectDragOverlay = (props: {
   projects: Accessor<LocalProject[]>
-  activeProject: Accessor<string | undefined>
+  activeProject: Accessor<WorkspacePath | undefined>
 }): JSX.Element => {
   const project = createMemo(() => props.projects().find((p) => workspaceEqual(p.worktree, props.activeProject())))
   return (
@@ -59,15 +60,15 @@ const ProjectTile = (props: {
   active: Accessor<boolean>
   overlay: Accessor<boolean>
   suppressHover: Accessor<boolean>
-  dirs: Accessor<string[]>
-  onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
-  onProjectMouseLeave: (worktree: string) => void
-  onProjectFocus: (worktree: string) => void
-  navigateToProject: (directory: string) => void
+  dirs: Accessor<WorkspacePath[]>
+  onProjectMouseEnter: (worktree: WorkspacePath, event: MouseEvent) => void
+  onProjectMouseLeave: (worktree: WorkspacePath) => void
+  onProjectFocus: (worktree: WorkspacePath) => void
+  navigateToProject: (directory: WorkspacePath) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
-  closeProject: (directory: string) => void
+  closeProject: (directory: WorkspacePath) => void
   setMenu: (value: boolean) => void
   setOpen: (value: boolean) => void
   setSuppressHover: (value: boolean) => void
@@ -185,12 +186,12 @@ const ProjectPreviewPanel = (props: {
   mobile?: boolean
   selected: Accessor<boolean>
   workspaceEnabled: Accessor<boolean>
-  workspaces: Accessor<string[]>
-  label: (directory: string) => string
+  workspaces: Accessor<WorkspacePath[]>
+  label: (directory: WorkspacePath) => string
   projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
   projectChildren: Accessor<Map<string, string[]>>
-  workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
-  workspaceChildren: (directory: string) => Map<string, string[]>
+  workspaceSessions: (directory: WorkspacePath) => ReturnType<typeof sortedRootSessions>
+  workspaceChildren: (directory: WorkspacePath) => Map<string, string[]>
   setOpen: (value: boolean) => void
   ctx: ProjectSidebarContext
   language: ReturnType<typeof useLanguage>
@@ -306,7 +307,7 @@ export const SortableProject = (props: {
     setState("open", false)
   })
 
-  const label = (directory: string) => {
+  const label = (directory: WorkspacePath) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     const kind =
       directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
@@ -317,11 +318,11 @@ export const SortableProject = (props: {
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
   const projectChildren = createMemo(() => childMapByParent(projectStore().session))
-  const workspaceSessions = (directory: string) => {
+  const workspaceSessions = (directory: WorkspacePath) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     return sortedRootSessions(data, props.sortNow())
   }
-  const workspaceChildren = (directory: string) => {
+  const workspaceChildren = (directory: WorkspacePath) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     return childMapByParent(data.session)
   }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { createSessionKeyReader, ensureSessionKey, normalizeStoredSessionTabs, pruneSessionKeys } from "./layout"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -19,17 +20,20 @@ describe("layout session-key helpers", () => {
     const seen: string[] = []
 
     createRoot((dispose) => {
-      const [key, setKey] = createSignal("dir/one")
-      const read = createSessionKeyReader(key, (value) => seen.push(value))
+      const [key, setKey] = createSignal(`${base64Encode("C:\\Repo\\")}/one`)
+      const read = createSessionKeyReader(key, (value) => {
+        seen.push(value)
+        return ensureSessionKey(value, () => {}, () => {})
+      })
 
-      expect(read()).toBe("dir/one")
-      setKey("dir/two")
-      expect(read()).toBe("dir/two")
+      expect(read()).toBe(`${base64Encode("c:/repo")}/one`)
+      setKey(`${base64Encode("C:\\Repo\\")}/two`)
+      expect(read()).toBe(`${base64Encode("c:/repo")}/two`)
 
       dispose()
     })
 
-    expect(seen).toEqual(["dir/one", "dir/two"])
+    expect(seen).toEqual([`${base64Encode("C:\\Repo\\")}/one`, `${base64Encode("C:\\Repo\\")}/two`])
   })
 })
 
@@ -65,5 +69,21 @@ describe("pruneSessionKeys", () => {
     })
 
     expect(drop).toEqual([])
+  })
+})
+
+describe("normalizeStoredSessionTabs", () => {
+  test("upgrades legacy file tabs without touching real file URIs", () => {
+    const key = `${base64Encode("/repo")}/session`
+
+    expect(
+      normalizeStoredSessionTabs(key, {
+        all: ["context", "file://src/a.ts", "tab:file:src/a.ts", "file:///repo/src/b.ts"],
+        active: "file://src/a.ts",
+      }),
+    ).toEqual({
+      all: ["context", "tab:file:src/a.ts", "file:///repo/src/b.ts"],
+      active: "tab:file:src/a.ts",
+    })
   })
 })

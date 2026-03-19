@@ -3,7 +3,7 @@ import { filePathEqual, filePathKey } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
-import { encodeFilePath } from "@opencode-ai/util/path"
+import { encodeFilePath, getPathRoot } from "@opencode-ai/util/path"
 import {
   createEffect,
   createMemo,
@@ -23,8 +23,11 @@ import type { FileNode } from "@opencode-ai/sdk/v2"
 
 const MAX_DEPTH = 128
 
-function pathToFileUrl(filepath: string): string {
-  return `file://${encodeFilePath(filepath)}`
+function pathToFileUrl(filepath: string) {
+  if (!getPathRoot(filepath)) return
+  const path = encodeFilePath(filepath)
+  if (path.startsWith("//")) return `file:${path}`
+  return `file://${path}`
 }
 
 type Kind = "add" | "del" | "mix"
@@ -160,7 +163,8 @@ const FileTreeNode = (
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
         event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-        event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
+        const url = pathToFileUrl(local.node.absolute)
+        if (url) event.dataTransfer?.setData("text/uri-list", url)
         if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
         withFileDragImage(event)
       }}

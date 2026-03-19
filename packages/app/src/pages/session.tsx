@@ -51,6 +51,7 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { sessionDirKey } from "@/utils/session-key"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
@@ -360,7 +361,7 @@ export default function Page() {
 
         if (pending.id !== id) return
         layout.handoff.clearTabs()
-        if (pending.dir !== (params.dir ?? "")) return
+        if (pending.dir !== sessionDirKey(params.dir ?? "")) return
 
         const from = workspaceTabs().tabs()
         if (from.all.length === 0 && !from.active) return

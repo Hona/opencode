@@ -16,7 +16,7 @@ describe("createOpenReviewFile", () => {
       showAllFiles: () => calls.push("show"),
       tabForPath: (path) => {
         calls.push(`tab:${path}`)
-        return `file://${path}`
+        return `tab:file:${path}`
       },
       openTab: (tab) => calls.push(`open:${tab}`),
       setActive: (tab) => calls.push(`active:${tab}`),
@@ -25,7 +25,7 @@ describe("createOpenReviewFile", () => {
 
     openReviewFile("src/a.ts")
 
-    expect(calls).toEqual(["show", "load:src/a.ts", "tab:src/a.ts", "open:file://src/a.ts", "active:file://src/a.ts"])
+    expect(calls).toEqual(["show", "load:src/a.ts", "tab:src/a.ts", "open:tab:file:src/a.ts", "active:tab:file:src/a.ts"])
   })
 })
 
@@ -35,12 +35,12 @@ describe("createOpenSessionFileTab", () => {
     const openTab = createOpenSessionFileTab({
       normalizeTab: (value) => {
         calls.push(`normalize:${value}`)
-        return `file://${value}`
+        return value.startsWith("file://") ? `tab:file:${value.slice("file://".length)}` : `tab:file:${value}`
       },
       openTab: (tab) => calls.push(`open:${tab}`),
       pathFromTab: (tab) => {
         calls.push(`path:${tab}`)
-        return tab.slice("file://".length)
+        return tab.slice("tab:file:".length)
       },
       loadFile: (path) => calls.push(`load:${path}`),
       openReviewPanel: () => calls.push("review"),
@@ -51,11 +51,11 @@ describe("createOpenSessionFileTab", () => {
 
     expect(calls).toEqual([
       "normalize:src/a.ts",
-      "open:file://src/a.ts",
-      "path:file://src/a.ts",
+      "open:tab:file:src/a.ts",
+      "path:tab:file:src/a.ts",
       "load:src/a.ts",
       "review",
-      "active:file://src/a.ts",
+      "active:tab:file:src/a.ts",
     ])
   })
 })
@@ -101,18 +101,25 @@ describe("createSessionTabs", () => {
     createRoot((dispose) => {
       const [state] = createStore({
         active: undefined as string | undefined,
-        all: ["file://src/a.ts", "context"],
+        all: ["file://src/a.ts", "tab:file:src/a.ts", "context"],
       })
       const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
       const result = createSessionTabs({
         tabs,
-        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
-        normalizeTab: (tab) => (tab.startsWith("file://") ? `norm:${tab.slice("file://".length)}` : tab),
+        pathFromTab: (tab) => {
+          if (tab.startsWith("file://")) return tab.slice("file://".length)
+          if (tab.startsWith("tab:file:")) return tab.slice("tab:file:".length)
+        },
+        normalizeTab: (tab) => {
+          if (tab.startsWith("file://")) return `tab:file:${tab.slice("file://".length)}`
+          return tab
+        },
       })
 
-      expect(result.activeTab()).toBe("norm:src/a.ts")
-      expect(result.activeFileTab()).toBe("norm:src/a.ts")
-      expect(result.closableTab()).toBe("norm:src/a.ts")
+      expect(result.openedTabs()).toEqual(["tab:file:src/a.ts"])
+      expect(result.activeTab()).toBe("tab:file:src/a.ts")
+      expect(result.activeFileTab()).toBe("tab:file:src/a.ts")
+      expect(result.closableTab()).toBe("tab:file:src/a.ts")
       dispose()
     })
   })

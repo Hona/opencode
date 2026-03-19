@@ -28,15 +28,20 @@ describe("getWorkspaceTerminalCacheKey", () => {
 })
 
 describe("getLegacyTerminalStorageKeys", () => {
-  test("keeps workspace storage path when no legacy session id", () => {
-    expect(getLegacyTerminalStorageKeys("/repo")).toEqual(["/repo/terminal.v1"])
+  test("includes workspace path aliases when no legacy session id", () => {
+    const keys = getLegacyTerminalStorageKeys("/repo")
+
+    expect(keys).toContain("/repo/terminal.v1")
+    expect(keys).toContain("/repo//terminal.v1")
   })
 
-  test("includes legacy session path before workspace path", () => {
-    expect(getLegacyTerminalStorageKeys("/repo", "session-123")).toEqual([
-      "/repo/terminal/session-123.v1",
-      "/repo/terminal.v1",
-    ])
+  test("includes equivalent directory spellings for session and workspace keys", () => {
+    const keys = getLegacyTerminalStorageKeys("C:/Repo", "session-123")
+
+    expect(keys).toContain("C:/Repo/terminal/session-123.v1")
+    expect(keys).toContain("C:/Repo/terminal.v1")
+    expect(keys).toContain("c:/repo/terminal/session-123.v1")
+    expect(keys).toContain("C:\\Repo/terminal/session-123.v1")
   })
 })
 

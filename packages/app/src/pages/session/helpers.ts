@@ -1,5 +1,6 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import { type FilePath, type FileTabId } from "@/context/file/path"
 import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
@@ -11,7 +12,7 @@ type Tabs = {
 
 type TabsInput = {
   tabs: Accessor<Tabs>
-  pathFromTab: (tab: string) => string | undefined
+  pathFromTab: (tab: string) => FilePath | undefined
   normalizeTab: (tab: string) => string
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
@@ -95,12 +96,12 @@ export const focusTerminalById = (id: string) => {
 
 export const createOpenReviewFile = (input: {
   showAllFiles: () => void
-  tabForPath: (path: string) => string
+  tabForPath: (path: FilePath) => FileTabId
   openTab: (tab: string) => void
   setActive: (tab: string) => void
-  loadFile: (path: string) => any | Promise<void>
+  loadFile: (path: FilePath) => any | Promise<void>
 }) => {
-  return (path: string) => {
+  return (path: FilePath) => {
     batch(() => {
       input.showAllFiles()
       const maybePromise = input.loadFile(path)
@@ -118,12 +119,12 @@ export const createOpenReviewFile = (input: {
 export const createOpenSessionFileTab = (input: {
   normalizeTab: (tab: string) => string
   openTab: (tab: string) => void
-  pathFromTab: (tab: string) => string | undefined
-  loadFile: (path: string) => void
+  pathFromTab: (tab: string) => FilePath | undefined
+  loadFile: (path: FilePath) => void
   openReviewPanel: () => void
   setActive: (tab: string) => void
 }) => {
-  return (value: string) => {
+  return (value: FilePath | FileTabId) => {
     const next = input.normalizeTab(value)
     input.openTab(next)
 
