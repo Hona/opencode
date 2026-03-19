@@ -10,6 +10,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { Path } from "../../src/path/path"
+import { win as alias } from "../lib/windows-path"
 
 Log.init({ print: false })
 
@@ -163,6 +165,51 @@ describe("session.prompt special characters", () => {
 
         expect(file.filename).toBe("~/prompt-home.txt")
         expect(fileURLToPath(file.url)).toBe(path.join(home, "prompt-home.txt"))
+      },
+    })
+  })
+
+  test("resolves file URI prompt file references through Path", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "prompt-uri.txt"), "uri content\n")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const file = path.join(tmp.path, "prompt-uri.txt")
+        const parts = await SessionPrompt.resolvePromptParts(`Read @${Path.uri(file)}`)
+        const item = parts.find((part) => part.type === "file")
+        if (!item || item.type !== "file") throw new Error("expected file part")
+
+        expect(fileURLToPath(item.url)).toBe(file)
+      },
+    })
+  })
+
+  test("resolves Windows alias prompt file references through Path", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "prompt-alias.txt"), "alias content\n")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const file = path.join(tmp.path, "prompt-alias.txt")
+        const ref = alias(file).find((item) => item.name === "git")!.path
+        const parts = await SessionPrompt.resolvePromptParts(`Read @${ref}`)
+        const item = parts.find((part) => part.type === "file")
+        if (!item || item.type !== "file") throw new Error("expected file part")
+
+        expect(fileURLToPath(item.url)).toBe(file)
       },
     })
   })

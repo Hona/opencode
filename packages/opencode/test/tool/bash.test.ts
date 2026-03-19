@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
@@ -22,6 +23,10 @@ const ctx = {
 }
 
 const projectRoot = path.join(__dirname, "../..")
+
+async function link(target: string, alias: string) {
+  await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
+}
 
 describe("tool.bash", () => {
   test("basic", async () => {
@@ -150,6 +155,43 @@ describe("tool.bash permissions", () => {
         const expected = (await resolveExternalDirectory(os.tmpdir(), { kind: "directory" })).glob
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(expected)
+      },
+    })
+  })
+
+  test("asks for external_directory permission when workdir alias resolves outside project", async () => {
+    await using outer = await tmpdir()
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await link(outer.path, path.join(dir, "link"))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        const alias = path.join(tmp.path, "link")
+        await bash.execute(
+          {
+            command: "echo hello",
+            workdir: alias,
+            description: "Echo hello",
+          },
+          testCtx,
+        )
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        const expected = (await resolveExternalDirectory(alias, { kind: "directory" })).glob
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns).toContain(expected)
+        expect(extDirReq!.always).toContain(expected)
       },
     })
   })

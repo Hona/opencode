@@ -3,6 +3,8 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
+import { Global } from "../../src/global"
+import { Path } from "../../src/path/path"
 import { PermissionNext } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
@@ -55,6 +57,13 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
       expect(evalPerm(plan, "edit")).toBe("deny")
       // But specific path is allowed
       expect(PermissionNext.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+      expect(
+        PermissionNext.evaluate(
+          "edit",
+          String(Path.rel(Instance.worktree, path.join(Global.Path.data, "plans", "foo.md"))),
+          plan!.permission,
+        ).action,
+      ).toBe("allow")
     },
   })
 })

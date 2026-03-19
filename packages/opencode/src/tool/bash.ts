@@ -77,7 +77,15 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      const root = Path.physical(Instance.directory)
+      const worktree = Instance.worktree === "/" ? undefined : Path.physical(Instance.worktree)
+      const inside = async (input: string) => {
+        const file = await Path.physical(input)
+        if (Path.contains(await root, file)) return true
+        if (!worktree) return false
+        return Path.contains(await worktree, file)
+      }
+      const cwd = await Path.physical(params.workdir || Instance.directory, { cwd: Instance.directory })
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -87,7 +95,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const dirs = new Set<string>()
-      if (!Instance.containsPath(cwd)) dirs.add(cwd)
+      if (!(await inside(cwd))) dirs.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -119,7 +127,7 @@ export const BashTool = Tool.define("bash", async () => {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await Path.physical(arg, { cwd })
             log.info("resolved path", { arg, resolved })
-            if (!Instance.containsPath(resolved)) {
+            if (!(await inside(resolved))) {
               const dir = (await Filesystem.isDir(resolved)) ? resolved : path.dirname(resolved)
               dirs.add(dir)
             }

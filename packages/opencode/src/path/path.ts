@@ -175,6 +175,11 @@ async function physicalAsync(input: string, opts: Opts = {}) {
 export namespace Path {
   export type Options = Opts
 
+  export function isAbsolute(input: string, opts: Omit<Opts, "cwd"> = {}) {
+    const platform = pf(opts)
+    return lib(platform).isAbsolute(raw(input, platform))
+  }
+
   export function pretty(input: string, opts: Opts = {}) {
     return PrettyPath.make(prettyText(input, opts))
   }

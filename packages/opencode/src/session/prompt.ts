@@ -32,7 +32,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $ } from "bun"
-import { pathToFileURL, fileURLToPath } from "url"
+import { fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -202,7 +202,7 @@ export namespace SessionPrompt {
         if (seen.has(name)) return
         seen.add(name)
         const file = Path.expand(name)
-        const filepath = path.isAbsolute(file) ? file : path.resolve(Instance.worktree, name)
+        const filepath = Path.pretty(file, { cwd: Instance.worktree })
 
         const stats = await fs.stat(filepath).catch(() => undefined)
         if (!stats) {
@@ -219,7 +219,7 @@ export namespace SessionPrompt {
         if (stats.isDirectory()) {
           parts.push({
             type: "file",
-            url: pathToFileURL(filepath).href,
+            url: String(Path.uri(filepath)),
             filename: name,
             mime: "application/x-directory",
           })
@@ -228,7 +228,7 @@ export namespace SessionPrompt {
 
         parts.push({
           type: "file",
-          url: pathToFileURL(filepath).href,
+          url: String(Path.uri(filepath)),
           filename: name,
           mime: "text/plain",
         })

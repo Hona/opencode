@@ -11,6 +11,8 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { BunProc } from "../../src/bun"
+import { Path } from "../../src/path/path"
+import { win as alias } from "../lib/windows-path"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -325,6 +327,48 @@ test("handles file inclusion with replacement tokens", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.username).toBe("const out = await Bun.$`echo hi`")
+    },
+  })
+})
+
+test("handles file inclusion via file URI reference", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "included.txt")
+      await Filesystem.write(file, "uri-user")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        username: `{file:${Path.uri(file)}}`,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.username).toBe("uri-user")
+    },
+  })
+})
+
+test("handles file inclusion via Windows alias reference", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "included.txt")
+      await Filesystem.write(file, "alias-user")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        username: `{file:${alias(file).find((item) => item.name === "git")!.path}}`,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.username).toBe("alias-user")
     },
   })
 })

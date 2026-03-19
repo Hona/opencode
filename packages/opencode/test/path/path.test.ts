@@ -34,6 +34,24 @@ describe("path", () => {
     })
   })
 
+  describe("isAbsolute()", () => {
+    test("treats file URIs as absolute", () => {
+      expect(Path.isAbsolute("file:///tmp/dir/file.txt", { platform: "linux" })).toBe(true)
+      expect(Path.isAbsolute("file:///C:/tmp/file.txt", { platform: "win32" })).toBe(true)
+    })
+
+    test("matches all Windows alias roots", () => {
+      for (const item of alias("C:\\Users\\Dev\\tmp\\file.txt")) {
+        expect(Path.isAbsolute(item.path, { platform: "win32" })).toBe(true)
+      }
+    })
+
+    test("keeps relative inputs relative", () => {
+      expect(Path.isAbsolute("src/file.ts", { platform: "linux" })).toBe(false)
+      expect(Path.isAbsolute("src/file.ts", { platform: "win32" })).toBe(false)
+    })
+  })
+
   describe("key()", () => {
     test("matches slash and case variants on Windows", () => {
       const a = Path.key("C:\\Repo\\File.ts", { platform: "win32" })

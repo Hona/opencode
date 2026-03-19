@@ -15,6 +15,7 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission"
+import { Path } from "@/path/path"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
@@ -105,7 +106,7 @@ export namespace Agent {
             edit: {
               "*": "deny",
               [path.join(".opencode", "plans", "*.md")]: "allow",
-              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [String(Path.rel(Instance.worktree, path.join(Global.Path.data, "plans", "*.md")))]: "allow",
             },
           }),
           user,
@@ -232,13 +233,15 @@ export namespace Agent {
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
 
+    const trunc = Path.canonical(Truncate.GLOB)
+
     // Ensure Truncate.GLOB is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]
       const explicit = agent.permission.some((r) => {
         if (r.permission !== "external_directory") return false
         if (r.action !== "deny") return false
-        return r.pattern === Truncate.GLOB
+        return Path.canonical(r.pattern) === trunc
       })
       if (explicit) continue
 

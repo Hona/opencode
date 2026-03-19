@@ -1,6 +1,5 @@
 import type { Argv } from "yargs"
 import path from "path"
-import { pathToFileURL } from "url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
@@ -27,6 +26,7 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
+import { Path } from "@/path/path"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -214,8 +214,7 @@ function todo(info: ToolProps<typeof TodoWriteTool>) {
 
 function normalizePath(input?: string) {
   if (!input) return ""
-  if (path.isAbsolute(input)) return path.relative(process.cwd(), input) || "."
-  return input
+  return Path.display(input, { cwd: process.cwd(), home: false, relative: true })
 }
 
 export const RunCommand = cmd({
@@ -325,7 +324,7 @@ export const RunCommand = cmd({
       const list = Array.isArray(args.file) ? args.file : [args.file]
 
       for (const filePath of list) {
-        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const resolvedPath = Path.pretty(filePath, { cwd: process.cwd() })
         if (!(await Filesystem.exists(resolvedPath))) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
@@ -335,7 +334,7 @@ export const RunCommand = cmd({
 
         files.push({
           type: "file",
-          url: pathToFileURL(resolvedPath).href,
+          url: String(Path.uri(resolvedPath)),
           filename: path.basename(resolvedPath),
           mime,
         })

@@ -5,6 +5,8 @@ import { InstructionPrompt } from "../../src/session/instruction"
 import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
+import { Path } from "../../src/path/path"
+import { win as alias } from "../lib/windows-path"
 
 describe("InstructionPrompt.resolve", () => {
   test("returns empty when AGENTS.md is at project root (already in systemPaths)", async () => {
@@ -188,5 +190,57 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
     } finally {
       ;(Global.Path as { config: string }).config = originalGlobalConfig
     }
+  })
+})
+
+describe("InstructionPrompt.systemPaths instruction boundaries", () => {
+  test("resolves file URI instructions through Path", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "rules.md")
+        await Bun.write(file, "# Rules")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            instructions: [String(Path.uri(file))],
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const paths = await InstructionPrompt.systemPaths()
+        expect(paths.has(path.join(tmp.path, "rules.md"))).toBe(true)
+      },
+    })
+  })
+
+  test("resolves Windows alias instructions through Path", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "rules.md")
+        await Bun.write(file, "# Rules")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            instructions: [alias(file).find((item) => item.name === "git")!.path],
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const paths = await InstructionPrompt.systemPaths()
+        expect(paths.has(path.join(tmp.path, "rules.md"))).toBe(true)
+      },
+    })
   })
 })

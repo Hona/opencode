@@ -6,7 +6,6 @@ import z from "zod"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
-import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
@@ -16,6 +15,7 @@ import { git } from "@/util/git"
 import { Protected } from "./protected"
 import { Flag } from "@/flag/flag"
 import { Cause, Effect, Layer, ServiceMap } from "effect"
+import { Path } from "@/path/path"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
@@ -128,7 +128,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
             cwd: instance.project.worktree,
           }),
         )
-        const vcsDir = result.exitCode === 0 ? path.resolve(instance.project.worktree, result.text().trim()) : undefined
+        const vcsDir = result.exitCode === 0 ? Path.pretty(result.text().trim(), { cwd: instance.project.worktree }) : undefined
         if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
           const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
             (entry) => entry !== "HEAD",

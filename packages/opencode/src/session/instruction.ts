@@ -20,9 +20,9 @@ const FILES = [
 function globalFiles() {
   const files = []
   if (Flag.OPENCODE_CONFIG_DIR) {
-    files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+    files.push(Path.pretty("AGENTS.md", { cwd: Flag.OPENCODE_CONFIG_DIR }))
   }
-  files.push(path.join(Global.Path.config, "AGENTS.md"))
+  files.push(Path.pretty("AGENTS.md", { cwd: Global.Path.config }))
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
     files.push(Path.expand("~/.claude/CLAUDE.md"))
   }
@@ -78,7 +78,7 @@ export namespace InstructionPrompt {
         const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         if (matches.length > 0) {
           matches.forEach((p) => {
-            paths.add(path.resolve(p))
+            paths.add(Path.pretty(p))
           })
           break
         }
@@ -87,7 +87,7 @@ export namespace InstructionPrompt {
 
     for (const file of globalFiles()) {
       if (await Filesystem.exists(file)) {
-        paths.add(path.resolve(file))
+        paths.add(Path.pretty(file))
         break
       }
     }
@@ -96,15 +96,16 @@ export namespace InstructionPrompt {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
         instruction = Path.expand(instruction)
-        const matches = path.isAbsolute(instruction)
-          ? await Glob.scan(path.basename(instruction), {
-              cwd: path.dirname(instruction),
+        const file = Path.isAbsolute(instruction) ? Path.pretty(instruction) : undefined
+        const matches = file
+          ? await Glob.scan(path.basename(file), {
+              cwd: path.dirname(file),
               absolute: true,
               include: "file",
             }).catch(() => [])
           : await resolveRelative(instruction)
         matches.forEach((p) => {
-          paths.add(path.resolve(p))
+          paths.add(Path.pretty(p))
         })
       }
     }
@@ -158,7 +159,7 @@ export namespace InstructionPrompt {
 
   export async function find(dir: string) {
     for (const file of FILES) {
-      const filepath = path.resolve(path.join(dir, file))
+      const filepath = Path.pretty(file, { cwd: dir })
       if (await Filesystem.exists(filepath)) return filepath
     }
   }

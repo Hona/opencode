@@ -78,7 +78,7 @@ export namespace ConfigPaths {
   }
 
   function dir(input: ParseSource) {
-    return typeof input === "string" ? path.dirname(input) : input.dir
+    return typeof input === "string" ? path.dirname(Path.pretty(input)) : input.dir
   }
 
   /** Apply {env:VAR} and {file:path} substitutions to config text. */
@@ -109,8 +109,7 @@ export namespace ConfigPaths {
       }
 
       const filePath = Path.expand(token.replace(/^\{file:/, "").replace(/\}$/, ""))
-
-      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+      const resolvedPath = Path.pretty(filePath, { cwd: configDir })
       const fileContent = (
         await Filesystem.readText(resolvedPath).catch((error: NodeJS.ErrnoException) => {
           if (missing === "empty") return ""
