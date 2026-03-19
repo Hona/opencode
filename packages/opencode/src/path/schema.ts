@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import path from "path"
 
-import { withStatics, zodFrom } from "@/util/schema"
+import { withStatics, zodString } from "@/util/schema"
 
 /**
  * These brands document which path shape a string is expected to already be in.
@@ -63,6 +63,8 @@ function parseURI(input: string) {
 
 export type PrettyPath = typeof prettyPathSchema.Type
 
+const pretty = zodString<PrettyPath>(parsePretty)
+
 export const PrettyPath = prettyPathSchema.pipe(
   withStatics((schema: typeof prettyPathSchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -70,7 +72,8 @@ export const PrettyPath = prettyPathSchema.pipe(
     assert: (input: string): asserts input is PrettyPath => {
       parsePretty(input)
     },
-    zod: zodFrom(parsePretty),
+    input: pretty.input,
+    zod: pretty.zod,
   })),
 )
 
@@ -79,6 +82,8 @@ const pathKeySchema = Schema.String.pipe(Schema.brand("PathKey"))
 
 export type PathKey = typeof pathKeySchema.Type
 
+const key = zodString<PathKey>(parseKey)
+
 export const PathKey = pathKeySchema.pipe(
   withStatics((schema: typeof pathKeySchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -86,7 +91,8 @@ export const PathKey = pathKeySchema.pipe(
     assert: (input: string): asserts input is PathKey => {
       parseKey(input)
     },
-    zod: zodFrom(parseKey),
+    input: key.input,
+    zod: key.zod,
   })),
 )
 
@@ -95,6 +101,8 @@ const posixPathSchema = Schema.String.pipe(Schema.brand("PosixPath"))
 
 export type PosixPath = typeof posixPathSchema.Type
 
+const posix = zodString<PosixPath>(parsePosix)
+
 export const PosixPath = posixPathSchema.pipe(
   withStatics((schema: typeof posixPathSchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -102,7 +110,8 @@ export const PosixPath = posixPathSchema.pipe(
     assert: (input: string): asserts input is PosixPath => {
       parsePosix(input)
     },
-    zod: zodFrom(parsePosix),
+    input: posix.input,
+    zod: posix.zod,
   })),
 )
 
@@ -111,6 +120,8 @@ const relativePathSchema = Schema.String.pipe(Schema.brand("RelativePath"))
 
 export type RelativePath = typeof relativePathSchema.Type
 
+const relative = zodString<RelativePath>(parseRelative)
+
 export const RelativePath = relativePathSchema.pipe(
   withStatics((schema: typeof relativePathSchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -118,7 +129,8 @@ export const RelativePath = relativePathSchema.pipe(
     assert: (input: string): asserts input is RelativePath => {
       parseRelative(input)
     },
-    zod: zodFrom(parseRelative),
+    input: relative.input,
+    zod: relative.zod,
   })),
 )
 
@@ -127,6 +139,8 @@ const repoPathSchema = Schema.String.pipe(Schema.brand("RepoPath"))
 
 export type RepoPath = typeof repoPathSchema.Type
 
+const repo = zodString<RepoPath>(parseRepo)
+
 export const RepoPath = repoPathSchema.pipe(
   withStatics((schema: typeof repoPathSchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -134,7 +148,8 @@ export const RepoPath = repoPathSchema.pipe(
     assert: (input: string): asserts input is RepoPath => {
       parseRepo(input)
     },
-    zod: zodFrom(parseRepo),
+    input: repo.input,
+    zod: repo.zod,
   })),
 )
 
@@ -143,6 +158,8 @@ const fileUriSchema = Schema.String.pipe(Schema.brand("FileURI"))
 
 export type FileURI = typeof fileUriSchema.Type
 
+const uri = zodString<FileURI>(parseURI)
+
 export const FileURI = fileUriSchema.pipe(
   withStatics((schema: typeof fileUriSchema) => ({
     make: (input: string) => schema.makeUnsafe(input),
@@ -150,6 +167,7 @@ export const FileURI = fileUriSchema.pipe(
     assert: (input: string): asserts input is FileURI => {
       parseURI(input)
     },
-    zod: zodFrom(parseURI),
+    input: uri.input,
+    zod: uri.zod,
   })),
 )

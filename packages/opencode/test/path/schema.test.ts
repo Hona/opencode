@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import z from "zod"
 
 import { WorkspaceID } from "../../src/control-plane/schema"
 import { PrettyPath } from "../../src/path/schema"
@@ -13,5 +14,17 @@ describe("runtime-safe path/id constructors", () => {
 
   test("rejects relative pretty paths", () => {
     expect(() => PrettyPath.parse("relative/path")).toThrow('Expected absolute filesystem path, received "relative/path"')
+  })
+
+  test("exports pretty path input schema to JSON schema", () => {
+    const schema = z.toJSONSchema(z.object({ path: PrettyPath.zod }))
+    expect(schema).toMatchObject({
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+        },
+      },
+    })
   })
 })

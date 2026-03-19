@@ -17,18 +17,37 @@ export const withStatics =
   (schema: S): S & M =>
     Object.assign(schema, methods(schema))
 
+function issue(ctx: z.core.$RefinementCtx<unknown>, err: unknown) {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: err instanceof Error ? err.message : String(err),
+  })
+}
+
 export function zodFrom<T>(parse: (input: string) => T): z.ZodType<T> {
   return z.string().transform((input, ctx) => {
     try {
       return parse(input)
     } catch (err) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: err instanceof Error ? err.message : String(err),
-      })
+      issue(ctx, err)
       return z.NEVER
     }
   })
+}
+
+export function zodString<T extends string>(parse: (input: string) => T) {
+  const input = z.string().superRefine((value, ctx) => {
+    try {
+      parse(value)
+    } catch (err) {
+      issue(ctx, err)
+    }
+  })
+
+  return {
+    input,
+    zod: input as unknown as z.ZodType<T>,
+  }
 }
 
 declare const NewtypeBrand: unique symbol
