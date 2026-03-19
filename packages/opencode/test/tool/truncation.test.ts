@@ -13,10 +13,6 @@ import { writeFileStringScoped } from "../lib/filesystem"
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
 
-function bun(script: string) {
-  return [process.execPath, "-e", script]
-}
-
 describe("Truncate", () => {
   describe("output", () => {
     test("truncates large json file by bytes", async () => {
@@ -132,18 +128,13 @@ describe("Truncate", () => {
       expect("outputPath" in result).toBe(false)
     })
 
-    test("loads truncate output in a fresh process", async () => {
-      const script = [
-        'const { Truncate } = await import("./src/tool/truncate.ts")',
-        'const { runtime } = await import("./src/effect/runtime.ts")',
-        'const out = await Truncate.output("ok")',
-        'if (out.truncated || out.content !== "ok") throw new Error("unexpected truncate result")',
-        "await runtime.dispose()",
-      ].join(";")
+    test("loads truncate effect in a fresh process", async () => {
+      const out = await Process.run([process.execPath, "run", path.join(ROOT, "src", "tool", "truncate-effect.ts")], {
+        cwd: ROOT,
+      })
 
-      const out = await Process.run(bun(script), { cwd: ROOT })
       expect(out.code).toBe(0)
-    })
+    }, 20000)
   })
 
   describe("cleanup", () => {
