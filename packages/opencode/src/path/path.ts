@@ -94,6 +94,10 @@ function raw(input: string, platform: NodeJS.Platform) {
     .replace(/^\/mnt\/([a-zA-Z])(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:\\`)
 }
 
+function absolute(input: string, platform: NodeJS.Platform) {
+  return lib(platform).isAbsolute(raw(input, platform))
+}
+
 function winabs(input: string) {
   return (
     input.startsWith("file://") ||
@@ -190,6 +194,20 @@ function decodeText(input: string, label: string) {
   } catch {
     throw new TypeError(`Invalid percent-encoding in ${label}: ${input}`)
   }
+}
+
+function ingressText(input: string, opts: Omit<ParseOpts, "encoded"> = {}) {
+  const label = opts.label ?? "path"
+  if (!input) throw new TypeError(`Expected ${label}, received empty string`)
+  if (input.includes("\0")) throw new TypeError(`Expected ${label} without null bytes`)
+
+  const platform = pf(opts)
+  if (absolute(input, platform)) return prettyText(input, opts)
+  if (!input.includes("%")) return prettyText(input, opts)
+
+  const text = decodeText(input, label)
+  if (absolute(text, platform)) return prettyText(text, opts)
+  return prettyText(input, opts)
 }
 
 function parseText(input: string, opts: ParseOpts = {}) {
@@ -316,8 +334,7 @@ export namespace Path {
   }
 
   export function isAbsolute(input: string, opts: Omit<Opts, "cwd"> = {}) {
-    const platform = pf(opts)
-    return lib(platform).isAbsolute(raw(input, platform))
+    return absolute(input, pf(opts))
   }
 
   /**
@@ -332,6 +349,18 @@ export namespace Path {
 
   export function from(input: string, opts: ParseOpts = {}) {
     return PrettyPath.make(parseText(input, opts))
+  }
+
+  /**
+   * Parses already-decoded boundary input like headers and query params.
+   *
+    * Absolute inputs are treated as raw native paths so literal `%` segments are
+    * preserved. Non-absolute inputs get one decode attempt so older encoded
+    * headers can still become absolute paths, and malformed encoded values fail
+    * clearly.
+   */
+  export function ingress(input: string, opts: Omit<ParseOpts, "encoded"> = {}) {
+    return PrettyPath.make(ingressText(input, opts))
   }
 
   /**

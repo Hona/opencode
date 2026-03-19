@@ -46,6 +46,7 @@ export const WorktreeAdaptor: Adaptor = {
     const cfg = config(info)
     const { WorkspaceServer } = await import("../workspace-server/server")
     const req = request(input, init)
+    req.headers.set("x-opencode-workspace", cfg.id)
     req.headers.set("x-opencode-directory", cfg.directory)
 
     return WorkspaceServer.App().fetch(new Request(req.url, { ...init, headers: req.headers }))

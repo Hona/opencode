@@ -110,6 +110,58 @@ describe("control-plane/workspace-server SSE", () => {
     }
   })
 
+  test("accepts literal percent directories before Instance.provide", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const dir = path.join(tmp.path, "100% ready")
+    await fs.mkdir(dir)
+    const app = WorkspaceServer.App()
+    const stop = new AbortController()
+    const provide = Instance.provide
+    const spy = spyOn(Instance, "provide").mockImplementation((input) => provide(input))
+
+    try {
+      const response = await app.request("/event", {
+        signal: stop.signal,
+        headers: {
+          "x-opencode-workspace": "wrk_test_workspace",
+          "x-opencode-directory": dir,
+        },
+      })
+
+      expect(response.status).toBe(200)
+      expect(spy.mock.calls[0]?.[0]?.directory).toBe(dir)
+    } finally {
+      stop.abort()
+      spy.mockRestore()
+    }
+  })
+
+  test("decodes encoded directory headers before Instance.provide", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const dir = path.join(tmp.path, "100% ready")
+    await fs.mkdir(dir)
+    const app = WorkspaceServer.App()
+    const stop = new AbortController()
+    const provide = Instance.provide
+    const spy = spyOn(Instance, "provide").mockImplementation((input) => provide(input))
+
+    try {
+      const response = await app.request("/event", {
+        signal: stop.signal,
+        headers: {
+          "x-opencode-workspace": "wrk_test_workspace",
+          "x-opencode-directory": encodeURIComponent(dir),
+        },
+      })
+
+      expect(response.status).toBe(200)
+      expect(spy.mock.calls[0]?.[0]?.directory).toBe(dir)
+    } finally {
+      stop.abort()
+      spy.mockRestore()
+    }
+  })
+
   test("rejects invalid workspace ids before bootstrapping", async () => {
     const app = WorkspaceServer.App()
     const response = await app.request("/event", {

@@ -47,7 +47,7 @@ export namespace WorkspaceServer {
         })()
         const directory = (() => {
           try {
-            return Path.from(raw, { encoded: true, label: "directory parameter" })
+            return Path.ingress(raw, { label: "directory parameter" })
           } catch (err) {
             throw badInput(err)
           }

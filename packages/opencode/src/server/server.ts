@@ -213,7 +213,7 @@ export namespace Server {
         const directory = (() => {
           try {
             if (!rawDirectory) return Path.pretty(process.cwd())
-            return Path.from(rawDirectory, { encoded: true, label: "directory parameter" })
+            return Path.ingress(rawDirectory, { label: "directory parameter" })
           } catch (err) {
             throw badInput(err)
           }

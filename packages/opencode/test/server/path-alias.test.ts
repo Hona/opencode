@@ -49,6 +49,56 @@ test("server ingress keeps alias directories", async () => {
   }
 })
 
+test("server ingress accepts literal percent directories", async () => {
+  await using tmp = await tmpdir()
+  const dir = path.join(tmp.path, "100% ready")
+  await fs.mkdir(dir)
+
+  const app = Server.createApp({})
+  const response = await app.request("/path", {
+    headers: {
+      "x-opencode-directory": dir,
+    },
+  })
+
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    directory: dir,
+  })
+})
+
+test("server ingress decodes encoded directory headers once", async () => {
+  await using tmp = await tmpdir()
+  const dir = path.join(tmp.path, "100% ready")
+  await fs.mkdir(dir)
+
+  const app = Server.createApp({})
+  const response = await app.request("/path", {
+    headers: {
+      "x-opencode-directory": encodeURIComponent(dir),
+    },
+  })
+
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    directory: dir,
+  })
+})
+
+test("server ingress keeps query directory behavior", async () => {
+  await using tmp = await tmpdir()
+  const dir = path.join(tmp.path, "100% ready")
+  await fs.mkdir(dir)
+
+  const app = Server.createApp({})
+  const response = await app.request(`/path?directory=${encodeURIComponent(dir)}`)
+
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    directory: dir,
+  })
+})
+
 test("server ingress rejects invalid workspace ids", async () => {
   const app = Server.createApp({})
   const response = await app.request("/path", {
