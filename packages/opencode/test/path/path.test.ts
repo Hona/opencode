@@ -4,10 +4,11 @@ import path from "path"
 
 import { Path } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
+import { win as alias } from "../lib/windows-path"
 
 describe("path", () => {
   describe("pretty()", () => {
-    const win = { cwd: "C:\\work", platform: "win32" as const }
+    const opts = { cwd: "C:\\work", platform: "win32" as const }
 
     for (const [name, input] of [
       ["slash drive", "/c/tmp/file.txt"],
@@ -17,12 +18,19 @@ describe("path", () => {
       ["file uri", "file:///C:/tmp/file.txt"],
     ]) {
       test(`normalizes ${name} on Windows`, () => {
-        expect(String(Path.pretty(input, win))).toBe("C:\\tmp\\file.txt")
+        expect(String(Path.pretty(input, opts))).toBe("C:\\tmp\\file.txt")
       })
     }
 
     test("normalizes relative input to native absolute form", () => {
       expect(String(Path.pretty("src/../file.ts", { cwd: "/repo", platform: "linux" }))).toBe("/repo/file.ts")
+    })
+
+    test("collapses Windows alias forms to the same pretty path", () => {
+      const file = "C:\\Users\\Dev\\tmp\\file.txt"
+      for (const item of alias(file)) {
+        expect(String(Path.pretty(item.path, { platform: "win32" }))).toBe(file)
+      }
     })
   })
 
@@ -34,11 +42,31 @@ describe("path", () => {
       expect(Path.eq("C:\\Repo\\File.ts", "c:/repo/file.ts", { platform: "win32" })).toBe(true)
       expect(Path.match("C:\\Repo\\File.ts", b, { platform: "win32" })).toBe(true)
     })
+
+    test("matches all Windows alias forms", () => {
+      const [head, ...tail] = alias("C:\\Users\\Dev\\tmp\\file.txt")
+      const key = Path.key(head.path, { platform: "win32" })
+      for (const item of tail) {
+        expect(Path.key(item.path, { platform: "win32" })).toBe(key)
+        expect(Path.eq(head.path, item.path, { platform: "win32" })).toBe(true)
+        expect(Path.match(item.path, key, { platform: "win32" })).toBe(true)
+      }
+    })
   })
 
   describe("contains()", () => {
     test("matches slash and case variants on Windows", () => {
       expect(Path.contains("C:\\Repo", "c:/repo/src/file.ts", { platform: "win32" })).toBe(true)
+    })
+
+    test("matches all Windows alias parent and child forms", () => {
+      const dirs = alias("C:\\Users\\Dev\\tmp")
+      const files = alias("C:\\Users\\Dev\\tmp\\file.txt")
+      for (const dir of dirs) {
+        for (const file of files) {
+          expect(Path.contains(dir.path, file.path, { platform: "win32" })).toBe(true)
+        }
+      }
     })
 
     test("rejects absolute-relative path mixes", () => {
@@ -50,6 +78,26 @@ describe("path", () => {
   describe("externalGlob()", () => {
     test("normalizes Windows directory globs", () => {
       expect(Path.externalGlob("C:\\Users\\Dev\\tmp\\", { platform: "win32" })).toBe("C:/Users/Dev/tmp/*")
+    })
+
+    test("canonicalizes all Windows alias roots", () => {
+      for (const item of alias("C:\\Users\\Dev\\tmp")) {
+        expect(Path.externalGlob(item.path, { platform: "win32" })).toBe("C:/Users/Dev/tmp/*")
+      }
+    })
+  })
+
+  describe("canonical()", () => {
+    test("leaves non-path patterns alone", () => {
+      expect(Path.canonical("*", { platform: "win32" })).toBe("*")
+      expect(Path.canonical("src/*", { platform: "win32" })).toBe("src/*")
+    })
+
+    test("canonicalizes Windows alias paths to posix form", () => {
+      for (const item of alias("C:\\Users\\Dev\\tmp\\file.txt")) {
+        expect(Path.canonical(item.path, { platform: "win32" })).toBe("C:/Users/Dev/tmp/file.txt")
+        expect(Path.canonical(item.glob, { platform: "win32" })).toBe("C:/Users/Dev/tmp/file.txt/*")
+      }
     })
   })
 

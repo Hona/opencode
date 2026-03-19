@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { win } from "../lib/windows-path"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
@@ -124,6 +125,44 @@ describe("tool.write", () => {
           expect(extDirReq).toBeDefined()
           expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "*").replaceAll("\\", "/"))
           expect(await fs.readFile(path.join(outerTmp.path, "new.txt"), "utf-8")).toBe("escaped")
+        },
+      })
+    })
+
+    test("canonicalizes external_directory permission across Windows aliases", async () => {
+      if (process.platform !== "win32") return
+      await using outerTmp = await tmpdir()
+      await using tmp = await tmpdir()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const write = await WriteTool.init()
+          for (const item of win(path.join(outerTmp.path, "new.txt"))) {
+            const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+            const stop = new Error("stop")
+            const testCtx = {
+              ...ctx,
+              ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+                requests.push(req)
+                if (req.permission === "external_directory") throw stop
+              },
+            }
+
+            await expect(
+              write.execute(
+                {
+                  filePath: item.path,
+                  content: "escaped",
+                },
+                testCtx,
+              ),
+            ).rejects.toBe(stop)
+
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toEqual([path.join(outerTmp.path, "*").replaceAll("\\", "/")])
+          }
         },
       })
     })

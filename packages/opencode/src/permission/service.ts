@@ -5,6 +5,7 @@ import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
+import { Path } from "@/path/path"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
@@ -120,11 +121,17 @@ export namespace PermissionEffect {
     deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
   }
 
+  function normalize(permission: string, pattern: string) {
+    if (permission !== "external_directory") return pattern
+    return Path.canonical(pattern)
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const rules = rulesets.flat()
-    log.info("evaluate", { permission, pattern, ruleset: rules })
+    const text = normalize(permission, pattern)
+    log.info("evaluate", { permission, pattern: text, ruleset: rules })
     const match = rules.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
+      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(text, normalize(permission, rule.pattern)),
     )
     return match ?? { action: "ask", permission, pattern: "*" }
   }

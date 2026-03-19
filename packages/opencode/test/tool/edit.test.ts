@@ -6,6 +6,8 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
 import { SessionID, MessageID } from "../../src/session/schema"
+import type { PermissionNext } from "../../src/permission"
+import { win } from "../lib/windows-path"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
@@ -678,7 +680,46 @@ describe("tool.edit", () => {
           const results = await Promise.allSettled([promise1, promise2])
           expect(results.some((r) => r.status === "fulfilled")).toBe(true)
         },
+        })
+      })
+    })
+
+    test("canonicalizes external_directory permission across Windows aliases", async () => {
+      if (process.platform !== "win32") return
+      await using outerTmp = await tmpdir()
+      await using tmp = await tmpdir()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          for (const item of win(path.join(outerTmp.path, "new.txt"))) {
+            const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+            const stop = new Error("stop")
+            const testCtx = {
+              ...ctx,
+              ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+                requests.push(req)
+                if (req.permission === "external_directory") throw stop
+              },
+            }
+
+            await expect(
+              edit.execute(
+                {
+                  filePath: item.path,
+                  oldString: "",
+                  newString: "new content",
+                },
+                testCtx,
+              ),
+            ).rejects.toBe(stop)
+
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toEqual([path.join(outerTmp.path, "*").replaceAll("\\", "/")])
+          }
+        },
       })
     })
   })
-})

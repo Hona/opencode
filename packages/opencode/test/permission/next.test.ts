@@ -8,8 +8,10 @@ import { PermissionNext } from "../../src/permission"
 import * as S from "../../src/permission/service"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
+import { Path } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { win } from "../lib/windows-path"
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -73,17 +75,17 @@ test("fromConfig - empty object", () => {
 
 test("fromConfig - expands tilde to home directory", () => {
   const result = PermissionNext.fromConfig({ external_directory: { "~/projects/*": "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: path.join(dir, "*"), action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: Path.canonical(path.join(dir, "*")), action: "allow" }])
 })
 
 test("fromConfig - expands $HOME to home directory", () => {
   const result = PermissionNext.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: path.join(dir, "*"), action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: Path.canonical(path.join(dir, "*")), action: "allow" }])
 })
 
 test("fromConfig - expands $HOME without trailing slash", () => {
   const result = PermissionNext.fromConfig({ external_directory: { $HOME: "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: home, action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: Path.canonical(home), action: "allow" }])
 })
 
 test("fromConfig - does not expand tilde in middle of path", () => {
@@ -93,7 +95,7 @@ test("fromConfig - does not expand tilde in middle of path", () => {
 
 test("fromConfig - expands exact tilde to home directory", () => {
   const result = PermissionNext.fromConfig({ external_directory: { "~": "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: home, action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: Path.canonical(home), action: "allow" }])
 })
 
 test("evaluate - matches expanded tilde pattern", () => {
@@ -106,6 +108,81 @@ test("evaluate - matches expanded $HOME pattern", () => {
   const ruleset = PermissionNext.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
   const result = PermissionNext.evaluate("external_directory", path.join(dir, "file.txt"), ruleset)
   expect(result.action).toBe("allow")
+})
+
+test("fromConfig - canonicalizes Windows external_directory aliases", () => {
+  if (process.platform !== "win32") return
+  for (const item of win(dir)) {
+    const result = PermissionNext.fromConfig({ external_directory: { [item.glob]: "allow" } })
+    expect(result).toEqual([{ permission: "external_directory", pattern: Path.externalGlob(dir), action: "allow" }])
+  }
+})
+
+test("evaluate - matches Windows external_directory aliases across rule forms", () => {
+  if (process.platform !== "win32") return
+  const list = win(dir)
+  for (const rule of list) {
+    for (const item of list) {
+      const result = PermissionNext.evaluate("external_directory", item.glob, [
+        { permission: "external_directory", pattern: rule.glob, action: "allow" },
+      ])
+      expect(result.action).toBe("allow")
+    }
+  }
+})
+
+test("evaluate - keeps Windows external_directory matching case-insensitive", () => {
+  if (process.platform !== "win32") return
+  const result = PermissionNext.evaluate("external_directory", "c:/users/test/projects/file.txt", [
+    { permission: "external_directory", pattern: "C:/Users/Test/Projects/*", action: "allow" },
+  ])
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - keeps non-Windows external_directory matching case-sensitive", () => {
+  if (process.platform === "win32") return
+  const result = PermissionNext.evaluate("external_directory", "/users/test/projects/file.txt", [
+    { permission: "external_directory", pattern: "/Users/Test/Projects/*", action: "allow" },
+  ])
+  expect(result.action).toBe("ask")
+})
+
+test("ask - auto-allow matches Windows external_directory aliases after always", async () => {
+  if (process.platform !== "win32") return
+  const [head, tail] = win(dir)
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const first = PermissionNext.ask({
+        id: PermissionID.make("per_alias1"),
+        sessionID: SessionID.make("session_alias"),
+        permission: "external_directory",
+        patterns: [head.glob],
+        metadata: {},
+        always: [head.glob],
+        ruleset: [{ permission: "external_directory", pattern: "*", action: "ask" }],
+      })
+
+      await waitForPending(1)
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_alias1"),
+        reply: "always",
+      })
+      await expect(first).resolves.toBeUndefined()
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: SessionID.make("session_alias"),
+          permission: "external_directory",
+          patterns: [tail.glob],
+          metadata: {},
+          always: [],
+          ruleset: [],
+        }),
+      ).resolves.toBeUndefined()
+    },
+  })
 })
 
 // merge tests

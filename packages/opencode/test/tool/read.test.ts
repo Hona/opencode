@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { win } from "../lib/windows-path"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -185,6 +186,36 @@ describe("tool.read external_directory permission", () => {
         expect(result.output).toContain("secret data")
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "*").replaceAll("\\", "/"))
+      },
+    })
+  })
+
+  test("canonicalizes external_directory permission across Windows aliases", async () => {
+    if (process.platform !== "win32") return
+    await using outerTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    const expected = path.join(outerTmp.path, "*").replaceAll("\\", "/")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        for (const item of win(path.join(outerTmp.path, "secret.txt"))) {
+          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const stop = new Error("stop")
+          const testCtx = {
+            ...ctx,
+            ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+              requests.push(req)
+              if (req.permission === "external_directory") throw stop
+            },
+          }
+
+          await expect(read.execute({ filePath: item.path }, testCtx)).rejects.toBe(stop)
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toEqual([expected])
+        }
       },
     })
   })

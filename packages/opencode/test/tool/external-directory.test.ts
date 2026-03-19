@@ -8,6 +8,7 @@ import { assertExternalDirectory } from "../../src/tool/external-directory"
 import type { PermissionNext } from "../../src/permission"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { win } from "../lib/windows-path"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
@@ -148,6 +149,34 @@ describe("tool.assertExternalDirectory", () => {
     const req = requests.find((r) => r.permission === "external_directory")
     expect(req).toBeDefined()
     expect(req!.patterns).toEqual([Path.externalGlob(outer.path)])
+  })
+
+  test("asks with the same canonical glob across Windows aliases", async () => {
+    if (process.platform !== "win32") return
+    await using outer = await tmpdir()
+    await using tmp = await tmpdir()
+
+    for (const item of win(path.join(outer.path, "secret.txt"))) {
+      const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+      const ctx: Tool.Context = {
+        ...baseCtx,
+        ask: async (req) => {
+          requests.push(req)
+        },
+      }
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await assertExternalDirectory(ctx, item.path)
+        },
+      })
+
+      const req = requests.find((r) => r.permission === "external_directory")
+      expect(req).toBeDefined()
+      expect(req!.patterns).toEqual([Path.externalGlob(outer.path)])
+      expect(req!.always).toEqual([Path.externalGlob(outer.path)])
+    }
   })
 
   test("uses physical parent for missing file paths through symlink", async () => {

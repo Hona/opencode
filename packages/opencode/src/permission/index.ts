@@ -10,6 +10,11 @@ export namespace PermissionNext {
     return Path.expand(pattern)
   }
 
+  function normalize(permission: string, pattern: string) {
+    if (permission !== "external_directory") return pattern
+    return Path.canonical(pattern)
+  }
+
   export const Action = S.Action
   export type Action = S.Action
   export const Rule = S.Rule
@@ -39,7 +44,11 @@ export namespace PermissionNext {
         continue
       }
       ruleset.push(
-        ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
+        ...Object.entries(value).map(([pattern, action]) => ({
+          permission: key,
+          pattern: normalize(key, expand(pattern)),
+          action,
+        })),
       )
     }
     return ruleset

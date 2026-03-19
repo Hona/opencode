@@ -54,6 +54,16 @@ function raw(input: string, platform: NodeJS.Platform) {
     .replace(/^\/mnt\/([a-zA-Z])(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:\\`)
 }
 
+function winabs(input: string) {
+  return (
+    input.startsWith("file://") ||
+    /^[a-zA-Z]:/.test(input) ||
+    /^\/([a-zA-Z]:|[a-zA-Z])(?:[\\/]|$)/.test(input) ||
+    /^\/cygdrive\/[a-zA-Z](?:[\\/]|$)/.test(input) ||
+    /^\/mnt\/[a-zA-Z](?:[\\/]|$)/.test(input)
+  )
+}
+
 function base(input: string, platform: NodeJS.Platform) {
   const mod = lib(platform)
   const text = raw(input, platform)
@@ -178,6 +188,13 @@ export namespace Path {
 
   export function posix(input: string, opts: Opts = {}) {
     return PosixPath.make(pretty(input, opts).replaceAll("\\", "/"))
+  }
+
+  export function canonical(input: string, opts: Opts = {}) {
+    const platform = pf(opts)
+    if (platform !== "win32") return input
+    if (!winabs(input)) return input
+    return posix(input, opts)
   }
 
   export function expand(input: string, opts: HomeOpts = {}) {
