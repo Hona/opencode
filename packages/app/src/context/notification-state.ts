@@ -1,8 +1,8 @@
-import { pathKey } from "@opencode-ai/util/path"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
+import { type WorkspacePath, workspacePathKey } from "@/context/file/path"
 
 type NotificationBase = {
-  directory?: string
+  directory?: WorkspacePath
   session?: string
   metadata?: unknown
   time: number
@@ -52,7 +52,7 @@ function createNotificationIndex(): NotificationIndex {
   }
 }
 
-export const projectKey = (directory: string) => pathKey(directory) || directory
+export const projectKey = (directory: WorkspacePath) => workspacePathKey(directory)
 
 export function normalizeNotification(notification: Notification): Notification {
   if (!notification.directory) return notification

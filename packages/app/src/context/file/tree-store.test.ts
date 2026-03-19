@@ -3,9 +3,11 @@ import { createFileTreeStore } from "./tree-store"
 
 describe("file tree store path handling", () => {
   test("normalizes node and directory keys across slash variants", async () => {
+    const normalize = (input: string) => input.replace(/\\/g, "/").replace(/[\\/]+$/, "")
     const tree = createFileTreeStore({
       scope: () => "/repo",
-      normalizeDir: (input) => input.replace(/\/+$/, ""),
+      normalize,
+      normalizeDir: normalize,
       list: async (input) => {
         if (!input) {
           return [

@@ -2,13 +2,13 @@ import { createEffect, createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { createScopedCache } from "@/utils/scoped-cache"
-import { createPathHelpers, filePathKey } from "./path"
+import { createPathHelpers, filePathKey, type FilePath, type FilePathKey, type WorkspacePath } from "./path"
 import type { FileViewState, SelectedLineRange } from "./types"
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
-const fileKey = (path: string) => filePathKey(path) || path
+const fileKey = (path: FilePath) => (filePathKey(path) || path) as FilePathKey
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -57,13 +57,13 @@ function merge(prev: FileViewState, next: FileViewState) {
   }
 }
 
-export function migrateFileViewState(dir: string, value: unknown) {
+export function migrateFileViewState(dir: WorkspacePath, value: unknown) {
   if (!record(value)) return value
   if (!record(value.file)) return value
 
   const path = createPathHelpers(() => dir)
   let changed = false
-  const file: Record<string, FileViewState> = {}
+  const file: Record<FilePathKey, FileViewState> = {}
 
   for (const [name, item] of Object.entries(value.file)) {
     const next = state(item)
@@ -90,14 +90,14 @@ export function migrateFileViewState(dir: string, value: unknown) {
   }
 }
 
-function createViewSession(dir: string, id: string | undefined) {
+function createViewSession(dir: WorkspacePath, id: string | undefined) {
   const [view, setView, _, ready] = persisted(
     {
       ...Persist.scoped(dir, id, "file-view", Persist.legacyScoped(dir, id, "file", "v1")),
       migrate: (value) => migrateFileViewState(dir, value),
     },
     createStore<{
-      file: Record<string, FileViewState>
+      file: Record<FilePathKey, FileViewState>
     }>({
       file: {},
     }),
@@ -105,7 +105,7 @@ function createViewSession(dir: string, id: string | undefined) {
 
   const meta = { pruned: false }
 
-  const pruneView = (keep?: string) => {
+  const pruneView = (keep?: FilePathKey) => {
     const keys = Object.keys(view.file)
     if (keys.length <= MAX_VIEW_FILES) return
 
@@ -114,7 +114,7 @@ function createViewSession(dir: string, id: string | undefined) {
 
     setView(
       produce((draft) => {
-        for (const key of drop) {
+        for (const key of drop as FilePathKey[]) {
           delete draft.file[key]
         }
       }),
@@ -128,11 +128,11 @@ function createViewSession(dir: string, id: string | undefined) {
     pruneView()
   })
 
-  const scrollTop = (path: string) => view.file[fileKey(path)]?.scrollTop
-  const scrollLeft = (path: string) => view.file[fileKey(path)]?.scrollLeft
-  const selectedLines = (path: string) => view.file[fileKey(path)]?.selectedLines
+  const scrollTop = (path: FilePath) => view.file[fileKey(path)]?.scrollTop
+  const scrollLeft = (path: FilePath) => view.file[fileKey(path)]?.scrollLeft
+  const selectedLines = (path: FilePath) => view.file[fileKey(path)]?.selectedLines
 
-  const setScrollTop = (path: string, top: number) => {
+  const setScrollTop = (path: FilePath, top: number) => {
     const key = fileKey(path)
     setView(
       produce((draft) => {
@@ -144,7 +144,7 @@ function createViewSession(dir: string, id: string | undefined) {
     pruneView(key)
   }
 
-  const setScrollLeft = (path: string, left: number) => {
+  const setScrollLeft = (path: FilePath, left: number) => {
     const key = fileKey(path)
     setView(
       produce((draft) => {
@@ -156,7 +156,7 @@ function createViewSession(dir: string, id: string | undefined) {
     pruneView(key)
   }
 
-  const setSelectedLines = (path: string, range: SelectedLineRange | null) => {
+  const setSelectedLines = (path: FilePath, range: SelectedLineRange | null) => {
     const key = fileKey(path)
     const next = range ? normalizeSelectedLines(range) : null
     setView(
@@ -198,7 +198,7 @@ export function createFileViewCache() {
   )
 
   return {
-    load: (dir: string, id: string | undefined) => {
+    load: (dir: WorkspacePath, id: string | undefined) => {
       const key = `${dir}\n${id ?? WORKSPACE_KEY}`
       return cache.get(key).value
     },

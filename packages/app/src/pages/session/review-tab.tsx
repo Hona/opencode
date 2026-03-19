@@ -7,6 +7,7 @@ import type {
   SessionReviewCommentUpdate,
 } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
+import type { FilePath, ReviewPath } from "@/context/file/path"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
 import type { LineComment } from "@/context/comments"
@@ -20,15 +21,15 @@ export interface SessionReviewTabProps {
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
-  onViewFile?: (file: string) => void
-  onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  onViewFile?: (file: FilePath) => void
+  onLineComment?: (comment: { file: ReviewPath; selection: SelectedLineRange; comment: string; preview?: string }) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
   comments?: LineComment[]
-  focusedComment?: { file: string; id: string } | null
-  onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
-  focusedFile?: string
+  focusedComment?: { file: FilePath; id: string } | null
+  onFocusedCommentChange?: (focus: { file: FilePath; id: string } | null) => void
+  focusedFile?: ReviewPath
   onScrollRef?: (el: HTMLDivElement) => void
   classes?: {
     root?: string
@@ -46,7 +47,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   const sdk = useSDK()
   const layout = useLayout()
 
-  const readFile = async (path: string) => {
+  const readFile = async (path: FilePath) => {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)

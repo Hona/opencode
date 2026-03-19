@@ -19,6 +19,7 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
+import type { WorkspacePath } from "@/context/file/path"
 
 export type ProjectMeta = {
   name?: string
@@ -116,9 +117,9 @@ export type DisposeCheck = {
 }
 
 export type RootLoadArgs = {
-  directory: string
+  directory: WorkspacePath
   limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
+  list: (query: { directory: WorkspacePath; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
 }
 
 export type RootLoadResult = {

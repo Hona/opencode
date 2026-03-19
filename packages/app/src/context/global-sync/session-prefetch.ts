@@ -1,8 +1,8 @@
-import { pathKey } from "@opencode-ai/util/path"
+import { workspacePathKey, type WorkspaceKey, type WorkspacePath } from "@/context/file/path"
 
-const dir = (directory: string) => pathKey(directory) || directory
+const dir = (directory: WorkspacePath | WorkspaceKey) => workspacePathKey(directory as WorkspacePath)
 
-const key = (directory: string, sessionID: string) => `${dir(directory)}\n${sessionID}`
+const key = (directory: WorkspacePath | WorkspaceKey, sessionID: string) => `${dir(directory)}\n${sessionID}`
 
 export const SESSION_PREFETCH_TTL = 15_000
 
@@ -31,11 +31,11 @@ const rev = new Map<string, number>()
 
 const version = (id: string) => rev.get(id) ?? 0
 
-export function getSessionPrefetch(directory: string, sessionID: string) {
+export function getSessionPrefetch(directory: WorkspacePath, sessionID: string) {
   return cache.get(key(directory, sessionID))
 }
 
-export function getSessionPrefetchPromise(directory: string, sessionID: string) {
+export function getSessionPrefetchPromise(directory: WorkspacePath, sessionID: string) {
   return inflight.get(key(directory, sessionID))
 }
 
@@ -43,12 +43,12 @@ export function clearSessionPrefetchInflight() {
   inflight.clear()
 }
 
-export function isSessionPrefetchCurrent(directory: string, sessionID: string, value: number) {
+export function isSessionPrefetchCurrent(directory: WorkspacePath, sessionID: string, value: number) {
   return version(key(directory, sessionID)) === value
 }
 
 export function runSessionPrefetch(input: {
-  directory: string
+  directory: WorkspacePath
   sessionID: string
   task: (value: number) => Promise<Meta | undefined>
 }) {
@@ -67,7 +67,7 @@ export function runSessionPrefetch(input: {
 }
 
 export function setSessionPrefetch(input: {
-  directory: string
+  directory: WorkspacePath
   sessionID: string
   limit: number
   cursor?: string
@@ -82,7 +82,7 @@ export function setSessionPrefetch(input: {
   })
 }
 
-export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<string>) {
+export function clearSessionPrefetch(directory: WorkspacePath, sessionIDs: Iterable<string>) {
   for (const sessionID of sessionIDs) {
     if (!sessionID) continue
     const id = key(directory, sessionID)
@@ -92,7 +92,7 @@ export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<str
   }
 }
 
-export function clearSessionPrefetchDirectory(directory: string) {
+export function clearSessionPrefetchDirectory(directory: WorkspacePath) {
   const prefix = `${dir(directory)}\n`
   const keys = new Set([...cache.keys(), ...inflight.keys()])
   for (const id of keys) {

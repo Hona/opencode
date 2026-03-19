@@ -1,7 +1,9 @@
+import type { WorkspacePath } from "@/context/file/path"
+
 type QueueInput = {
   paused: () => boolean
   bootstrap: () => Promise<void>
-  bootstrapInstance: (directory: string) => Promise<void> | void
+  bootstrapInstance: (directory: WorkspacePath) => Promise<void> | void
 }
 
 export function createRefreshQueue(input: QueueInput) {

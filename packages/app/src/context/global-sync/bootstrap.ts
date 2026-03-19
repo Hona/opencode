@@ -17,6 +17,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
+import type { WorkspacePath } from "@/context/file/path"
 
 type GlobalStore = {
   ready: boolean
@@ -112,12 +113,12 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 }
 
 export async function bootstrapDirectory(input: {
-  directory: string
+  directory: WorkspacePath
   sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
-  loadSessions: (directory: string) => Promise<void> | void
+  loadSessions: (directory: WorkspacePath) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
   if (input.store.status !== "complete") input.setStore("status", "loading")

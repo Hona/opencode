@@ -9,7 +9,7 @@ import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { sessionKey } from "@/utils/session-key"
-import { createPathHelpers } from "./file/path"
+import { createPathHelpers, filePathKey, workspacePathKey, type FilePath, type FilePathKey } from "./file/path"
 import {
   approxBytes,
   evictContentLru,
@@ -63,16 +63,19 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => sessionKey(params.dir ?? "", params.id))
+    const fileKey = (file: FilePath) => (filePathKey(file) || file) as FilePathKey
+    const loadKey = (directory: string, file: FilePath) => `${workspacePathKey(directory)}\n${fileKey(file)}`
 
     const inflight = new Map<string, Promise<void>>()
     const [store, setStore] = createStore<{
-      file: Record<string, FileState>
+      file: Record<FilePathKey, FileState>
     }>({
       file: {},
     })
 
     const tree = createFileTreeStore({
       scope,
+      normalize: path.normalize,
       normalizeDir: path.normalizeDir,
       list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
       onError: (message) => {
@@ -86,10 +89,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const evictContent = (keep?: Set<string>) => {
       evictContentLru(keep, (target) => {
-        if (!store.file[target]) return
+        const key = fileKey(target as FilePath)
+        if (!store.file[key]) return
         setStore(
           "file",
-          target,
+          key,
           produce((draft) => {
             draft.content = undefined
             draft.loaded = false
@@ -111,16 +115,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const viewCache = createFileViewCache()
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
-    const ensure = (file: string) => {
+    const ensure = (file: FilePath) => {
       if (!file) return
-      if (store.file[file]) return
-      setStore("file", file, { path: file, name: getFilename(file) })
+      const key = fileKey(file)
+      if (store.file[key]) return
+      setStore("file", key, { path: file, name: getFilename(file) })
     }
 
-    const setLoading = (file: string) => {
+    const setLoading = (file: FilePath) => {
+      const key = fileKey(file)
       setStore(
         "file",
-        file,
+        key,
         produce((draft) => {
           draft.loading = true
           draft.error = undefined
@@ -128,10 +134,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    const setLoaded = (file: string, content: FileState["content"]) => {
+    const setLoaded = (file: FilePath, content: FileState["content"]) => {
+      const key = fileKey(file)
       setStore(
         "file",
-        file,
+        key,
         produce((draft) => {
           draft.loaded = true
           draft.loading = false
@@ -140,10 +147,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    const setLoadError = (file: string, message: string) => {
+    const setLoadError = (file: FilePath, message: string) => {
+      const key = fileKey(file)
       setStore(
         "file",
-        file,
+        key,
         produce((draft) => {
           draft.loading = false
           draft.error = message
@@ -161,10 +169,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (!file) return Promise.resolve()
 
       const directory = scope()
-      const key = `${directory}\n${file}`
+      const key = loadKey(directory, file)
       ensure(file)
 
-      const current = store.file[file]
+      const current = store.file[fileKey(file)]
       if (!options?.force && current?.loaded) return Promise.resolve()
 
       const pending = inflight.get(key)
@@ -202,12 +210,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
 
     const stop = sdk.event.listen((e) => {
-      invalidateFromWatcher(e.details, {
-        normalize: path.normalize,
-        hasFile: (file) => Boolean(store.file[file]),
-        isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
-        loadFile: (file) => {
-          void load(file, { force: true })
+        invalidateFromWatcher(e.details, {
+          normalize: path.normalize,
+          hasFile: (file) => Boolean(store.file[fileKey(file)]),
+          isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
+          loadFile: (file) => {
+            void load(file, { force: true })
         },
         node: tree.node,
         isDirLoaded: tree.isLoaded,
@@ -219,7 +227,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const get = (input: string) => {
       const file = path.normalize(input)
-      const state = store.file[file]
+      const state = store.file[fileKey(file)]
       const content = state?.content
       if (!content) return state
       if (hasFileContent(file)) {
@@ -230,7 +238,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return state
     }
 
-    function withPath(input: string, action: (file: string) => unknown) {
+    function withPath(input: string, action: (file: FilePath) => unknown) {
       return action(path.normalize(input))
     }
     const scrollTop = (input: string) => withPath(input, (file) => view().scrollTop(file))

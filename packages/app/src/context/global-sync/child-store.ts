@@ -1,8 +1,8 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
-import { pathKey } from "@opencode-ai/util/path"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
+import { workspacePathKey, type WorkspacePath } from "@/context/file/path"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -32,23 +32,23 @@ export function createChildStoreManager(input: {
   const pins = new Map<string, number>()
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
-  const dir = (directory: string) => pathKey(directory) || directory
+  const dir = (directory: WorkspacePath | string) => workspacePathKey(directory as WorkspacePath)
 
-  const mark = (directory: string) => {
+  const mark = (directory: WorkspacePath | string) => {
     directory = dir(directory)
     if (!directory) return
     lifecycle.set(directory, { lastAccessAt: Date.now() })
     runEviction(directory)
   }
 
-  const pin = (directory: string) => {
+  const pin = (directory: WorkspacePath | string) => {
     directory = dir(directory)
     if (!directory) return
     pins.set(directory, (pins.get(directory) ?? 0) + 1)
     mark(directory)
   }
 
-  const unpin = (directory: string) => {
+  const unpin = (directory: WorkspacePath | string) => {
     directory = dir(directory)
     if (!directory) return
     const next = (pins.get(directory) ?? 0) - 1
@@ -60,9 +60,9 @@ export function createChildStoreManager(input: {
     runEviction()
   }
 
-  const pinned = (directory: string) => (pins.get(dir(directory)) ?? 0) > 0
+  const pinned = (directory: WorkspacePath | string) => (pins.get(dir(directory)) ?? 0) > 0
 
-  const pinForOwner = (directory: string) => {
+  const pinForOwner = (directory: WorkspacePath | string) => {
     directory = dir(directory)
     const current = getOwner()
     if (!current) return
@@ -83,7 +83,7 @@ export function createChildStoreManager(input: {
     })
   }
 
-  function disposeDirectory(directory: string) {
+  function disposeDirectory(directory: WorkspacePath | string) {
     directory = dir(directory)
     if (
       !canDisposeDirectory({
@@ -128,7 +128,7 @@ export function createChildStoreManager(input: {
     }
   }
 
-  function ensureChild(directory: string) {
+  function ensureChild(directory: WorkspacePath | string) {
     directory = dir(directory)
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
@@ -231,7 +231,7 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function child(directory: string, options: ChildOptions = {}) {
+  function child(directory: WorkspacePath | string, options: ChildOptions = {}) {
     directory = dir(directory)
     const childStore = ensureChild(directory)
     pinForOwner(directory)
@@ -242,7 +242,7 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function projectMeta(directory: string, patch: ProjectMeta) {
+  function projectMeta(directory: WorkspacePath | string, patch: ProjectMeta) {
     directory = dir(directory)
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
@@ -260,7 +260,7 @@ export function createChildStoreManager(input: {
     setStore("projectMeta", next)
   }
 
-  function projectIcon(directory: string, value: string | undefined) {
+  function projectIcon(directory: WorkspacePath | string, value: string | undefined) {
     directory = dir(directory)
     const [store, setStore] = ensureChild(directory)
     const cached = iconCache.get(directory)

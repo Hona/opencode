@@ -4,7 +4,7 @@ import { useParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
-import { filePathEqual, filePathKey } from "@/context/file/path"
+import { filePathEqual, filePathKey, type FilePath } from "@/context/file/path"
 import { Persist, persisted } from "@/utils/persist"
 
 interface PartBase {
@@ -19,7 +19,7 @@ export interface TextPart extends PartBase {
 
 export interface FileAttachmentPart extends PartBase {
   type: "file"
-  path: string
+  path: FilePath
   selection?: FileSelection
 }
 
@@ -41,7 +41,7 @@ export type Prompt = ContentPart[]
 
 export type FileContextItem = {
   type: "file"
-  path: string
+  path: FilePath
   selection?: FileSelection
   comment?: string
   commentID?: string
@@ -181,12 +181,12 @@ function createPromptSessionState(store: Store<PromptStore>, setStore: SetStoreF
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
-      removeComment(path: string, commentID: string) {
+      removeComment(path: FilePath, commentID: string) {
         setStore("context", "items", (items) =>
           items.filter((item) => !(item.type === "file" && filePathEqual(item.path, path) && item.commentID === commentID)),
         )
       },
-      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+      updateComment(path: FilePath, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
         setStore("context", "items", (items) =>
           items.map((item) => {
             if (item.type !== "file" || !filePathEqual(item.path, path) || item.commentID !== commentID) return item
@@ -311,8 +311,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
-        removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
-        updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
+        removeComment: (path: FilePath, commentID: string) => session().context.removeComment(path, commentID),
+        updateComment: (path: FilePath, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },

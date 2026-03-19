@@ -14,6 +14,7 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSound, soundSrc } from "@/utils/sound"
+import { type WorkspacePath } from "@/context/file/path"
 import {
   buildNotificationIndex,
   migrateNotifications,
@@ -139,7 +140,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
-    const lookup = async (directory: string, sessionID?: string) => {
+    const lookup = async (directory: WorkspacePath, sessionID?: string) => {
       if (!sessionID) return undefined
       const [syncStore] = globalSync.child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
@@ -150,7 +151,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         .catch(() => undefined)
     }
 
-    const viewedInCurrentSession = (directory: string, sessionID?: string) => {
+    const viewedInCurrentSession = (directory: WorkspacePath, sessionID?: string) => {
       const activeDirectory = currentDirectory()
       const activeSession = currentSession()
       if (!activeDirectory) return false
@@ -160,7 +161,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       return sessionID === activeSession
     }
 
-    const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
+    const handleSessionIdle = (directory: WorkspacePath, event: { properties: { sessionID?: string } }, time: number) => {
       const sessionID = event.properties.sessionID
       void lookup(directory, sessionID).then((session) => {
         if (meta.disposed) return
@@ -187,7 +188,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     }
 
     const handleSessionError = (
-      directory: string,
+      directory: WorkspacePath,
       event: { properties: { sessionID?: string; error?: EventSessionError["properties"]["error"] } },
       time: number,
     ) => {
@@ -272,19 +273,19 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         },
       },
       project: {
-        all(directory: string) {
+        all(directory: WorkspacePath) {
           return index.project.all[projectKey(directory)] ?? empty
         },
-        unseen(directory: string) {
+        unseen(directory: WorkspacePath) {
           return index.project.unseen[projectKey(directory)] ?? empty
         },
-        unseenCount(directory: string) {
+        unseenCount(directory: WorkspacePath) {
           return index.project.unseenCount[projectKey(directory)] ?? 0
         },
-        unseenHasError(directory: string) {
+        unseenHasError(directory: WorkspacePath) {
           return index.project.unseenHasError[projectKey(directory)] ?? false
         },
-        markViewed(directory: string) {
+        markViewed(directory: WorkspacePath) {
           const key = projectKey(directory)
           const unseen = index.project.unseen[key] ?? empty
           if (!unseen.length) return

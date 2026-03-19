@@ -17,7 +17,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
-import { filePathKey } from "@/context/file/path"
+import { filePathKey, type FilePath, type FilePathKey, type ReviewPath } from "@/context/file/path"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
@@ -29,8 +29,8 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
-  activeDiff?: string
-  focusReviewDiff: (path: string) => void
+  activeDiff?: ReviewPath
+  focusReviewDiff: (path: ReviewPath) => void
   reviewSnap: boolean
   size: Sizing
 }) {
@@ -80,7 +80,7 @@ export function SessionSidePanel(props: {
       return "mix" as const
     }
 
-    const out = new Map<string, "add" | "del" | "mix">()
+    const out = new Map<FilePathKey, "add" | "del" | "mix">()
     for (const diff of diffs()) {
       const file = filePathKey(diff.file)
       const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
@@ -91,7 +91,8 @@ export function SessionSidePanel(props: {
       for (const [idx] of parts.slice(0, -1).entries()) {
         const dir = parts.slice(0, idx + 1).join("/")
         if (!dir) continue
-        out.set(dir, merge(out.get(dir), kind))
+        const key = filePathKey(dir)
+        out.set(key, merge(out.get(key), kind))
       }
     }
     return out
@@ -179,7 +180,7 @@ export function SessionSidePanel(props: {
     setSessionHandoff(sessionKey(), {
       files: tabs()
         .all()
-        .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
+        .reduce<Record<FilePath, SelectedLineRange | null>>((acc, tab) => {
           const path = file.pathFromTab(tab)
           if (!path) return acc
 

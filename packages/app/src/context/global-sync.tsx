@@ -8,7 +8,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename, pathKey } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import {
   createContext,
   getOwner,
@@ -36,6 +36,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
+import { workspacePathKey, type WorkspacePath } from "@/context/file/path"
 
 type GlobalStore = {
   ready: boolean
@@ -87,7 +88,7 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
-  const dir = (directory: string) => pathKey(directory) || directory
+  const dir = (directory: WorkspacePath | string) => workspacePathKey(directory as WorkspacePath)
 
   onCleanup(() => {
     active = false
@@ -175,7 +176,7 @@ function createGlobalSync() {
     translate: language.t,
   })
 
-  const sdkFor = (directory: string) => {
+  const sdkFor = (directory: WorkspacePath | string) => {
     directory = dir(directory)
     const cached = sdkCache.get(directory)
     if (cached) return cached
@@ -187,7 +188,7 @@ function createGlobalSync() {
     return sdk
   }
 
-  async function loadSessions(directory: string) {
+  async function loadSessions(directory: WorkspacePath | string) {
     directory = dir(directory)
     const pending = sessionLoads.get(directory)
     if (pending) return pending
@@ -255,7 +256,7 @@ function createGlobalSync() {
     return promise
   }
 
-  async function bootstrapInstance(directory: string) {
+  async function bootstrapInstance(directory: WorkspacePath | string) {
     directory = dir(directory)
     if (!directory) return
     const pending = booting.get(directory)
@@ -353,14 +354,14 @@ function createGlobalSync() {
     void bootstrap()
   })
 
-  const projectApi = {
-    loadSessions,
-    meta(directory: string, patch: ProjectMeta) {
-      children.projectMeta(directory, patch)
-    },
-    icon(directory: string, value: string | undefined) {
-      children.projectIcon(directory, value)
-    },
+    const projectApi = {
+      loadSessions,
+      meta(directory: WorkspacePath, patch: ProjectMeta) {
+        children.projectMeta(directory, patch)
+      },
+      icon(directory: WorkspacePath, value: string | undefined) {
+        children.projectIcon(directory, value)
+      },
   }
 
   const updateConfig = async (config: Config) => {

@@ -14,7 +14,7 @@ import type {
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
-import { filePathKey } from "@/context/file/path"
+import { filePathKey, type WorkspacePath } from "@/context/file/path"
 
 export function normalizeSessionDiffs(diffs: FileDiff[]) {
   const order: string[] = []
@@ -102,7 +102,7 @@ export function applyDirectoryEvent(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   push: (directory: string) => void
-  directory: string
+  directory: WorkspacePath
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void

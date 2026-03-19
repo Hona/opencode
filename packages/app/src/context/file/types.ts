@@ -1,4 +1,5 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { FilePath } from "./path"
 
 export type FileSelection = {
   startLine: number
@@ -21,7 +22,7 @@ export type FileViewState = {
 }
 
 export type FileState = {
-  path: string
+  path: FilePath
   name: string
   loaded?: boolean
   loading?: boolean

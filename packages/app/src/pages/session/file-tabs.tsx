@@ -12,7 +12,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
-import { filePathEqual } from "@/context/file/path"
+import { filePathEqual, type FilePath, type FileTabId } from "@/context/file/path"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
@@ -53,7 +53,7 @@ function FileCommentMenu(props: {
   )
 }
 
-export function FileTabContent(props: { tab: string }) {
+export function FileTabContent(props: { tab: FileTabId }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
@@ -107,7 +107,7 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   const addCommentToContext = (input: {
-    file: string
+    file: FilePath
     selection: SelectedLineRange
     comment: string
     preview?: string
@@ -141,7 +141,7 @@ export function FileTabContent(props: { tab: string }) {
 
   const updateCommentInContext = (input: {
     id: string
-    file: string
+    file: FilePath
     selection: SelectedLineRange
     comment: string
   }) => {
@@ -154,7 +154,7 @@ export function FileTabContent(props: { tab: string }) {
     })
   }
 
-  const removeCommentFromContext = (input: { id: string; file: string }) => {
+  const removeCommentFromContext = (input: { id: string; file: FilePath }) => {
     comments.remove(input.file, input.id)
     prompt.context.removeComment(input.file, input.id)
   }

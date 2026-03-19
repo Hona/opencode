@@ -15,12 +15,14 @@ export type PrettyPath = string
 export type WorkspacePath = PrettyPath
 export type ReviewPath = PrettyPath
 export type FilePath = PrettyPath
+export type FileUri = `file://${string}`
 
 export type WorkspaceKey = string & { _brand: "WorkspaceKey" }
 export type FilePathKey = string & { _brand: "FilePathKey" }
-type LegacyFileTabId = `file://${string}`
+type LegacyFileTabId = FileUri
 export const FILE_TAB_PREFIX = "tab:file:" as const
 export type FileTabId = `${typeof FILE_TAB_PREFIX}${string}`
+export type SessionTabId = "context" | "review" | FileTabId | FileUri
 
 export const workspacePathKey = (input: WorkspacePath) => (pathKey(input) || input) as WorkspaceKey
 
