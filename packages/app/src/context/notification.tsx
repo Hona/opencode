@@ -46,10 +46,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const empty: Notification[] = []
 
-    const currentDirectory = createMemo(() => {
-      const value = decode64(params.dir)
-      return value ? projectKey(value) : value
-    })
+    const currentDirectory = createMemo(() => decode64(params.dir))
 
     const currentSession = createMemo(() => params.id)
 

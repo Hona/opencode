@@ -19,11 +19,12 @@ describe("notification directory normalization", () => {
 
     expect(index.project.unseenCount["c:/repo"]).toBe(2)
     expect(index.project.unseenHasError["c:/repo"]).toBe(true)
+    expect(index.project.all["c:/repo"].map((item) => item.directory)).toEqual(["C:/Repo", "c:\\repo\\"])
   })
 
-  test("migrates persisted notifications onto normalized directory keys", () => {
+  test("preserves stored notification directory values during migration", () => {
     expect(migrateNotifications({ list: [{ type: "turn-complete", directory: "C:\\Repo\\", time: 1, viewed: true }] })).toEqual({
-      list: [{ type: "turn-complete", directory: "c:/repo", time: 1, viewed: true }],
+      list: [{ type: "turn-complete", directory: "C:\\Repo\\", time: 1, viewed: true }],
     })
   })
 })

@@ -292,7 +292,7 @@ export const SortableProject = (props: {
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
   const active = createMemo(
-    () => state.menu || (preview() ? state.open : overlay() && props.ctx.hoverProject() === props.project.worktree),
+    () => state.menu || (preview() ? state.open : overlay() && workspaceEqual(props.ctx.hoverProject(), props.project.worktree)),
   )
 
   createEffect(() => {
@@ -310,7 +310,9 @@ export const SortableProject = (props: {
   const label = (directory: WorkspacePath) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     const kind =
-      directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
+      workspaceEqual(directory, props.project.worktree)
+        ? language.t("workspace.type.local")
+        : language.t("workspace.type.sandbox")
     const name = props.ctx.workspaceLabel(directory, data.vcs?.branch, props.project.id)
     return `${kind} : ${name}`
   }

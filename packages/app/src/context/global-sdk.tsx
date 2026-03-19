@@ -44,7 +44,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       [key: string]: Event
     }>()
 
-    type Queued = { directory: string; payload: Event }
+    type Queued = { directory: string; id: string; payload: Event }
     const FLUSH_FRAME_MS = 16
     const STREAM_YIELD_MS = 8
     const RECONNECT_DELAY_MS = 250
@@ -56,7 +56,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
 
-    const dir = (directory: string) => (directory === "global" ? directory : workspacePathKey(directory))
+    const keyDir = (directory: string) => (directory === "global" ? directory : workspacePathKey(directory))
 
     const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
@@ -88,7 +88,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         for (const event of events) {
           if (skip && event.payload.type === "message.part.delta") {
             const props = event.payload.properties
-            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
+            if (skip.has(deltaKey(event.id, props.messageID, props.partID))) continue
           }
           emitter.emit(event.directory, event.payload)
         }
@@ -151,22 +151,23 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           for await (const event of events.stream) {
             resetHeartbeat()
             streamErrorLogged = false
-            const directory = dir(event.directory ?? "global")
+            const directory = event.directory ?? "global"
+            const id = keyDir(directory)
             const payload = event.payload
-            const k = key(directory, payload)
+            const k = key(id, payload)
             if (k) {
               const i = coalesced.get(k)
               if (i !== undefined) {
-                queue[i] = { directory, payload }
+                queue[i] = { directory, id, payload }
                 if (payload.type === "message.part.updated") {
                   const part = payload.properties.part
-                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
+                  staleDeltas.add(deltaKey(id, part.messageID, part.id))
                 }
                 continue
               }
               coalesced.set(k, queue.length)
             }
-            queue.push({ directory, payload })
+            queue.push({ directory, id, payload })
             schedule()
 
             if (Date.now() - yielded < STREAM_YIELD_MS) continue

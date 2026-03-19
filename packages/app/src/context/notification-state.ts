@@ -55,10 +55,7 @@ function createNotificationIndex(): NotificationIndex {
 export const projectKey = (directory: WorkspacePath) => workspacePathKey(directory)
 
 export function normalizeNotification(notification: Notification): Notification {
-  if (!notification.directory) return notification
-  const directory = projectKey(notification.directory)
-  if (directory === notification.directory) return notification
-  return { ...notification, directory }
+  return notification
 }
 
 export function migrateNotifications(value: unknown) {

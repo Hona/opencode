@@ -461,7 +461,7 @@ export default function Layout(props: ParentProps) {
           e.details?.type === "permission.replied"
         ) {
           const props = e.details.properties as { sessionID: string }
-          const sessionKey = `${e.name}:${props.sessionID}`
+          const sessionKey = alertKey(e.name, props.sessionID)
           dismissSessionAlert(sessionKey)
           return
         }
@@ -478,7 +478,7 @@ export default function Layout(props: ParentProps) {
 
         const [store] = globalSync.child(directory, { bootstrap: false })
         const session = store.session.find((s) => s.id === props.sessionID)
-        const sessionKey = `${directory}:${props.sessionID}`
+        const sessionKey = alertKey(directory, props.sessionID)
 
         const sessionTitle = session?.title ?? language.t("command.session.new")
         const projectName = getFilename(directory)
@@ -537,12 +537,12 @@ export default function Layout(props: ParentProps) {
       createEffect(() => {
         const currentSession = params.id
         if (!currentDir() || !currentSession) return
-        const sessionKey = `${currentDir()}:${currentSession}`
+        const sessionKey = alertKey(currentDir(), currentSession)
         dismissSessionAlert(sessionKey)
         const [store] = globalSync.child(currentDir(), { bootstrap: false })
         const childSessions = store.session.filter((s) => s.parentID === currentSession)
         for (const child of childSessions) {
-          dismissSessionAlert(`${currentDir()}:${child.id}`)
+          dismissSessionAlert(alertKey(currentDir(), child.id))
         }
       })
     })
@@ -586,6 +586,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const keyOf = (directory: WorkspacePath) => workspacePathKey(directory)
+  const alertKey = (directory: WorkspacePath, sessionID: string) => `${keyOf(directory)}:${sessionID}`
   const routeFor = (root: WorkspacePath) => store.lastProjectSession[keyOf(root)]
   const orderFor = (root: WorkspacePath, dirs: WorkspacePath[]) =>
     effectiveWorkspaceOrder(root, dirs, store.workspaceOrder[keyOf(root)])
@@ -712,7 +713,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+      preserve: workspaceEqual(directory, currentDir()) && params.id ? [params.id] : undefined,
     })
   }
 
@@ -1736,7 +1737,7 @@ export default function Layout(props: ParentProps) {
           return
         }
 
-        if (root === activeRoute.sessionProject) return
+        if (workspaceEqual(root, activeRoute.sessionProject)) return
         activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
       },
     ),
@@ -1809,7 +1810,7 @@ export default function Layout(props: ParentProps) {
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const ordered = orderFor(local, dirs)
-    if (pending && extra) return [local, extra, ...ordered.filter((item) => item !== local)]
+    if (pending && extra) return [local, extra, ...ordered.filter((item) => !workspaceEqual(item, local))]
     if (!extra) return ordered
     if (pending) return ordered
     return [...ordered, extra]

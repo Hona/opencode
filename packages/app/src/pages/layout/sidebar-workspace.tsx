@@ -17,7 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
-import { childMapByParent, sortedRootSessions } from "./helpers"
+import { childMapByParent, sortedRootSessions, workspaceEqual } from "./helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -71,7 +71,7 @@ export const WorkspaceDragOverlay = (props: {
 
     const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
     const kind =
-      directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
+      workspaceEqual(directory, project.worktree) ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
     const name = props.workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
     return `${kind} : ${name}`
   })
@@ -322,8 +322,8 @@ export const SortableWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspaceStore.session))
-  const local = createMemo(() => props.directory === props.project.worktree)
-  const active = createMemo(() => props.ctx.currentDir() === props.directory)
+  const local = createMemo(() => workspaceEqual(props.directory, props.project.worktree))
+  const active = createMemo(() => workspaceEqual(props.ctx.currentDir(), props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)
