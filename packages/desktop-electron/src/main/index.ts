@@ -31,7 +31,6 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { migrate } from "./migrate"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
 
@@ -83,7 +82,6 @@ function setupApp() {
   })
 
   void app.whenReady().then(async () => {
-    migrate()
     app.setAsDefaultProtocolClient("opencode")
     setDockIcon()
     setupAutoUpdater()
