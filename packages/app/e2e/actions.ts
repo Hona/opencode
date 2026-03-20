@@ -197,9 +197,49 @@ export async function closeDialog(page: Page, dialog: Locator) {
 }
 
 export async function isSidebarClosed(page: Page) {
-  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
-  await expect(button).toBeVisible()
+  const button = await waitSidebarButton(page, "isSidebarClosed")
   return (await button.getAttribute("aria-expanded")) !== "true"
+}
+
+async function errorBoundaryText(page: Page) {
+  const title = page.getByRole("heading", { name: /something went wrong/i }).first()
+  if (!(await title.isVisible().catch(() => false))) return
+
+  const description = await page
+    .getByText(/an error occurred while loading the application\./i)
+    .first()
+    .textContent()
+    .catch(() => "")
+  const detail = await page
+    .getByRole("textbox", { name: /error details/i })
+    .first()
+    .inputValue()
+    .catch(async () =>
+      (
+        (await page
+          .getByRole("textbox", { name: /error details/i })
+          .first()
+          .textContent()
+          .catch(() => "")) ?? ""
+      ).trim(),
+    )
+
+  return [title ? "Error boundary" : "", description ?? "", detail ?? ""].filter(Boolean).join("\n")
+}
+
+async function throwIfErrorBoundary(page: Page, context: string) {
+  const text = await errorBoundaryText(page)
+  if (!text) return
+  console.log(`[e2e:error-boundary][${context}]\n${text}`)
+  throw new Error(`Error boundary during ${context}\n${text}`)
+}
+
+async function waitSidebarButton(page: Page, context: string) {
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const boundary = page.getByRole("heading", { name: /something went wrong/i }).first()
+  await button.or(boundary).first().waitFor({ state: "visible", timeout: 10_000 })
+  await throwIfErrorBoundary(page, context)
+  return button
 }
 
 export async function toggleSidebar(page: Page) {
@@ -210,7 +250,7 @@ export async function toggleSidebar(page: Page) {
 export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
 
-  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const button = await waitSidebarButton(page, "openSidebar")
   await button.click()
 
   const opened = await expect(button)
@@ -227,7 +267,7 @@ export async function openSidebar(page: Page) {
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
 
-  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const button = await waitSidebarButton(page, "closeSidebar")
   await button.click()
 
   const closed = await expect(button)

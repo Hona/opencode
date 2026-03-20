@@ -34,6 +34,21 @@ type WorkerFixtures = {
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  page: async ({ page }, use) => {
+    const consoleHandler = (msg: { text(): string }) => {
+      const text = msg.text()
+      if (!text.includes("[e2e:error-boundary]")) return
+      console.log(text)
+    }
+    const pageErrorHandler = (err: Error) => {
+      console.log(`[e2e:pageerror] ${err.stack || err.message}`)
+    }
+    page.on("console", consoleHandler)
+    page.on("pageerror", pageErrorHandler)
+    await use(page)
+    page.off("console", consoleHandler)
+    page.off("pageerror", pageErrorHandler)
+  },
   directory: [
     async ({}, use) => {
       const directory = await getWorktree()
