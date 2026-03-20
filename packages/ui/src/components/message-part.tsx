@@ -807,10 +807,10 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       </Collapsible.Trigger>
       <Collapsible.Content>
         <div data-component="context-tool-group-list">
-          <For each={props.parts}>
+          <Index each={props.parts}>
             {(part) => {
-              const trigger = createMemo(() => contextToolTrigger(part, i18n))
-              const running = createMemo(() => part.state.status === "pending" || part.state.status === "running")
+              const trigger = createMemo(() => contextToolTrigger(part(), i18n))
+              const running = createMemo(() => part().state.status === "pending" || part().state.status === "running")
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
@@ -837,7 +837,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                 </div>
               )
             }}
-          </For>
+          </Index>
         </div>
       </Collapsible.Content>
     </Collapsible>
