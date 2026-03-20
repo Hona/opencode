@@ -1,7 +1,14 @@
 import { test as base, expect, type Page } from "@playwright/test"
 import type { E2EWindow } from "../src/testing/terminal"
-import { cleanupSession, cleanupTestProject, createTestProject, seedProjects, sessionIDFromUrl } from "./actions"
-import { promptSelector } from "./selectors"
+import {
+  cleanupSession,
+  cleanupTestProject,
+  createTestProject,
+  seedProjects,
+  sessionIDFromUrl,
+  waitSlug,
+  waitSession,
+} from "./actions"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 export const settingsKey = "settings.v3"
@@ -48,21 +55,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
     const gotoSession = async (sessionID?: string) => {
       await page.goto(sessionPath(directory, sessionID))
-      await expect(page.locator(promptSelector)).toBeVisible()
+      await waitSession(page, { directory, sessionID })
     }
     await use(gotoSession)
   },
   withProject: async ({ page }, use) => {
     await use(async (callback, options) => {
       const root = await createTestProject()
-      const slug = dirSlug(root)
       const sessions = new Map<string, string>()
       const dirs = new Set<string>()
       await seedStorage(page, { directory: root, extra: options?.extra })
 
       const gotoSession = async (sessionID?: string) => {
         await page.goto(sessionPath(root, sessionID))
-        await expect(page.locator(promptSelector)).toBeVisible()
+        await waitSession(page, { directory: root, sessionID })
         const current = sessionIDFromUrl(page.url())
         if (current) trackSession(current)
       }
@@ -77,6 +83,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
       try {
         await gotoSession()
+        const slug = await waitSlug(page)
         return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory })
       } finally {
         await Promise.allSettled(

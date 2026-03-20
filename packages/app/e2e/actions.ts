@@ -9,6 +9,7 @@ import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
+  projectSwitchSelector,
   projectMenuTriggerSelector,
   projectCloseMenuSelector,
   projectWorkspacesToggleSelector,
@@ -339,6 +340,17 @@ export function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:[/?#]|$)/.exec(url)?.[1] ?? ""
 }
 
+async function probeSession(page: Page) {
+  return page
+    .evaluate(() => {
+      const win = window as E2EWindow
+      const current = win.__opencode_e2e?.model?.current
+      if (!current) return null
+      return { dir: current.dir, sessionID: current.sessionID }
+    })
+    .catch(() => null as { dir?: string; sessionID?: string } | null)
+}
+
 export async function waitSlug(page: Page, skip: string[] = []) {
   let prev = ""
   let next = ""
@@ -384,6 +396,68 @@ export async function waitDir(page: Page, directory: string) {
     )
     .toBe(target)
   return { directory: target, slug: base64Encode(target) }
+}
+
+export async function waitSession(page: Page, input: { directory: string; sessionID?: string }) {
+  const target = await resolveDirectory(input.directory)
+  await expect
+    .poll(
+      async () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return false
+        const resolved = await resolveSlug(slug).catch(() => undefined)
+        if (!resolved || resolved.directory !== target) return false
+        if (input.sessionID && sessionIDFromUrl(page.url()) !== input.sessionID) return false
+
+        const state = await probeSession(page)
+        if (state?.dir) {
+          const dir = await resolveDirectory(state.dir).catch(() => state.dir ?? "")
+          if (dir !== target) return false
+        }
+        if (input.sessionID && state?.sessionID && state.sessionID !== input.sessionID) return false
+
+        return page
+          .locator(promptSelector)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      },
+      { timeout: 45_000 },
+    )
+    .toBe(true)
+  return { directory: target, slug: base64Encode(target) }
+}
+
+export async function waitSessionSaved(directory: string, sessionID: string, timeout = 30_000) {
+  const sdk = createSdk(directory)
+  const target = await resolveDirectory(directory)
+
+  await expect
+    .poll(
+      async () => {
+        const data = await sdk.session
+          .get({ sessionID })
+          .then((x) => x.data)
+          .catch(() => undefined)
+        if (!data?.directory) return ""
+        return resolveDirectory(data.directory).catch(() => data.directory)
+      },
+      { timeout },
+    )
+    .toBe(target)
+
+  await expect
+    .poll(
+      async () => {
+        const items = await sdk.session
+          .messages({ sessionID, limit: 20 })
+          .then((x) => x.data ?? [])
+          .catch(() => [])
+        return items.some((item) => item.info.role === "user")
+      },
+      { timeout },
+    )
+    .toBe(true)
 }
 
 export function sessionIDFromUrl(url: string) {
@@ -797,8 +871,14 @@ export async function openStatusPopover(page: Page) {
 }
 
 export async function openProjectMenu(page: Page, projectSlug: string) {
+  await openSidebar(page)
+  const item = page.locator(projectSwitchSelector(projectSlug)).first()
+  await expect(item).toBeVisible()
+  await item.hover()
+
   const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
   await expect(trigger).toHaveCount(1)
+  await expect(trigger).toBeVisible()
 
   const menu = page
     .locator(dropdownMenuContentSelector)
@@ -807,7 +887,7 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
 
   const clicked = await trigger
-    .click({ timeout: 1500 })
+    .click({ force: true, timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
