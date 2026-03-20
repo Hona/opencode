@@ -545,20 +545,29 @@ export function AssistantParts(props: {
           if (value.type !== "part") return
           return part().get(value.ref.messageID)?.get(value.ref.partID)
         })
+        const ready = createMemo(() => {
+          if (kind() !== "part") return
+          const msg = message()
+          const value = item()
+          if (!msg || !value) return
+          return { msg, value }
+        })
 
         return (
           <>
             <Show when={kind() === "context" && parts().length > 0}>
               <ContextToolGroup parts={parts()} busy={busy()} />
             </Show>
-            <Show when={kind() === "part" && message() && item()}>
-              <Part
-                part={item()!}
-                message={message()!}
-                showAssistantCopyPartID={props.showAssistantCopyPartID}
-                turnDurationMs={props.turnDurationMs}
-                defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-              />
+            <Show when={ready()} keyed>
+              {(ready) => (
+                <Part
+                  part={ready.value}
+                  message={ready.msg}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  turnDurationMs={props.turnDurationMs}
+                  defaultOpen={partDefaultOpen(ready.value, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                />
+              )}
             </Show>
           </>
         )
@@ -732,14 +741,22 @@ export function AssistantMessageDisplay(props: {
           if (value.type !== "part") return
           return part().get(value.ref.partID)
         })
+        const ready = createMemo(() => {
+          if (kind() !== "part") return
+          const value = item()
+          if (!value) return
+          return value
+        })
 
         return (
           <>
             <Show when={kind() === "context" && parts().length > 0}>
               <ContextToolGroup parts={parts()} />
             </Show>
-            <Show when={kind() === "part" && item()}>
-              <Part part={item()!} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+            <Show when={ready()} keyed>
+              {(ready) => (
+                <Part part={ready} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+              )}
             </Show>
           </>
         )
