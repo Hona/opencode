@@ -12,7 +12,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
@@ -483,9 +483,10 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
 
 function bindMessage<T extends MessageType>(input: T) {
   const data = useData()
+  const base = structuredClone(unwrap(input)) as T
   return createMemo(() => {
-    const next = data.store.message?.[input.sessionID]?.find((item) => item.id === input.id)
-    return (next as T | undefined) ?? input
+    const next = data.store.message?.[base.sessionID]?.find((item) => item.id === base.id)
+    return (next as T | undefined) ?? base
   })
 }
 
