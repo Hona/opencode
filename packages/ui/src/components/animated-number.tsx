@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on } from "solid-js"
+import { For, Index, createEffect, createMemo, on } from "solid-js"
 import { createStore } from "solid-js/store"
 
 const TRACK = Array.from({ length: 30 }, (_, index) => index % 10)
@@ -102,7 +102,7 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
   return (
     <span data-component="animated-number" class={props.class} aria-label={label()}>
       <span data-slot="animated-number-value" style={{ "--animated-number-width": width() }}>
-        <For each={digits()}>{(digit) => <Digit value={digit} direction={direction()} />}</For>
+        <Index each={digits()}>{(digit) => <Digit value={digit()} direction={direction()} />}</Index>
       </span>
     </span>
   )
