@@ -136,7 +136,7 @@ export default function Layout(props: ParentProps) {
     if (!dir) return { slug, dir: "" }
     return {
       slug,
-      dir: globalSync.child(dir, { bootstrap: false })[0].path.directory || dir,
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))

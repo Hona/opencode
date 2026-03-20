@@ -412,11 +412,11 @@ export async function waitSession(page: Page, input: { directory: string; sessio
         if (input.sessionID && sessionIDFromUrl(page.url()) !== input.sessionID) return false
 
         const state = await probeSession(page)
+        if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
         if (state?.dir) {
           const dir = await resolveDirectory(state.dir).catch(() => state.dir ?? "")
           if (dir !== target) return false
         }
-        if (input.sessionID && state?.sessionID && state.sessionID !== input.sessionID) return false
 
         return page
           .locator(promptSelector)
