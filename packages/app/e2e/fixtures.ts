@@ -1,9 +1,11 @@
 import { test as base, expect, type Page } from "@playwright/test"
 import type { E2EWindow } from "../src/testing/terminal"
 import {
+  healthPhase,
   cleanupSession,
   cleanupTestProject,
   createTestProject,
+  setHealthPhase,
   seedProjects,
   sessionIDFromUrl,
   waitSlug,
@@ -36,9 +38,14 @@ type WorkerFixtures = {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   page: async ({ page }, use) => {
     let boundary: string | undefined
+    setHealthPhase(page, "test")
     const consoleHandler = (msg: { text(): string }) => {
       const text = msg.text()
       if (!text.includes("[e2e:error-boundary]")) return
+      if (healthPhase(page) === "cleanup") {
+        console.warn(`[e2e:error-boundary][cleanup-warning]\n${text}`)
+        return
+      }
       boundary ||= text
       console.log(text)
     }
@@ -104,11 +111,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         const slug = await waitSlug(page)
         return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory })
       } finally {
+        setHealthPhase(page, "cleanup")
         await Promise.allSettled(
           Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
         )
         await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
         await cleanupTestProject(root)
+        setHealthPhase(page, "test")
       }
     })
   },

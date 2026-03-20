@@ -24,6 +24,16 @@ import {
   workspaceMenuTriggerSelector,
 } from "./selectors"
 
+const phase = new WeakMap<Page, "test" | "cleanup">()
+
+export function setHealthPhase(page: Page, value: "test" | "cleanup") {
+  phase.set(page, value)
+}
+
+export function healthPhase(page: Page) {
+  return phase.get(page) ?? "test"
+}
+
 export async function defocus(page: Page) {
   await page
     .evaluate(() => {
@@ -227,7 +237,7 @@ async function errorBoundaryText(page: Page) {
   return [title ? "Error boundary" : "", description ?? "", detail ?? ""].filter(Boolean).join("\n")
 }
 
-async function throwIfErrorBoundary(page: Page, context: string) {
+export async function assertHealthy(page: Page, context: string) {
   const text = await errorBoundaryText(page)
   if (!text) return
   console.log(`[e2e:error-boundary][${context}]\n${text}`)
@@ -238,7 +248,7 @@ async function waitSidebarButton(page: Page, context: string) {
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
   const boundary = page.getByRole("heading", { name: /something went wrong/i }).first()
   await button.or(boundary).first().waitFor({ state: "visible", timeout: 10_000 })
-  await throwIfErrorBoundary(page, context)
+  await assertHealthy(page, context)
   return button
 }
 
@@ -282,6 +292,7 @@ export async function closeSidebar(page: Page) {
 }
 
 export async function openSettings(page: Page) {
+  await assertHealthy(page, "openSettings")
   await defocus(page)
 
   const dialog = page.getByRole("dialog")
@@ -293,6 +304,8 @@ export async function openSettings(page: Page) {
     .catch(() => false)
 
   if (opened) return dialog
+
+  await assertHealthy(page, "openSettings")
 
   await page.getByRole("button", { name: "Settings" }).first().click()
   await expect(dialog).toBeVisible()
@@ -398,7 +411,8 @@ export async function waitSlug(page: Page, skip: string[] = []) {
   let next = ""
   await expect
     .poll(
-      () => {
+      async () => {
+        await assertHealthy(page, "waitSlug")
         const slug = slugFromUrl(page.url())
         if (!slug) return ""
         if (skip.includes(slug)) return ""
@@ -428,6 +442,7 @@ export async function waitDir(page: Page, directory: string) {
   await expect
     .poll(
       async () => {
+        await assertHealthy(page, "waitDir")
         const slug = slugFromUrl(page.url())
         if (!slug) return ""
         return resolveSlug(slug)
@@ -445,6 +460,7 @@ export async function waitSession(page: Page, input: { directory: string; sessio
   await expect
     .poll(
       async () => {
+        await assertHealthy(page, "waitSession")
         const slug = slugFromUrl(page.url())
         if (!slug) return false
         const resolved = await resolveSlug(slug).catch(() => undefined)
