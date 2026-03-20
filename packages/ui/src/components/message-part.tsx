@@ -558,14 +558,14 @@ export function AssistantParts(props: {
             <Show when={kind() === "context" && parts().length > 0}>
               <ContextToolGroup parts={parts()} busy={busy()} />
             </Show>
-            <Show when={ready()} keyed>
+            <Show when={ready()}>
               {(ready) => (
                 <Part
-                  part={ready.value}
-                  message={ready.msg}
+                  part={ready().value}
+                  message={ready().msg}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                   turnDurationMs={props.turnDurationMs}
-                  defaultOpen={partDefaultOpen(ready.value, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  defaultOpen={partDefaultOpen(ready().value, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                 />
               )}
             </Show>
@@ -753,9 +753,9 @@ export function AssistantMessageDisplay(props: {
             <Show when={kind() === "context" && parts().length > 0}>
               <ContextToolGroup parts={parts()} />
             </Show>
-            <Show when={ready()} keyed>
+            <Show when={ready()}>
               {(ready) => (
-                <Part part={ready} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+                <Part part={ready()} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
               )}
             </Show>
           </>
