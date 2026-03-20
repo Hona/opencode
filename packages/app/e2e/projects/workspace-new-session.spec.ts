@@ -7,9 +7,11 @@ import {
   setWorkspacesEnabled,
   waitDir,
   waitSession,
+  waitSessionSaved,
   waitSlug,
 } from "../actions"
-import { workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { createSdk } from "../utils"
 
 function item(space: { slug: string; raw: string }) {
   return `${workspaceItemSelector(space.slug)}, ${workspaceItemSelector(space.raw)}`
@@ -47,10 +49,33 @@ async function openWorkspaceNewSession(page: Page, space: { slug: string; raw: s
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "").toBe("")
 }
 
+async function createSessionFromWorkspace(
+  page: Page,
+  space: { slug: string; raw: string; directory: string },
+  text: string,
+) {
+  await openWorkspaceNewSession(page, space)
+
+  const prompt = page.locator(promptSelector)
+  await expect(prompt).toBeVisible()
+  await prompt.fill(text)
+  await page.keyboard.press("Enter")
+
+  await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
+  const sessionID = sessionIDFromUrl(page.url())
+  if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+
+  await waitSessionSaved(space.directory, sessionID)
+  await createSdk(space.directory)
+    .session.abort({ sessionID })
+    .catch(() => undefined)
+  return sessionID
+}
+
 test("new sessions from sidebar workspace actions stay in selected workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  await withProject(async ({ slug: root, trackDirectory }) => {
+  await withProject(async ({ slug: root, trackDirectory, trackSession }) => {
     await openSidebar(page)
     await setWorkspacesEnabled(page, root, true)
 
@@ -62,8 +87,8 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
     trackDirectory(second.directory)
     await waitWorkspaceReady(page, second)
 
-    await openWorkspaceNewSession(page, first)
-    await openWorkspaceNewSession(page, second)
-    await openWorkspaceNewSession(page, first)
+    trackSession(await createSessionFromWorkspace(page, first, `workspace one ${Date.now()}`), first.directory)
+    trackSession(await createSessionFromWorkspace(page, second, `workspace two ${Date.now()}`), second.directory)
+    trackSession(await createSessionFromWorkspace(page, first, `workspace one again ${Date.now()}`), first.directory)
   })
 })
