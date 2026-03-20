@@ -50,7 +50,6 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
-    needs: unit
     strategy:
       fail-fast: false
       matrix:

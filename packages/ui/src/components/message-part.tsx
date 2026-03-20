@@ -481,6 +481,14 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
   return toolDefaultOpen(part.tool, shell, edit)
 }
 
+function bindMessage<T extends MessageType>(input: T) {
+  const data = useData()
+  return createMemo(() => {
+    const next = data.store.message?.[input.sessionID]?.find((item) => item.id === input.id)
+    return (next as T | undefined) ?? input
+  })
+}
+
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
@@ -865,6 +873,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
+  const message = bindMessage(props.message)
   const [state, setState] = createStore({
     copied: false,
     busy: undefined as "fork" | "revert" | undefined,
@@ -887,8 +896,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
   const model = createMemo(() => {
-    const providerID = props.message.model?.providerID
-    const modelID = props.message.model?.modelID
+    const providerID = message().model?.providerID
+    const modelID = message().model?.modelID
     if (!providerID || !modelID) return ""
     const match = data.store.provider?.all?.find((p) => p.id === providerID)
     return match?.models?.[modelID]?.name ?? modelID
@@ -896,13 +905,13 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
 
   const stamp = createMemo(() => {
-    const created = props.message.time?.created
+    const created = message().time?.created
     if (typeof created !== "number") return ""
     return timefmt().format(created)
   })
 
   const metaHead = createMemo(() => {
-    const agent = props.message.agent
+    const agent = message().agent
     const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
@@ -928,8 +937,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     void Promise.resolve()
       .then(() =>
         act({
-          sessionID: props.message.sessionID,
-          messageID: props.message.id,
+          sessionID: message().sessionID,
+          messageID: message().id,
         }),
       )
       .finally(() => {
@@ -1288,27 +1297,27 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const i18n = useI18n()
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   const part = () => props.part as TextPart
+  const message = bindMessage(props.message)
   const interrupted = createMemo(
-    () =>
-      props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
+    () => message().role === "assistant" && (message() as AssistantMessage).error?.name === "MessageAbortedError",
   )
 
   const model = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
-    return match?.models?.[message.modelID]?.name ?? message.modelID
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const match = data.store.provider?.all?.find((p) => p.id === current.providerID)
+    return match?.models?.[current.modelID]?.name ?? current.modelID
   })
 
   const duration = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const completed = message.time.completed
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const completed = current.time.completed
     const ms =
       typeof props.turnDurationMs === "number"
         ? props.turnDurationMs
         : typeof completed === "number"
-          ? completed - message.time.created
+          ? completed - current.time.created
           : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
@@ -1322,8 +1331,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
 
   const meta = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const agent = (props.message as AssistantMessage).agent
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const agent = current.agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
       model(),
@@ -1336,13 +1346,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const displayText = () => (part().text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
-    const last = (data.store.part?.[props.message.id] ?? [])
+    const last = (data.store.part?.[message().id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
       .at(-1)
     return last?.id === part().id
   })
   const showCopy = createMemo(() => {
-    if (props.message.role !== "assistant") return isLastTextPart()
+    if (message().role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
     if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
     return isLastTextPart()
