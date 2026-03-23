@@ -25,6 +25,7 @@ import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { Path } from "@/path/path"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -68,7 +69,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: row.directory,
+      directory: Path.stored(row.directory),
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -92,7 +93,7 @@ export namespace Session {
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
-      directory: info.directory,
+      directory: Path.stored(info.directory),
       title: info.title,
       version: info.version,
       share_url: info.share?.url,
@@ -307,7 +308,7 @@ export namespace Session {
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
-      directory: input.directory,
+      directory: Path.stored(input.directory),
       workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -552,7 +553,7 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, Path.stored(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -592,7 +593,7 @@ export namespace Session {
     const conditions: SQL[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, Path.stored(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -638,7 +639,7 @@ export namespace Session {
         projects.set(item.id, {
           id: item.id,
           name: item.name ?? undefined,
-          worktree: item.worktree,
+          worktree: Path.stored(item.worktree),
         })
       }
     }

@@ -15,20 +15,21 @@ import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
+import { Path, type StoredPath } from "@/path/path"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
 
-  function gitpath(cwd: string, name: string) {
-    if (!name) return cwd
+  function gitpath(cwd: string, name: string): StoredPath {
+    if (!name) return Path.stored(cwd)
     // git output includes trailing newlines; keep path whitespace intact.
     name = name.replace(/[\r\n]+$/, "")
-    if (!name) return cwd
+    if (!name) return Path.stored(cwd)
 
     name = Filesystem.windowsPath(name)
 
-    if (path.isAbsolute(name)) return path.normalize(name)
-    return path.resolve(cwd, name)
+    if (path.isAbsolute(name)) return Path.stored(name)
+    return Path.stored(path.resolve(cwd, name))
   }
 
   export const Info = z
@@ -74,7 +75,7 @@ export namespace Project {
         : undefined
     return {
       id: ProjectID.make(row.id),
-      worktree: row.worktree,
+      worktree: Path.stored(row.worktree),
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -83,7 +84,7 @@ export namespace Project {
         updated: row.time_updated,
         initialized: row.time_initialized ?? undefined,
       },
-      sandboxes: row.sandboxes,
+      sandboxes: row.sandboxes.map(Path.stored),
       commands: row.commands ?? undefined,
     }
   }
@@ -96,6 +97,7 @@ export namespace Project {
   }
 
   export async function fromDirectory(directory: string) {
+    directory = Path.stored(directory)
     log.info("fromDirectory", { directory })
 
     const data = await iife(async () => {
@@ -103,7 +105,7 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+        let sandbox = Path.stored(path.dirname(dotgit))
 
         const gitBinary = which("git")
 
@@ -125,7 +127,7 @@ export namespace Project {
           .then(async (result) => {
             const common = gitpath(sandbox, await result.text())
             // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
+            return common === sandbox ? sandbox : Path.stored(path.dirname(common))
           })
           .catch(() => undefined)
 

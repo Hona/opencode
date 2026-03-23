@@ -3,6 +3,7 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { Path, type StoredPath } from "@/path/path"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -13,7 +14,7 @@ export interface Shape {
   project: Project.Info
 }
 const context = Context.create<Shape>("instance")
-const cache = new Map<string, Promise<Shape>>()
+const cache = new Map<StoredPath, Promise<Shape>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -52,18 +53,18 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<Shape>) {
+function track(dir: StoredPath, next: Promise<Shape>) {
   const task = next.catch((error) => {
-    if (cache.get(directory) === task) cache.delete(directory)
+    if (cache.get(dir) === task) cache.delete(dir)
     throw error
   })
-  cache.set(directory, task)
+  cache.set(dir, task)
   return task
 }
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = Path.stored(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -117,7 +118,7 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = Path.stored(input.directory)
     Log.Default.info("reloading instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
@@ -129,7 +130,7 @@ export const Instance = {
     const directory = Instance.directory
     Log.Default.info("disposing instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
+    cache.delete(directory as StoredPath)
     emit(directory)
   },
   async disposeAll() {
