@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test"
 import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
-import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
@@ -99,20 +98,6 @@ describe("Project.fromDirectory", () => {
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Filesystem.exists(opencodeFile)
     expect(fileExists).toBe(true)
-  })
-
-  test("canonicalizes Windows alias roots before persisting", async () => {
-    if (process.platform !== "win32") return
-    const p = await loadProject()
-    await using tmp = await tmpdir({ git: true })
-
-    const alias = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-alias")
-    await fs.symlink(tmp.path, alias, "junction")
-
-    const { project, sandbox } = await p.fromDirectory(alias)
-
-    expect(String(project.worktree)).toBe(tmp.path)
-    expect(String(sandbox)).toBe(tmp.path)
   })
 
   test("keeps git vcs when rev-list exits non-zero with empty output", async () => {

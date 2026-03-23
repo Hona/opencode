@@ -10,15 +10,16 @@ describe("path", () => {
     expect(String(Path.stored("/"))).toBe("/")
   })
 
-  test("resolves Windows alias roots for stored paths", async () => {
-    if (process.platform !== "win32") return
+  test("preserves symlink routes in stored paths", async () => {
     await using tmp = await tmpdir()
 
     const real = path.join(tmp.path, "Target")
     await fs.mkdir(real, { recursive: true })
+    await fs.mkdir(path.join(real, "Leaf"), { recursive: true })
     const alias = path.join(tmp.path, "Alias")
-    await fs.symlink(real, alias, "junction")
+    await fs.symlink(real, alias, process.platform === "win32" ? "junction" : "dir")
 
-    expect(Path.stored(alias)).toBe(Path.stored(real))
+    expect(String(Path.stored(alias))).toBe(alias)
+    expect(String(Path.stored(path.join(alias, "Leaf")))).toBe(path.join(alias, "Leaf"))
   })
 })
