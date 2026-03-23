@@ -29,6 +29,12 @@ const short = (input: string) => {
 }
 
 describe("path", () => {
+  const bash = (input: string) => {
+    const drive = input[0].toLowerCase()
+    const rest = input.slice(2).replaceAll("\\", "/")
+    return `/${drive}${rest}`
+  }
+
   test("keeps sentinel storage paths unchanged", () => {
     expect(String(Path.stored(""))).toBe("")
     expect(String(Path.stored("/"))).toBe("/")
@@ -55,6 +61,18 @@ describe("path", () => {
     expect(String(Path.stored(path.join(alias, "Leaf")))).not.toBe(path.join(real, "Leaf"))
   })
 
+  test("keeps missing descendants on a chosen symlink route", async () => {
+    await using tmp = await tmpdir()
+
+    const real = path.join(tmp.path, "Target")
+    await fs.mkdir(real, { recursive: true })
+    const alias = path.join(tmp.path, "Alias")
+    await fs.symlink(real, alias, process.platform === "win32" ? "junction" : "dir")
+
+    expect(String(Path.stored(path.join(alias, "missing", "child")))).toBe(path.join(alias, "missing", "child"))
+    expect(String(Path.stored(path.join(alias, "missing", "child")))).not.toBe(path.join(real, "missing", "child"))
+  })
+
   test("keeps native posix routes without introducing Windows key forms", async () => {
     if (process.platform === "win32") return
     await using tmp = await tmpdir()
@@ -69,14 +87,15 @@ describe("path", () => {
     if (process.platform !== "win32") return
     await using tmp = await tmpdir()
 
+    const root = bash(tmp.path)
     const drive = tmp.path[0].toLowerCase()
     const rest = tmp.path.slice(2).replaceAll("\\", "/")
 
-    expect(String(Path.stored(`/${drive}${rest}`))).toBe(tmp.path)
+    expect(String(Path.stored(root))).toBe(tmp.path)
     expect(String(Path.stored(`/cygdrive/${drive}${rest}`))).toBe(tmp.path)
     expect(String(Path.stored(`/mnt/${drive}${rest}`))).toBe(tmp.path)
-    expect(String(Path.stored(`/${drive}${rest}`))).not.toContain("/cygdrive/")
-    expect(String(Path.stored(`/${drive}${rest}`))).not.toContain(`/mnt/${drive}`)
+    expect(String(Path.stored(root))).not.toContain("/cygdrive/")
+    expect(String(Path.stored(root))).not.toContain(`/mnt/${drive}`)
   })
 
   test("expands Windows short-name aliases when one exists", async () => {

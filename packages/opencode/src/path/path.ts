@@ -38,7 +38,7 @@ export type RawPath = string & { readonly __raw: unique symbol }
  */
 export type StoredPath = string & { readonly __stored: unique symbol }
 
-const match = (dir: string, part: string) => {
+const caseMatch = (dir: string, part: string) => {
   try {
     const low = part.toLowerCase()
     return readdirSync(dir).find((item) => item.toLowerCase() === low)
@@ -47,7 +47,7 @@ const match = (dir: string, part: string) => {
   }
 }
 
-const win = (input: string) => {
+const storedWin = (input: string) => {
   const full = path.resolve(Filesystem.windowsPath(input))
   const root = path.parse(full).root
   const parts = full
@@ -69,7 +69,7 @@ const win = (input: string) => {
 
     if (!hit) return path.join(dir, ...parts.slice(i)) as StoredPath
     if (hit.isSymbolicLink()) {
-      dir = path.join(dir, match(dir, part) ?? part)
+      dir = path.join(dir, caseMatch(dir, part) ?? part)
       continue
     }
 
@@ -77,7 +77,7 @@ const win = (input: string) => {
       try {
         return path.basename(realpathSync.native(next))
       } catch {
-        return match(dir, part) ?? part
+        return caseMatch(dir, part) ?? part
       }
     })()
     dir = path.join(dir, name)
@@ -90,6 +90,10 @@ export namespace Path {
   export function stored(input: RawPath | string): StoredPath {
     if (!input || input === "/") return input as StoredPath
     if (process.platform !== "win32") return path.resolve(input) as StoredPath
-    return win(input)
+    return storedWin(input)
+  }
+
+  export function same(a: RawPath | string, b: RawPath | string) {
+    return Filesystem.resolve(stored(a)) === Filesystem.resolve(stored(b))
   }
 }

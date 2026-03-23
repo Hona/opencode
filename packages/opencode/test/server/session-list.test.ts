@@ -3,9 +3,16 @@ import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+const bash = (input: string) => {
+  const drive = input[0].toLowerCase()
+  const rest = input.slice(2).replaceAll("\\", "/")
+  return `/${drive}${rest}`
+}
 
 describe("Session.list", () => {
   test("filters by directory", async () => {
@@ -84,6 +91,22 @@ describe("Session.list", () => {
 
         const sessions = [...Session.list({ limit: 2 })]
         expect(sessions.length).toBe(2)
+      },
+    })
+  })
+
+  test("matches the stored directory when queried with a Windows bash path", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "bash-path-session" })
+        const sessions = [...Session.list({ directory: bash(tmp.path) })]
+
+        expect(sessions.map((item) => item.id)).toContain(session.id)
+        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(tmp.path)
       },
     })
   })

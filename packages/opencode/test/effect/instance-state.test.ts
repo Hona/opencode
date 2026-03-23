@@ -4,6 +4,12 @@ import { InstanceState } from "../../src/effect/instance-state"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
+const bash = (input: string) => {
+  const drive = input[0].toLowerCase()
+  const rest = input.slice(2).replaceAll("\\", "/")
+  return `/${drive}${rest}`
+}
+
 async function access<A, E>(state: InstanceState<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
@@ -83,6 +89,32 @@ test("InstanceState invalidates on reload", async () => {
       }),
     ),
   )
+})
+
+test("Instance.provide collapses equivalent Windows bash spellings", async () => {
+  if (process.platform !== "win32") return
+  await using tmp = await tmpdir({ git: true })
+  let n = 0
+
+  const a = await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      n += 1
+    },
+    fn: async () => Instance.directory,
+  })
+
+  const b = await Instance.provide({
+    directory: bash(tmp.path),
+    init: async () => {
+      n += 1
+    },
+    fn: async () => Instance.directory,
+  })
+
+  expect(a).toBe(tmp.path)
+  expect(b).toBe(tmp.path)
+  expect(n).toBe(1)
 })
 
 test("InstanceState invalidates on disposeAll", async () => {

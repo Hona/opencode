@@ -10,6 +10,12 @@ import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
 
+const bash = (input: string) => {
+  const drive = input[0].toLowerCase()
+  const rest = input.slice(2).replaceAll("\\", "/")
+  return `/${drive}${rest}`
+}
+
 afterEach(async () => {
   mock.restore()
   await resetDatabase()
@@ -95,5 +101,38 @@ describe("control-plane/workspace.startSyncing", () => {
     ])
 
     await sync.stop()
+  })
+
+  test("stores and rehydrates workspace directories in one stored form", async () => {
+    const { Workspace } = await import("../../src/control-plane/workspace")
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const dir = process.platform === "win32" ? bash(tmp.path) : tmp.path
+    adaptors.installAdaptor("testing-path", {
+      ...TestAdaptor,
+      configure(config) {
+        return {
+          ...config,
+          directory: dir,
+          name: "remote-b",
+        }
+      },
+      async create() {},
+    })
+
+    const created = await Workspace.create({
+      type: "testing-path",
+      branch: null,
+      projectID: project.id,
+      extra: null,
+    })
+
+    const loaded = await Workspace.get(created.id)
+    const listed = Workspace.list(project)
+
+    expect(created.directory).toBe(tmp.path)
+    expect(loaded?.directory).toBe(tmp.path)
+    expect(listed.find((item) => item.id === created.id)?.directory).toBe(tmp.path)
   })
 })

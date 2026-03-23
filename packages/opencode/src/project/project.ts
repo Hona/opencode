@@ -20,9 +20,9 @@ import { Path, type StoredPath } from "@/path/path"
 export namespace Project {
   const log = Log.create({ service: "project" })
 
-  function keep(curr: StoredPath, next: string) {
+  function preserve(curr: StoredPath, next: string) {
     const full = Path.stored(next)
-    if (Filesystem.resolve(curr) === Filesystem.resolve(full)) return curr
+    if (Path.same(curr, full)) return curr
     return full
   }
 
@@ -133,7 +133,7 @@ export namespace Project {
           .then(async (result) => {
             const common = gitpath(sandbox, await result.text())
             // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : keep(sandbox, path.dirname(common))
+            return common === sandbox ? sandbox : preserve(sandbox, path.dirname(common))
           })
           .catch(() => undefined)
 
@@ -207,7 +207,7 @@ export namespace Project {
           }
         }
 
-        sandbox = keep(sandbox, top)
+        sandbox = preserve(sandbox, top)
 
         return {
           id,
