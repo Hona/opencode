@@ -12,6 +12,8 @@ import { registerInstrumentations } from "@opentelemetry/instrumentation"
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici"
 import { FsInstrumentation } from "@opentelemetry/instrumentation-fs"
 import { DnsInstrumentation } from "@opentelemetry/instrumentation-dns"
+import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
+import { NetInstrumentation } from "@opentelemetry/instrumentation-net"
 import type { ModelMessage } from "ai"
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
@@ -97,6 +99,8 @@ export namespace Telemetry {
         }),
         new FsInstrumentation(),
         new DnsInstrumentation(),
+        new HttpInstrumentation(),
+        new NetInstrumentation(),
       ],
     })
 

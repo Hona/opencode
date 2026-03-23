@@ -106,6 +106,8 @@
     "@opentelemetry/instrumentation": "0.213.0",
     "@opentelemetry/instrumentation-dns": "0.56.0",
     "@opentelemetry/instrumentation-fs": "0.32.0",
+    "@opentelemetry/instrumentation-http": "0.213.0",
+    "@opentelemetry/instrumentation-net": "0.57.0",
     "@opentelemetry/instrumentation-undici": "0.23.0",
     "@opentui/core": "0.1.90",
     "@opentui/solid": "0.1.90",
