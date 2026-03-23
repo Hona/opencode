@@ -7,12 +7,12 @@ import { existsSync, writeFileSync } from "fs"
 import { ProjectTable } from "@/project/project.sql"
 import { SessionTable } from "@/session/session.sql"
 import { WorkspaceTable } from "@/control-plane/workspace.sql"
-import { Path } from "./path"
+import { StoredPath } from "./path"
 
 export namespace PathMigration {
   const log = Log.create({ service: "path-migration" })
 
-  const uniq = (input: string[]) => [...new Set(input.map((item) => Path.stored(item)))]
+  const uniq = (input: string[]) => [...new Set(input.map((item) => StoredPath.parse(item)))]
 
   export type Stats = {
     projects: number
@@ -33,7 +33,7 @@ export namespace PathMigration {
     const stats = { projects: 0, sessions: 0, workspaces: 0 } satisfies Stats
 
     for (const row of db.select().from(ProjectTable).all()) {
-      const worktree = Path.stored(row.worktree)
+      const worktree = StoredPath.parse(row.worktree)
       const sandboxes = uniq(row.sandboxes)
       if (
         worktree === row.worktree &&
@@ -47,7 +47,7 @@ export namespace PathMigration {
     }
 
     for (const row of db.select().from(SessionTable).all()) {
-      const directory = Path.stored(row.directory)
+      const directory = StoredPath.parse(row.directory)
       if (directory === row.directory) continue
 
       db.update(SessionTable).set({ directory }).where(eq(SessionTable.id, row.id)).run()
@@ -55,7 +55,7 @@ export namespace PathMigration {
     }
 
     for (const row of db.select().from(WorkspaceTable).all()) {
-      const directory = row.directory ? Path.stored(row.directory) : null
+      const directory = row.directory ? StoredPath.parse(row.directory) : null
       if (directory === row.directory) continue
 
       db.update(WorkspaceTable).set({ directory }).where(eq(WorkspaceTable.id, row.id)).run()

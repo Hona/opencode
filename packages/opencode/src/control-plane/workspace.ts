@@ -12,7 +12,7 @@ import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
-import { Path } from "@/path/path"
+import { StoredPath } from "@/path/path"
 
 export namespace Workspace {
   export const Event = {
@@ -41,7 +41,7 @@ export namespace Workspace {
       type: row.type,
       branch: row.branch,
       name: row.name,
-      directory: row.directory,
+      directory: row.directory ? StoredPath.unsafe(row.directory) : null,
       extra: row.extra,
       projectID: row.project_id,
     }
@@ -66,7 +66,7 @@ export namespace Workspace {
       type: config.type,
       branch: config.branch ?? null,
       name: config.name ?? null,
-      directory: config.directory ? Path.stored(config.directory) : null,
+      directory: config.directory ? StoredPath.parse(config.directory) : null,
       extra: config.extra ?? null,
       projectID: input.projectID,
     }

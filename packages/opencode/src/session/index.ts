@@ -25,7 +25,7 @@ import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
-import { Path } from "@/path/path"
+import { StoredPath } from "@/path/path"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -52,6 +52,8 @@ export namespace Session {
 
   type SessionRow = typeof SessionTable.$inferSelect
 
+  const PathValue = z.custom<StoredPath>()
+
   export function fromRow(row: SessionRow): Info {
     const summary =
       row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
@@ -69,7 +71,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: row.directory,
+      directory: StoredPath.unsafe(row.directory),
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -93,7 +95,7 @@ export namespace Session {
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
-      directory: Path.stored(info.directory),
+      directory: info.directory,
       title: info.title,
       version: info.version,
       share_url: info.share?.url,
@@ -126,7 +128,7 @@ export namespace Session {
       slug: z.string(),
       projectID: ProjectID.zod,
       workspaceID: WorkspaceID.zod.optional(),
-      directory: z.string(),
+      directory: PathValue,
       parentID: SessionID.zod.optional(),
       summary: z
         .object({
@@ -168,7 +170,7 @@ export namespace Session {
     .object({
       id: ProjectID.zod,
       name: z.string().optional(),
-      worktree: z.string(),
+      worktree: PathValue,
     })
     .meta({
       ref: "ProjectSummary",
@@ -308,7 +310,7 @@ export namespace Session {
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
-      directory: Path.stored(input.directory),
+      directory: StoredPath.parse(input.directory),
       workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -553,7 +555,7 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, Path.stored(input.directory)))
+      conditions.push(eq(SessionTable.directory, StoredPath.parse(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -593,7 +595,7 @@ export namespace Session {
     const conditions: SQL[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, Path.stored(input.directory)))
+      conditions.push(eq(SessionTable.directory, StoredPath.parse(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -639,7 +641,7 @@ export namespace Session {
         projects.set(item.id, {
           id: item.id,
           name: item.name ?? undefined,
-          worktree: item.worktree,
+          worktree: StoredPath.unsafe(item.worktree),
         })
       }
     }

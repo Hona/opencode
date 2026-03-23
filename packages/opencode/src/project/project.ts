@@ -15,33 +15,35 @@ import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Path, type StoredPath } from "@/path/path"
+import { StoredPath } from "@/path/path"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
 
   function preserve(curr: StoredPath, next: string) {
-    const full = Path.stored(next)
-    if (Path.same(curr, full)) return curr
+    const full = StoredPath.parse(next)
+    if (StoredPath.same(curr, full)) return curr
     return full
   }
 
   function gitpath(cwd: string, name: string): StoredPath {
-    if (!name) return Path.stored(cwd)
+    if (!name) return StoredPath.parse(cwd)
     // git output includes trailing newlines; keep path whitespace intact.
     name = name.replace(/[\r\n]+$/, "")
-    if (!name) return Path.stored(cwd)
+    if (!name) return StoredPath.parse(cwd)
 
     name = Filesystem.windowsPath(name)
 
-    if (path.isAbsolute(name)) return Path.stored(name)
-    return Path.stored(path.resolve(cwd, name))
+    if (path.isAbsolute(name)) return StoredPath.parse(name)
+    return StoredPath.parse(path.resolve(cwd, name))
   }
+
+  const PathValue = z.custom<StoredPath>()
 
   export const Info = z
     .object({
       id: ProjectID.zod,
-      worktree: z.string(),
+      worktree: PathValue,
       vcs: z.literal("git").optional(),
       name: z.string().optional(),
       icon: z
@@ -61,7 +63,7 @@ export namespace Project {
         updated: z.number(),
         initialized: z.number().optional(),
       }),
-      sandboxes: z.array(z.string()),
+      sandboxes: z.array(PathValue),
     })
     .meta({
       ref: "Project",
@@ -81,7 +83,7 @@ export namespace Project {
         : undefined
     return {
       id: ProjectID.make(row.id),
-      worktree: row.worktree,
+      worktree: StoredPath.unsafe(row.worktree),
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -90,7 +92,7 @@ export namespace Project {
         updated: row.time_updated,
         initialized: row.time_initialized ?? undefined,
       },
-      sandboxes: row.sandboxes,
+      sandboxes: row.sandboxes.map(StoredPath.unsafe),
       commands: row.commands ?? undefined,
     }
   }
@@ -103,7 +105,7 @@ export namespace Project {
   }
 
   export async function fromDirectory(directory: string) {
-    directory = Path.stored(directory)
+    directory = StoredPath.parse(directory)
     log.info("fromDirectory", { directory })
 
     const data = await iife(async () => {
@@ -111,7 +113,7 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = Path.stored(path.dirname(dotgit))
+        let sandbox = StoredPath.parse(path.dirname(dotgit))
 
         const gitBinary = which("git")
 
@@ -219,20 +221,20 @@ export namespace Project {
 
       return {
         id: ProjectID.global,
-        worktree: "/",
-        sandbox: "/",
+        worktree: StoredPath.unsafe("/"),
+        sandbox: StoredPath.unsafe("/"),
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
       }
     })
 
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-    const existing = row
+    const existing: Info = row
       ? fromRow(row)
       : {
           id: data.id,
           worktree: data.worktree,
           vcs: data.vcs as Info["vcs"],
-          sandboxes: [] as string[],
+          sandboxes: [] as StoredPath[],
           time: {
             created: Date.now(),
             updated: Date.now(),
@@ -418,7 +420,7 @@ export namespace Project {
   export async function addSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    directory = Path.stored(directory)
+    directory = StoredPath.parse(directory)
     const sandboxes = [...row.sandboxes]
     if (!sandboxes.includes(directory)) sandboxes.push(directory)
     const result = Database.use((db) =>
@@ -443,7 +445,7 @@ export namespace Project {
   export async function removeSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
-    directory = Path.stored(directory)
+    directory = StoredPath.parse(directory)
     const sandboxes = row.sandboxes.filter((s) => s !== directory)
     const result = Database.use((db) =>
       db

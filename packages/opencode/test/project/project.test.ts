@@ -7,9 +7,12 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
+import { StoredPath } from "../../src/path/path"
 import { ProjectID } from "../../src/project/schema"
 
 Log.init({ print: false })
+
+const trust = StoredPath.unsafe
 
 const gitModule = await import("../../src/util/git")
 const originalGit = gitModule.git
@@ -78,7 +81,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(trust(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Filesystem.exists(opencodeFile)
@@ -94,7 +97,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).not.toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(trust(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Filesystem.exists(opencodeFile)
@@ -110,9 +113,9 @@ describe("Project.fromDirectory", () => {
 
     const { project, sandbox } = await p.fromDirectory(alias)
 
-    expect(project.worktree).toBe(alias)
-    expect(sandbox).toBe(alias)
-    expect(project.worktree).not.toBe(tmp.path)
+    expect(project.worktree).toBe(trust(alias))
+    expect(sandbox).toBe(trust(alias))
+    expect(project.worktree).not.toBe(trust(tmp.path))
   })
 
   test("keeps git vcs when rev-list exits non-zero with empty output", async () => {
@@ -124,7 +127,7 @@ describe("Project.fromDirectory", () => {
       const { project } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
       expect(project.id).toBe(ProjectID.global)
-      expect(project.worktree).toBe(tmp.path)
+      expect(project.worktree).toBe(trust(tmp.path))
     })
   })
 
@@ -135,8 +138,8 @@ describe("Project.fromDirectory", () => {
     await withMode("top-fail", async () => {
       const { project, sandbox } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
-      expect(project.worktree).toBe(tmp.path)
-      expect(sandbox).toBe(tmp.path)
+      expect(project.worktree).toBe(trust(tmp.path))
+      expect(sandbox).toBe(trust(tmp.path))
     })
   })
 
@@ -147,8 +150,8 @@ describe("Project.fromDirectory", () => {
     await withMode("common-dir-fail", async () => {
       const { project, sandbox } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
-      expect(project.worktree).toBe(tmp.path)
-      expect(sandbox).toBe(tmp.path)
+      expect(project.worktree).toBe(trust(tmp.path))
+      expect(sandbox).toBe(trust(tmp.path))
     })
   })
 })
@@ -160,9 +163,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const { project, sandbox } = await p.fromDirectory(tmp.path)
 
-    expect(project.worktree).toBe(tmp.path)
-    expect(sandbox).toBe(tmp.path)
-    expect(project.sandboxes).not.toContain(tmp.path)
+    expect(project.worktree).toBe(trust(tmp.path))
+    expect(sandbox).toBe(trust(tmp.path))
+    expect(project.sandboxes).not.toContain(trust(tmp.path))
   })
 
   test("should set worktree to root when called from a worktree", async () => {
@@ -175,10 +178,10 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const { project, sandbox } = await p.fromDirectory(worktreePath)
 
-      expect(project.worktree).toBe(tmp.path)
-      expect(sandbox).toBe(worktreePath)
-      expect(project.sandboxes).toContain(worktreePath)
-      expect(project.sandboxes).not.toContain(tmp.path)
+      expect(project.worktree).toBe(trust(tmp.path))
+      expect(sandbox).toBe(trust(worktreePath))
+      expect(project.sandboxes).toContain(trust(worktreePath))
+      expect(project.sandboxes).not.toContain(trust(tmp.path))
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)
@@ -246,10 +249,10 @@ describe("Project.fromDirectory with worktrees", () => {
       await p.fromDirectory(worktree1)
       const { project } = await p.fromDirectory(worktree2)
 
-      expect(project.worktree).toBe(tmp.path)
-      expect(project.sandboxes).toContain(worktree1)
-      expect(project.sandboxes).toContain(worktree2)
-      expect(project.sandboxes).not.toContain(tmp.path)
+      expect(project.worktree).toBe(trust(tmp.path))
+      expect(project.sandboxes).toContain(trust(worktree1))
+      expect(project.sandboxes).toContain(trust(worktree2))
+      expect(project.sandboxes).not.toContain(trust(tmp.path))
     } finally {
       await $`git worktree remove ${worktree1}`
         .cwd(tmp.path)
@@ -308,7 +311,7 @@ describe("Project sandboxes", () => {
     await Project.addSandbox(project.id, tmp.path)
     const updated = await Project.addSandbox(project.id, raw)
 
-    expect(updated.sandboxes).toEqual([tmp.path])
+    expect(updated.sandboxes).toEqual([trust(tmp.path)])
   })
 
   test("removes a sandbox across equivalent path spellings", async () => {

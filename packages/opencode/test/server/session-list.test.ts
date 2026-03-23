@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { StoredPath } from "../../src/path/path"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
@@ -106,7 +107,7 @@ describe("Session.list", () => {
         const sessions = [...Session.list({ directory: bash(tmp.path) })]
 
         expect(sessions.map((item) => item.id)).toContain(session.id)
-        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(tmp.path)
+        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(StoredPath.unsafe(tmp.path))
       },
     })
   })
@@ -124,7 +125,7 @@ describe("Session.list", () => {
         const sessions = [...Session.list({ directory: raw })]
 
         expect(sessions.map((item) => item.id)).toContain(session.id)
-        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(tmp.path)
+        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(StoredPath.unsafe(tmp.path))
       },
     })
   })

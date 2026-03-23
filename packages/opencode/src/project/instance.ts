@@ -3,7 +3,7 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
-import { Path, type StoredPath } from "@/path/path"
+import { StoredPath } from "@/path/path"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -64,7 +64,7 @@ function track(dir: StoredPath, next: Promise<Shape>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Path.stored(input.directory)
+    const directory = StoredPath.parse(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -118,7 +118,7 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Path.stored(input.directory)
+    const directory = StoredPath.parse(input.directory)
     Log.Default.info("reloading instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)

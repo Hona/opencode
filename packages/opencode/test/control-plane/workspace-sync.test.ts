@@ -9,6 +9,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
+import { StoredPath } from "../../src/path/path"
 
 const bash = (input: string) => {
   const drive = input[0].toLowerCase()
@@ -114,7 +115,7 @@ describe("control-plane/workspace.startSyncing", () => {
       configure(config) {
         return {
           ...config,
-          directory: dir,
+          directory: StoredPath.parse(dir),
           name: "remote-b",
         }
       },
@@ -131,8 +132,8 @@ describe("control-plane/workspace.startSyncing", () => {
     const loaded = await Workspace.get(created.id)
     const listed = Workspace.list(project)
 
-    expect(created.directory).toBe(tmp.path)
-    expect(loaded?.directory).toBe(tmp.path)
-    expect(listed.find((item) => item.id === created.id)?.directory).toBe(tmp.path)
+    expect(created.directory).toBe(StoredPath.unsafe(tmp.path))
+    expect(loaded?.directory).toBe(StoredPath.unsafe(tmp.path))
+    expect(listed.find((item) => item.id === created.id)?.directory).toBe(StoredPath.unsafe(tmp.path))
   })
 })

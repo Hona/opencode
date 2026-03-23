@@ -1,5 +1,6 @@
 import z from "zod"
 import { ProjectID } from "@/project/schema"
+import { StoredPath } from "@/path/path"
 import { WorkspaceID } from "./schema"
 
 export const WorkspaceInfo = z.object({
@@ -7,7 +8,7 @@ export const WorkspaceInfo = z.object({
   type: z.string(),
   branch: z.string().nullable(),
   name: z.string().nullable(),
-  directory: z.string().nullable(),
+  directory: z.custom<StoredPath>().nullable(),
   extra: z.unknown().nullable(),
   projectID: ProjectID.zod,
 })

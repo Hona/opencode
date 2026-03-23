@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { dlopen, ptr } from "bun:ffi"
 import fs from "fs/promises"
 import path from "path"
-import { Path } from "../../src/path/path"
+import { StoredPath } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
 
 const k32 =
@@ -36,14 +36,14 @@ describe("path", () => {
   }
 
   test("keeps sentinel storage paths unchanged", () => {
-    expect(String(Path.stored(""))).toBe("")
-    expect(String(Path.stored("/"))).toBe("/")
+    expect(String(StoredPath.parse(""))).toBe("")
+    expect(String(StoredPath.parse("/"))).toBe("/")
   })
 
   test("keeps missing paths on the chosen route", async () => {
     await using tmp = await tmpdir()
     const dir = path.join(tmp.path, "missing", "child")
-    expect(String(Path.stored(dir))).toBe(path.resolve(dir))
+    expect(String(StoredPath.parse(dir))).toBe(path.resolve(dir))
   })
 
   test("preserves symlink routes in stored paths", async () => {
@@ -55,10 +55,10 @@ describe("path", () => {
     const alias = path.join(tmp.path, "Alias")
     await fs.symlink(real, alias, process.platform === "win32" ? "junction" : "dir")
 
-    expect(String(Path.stored(alias))).toBe(alias)
-    expect(String(Path.stored(path.join(alias, "Leaf")))).toBe(path.join(alias, "Leaf"))
-    expect(String(Path.stored(alias))).not.toBe(real)
-    expect(String(Path.stored(path.join(alias, "Leaf")))).not.toBe(path.join(real, "Leaf"))
+    expect(String(StoredPath.parse(alias))).toBe(alias)
+    expect(String(StoredPath.parse(path.join(alias, "Leaf")))).toBe(path.join(alias, "Leaf"))
+    expect(String(StoredPath.parse(alias))).not.toBe(real)
+    expect(String(StoredPath.parse(path.join(alias, "Leaf")))).not.toBe(path.join(real, "Leaf"))
   })
 
   test("keeps missing descendants on a chosen symlink route", async () => {
@@ -69,8 +69,8 @@ describe("path", () => {
     const alias = path.join(tmp.path, "Alias")
     await fs.symlink(real, alias, process.platform === "win32" ? "junction" : "dir")
 
-    expect(String(Path.stored(path.join(alias, "missing", "child")))).toBe(path.join(alias, "missing", "child"))
-    expect(String(Path.stored(path.join(alias, "missing", "child")))).not.toBe(path.join(real, "missing", "child"))
+    expect(String(StoredPath.parse(path.join(alias, "missing", "child")))).toBe(path.join(alias, "missing", "child"))
+    expect(String(StoredPath.parse(path.join(alias, "missing", "child")))).not.toBe(path.join(real, "missing", "child"))
   })
 
   test("keeps native posix routes without introducing Windows key forms", async () => {
@@ -79,8 +79,8 @@ describe("path", () => {
     const dir = path.join(tmp.path, "Thing")
     await fs.mkdir(dir, { recursive: true })
 
-    expect(String(Path.stored(dir))).toBe(dir)
-    expect(String(Path.stored(dir))).not.toContain("\\")
+    expect(String(StoredPath.parse(dir))).toBe(dir)
+    expect(String(StoredPath.parse(dir))).not.toContain("\\")
   })
 
   test("normalizes Windows bash-style paths to native routes", async () => {
@@ -91,11 +91,11 @@ describe("path", () => {
     const drive = tmp.path[0].toLowerCase()
     const rest = tmp.path.slice(2).replaceAll("\\", "/")
 
-    expect(String(Path.stored(root))).toBe(tmp.path)
-    expect(String(Path.stored(`/cygdrive/${drive}${rest}`))).toBe(tmp.path)
-    expect(String(Path.stored(`/mnt/${drive}${rest}`))).toBe(tmp.path)
-    expect(String(Path.stored(root))).not.toContain("/cygdrive/")
-    expect(String(Path.stored(root))).not.toContain(`/mnt/${drive}`)
+    expect(String(StoredPath.parse(root))).toBe(tmp.path)
+    expect(String(StoredPath.parse(`/cygdrive/${drive}${rest}`))).toBe(tmp.path)
+    expect(String(StoredPath.parse(`/mnt/${drive}${rest}`))).toBe(tmp.path)
+    expect(String(StoredPath.parse(root))).not.toContain("/cygdrive/")
+    expect(String(StoredPath.parse(root))).not.toContain(`/mnt/${drive}`)
   })
 
   test("canonicalizes lowercase drive roots to the stored drive casing", async () => {
@@ -103,7 +103,7 @@ describe("path", () => {
     await using tmp = await tmpdir()
 
     const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
-    expect(String(Path.stored(raw))).toBe(tmp.path)
+    expect(String(StoredPath.parse(raw))).toBe(tmp.path)
   })
 
   test("expands Windows short-name aliases when one exists", async () => {
@@ -114,13 +114,13 @@ describe("path", () => {
     if (!raw || raw === tmp.path) return
 
     expect(raw).toContain("~")
-    expect(String(Path.stored(raw))).toBe(tmp.path)
-    expect(String(Path.stored(raw))).not.toContain("~")
+    expect(String(StoredPath.parse(raw))).toBe(tmp.path)
+    expect(String(StoredPath.parse(raw))).not.toContain("~")
   })
 
   test("preserves UNC routes for network-style paths", () => {
     if (process.platform !== "win32") return
     const dir = "\\\\server\\share\\Repo\\folder"
-    expect(String(Path.stored(dir))).toBe(dir)
+    expect(String(StoredPath.parse(dir))).toBe(dir)
   })
 })
