@@ -126,7 +126,7 @@ describe("Telemetry.stringifyMessagesForGenAI", () => {
             type: "tool-result",
             toolCallId: "call-123",
             toolName: "search",
-            output: { result: "found" },
+            output: "found",
           },
         ],
       },
