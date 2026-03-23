@@ -1,10 +1,12 @@
 import { test, expect } from "../fixtures"
 import {
+  defocus,
   cleanupSession,
   cleanupTestProject,
   closeSidebar,
   createTestProject,
   hoverSessionItem,
+  openSidebar,
   waitSession,
 } from "../actions"
 import { projectSwitchSelector } from "../selectors"
@@ -46,7 +48,7 @@ test("collapsed sidebar popover stays open when archiving a session", async ({ p
   }
 })
 
-test("collapsed sidebar project switch activates on enter", async ({ page, withProject }) => {
+test("open sidebar project switch activates on first tabbed enter", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
@@ -55,13 +57,23 @@ test("collapsed sidebar project switch activates on enter", async ({ page, withP
   try {
     await withProject(
       async () => {
-        await closeSidebar(page)
+        await openSidebar(page)
+        await defocus(page)
 
         const project = page.locator(projectSwitchSelector(slug)).first()
 
         await expect(project).toBeVisible()
-        await project.focus()
-        await expect(project).toBeFocused()
+
+        let hit = false
+        for (let i = 0; i < 20; i++) {
+          hit = await project.evaluate((el) => {
+            return el.matches(":focus") || !!el.parentElement?.matches(":focus")
+          })
+          if (hit) break
+          await page.keyboard.press("Tab")
+        }
+
+        expect(hit).toBe(true)
 
         await page.keyboard.press("Enter")
         await waitSession(page, { directory: other })

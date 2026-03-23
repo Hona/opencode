@@ -76,15 +76,6 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
-  const open = () => {
-    if (props.selected()) {
-      props.setSuppressHover(true)
-      layout.sidebar.toggle()
-      return
-    }
-    props.setSuppressHover(false)
-    props.navigateToProject(props.project.worktree)
-  }
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -138,13 +129,15 @@ const ProjectTile = (props: {
           if (props.suppressHover()) return
           props.onProjectFocus(props.project.worktree)
         }}
-        onKeyDown={(event: KeyboardEvent) => {
-          if (event.key !== "Enter") return
-          event.preventDefault()
-          event.stopPropagation()
-          open()
+        onClick={() => {
+          if (props.selected()) {
+            props.setSuppressHover(true)
+            layout.sidebar.toggle()
+            return
+          }
+          props.setSuppressHover(false)
+          props.navigateToProject(props.project.worktree)
         }}
-        onClick={open}
         onBlur={() => props.setOpen(false)}
       >
         <ProjectIcon project={props.project} notify />
