@@ -418,6 +418,7 @@ export namespace Project {
   export async function addSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
+    directory = Path.stored(directory)
     const sandboxes = [...row.sandboxes]
     if (!sandboxes.includes(directory)) sandboxes.push(directory)
     const result = Database.use((db) =>
@@ -442,6 +443,7 @@ export namespace Project {
   export async function removeSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
+    directory = Path.stored(directory)
     const sandboxes = row.sandboxes.filter((s) => s !== directory)
     const result = Database.use((db) =>
       db

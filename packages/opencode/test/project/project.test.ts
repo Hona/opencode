@@ -297,6 +297,33 @@ describe("Project.discover", () => {
   })
 })
 
+describe("Project sandboxes", () => {
+  test("dedupes equivalent sandbox path spellings", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
+
+    await Project.addSandbox(project.id, tmp.path)
+    const updated = await Project.addSandbox(project.id, raw)
+
+    expect(updated.sandboxes).toEqual([tmp.path])
+  })
+
+  test("removes a sandbox across equivalent path spellings", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await Project.addSandbox(project.id, tmp.path)
+    const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
+    const updated = await Project.removeSandbox(project.id, raw)
+
+    expect(updated.sandboxes).toEqual([])
+  })
+})
+
 describe("Project.update", () => {
   test("should update name", async () => {
     await using tmp = await tmpdir({ git: true })
