@@ -4,6 +4,12 @@ import path from "path"
 import { Path } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
 
+const alias = (input: string) =>
+  input
+    .split(/[\\/]+/)
+    .filter(Boolean)
+    .some((part) => /^[^ .\\/]{1,6}~\d(?:\.[^ .\\/]{0,3})?$/i.test(part))
+
 describe("path", () => {
   test("keeps sentinel storage paths unchanged", () => {
     expect(String(Path.stored(""))).toBe("")
@@ -59,6 +65,6 @@ describe("path", () => {
     if (process.platform !== "win32") return
     const dir = "\\\\server\\share\\Repo\\folder"
     expect(String(Path.stored(dir))).toBe(dir)
-    expect(String(Path.stored(dir))).not.toContain("RUNNER~1")
+    expect(alias(String(Path.stored(dir)))).toBe(false)
   })
 })
