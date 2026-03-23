@@ -38,7 +38,7 @@ export namespace Project {
     return StoredPath.parse(path.resolve(cwd, name))
   }
 
-  const PathValue = z.custom<StoredPath>()
+  const PathValue = z.string() as unknown as z.ZodType<StoredPath>
 
   export const Info = z
     .object({

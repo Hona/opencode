@@ -127,7 +127,9 @@ export const TuiThreadCommand = cmd({
         UI.error("Failed to change directory to " + next)
         return
       }
-      const cwd = StoredPath.unsafe(Filesystem.resolve(process.cwd()))
+      // After chdir we intentionally collapse to the physical cwd so the thread,
+      // worker, and downstream session keys agree on one target directory.
+      const cwd = StoredPath.parse(Filesystem.resolve(process.cwd()))
 
       const worker = new Worker(file, {
         env: Object.fromEntries(

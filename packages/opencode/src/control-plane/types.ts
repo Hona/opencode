@@ -8,7 +8,7 @@ export const WorkspaceInfo = z.object({
   type: z.string(),
   branch: z.string().nullable(),
   name: z.string().nullable(),
-  directory: z.custom<StoredPath>().nullable(),
+  directory: (z.string() as unknown as z.ZodType<StoredPath>).nullable(),
   extra: z.unknown().nullable(),
   projectID: ProjectID.zod,
 })

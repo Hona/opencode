@@ -52,7 +52,7 @@ export namespace Session {
 
   type SessionRow = typeof SessionTable.$inferSelect
 
-  const PathValue = z.custom<StoredPath>()
+  const PathValue = z.string() as unknown as z.ZodType<StoredPath>
 
   export function fromRow(row: SessionRow): Info {
     const summary =
