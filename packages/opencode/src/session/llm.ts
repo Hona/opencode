@@ -182,7 +182,11 @@ export namespace LLM {
       })
       const userContent = input.messages
         .filter((m) => m.role === "user")
-        .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
+        .map((m) => {
+          if (typeof m.content === "string") return m.content
+          if (Array.isArray(m.content)) return m.content.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n")
+          return String(m.content)
+        })
         .join("\n")
       if (userContent) {
         span.addEvent("gen_ai.user.message", {
