@@ -8,6 +8,8 @@ import { NodeSDK } from "@opentelemetry/sdk-node"
 import { LoggerProvider, BatchLogRecordProcessor } from "@opentelemetry/sdk-logs"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc"
+import { registerInstrumentations } from "@opentelemetry/instrumentation"
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici"
 import type { ModelMessage } from "ai"
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
@@ -82,6 +84,18 @@ export namespace Telemetry {
     })
 
     sdk.start()
+
+    registerInstrumentations({
+      instrumentations: [
+        new UndiciInstrumentation({
+          headersToSpanAttributes: {
+            requestHeaders: ["content-type"],
+            responseHeaders: ["content-type"],
+          },
+        }),
+      ],
+    })
+
     initialized = true
     log.info("initialized")
   }
