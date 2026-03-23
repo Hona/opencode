@@ -1,14 +1,32 @@
 import { describe, expect, test } from "bun:test"
+import { dlopen, ptr } from "bun:ffi"
 import fs from "fs/promises"
 import path from "path"
 import { Path } from "../../src/path/path"
 import { tmpdir } from "../fixture/fixture"
 
-const alias = (input: string) =>
-  input
-    .split(/[\\/]+/)
-    .filter(Boolean)
-    .some((part) => /^[^ .\\/]{1,6}~\d(?:\.[^ .\\/]{0,3})?$/i.test(part))
+const k32 =
+  process.platform === "win32"
+    ? dlopen("kernel32.dll", {
+        GetShortPathNameW: { args: ["ptr", "ptr", "u32"], returns: "u32" },
+      })
+    : undefined
+
+const wide = (input: string) => Buffer.from(input + "\0", "utf16le")
+
+const text = (input: Uint16Array) => {
+  const end = input.indexOf(0)
+  return Buffer.from(input.buffer, input.byteOffset, (end === -1 ? input.length : end) * 2).toString("utf16le")
+}
+
+const short = (input: string) => {
+  if (!k32) return
+  const src = wide(input)
+  const out = new Uint16Array(4096)
+  const len = k32.symbols.GetShortPathNameW(ptr(src), ptr(out), out.length)
+  if (!len) return
+  return text(out)
+}
 
 describe("path", () => {
   test("keeps sentinel storage paths unchanged", () => {
@@ -61,10 +79,21 @@ describe("path", () => {
     expect(String(Path.stored(`/${drive}${rest}`))).not.toContain(`/mnt/${drive}`)
   })
 
+  test("expands Windows short-name aliases when one exists", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir()
+
+    const raw = short(tmp.path)
+    if (!raw || raw === tmp.path) return
+
+    expect(raw).toContain("~")
+    expect(String(Path.stored(raw))).toBe(tmp.path)
+    expect(String(Path.stored(raw))).not.toContain("~")
+  })
+
   test("preserves UNC routes for network-style paths", () => {
     if (process.platform !== "win32") return
     const dir = "\\\\server\\share\\Repo\\folder"
     expect(String(Path.stored(dir))).toBe(dir)
-    expect(alias(String(Path.stored(dir)))).toBe(false)
   })
 })
