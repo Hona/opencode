@@ -801,7 +801,7 @@ export namespace SessionPrompt {
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
-          return Telemetry.withSpan("tool.execute", {
+          return Telemetry.withSpan(`tool.execute ${item.id}`, {
             "tool.name": item.id,
             "tool.call_id": options.toolCallId,
             "session.id": input.session.id,
@@ -854,7 +854,7 @@ export namespace SessionPrompt {
       item.inputSchema = jsonSchema(transformed)
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
-        return Telemetry.withSpan("tool.execute", {
+        return Telemetry.withSpan(`tool.execute ${key}`, {
           "tool.name": key,
           "tool.call_id": opts.toolCallId,
           "session.id": input.session.id,

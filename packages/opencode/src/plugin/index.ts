@@ -195,7 +195,7 @@ export namespace Plugin {
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
     return Telemetry.withSpan(
-      "plugin.trigger",
+      `plugin.trigger ${name as string}`,
       {
         "plugin.hook": name as string,
       },
