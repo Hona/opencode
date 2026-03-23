@@ -58,6 +58,7 @@ import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
+import { Filesystem } from "@/util/filesystem"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
@@ -2135,7 +2136,8 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
     if (file.type === "delete") return "# Deleted " + normalizePath(file.relativePath)
     if (file.type === "add") return "# Created " + normalizePath(file.relativePath)
-    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + normalizePath(file.relativePath)
+    if (file.type === "move")
+      return "# Moved " + normalizePath(file.filePath) + " → " + normalizePath(file.relativePath)
     return "← Patched " + normalizePath(file.relativePath)
   }
 
