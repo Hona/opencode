@@ -88,14 +88,30 @@ const storedWin = (input: string) => {
   return dir as StoredPath
 }
 
-export namespace Path {
-  export function stored(input: RawPath | string): StoredPath {
+export namespace StoredPath {
+  /**
+   * Parse raw external input into the canonical stored path form.
+   */
+  export function parse(input: RawPath | string): StoredPath {
+    // Legacy sentinel: "/" is used internally to represent the global/non-project
+    // pseudo-root. It is not a real Windows StoredPath, but we preserve it here
+    // for backward compatibility with existing project/session/instance logic.
+    // Tech debt: split this sentinel out from StoredPath entirely.
     if (!input || input === "/") return input as StoredPath
     if (process.platform !== "win32") return path.resolve(input) as StoredPath
     return storedWin(input)
   }
 
+  /**
+   * Rehydrate a value that is already stored in canonical form.
+   *
+   * Use this for trusted values we previously persisted ourselves.
+   */
+  export function unsafe(input: string): StoredPath {
+    return input as StoredPath
+  }
+
   export function same(a: RawPath | string, b: RawPath | string) {
-    return Filesystem.resolve(stored(a)) === Filesystem.resolve(stored(b))
+    return Filesystem.resolve(parse(a)) === Filesystem.resolve(parse(b))
   }
 }
