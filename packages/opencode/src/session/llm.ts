@@ -178,7 +178,7 @@ export namespace LLM {
     // Add GenAI events for system and user messages
     if (Telemetry.shouldCaptureMessageContent()) {
       span.addEvent("gen_ai.system.message", {
-        "gen_ai.event.content": system.join("\n"),
+        "gen_ai.event.content": JSON.stringify(system.join("\n")),
       })
       const userContent = input.messages
         .filter((m) => m.role === "user")
@@ -186,7 +186,7 @@ export namespace LLM {
         .join("\n")
       if (userContent) {
         span.addEvent("gen_ai.user.message", {
-          "gen_ai.event.content": userContent,
+          "gen_ai.event.content": JSON.stringify(userContent),
         })
       }
     }
