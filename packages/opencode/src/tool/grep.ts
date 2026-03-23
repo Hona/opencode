@@ -1,12 +1,14 @@
 import z from "zod"
+import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
+import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
-import { Telemetry } from "@/telemetry"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -44,26 +46,18 @@ export const GrepTool = Tool.define("grep", {
     }
     args.push(searchPath)
 
-    using spawnSpan = Telemetry.span("tool.grep.spawn", {
-      "tool.type": "search",
-      "process.executable.name": "rg",
-      "process.executable.path": rgPath,
-      "process.command_line": `rg ${args.join(" ")}`,
-      "process.working_directory": searchPath,
-      "search.pattern": params.pattern,
-      "search.glob": params.include ?? "*",
-    })
-
-    const proc = Bun.spawn([rgPath, ...args], {
+    const proc = Process.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
-      signal: ctx.abort,
+      abort: ctx.abort,
     })
 
-    spawnSpan.setAttribute("process.pid", proc.pid)
+    if (!proc.stdout || !proc.stderr) {
+      throw new Error("Process output not available")
+    }
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
+    const output = await text(proc.stdout)
+    const errorOutput = await text(proc.stderr)
     const exitCode = await proc.exited
 
     // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
@@ -72,7 +66,7 @@ export const GrepTool = Tool.define("grep", {
     if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false, uniqueFiles: 0 },
+        metadata: { matches: 0, truncated: false },
         output: "No files found",
       }
     }
@@ -96,8 +90,7 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
+      const stats = Filesystem.stat(filePath)
       if (!stats) continue
 
       matches.push({
@@ -117,13 +110,12 @@ export const GrepTool = Tool.define("grep", {
     if (finalMatches.length === 0) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false, uniqueFiles: 0 },
+        metadata: { matches: 0, truncated: false },
         output: "No files found",
       }
     }
 
     const totalMatches = matches.length
-    const uniqueFiles = new Set(matches.map((m) => m.path)).size
     const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
     let currentFile = ""
@@ -157,7 +149,6 @@ export const GrepTool = Tool.define("grep", {
       metadata: {
         matches: totalMatches,
         truncated,
-        uniqueFiles,
       },
       output: outputLines.join("\n"),
     }

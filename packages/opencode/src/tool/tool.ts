@@ -1,9 +1,9 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
-import type { PermissionNext } from "../permission/next"
-import { Telemetry } from "../telemetry"
-import { Truncate } from "./truncation"
+import type { Permission } from "../permission"
+import type { SessionID, MessageID } from "../session/schema"
+import { Truncate } from "./truncate"
 
 export namespace Tool {
   interface Metadata {
@@ -15,15 +15,15 @@ export namespace Tool {
   }
 
   export type Context<M extends Metadata = Metadata> = {
-    sessionID: string
-    messageID: string
+    sessionID: SessionID
+    messageID: MessageID
     agent: string
     abort: AbortSignal
     callID?: string
     extra?: { [key: string]: any }
     messages: MessageV2.WithParts[]
     metadata(input: { title?: string; metadata?: M }): void
-    ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
+    ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Promise<void>
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
@@ -37,7 +37,7 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
-        attachments?: MessageV2.FilePart[]
+        attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
       }>
       formatValidationError?(error: z.ZodError): string
     }>
@@ -67,36 +67,21 @@ export namespace Tool {
               { cause: error },
             )
           }
-          return Telemetry.withSpan(
-            `tool.${id}.execute`,
-            {
-              "tool.name": id,
-              "session.id": ctx.sessionID,
-              ...Telemetry.flattenAttributes("tool.param.", args as Record<string, unknown>),
+          const result = await execute(args, ctx)
+          // skip truncation for tools that handle it themselves
+          if (result.metadata.truncated !== undefined) {
+            return result
+          }
+          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+          return {
+            ...result,
+            output: truncated.content,
+            metadata: {
+              ...result.metadata,
+              truncated: truncated.truncated,
+              ...(truncated.truncated && { outputPath: truncated.outputPath }),
             },
-            async (span) => {
-              const result = await execute(args, ctx)
-
-              // skip truncation for tools that handle it themselves
-              if (result.metadata.truncated !== undefined) {
-                span.setAttributes(Telemetry.flattenAttributes("tool.", result.metadata as Record<string, unknown>))
-                return result
-              }
-
-              const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
-              const next = {
-                ...result,
-                output: truncated.content,
-                metadata: {
-                  ...result.metadata,
-                  truncated: truncated.truncated,
-                  ...(truncated.truncated && { outputPath: truncated.outputPath }),
-                },
-              }
-              span.setAttributes(Telemetry.flattenAttributes("tool.", next.metadata as Record<string, unknown>))
-              return next
-            },
-          )
+          }
         }
         return toolInfo
       },

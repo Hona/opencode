@@ -7,11 +7,12 @@ import z from "zod"
 import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
-import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
@@ -20,10 +21,14 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
-import { Telemetry } from "@/telemetry"
+import { WorkspaceContext } from "../control-plane/workspace-context"
+import { ProjectID } from "../project/schema"
+import { WorkspaceID } from "../control-plane/schema"
+import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { PermissionNext } from "@/permission/next"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
@@ -62,6 +67,7 @@ export namespace Session {
       id: row.id,
       slug: row.slug,
       projectID: row.project_id,
+      workspaceID: row.workspace_id ?? undefined,
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
       title: row.title,
@@ -83,6 +89,7 @@ export namespace Session {
     return {
       id: info.id,
       project_id: info.projectID,
+      workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
       directory: info.directory,
@@ -114,11 +121,12 @@ export namespace Session {
 
   export const Info = z
     .object({
-      id: Identifier.schema("session"),
+      id: SessionID.zod,
       slug: z.string(),
-      projectID: z.string(),
+      projectID: ProjectID.zod,
+      workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
-      parentID: Identifier.schema("session").optional(),
+      parentID: SessionID.zod.optional(),
       summary: z
         .object({
           additions: z.number(),
@@ -140,11 +148,11 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: PermissionNext.Ruleset.optional(),
+      permission: Permission.Ruleset.optional(),
       revert: z
         .object({
-          messageID: z.string(),
-          partID: z.string().optional(),
+          messageID: MessageID.zod,
+          partID: PartID.zod.optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
         })
@@ -154,6 +162,24 @@ export namespace Session {
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
+
+  export const ProjectInfo = z
+    .object({
+      id: ProjectID.zod,
+      name: z.string().optional(),
+      worktree: z.string(),
+    })
+    .meta({
+      ref: "ProjectSummary",
+    })
+  export type ProjectInfo = z.output<typeof ProjectInfo>
+
+  export const GlobalInfo = Info.extend({
+    project: ProjectInfo.nullable(),
+  }).meta({
+    ref: "GlobalSession",
+  })
+  export type GlobalInfo = z.output<typeof GlobalInfo>
 
   export const Event = {
     Created: BusEvent.define(
@@ -177,14 +203,14 @@ export namespace Session {
     Diff: BusEvent.define(
       "session.diff",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         diff: Snapshot.FileDiff.array(),
       }),
     ),
     Error: BusEvent.define(
       "session.error",
       z.object({
-        sessionID: z.string().optional(),
+        sessionID: SessionID.zod.optional(),
         error: MessageV2.Assistant.shape.error,
       }),
     ),
@@ -193,9 +219,10 @@ export namespace Session {
   export const create = fn(
     z
       .object({
-        parentID: Identifier.schema("session").optional(),
+        parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        workspaceID: WorkspaceID.zod.optional(),
       })
       .optional(),
     async (input) => {
@@ -204,14 +231,15 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        workspaceID: input?.workspaceID,
       })
     },
   )
 
   export const fork = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message").optional(),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod.optional(),
     }),
     async (input) => {
       const original = await get(input.sessionID)
@@ -219,14 +247,15 @@ export namespace Session {
       const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        workspaceID: original.workspaceID,
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
-      const idMap = new Map<string, string>()
+      const idMap = new Map<string, MessageID>()
 
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
-        const newID = Identifier.ascending("message")
+        const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 
         const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
@@ -240,7 +269,7 @@ export namespace Session {
         for (const part of msg.parts) {
           await updatePart({
             ...part,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID: cloned.id,
             sessionID: session.id,
           })
@@ -250,16 +279,9 @@ export namespace Session {
     },
   )
 
-  export const touch = fn(Identifier.schema("session"), async (sessionID) => {
+  export const touch = fn(SessionID.zod, async (sessionID) => {
     const now = Date.now()
     Database.use((db) => {
-      using span = Telemetry.span("db.session.update", {
-        "db.system": "sqlite",
-        "db.operation": "UPDATE",
-        "db.table": "sessions",
-        "session.id": sessionID,
-        "session.field": "time_updated",
-      })
       const row = db
         .update(SessionTable)
         .set({ time_updated: now })
@@ -267,71 +289,52 @@ export namespace Session {
         .returning()
         .get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
-      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
   })
 
   export async function createNext(input: {
-    id?: string
+    id?: SessionID
     title?: string
-    parentID?: string
+    parentID?: SessionID
+    workspaceID?: WorkspaceID
     directory: string
-    permission?: PermissionNext.Ruleset
+    permission?: Permission.Ruleset
   }) {
-    return Telemetry.withSpan(
-      "action.execute",
-      {
-        "action.name": "session.create",
-        "action.category": "session",
-        "action.source": "user",
-        ...(input.parentID && { "session.parent_id": input.parentID }),
-        "opencode.execution.mode": "in-process",
+    const result: Info = {
+      id: SessionID.descending(input.id),
+      slug: Slug.create(),
+      version: Installation.VERSION,
+      projectID: Instance.project.id,
+      directory: input.directory,
+      workspaceID: input.workspaceID,
+      parentID: input.parentID,
+      title: input.title ?? createDefaultTitle(!!input.parentID),
+      permission: input.permission,
+      time: {
+        created: Date.now(),
+        updated: Date.now(),
       },
-      async () => {
-        const result: Info = {
-          id: Identifier.descending("session", input.id),
-          slug: Slug.create(),
-          version: Installation.VERSION,
-          projectID: Instance.project.id,
-          directory: input.directory,
-          parentID: input.parentID,
-          title: input.title ?? createDefaultTitle(!!input.parentID),
-          permission: input.permission,
-          time: {
-            created: Date.now(),
-            updated: Date.now(),
-          },
-        }
-        log.info("created", result)
-        Database.use((db) => {
-          using span = Telemetry.span("db.session.insert", {
-            "db.system": "sqlite",
-            "db.operation": "INSERT",
-            "db.table": "sessions",
-            "session.id": result.id,
-            ...(result.parentID && { "session.parent_id": result.parentID }),
-          })
-          db.insert(SessionTable).values(toRow(result)).run()
-          span.setAttribute("db.rows_affected", 1)
-          Database.effect(() =>
-            Bus.publish(Event.Created, {
-              info: result,
-            }),
-          )
-        })
-        const cfg = await Config.get()
-        if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-          share(result.id).catch(() => {
-            // Silently ignore sharing errors during session creation
-          })
-        Bus.publish(Event.Updated, {
+    }
+    log.info("created", result)
+    Database.use((db) => {
+      db.insert(SessionTable).values(toRow(result)).run()
+      Database.effect(() =>
+        Bus.publish(Event.Created, {
           info: result,
-        })
-        return result
-      }
-    )
+        }),
+      )
+    })
+    const cfg = await Config.get()
+    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
+      share(result.id).catch(() => {
+        // Silently ignore sharing errors during session creation
+      })
+    Bus.publish(Event.Updated, {
+      info: result,
+    })
+    return result
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
@@ -341,23 +344,13 @@ export namespace Session {
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
-  export const get = fn(Identifier.schema("session"), async (id) => {
-    const row = Database.use((db) => {
-      using span = Telemetry.span("db.session.select", {
-        "db.system": "sqlite",
-        "db.operation": "SELECT",
-        "db.table": "sessions",
-        "session.id": id,
-      })
-      const result = db.select().from(SessionTable).where(eq(SessionTable.id, id)).get()
-      span.setAttribute("db.response.returned_rows", result ? 1 : 0)
-      return result
-    })
+  export const get = fn(SessionID.zod, async (id) => {
+    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
   })
 
-  export const share = fn(Identifier.schema("session"), async (id) => {
+  export const share = fn(SessionID.zod, async (id) => {
     const cfg = await Config.get()
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
@@ -365,37 +358,21 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
     Database.use((db) => {
-      using span = Telemetry.span("db.session.update", {
-        "db.system": "sqlite",
-        "db.operation": "UPDATE",
-        "db.table": "sessions",
-        "session.id": id,
-        "session.field": "share_url",
-      })
       const row = db.update(SessionTable).set({ share_url: share.url }).where(eq(SessionTable.id, id)).returning().get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
     return share
   })
 
-  export const unshare = fn(Identifier.schema("session"), async (id) => {
+  export const unshare = fn(SessionID.zod, async (id) => {
     // Use ShareNext to remove the share (same as share function uses ShareNext to create)
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
     Database.use((db) => {
-      using span = Telemetry.span("db.session.update", {
-        "db.system": "sqlite",
-        "db.operation": "UPDATE",
-        "db.table": "sessions",
-        "session.id": id,
-        "session.field": "share_url",
-      })
       const row = db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning().get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
@@ -403,18 +380,11 @@ export namespace Session {
 
   export const setTitle = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       title: z.string(),
     }),
     async (input) => {
       return Database.use((db) => {
-        using span = Telemetry.span("db.session.update", {
-          "db.system": "sqlite",
-          "db.operation": "UPDATE",
-          "db.table": "sessions",
-          "session.id": input.sessionID,
-          "session.field": "title",
-        })
         const row = db
           .update(SessionTable)
           .set({ title: input.title })
@@ -422,7 +392,6 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -432,18 +401,11 @@ export namespace Session {
 
   export const setArchived = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       time: z.number().optional(),
     }),
     async (input) => {
       return Database.use((db) => {
-        using span = Telemetry.span("db.session.update", {
-          "db.system": "sqlite",
-          "db.operation": "UPDATE",
-          "db.table": "sessions",
-          "session.id": input.sessionID,
-          "session.field": "time_archived",
-        })
         const row = db
           .update(SessionTable)
           .set({ time_archived: input.time })
@@ -451,7 +413,6 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -461,18 +422,11 @@ export namespace Session {
 
   export const setPermission = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      permission: PermissionNext.Ruleset,
+      sessionID: SessionID.zod,
+      permission: Permission.Ruleset,
     }),
     async (input) => {
       return Database.use((db) => {
-        using span = Telemetry.span("db.session.update", {
-          "db.system": "sqlite",
-          "db.operation": "UPDATE",
-          "db.table": "sessions",
-          "session.id": input.sessionID,
-          "session.field": "permission",
-        })
         const row = db
           .update(SessionTable)
           .set({ permission: input.permission, time_updated: Date.now() })
@@ -480,7 +434,6 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -490,19 +443,12 @@ export namespace Session {
 
   export const setRevert = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       revert: Info.shape.revert,
       summary: Info.shape.summary,
     }),
     async (input) => {
       return Database.use((db) => {
-        using span = Telemetry.span("db.session.update", {
-          "db.system": "sqlite",
-          "db.operation": "UPDATE",
-          "db.table": "sessions",
-          "session.id": input.sessionID,
-          "session.field": "revert",
-        })
         const row = db
           .update(SessionTable)
           .set({
@@ -516,7 +462,6 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -524,15 +469,8 @@ export namespace Session {
     },
   )
 
-  export const clearRevert = fn(Identifier.schema("session"), async (sessionID) => {
+  export const clearRevert = fn(SessionID.zod, async (sessionID) => {
     return Database.use((db) => {
-      using span = Telemetry.span("db.session.update", {
-        "db.system": "sqlite",
-        "db.operation": "UPDATE",
-        "db.table": "sessions",
-        "session.id": sessionID,
-        "session.field": "revert",
-      })
       const row = db
         .update(SessionTable)
         .set({
@@ -543,7 +481,6 @@ export namespace Session {
         .returning()
         .get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
-      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
       return info
@@ -552,18 +489,11 @@ export namespace Session {
 
   export const setSummary = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       summary: Info.shape.summary,
     }),
     async (input) => {
       return Database.use((db) => {
-        using span = Telemetry.span("db.session.update", {
-          "db.system": "sqlite",
-          "db.operation": "UPDATE",
-          "db.table": "sessions",
-          "session.id": input.sessionID,
-          "session.field": "summary",
-        })
         const row = db
           .update(SessionTable)
           .set({
@@ -576,7 +506,6 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -584,7 +513,7 @@ export namespace Session {
     },
   )
 
-  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
+  export const diff = fn(SessionID.zod, async (sessionID) => {
     try {
       return await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
     } catch {
@@ -594,7 +523,7 @@ export namespace Session {
 
   export const messages = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       limit: z.number().optional(),
     }),
     async (input) => {
@@ -610,6 +539,7 @@ export namespace Session {
 
   export function* list(input?: {
     directory?: string
+    workspaceID?: WorkspaceID
     roots?: boolean
     start?: number
     search?: string
@@ -618,6 +548,9 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
+    if (WorkspaceContext.workspaceID) {
+      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
+    }
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
@@ -647,7 +580,76 @@ export namespace Session {
     }
   }
 
-  export const children = fn(Identifier.schema("session"), async (parentID) => {
+  export function* listGlobal(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    cursor?: number
+    search?: string
+    limit?: number
+    archived?: boolean
+  }) {
+    const conditions: SQL[] = []
+
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.cursor) {
+      conditions.push(lt(SessionTable.time_updated, input.cursor))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+    if (!input?.archived) {
+      conditions.push(isNull(SessionTable.time_archived))
+    }
+
+    const limit = input?.limit ?? 100
+
+    const rows = Database.use((db) => {
+      const query =
+        conditions.length > 0
+          ? db
+              .select()
+              .from(SessionTable)
+              .where(and(...conditions))
+          : db.select().from(SessionTable)
+      return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    })
+
+    const ids = [...new Set(rows.map((row) => row.project_id))]
+    const projects = new Map<string, ProjectInfo>()
+
+    if (ids.length > 0) {
+      const items = Database.use((db) =>
+        db
+          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(inArray(ProjectTable.id, ids))
+          .all(),
+      )
+      for (const item of items) {
+        projects.set(item.id, {
+          id: item.id,
+          name: item.name ?? undefined,
+          worktree: item.worktree,
+        })
+      }
+    }
+
+    for (const row of rows) {
+      const project = projects.get(row.project_id) ?? null
+      yield { ...fromRow(row), project }
+    }
+  }
+
+  export const children = fn(SessionID.zod, async (parentID) => {
     const project = Instance.project
     const rows = Database.use((db) =>
       db
@@ -659,58 +661,32 @@ export namespace Session {
     return rows.map(fromRow)
   })
 
-  export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    return Telemetry.withSpan(
-      "action.execute",
-      {
-        "action.name": "session.delete",
-        "action.category": "session",
-        "action.source": "user",
-        "session.id": sessionID,
-        "opencode.execution.mode": "in-process",
-      },
-      async () => {
-        const project = Instance.project
-        try {
-          const session = await get(sessionID)
-          for (const child of await children(sessionID)) {
-            await remove(child.id)
-          }
-          await unshare(sessionID).catch(() => {})
-          // CASCADE delete handles messages and parts automatically
-          Database.use((db) => {
-            using span = Telemetry.span("db.session.delete", {
-              "db.system": "sqlite",
-              "db.operation": "DELETE",
-              "db.table": "sessions",
-              "session.id": sessionID,
-            })
-            db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
-            span.setAttribute("db.rows_affected", 1)
-            Database.effect(() =>
-              Bus.publish(Event.Deleted, {
-                info: session,
-              }),
-            )
-          })
-        } catch (e) {
-          log.error(e)
-        }
+  export const remove = fn(SessionID.zod, async (sessionID) => {
+    const project = Instance.project
+    try {
+      const session = await get(sessionID)
+      for (const child of await children(sessionID)) {
+        await remove(child.id)
       }
-    )
+      await unshare(sessionID).catch(() => {})
+      // CASCADE delete handles messages and parts automatically
+      Database.use((db) => {
+        db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
+        Database.effect(() =>
+          Bus.publish(Event.Deleted, {
+            info: session,
+          }),
+        )
+      })
+    } catch (e) {
+      log.error(e)
+    }
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    const time_created = msg.role === "user" ? msg.time.created : msg.time.created
+    const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
     Database.use((db) => {
-      using span = Telemetry.span("db.message.upsert", {
-        "db.system": "sqlite",
-        "db.operation": "INSERT",
-        "db.table": "messages",
-        "message.id": id,
-        "session.id": sessionID,
-      })
       db.insert(MessageTable)
         .values({
           id,
@@ -720,7 +696,6 @@ export namespace Session {
         })
         .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
         .run()
-      span.setAttribute("db.rows_affected", 1)
       Database.effect(() =>
         Bus.publish(MessageV2.Event.Updated, {
           info: msg,
@@ -732,13 +707,15 @@ export namespace Session {
 
   export const removeMessage = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
     }),
     async (input) => {
       // CASCADE delete handles parts automatically
       Database.use((db) => {
-        db.delete(MessageTable).where(eq(MessageTable.id, input.messageID)).run()
+        db.delete(MessageTable)
+          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
@@ -752,13 +729,15 @@ export namespace Session {
 
   export const removePart = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
-      partID: Identifier.schema("part"),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
+      partID: PartID.zod,
     }),
     async (input) => {
       Database.use((db) => {
-        db.delete(PartTable).where(eq(PartTable.id, input.partID)).run()
+        db.delete(PartTable)
+          .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
@@ -789,7 +768,7 @@ export namespace Session {
         .run()
       Database.effect(() =>
         Bus.publish(MessageV2.Event.PartUpdated, {
-          part,
+          part: structuredClone(part),
         }),
       )
     })
@@ -798,9 +777,9 @@ export namespace Session {
 
   export const updatePartDelta = fn(
     z.object({
-      sessionID: z.string(),
-      messageID: z.string(),
-      partID: z.string(),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
+      partID: PartID.zod,
       field: z.string(),
       delta: z.string(),
     }),
@@ -896,10 +875,10 @@ export namespace Session {
 
   export const initialize = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      modelID: z.string(),
-      providerID: z.string(),
-      messageID: Identifier.schema("message"),
+      sessionID: SessionID.zod,
+      modelID: ModelID.zod,
+      providerID: ProviderID.zod,
+      messageID: MessageID.zod,
     }),
     async (input) => {
       await SessionPrompt.command({

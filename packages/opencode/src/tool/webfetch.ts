@@ -3,8 +3,6 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
-import { Identifier } from "../id/id"
-import { Telemetry } from "@/telemetry"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -64,127 +62,102 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    return Telemetry.withSpan("tool.webfetch.execute", {
-      "http.url": params.url,
-      "http.request.method": "GET",
-      "http.request.format": params.format || "text",
-      "fetch.retry_enabled": true,
-    }, async (span) => {
-      const initial = await fetch(params.url, { signal, headers })
+    const initial = await fetch(params.url, { signal, headers })
 
-      // Check if we need to retry with User-Agent
-      const needsRetry = initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
-      span.setAttribute("fetch.retry_triggered", needsRetry)
-
-      const response = needsRetry
+    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+    const response =
+      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
         ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
         : initial
 
-      span.setAttribute("http.response.status_code", response.status)
-      span.setAttribute("http.response.content_type", response.headers.get("content-type"))
+    clearTimeout()
 
-      clearTimeout()
+    if (!response.ok) {
+      throw new Error(`Request failed with status code: ${response.status}`)
+    }
 
-      if (!response.ok) {
-        throw new Error(`Request failed with status code: ${response.status}`)
+    // Check content length
+    const contentLength = response.headers.get("content-length")
+    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large (exceeds 5MB limit)")
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large (exceeds 5MB limit)")
+    }
+
+    const contentType = response.headers.get("content-type") || ""
+    const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
+    const title = `${params.url} (${contentType})`
+
+    // Check if response is an image
+    const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
+
+    if (isImage) {
+      const base64Content = Buffer.from(arrayBuffer).toString("base64")
+      return {
+        title,
+        output: "Image fetched successfully",
+        metadata: {},
+        attachments: [
+          {
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${base64Content}`,
+          },
+        ],
       }
+    }
 
-      // Check content length
-      const contentLength = response.headers.get("content-length")
-      if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-        throw new Error("Response too large (exceeds 5MB limit)")
-      }
+    const content = new TextDecoder().decode(arrayBuffer)
 
-      const arrayBuffer = await response.arrayBuffer()
-      if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-        throw new Error("Response too large (exceeds 5MB limit)")
-      }
-
-      span.setAttribute("http.response.size_bytes", arrayBuffer.byteLength)
-
-      const contentType = response.headers.get("content-type") || ""
-      const statusCode = response.status
-      const responseSize = arrayBuffer.byteLength
-      const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
-      const title = `${params.url} (${contentType})`
-      const metadata = {
-        statusCode,
-        contentType,
-        responseSize,
-      }
-
-      // Check if response is an image
-      const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-      span.setAttribute("fetch.is_image", isImage)
-
-      if (isImage) {
-        const base64Content = Buffer.from(arrayBuffer).toString("base64")
-        return {
-          title,
-          output: "Image fetched successfully",
-          metadata: {},
-          attachments: [
-            {
-              id: Identifier.ascending("part"),
-              sessionID: ctx.sessionID,
-              messageID: ctx.messageID,
-              type: "file",
-              mime,
-              url: `data:${mime};base64,${base64Content}`,
-            },
-          ],
+    // Handle content based on requested format and actual content type
+    switch (params.format) {
+      case "markdown":
+        if (contentType.includes("text/html")) {
+          const markdown = convertHTMLToMarkdown(content)
+          return {
+            output: markdown,
+            title,
+            metadata: {},
+          }
         }
-      }
+        return {
+          output: content,
+          title,
+          metadata: {},
+        }
 
-      const content = new TextDecoder().decode(arrayBuffer)
-
-      // Handle content based on requested format and actual content type
-      switch (params.format) {
-        case "markdown":
-          if (contentType.includes("text/html")) {
-            const markdown = convertHTMLToMarkdown(content)
-            return {
-              output: markdown,
-              title,
-              metadata,
-            }
-          }
+      case "text":
+        if (contentType.includes("text/html")) {
+          const text = await extractTextFromHTML(content)
           return {
-            output: content,
+            output: text,
             title,
-            metadata,
+            metadata: {},
           }
+        }
+        return {
+          output: content,
+          title,
+          metadata: {},
+        }
 
-        case "text":
-          if (contentType.includes("text/html")) {
-            const text = await extractTextFromHTML(content)
-            return {
-              output: text,
-              title,
-              metadata,
-            }
-          }
-          return {
-            output: content,
-            title,
-            metadata,
-          }
+      case "html":
+        return {
+          output: content,
+          title,
+          metadata: {},
+        }
 
-        case "html":
-          return {
-            output: content,
-            title,
-            metadata,
-          }
-
-        default:
-          return {
-            output: content,
-            title,
-            metadata,
-          }
-      }
-    })
+      default:
+        return {
+          output: content,
+          title,
+          metadata: {},
+        }
+    }
   },
 })
 
