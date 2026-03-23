@@ -13,6 +13,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Telemetry } from "@/telemetry"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
@@ -41,6 +42,10 @@ export namespace LSPClient {
   }
 
   export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
+    using _span = Telemetry.span("lsp.client.create", {
+      "lsp.server_id": input.serverID,
+      "lsp.root": input.root,
+    })
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 

@@ -43,6 +43,7 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { Telemetry } from "@/telemetry"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -95,10 +96,21 @@ export namespace Server {
           method: c.req.method,
           path: c.req.path,
         })
-        await next()
-        if (!skipLogging) {
-          timer.stop()
-        }
+        const method = c.req.method
+        const route = c.req.path
+        const spanName = `${method} ${route}`
+        return Telemetry.withSpan(spanName, {
+          "http.request.method": method,
+          "http.route": route,
+          "http.url": c.req.url,
+          "server.address": new URL(c.req.url).host,
+        }, async (span) => {
+          await next()
+          span.setAttribute("http.response.status_code", c.res.status)
+          if (!skipLogging) {
+            timer.stop()
+          }
+        })
       })
       .use(
         cors({

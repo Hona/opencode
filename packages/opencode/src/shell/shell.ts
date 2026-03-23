@@ -1,6 +1,7 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
+import { Telemetry } from "@/telemetry"
 import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
@@ -12,6 +13,11 @@ export namespace Shell {
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
+
+    using _span = Telemetry.span("process.kill", {
+      "process.pid": pid,
+      "process.platform": process.platform,
+    })
 
     if (process.platform === "win32") {
       await new Promise<void>((resolve) => {

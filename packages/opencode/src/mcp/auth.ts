@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
+import { Telemetry } from "@/telemetry"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -73,6 +74,11 @@ export namespace McpAuth {
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
+    using _span = Telemetry.span("oauth.token.store", {
+      "oauth.provider": mcpName,
+      "oauth.token.has_refresh": !!tokens.refreshToken,
+      "oauth.token.has_expiry": !!tokens.expiresAt,
+    })
     const entry = (await get(mcpName)) ?? {}
     entry.tokens = tokens
     await set(mcpName, entry, serverUrl)
@@ -125,6 +131,12 @@ export namespace McpAuth {
     const entry = await get(mcpName)
     if (!entry?.tokens) return null
     if (!entry.tokens.expiresAt) return false
-    return entry.tokens.expiresAt < Date.now() / 1000
+    const expired = entry.tokens.expiresAt < Date.now() / 1000
+    Telemetry.span("oauth.token.validate", {
+      "oauth.provider": mcpName,
+      "oauth.token.expired": expired,
+      "oauth.token.expires_at": entry.tokens.expiresAt,
+    })
+    return expired
   }
 }

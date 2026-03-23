@@ -75,6 +75,10 @@ export namespace Flag {
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")
 
+  // OpenTelemetry
+  export const OTEL_EXPORTER_OTLP_ENDPOINT = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+  export const OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = truthy("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+
   function number(key: string) {
     const value = process.env[key]
     if (!value) return undefined

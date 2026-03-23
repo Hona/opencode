@@ -14,6 +14,7 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { Telemetry } from "@/telemetry"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -193,7 +194,15 @@ export namespace Plugin {
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
-    return runPromise((svc) => svc.trigger(name, input, output))
+    return Telemetry.withSpan(
+      "plugin.trigger",
+      {
+        "plugin.hook": name as string,
+      },
+      async () => {
+        return runPromise((svc) => svc.trigger(name, input, output))
+      },
+    )
   }
 
   export async function list(): Promise<Hooks[]> {

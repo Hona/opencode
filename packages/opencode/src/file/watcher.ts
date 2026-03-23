@@ -11,6 +11,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Instance } from "@/project/instance"
+import { Telemetry } from "@/telemetry"
 import { git } from "@/util/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "../config/config"
@@ -96,6 +97,10 @@ export namespace FileWatcher {
             const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
               if (err) return
               for (const evt of evts) {
+                using _span = Telemetry.span("file.watcher.event", {
+                  "file.path": evt.path,
+                  "file.event_type": evt.type,
+                })
                 if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
                 if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
                 if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })

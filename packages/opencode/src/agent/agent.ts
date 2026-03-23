@@ -20,6 +20,7 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Telemetry } from "@/telemetry"
 
 export namespace Agent {
   export const Info = z
@@ -294,12 +295,18 @@ export namespace Agent {
     await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
     const existing = await list()
 
+    return Telemetry.withSpan(
+      "agent.generate",
+      {
+        "gen_ai.operation.name": "generate",
+        "gen_ai.system": defaultModel.providerID,
+        "gen_ai.request.model": defaultModel.modelID,
+        "gen_ai.agent.name": "generate",
+      },
+      async (span) => {
     const params = {
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-        },
+        isEnabled: false,
       },
       temperature: 0.3,
       messages: [
@@ -339,5 +346,7 @@ export namespace Agent {
 
     const result = await generateObject(params)
     return result.object
+      },
+    )
   }
 }

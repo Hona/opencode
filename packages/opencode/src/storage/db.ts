@@ -14,6 +14,7 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { init } from "#db"
+import { Telemetry } from "@/telemetry"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -124,17 +125,21 @@ export namespace Database {
   }>("database")
 
   export function use<T>(callback: (trx: TxOrDb) => T): T {
-    try {
-      return callback(ctx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const effects: (() => void | Promise<void>)[] = []
-        const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
-        return result
+    return Telemetry.withSpanSync("db.operation", {
+      "db.system": "sqlite",
+    }, () => {
+      try {
+        return callback(ctx.use().tx)
+      } catch (err) {
+        if (err instanceof Context.NotFound) {
+          const effects: (() => void | Promise<void>)[] = []
+          const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
+          for (const effect of effects) effect()
+          return result
+        }
+        throw err
       }
-      throw err
-    }
+    })
   }
 
   export function effect(fn: () => any | Promise<any>) {

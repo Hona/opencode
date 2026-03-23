@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
+import { Telemetry } from "@/telemetry"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -62,6 +63,12 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
+    return Telemetry.withSpan("tool.webfetch.execute", {
+      "http.url": params.url,
+      "http.request.method": "GET",
+      "webfetch.format": params.format,
+      "webfetch.timeout_ms": timeout,
+    }, async (span) => {
     const initial = await fetch(params.url, { signal, headers })
 
     // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
@@ -71,6 +78,7 @@ export const WebFetchTool = Tool.define("webfetch", {
         : initial
 
     clearTimeout()
+    span.setAttribute("http.response.status_code", response.status)
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
@@ -158,6 +166,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           metadata: {},
         }
     }
+    })
   },
 })
 

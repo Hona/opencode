@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
+import { Telemetry } from "@/telemetry"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -19,6 +20,11 @@ await Log.init({
     return "INFO"
   })(),
 })
+
+const globalConfig = await Config.global()
+if (globalConfig?.experimental?.openTelemetry || process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  Telemetry.init(Telemetry.resolveConfig("opencode-worker", true, true))
+}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {

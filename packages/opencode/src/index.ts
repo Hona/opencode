@@ -34,6 +34,8 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { Telemetry } from "./telemetry"
+import { Config } from "./config/config"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -83,6 +85,11 @@ let cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    const globalConfig = await Config.global()
+    if (globalConfig?.experimental?.openTelemetry || process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      Telemetry.init(Telemetry.resolveConfig("opencode-cli", true))
+    }
 
     const marker = path.join(Global.Path.data, "opencode.db")
     if (!(await Filesystem.exists(marker))) {

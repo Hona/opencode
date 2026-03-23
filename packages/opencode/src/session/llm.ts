@@ -23,6 +23,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
+import { Telemetry, traced } from "@/telemetry"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -45,7 +46,16 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
-  export async function stream(input: StreamInput) {
+  export const stream = traced<StreamInput, StreamOutput>(
+    "gen_ai.chat",
+    (input) => ({
+      "gen_ai.system": input.model.providerID,
+      "gen_ai.operation.name": "chat",
+      "gen_ai.request.model": input.model.id,
+      "session.id": input.sessionID,
+      "agent.name": input.agent.name,
+    }),
+  )(async (input, span) => {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -165,6 +175,22 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
+    // Add GenAI events for system and user messages
+    if (Telemetry.shouldCaptureMessageContent()) {
+      span.addEvent("gen_ai.system.message", {
+        "gen_ai.event.content": system.join("\n"),
+      })
+      const userContent = input.messages
+        .filter((m) => m.role === "user")
+        .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
+        .join("\n")
+      if (userContent) {
+        span.addEvent("gen_ai.user.message", {
+          "gen_ai.event.content": userContent,
+        })
+      }
+    }
+
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
     // Add a dummy tool that is never called to satisfy this validation.
@@ -183,6 +209,16 @@ export namespace LLM {
         inputSchema: jsonSchema({ type: "object", properties: {} }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
+    }
+
+    // Add tool definitions attribute
+    const toolNames = Object.keys(tools)
+    if (toolNames.length > 0) {
+      const toolDefs = toolNames.map((name) => ({
+        name,
+        description: tools[name].description,
+      }))
+      span.setAttribute("gen_ai.tool.definitions", JSON.stringify(toolDefs))
     }
 
     // Wire up toolExecutor for DWS workflow models so that tool calls
@@ -276,14 +312,10 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.sessionID,
-        },
+        isEnabled: false,
       },
     })
-  }
+  })
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(

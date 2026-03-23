@@ -16,6 +16,7 @@ import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
+import { Telemetry } from "@/telemetry"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -248,6 +249,11 @@ export namespace SessionProcessor {
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
+                  Telemetry.setSpanAttribute("gen_ai.usage.input_tokens", usage.tokens.input)
+                  Telemetry.setSpanAttribute("gen_ai.usage.output_tokens", usage.tokens.output)
+                  Telemetry.setSpanAttribute("gen_ai.usage.reasoning_tokens", usage.tokens.reasoning)
+                  Telemetry.setSpanAttribute("gen_ai.response.finish_reason", value.finishReason)
+                  Telemetry.setSpanAttribute("gen_ai.usage.cost", usage.cost)
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens

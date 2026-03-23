@@ -11,6 +11,7 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
+import { Telemetry } from "@/telemetry"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -34,6 +35,12 @@ export const ReadTool = Tool.define("read", {
       filepath = path.resolve(Instance.directory, filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
+
+    return Telemetry.withSpan("tool.read.file", {
+      "file.path": filepath,
+      "read.offset": params.offset ?? 1,
+      "read.limit": params.limit ?? DEFAULT_READ_LIMIT,
+    }, async (span) => {
 
     const stat = Filesystem.stat(filepath)
 
@@ -229,6 +236,7 @@ export const ReadTool = Tool.define("read", {
         loaded: instructions.map((i) => i.filepath),
       },
     }
+    })
   },
 })
 

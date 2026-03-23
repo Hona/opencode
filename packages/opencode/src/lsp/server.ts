@@ -14,6 +14,7 @@ import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
 import { spawn } from "./launch"
+import { Telemetry } from "@/telemetry"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -182,6 +183,10 @@ export namespace LSPServer {
       if (!(await Filesystem.exists(serverPath))) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading and building VS Code ESLint server")
+        using _dlSpan = Telemetry.span("http.download", {
+          "http.url": "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip",
+          "lsp.server_id": "eslint",
+        })
         const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
         if (!response.ok) return
 
@@ -586,7 +591,10 @@ export namespace LSPServer {
 
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           log.info("downloading elixir-ls from GitHub releases")
-
+          Telemetry.span("http.download", {
+            "http.url": "https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip",
+            "lsp.server_id": "elixir-ls",
+          })
           const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
@@ -643,6 +651,10 @@ export namespace LSPServer {
 
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading zls from GitHub releases")
+        Telemetry.span("http.download", {
+          "http.url": "https://api.github.com/repos/zigtools/zls/releases/latest",
+          "lsp.server_id": "zls",
+        })
 
         const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
         if (!releaseResponse.ok) {
@@ -935,9 +947,13 @@ export namespace LSPServer {
       }
 
       if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-      log.info("downloading clangd from GitHub releases")
+        log.info("downloading clangd from GitHub releases")
+        Telemetry.span("http.download", {
+          "http.url": "https://api.github.com/repos/clangd/clangd/releases/latest",
+          "lsp.server_id": "clangd",
+        })
 
-      const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+        const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
       if (!releaseResponse.ok) {
         log.error("Failed to fetch clangd release info")
         return
@@ -1420,6 +1436,10 @@ export namespace LSPServer {
       if (!bin) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading lua-language-server from GitHub releases")
+        Telemetry.span("http.download", {
+          "http.url": "https://api.github.com/repos/LuaLS/lua-language-server/releases/latest",
+          "lsp.server_id": "lua-ls",
+        })
 
         const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
         if (!releaseResponse.ok) {

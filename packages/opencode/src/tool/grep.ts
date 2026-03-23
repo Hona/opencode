@@ -9,6 +9,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Telemetry } from "@/telemetry"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -45,6 +46,12 @@ export const GrepTool = Tool.define("grep", {
       args.push("--glob", params.include)
     }
     args.push(searchPath)
+
+    using spawnSpan = Telemetry.span("tool.grep.spawn", {
+      "search.pattern": params.pattern,
+      "search.path": searchPath,
+      "search.include": params.include || "",
+    })
 
     const proc = Process.spawn([rgPath, ...args], {
       stdout: "pipe",
@@ -143,6 +150,9 @@ export const GrepTool = Tool.define("grep", {
       outputLines.push("")
       outputLines.push("(Some paths were inaccessible and skipped)")
     }
+
+    spawnSpan.setAttribute("search.matches", totalMatches)
+    spawnSpan.setAttribute("search.truncated", truncated)
 
     return {
       title: params.pattern,

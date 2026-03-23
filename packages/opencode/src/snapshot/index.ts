@@ -6,6 +6,7 @@ import z from "zod"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
+import { Telemetry } from "@/telemetry"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -371,7 +372,9 @@ export namespace Snapshot {
   }
 
   export async function track() {
-    return runPromise((svc) => svc.track())
+    return Telemetry.withSpan("snapshot.track", {}, async () => {
+      return runPromise((svc) => svc.track())
+    })
   }
 
   export async function patch(hash: string) {

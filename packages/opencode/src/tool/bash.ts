@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { Telemetry } from "@/telemetry"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -164,6 +165,12 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
+      using spawnSpan = Telemetry.span("tool.bash.spawn", {
+        "process.command": params.command,
+        "process.cwd": cwd,
+        "process.timeout_ms": timeout,
+      })
+
       const proc = spawn(params.command, {
         shell,
         cwd,
@@ -255,6 +262,10 @@ export const BashTool = Tool.define("bash", async () => {
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
+
+      spawnSpan.setAttribute("process.exit_code", proc.exitCode ?? -1)
+      if (timedOut) spawnSpan.setAttribute("process.timed_out", true)
+      if (aborted) spawnSpan.setAttribute("process.aborted", true)
 
       return {
         title: params.description,

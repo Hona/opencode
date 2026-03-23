@@ -336,17 +336,23 @@ export namespace Telemetry {
     // Access the underlying AsyncLocalStorage to enter the new context.
     // The OTel JS API only provides callback-based context.with(), but the
     // using/disposable pattern requires enter/exit semantics.
-    const mgr = (context as any)._getContextManager?.()
-    const als = mgr?._asyncLocalStorage
-    if (als?.enterWith) {
-      als.enterWith(ctx)
-    }
+    try {
+      const mgr = (context as any)["_getContextManager"]?.()
+      const als = mgr?._asyncLocalStorage ?? mgr?.active
+      if (als?.enterWith) {
+        als.enterWith(ctx)
+      }
+    } catch {}
 
     return Object.assign(s, {
       [Symbol.dispose]: () => {
-        if (als?.enterWith) {
-          als.enterWith(parentCtx)
-        }
+        try {
+          const mgr = (context as any)["_getContextManager"]?.()
+          const als = mgr?._asyncLocalStorage ?? mgr?.active
+          if (als?.enterWith) {
+            als.enterWith(parentCtx)
+          }
+        } catch {}
         s.end()
       },
     })

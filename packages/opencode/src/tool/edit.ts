@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { Telemetry } from "@/telemetry"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -53,6 +54,10 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
+    return Telemetry.withSpan("tool.edit.execute", {
+      "file.path": filePath,
+      "edit.replace_all": params.replaceAll ?? false,
+    }, async (span) => {
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -164,6 +169,7 @@ export const EditTool = Tool.define("edit", {
       title: `${path.relative(Instance.worktree, filePath)}`,
       output,
     }
+    })
   },
 })
 

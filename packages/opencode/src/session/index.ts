@@ -32,6 +32,7 @@ import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { Telemetry } from "@/telemetry"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -281,6 +282,12 @@ export namespace Session {
 
   export const touch = fn(SessionID.zod, async (sessionID) => {
     const now = Date.now()
+    using _span = Telemetry.span("db.session.touch", {
+      "db.system": "sqlite",
+      "db.operation": "UPDATE",
+      "db.table": "sessions",
+      "session.id": sessionID,
+    })
     Database.use((db) => {
       const row = db
         .update(SessionTable)
@@ -318,14 +325,22 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    Database.use((db) => {
-      db.insert(SessionTable).values(toRow(result)).run()
-      Database.effect(() =>
-        Bus.publish(Event.Created, {
-          info: result,
-        }),
-      )
-    })
+    {
+      using _span = Telemetry.span("db.session.insert", {
+        "db.system": "sqlite",
+        "db.operation": "INSERT",
+        "db.table": "sessions",
+        "session.id": result.id,
+      })
+      Database.use((db) => {
+        db.insert(SessionTable).values(toRow(result)).run()
+        Database.effect(() =>
+          Bus.publish(Event.Created, {
+            info: result,
+          }),
+        )
+      })
+    }
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id).catch(() => {
@@ -345,6 +360,12 @@ export namespace Session {
   }
 
   export const get = fn(SessionID.zod, async (id) => {
+    using _span = Telemetry.span("db.session.get", {
+      "db.system": "sqlite",
+      "db.operation": "SELECT",
+      "db.table": "sessions",
+      "session.id": id,
+    })
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
@@ -670,14 +691,22 @@ export namespace Session {
       }
       await unshare(sessionID).catch(() => {})
       // CASCADE delete handles messages and parts automatically
-      Database.use((db) => {
-        db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
-        Database.effect(() =>
-          Bus.publish(Event.Deleted, {
-            info: session,
-          }),
-        )
-      })
+      {
+        using _span = Telemetry.span("db.session.delete", {
+          "db.system": "sqlite",
+          "db.operation": "DELETE",
+          "db.table": "sessions",
+          "session.id": sessionID,
+        })
+        Database.use((db) => {
+          db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
+          Database.effect(() =>
+            Bus.publish(Event.Deleted, {
+              info: session,
+            }),
+          )
+        })
+      }
     } catch (e) {
       log.error(e)
     }
@@ -686,6 +715,13 @@ export namespace Session {
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
+    using _span = Telemetry.span("db.message.upsert", {
+      "db.system": "sqlite",
+      "db.operation": "UPSERT",
+      "db.table": "messages",
+      "session.id": sessionID,
+      "message.id": id,
+    })
     Database.use((db) => {
       db.insert(MessageTable)
         .values({
@@ -755,6 +791,14 @@ export namespace Session {
   export const updatePart = fn(UpdatePartInput, async (part) => {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
+    using _span = Telemetry.span("db.part.upsert", {
+      "db.system": "sqlite",
+      "db.operation": "UPSERT",
+      "db.table": "parts",
+      "session.id": sessionID,
+      "message.id": messageID,
+      "part.id": id,
+    })
     Database.use((db) => {
       db.insert(PartTable)
         .values({
