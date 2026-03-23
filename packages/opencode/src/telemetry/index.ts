@@ -211,6 +211,14 @@ export namespace Telemetry {
     }
   }
 
+  export function addSpanEvent(name: string, attributes?: Record<string, AttributeValue>): void {
+    if (!initialized) return
+    const span = trace.getActiveSpan()
+    if (span) {
+      span.addEvent(name, attributes)
+    }
+  }
+
   export function shouldCaptureMessageContent(): boolean {
     return Flag.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
   }
