@@ -1,8 +1,9 @@
 import { DateTime, Effect, Layer, Semaphore, ServiceMap } from "effect"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
+import { Flag } from "@/flag/flag"
 import { Path } from "@/path/path"
 import type { PathKey, PrettyPath } from "@/path/schema"
-import { runPromiseInstance } from "@/effect/runtime"
-import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
@@ -41,6 +42,11 @@ export namespace FileTime {
     return next
   }
 
+  interface State {
+    reads: Map<SessionID, Map<PathKey, Stamp>>
+    locks: Map<PathKey, Semaphore.Semaphore>
+  }
+
   export interface Interface {
     readonly read: (sessionID: SessionID, file: PrettyPath) => Effect.Effect<void>
     readonly get: (sessionID: SessionID, file: PrettyPath) => Effect.Effect<Date | undefined>
@@ -53,32 +59,42 @@ export namespace FileTime {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
-      const reads = new Map<SessionID, Map<PathKey, Stamp>>()
-      const locks = new Map<PathKey, Semaphore.Semaphore>()
+      const disable = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("FileTime.state")(() =>
+          Effect.succeed({
+            reads: new Map<SessionID, Map<PathKey, Stamp>>(),
+            locks: new Map<PathKey, Semaphore.Semaphore>(),
+          }),
+        ),
+      )
 
-      const getLock = (file: PrettyPath) => {
+      const lock = Effect.fn("FileTime.lock")(function* (file: PrettyPath) {
+        const locks = (yield* InstanceState.get(state)).locks
         const id = key(file)
-        const lock = locks.get(id)
-        if (lock) return lock
+        const existing = locks.get(id)
+        if (existing) return existing
 
         const next = Semaphore.makeUnsafe(1)
         locks.set(id, next)
         return next
-      }
+      })
 
       const read = Effect.fn("FileTime.read")(function* (sessionID: SessionID, file: PrettyPath) {
+        const reads = (yield* InstanceState.get(state)).reads
         log.info("read", { sessionID, file })
         session(reads, sessionID).set(key(file), yield* stamp(file))
       })
 
       const get = Effect.fn("FileTime.get")(function* (sessionID: SessionID, file: PrettyPath) {
+        const reads = (yield* InstanceState.get(state)).reads
         return reads.get(sessionID)?.get(key(file))?.read
       })
 
       const assert = Effect.fn("FileTime.assert")(function* (sessionID: SessionID, file: PrettyPath) {
-        if (disableCheck) return
+        if (disable) return
 
+        const reads = (yield* InstanceState.get(state)).reads
         const time = reads.get(sessionID)?.get(key(file))
         if (!time) throw new Error(`You must read file ${file} before overwriting it. Use the Read tool first`)
 
@@ -92,26 +108,28 @@ export namespace FileTime {
       })
 
       const withLock = Effect.fn("FileTime.withLock")(function* <T>(file: PrettyPath, fn: () => Promise<T>) {
-        return yield* Effect.promise(fn).pipe(getLock(file).withPermits(1))
+        return yield* Effect.promise(fn).pipe((yield* lock(file)).withPermits(1))
       })
 
       return Service.of({ read, get, assert, withLock })
     }),
-  )
+  ).pipe(Layer.orDie)
+
+  const runPromise = makeRunPromise(Service, layer)
 
   export function read(sessionID: SessionID, file: PrettyPath) {
-    return runPromiseInstance(Service.use((s) => s.read(sessionID, file)))
+    return runPromise((s) => s.read(sessionID, file))
   }
 
   export function get(sessionID: SessionID, file: PrettyPath) {
-    return runPromiseInstance(Service.use((s) => s.get(sessionID, file)))
+    return runPromise((s) => s.get(sessionID, file))
   }
 
   export async function assert(sessionID: SessionID, file: PrettyPath) {
-    return runPromiseInstance(Service.use((s) => s.assert(sessionID, file)))
+    return runPromise((s) => s.assert(sessionID, file))
   }
 
   export async function withLock<T>(file: PrettyPath, fn: () => Promise<T>): Promise<T> {
-    return runPromiseInstance(Service.use((s) => s.withLock(file, fn)))
+    return runPromise((s) => s.withLock(file, fn))
   }
 }

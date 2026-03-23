@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -10,6 +10,10 @@ import { tmpdir } from "../fixture/fixture"
 // Snapshot.patch() now returns native pretty paths, so expected values should
 // match the host separator and casing rules.
 const fwd = (...parts: string[]) => path.join(...parts)
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function bootstrap() {
   return tmpdir({

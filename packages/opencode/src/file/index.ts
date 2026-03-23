@@ -1,8 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Path } from "@/path/path"
-import { InstanceContext } from "@/effect/instance-context"
-import { runPromiseInstance } from "@/effect/runtime"
 import { Instance } from "@/project/instance"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import { git } from "@/util/git"
 import { Effect, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
@@ -19,7 +19,8 @@ import { Ripgrep } from "./ripgrep"
 import type { PrettyPath, RepoPath } from "@/path/schema"
 
 export namespace File {
-  const repo = (input: RepoPath | string) => (Path.isAbsolute(input) ? Path.repoFrom(Instance.directory, input) : Path.repo(input))
+  const repo = (input: RepoPath | string) =>
+    Path.isAbsolute(input) ? Path.repoFrom(Instance.directory, input) : Path.repo(input)
 
   export const Info = z
     .object({
@@ -90,26 +91,6 @@ export namespace File {
         file: z.string(),
       }),
     ),
-  }
-
-  export function init() {
-    return runPromiseInstance(Service.use((svc) => svc.init()))
-  }
-
-  export async function status() {
-    return runPromiseInstance(Service.use((svc) => svc.status()))
-  }
-
-  export async function read(file: RepoPath | string): Promise<Content> {
-    return runPromiseInstance(Service.use((svc) => svc.read(repo(file))))
-  }
-
-  export async function list(dir?: RepoPath | string) {
-    return runPromiseInstance(Service.use((svc) => svc.list(dir ? repo(dir) : undefined)))
-  }
-
-  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    return runPromiseInstance(Service.use((svc) => svc.search(input)))
   }
 
   const log = Log.create({ service: "file" })
@@ -208,12 +189,6 @@ export namespace File {
     "efi",
     "rom",
     "com",
-    "cmd",
-    "ps1",
-    "sh",
-    "bash",
-    "zsh",
-    "fish",
   ])
 
   const image = new Set([
@@ -332,7 +307,7 @@ export namespace File {
 
   function shouldEncode(mimeType: string) {
     const type = mimeType.toLowerCase()
-    log.info("shouldEncode", { type })
+    log.debug("shouldEncode", { type })
     if (!type) return false
     if (type.startsWith("text/")) return false
     if (type.includes("charset=")) return false
@@ -349,6 +324,13 @@ export namespace File {
       else visible.push(item)
     }
     return [...visible, ...hiddenItems]
+  }
+
+  interface State {
+    root: Promise<PrettyPath>
+    worktree: Promise<PrettyPath | undefined>
+    cache: Entry
+    fiber: Fiber.Fiber<void> | undefined
   }
 
   export interface Interface {
@@ -369,21 +351,28 @@ export namespace File {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const instance = yield* InstanceContext
-      const root = Path.physical(instance.directory)
-      const worktree = instance.worktree === "/" ? undefined : Path.physical(instance.worktree)
+      const store = yield* InstanceState.make<State>(
+        Effect.fn("File.state")((ctx) =>
+          Effect.succeed({
+            root: Path.physical(ctx.directory),
+            worktree: ctx.worktree === "/" ? Promise.resolve(undefined) : Path.physical(ctx.worktree),
+            cache: { files: [], dirs: [] } as Entry,
+            fiber: undefined as Fiber.Fiber<void> | undefined,
+          }),
+        ),
+      )
 
-      const allow = async (input: string) => {
+      const allow = async (state: State, input: string) => {
         const file = await Path.physical(input)
-        if (Path.contains(await root, file)) return true
+        if (Path.contains(await state.root, file)) return true
+        const worktree = await state.worktree
         if (!worktree) return false
-        return Path.contains(await worktree, file)
+        return Path.contains(worktree, file)
       }
-      let cache: Entry = { files: [], dirs: [] }
-      const isGlobalHome = instance.directory === Global.Path.home && instance.project.id === "global"
 
       const scan = Effect.fn("File.scan")(function* () {
-        if (instance.directory === path.parse(instance.directory).root) return
+        if (Instance.directory === path.parse(Instance.directory).root) return
+        const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
         const next: Entry = { files: [], dirs: [] }
 
         yield* Effect.promise(async () => {
@@ -393,14 +382,16 @@ export namespace File {
             const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
             const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
             const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-            const top = await fs.promises.readdir(instance.directory, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+            const top = await fs.promises
+              .readdir(Instance.directory, { withFileTypes: true })
+              .catch(() => [] as fs.Dirent[])
 
             for (const entry of top) {
               if (!entry.isDirectory()) continue
               if (shouldIgnoreName(entry.name)) continue
               dirs.add(Path.repo(`${entry.name}/`))
 
-              const base = path.join(instance.directory, entry.name)
+              const base = path.join(Instance.directory, entry.name)
               const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
               for (const child of children) {
                 if (!child.isDirectory()) continue
@@ -412,7 +403,7 @@ export namespace File {
             next.dirs = Array.from(dirs).toSorted()
           } else {
             const seen = new Set<string>()
-            for await (const file of Ripgrep.files({ cwd: instance.directory })) {
+            for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
               const key = Path.repo(file)
               next.files.push(key)
               let dir = Path.repoParent(key)
@@ -430,31 +421,38 @@ export namespace File {
           }
         })
 
-        cache = next
+        const s = yield* InstanceState.get(store)
+        s.cache = next
       })
 
-      const getFiles = () => cache
-
       const scope = yield* Scope.Scope
-      let fiber: Fiber.Fiber<void> | undefined
 
-      const init = Effect.fn("File.init")(function* () {
-        if (!fiber) {
-          fiber = yield* scan().pipe(
+      const ensure = Effect.fn("File.ensure")(function* () {
+        const s = yield* InstanceState.get(store)
+        if (!s.fiber)
+          s.fiber = yield* scan().pipe(
             Effect.catchCause(() => Effect.void),
+            Effect.ensuring(
+              Effect.sync(() => {
+                s.fiber = undefined
+              }),
+            ),
             Effect.forkIn(scope),
           )
-        }
-        yield* Fiber.join(fiber)
+        yield* Fiber.join(s.fiber)
+      })
+
+      const init = Effect.fn("File.init")(function* () {
+        yield* ensure()
       })
 
       const status = Effect.fn("File.status")(function* () {
-        if (instance.project.vcs !== "git") return []
+        if (Instance.project.vcs !== "git") return []
 
         return yield* Effect.promise(async () => {
           const diffOutput = (
             await git(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
-              cwd: instance.directory,
+              cwd: Instance.directory,
             })
           ).text()
 
@@ -484,7 +482,7 @@ export namespace File {
                 "--exclude-standard",
               ],
               {
-                cwd: instance.directory,
+                cwd: Instance.directory,
               },
             )
           ).text()
@@ -492,7 +490,7 @@ export namespace File {
           if (untrackedOutput.trim()) {
             for (const file of untrackedOutput.trim().split("\n")) {
               try {
-                const content = await Filesystem.readText(Path.join(instance.directory, file))
+                const content = await Filesystem.readText(path.join(Instance.directory, file))
                 changed.push({
                   path: file,
                   added: content.split("\n").length,
@@ -518,7 +516,7 @@ export namespace File {
                 "HEAD",
               ],
               {
-                cwd: instance.directory,
+                cwd: Instance.directory,
               },
             )
           ).text()
@@ -535,21 +533,22 @@ export namespace File {
           }
 
           return changed.map((item) => {
-              const full = Path.join(instance.directory, item.path)
-              return {
-                ...item,
-                path: Path.repoFrom(instance.directory, full),
-              }
-            })
+            const full = path.isAbsolute(item.path) ? item.path : path.join(Instance.directory, item.path)
+            return {
+              ...item,
+              path: Path.repoFrom(Instance.directory, full),
+            }
+          })
         })
       })
 
       const read = Effect.fn("File.read")(function* (file: RepoPath) {
+        const state = yield* InstanceState.get(store)
         return yield* Effect.promise(async (): Promise<File.Content> => {
           using _ = log.time("read", { file })
-          const full = Path.join(instance.directory, file)
+          const full = Path.join(Instance.directory, file)
 
-          if (!(await allow(full))) {
+          if (!(await allow(state, full))) {
             throw new Error(`Access denied: path escapes project directory`)
           }
 
@@ -595,19 +594,19 @@ export namespace File {
 
           const content = (await Filesystem.readText(full).catch(() => "")).trim()
 
-          if (instance.project.vcs === "git") {
+          if (Instance.project.vcs === "git") {
             let diff = (
-              await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: instance.directory })
+              await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })
             ).text()
             if (!diff.trim()) {
               diff = (
                 await git(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], {
-                  cwd: instance.directory,
+                  cwd: Instance.directory,
                 })
               ).text()
             }
             if (diff.trim()) {
-              const original = (await git(["show", `HEAD:${file}`], { cwd: instance.directory })).text()
+              const original = (await git(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
               const patch = structuredPatch(file, file, original, content, "old", "new", {
                 context: Infinity,
                 ignoreWhitespace: true,
@@ -626,32 +625,33 @@ export namespace File {
       })
 
       const list = Effect.fn("File.list")(function* (dir?: RepoPath) {
+        const state = yield* InstanceState.get(store)
         return yield* Effect.promise(async () => {
           const exclude = [".git", ".DS_Store"]
           let ignored = (_: string) => false
-          if (instance.project.vcs === "git") {
+          if (Instance.project.vcs === "git") {
             const ig = ignore()
-            const gitignore = path.join(instance.project.worktree, ".gitignore")
+            const gitignore = path.join(Instance.project.worktree, ".gitignore")
             if (await Filesystem.exists(gitignore)) {
               ig.add(await Filesystem.readText(gitignore))
             }
-            const ignoreFile = path.join(instance.project.worktree, ".ignore")
+            const ignoreFile = path.join(Instance.project.worktree, ".ignore")
             if (await Filesystem.exists(ignoreFile)) {
               ig.add(await Filesystem.readText(ignoreFile))
             }
             ignored = ig.ignores.bind(ig)
           }
 
-          const resolved = dir ? Path.join(instance.directory, dir) : instance.directory
-          if (!(await allow(resolved))) {
-            throw new Error(`Access denied: path escapes project directory`)
+          const resolved = dir ? Path.join(Instance.directory, dir) : Instance.directory
+          if (!(await allow(state, resolved))) {
+            throw new Error("Access denied: path escapes project directory")
           }
 
           const nodes: File.Node[] = []
           for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
             if (exclude.includes(entry.name)) continue
             const absolute = Path.join(resolved, entry.name)
-            const file = Path.repoFrom(instance.directory, absolute)
+            const file = Path.repoFrom(Instance.directory, absolute)
             const type = entry.isDirectory() ? "directory" : "file"
             nodes.push({
               name: entry.name,
@@ -675,14 +675,17 @@ export namespace File {
         dirs?: boolean
         type?: "file" | "directory"
       }) {
+        yield* ensure()
+        const { cache } = yield* InstanceState.get(store)
+
         return yield* Effect.promise(async () => {
           const query = input.query.trim()
           const limit = input.limit ?? 100
           const kind = input.type ?? (input.dirs === false ? "file" : "all")
           log.info("search", { query, kind })
 
-          const result = getFiles()
-          const preferHidden = query.startsWith(".") || Path.hidden(query)
+          const result = cache
+          const preferHidden = query.startsWith(".") || query.includes("/.")
 
           if (!query) {
             if (kind === "file") return result.files.slice(0, limit)
@@ -694,10 +697,7 @@ export namespace File {
 
           const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
           const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
-          const output =
-            kind === "directory"
-              ? sortHiddenLast(sorted, preferHidden).slice(0, limit)
-              : sorted
+          const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
           log.info("search", { query, kind, results: output.length })
           return output as RepoPath[]
@@ -708,4 +708,26 @@ export namespace File {
       return Service.of({ init, status, read, list, search })
     }),
   )
+
+  const runPromise = makeRunPromise(Service, layer)
+
+  export function init() {
+    return runPromise((svc) => svc.init())
+  }
+
+  export async function status() {
+    return runPromise((svc) => svc.status())
+  }
+
+  export async function read(file: RepoPath | string): Promise<Content> {
+    return runPromise((svc) => svc.read(repo(file)))
+  }
+
+  export async function list(dir?: RepoPath | string) {
+    return runPromise((svc) => svc.list(dir ? repo(dir) : undefined))
+  }
+
+  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
+    return runPromise((svc) => svc.search(input))
+  }
 }

@@ -396,6 +396,8 @@ function createGlobalSync() {
       return globalStore.error
     },
     child,
+    peek: (directory: WorkspacePath, options?: { bootstrap?: boolean }) =>
+      children.peek(workspacePathKey(directory), options),
     bootstrap,
     updateConfig,
     project: projectApi,

@@ -28,7 +28,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { PermissionNext } from "@/permission"
+import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
@@ -151,7 +151,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: PermissionNext.Ruleset.optional(),
+      permission: Permission.Ruleset.optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -305,7 +305,7 @@ export namespace Session {
     parentID?: SessionID
     workspaceID?: WorkspaceID
     directory: PrettyPath
-    permission?: PermissionNext.Ruleset
+    permission?: Permission.Ruleset
   }) {
     const dir = await Path.truecase(input.directory)
     const result: Info = {
@@ -429,7 +429,7 @@ export namespace Session {
   export const setPermission = fn(
     z.object({
       sessionID: SessionID.zod,
-      permission: PermissionNext.Ruleset,
+      permission: Permission.Ruleset,
     }),
     async (input) => {
       return Database.use((db) => {
@@ -574,7 +574,11 @@ export namespace Session {
     const limit = input?.limit ?? 100
 
     const rows = Database.use((db) => {
-      const query = db.select().from(SessionTable).where(and(...conditions)).orderBy(desc(SessionTable.time_updated))
+      const query = db
+        .select()
+        .from(SessionTable)
+        .where(and(...conditions))
+        .orderBy(desc(SessionTable.time_updated))
       return query.limit(limit).all()
     })
     for (const row of rows) {

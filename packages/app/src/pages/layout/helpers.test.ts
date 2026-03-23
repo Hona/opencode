@@ -135,10 +135,11 @@ describe("layout workspace helpers", () => {
   })
 
   test("dedupes windows workspace variants in effective order", () => {
-    const result = effectiveWorkspaceOrder("C:/Root", ["c:\\root\\", "C:/ROOT/feature", "c:\\root\\FEATURE\\"], [
-      "c:/root",
-      "c:/root/feature",
-    ])
+    const result = effectiveWorkspaceOrder(
+      "C:/Root",
+      ["c:\\root\\", "C:/ROOT/feature", "c:\\root\\FEATURE\\"],
+      ["c:/root", "c:/root/feature"],
+    )
 
     expect(result).toEqual(["C:/Root", "C:/ROOT/feature"])
   })

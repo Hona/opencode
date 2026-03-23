@@ -223,17 +223,6 @@ export function FileTabContent(props: { tab: FileTabId }) {
         onDelete={controls.remove}
       />
     ),
-    onDraftPopoverFocusOut: (e: FocusEvent) => {
-      const current = e.currentTarget as HTMLDivElement
-      const target = e.relatedTarget
-      if (target instanceof Node && current.contains(target)) return
-
-      setTimeout(() => {
-        if (!document.activeElement || !current.contains(document.activeElement)) {
-          setNote("commenting", null)
-        }
-      }, 0)
-    },
   })
 
   createEffect(() => {
@@ -432,7 +421,6 @@ export function FileTabContent(props: { tab: FileTabId }) {
           commentsUi.onLineSelectionEnd(range)
         }}
         search={search}
-        overflow="scroll"
         class="select-text"
         media={{
           mode: "auto",

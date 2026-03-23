@@ -1,10 +1,10 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import type { PermissionNext } from "../../src/permission"
+import type { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Path } from "../../src/path/path"
 import { win } from "../lib/windows-path"
@@ -25,6 +25,9 @@ const pretty = (file: string) => Path.pretty(file)
 async function link(target: string, alias: string) {
   await fs.symlink(target, alias, process.platform === "win32" ? "junction" : "dir")
 }
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.write", () => {
   describe("new file creation", () => {
@@ -108,10 +111,10 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const write = await WriteTool.init()
-          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const testCtx = {
             ...ctx,
-            ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
               requests.push(req)
             },
           }
@@ -142,11 +145,11 @@ describe("tool.write", () => {
         fn: async () => {
           const write = await WriteTool.init()
           for (const item of win(path.join(outerTmp.path, "new.txt"))) {
-            const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+            const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
             const stop = new Error("stop")
             const testCtx = {
               ...ctx,
-              ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+              ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
                 requests.push(req)
                 if (req.permission === "external_directory") throw stop
               },

@@ -2,7 +2,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Bus } from "../../src/bus"
-import { PermissionNext } from "../../src/permission"
+import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -240,10 +240,10 @@ describe("session.prompt local file permissions", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        const seen: PermissionNext.Request[] = []
-        const unsub = Bus.subscribe(PermissionNext.Event.Asked, (event) => {
+        const seen: Permission.Request[] = []
+        const unsub = Bus.subscribe(Permission.Event.Asked, (event) => {
           seen.push(event.properties)
-          void PermissionNext.reply({
+          void Permission.reply({
             requestID: event.properties.id,
             reply: "once",
           })
@@ -305,10 +305,10 @@ describe("session.prompt local file permissions", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        const seen: PermissionNext.Request[] = []
-        const unsub = Bus.subscribe(PermissionNext.Event.Asked, (event) => {
+        const seen: Permission.Request[] = []
+        const unsub = Bus.subscribe(Permission.Event.Asked, (event) => {
           seen.push(event.properties)
-          void PermissionNext.reply({
+          void Permission.reply({
             requestID: event.properties.id,
             reply: "once",
           })

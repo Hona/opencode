@@ -70,8 +70,9 @@ export const WorkspaceDragOverlay = (props: {
     if (!directory) return
 
     const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
-    const kind =
-      workspaceEqual(directory, project.worktree) ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
+    const kind = workspaceEqual(directory, project.worktree)
+      ? language.t("workspace.type.local")
+      : language.t("workspace.type.sandbox")
     const name = props.workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
     return `${kind} : ${name}`
   })
@@ -332,12 +333,13 @@ export const SortableWorkspace = (props: {
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
   const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
-  const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
+  const count = createMemo(() => sessions()?.length ?? 0)
+  const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
-  const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
+  const loading = createMemo(() => open() && !booted() && count() === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
-  const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
+  const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.directory)
@@ -472,8 +474,9 @@ export const LocalWorkspace = (props: {
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
-  const loading = createMemo(() => !booted() && sessions().length === 0)
-  const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
+  const count = createMemo(() => sessions()?.length ?? 0)
+  const loading = createMemo(() => !booted() && count() === 0)
+  const hasMore = createMemo(() => workspace().store.sessionTotal > count())
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)

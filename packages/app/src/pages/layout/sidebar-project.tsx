@@ -16,6 +16,7 @@ import { childMapByParent, displayName, projectContains, sortedRootSessions, wor
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<WorkspacePath>
+  currentProject: Accessor<LocalProject | undefined>
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   hoverProject: Accessor<WorkspacePath | undefined>
@@ -109,8 +110,14 @@ const ProjectTile = (props: {
           "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
         onPointerDown={(event) => {
+          if (event.button === 0 && !event.ctrlKey) {
+            props.setOpen(false)
+            props.setSuppressHover(true)
+            return
+          }
           if (!props.overlay()) return
           if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+          props.setOpen(false)
           props.setSuppressHover(true)
           event.preventDefault()
         }}
@@ -130,12 +137,11 @@ const ProjectTile = (props: {
           props.onProjectFocus(props.project.worktree)
         }}
         onClick={() => {
+          props.setOpen(false)
           if (props.selected()) {
-            props.setSuppressHover(true)
             layout.sidebar.toggle()
             return
           }
-          props.setSuppressHover(false)
           props.navigateToProject(props.project.worktree)
         }}
         onBlur={() => props.setOpen(false)}
@@ -292,7 +298,9 @@ export const SortableProject = (props: {
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
   const active = createMemo(
-    () => state.menu || (preview() ? state.open : overlay() && workspaceEqual(props.ctx.hoverProject(), props.project.worktree)),
+    () =>
+      state.menu ||
+      (preview() ? state.open : overlay() && workspaceEqual(props.ctx.hoverProject(), props.project.worktree)),
   )
 
   createEffect(() => {
@@ -309,10 +317,9 @@ export const SortableProject = (props: {
 
   const label = (directory: WorkspacePath) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
-    const kind =
-      workspaceEqual(directory, props.project.worktree)
-        ? language.t("workspace.type.local")
-        : language.t("workspace.type.sandbox")
+    const kind = workspaceEqual(directory, props.project.worktree)
+      ? language.t("workspace.type.local")
+      : language.t("workspace.type.sandbox")
     const name = props.ctx.workspaceLabel(directory, data.vcs?.branch, props.project.id)
     return `${kind} : ${name}`
   }

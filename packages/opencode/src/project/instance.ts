@@ -8,13 +8,13 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-interface Context {
+export interface Shape {
   directory: PrettyPath
   worktree: PrettyPath
   project: Project.Info
 }
-const context = Context.create<Context>("instance")
-const cache = new Map<PathKey, Promise<Context>>()
+const context = Context.create<Shape>("instance")
+const cache = new Map<PathKey, Promise<Shape>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -32,7 +32,12 @@ function emit(directory: PrettyPath) {
   })
 }
 
-function boot(input: { directory: PrettyPath; init?: () => Promise<any>; project?: Project.Info; worktree?: PrettyPath }) {
+function boot(input: {
+  directory: PrettyPath
+  init?: () => Promise<any>
+  project?: Project.Info
+  worktree?: PrettyPath
+}) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -53,7 +58,7 @@ function boot(input: { directory: PrettyPath; init?: () => Promise<any>; project
   })
 }
 
-function track(key: PathKey, next: Promise<Context>) {
+function track(key: PathKey, next: Promise<Shape>) {
   const task = next.catch((error) => {
     if (cache.get(key) === task) cache.delete(key)
     throw error
@@ -129,15 +134,13 @@ export const Instance = {
     cache.delete(key)
     const next = track(
       key,
-      Promise.all([
-        Promise.resolve(directory),
-        input.worktree ? Path.truecase(input.worktree) : undefined,
-      ]).then(([directory, worktree]) =>
-        boot({
-          ...input,
-          directory,
-          worktree,
-        }),
+      Promise.all([Promise.resolve(directory), input.worktree ? Path.truecase(input.worktree) : undefined]).then(
+        ([directory, worktree]) =>
+          boot({
+            ...input,
+            directory,
+            worktree,
+          }),
       ),
     )
     emit(directory)

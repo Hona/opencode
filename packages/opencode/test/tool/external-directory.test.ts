@@ -5,8 +5,8 @@ import { Path } from "../../src/path/path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
-import type { PermissionNext } from "../../src/permission"
 import { tmpdir } from "../fixture/fixture"
+import type { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { win } from "../lib/windows-path"
 
@@ -30,7 +30,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("no-ops for empty target", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -49,7 +49,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("no-ops for paths inside Instance.directory", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -68,7 +68,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("asks with a single canonical glob", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -94,7 +94,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("uses target directory when kind=directory", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -131,7 +131,7 @@ describe("tool.assertExternalDirectory", () => {
       },
     })
 
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -157,7 +157,7 @@ describe("tool.assertExternalDirectory", () => {
     await using tmp = await tmpdir()
 
     for (const item of win(path.join(outer.path, "secret.txt"))) {
-      const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
       const ctx: Tool.Context = {
         ...baseCtx,
         ask: async (req) => {
@@ -187,7 +187,7 @@ describe("tool.assertExternalDirectory", () => {
       },
     })
 
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -215,7 +215,7 @@ describe("tool.assertExternalDirectory", () => {
       },
     })
 
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -234,5 +234,4 @@ describe("tool.assertExternalDirectory", () => {
     expect(req).toBeDefined()
     expect(req!.patterns).toEqual([Path.externalGlob(path.join(outer.path, "newdir"))])
   })
-
 })

@@ -150,6 +150,16 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   const initialDirectory = decode64(params.dir)
+  const route = createMemo(() => {
+    const slug = params.dir
+    if (!slug) return { slug, dir: "" }
+    const dir = decode64(slug)
+    if (!dir) return { slug, dir: "" }
+    return {
+      slug,
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+    }
+  })
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -158,7 +168,7 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -726,7 +736,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    params.dir
+    route()
     globalSDK.url
 
     prefetchToken.value += 1
@@ -952,6 +962,26 @@ export default function Layout(props: ParentProps) {
     navigateToSession(session)
   }
 
+  function navigateProjectByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const current = currentProject()?.worktree
+    const fallback = currentDir() ? projectRoot(currentDir()) : undefined
+    const active = current ?? fallback
+    const index = active ? projects.findIndex((project) => project.worktree === active) : -1
+
+    const target =
+      index === -1
+        ? offset > 0
+          ? projects[0]
+          : projects[projects.length - 1]
+        : projects[(index + offset + projects.length) % projects.length]
+    if (!target) return
+
+    openProject(target.worktree)
+  }
+
   function navigateSessionByUnseen(offset: number) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
@@ -1017,6 +1047,20 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
+      },
+      {
+        id: "project.previous",
+        title: language.t("command.project.previous"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowup",
+        onSelect: () => navigateProjectByOffset(-1),
+      },
+      {
+        id: "project.next",
+        title: language.t("command.project.next"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowdown",
+        onSelect: () => navigateProjectByOffset(1),
       },
       {
         id: "provider.connect",
@@ -1707,38 +1751,51 @@ export default function Layout(props: ParentProps) {
   const activeRoute = {
     session: "",
     sessionProject: "" as WorkspacePath | "",
+    directory: "" as WorkspacePath | "",
   }
 
   createEffect(
     on(
-      () => [pageReady(), params.dir, params.id, currentProject()?.worktree] as const,
-      ([ready, dir, id]) => {
-        if (!ready || !dir) {
+      () => {
+        return [pageReady(), route().slug, params.id, currentProject()?.worktree, currentDir()] as const
+      },
+      ([ready, slug, id, root, dir]) => {
+        if (!ready || !slug || !dir) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
-
-        const directory = decode64(dir)
-        if (!directory) return
-
-        const root = touchProjectRoute() ?? activeProjectRoot(directory)
 
         if (!id) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
 
-        const session = `${dir}/${id}`
-        if (session !== activeRoute.session) {
+        const session = `${slug}/${id}`
+
+        if (!root) {
           activeRoute.session = session
-          activeRoute.sessionProject = syncSessionRoute(directory, id, root)
+          activeRoute.directory = dir
+          activeRoute.sessionProject = ""
+          return
+        }
+
+        if (server.projects.last() !== root) server.projects.touch(root)
+
+        const changed = session !== activeRoute.session || dir !== activeRoute.directory
+        if (changed) {
+          activeRoute.session = session
+          activeRoute.directory = dir
+          activeRoute.sessionProject = syncSessionRoute(dir, id, root)
           return
         }
 
         if (workspaceEqual(root, activeRoute.sessionProject)) return
-        activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
+        activeRoute.directory = dir
+        activeRoute.sessionProject = rememberSessionRoute(dir, id, root)
       },
     ),
   )
@@ -1923,6 +1980,7 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
+    currentProject,
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
@@ -2323,14 +2381,12 @@ export default function Layout(props: ParentProps) {
                     size={layout.sidebar.width()}
                     min={244}
                     max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    collapseThreshold={244}
                     onResize={(w) => {
                       setState("sizing", true)
                       if (sizet !== undefined) clearTimeout(sizet)
                       sizet = window.setTimeout(() => setState("sizing", false), 120)
                       layout.sidebar.resize(w)
                     }}
-                    onCollapse={layout.sidebar.close}
                   />
                 </div>
               </Show>

@@ -8,7 +8,9 @@ import { Path } from "../../src/path/path"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function touch(file: string, time: number) {
   const date = new Date(time)
@@ -85,6 +87,28 @@ describe("file/time", () => {
         },
       })
     })
+
+    test("isolates reads by directory", async () => {
+      await using one = await tmpdir()
+      await using two = await tmpdir()
+      await using shared = await tmpdir()
+      const filepath = path.join(shared.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: one.path,
+        fn: async () => {
+          await FileTime.read(sessionID, Path.pretty(filepath))
+        },
+      })
+
+      await Instance.provide({
+        directory: two.path,
+        fn: async () => {
+          expect(await FileTime.get(sessionID, Path.pretty(filepath))).toBeUndefined()
+        },
+      })
+    })
   })
 
   describe("assert()", () => {
@@ -128,7 +152,9 @@ describe("file/time", () => {
           await FileTime.read(sessionID, Path.pretty(filepath))
           await fs.writeFile(filepath, "modified content", "utf-8")
           await touch(filepath, 2_000)
-          await expect(FileTime.assert(sessionID, Path.pretty(filepath))).rejects.toThrow("modified since it was last read")
+          await expect(FileTime.assert(sessionID, Path.pretty(filepath))).rejects.toThrow(
+            "modified since it was last read",
+          )
         },
       })
     })
