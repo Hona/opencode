@@ -10,6 +10,11 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { Telemetry } from "@/telemetry"
+
+const workerInitStart = Date.now()
+const workerId = process.env.OPENCODE_WORKER_ID || `worker-${process.pid}`
+const workerPurpose = process.env.OPENCODE_WORKER_PURPOSE || "server"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -21,10 +26,18 @@ await Log.init({
 })
 
 const globalConfig = await Config.global()
-if (globalConfig?.experimental?.openTelemetry) {
+if (globalConfig?.experimental?.openTelemetry || process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const { Telemetry } = await import("@/telemetry")
-  Telemetry.init(Telemetry.resolveConfig("opencode-server", true))
+  Telemetry.init(Telemetry.resolveConfig("opencode-worker", true, true, workerId, workerPurpose))
 }
+
+// Worker lifecycle span - initialization
+const initSpan = Telemetry.span("worker.init", {
+  "worker.id": workerId,
+  "worker.type": workerPurpose,
+  "worker.pid": process.pid,
+  "execution.context": "worker",
+})
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -40,7 +53,7 @@ process.on("uncaughtException", (e) => {
 
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
+  Rpc.emit("global.event", event, { workerId })
 })
 
 let server: Bun.Server<BunWebSocketData> | undefined
@@ -48,6 +61,18 @@ let server: Bun.Server<BunWebSocketData> | undefined
 const eventStream = {
   abort: undefined as AbortController | undefined,
 }
+
+// Complete worker.init span after initialization
+initSpan.end()
+
+// Worker lifecycle span - startup complete
+using startupSpan = Telemetry.span("worker.startup", {
+  "worker.id": workerId,
+  "worker.type": workerPurpose,
+  "init.duration_ms": Date.now() - workerInitStart,
+  "execution.context": "worker",
+})
+Log.Default.info("worker started", { workerId, purpose: workerPurpose, initDuration: Date.now() - workerInitStart })
 
 const startEventStream = (directory: string) => {
   if (eventStream.abort) eventStream.abort.abort()
@@ -86,7 +111,7 @@ const startEventStream = (directory: string) => {
       }
 
       for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+        Rpc.emit("event", event as Event, { workerId })
       }
 
       if (!signal.aborted) {
@@ -141,16 +166,22 @@ export const rpc = {
     await Instance.disposeAll()
   },
   async shutdown() {
+    // Worker lifecycle span - shutdown
+    using shutdownSpan = Telemetry.span("worker.shutdown", {
+      "worker.id": workerId,
+      "shutdown.reason": "explicit",
+      "worker.uptime_ms": Date.now() - workerInitStart,
+      "execution.context": "worker",
+    })
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
-    const { Telemetry } = await import("@/telemetry")
     await Telemetry.shutdown()
   },
 }
 
-Rpc.listen(rpc)
+Rpc.listen(rpc, { workerId })
 
 function getAuthorizationHeader(): string | undefined {
   const password = Flag.OPENCODE_SERVER_PASSWORD

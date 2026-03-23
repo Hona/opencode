@@ -46,20 +46,25 @@ export namespace Bus {
       type: def.type,
       properties,
     }
+
     log.info("publishing", {
       type: def.type,
     })
+
+    const subscribers = state().subscriptions
     const pending = []
     for (const key of [def.type, "*"]) {
-      const match = state().subscriptions.get(key)
+      const match = subscribers.get(key)
       for (const sub of match ?? []) {
         pending.push(sub(payload))
       }
     }
+
     GlobalBus.emit("event", {
       directory: Instance.directory,
       payload,
     })
+
     return Promise.all(pending)
   }
 
@@ -80,6 +85,7 @@ export namespace Bus {
     const unsub = subscribe(def, (event) => {
       if (callback(event)) unsub()
     })
+    return unsub
   }
 
   export function subscribeAll(callback: (event: any) => void) {

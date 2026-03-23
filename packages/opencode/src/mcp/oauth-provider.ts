@@ -7,6 +7,7 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { McpAuth } from "./auth"
 import { Log } from "../util/log"
+import { Telemetry } from "../telemetry"
 
 const log = Log.create({ service: "mcp.oauth" })
 
@@ -75,6 +76,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+    using span = Telemetry.span("oauth.client.register", {
+      "oauth.provider": this.mcpName,
+      "oauth.client.has_secret": !!info.client_secret,
+      "oauth.client.secret_expires": info.client_secret_expires_at ?? 0,
+    })
     await McpAuth.updateClientInfo(
       this.mcpName,
       {
@@ -94,7 +100,20 @@ export class McpOAuthProvider implements OAuthClientProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     // Use getForUrl to validate tokens are for the current server URL
     const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
-    if (!entry?.tokens) return undefined
+    if (!entry?.tokens) {
+      Telemetry.span("oauth.token.retrieve", {
+        "oauth.provider": this.mcpName,
+        "oauth.token.found": false,
+      })
+      return undefined
+    }
+
+    Telemetry.span("oauth.token.retrieve", {
+      "oauth.provider": this.mcpName,
+      "oauth.token.found": true,
+      "oauth.token.has_refresh": !!entry.tokens.refreshToken,
+      "oauth.token.expires_at": entry.tokens.expiresAt ?? 0,
+    })
 
     return {
       access_token: entry.tokens.accessToken,
@@ -108,6 +127,12 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
+    using span = Telemetry.span("oauth.token.save", {
+      "oauth.provider": this.mcpName,
+      "oauth.token.has_refresh": !!tokens.refresh_token,
+      "oauth.token.expires_in": tokens.expires_in ?? 0,
+      "oauth.token.has_scope": !!tokens.scope,
+    })
     await McpAuth.updateTokens(
       this.mcpName,
       {
@@ -122,6 +147,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
+    using span = Telemetry.span("oauth.redirect", {
+      "oauth.provider": this.mcpName,
+      "oauth.authorization_url_host": authorizationUrl.hostname,
+    })
     log.info("redirecting to authorization", { mcpName: this.mcpName, url: authorizationUrl.toString() })
     await this.callbacks.onRedirect(authorizationUrl)
   }

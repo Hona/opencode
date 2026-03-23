@@ -815,7 +815,21 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const result = await item.execute(args, ctx)
+          const result = await Telemetry.withSpan(
+            "tool.execute",
+            {
+              "tool.name": item.id,
+              "tool.call_id": ctx.callID,
+              "session.id": ctx.sessionID,
+              "gen_ai.tool.name": item.id,
+              "gen_ai.tool.type": "function",
+            },
+            async (span) => {
+              const result = await item.execute(args, ctx)
+              span.setAttribute("tool.success", true)
+              return result
+            },
+          )
           await Plugin.trigger(
             "tool.execute.after",
             {
@@ -860,7 +874,21 @@ export namespace SessionPrompt {
           always: ["*"],
         })
 
-        const result = await execute(args, opts)
+        const result = await Telemetry.withSpan(
+          "tool.execute",
+          {
+            "tool.name": key,
+            "tool.call_id": opts.toolCallId,
+            "session.id": ctx.sessionID,
+            "gen_ai.tool.name": key,
+            "gen_ai.tool.type": "function",
+          },
+          async (span) => {
+            const result = await execute(args, opts)
+            span.setAttribute("tool.success", true)
+            return result
+          },
+        )
 
         await Plugin.trigger(
           "tool.execute.after",
@@ -1885,16 +1913,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       { parts },
     )
 
-    const result = (await prompt({
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      model: userModel,
-      agent: userAgent,
-      parts,
-      variant: input.variant,
-    })) as MessageV2.WithParts
+    const result = await Telemetry.withSpan(
+      "command.execute",
+      {
+        "command.name": input.command,
+        "command.session_id": input.sessionID,
+        "command.arguments": input.arguments,
+        "command.agent": agentName,
+        "command.model": `${taskModel.providerID}/${taskModel.modelID}`,
+        "command.is_subtask": isSubtask,
+        "opencode.action.type": "command",
+        "opencode.execution.mode": "in-process",
+      },
+      async () => {
+        const result = (await prompt({
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          model: userModel,
+          agent: userAgent,
+          parts,
+          variant: input.variant,
+        })) as MessageV2.WithParts
+        return result
+      }
+    )
 
-    Bus.publish(Command.Event.Executed, {
+    await Bus.publish(Command.Event.Executed, {
       name: input.command,
       sessionID: input.sessionID,
       arguments: input.arguments,

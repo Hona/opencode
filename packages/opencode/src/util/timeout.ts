@@ -1,3 +1,4 @@
+// Utility function to wrap a promise with a timeout
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeout: NodeJS.Timeout
   return Promise.race([

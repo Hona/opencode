@@ -285,6 +285,9 @@ export namespace Agent {
     using _ = Telemetry.span("agent.generate", {
       "llm.provider_id": defaultModel.providerID,
       "llm.model_id": defaultModel.modelID,
+      "gen_ai.system": Telemetry.toGenAIProvider(defaultModel.providerID),
+      "gen_ai.operation.name": "chat",
+      "gen_ai.request.model": defaultModel.modelID,
     })
     const cfg = await Config.get()
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
@@ -296,7 +299,7 @@ export namespace Agent {
 
     const params = {
       experimental_telemetry: {
-        isEnabled: Telemetry.isEnabled(),
+        isEnabled: false,
         functionId: "opencode.agent.generate",
         metadata: {
           "llm.provider_id": defaultModel.providerID,

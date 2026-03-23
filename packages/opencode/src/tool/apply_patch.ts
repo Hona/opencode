@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { Telemetry } from "@/telemetry"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -26,42 +27,64 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       throw new Error("patchText is required")
     }
 
-    // Parse the patch to get hunks
-    let hunks: Patch.Hunk[]
-    try {
-      const parseResult = Patch.parsePatch(params.patchText)
-      hunks = parseResult.hunks
-    } catch (error) {
-      throw new Error(`apply_patch verification failed: ${error}`)
-    }
+    return Telemetry.withSpan("tool.apply_patch.execute", {
+      "patch.parse_duration_ms": 0,
+    }, async (span) => {
+      const parseStart = Date.now()
 
-    if (hunks.length === 0) {
-      const normalized = params.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
-      if (normalized === "*** Begin Patch\n*** End Patch") {
-        throw new Error("patch rejected: empty patch")
+      // Parse the patch to get hunks
+      let hunks: Patch.Hunk[]
+      try {
+        const parseResult = Patch.parsePatch(params.patchText)
+        hunks = parseResult.hunks
+      } catch (error) {
+        throw new Error(`apply_patch verification failed: ${error}`)
       }
-      throw new Error("apply_patch verification failed: no hunks found")
-    }
 
-    // Validate file paths and check permissions
-    const fileChanges: Array<{
-      filePath: string
-      oldContent: string
-      newContent: string
-      type: "add" | "update" | "delete" | "move"
-      movePath?: string
-      diff: string
-      additions: number
-      deletions: number
-    }> = []
+      span.setAttribute("patch.parse_duration_ms", Date.now() - parseStart)
+      span.setAttribute("patch.hunks.count", hunks.length)
 
-    let totalDiff = ""
+      if (hunks.length === 0) {
+        const normalized = params.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+        if (normalized === "*** Begin Patch\n*** End Patch") {
+          throw new Error("patch rejected: empty patch")
+        }
+        throw new Error("apply_patch verification failed: no hunks found")
+      }
 
-    for (const hunk of hunks) {
-      const filePath = path.resolve(Instance.directory, hunk.path)
-      await assertExternalDirectory(ctx, filePath)
+      // Validate file paths and check permissions
+      const fileChanges: Array<{
+        filePath: string
+        oldContent: string
+        newContent: string
+        type: "add" | "update" | "delete" | "move"
+        movePath?: string
+        diff: string
+        additions: number
+        deletions: number
+      }> = []
 
-      switch (hunk.type) {
+      let totalAdditions = 0
+      let totalDeletions = 0
+      const patchTypes = new Set<string>()
+      let totalDiff = ""
+
+      for (const hunk of hunks) {
+        const filePath = path.resolve(Instance.directory, hunk.path)
+        await assertExternalDirectory(ctx, filePath)
+
+        // Track patch types
+        if (hunk.type === "add") {
+          patchTypes.add("add")
+        } else if (hunk.type === "delete") {
+          patchTypes.add("delete")
+        } else if (hunk.type === "update") {
+          patchTypes.add("update")
+        } else if (hunk.type === "move") {
+          patchTypes.add("move")
+        }
+
+        switch (hunk.type) {
         case "add": {
           const oldContent = ""
           const newContent =
@@ -84,6 +107,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             additions,
             deletions,
           })
+
+          totalAdditions += additions
+          totalDeletions += deletions
 
           totalDiff += diff + "\n"
           break
@@ -130,6 +156,9 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             deletions,
           })
 
+          totalAdditions += additions
+          totalDeletions += deletions
+
           totalDiff += diff + "\n"
           break
         }
@@ -151,6 +180,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             additions: 0,
             deletions,
           })
+
+          totalDeletions += deletions
 
           totalDiff += deleteDiff + "\n"
           break
@@ -268,6 +299,12 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
     }
 
+    span.setAttribute("patch.files.count", fileChanges.length)
+    span.setAttribute("patch.total_additions", totalAdditions)
+    span.setAttribute("patch.total_deletions", totalDeletions)
+    span.setAttribute("patch.types", Array.from(patchTypes).join(","))
+    span.setAttribute("patch.apply_duration_ms", Date.now() - parseStart)
+
     return {
       title: output,
       metadata: {
@@ -277,5 +314,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       },
       output,
     }
+    })
   },
 })

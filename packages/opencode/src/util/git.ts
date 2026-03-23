@@ -1,5 +1,6 @@
 import { $ } from "bun"
 import { Flag } from "../flag/flag"
+import { Telemetry } from "../telemetry"
 
 export interface GitResult {
   exitCode: number
@@ -17,6 +18,16 @@ export interface GitResult {
  * case we fall back to `Bun.spawn` with `stdin: "ignore"`.
  */
 export async function git(args: string[], opts: { cwd: string; env?: Record<string, string> }): Promise<GitResult> {
+  const cmdLine = `git ${args.join(" ")}`.slice(0, 200)
+  
+  using span = Telemetry.span("tool.git.execute", {
+    "tool.type": "git",
+    "process.executable.name": "git",
+    "process.command_line": cmdLine,
+    "process.working_directory": opts.cwd,
+    "git.command": args[0] ?? "unknown",
+  })
+
   if (Flag.OPENCODE_CLIENT === "acp") {
     try {
       const proc = Bun.spawn(["git", ...args], {
@@ -26,6 +37,9 @@ export async function git(args: string[], opts: { cwd: string; env?: Record<stri
         cwd: opts.cwd,
         env: opts.env ? { ...process.env, ...opts.env } : process.env,
       })
+      
+      span.setAttribute("process.pid", proc.pid)
+
       // Read output concurrently with exit to avoid pipe buffer deadlock
       const [exitCode, stdout, stderr] = await Promise.all([
         proc.exited,
@@ -34,6 +48,9 @@ export async function git(args: string[], opts: { cwd: string; env?: Record<stri
       ])
       const stdoutBuf = Buffer.from(stdout)
       const stderrBuf = Buffer.from(stderr)
+      
+      span.setAttribute("process.exit_code", exitCode)
+      
       return {
         exitCode,
         text: () => stdoutBuf.toString(),
@@ -42,6 +59,8 @@ export async function git(args: string[], opts: { cwd: string; env?: Record<stri
       }
     } catch (error) {
       const stderr = Buffer.from(error instanceof Error ? error.message : String(error))
+      span.setAttribute("process.exit_code", 1)
+      span.recordException(error instanceof Error ? error : new Error(String(error)))
       return {
         exitCode: 1,
         text: () => "",
@@ -55,6 +74,9 @@ export async function git(args: string[], opts: { cwd: string; env?: Record<stri
   let cmd = $`git ${args}`.quiet().nothrow().cwd(opts.cwd)
   if (env) cmd = cmd.env(env)
   const result = await cmd
+  
+  span.setAttribute("process.exit_code", result.exitCode)
+  
   return {
     exitCode: result.exitCode,
     text: () => result.text(),

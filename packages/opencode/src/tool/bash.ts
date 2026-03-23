@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
+import { Telemetry } from "@/telemetry"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -164,6 +165,15 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+      
+      using spawnSpan = Telemetry.span("tool.bash.spawn", {
+        "tool.type": "shell",
+        "process.executable.name": path.basename(shell),
+        "process.executable.path": shell,
+        "process.command_line": params.command.slice(0, 200), // Truncate for safety
+        "process.working_directory": cwd,
+      })
+      
       const proc = spawn(params.command, {
         shell,
         cwd,
@@ -174,6 +184,8 @@ export const BashTool = Tool.define("bash", async () => {
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
       })
+
+      spawnSpan.setAttribute("process.pid", proc.pid ?? -1)
 
       let output = ""
 
@@ -263,6 +275,8 @@ export const BashTool = Tool.define("bash", async () => {
           description: params.description,
           aborted,
           timedOut,
+          "process.exit_code": proc.exitCode ?? -1,
+          "process.pid": proc.pid ?? -1,
         },
         output,
       }

@@ -37,7 +37,9 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 
 function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
+    on: (handler) => {
+      return client.on<Event>("event", handler)
+    },
   }
 }
 
@@ -109,15 +111,21 @@ export const TuiThreadCommand = cmd({
         return
       }
 
+      const workerId = `worker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
       const worker = new Worker(workerPath, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          ),
+          OPENCODE_WORKER_ID: workerId,
+          OPENCODE_WORKER_PURPOSE: "tui-server",
+        },
       })
       worker.onerror = (e) => {
         Log.Default.error(e)
       }
-      const client = Rpc.client<typeof rpc>(worker)
+      const client = Rpc.client<typeof rpc>(worker, { workerId })
       process.on("uncaughtException", (e) => {
         Log.Default.error(e)
       })

@@ -8,7 +8,12 @@
       "options": {},
     },
   },
-  "mcp": {},
+  "mcp": {
+    "aspire": {
+      "type": "remote",
+      "url": "http://localhost:15890/mcp",
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

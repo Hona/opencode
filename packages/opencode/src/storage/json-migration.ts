@@ -7,6 +7,7 @@ import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } fro
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
+import { Telemetry } from "../telemetry"
 
 export namespace JsonMigration {
   const log = Log.create({ service: "json-migration" })
@@ -22,26 +23,33 @@ export namespace JsonMigration {
   }
 
   export async function run(sqlite: Database, options?: Options) {
-    const storageDir = path.join(Global.Path.data, "storage")
+    return Telemetry.withSpan(
+      "db.migration.json",
+      {
+        "db.system": "sqlite",
+        "db.operation": "MIGRATE",
+      },
+      async (span) => {
+        const storageDir = path.join(Global.Path.data, "storage")
 
-    if (!existsSync(storageDir)) {
-      log.info("storage directory does not exist, skipping migration")
-      return {
-        projects: 0,
-        sessions: 0,
-        messages: 0,
-        parts: 0,
-        todos: 0,
-        permissions: 0,
-        shares: 0,
-        errors: [] as string[],
-      }
-    }
+        if (!existsSync(storageDir)) {
+          log.info("storage directory does not exist, skipping migration")
+          return {
+            projects: 0,
+            sessions: 0,
+            messages: 0,
+            parts: 0,
+            todos: 0,
+            permissions: 0,
+            shares: 0,
+            errors: [] as string[],
+          }
+        }
 
-    log.info("starting json to sqlite migration", { storageDir })
-    const start = performance.now()
+        log.info("starting json to sqlite migration", { storageDir })
+        const start = performance.now()
 
-    const db = drizzle({ client: sqlite })
+        const db = drizzle({ client: sqlite })
 
     // Optimize SQLite for bulk inserts
     sqlite.exec("PRAGMA journal_mode = WAL")
@@ -423,6 +431,20 @@ export namespace JsonMigration {
 
     progress?.({ current: total, total, label: "complete" })
 
+    span.setAttributes({
+      "db.migration.projects": stats.projects,
+      "db.migration.sessions": stats.sessions,
+      "db.migration.messages": stats.messages,
+      "db.migration.parts": stats.parts,
+      "db.migration.todos": stats.todos,
+      "db.migration.permissions": stats.permissions,
+      "db.migration.shares": stats.shares,
+      "db.migration.errors": stats.errors.length,
+      "db.migration.duration_ms": Math.round(performance.now() - start),
+    })
+
     return stats
+      }
+    )
   }
 }

@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Telemetry } from "@/telemetry"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -43,11 +44,23 @@ export const GrepTool = Tool.define("grep", {
     }
     args.push(searchPath)
 
+    using spawnSpan = Telemetry.span("tool.grep.spawn", {
+      "tool.type": "search",
+      "process.executable.name": "rg",
+      "process.executable.path": rgPath,
+      "process.command_line": `rg ${args.join(" ")}`,
+      "process.working_directory": searchPath,
+      "search.pattern": params.pattern,
+      "search.glob": params.include ?? "*",
+    })
+
     const proc = Bun.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
       signal: ctx.abort,
     })
+
+    spawnSpan.setAttribute("process.pid", proc.pid)
 
     const output = await new Response(proc.stdout).text()
     const errorOutput = await new Response(proc.stderr).text()

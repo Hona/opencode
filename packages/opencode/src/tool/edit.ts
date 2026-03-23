@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { Telemetry } from "@/telemetry"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -44,16 +45,106 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
-    let diff = ""
-    let contentOld = ""
-    let contentNew = ""
-    let fileExisted = true
-    await FileTime.withLock(filePath, async () => {
-      if (params.oldString === "") {
-        const existed = await Bun.file(filePath).exists()
-        fileExisted = existed
-        contentNew = params.newString
-        diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+    return Telemetry.withSpan("tool.edit.execute", {
+      "file.path": filePath,
+      "edit.replace_all": params.replaceAll,
+      "edit.old_string.length": params.oldString.length,
+      "edit.new_string.length": params.newString.length,
+    }, async (span) => {
+      let diff = ""
+      let contentOld = ""
+      let contentNew = ""
+      let fileExisted = true
+      let replaceCount = 0
+      
+      await FileTime.withLock(filePath, async () => {
+        if (params.oldString === "") {
+          const existed = await Bun.file(filePath).exists()
+          fileExisted = existed
+          contentOld = ""
+          contentNew = params.newString
+          span.setAttribute("file.existed", fileExisted)
+          span.setAttribute("file.original_size_bytes", 0)
+          
+          replaceCount = contentNew.length > 0 ? 1 : 0
+          span.setAttribute("edit.replacements.count", replaceCount)
+          span.setAttribute("edit.new_size_bytes", contentNew.length)
+          span.setAttribute("edit.size_delta", contentNew.length)
+          
+          diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+          
+          const filediff: Snapshot.FileDiff = {
+            file: filePath,
+            before: contentOld,
+            after: contentNew,
+            additions: 0,
+            deletions: 0,
+          }
+          for (const change of diffLines(contentOld, contentNew)) {
+            if (change.added) filediff.additions += change.count || 0
+            if (change.removed) filediff.deletions += change.count || 0
+          }
+          span.setAttribute("diff.additions", filediff.additions)
+          span.setAttribute("diff.deletions", filediff.deletions)
+          
+          await ctx.ask({
+            permission: "edit",
+            patterns: [path.relative(Instance.worktree, filePath)],
+            always: ["*"],
+            metadata: {
+              filepath: filePath,
+              diff,
+            },
+          })
+          await Bun.write(filePath, params.newString)
+          await Bus.publish(File.Event.Edited, {
+            file: filePath,
+          })
+          await Bus.publish(FileWatcher.Event.Updated, {
+            file: filePath,
+            event: existed ? "change" : "add",
+          })
+          FileTime.read(ctx.sessionID, filePath)
+          return
+        }
+
+        const file = Bun.file(filePath)
+        const stats = await file.stat().catch(() => {})
+        if (!stats) throw new Error(`File ${filePath} not found`)
+        if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+        await FileTime.assert(ctx.sessionID, filePath)
+        contentOld = await file.text()
+        
+        span.setAttribute("file.existed", true)
+        span.setAttribute("file.original_size_bytes", contentOld.length)
+        
+        contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+        
+        replaceCount = params.replaceAll
+          ? (contentOld.split(params.oldString).length - 1)
+          : (contentOld.indexOf(params.oldString) >= 0 ? 1 : 0)
+        span.setAttribute("edit.replacements.count", replaceCount)
+        span.setAttribute("edit.new_size_bytes", contentNew.length)
+        span.setAttribute("edit.size_delta", contentNew.length - contentOld.length)
+
+        diff = trimDiff(
+          createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        )
+        
+        const filediff: Snapshot.FileDiff = {
+          file: filePath,
+          before: contentOld,
+          after: contentNew,
+          additions: 0,
+          deletions: 0,
+        }
+        for (const change of diffLines(contentOld, contentNew)) {
+          if (change.added) filediff.additions += change.count || 0
+          if (change.removed) filediff.deletions += change.count || 0
+        }
+        span.setAttribute("diff.additions", filediff.additions)
+        span.setAttribute("diff.deletions", filediff.deletions)
+        
         await ctx.ask({
           permission: "edit",
           patterns: [path.relative(Instance.worktree, filePath)],
@@ -63,98 +154,70 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
+
+        await file.write(contentNew)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
         await Bus.publish(FileWatcher.Event.Updated, {
           file: filePath,
-          event: existed ? "change" : "add",
+          event: "change",
         })
+        contentNew = await file.text()
+        diff = trimDiff(
+          createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        )
         FileTime.read(ctx.sessionID, filePath)
-        return
-      }
+      })
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
-      if (!stats) throw new Error(`File ${filePath} not found`)
-      if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
-      await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
-
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
-      await ctx.ask({
-        permission: "edit",
-        patterns: [path.relative(Instance.worktree, filePath)],
-        always: ["*"],
+      ctx.metadata({
         metadata: {
-          filepath: filePath,
           diff,
+          filediff: {
+            file: filePath,
+            before: contentOld,
+            after: contentNew,
+            additions: 0,
+            deletions: 0,
+          },
+          diagnostics: {},
         },
       })
 
-      await file.write(contentNew)
-      await Bus.publish(File.Event.Edited, {
-        file: filePath,
-      })
-      await Bus.publish(FileWatcher.Event.Updated, {
-        file: filePath,
-        event: "change",
-      })
-      contentNew = await file.text()
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
-      FileTime.read(ctx.sessionID, filePath)
+      let output = "Edit applied successfully."
+      await LSP.touchFile(filePath, true)
+      const diagnostics = await LSP.diagnostics()
+      const normalizedFilePath = Filesystem.normalizePath(filePath)
+      const issues = diagnostics[normalizedFilePath] ?? []
+      const errors = issues.filter((item) => item.severity === 1)
+      
+      span.setAttribute("lsp.diagnostics.errors", errors.length)
+      
+      if (errors.length > 0) {
+        const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+        const suffix =
+          errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
+        output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+      }
+
+      return {
+        metadata: {
+          diagnostics,
+          diff,
+          filediff: {
+            file: filePath,
+            before: contentOld,
+            after: contentNew,
+            additions: 0,
+            deletions: 0,
+          },
+          errorCount: errors.length,
+          fileExisted,
+        },
+        title: `${path.relative(Instance.worktree, filePath)}`,
+        output,
+      }
     })
-
-    const filediff: Snapshot.FileDiff = {
-      file: filePath,
-      before: contentOld,
-      after: contentNew,
-      additions: 0,
-      deletions: 0,
-    }
-    for (const change of diffLines(contentOld, contentNew)) {
-      if (change.added) filediff.additions += change.count || 0
-      if (change.removed) filediff.deletions += change.count || 0
-    }
-
-    ctx.metadata({
-      metadata: {
-        diff,
-        filediff,
-        diagnostics: {},
-      },
-    })
-
-    let output = "Edit applied successfully."
-    await LSP.touchFile(filePath, true)
-    const diagnostics = await LSP.diagnostics()
-    const normalizedFilePath = Filesystem.normalizePath(filePath)
-    const issues = diagnostics[normalizedFilePath] ?? []
-    const errors = issues.filter((item) => item.severity === 1)
-    if (errors.length > 0) {
-      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
-      const suffix =
-        errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
-    }
-
-    return {
-      metadata: {
-        diagnostics,
-        diff,
-        filediff,
-        errorCount: errors.length,
-        fileExisted,
-      },
-      title: `${path.relative(Instance.worktree, filePath)}`,
-      output,
-    }
   },
 })
 

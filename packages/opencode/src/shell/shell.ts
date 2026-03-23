@@ -2,6 +2,7 @@ import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { Telemetry } from "@/telemetry"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -9,6 +10,11 @@ export namespace Shell {
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
+
+    using span = Telemetry.span("process.kill", {
+      "process.pid": pid,
+      "process.kill.signal": process.platform === "win32" ? "SIGTERM/SIGKILL via taskkill" : "SIGTERM/SIGKILL",
+    })
 
     if (process.platform === "win32") {
       await new Promise<void>((resolve) => {

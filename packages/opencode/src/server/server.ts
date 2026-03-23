@@ -40,6 +40,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { Telemetry } from "../telemetry"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -88,20 +89,49 @@ export namespace Server {
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
-          if (!skipLogging) {
-            log.info("request", {
-              method: c.req.method,
-              path: c.req.path,
-            })
-          }
-          const timer = log.time("request", {
-            method: c.req.method,
-            path: c.req.path,
-          })
-          await next()
-          if (!skipLogging) {
-            timer.stop()
-          }
+          
+          // Create HTTP span for each request
+          const method = c.req.method
+          const path = c.req.path
+          const url = c.req.url
+          const host = new URL(url).host
+          const spanName = `${method} ${path}`
+          
+          return Telemetry.withSpan(
+            spanName,
+            {
+              "http.request.method": method,
+              "http.route": path,
+              "http.url": url,
+              "http.host": host,
+              "server.address": host,
+              "http.scheme": new URL(url).protocol.replace(":", ""),
+            },
+            async (span) => {
+              if (!skipLogging) {
+                log.info("request", {
+                  method: c.req.method,
+                  path: c.req.path,
+                })
+              }
+              const timer = log.time("request", {
+                method: c.req.method,
+                path: c.req.path,
+              })
+              
+              try {
+                await next()
+                
+                // Set response attributes
+                span.setAttribute("http.response.status_code", c.res.status)
+                span.setAttribute("http.response.body.size", Number(c.res.headers.get("content-length") ?? 0))
+              } finally {
+                if (!skipLogging) {
+                  timer.stop()
+                }
+              }
+            }
+          )
         })
         .use(
           cors({
@@ -518,11 +548,21 @@ export namespace Server {
               })
 
               // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+              let heartbeatCount = 0
               const heartbeat = setInterval(() => {
+                heartbeatCount++
+                using span = Telemetry.span("server.heartbeat", {
+                  "server.connection.id": c.req.header("x-request-id") ?? "sse",
+                  "server.heartbeat.count": heartbeatCount,
+                  "server.heartbeat.interval_ms": 30000,
+                  "execution.context": "background",
+                })
                 stream.writeSSE({
                   data: JSON.stringify({
                     type: "server.heartbeat",
-                    properties: {},
+                    properties: {
+                      count: heartbeatCount,
+                    },
                   }),
                 })
               }, 30000)

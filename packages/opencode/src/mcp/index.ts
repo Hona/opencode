@@ -143,6 +143,9 @@ export namespace MCP {
           {
             "mcp.server_name": serverName,
             "mcp.tool_name": mcpTool.name,
+            "gen_ai.tool.name": mcpTool.name,
+            "gen_ai.tool.type": "mcp",
+            "gen_ai.operation.name": "execute_tool",
           },
           async () => {
             return client.callTool(
@@ -389,8 +392,15 @@ export namespace MCP {
           if (error instanceof UnauthorizedError) {
             log.info("mcp server requires authentication", { key, transport: name })
 
+            using authSpan = Telemetry.span("mcp.auth.required", {
+              "mcp.server_name": key,
+              "mcp.transport": name,
+              "auth.method": "oauth",
+            })
+
             // Check if this is a "needs registration" error
             if (lastError.message.includes("registration") || lastError.message.includes("client_id")) {
+              authSpan.setAttribute("auth.status", "needs_client_registration")
               status = {
                 status: "needs_client_registration" as const,
                 error: "Server does not support dynamic client registration. Please provide clientId in config.",
@@ -405,6 +415,7 @@ export namespace MCP {
             } else {
               // Store transport for later finishAuth call
               pendingOAuthTransports.set(key, transport)
+              authSpan.setAttribute("auth.status", "needs_auth")
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
@@ -499,6 +510,8 @@ export namespace MCP {
       "mcp.tools.list",
       {
         "mcp.server_name": key,
+        "gen_ai.tool.definitions.requested": true,
+        "gen_ai.operation.name": "list_tools",
       },
       async (span) => {
         const tools = await withTimeout(mcpClient!.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
@@ -622,7 +635,11 @@ export namespace MCP {
     )
     const toolsResults = await Promise.all(
       connectedClients.map(async ([clientName, client]) => {
-        using span = Telemetry.span("mcp.tools.list", { "mcp.server_name": clientName })
+        using span = Telemetry.span("mcp.tools.list", {
+          "mcp.server_name": clientName,
+          "gen_ai.tool.definitions.requested": true,
+          "gen_ai.operation.name": "list_tools",
+        })
         const toolsResult = await client.listTools().catch((e) => {
           log.error("failed to get tools", { clientName, error: e.message })
           const failedStatus = {
@@ -769,76 +786,103 @@ export namespace MCP {
    * Returns the authorization URL that should be opened in a browser.
    */
   export async function startAuth(mcpName: string): Promise<{ authorizationUrl: string }> {
-    const cfg = await Config.get()
-    const mcpConfig = cfg.mcp?.[mcpName]
-
-    if (!mcpConfig) {
-      throw new Error(`MCP server not found: ${mcpName}`)
-    }
-
-    if (!isMcpConfigured(mcpConfig)) {
-      throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
-    }
-
-    if (mcpConfig.type !== "remote") {
-      throw new Error(`MCP server ${mcpName} is not a remote server`)
-    }
-
-    if (mcpConfig.oauth === false) {
-      throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
-    }
-
-    // Start the callback server
-    await McpOAuthCallback.ensureRunning()
-
-    // Generate and store a cryptographically secure state parameter BEFORE creating the provider
-    // The SDK will call provider.state() to read this value
-    const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-    await McpAuth.updateOAuthState(mcpName, oauthState)
-
-    // Create a new auth provider for this flow
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
-    let capturedUrl: URL | undefined
-    const authProvider = new McpOAuthProvider(
-      mcpName,
-      mcpConfig.url,
+    return Telemetry.withSpan(
+      "oauth.flow.start",
       {
-        clientId: oauthConfig?.clientId,
-        clientSecret: oauthConfig?.clientSecret,
-        scope: oauthConfig?.scope,
+        "oauth.provider": mcpName,
+        "oauth.grant_type": "authorization_code",
+        "mcp.server_name": mcpName,
       },
-      {
-        onRedirect: async (url) => {
-          capturedUrl = url
-        },
+      async (span) => {
+        const cfg = await Config.get()
+        const mcpConfig = cfg.mcp?.[mcpName]
+
+        if (!mcpConfig) {
+          throw new Error(`MCP server not found: ${mcpName}`)
+        }
+
+        if (!isMcpConfigured(mcpConfig)) {
+          throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
+        }
+
+        if (mcpConfig.type !== "remote") {
+          throw new Error(`MCP server ${mcpName} is not a remote server`)
+        }
+
+        if (mcpConfig.oauth === false) {
+          throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
+        }
+
+        const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
+        const scope = oauthConfig?.scope
+
+        if (scope) {
+          span.setAttribute("oauth.scope", scope)
+        }
+
+        // Start the callback server
+        await Telemetry.withSpan(
+          "oauth.callback_server.start",
+          {
+            "oauth.provider": mcpName,
+            "mcp.server_name": mcpName,
+          },
+          async () => {
+            await McpOAuthCallback.ensureRunning()
+          },
+        )
+
+        // Generate and store a cryptographically secure state parameter BEFORE creating the provider
+        // The SDK will call provider.state() to read this value
+        const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+        await McpAuth.updateOAuthState(mcpName, oauthState)
+
+        // Create a new auth provider for this flow
+        // OAuth config is optional - if not provided, we'll use auto-discovery
+        let capturedUrl: URL | undefined
+        const authProvider = new McpOAuthProvider(
+          mcpName,
+          mcpConfig.url,
+          {
+            clientId: oauthConfig?.clientId,
+            clientSecret: oauthConfig?.clientSecret,
+            scope: oauthConfig?.scope,
+          },
+          {
+            onRedirect: async (url) => {
+              capturedUrl = url
+            },
+          },
+        )
+
+        // Create transport with auth provider
+        const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
+          authProvider,
+        })
+
+        // Try to connect - this will trigger the OAuth flow
+        try {
+          const client = new Client({
+            name: "opencode",
+            version: Installation.VERSION,
+          })
+          await client.connect(transport)
+          // If we get here, we're already authenticated
+          span.setAttribute("oauth.already_authenticated", true)
+          return { authorizationUrl: "" }
+        } catch (error) {
+          if (error instanceof UnauthorizedError && capturedUrl) {
+            // Store transport for finishAuth
+            pendingOAuthTransports.set(mcpName, transport)
+            span.setAttribute("oauth.authorization_url", capturedUrl.toString())
+            return { authorizationUrl: capturedUrl.toString() }
+          }
+          throw error
+        }
       },
     )
-
-    // Create transport with auth provider
-    const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
-      authProvider,
-    })
-
-    // Try to connect - this will trigger the OAuth flow
-    try {
-      const client = new Client({
-        name: "opencode",
-        version: Installation.VERSION,
-      })
-      await client.connect(transport)
-      // If we get here, we're already authenticated
-      return { authorizationUrl: "" }
-    } catch (error) {
-      if (error instanceof UnauthorizedError && capturedUrl) {
-        // Store transport for finishAuth
-        pendingOAuthTransports.set(mcpName, transport)
-        return { authorizationUrl: capturedUrl.toString() }
-      }
-      throw error
-    }
   }
 
   /**
@@ -846,119 +890,167 @@ export namespace MCP {
    * Opens the browser and waits for callback.
    */
   export async function authenticate(mcpName: string): Promise<Status> {
-    const { authorizationUrl } = await startAuth(mcpName)
+    return Telemetry.withSpan(
+      "oauth.flow.authenticate",
+      {
+        "oauth.provider": mcpName,
+        "oauth.grant_type": "authorization_code",
+        "mcp.server_name": mcpName,
+      },
+      async (span) => {
+        const startTime = Date.now()
+        const { authorizationUrl } = await startAuth(mcpName)
 
-    if (!authorizationUrl) {
-      // Already authenticated
-      const s = await state()
-      return s.status[mcpName] ?? { status: "connected" }
-    }
+        if (!authorizationUrl) {
+          // Already authenticated
+          const s = await state()
+          span.setAttribute("oauth.already_authenticated", true)
+          return s.status[mcpName] ?? { status: "connected" }
+        }
 
-    // Get the state that was already generated and stored in startAuth()
-    const oauthState = await McpAuth.getOAuthState(mcpName)
-    if (!oauthState) {
-      throw new Error("OAuth state not found - this should not happen")
-    }
+        // Get the state that was already generated and stored in startAuth()
+        const oauthState = await McpAuth.getOAuthState(mcpName)
+        if (!oauthState) {
+          throw new Error("OAuth state not found - this should not happen")
+        }
 
-    // The SDK has already added the state parameter to the authorization URL
-    // We just need to open the browser
-    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+        // The SDK has already added the state parameter to the authorization URL
+        // We just need to open the browser
+        log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
 
-    // Register the callback BEFORE opening the browser to avoid race condition
-    // when the IdP has an active SSO session and redirects immediately
-    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
+        // Register the callback BEFORE opening the browser to avoid race condition
+        // when the IdP has an active SSO session and redirects immediately
+        const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
 
-    try {
-      const subprocess = await open(authorizationUrl)
-      // The open package spawns a detached process and returns immediately.
-      // We need to listen for errors which fire asynchronously:
-      // - "error" event: command not found (ENOENT)
-      // - "exit" with non-zero code: command exists but failed (e.g., no display)
-      await new Promise<void>((resolve, reject) => {
-        // Give the process a moment to fail if it's going to
-        const timeout = setTimeout(() => resolve(), 500)
-        subprocess.on("error", (error) => {
-          clearTimeout(timeout)
-          reject(error)
-        })
-        subprocess.on("exit", (code) => {
-          if (code !== null && code !== 0) {
-            clearTimeout(timeout)
-            reject(new Error(`Browser open failed with exit code ${code}`))
-          }
-        })
-      })
-    } catch (error) {
-      // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
-      // Emit event so CLI can display the URL for manual opening
-      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
-      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
-    }
+        const browserOpened = await Telemetry.withSpan(
+          "oauth.browser.open",
+          {
+            "oauth.provider": mcpName,
+            "mcp.server_name": mcpName,
+          },
+          async (browserSpan) => {
+            try {
+              const subprocess = await open(authorizationUrl)
+              // The open package spawns a detached process and returns immediately.
+              // We need to listen for errors which fire asynchronously:
+              // - "error" event: command not found (ENOENT)
+              // - "exit" with non-zero code: command exists but failed (e.g., no display)
+              await new Promise<void>((resolve, reject) => {
+                // Give the process a moment to fail if it's going to
+                const timeout = setTimeout(() => resolve(), 500)
+                subprocess.on("error", (error) => {
+                  clearTimeout(timeout)
+                  reject(error)
+                })
+                subprocess.on("exit", (code) => {
+                  if (code !== null && code !== 0) {
+                    clearTimeout(timeout)
+                    reject(new Error(`Browser open failed with exit code ${code}`))
+                  }
+                })
+              })
+              browserSpan.setAttribute("oauth.browser.opened", true)
+              return true
+            } catch (error) {
+              // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
+              // Emit event so CLI can display the URL for manual opening
+              log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+              browserSpan.setAttribute("oauth.browser.opened", false)
+              browserSpan.setAttribute("oauth.browser.error", error instanceof Error ? error.message : String(error))
+              Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
+              return false
+            }
+          },
+        )
 
-    // Wait for callback using the already-registered promise
-    const code = await callbackPromise
+        // Wait for callback using the already-registered promise
+        const code = await callbackPromise
+        span.setAttribute("oauth.callback_received", true)
+        span.setAttribute("oauth.callback_duration_ms", Date.now() - startTime)
 
-    // Validate and clear the state
-    const storedState = await McpAuth.getOAuthState(mcpName)
-    if (storedState !== oauthState) {
-      await McpAuth.clearOAuthState(mcpName)
-      throw new Error("OAuth state mismatch - potential CSRF attack")
-    }
+        // Validate and clear the state
+        const storedState = await McpAuth.getOAuthState(mcpName)
+        if (storedState !== oauthState) {
+          await McpAuth.clearOAuthState(mcpName)
+          throw new Error("OAuth state mismatch - potential CSRF attack")
+        }
 
-    await McpAuth.clearOAuthState(mcpName)
+        await McpAuth.clearOAuthState(mcpName)
 
-    // Finish auth
-    return finishAuth(mcpName, code)
+        // Finish auth
+        const result = await finishAuth(mcpName, code)
+        span.setAttribute("oauth.completed", result.status === "connected")
+        return result
+      },
+    )
   }
 
   /**
    * Complete OAuth authentication with the authorization code.
    */
   export async function finishAuth(mcpName: string, authorizationCode: string): Promise<Status> {
-    const transport = pendingOAuthTransports.get(mcpName)
+    return Telemetry.withSpan(
+      "oauth.flow.finish",
+      {
+        "oauth.provider": mcpName,
+        "mcp.server_name": mcpName,
+      },
+      async (span) => {
+        const transport = pendingOAuthTransports.get(mcpName)
 
-    if (!transport) {
-      throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
-    }
+        if (!transport) {
+          throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
+        }
 
-    try {
-      // Call finishAuth on the transport
-      await transport.finishAuth(authorizationCode)
+        try {
+          // Call finishAuth on the transport
+          await transport.finishAuth(authorizationCode)
 
-      // Clear the code verifier after successful auth
-      await McpAuth.clearCodeVerifier(mcpName)
+          // Clear the code verifier after successful auth
+          await McpAuth.clearCodeVerifier(mcpName)
 
-      // Now try to reconnect
-      const cfg = await Config.get()
-      const mcpConfig = cfg.mcp?.[mcpName]
+          // Now try to reconnect
+          const cfg = await Config.get()
+          const mcpConfig = cfg.mcp?.[mcpName]
 
-      if (!mcpConfig) {
-        throw new Error(`MCP server not found: ${mcpName}`)
-      }
+          if (!mcpConfig) {
+            throw new Error(`MCP server not found: ${mcpName}`)
+          }
 
-      if (!isMcpConfigured(mcpConfig)) {
-        throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
-      }
+          if (!isMcpConfigured(mcpConfig)) {
+            throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
+          }
 
-      // Re-add the MCP server to establish connection
-      pendingOAuthTransports.delete(mcpName)
-      const result = await add(mcpName, mcpConfig)
+          // Re-add the MCP server to establish connection
+          pendingOAuthTransports.delete(mcpName)
+          const result = await add(mcpName, mcpConfig)
 
-      const statusRecord = result.status as Record<string, Status>
-      return statusRecord[mcpName] ?? { status: "failed", error: "Unknown error after auth" }
-    } catch (error) {
-      log.error("failed to finish oauth", { mcpName, error })
-      return {
-        status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-      }
-    }
+          const statusRecord = result.status as Record<string, Status>
+          const finalStatus = statusRecord[mcpName] ?? { status: "failed", error: "Unknown error after auth" }
+
+          span.setAttribute("oauth.success", finalStatus.status === "connected")
+          return finalStatus
+        } catch (error) {
+          log.error("failed to finish oauth", { mcpName, error })
+          span.setAttribute("oauth.success", false)
+          span.setAttribute("oauth.error", error instanceof Error ? error.message : String(error))
+          return {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+          }
+        }
+      },
+    )
   }
 
   /**
    * Remove OAuth credentials for an MCP server.
    */
   export async function removeAuth(mcpName: string): Promise<void> {
+    using span = Telemetry.span("oauth.credentials.remove", {
+      "oauth.provider": mcpName,
+      "mcp.server_name": mcpName,
+    })
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
@@ -992,8 +1084,22 @@ export namespace MCP {
    */
   export async function getAuthStatus(mcpName: string): Promise<AuthStatus> {
     const hasTokens = await hasStoredTokens(mcpName)
-    if (!hasTokens) return "not_authenticated"
+    if (!hasTokens) {
+      Telemetry.span("mcp.auth.status", {
+        "mcp.server_name": mcpName,
+        "auth.status": "not_authenticated",
+        "auth.method": "oauth",
+      })
+      return "not_authenticated"
+    }
     const expired = await McpAuth.isTokenExpired(mcpName)
-    return expired ? "expired" : "authenticated"
+    const status: AuthStatus = expired ? "expired" : "authenticated"
+    Telemetry.span("mcp.auth.status", {
+      "mcp.server_name": mcpName,
+      "auth.status": status,
+      "auth.method": "oauth",
+      "auth.token_expired": expired === true,
+    })
+    return status
   }
 }

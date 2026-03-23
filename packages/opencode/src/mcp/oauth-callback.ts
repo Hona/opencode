@@ -1,5 +1,6 @@
 import { Log } from "../util/log"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
+import { Telemetry } from "../telemetry"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
 
@@ -74,6 +75,12 @@ export namespace McpOAuthCallback {
           return new Response("Not found", { status: 404 })
         }
 
+        using span = Telemetry.span("oauth.callback.receive", {
+          "oauth.callback.has_state": !!url.searchParams.get("state"),
+          "oauth.callback.has_code": !!url.searchParams.get("code"),
+          "oauth.callback.has_error": !!url.searchParams.get("error"),
+        })
+
         const code = url.searchParams.get("code")
         const state = url.searchParams.get("state")
         const error = url.searchParams.get("error")
@@ -85,14 +92,20 @@ export namespace McpOAuthCallback {
         if (!state) {
           const errorMsg = "Missing required state parameter - potential CSRF attack"
           log.error("oauth callback missing state parameter", { url: url.toString() })
+          span.setAttribute("oauth.callback.error", "missing_state")
+          span.setAttribute("oauth.callback.csrf_detected", true)
           return new Response(HTML_ERROR(errorMsg), {
             status: 400,
             headers: { "Content-Type": "text/html" },
           })
         }
 
+        span.setAttribute("oauth.state", state)
+
         if (error) {
           const errorMsg = errorDescription || error
+          span.setAttribute("oauth.callback.error", error)
+          span.setAttribute("oauth.callback.success", false)
           if (pendingAuths.has(state)) {
             const pending = pendingAuths.get(state)!
             clearTimeout(pending.timeout)
@@ -105,6 +118,8 @@ export namespace McpOAuthCallback {
         }
 
         if (!code) {
+          span.setAttribute("oauth.callback.error", "missing_code")
+          span.setAttribute("oauth.callback.success", false)
           return new Response(HTML_ERROR("No authorization code provided"), {
             status: 400,
             headers: { "Content-Type": "text/html" },
@@ -115,6 +130,9 @@ export namespace McpOAuthCallback {
         if (!pendingAuths.has(state)) {
           const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
           log.error("oauth callback with invalid state", { state, pendingStates: Array.from(pendingAuths.keys()) })
+          span.setAttribute("oauth.callback.error", "invalid_state")
+          span.setAttribute("oauth.callback.csrf_detected", true)
+          span.setAttribute("oauth.callback.success", false)
           return new Response(HTML_ERROR(errorMsg), {
             status: 400,
             headers: { "Content-Type": "text/html" },
@@ -127,6 +145,9 @@ export namespace McpOAuthCallback {
         pendingAuths.delete(state)
         pending.resolve(code)
 
+        span.setAttribute("oauth.callback.success", true)
+        span.setAttribute("oauth.callback.state_valid", true)
+
         return new Response(HTML_SUCCESS, {
           headers: { "Content-Type": "text/html" },
         })
@@ -137,10 +158,15 @@ export namespace McpOAuthCallback {
   }
 
   export function waitForCallback(oauthState: string): Promise<string> {
+    using span = Telemetry.span("oauth.callback.wait", {
+      "oauth.state": oauthState,
+    })
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (pendingAuths.has(oauthState)) {
           pendingAuths.delete(oauthState)
+          span.setAttribute("oauth.callback.timeout", true)
+          span.setAttribute("oauth.callback.success", false)
           reject(new Error("OAuth callback timeout - authorization took too long"))
         }
       }, CALLBACK_TIMEOUT_MS)

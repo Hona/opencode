@@ -1,6 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
+import { Telemetry } from "../telemetry"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -75,6 +76,13 @@ export namespace McpAuth {
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
+    using span = Telemetry.span("oauth.token.store", {
+      "oauth.provider": mcpName,
+      "oauth.token.has_access_token": !!tokens.accessToken,
+      "oauth.token.has_refresh_token": !!tokens.refreshToken,
+      "oauth.token.expires_at": tokens.expiresAt ?? 0,
+      "oauth.token.has_scope": !!tokens.scope,
+    })
     const entry = (await get(mcpName)) ?? {}
     entry.tokens = tokens
     await set(mcpName, entry, serverUrl)
@@ -126,7 +134,23 @@ export namespace McpAuth {
   export async function isTokenExpired(mcpName: string): Promise<boolean | null> {
     const entry = await get(mcpName)
     if (!entry?.tokens) return null
-    if (!entry.tokens.expiresAt) return false
-    return entry.tokens.expiresAt < Date.now() / 1000
+    if (!entry.tokens.expiresAt) {
+      Telemetry.span("oauth.token.validate", {
+        "oauth.provider": mcpName,
+        "oauth.token.valid": true,
+        "oauth.token.expired": false,
+        "oauth.token.has_expiry": false,
+      })
+      return false
+    }
+    const isExpired = entry.tokens.expiresAt < Date.now() / 1000
+    Telemetry.span("oauth.token.validate", {
+      "oauth.provider": mcpName,
+      "oauth.token.valid": !isExpired,
+      "oauth.token.expired": isExpired,
+      "oauth.token.has_expiry": true,
+      "oauth.token.expires_at": entry.tokens.expiresAt,
+    })
+    return isExpired
   }
 }

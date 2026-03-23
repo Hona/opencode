@@ -10,6 +10,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
+import { Telemetry } from "@/telemetry"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -18,6 +19,119 @@ export namespace LSPServer {
       .stat(p)
       .then(() => true)
       .catch(() => false)
+
+  /**
+   * Download a file with telemetry instrumentation.
+   */
+  async function download(url: string, destPath: string, name: string): Promise<boolean> {
+    return Telemetry.withSpan("http.download", {
+      "http.url": url,
+      "http.request.method": "GET",
+      "download.name": name,
+      "server.address": new URL(url).hostname,
+    }, async (span) => {
+      const response = await fetch(url)
+      
+      span.setAttribute("http.response.status_code", response.status)
+      
+      const contentLength = response.headers.get("content-length")
+      if (contentLength) {
+        span.setAttribute("download.size_bytes", parseInt(contentLength))
+      }
+      
+      if (!response.ok) {
+        span.setAttribute("error", true)
+        return false
+      }
+      
+      await Bun.file(destPath).write(response)
+      const stats = await fs.stat(destPath)
+      span.setAttribute("download.actual_size_bytes", stats.size)
+      
+      return true
+    })
+  }
+
+  /**
+   * Download GitHub release info with telemetry instrumentation.
+   */
+  async function fetchGitHubRelease(url: string, name: string): Promise<any | undefined> {
+    return Telemetry.withSpan("http.download", {
+      "http.url": url,
+      "http.request.method": "GET",
+      "download.name": `${name}-release-info`,
+      "server.address": "api.github.com",
+    }, async (span) => {
+      const response = await fetch(url)
+      
+      span.setAttribute("http.response.status_code", response.status)
+      
+      if (!response.ok) {
+        span.setAttribute("error", true)
+        return undefined
+      }
+      
+      const data = await response.json()
+      return data
+    })
+  }
+
+  /**
+   * Extract an archive with telemetry instrumentation.
+   */
+  async function extractArchive(archivePath: string, destPath: string, type: "zip" | "tar" | "tar.gz" | "tar.xz"): Promise<boolean> {
+    const stats = await fs.stat(archivePath).catch(() => undefined)
+    
+    return Telemetry.withSpan("archive.extract", {
+      "archive.type": type,
+      "archive.source": archivePath,
+      "archive.destination": destPath,
+      "archive.size_bytes": stats?.size ?? 0,
+    }, async (span) => {
+      try {
+        if (type === "zip") {
+          await Archive.extractZip(archivePath, destPath)
+        } else if (type === "tar" || type === "tar.gz" || type === "tar.xz") {
+          await $`tar -xf ${archivePath}`.cwd(destPath).quiet().nothrow()
+        }
+        span.setAttribute("archive.success", true)
+        return true
+      } catch (error) {
+        span.setAttribute("archive.success", false)
+        span.setAttribute("error", true)
+        log.error(`Failed to extract archive`, { archivePath, type, error })
+        return false
+      }
+    })
+  }
+  function spawnLSP(
+    serverId: string,
+    command: string,
+    args: string[],
+    options: { cwd: string; env?: Record<string, string> },
+    initialization?: Record<string, any>,
+  ): Handle {
+    const cmdLine = `${command} ${args.join(" ")}`
+    using span = Telemetry.span("lsp.server.spawn", {
+      "lsp.server": serverId,
+      "process.executable.name": path.basename(command),
+      "process.executable.path": command,
+      "process.command_line": cmdLine,
+      "process.working_directory": options.cwd,
+    })
+
+    const proc = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+    })
+
+    span.setAttribute("process.pid", proc.pid ?? -1)
+
+    return {
+      process: proc,
+      initialization,
+    }
+  }
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -78,11 +192,7 @@ export namespace LSPServer {
         log.info("deno not found, please install deno first")
         return
       }
-      return {
-        process: spawn(deno, ["lsp"], {
-          cwd: root,
-        }),
-      }
+      return spawnLSP("deno", deno, ["lsp"], { cwd: root })
     },
   }
 
@@ -97,21 +207,16 @@ export namespace LSPServer {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       log.info("typescript server", { tsserver })
       if (!tsserver) return
-      const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
+      return spawnLSP(
+        "typescript",
+        BunProc.which(),
+        ["x", "typescript-language-server", "--stdio"],
+        {
+          cwd: root,
+          env: { BUN_BE_BUN: "1" },
         },
-      })
-      return {
-        process: proc,
-        initialization: {
-          tsserver: {
-            path: tsserver,
-          },
-        },
-      }
+        { tsserver: { path: tsserver } },
+      )
     },
   }
 
@@ -176,19 +281,15 @@ export namespace LSPServer {
       if (!(await Bun.file(serverPath).exists())) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading and building VS Code ESLint server")
-        const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
-        if (!response.ok) return
-
+        const zipUrl = "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip"
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
-        await Bun.file(zipPath).write(response)
+        
+        const downloaded = await download(zipUrl, zipPath, "vscode-eslint")
+        if (!downloaded) return
 
-        const ok = await Archive.extractZip(zipPath, Global.Path.bin)
-          .then(() => true)
-          .catch((error) => {
-            log.error("Failed to extract vscode-eslint archive", { error })
-            return false
-          })
+        const ok = await extractArchive(zipPath, Global.Path.bin, "zip")
         if (!ok) return
+        
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -581,17 +682,13 @@ export namespace LSPServer {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           log.info("downloading elixir-ls from GitHub releases")
 
-          const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
-          if (!response.ok) return
+          const zipUrl = "https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip"
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
-          await Bun.file(zipPath).write(response)
+          
+          const downloaded = await download(zipUrl, zipPath, "elixir-ls")
+          if (!downloaded) return
 
-          const ok = await Archive.extractZip(zipPath, Global.Path.bin)
-            .then(() => true)
-            .catch((error) => {
-              log.error("Failed to extract elixir-ls archive", { error })
-              return false
-            })
+          const ok = await extractArchive(zipPath, Global.Path.bin, "zip")
           if (!ok) return
 
           await fs.rm(zipPath, {
@@ -637,13 +734,11 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading zls from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
-        if (!releaseResponse.ok) {
+        const release = await fetchGitHubRelease("https://api.github.com/repos/zigtools/zls/releases/latest", "zls")
+        if (!release) {
           log.error("Failed to fetch zls release info")
           return
         }
-
-        const release = (await releaseResponse.json()) as any
 
         const platform = process.platform
         const arch = process.arch
@@ -685,22 +780,16 @@ export namespace LSPServer {
         }
 
         const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
-        if (!downloadResponse.ok) {
+        const tempPath = path.join(Global.Path.bin, assetName)
+        
+        const downloaded = await download(downloadUrl, tempPath, "zls-binary")
+        if (!downloaded) {
           log.error("Failed to download zls")
           return
         }
 
-        const tempPath = path.join(Global.Path.bin, assetName)
-        await Bun.file(tempPath).write(downloadResponse)
-
         if (ext === "zip") {
-          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
-            .then(() => true)
-            .catch((error) => {
-              log.error("Failed to extract zls archive", { error })
-              return false
-            })
+          const ok = await extractArchive(tempPath, Global.Path.bin, "zip")
           if (!ok) return
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
@@ -932,16 +1021,11 @@ export namespace LSPServer {
       if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
       log.info("downloading clangd from GitHub releases")
 
-      const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
-      if (!releaseResponse.ok) {
+      const release = await fetchGitHubRelease("https://api.github.com/repos/clangd/clangd/releases/latest", "clangd")
+      if (!release) {
         log.error("Failed to fetch clangd release info")
         return
       }
-
-      const release: {
-        tag_name?: string
-        assets?: { name?: string; browser_download_url?: string }[]
-      } = await releaseResponse.json()
 
       const tag = release.tag_name
       if (!tag) {
@@ -978,19 +1062,19 @@ export namespace LSPServer {
       }
 
       const name = asset.name
-      const downloadResponse = await fetch(asset.browser_download_url)
-      if (!downloadResponse.ok) {
+      const archive = path.join(Global.Path.bin, name)
+      
+      const downloaded = await download(asset.browser_download_url, archive, "clangd-binary")
+      if (!downloaded) {
         log.error("Failed to download clangd")
         return
       }
 
-      const archive = path.join(Global.Path.bin, name)
-      const buf = await downloadResponse.arrayBuffer()
+      const buf = await Bun.file(archive).arrayBuffer()
       if (buf.byteLength === 0) {
         log.error("Failed to write clangd archive")
         return
       }
-      await Bun.write(archive, buf)
 
       const zip = name.endsWith(".zip")
       const tar = name.endsWith(".tar.xz")
@@ -1000,16 +1084,11 @@ export namespace LSPServer {
       }
 
       if (zip) {
-        const ok = await Archive.extractZip(archive, Global.Path.bin)
-          .then(() => true)
-          .catch((error) => {
-            log.error("Failed to extract clangd archive", { error })
-            return false
-          })
+        const ok = await extractArchive(archive, Global.Path.bin, "zip")
         if (!ok) return
       }
       if (tar) {
-        await $`tar -xf ${archive}`.cwd(Global.Path.bin).quiet().nothrow()
+        await extractArchive(archive, Global.Path.bin, "tar.xz")
       }
       await fs.rm(archive, { force: true })
 
@@ -1159,21 +1238,29 @@ export namespace LSPServer {
           "https://www.eclipse.org/downloads/download.php?file=/jdtls/snapshots/jdt-language-server-latest.tar.gz"
         const archiveName = "release.tar.gz"
 
-        log.info("Downloading JDTLS archive", { url: releaseURL, dest: distPath })
-        const curlResult = await $`curl -L -o ${archiveName} '${releaseURL}'`.cwd(distPath).quiet().nothrow()
-        if (curlResult.exitCode !== 0) {
-          log.error("Failed to download JDTLS", { exitCode: curlResult.exitCode, stderr: curlResult.stderr.toString() })
-          return
-        }
+        const downloaded = await Telemetry.withSpan("http.download", {
+          "http.url": releaseURL,
+          "http.request.method": "GET",
+          "download.name": "jdtls",
+          "server.address": "www.eclipse.org",
+        }, async (span) => {
+          log.info("Downloading JDTLS archive", { url: releaseURL, dest: distPath })
+          const curlResult = await $`curl -L -o ${archiveName} '${releaseURL}'`.cwd(distPath).quiet().nothrow()
+          if (curlResult.exitCode !== 0) {
+            span.setAttribute("error", true)
+            log.error("Failed to download JDTLS", { exitCode: curlResult.exitCode, stderr: curlResult.stderr.toString() })
+            return false
+          }
+          return true
+        })
+        if (!downloaded) return
 
         log.info("Extracting JDTLS archive")
-        const tarResult = await $`tar -xzf ${archiveName}`.cwd(distPath).quiet().nothrow()
-        if (tarResult.exitCode !== 0) {
-          log.error("Failed to extract JDTLS", { exitCode: tarResult.exitCode, stderr: tarResult.stderr.toString() })
-          return
-        }
+        const archivePath = path.join(distPath, archiveName)
+        const ok = await extractArchive(archivePath, distPath, "tar.gz")
+        if (!ok) return
 
-        await fs.rm(path.join(distPath, archiveName), { force: true })
+        await fs.rm(archivePath, { force: true })
         log.info("JDTLS download and extraction completed")
       }
       const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
@@ -1253,13 +1340,12 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading Kotlin Language Server from GitHub.")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest")
-        if (!releaseResponse.ok) {
+        const release = await fetchGitHubRelease("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest", "kotlin-lsp")
+        if (!release) {
           log.error("Failed to fetch kotlin-lsp release info")
           return
         }
 
-        const release = await releaseResponse.json()
         const version = release.name?.replace(/^v/, "")
 
         if (!version) {
@@ -1293,13 +1379,17 @@ export namespace LSPServer {
 
         await fs.mkdir(distPath, { recursive: true })
         const archivePath = path.join(distPath, "kotlin-ls.zip")
-        await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
-        const ok = await Archive.extractZip(archivePath, distPath)
-          .then(() => true)
-          .catch((error) => {
-            log.error("Failed to extract Kotlin LS archive", { error })
-            return false
-          })
+        
+        await Telemetry.withSpan("http.download", {
+          "http.url": releaseURL,
+          "http.request.method": "GET",
+          "download.name": "kotlin-ls-binary",
+          "server.address": "download-cdn.jetbrains.com",
+        }, async () => {
+          await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
+        })
+        
+        const ok = await extractArchive(archivePath, distPath, "zip")
         if (!ok) return
         await fs.rm(archivePath, { force: true })
         if (process.platform !== "win32") {
@@ -1388,13 +1478,11 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading lua-language-server from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
-        if (!releaseResponse.ok) {
+        const release = await fetchGitHubRelease("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest", "lua-language-server")
+        if (!release) {
           log.error("Failed to fetch lua-language-server release info")
           return
         }
-
-        const release = await releaseResponse.json()
 
         const platform = process.platform
         const arch = process.arch
@@ -1436,14 +1524,13 @@ export namespace LSPServer {
         }
 
         const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
-        if (!downloadResponse.ok) {
+        const tempPath = path.join(Global.Path.bin, assetName)
+        
+        const downloaded = await download(downloadUrl, tempPath, "lua-language-server-binary")
+        if (!downloaded) {
           log.error("Failed to download lua-language-server")
           return
         }
-
-        const tempPath = path.join(Global.Path.bin, assetName)
-        await Bun.file(tempPath).write(downloadResponse)
 
         // Unlike zls which is a single self-contained binary,
         // lua-language-server needs supporting files (meta/, locale/, etc.)
@@ -1451,31 +1538,16 @@ export namespace LSPServer {
         const installDir = path.join(Global.Path.bin, `lua-language-server-${lualsArch}-${lualsPlatform}`)
 
         // Remove old installation if exists
-        const stats = await fs.stat(installDir).catch(() => undefined)
-        if (stats) {
+        const installStats = await fs.stat(installDir).catch(() => undefined)
+        if (installStats) {
           await fs.rm(installDir, { force: true, recursive: true })
         }
 
         await fs.mkdir(installDir, { recursive: true })
 
-        if (ext === "zip") {
-          const ok = await Archive.extractZip(tempPath, installDir)
-            .then(() => true)
-            .catch((error) => {
-              log.error("Failed to extract lua-language-server archive", { error })
-              return false
-            })
-          if (!ok) return
-        } else {
-          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`
-            .quiet()
-            .then(() => true)
-            .catch((error) => {
-              log.error("Failed to extract lua-language-server archive", { error })
-              return false
-            })
-          if (!ok) return
-        }
+        const archiveType = ext === "zip" ? "zip" : "tar.gz"
+        const ok = await extractArchive(tempPath, installDir, archiveType)
+        if (!ok) return
 
         await fs.rm(tempPath, { force: true })
 

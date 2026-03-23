@@ -1,4 +1,4 @@
-import { trace, type Span, SpanStatusCode, type AttributeValue } from "@opentelemetry/api"
+import { context, trace, type Span, SpanStatusCode, type AttributeValue } from "@opentelemetry/api"
 export { traced } from "./traced.ts"
 import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -7,9 +7,11 @@ import { NodeSDK } from "@opentelemetry/sdk-node"
 import { LoggerProvider, BatchLogRecordProcessor } from "@opentelemetry/sdk-logs"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc"
+import type { ModelMessage } from "ai"
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
 import { Flag } from "@/flag/flag"
+import os from "os"
 
 export namespace Telemetry {
   const log = Log.create({ service: "telemetry" })
@@ -18,17 +20,23 @@ export namespace Telemetry {
     enabled: boolean
     endpoint: string
     serviceName: string
+    isWorker?: boolean
+    workerId?: string
+    workerPurpose?: string
   }
 
   let sdk: NodeSDK | undefined
   let loggerProvider: LoggerProvider | undefined
   let initialized = false
 
-  export function resolveConfig(serviceName: string, enabled?: boolean): Config {
+  export function resolveConfig(serviceName: string, enabled?: boolean, isWorker?: boolean, workerId?: string, workerPurpose?: string): Config {
     return {
       enabled: enabled ?? false,
       endpoint: Flag.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4317",
       serviceName,
+      isWorker: isWorker ?? false,
+      workerId: workerId ?? (isWorker ? "unknown" : "main-thread"),
+      workerPurpose: workerPurpose ?? (isWorker ? "general" : "cli"),
     }
   }
 
@@ -36,11 +44,21 @@ export namespace Telemetry {
     if (initialized) return
     if (!config.enabled) return
 
-    log.info("initializing", { endpoint: config.endpoint })
+    log.info("initializing", { endpoint: config.endpoint, serviceName: config.serviceName, isWorker: config.isWorker })
+
+    const instanceId = config.isWorker 
+      ? `worker-${config.workerId}-${process.pid}` 
+      : `main-${process.pid}`
 
     const resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: config.serviceName,
       [ATTR_SERVICE_VERSION]: Installation.VERSION,
+      "service.instance.id": instanceId,
+      "host.name": os.hostname(),
+      "process.pid": process.pid,
+      "opencode.component.type": config.isWorker ? "worker" : "main",
+      "opencode.worker.id": config.workerId || "main-thread",
+      "opencode.worker.purpose": config.workerPurpose || (config.isWorker ? "general" : "cli"),
     })
 
     const traceExporter = new OTLPTraceExporter({
@@ -131,11 +149,115 @@ export namespace Telemetry {
     })
   }
 
+  export function withSpanSync<T>(
+    name: string,
+    attributes: Record<string, AttributeValue>,
+    fn: (span: Span) => T,
+  ): T {
+    if (!initialized) {
+      return fn(NOOP_SPAN)
+    }
+
+    const tracer = getTracer("opencode")
+    return tracer.startActiveSpan(name, { attributes }, (span) => {
+      try {
+        const result = fn(span)
+        return result
+      } catch (error) {
+        if (error instanceof Error) {
+          span.recordException(error)
+        }
+        span.setStatus({ code: SpanStatusCode.ERROR })
+        throw error
+      } finally {
+        span.end()
+      }
+    })
+  }
+
   export const SeverityMap: Record<string, SeverityNumber> = {
     DEBUG: SeverityNumber.DEBUG,
     INFO: SeverityNumber.INFO,
     WARN: SeverityNumber.WARN,
     ERROR: SeverityNumber.ERROR,
+  }
+
+  /**
+   * Maps opencode provider IDs to standard GenAI provider names.
+   * Used for OpenTelemetry GenAI semantic conventions.
+   */
+  const providerMapping: Record<string, string> = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "google": "gcp.gen_ai",
+    "bedrock": "aws.bedrock",
+    "azure-openai": "azure.ai.openai",
+    "groq": "groq",
+    "mistral": "mistral_ai",
+    "cohere": "cohere",
+    "deepseek": "deepseek",
+    "perplexity": "perplexity",
+  }
+
+  /**
+   * Returns the standard GenAI provider name for a given opencode provider ID.
+   * Falls back to the original provider ID if no mapping exists.
+   */
+  export function setSpanAttribute(key: string, value: AttributeValue): void {
+    if (!initialized) return
+    const span = trace.getActiveSpan()
+    if (span) {
+      span.setAttribute(key, value)
+    }
+  }
+
+  export function shouldCaptureMessageContent(): boolean {
+    return Flag.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+  }
+
+  export function stringifyMessagesForGenAI(messages: ModelMessage[]): string {
+    const parts = messages.map((msg): object => {
+      const role = msg.role === "tool" ? "tool" : msg.role
+      if (typeof msg.content === "string") {
+        return { role, parts: [{ type: "text", content: msg.content }] }
+      }
+      if (Array.isArray(msg.content)) {
+        const msgParts = msg.content.flatMap((part): object[] => {
+          switch (part.type) {
+            case "text":
+              return [{ type: "text", content: part.text }]
+            case "tool-call":
+              return [{
+                type: "tool_call",
+                id: part.toolCallId,
+                name: part.toolName,
+                arguments: part.input,
+              }]
+            case "tool-result":
+              return [{
+                type: "tool_call_response",
+                id: part.toolCallId,
+                response: part.output,
+              }]
+            case "reasoning":
+              return [{ type: "text", content: part.text }]
+            default:
+              return []
+          }
+        })
+        return { role, parts: msgParts }
+      }
+      return { role, parts: [] }
+    })
+    return JSON.stringify(parts)
+  }
+
+  /**
+   * Returns the standard GenAI provider name for a given opencode provider ID.
+   * Falls back to the original provider ID if no mapping exists.
+   */
+  export function toGenAIProvider(providerID: string): string {
+    return providerMapping[providerID] ?? providerID
   }
 
   /**
@@ -191,11 +313,13 @@ export namespace Telemetry {
 
   /**
    * Creates a span that can be used with the `using` keyword for automatic cleanup.
+   * Sets the span as the active context so child spans nest correctly.
    * Returns a NOOP span if telemetry is not initialized.
    *
    * @example
    * ```ts
    * using span = Telemetry.span("my.operation", { "attr.key": "value" })
+   * // span is active context — child spans will nest under it
    * // span.end() is automatically called when scope exits
    * ```
    */
@@ -205,11 +329,25 @@ export namespace Telemetry {
     }
 
     const tracer = getTracer("opencode")
-    const activeSpan = tracer.startSpan(name, { attributes: attrs })
+    const parentCtx = context.active()
+    const s = tracer.startSpan(name, { attributes: attrs }, parentCtx)
+    const ctx = trace.setSpan(parentCtx, s)
 
-    return Object.assign(activeSpan, {
+    // Access the underlying AsyncLocalStorage to enter the new context.
+    // The OTel JS API only provides callback-based context.with(), but the
+    // using/disposable pattern requires enter/exit semantics.
+    const mgr = (context as any)._getContextManager?.()
+    const als = mgr?._asyncLocalStorage
+    if (als?.enterWith) {
+      als.enterWith(ctx)
+    }
+
+    return Object.assign(s, {
       [Symbol.dispose]: () => {
-        activeSpan.end()
+        if (als?.enterWith) {
+          als.enterWith(parentCtx)
+        }
+        s.end()
       },
     })
   }

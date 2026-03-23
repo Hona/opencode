@@ -14,6 +14,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
+import { Telemetry } from "../telemetry"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
@@ -66,6 +67,18 @@ export namespace FileWatcher {
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
         for (const evt of evts) {
+          let changeType: "created" | "modified" | "deleted" | "unknown" = "unknown"
+          if (evt.type === "create") changeType = "created"
+          if (evt.type === "update") changeType = "modified"
+          if (evt.type === "delete") changeType = "deleted"
+
+          using span = Telemetry.span("file.watcher.event", {
+            "file.path": evt.path,
+            "file.change.type": changeType,
+            "watcher.backend": backend,
+            "execution.context": "background",
+          })
+
           if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
           if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
           if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })

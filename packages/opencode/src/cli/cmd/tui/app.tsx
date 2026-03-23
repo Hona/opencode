@@ -38,6 +38,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { Telemetry } from "@/telemetry"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -212,6 +213,13 @@ function App() {
   const promptRef = usePromptRef()
 
   useKeyboard((evt) => {
+    // TUI render span - keyboard input
+    using span = Telemetry.span("tui.input", {
+      "input.type": "keyboard",
+      "execution.context": "tui",
+      "async.operation": false,
+    })
+    
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     if (!renderer.getSelection()) return
 
@@ -253,6 +261,12 @@ function App() {
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
+    // TUI render span - route change
+    using span = Telemetry.span("tui.render", {
+      "tui.component": route.data.type,
+      "execution.context": "tui",
+      "async.operation": false,
+    })
     console.log(JSON.stringify(route.data))
   })
 

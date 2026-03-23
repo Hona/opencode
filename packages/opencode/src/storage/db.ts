@@ -12,8 +12,9 @@ import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync } from "fs"
 import * as schema from "./schema"
-
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
+
+import { Telemetry } from "@/telemetry"
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -103,17 +104,21 @@ export namespace Database {
   }>("database")
 
   export function use<T>(callback: (trx: TxOrDb) => T): T {
-    try {
-      return callback(ctx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const effects: (() => void | Promise<void>)[] = []
-        const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
-        return result
+    return Telemetry.withSpan("db.operation", {
+      "db.system": "sqlite",
+    }, () => {
+      try {
+        return callback(ctx.use().tx)
+      } catch (err) {
+        if (err instanceof Context.NotFound) {
+          const effects: (() => void | Promise<void>)[] = []
+          const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
+          for (const effect of effects) effect()
+          return result
+        }
+        throw err
       }
-      throw err
-    }
+    })
   }
 
   export function effect(fn: () => any | Promise<any>) {

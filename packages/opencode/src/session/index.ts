@@ -20,6 +20,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { Telemetry } from "@/telemetry"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -252,6 +253,13 @@ export namespace Session {
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     const now = Date.now()
     Database.use((db) => {
+      using span = Telemetry.span("db.session.update", {
+        "db.system": "sqlite",
+        "db.operation": "UPDATE",
+        "db.table": "sessions",
+        "session.id": sessionID,
+        "session.field": "time_updated",
+      })
       const row = db
         .update(SessionTable)
         .set({ time_updated: now })
@@ -259,6 +267,7 @@ export namespace Session {
         .returning()
         .get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
+      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
@@ -271,38 +280,58 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
-    const result: Info = {
-      id: Identifier.descending("session", input.id),
-      slug: Slug.create(),
-      version: Installation.VERSION,
-      projectID: Instance.project.id,
-      directory: input.directory,
-      parentID: input.parentID,
-      title: input.title ?? createDefaultTitle(!!input.parentID),
-      permission: input.permission,
-      time: {
-        created: Date.now(),
-        updated: Date.now(),
+    return Telemetry.withSpan(
+      "action.execute",
+      {
+        "action.name": "session.create",
+        "action.category": "session",
+        "action.source": "user",
+        ...(input.parentID && { "session.parent_id": input.parentID }),
+        "opencode.execution.mode": "in-process",
       },
-    }
-    log.info("created", result)
-    Database.use((db) => {
-      db.insert(SessionTable).values(toRow(result)).run()
-      Database.effect(() =>
-        Bus.publish(Event.Created, {
+      async () => {
+        const result: Info = {
+          id: Identifier.descending("session", input.id),
+          slug: Slug.create(),
+          version: Installation.VERSION,
+          projectID: Instance.project.id,
+          directory: input.directory,
+          parentID: input.parentID,
+          title: input.title ?? createDefaultTitle(!!input.parentID),
+          permission: input.permission,
+          time: {
+            created: Date.now(),
+            updated: Date.now(),
+          },
+        }
+        log.info("created", result)
+        Database.use((db) => {
+          using span = Telemetry.span("db.session.insert", {
+            "db.system": "sqlite",
+            "db.operation": "INSERT",
+            "db.table": "sessions",
+            "session.id": result.id,
+            ...(result.parentID && { "session.parent_id": result.parentID }),
+          })
+          db.insert(SessionTable).values(toRow(result)).run()
+          span.setAttribute("db.rows_affected", 1)
+          Database.effect(() =>
+            Bus.publish(Event.Created, {
+              info: result,
+            }),
+          )
+        })
+        const cfg = await Config.get()
+        if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
+          share(result.id).catch(() => {
+            // Silently ignore sharing errors during session creation
+          })
+        Bus.publish(Event.Updated, {
           info: result,
-        }),
-      )
-    })
-    const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id).catch(() => {
-        // Silently ignore sharing errors during session creation
-      })
-    Bus.publish(Event.Updated, {
-      info: result,
-    })
-    return result
+        })
+        return result
+      }
+    )
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
@@ -313,7 +342,17 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    const row = Database.use((db) => {
+      using span = Telemetry.span("db.session.select", {
+        "db.system": "sqlite",
+        "db.operation": "SELECT",
+        "db.table": "sessions",
+        "session.id": id,
+      })
+      const result = db.select().from(SessionTable).where(eq(SessionTable.id, id)).get()
+      span.setAttribute("db.response.returned_rows", result ? 1 : 0)
+      return result
+    })
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
   })
@@ -326,8 +365,16 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
     Database.use((db) => {
+      using span = Telemetry.span("db.session.update", {
+        "db.system": "sqlite",
+        "db.operation": "UPDATE",
+        "db.table": "sessions",
+        "session.id": id,
+        "session.field": "share_url",
+      })
       const row = db.update(SessionTable).set({ share_url: share.url }).where(eq(SessionTable.id, id)).returning().get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
@@ -339,8 +386,16 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
     Database.use((db) => {
+      using span = Telemetry.span("db.session.update", {
+        "db.system": "sqlite",
+        "db.operation": "UPDATE",
+        "db.table": "sessions",
+        "session.id": id,
+        "session.field": "share_url",
+      })
       const row = db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning().get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
     })
@@ -353,6 +408,13 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        using span = Telemetry.span("db.session.update", {
+          "db.system": "sqlite",
+          "db.operation": "UPDATE",
+          "db.table": "sessions",
+          "session.id": input.sessionID,
+          "session.field": "title",
+        })
         const row = db
           .update(SessionTable)
           .set({ title: input.title })
@@ -360,6 +422,7 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -374,6 +437,13 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        using span = Telemetry.span("db.session.update", {
+          "db.system": "sqlite",
+          "db.operation": "UPDATE",
+          "db.table": "sessions",
+          "session.id": input.sessionID,
+          "session.field": "time_archived",
+        })
         const row = db
           .update(SessionTable)
           .set({ time_archived: input.time })
@@ -381,6 +451,7 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -395,6 +466,13 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        using span = Telemetry.span("db.session.update", {
+          "db.system": "sqlite",
+          "db.operation": "UPDATE",
+          "db.table": "sessions",
+          "session.id": input.sessionID,
+          "session.field": "permission",
+        })
         const row = db
           .update(SessionTable)
           .set({ permission: input.permission, time_updated: Date.now() })
@@ -402,6 +480,7 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -417,6 +496,13 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        using span = Telemetry.span("db.session.update", {
+          "db.system": "sqlite",
+          "db.operation": "UPDATE",
+          "db.table": "sessions",
+          "session.id": input.sessionID,
+          "session.field": "revert",
+        })
         const row = db
           .update(SessionTable)
           .set({
@@ -430,6 +516,7 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -439,6 +526,13 @@ export namespace Session {
 
   export const clearRevert = fn(Identifier.schema("session"), async (sessionID) => {
     return Database.use((db) => {
+      using span = Telemetry.span("db.session.update", {
+        "db.system": "sqlite",
+        "db.operation": "UPDATE",
+        "db.table": "sessions",
+        "session.id": sessionID,
+        "session.field": "revert",
+      })
       const row = db
         .update(SessionTable)
         .set({
@@ -449,6 +543,7 @@ export namespace Session {
         .returning()
         .get()
       if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
+      span.setAttribute("db.rows_affected", 1)
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
       return info
@@ -462,6 +557,13 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        using span = Telemetry.span("db.session.update", {
+          "db.system": "sqlite",
+          "db.operation": "UPDATE",
+          "db.table": "sessions",
+          "session.id": input.sessionID,
+          "session.field": "summary",
+        })
         const row = db
           .update(SessionTable)
           .set({
@@ -474,6 +576,7 @@ export namespace Session {
           .returning()
           .get()
         if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        span.setAttribute("db.rows_affected", 1)
         const info = fromRow(row)
         Database.effect(() => Bus.publish(Event.Updated, { info }))
         return info
@@ -557,31 +660,57 @@ export namespace Session {
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
-    try {
-      const session = await get(sessionID)
-      for (const child of await children(sessionID)) {
-        await remove(child.id)
+    return Telemetry.withSpan(
+      "action.execute",
+      {
+        "action.name": "session.delete",
+        "action.category": "session",
+        "action.source": "user",
+        "session.id": sessionID,
+        "opencode.execution.mode": "in-process",
+      },
+      async () => {
+        const project = Instance.project
+        try {
+          const session = await get(sessionID)
+          for (const child of await children(sessionID)) {
+            await remove(child.id)
+          }
+          await unshare(sessionID).catch(() => {})
+          // CASCADE delete handles messages and parts automatically
+          Database.use((db) => {
+            using span = Telemetry.span("db.session.delete", {
+              "db.system": "sqlite",
+              "db.operation": "DELETE",
+              "db.table": "sessions",
+              "session.id": sessionID,
+            })
+            db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
+            span.setAttribute("db.rows_affected", 1)
+            Database.effect(() =>
+              Bus.publish(Event.Deleted, {
+                info: session,
+              }),
+            )
+          })
+        } catch (e) {
+          log.error(e)
+        }
       }
-      await unshare(sessionID).catch(() => {})
-      // CASCADE delete handles messages and parts automatically
-      Database.use((db) => {
-        db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
-        Database.effect(() =>
-          Bus.publish(Event.Deleted, {
-            info: session,
-          }),
-        )
-      })
-    } catch (e) {
-      log.error(e)
-    }
+    )
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     const time_created = msg.role === "user" ? msg.time.created : msg.time.created
     const { id, sessionID, ...data } = msg
     Database.use((db) => {
+      using span = Telemetry.span("db.message.upsert", {
+        "db.system": "sqlite",
+        "db.operation": "INSERT",
+        "db.table": "messages",
+        "message.id": id,
+        "session.id": sessionID,
+      })
       db.insert(MessageTable)
         .values({
           id,
@@ -591,6 +720,7 @@ export namespace Session {
         })
         .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
         .run()
+      span.setAttribute("db.rows_affected", 1)
       Database.effect(() =>
         Bus.publish(MessageV2.Event.Updated, {
           info: msg,

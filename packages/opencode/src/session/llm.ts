@@ -23,6 +23,7 @@ import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Telemetry, traced } from "@/telemetry"
+import type { Span } from "@opentelemetry/api"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -50,7 +51,10 @@ export namespace LLM {
     "session.id": input.sessionID,
     "llm.agent": input.agent.name,
     "llm.tools_count": Object.keys(input.tools).length,
-  }))(async (input) => {
+    "gen_ai.system": Telemetry.toGenAIProvider(input.model.providerID),
+    "gen_ai.operation.name": "chat",
+    "gen_ai.request.model": input.model.id,
+  }))(async (input, span) => {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -180,11 +184,74 @@ export namespace LLM {
       })
     }
 
+    // Build the complete message list for telemetry capture
+    const allMessages: ModelMessage[] = [
+      ...system.map(
+        (x): ModelMessage => ({
+          role: "system",
+          content: x,
+        }),
+      ),
+      ...input.messages,
+    ]
+
+    // Capture input messages for Aspire Dashboard GenAI view when enabled and recordInputs is not disabled
+    if (Telemetry.shouldCaptureMessageContent() && Telemetry.isEnabled()) {
+      Telemetry.setSpanAttribute("gen_ai.input.messages", Telemetry.stringifyMessagesForGenAI(allMessages))
+    }
+
+    // Add GenAI semantic convention span events for Aspire Dashboard visualizer
+    if (Telemetry.isEnabled()) {
+      // Add system message event
+      for (const sys of system) {
+        if (sys) {
+          span.addEvent("gen_ai.system.message", {
+            "gen_ai.event.content": sys,
+          })
+        }
+      }
+      // Add user message events
+      for (const msg of input.messages) {
+        if (msg.role === "user") {
+          const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)
+          span.addEvent("gen_ai.user.message", {
+            "gen_ai.event.content": content,
+          })
+        }
+      }
+    }
+
+    // Capture tool definitions for Aspire Dashboard GenAI visualizer Tools tab
+    const toolDefinitions = Object.entries(tools).map(([name, t]) => ({
+      type: "function",
+      name,
+      description: t.description || "",
+      parameters: t.inputSchema || { type: "object", properties: {} }
+    }))
+    if (toolDefinitions.length > 0) {
+      Telemetry.setSpanAttribute("gen_ai.tool.definitions", JSON.stringify(toolDefinitions))
+    }
+
     return streamText({
       onError(error) {
         l.error("stream error", {
           error,
         })
+      },
+      onFinish(result) {
+        if (result.response?.id) {
+          Telemetry.setSpanAttribute("gen_ai.response.id", result.response.id)
+        }
+        if (result.response?.modelId) {
+          Telemetry.setSpanAttribute("gen_ai.response.model", result.response.modelId)
+        }
+        // Add GenAI semantic convention span event for assistant response
+        if (Telemetry.isEnabled()) {
+          const assistantContent = result.text || JSON.stringify(result.messages)
+          span.addEvent("gen_ai.assistant.message", {
+            "gen_ai.event.content": assistantContent,
+          })
+        }
       },
       async experimental_repairToolCall(failed) {
         const lower = failed.toolCall.toolName.toLowerCase()
@@ -233,15 +300,7 @@ export namespace LLM {
         ...headers,
       },
       maxRetries: input.retries ?? 0,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...input.messages,
-      ],
+      messages: allMessages,
       model: wrapLanguageModel({
         model: language,
         middleware: [
@@ -257,7 +316,7 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled: Telemetry.isEnabled(),
+        isEnabled: false,
         functionId: `${input.agent.name}.chat`,
         recordInputs: true,
         recordOutputs: true,

@@ -12,7 +12,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, traced } from "@/telemetry"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
@@ -85,11 +85,16 @@ export namespace LSPClient {
 
     l.info("sending initialize")
     await Telemetry.withSpan(
-      "lsp.request.initialize",
+      "lsp.initialize",
       {
+        "rpc.system": "jsonrpc",
+        "rpc.method": "initialize",
+        "rpc.jsonrpc.version": "2.0",
         "lsp.server_id": input.serverID,
+        "lsp.root_uri": pathToFileURL(input.root).href,
+        "process.pid": input.server.process.pid,
       },
-      async () => {
+      async (span) => {
         await withTimeout(
           connection.sendRequest("initialize", {
             rootUri: pathToFileURL(input.root).href,
@@ -127,6 +132,7 @@ export namespace LSPClient {
           45_000,
         ).catch((err) => {
           l.error("initialize error", { error: err })
+          span.setAttribute("rpc.jsonrpc.error_code", -32000)
           throw new InitializeError(
             { serverID: input.serverID },
             {
@@ -137,12 +143,36 @@ export namespace LSPClient {
       },
     )
 
-    await connection.sendNotification("initialized", {})
+    await Telemetry.withSpan(
+      "lsp.notification",
+      {
+        "rpc.system": "jsonrpc",
+        "lsp.method": "initialized",
+        "lsp.direction": "client_to_server",
+        "rpc.jsonrpc.version": "2.0",
+        "lsp.server_id": input.serverID,
+      },
+      async () => {
+        await connection.sendNotification("initialized", {})
+      },
+    )
 
     if (input.server.initialization) {
-      await connection.sendNotification("workspace/didChangeConfiguration", {
-        settings: input.server.initialization,
-      })
+      await Telemetry.withSpan(
+        "lsp.notification",
+        {
+          "rpc.system": "jsonrpc",
+          "lsp.method": "workspace/didChangeConfiguration",
+          "lsp.direction": "client_to_server",
+          "rpc.jsonrpc.version": "2.0",
+          "lsp.server_id": input.serverID,
+        },
+        async () => {
+          await connection.sendNotification("workspace/didChangeConfiguration", {
+            settings: input.server.initialization,
+          })
+        },
+      )
     }
 
     const files: {
@@ -168,14 +198,27 @@ export namespace LSPClient {
           const version = files[input.path]
           if (version !== undefined) {
             log.info("workspace/didChangeWatchedFiles", input)
-            await connection.sendNotification("workspace/didChangeWatchedFiles", {
-              changes: [
-                {
-                  uri: pathToFileURL(input.path).href,
-                  type: 2, // Changed
-                },
-              ],
-            })
+            await Telemetry.withSpan(
+              "lsp.notification",
+              {
+                "rpc.system": "jsonrpc",
+                "lsp.method": "workspace/didChangeWatchedFiles",
+                "lsp.direction": "client_to_server",
+                "rpc.jsonrpc.version": "2.0",
+                "lsp.server_id": input.serverID,
+                "lsp.document_uri": pathToFileURL(input.path).href,
+              },
+              async () => {
+                await connection.sendNotification("workspace/didChangeWatchedFiles", {
+                  changes: [
+                    {
+                      uri: pathToFileURL(input.path).href,
+                      type: 2, // Changed
+                    },
+                  ],
+                })
+              },
+            )
 
             const next = version + 1
             files[input.path] = next
@@ -183,36 +226,77 @@ export namespace LSPClient {
               path: input.path,
               version: next,
             })
-            await connection.sendNotification("textDocument/didChange", {
-              textDocument: {
-                uri: pathToFileURL(input.path).href,
-                version: next,
+            await Telemetry.withSpan(
+              "lsp.notification",
+              {
+                "rpc.system": "jsonrpc",
+                "lsp.method": "textDocument/didChange",
+                "lsp.direction": "client_to_server",
+                "rpc.jsonrpc.version": "2.0",
+                "lsp.server_id": input.serverID,
+                "lsp.document_uri": pathToFileURL(input.path).href,
+                "lsp.language": languageId,
               },
-              contentChanges: [{ text }],
-            })
+              async () => {
+                await connection.sendNotification("textDocument/didChange", {
+                  textDocument: {
+                    uri: pathToFileURL(input.path).href,
+                    version: next,
+                  },
+                  contentChanges: [{ text }],
+                })
+              },
+            )
             return
           }
 
           log.info("workspace/didChangeWatchedFiles", input)
-          await connection.sendNotification("workspace/didChangeWatchedFiles", {
-            changes: [
-              {
-                uri: pathToFileURL(input.path).href,
-                type: 1, // Created
-              },
-            ],
-          })
+          await Telemetry.withSpan(
+            "lsp.notification",
+            {
+              "rpc.system": "jsonrpc",
+              "lsp.method": "workspace/didChangeWatchedFiles",
+              "lsp.direction": "client_to_server",
+              "rpc.jsonrpc.version": "2.0",
+              "lsp.server_id": input.serverID,
+              "lsp.document_uri": pathToFileURL(input.path).href,
+            },
+            async () => {
+              await connection.sendNotification("workspace/didChangeWatchedFiles", {
+                changes: [
+                  {
+                    uri: pathToFileURL(input.path).href,
+                    type: 1, // Created
+                  },
+                ],
+              })
+            },
+          )
 
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
-          await connection.sendNotification("textDocument/didOpen", {
-            textDocument: {
-              uri: pathToFileURL(input.path).href,
-              languageId,
-              version: 0,
-              text,
+          await Telemetry.withSpan(
+            "lsp.notification",
+            {
+              "rpc.system": "jsonrpc",
+              "lsp.method": "textDocument/didOpen",
+              "lsp.direction": "client_to_server",
+              "rpc.jsonrpc.version": "2.0",
+              "lsp.server_id": input.serverID,
+              "lsp.document_uri": pathToFileURL(input.path).href,
+              "lsp.language": languageId,
             },
-          })
+            async () => {
+              await connection.sendNotification("textDocument/didOpen", {
+                textDocument: {
+                  uri: pathToFileURL(input.path).href,
+                  languageId,
+                  version: 0,
+                  text,
+                },
+              })
+            },
+          )
           files[input.path] = 0
           return
         },
@@ -251,9 +335,20 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
-        connection.end()
-        connection.dispose()
-        input.server.process.kill()
+        await Telemetry.withSpan(
+          "lsp.shutdown",
+          {
+            "rpc.system": "jsonrpc",
+            "rpc.method": "shutdown",
+            "rpc.jsonrpc.version": "2.0",
+            "lsp.server_id": input.serverID,
+          },
+          async () => {
+            connection.end()
+            connection.dispose()
+            input.server.process.kill()
+          },
+        )
         l.info("shutdown")
       },
     }

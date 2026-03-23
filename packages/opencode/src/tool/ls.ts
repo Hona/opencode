@@ -5,6 +5,7 @@ import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
+import { Telemetry } from "@/telemetry"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -55,68 +56,80 @@ export const ListTool = Tool.define("list", {
     })
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
-    const files = []
-    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, signal: ctx.abort })) {
-      files.push(file)
-      if (files.length >= LIMIT) break
-    }
 
-    // Build directory structure
-    const dirs = new Set<string>()
-    const filesByDir = new Map<string, string[]>()
-
-    for (const file of files) {
-      const dir = path.dirname(file)
-      const parts = dir === "." ? [] : dir.split("/")
-
-      // Add all parent directories
-      for (let i = 0; i <= parts.length; i++) {
-        const dirPath = i === 0 ? "." : parts.slice(0, i).join("/")
-        dirs.add(dirPath)
+    return Telemetry.withSpan("tool.list.execute", {
+      "directory.path": searchPath,
+      "list.limit": LIMIT,
+      "list.ignore_patterns.count": ignoreGlobs.length,
+    }, async (span) => {
+      const files = []
+      for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, signal: ctx.abort })) {
+        files.push(file)
+        if (files.length >= LIMIT) break
       }
 
-      // Add file to its directory
-      if (!filesByDir.has(dir)) filesByDir.set(dir, [])
-      filesByDir.get(dir)!.push(path.basename(file))
-    }
+      // Build directory structure
+      const dirs = new Set<string>()
+      const filesByDir = new Map<string, string[]>()
 
-    function renderDir(dirPath: string, depth: number): string {
-      const indent = "  ".repeat(depth)
-      let output = ""
+      for (const file of files) {
+        const dir = path.dirname(file)
+        const parts = dir === "." ? [] : dir.split("/")
 
-      if (depth > 0) {
-        output += `${indent}${path.basename(dirPath)}/\n`
+        // Add all parent directories
+        for (let i = 0; i <= parts.length; i++) {
+          const dirPath = i === 0 ? "." : parts.slice(0, i).join("/")
+          dirs.add(dirPath)
+        }
+
+        // Add file to its directory
+        if (!filesByDir.has(dir)) filesByDir.set(dir, [])
+        filesByDir.get(dir)!.push(path.basename(file))
       }
 
-      const childIndent = "  ".repeat(depth + 1)
-      const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
-        .sort()
+      function renderDir(dirPath: string, depth: number): string {
+        const indent = "  ".repeat(depth)
+        let output = ""
 
-      // Render subdirectories first
-      for (const child of children) {
-        output += renderDir(child, depth + 1)
+        if (depth > 0) {
+          output += `${indent}${path.basename(dirPath)}/\n`
+        }
+
+        const childIndent = "  ".repeat(depth + 1)
+        const children = Array.from(dirs)
+          .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
+          .sort()
+
+        // Render subdirectories first
+        for (const child of children) {
+          output += renderDir(child, depth + 1)
+        }
+
+        // Render files
+        const files = filesByDir.get(dirPath) || []
+        for (const file of files.sort()) {
+          output += `${childIndent}${file}\n`
+        }
+
+        return output
       }
 
-      // Render files
-      const files = filesByDir.get(dirPath) || []
-      for (const file of files.sort()) {
-        output += `${childIndent}${file}\n`
+      const output = `${searchPath}/\n` + renderDir(".", 0)
+
+      span.setAttribute("list.files.count", files.length)
+      span.setAttribute("list.directories.count", dirs.size)
+      span.setAttribute("list.truncated", files.length >= LIMIT)
+      span.setAttribute("list.git.ignored", ignoreGlobs.includes(".git/"))
+
+      return {
+        title: path.relative(Instance.worktree, searchPath),
+        metadata: {
+          count: files.length,
+          truncated: files.length >= LIMIT,
+          directories: dirs.size,
+        },
+        output,
       }
-
-      return output
-    }
-
-    const output = `${searchPath}/\n` + renderDir(".", 0)
-
-    return {
-      title: path.relative(Instance.worktree, searchPath),
-      metadata: {
-        count: files.length,
-        truncated: files.length >= LIMIT,
-        directories: dirs.size,
-      },
-      output,
-    }
+    })
   },
 })

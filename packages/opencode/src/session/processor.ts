@@ -44,7 +44,7 @@ export namespace SessionProcessor {
         return toolcalls[toolCallID]
       },
       async process(streamInput: LLM.StreamInput) {
-        using _ = Telemetry.span("session.processor.process", {
+        using span = Telemetry.span("session.processor.process", {
           "session.id": input.sessionID,
           "session.message_id": input.assistantMessage.id,
           "llm.model_id": input.model.id,
@@ -257,6 +257,10 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  span.setAttribute("gen_ai.usage.input_tokens", usage.tokens.input)
+                  span.setAttribute("gen_ai.usage.output_tokens", usage.tokens.output)
+                  span.setAttribute("gen_ai.usage.cache_read_tokens", usage.tokens.cache.read)
+                  span.setAttribute("gen_ai.usage.cache_write_tokens", usage.tokens.cache.write)
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,

@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
 import { abortAfterAny } from "../util/abort"
+import { Telemetry } from "@/telemetry"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -100,42 +101,60 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           "content-type": "application/json",
         }
 
-        const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(searchRequest),
-          signal,
-        })
+        const searchRequestBody = JSON.stringify(searchRequest)
 
-        clearTimeout()
+        return Telemetry.withSpan("tool.websearch.execute", {
+          "search.query": params.query,
+          "search.type": params.type || "auto",
+          "search.num_results": params.numResults || 8,
+          "search.livecrawl": params.livecrawl || "fallback",
+          "http.url": `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`,
+          "http.request.method": "POST",
+          "http.request.body.size": searchRequestBody.length,
+        }, async (span) => {
+          const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
+            method: "POST",
+            headers,
+            body: searchRequestBody,
+            signal,
+          })
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`Search error (${response.status}): ${errorText}`)
-        }
+          span.setAttribute("http.response.status_code", response.status)
 
-        const responseText = await response.text()
+          clearTimeout()
 
-        // Parse SSE response
-        const lines = responseText.split("\n")
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data: McpSearchResponse = JSON.parse(line.substring(6))
-            if (data.result && data.result.content && data.result.content.length > 0) {
-              return {
-                output: data.result.content[0].text,
-                title: `Web search: ${params.query}`,
-                metadata: {},
+          if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Search error (${response.status}): ${errorText}`)
+          }
+
+          const responseText = await response.text()
+
+          // Parse SSE response
+          const lines = responseText.split("\n")
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data: McpSearchResponse = JSON.parse(line.substring(6))
+              if (data.result && data.result.content && data.result.content.length > 0) {
+                span.setAttribute("search.results_found", true)
+                span.setAttribute("search.results.count", data.result.content.length)
+                return {
+                  output: data.result.content[0].text,
+                  title: `Web search: ${params.query}`,
+                  metadata: {},
+                }
               }
             }
           }
-        }
 
-        return {
-          output: "No search results found. Please try a different query.",
-          title: `Web search: ${params.query}`,
-          metadata: {},
-        }
+          span.setAttribute("search.results_found", false)
+          span.setAttribute("search.results.count", 0)
+          return {
+            output: "No search results found. Please try a different query.",
+            title: `Web search: ${params.query}`,
+            metadata: {},
+          }
+        })
       } catch (error) {
         clearTimeout()
 

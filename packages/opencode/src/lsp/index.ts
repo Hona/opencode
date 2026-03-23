@@ -305,9 +305,14 @@ export namespace LSP {
   export const hover = traced<{ file: string; line: number; character: number }, (unknown | null)[]>(
     "lsp.request.hover",
     (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/hover",
+      "rpc.jsonrpc.version": "2.0",
       "lsp.file": input.file,
       "lsp.line": input.line,
       "lsp.character": input.character,
+      "code.operation": "hover",
+      "code.file.path": input.file,
     }),
   )(async (input) => {
     return run(input.file, (client) => {
@@ -365,7 +370,16 @@ export namespace LSP {
     SymbolKind.Enum,
   ]
 
-  export async function workspaceSymbol(query: string) {
+  export const workspaceSymbol = traced<string, LSP.Symbol[]>(
+    "lsp.request.workspaceSymbol",
+    (query) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "workspace/symbol",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.query": query,
+      "code.operation": "workspaceSymbol",
+    }),
+  )(async (query) => {
     return runAll((client) =>
       client.connection
         .sendRequest("workspace/symbol", {
@@ -375,9 +389,18 @@ export namespace LSP {
         .then((result: any) => result.slice(0, 10))
         .catch(() => []),
     ).then((result) => result.flat() as LSP.Symbol[])
-  }
+  })
 
-  export async function documentSymbol(uri: string) {
+  export const documentSymbol = traced<string, (LSP.DocumentSymbol | LSP.Symbol)[]>(
+    "lsp.request.documentSymbol",
+    (uri) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/documentSymbol",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.document_uri": uri,
+      "code.operation": "documentSymbol",
+    }),
+  )(async (uri) => {
     const file = fileURLToPath(uri)
     return run(file, (client) =>
       client.connection
@@ -390,14 +413,19 @@ export namespace LSP {
     )
       .then((result) => result.flat() as (LSP.DocumentSymbol | LSP.Symbol)[])
       .then((result) => result.filter(Boolean))
-  }
+  })
 
   export const definition = traced<{ file: string; line: number; character: number }, unknown[]>(
     "lsp.request.definition",
     (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/definition",
+      "rpc.jsonrpc.version": "2.0",
       "lsp.file": input.file,
       "lsp.line": input.line,
       "lsp.character": input.character,
+      "code.operation": "definition",
+      "code.file.path": input.file,
     }),
   )(async (input) => {
     return run(input.file, (client) =>
@@ -413,9 +441,14 @@ export namespace LSP {
   export const references = traced<{ file: string; line: number; character: number }, unknown[]>(
     "lsp.request.references",
     (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/references",
+      "rpc.jsonrpc.version": "2.0",
       "lsp.file": input.file,
       "lsp.line": input.line,
       "lsp.character": input.character,
+      "code.operation": "references",
+      "code.file.path": input.file,
     }),
   )(async (input) => {
     return run(input.file, (client) =>
@@ -429,7 +462,19 @@ export namespace LSP {
     ).then((result) => result.flat().filter(Boolean))
   })
 
-  export async function implementation(input: { file: string; line: number; character: number }) {
+  export const implementation = traced<{ file: string; line: number; character: number }, unknown[]>(
+    "lsp.request.implementation",
+    (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/implementation",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.file": input.file,
+      "lsp.line": input.line,
+      "lsp.character": input.character,
+      "code.operation": "implementation",
+      "code.file.path": input.file,
+    }),
+  )(async (input) => {
     return run(input.file, (client) =>
       client.connection
         .sendRequest("textDocument/implementation", {
@@ -438,9 +483,21 @@ export namespace LSP {
         })
         .catch(() => null),
     ).then((result) => result.flat().filter(Boolean))
-  }
+  })
 
-  export async function prepareCallHierarchy(input: { file: string; line: number; character: number }) {
+  export const prepareCallHierarchy = traced<{ file: string; line: number; character: number }, unknown[]>(
+    "lsp.request.prepareCallHierarchy",
+    (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "textDocument/prepareCallHierarchy",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.file": input.file,
+      "lsp.line": input.line,
+      "lsp.character": input.character,
+      "code.operation": "prepareCallHierarchy",
+      "code.file.path": input.file,
+    }),
+  )(async (input) => {
     return run(input.file, (client) =>
       client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
@@ -449,9 +506,21 @@ export namespace LSP {
         })
         .catch(() => []),
     ).then((result) => result.flat().filter(Boolean))
-  }
+  })
 
-  export async function incomingCalls(input: { file: string; line: number; character: number }) {
+  export const incomingCalls = traced<{ file: string; line: number; character: number }, unknown[]>(
+    "lsp.request.incomingCalls",
+    (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "callHierarchy/incomingCalls",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.file": input.file,
+      "lsp.line": input.line,
+      "lsp.character": input.character,
+      "code.operation": "incomingCalls",
+      "code.file.path": input.file,
+    }),
+  )(async (input) => {
     return run(input.file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
@@ -462,9 +531,21 @@ export namespace LSP {
       if (!items?.length) return []
       return client.connection.sendRequest("callHierarchy/incomingCalls", { item: items[0] }).catch(() => [])
     }).then((result) => result.flat().filter(Boolean))
-  }
+  })
 
-  export async function outgoingCalls(input: { file: string; line: number; character: number }) {
+  export const outgoingCalls = traced<{ file: string; line: number; character: number }, unknown[]>(
+    "lsp.request.outgoingCalls",
+    (input) => ({
+      "rpc.system": "jsonrpc",
+      "rpc.method": "callHierarchy/outgoingCalls",
+      "rpc.jsonrpc.version": "2.0",
+      "lsp.file": input.file,
+      "lsp.line": input.line,
+      "lsp.character": input.character,
+      "code.operation": "outgoingCalls",
+      "code.file.path": input.file,
+    }),
+  )(async (input) => {
     return run(input.file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
@@ -475,7 +556,7 @@ export namespace LSP {
       if (!items?.length) return []
       return client.connection.sendRequest("callHierarchy/outgoingCalls", { item: items[0] }).catch(() => [])
     }).then((result) => result.flat().filter(Boolean))
-  }
+  })
 
   async function runAll<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
     const clients = await state().then((x) => x.clients)

@@ -1,4 +1,4 @@
-import type { AttributeValue } from "@opentelemetry/api"
+import type { AttributeValue, Span } from "@opentelemetry/api"
 import { Telemetry } from "./index.ts"
 
 /**
@@ -23,11 +23,11 @@ import { Telemetry } from "./index.ts"
 export function traced<TInput, TOutput>(
   name: string,
   attributesFn: (input: TInput) => Record<string, AttributeValue>,
-): (fn: (input: TInput) => Promise<TOutput>) => (input: TInput) => Promise<TOutput> {
+): (fn: (input: TInput, span: Span) => Promise<TOutput>) => (input: TInput) => Promise<TOutput> {
   return (fn) => {
     return (input) => {
       const attributes = attributesFn(input)
-      return Telemetry.withSpan(name, attributes, () => fn(input))
+      return Telemetry.withSpan(name, attributes, (span) => fn(input, span))
     }
   }
 }
