@@ -41,7 +41,7 @@ export namespace Workspace {
       type: row.type,
       branch: row.branch,
       name: row.name,
-      directory: row.directory ? Path.stored(row.directory) : null,
+      directory: row.directory,
       extra: row.extra,
       projectID: row.project_id,
     }

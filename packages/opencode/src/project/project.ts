@@ -81,7 +81,7 @@ export namespace Project {
         : undefined
     return {
       id: ProjectID.make(row.id),
-      worktree: Path.stored(row.worktree),
+      worktree: row.worktree,
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -90,7 +90,7 @@ export namespace Project {
         updated: row.time_updated,
         initialized: row.time_initialized ?? undefined,
       },
-      sandboxes: row.sandboxes.map(Path.stored),
+      sandboxes: row.sandboxes,
       commands: row.commands ?? undefined,
     }
   }

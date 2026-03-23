@@ -93,7 +93,7 @@ describe("path migration", () => {
           .run()
       })
 
-      const stats = await PathMigration.run({ force: true, marker: path.join(tmp.path, "marker") })
+      const stats = PathMigration.run(Database.Client(), { force: true, marker: path.join(tmp.path, "marker") })
 
       const project = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
       const session = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())

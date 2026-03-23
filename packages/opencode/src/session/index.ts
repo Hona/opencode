@@ -69,7 +69,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: Path.stored(row.directory),
+      directory: row.directory,
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -639,7 +639,7 @@ export namespace Session {
         projects.set(item.id, {
           id: item.id,
           name: item.name ?? undefined,
-          worktree: Path.stored(item.worktree),
+          worktree: item.worktree,
         })
       }
     }
