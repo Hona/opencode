@@ -254,18 +254,6 @@ export namespace SessionProcessor {
                   Telemetry.setSpanAttribute("gen_ai.usage.reasoning_tokens", usage.tokens.reasoning)
                   Telemetry.setSpanAttribute("gen_ai.response.finish_reason", value.finishReason)
                   Telemetry.setSpanAttribute("gen_ai.usage.cost", usage.cost)
-                  // Emit gen_ai.choice event for Aspire GenAI output visualization
-                  if (Telemetry.shouldCaptureMessageContent()) {
-                    Telemetry.addSpanEvent("gen_ai.choice", {
-                      "gen_ai.event.content": JSON.stringify({
-                        finish_reason: value.finishReason,
-                        index: 0,
-                        message: {
-                          content: currentText?.text ?? "",
-                        },
-                      }),
-                    })
-                  }
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
