@@ -23,7 +23,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
-import { Telemetry, traced } from "@/telemetry"
+import { Telemetry } from "@/telemetry"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -46,16 +46,18 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
-  export const stream = traced<StreamInput, StreamOutput>(
-    "gen_ai.chat",
-    (input) => ({
+  export const stream = async (input: StreamInput): Promise<StreamOutput> => {
+    const span = Telemetry.span("gen_ai.chat", {
       "gen_ai.system": input.model.providerID,
       "gen_ai.operation.name": "chat",
       "gen_ai.request.model": input.model.id,
       "session.id": input.sessionID,
       "agent.name": input.agent.name,
-    }),
-  )(async (input, span) => {
+    })
+    return streamImpl(input, span)
+  }
+
+  const streamImpl = async (input: StreamInput, span: ReturnType<typeof Telemetry.span>): Promise<StreamOutput> => {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -219,8 +221,10 @@ export namespace LLM {
     const toolNames = Object.keys(tools)
     if (toolNames.length > 0) {
       const toolDefs = toolNames.map((name) => ({
+        type: "function",
         name,
         description: tools[name].description,
+        parameters: tools[name].parameters,
       }))
       span.setAttribute("gen_ai.tool.definitions", JSON.stringify(toolDefs))
     }
@@ -254,6 +258,25 @@ export namespace LLM {
     }
 
     return streamText({
+      onFinish(result) {
+        // Add GenAI output event and token usage to the gen_ai.chat span
+        if (Telemetry.shouldCaptureMessageContent() && result.text) {
+          span.addEvent("gen_ai.choice", {
+            "gen_ai.event.content": JSON.stringify({
+              finish_reason: result.finishReason,
+              index: 0,
+              message: { content: result.text },
+            }),
+          })
+        }
+        span.setAttribute("gen_ai.usage.input_tokens", result.usage?.inputTokens ?? 0)
+        span.setAttribute("gen_ai.usage.output_tokens", result.usage?.outputTokens ?? 0)
+        span.setAttribute("gen_ai.response.finish_reason", result.finishReason)
+        if (result.response?.modelId) {
+          span.setAttribute("gen_ai.response.model", result.response.modelId)
+        }
+        span.end()
+      },
       onError(error) {
         l.error("stream error", {
           error,
@@ -319,7 +342,7 @@ export namespace LLM {
         isEnabled: false,
       },
     })
-  })
+  }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(
