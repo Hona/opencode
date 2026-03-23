@@ -47,7 +47,7 @@ export namespace LLM {
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
   export const stream = async (input: StreamInput): Promise<StreamOutput> => {
-    const span = Telemetry.span("gen_ai.chat", {
+    const span = Telemetry.span(`gen_ai.chat ${input.agent.name}`, {
       "gen_ai.system": input.model.providerID,
       "gen_ai.operation.name": "chat",
       "gen_ai.request.model": input.model.id,
