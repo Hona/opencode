@@ -23,7 +23,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, SpanKind } from "@/telemetry"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -53,7 +53,7 @@ export namespace LLM {
       "gen_ai.request.model": input.model.id,
       "session.id": input.sessionID,
       "agent.name": input.agent.name,
-    })
+    }, SpanKind.CLIENT)
     return streamImpl(input, span)
   }
 

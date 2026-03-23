@@ -14,7 +14,7 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { init } from "#db"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, SpanKind } from "@/telemetry"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -139,7 +139,7 @@ export namespace Database {
         }
         throw err
       }
-    })
+    }, SpanKind.CLIENT)
   }
 
   export function effect(fn: () => any | Promise<any>) {

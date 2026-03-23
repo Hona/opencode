@@ -1,4 +1,5 @@
-import { context, trace, type Span, SpanStatusCode, type AttributeValue } from "@opentelemetry/api"
+import { context, trace, type Span, SpanStatusCode, SpanKind, type AttributeValue } from "@opentelemetry/api"
+export { SpanKind } from "@opentelemetry/api"
 export { traced } from "./traced.ts"
 import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -127,13 +128,14 @@ export namespace Telemetry {
     name: string,
     attributes: Record<string, AttributeValue>,
     fn: (span: Span) => Promise<T>,
+    kind?: SpanKind,
   ): Promise<T> {
     if (!initialized) {
       return fn(NOOP_SPAN)
     }
 
     const tracer = getTracer("opencode")
-    return tracer.startActiveSpan(name, { attributes }, async (span) => {
+    return tracer.startActiveSpan(name, { attributes, kind }, async (span) => {
       try {
         const result = await fn(span)
         return result
@@ -153,13 +155,14 @@ export namespace Telemetry {
     name: string,
     attributes: Record<string, AttributeValue>,
     fn: (span: Span) => T,
+    kind?: SpanKind,
   ): T {
     if (!initialized) {
       return fn(NOOP_SPAN)
     }
 
     const tracer = getTracer("opencode")
-    return tracer.startActiveSpan(name, { attributes }, (span) => {
+    return tracer.startActiveSpan(name, { attributes, kind }, (span) => {
       try {
         const result = fn(span)
         return result
@@ -331,14 +334,14 @@ export namespace Telemetry {
    * // span.end() is automatically called when scope exits
    * ```
    */
-  export function span(name: string, attrs: Record<string, AttributeValue> = {}): DisposableSpan {
+  export function span(name: string, attrs: Record<string, AttributeValue> = {}, kind?: SpanKind): DisposableSpan {
     if (!initialized) {
       return NOOP_DISPOSABLE_SPAN
     }
 
     const tracer = getTracer("opencode")
     const parentCtx = context.active()
-    const s = tracer.startSpan(name, { attributes: attrs }, parentCtx)
+    const s = tracer.startSpan(name, { attributes: attrs, kind }, parentCtx)
     const ctx = trace.setSpan(parentCtx, s)
 
     // Access the underlying AsyncLocalStorage to enter the new context.
