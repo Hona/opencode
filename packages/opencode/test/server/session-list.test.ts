@@ -110,4 +110,22 @@ describe("Session.list", () => {
       },
     })
   })
+
+  test("matches the stored directory when queried with a lowercase drive path", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir({ git: true })
+
+    const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "lower-drive-session" })
+        const sessions = [...Session.list({ directory: raw })]
+
+        expect(sessions.map((item) => item.id)).toContain(session.id)
+        expect(sessions.find((item) => item.id === session.id)?.directory).toBe(tmp.path)
+      },
+    })
+  })
 })

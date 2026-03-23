@@ -117,6 +117,34 @@ test("Instance.provide collapses equivalent Windows bash spellings", async () =>
   expect(n).toBe(1)
 })
 
+test("Instance.provide collapses drive-letter casing variants", async () => {
+  if (process.platform !== "win32") return
+  await using tmp = await tmpdir({ git: true })
+  let n = 0
+
+  const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
+
+  const a = await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      n += 1
+    },
+    fn: async () => Instance.directory,
+  })
+
+  const b = await Instance.provide({
+    directory: raw,
+    init: async () => {
+      n += 1
+    },
+    fn: async () => Instance.directory,
+  })
+
+  expect(a).toBe(tmp.path)
+  expect(b).toBe(tmp.path)
+  expect(n).toBe(1)
+})
+
 test("InstanceState invalidates on disposeAll", async () => {
   await using one = await tmpdir()
   await using two = await tmpdir()

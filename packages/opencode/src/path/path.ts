@@ -47,14 +47,16 @@ const caseMatch = (dir: string, part: string) => {
   }
 }
 
+const root = (input: string) => input.replace(/^[a-z]:/, (x) => x.toUpperCase())
+
 const storedWin = (input: string) => {
   const full = path.resolve(Filesystem.windowsPath(input))
-  const root = path.parse(full).root
+  const base = root(path.parse(full).root)
   const parts = full
-    .slice(root.length)
+    .slice(base.length)
     .split(/[\\/]+/)
     .filter(Boolean)
-  let dir = root
+  let dir = base
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i]

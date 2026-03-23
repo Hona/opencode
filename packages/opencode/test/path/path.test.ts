@@ -98,6 +98,14 @@ describe("path", () => {
     expect(String(Path.stored(root))).not.toContain(`/mnt/${drive}`)
   })
 
+  test("canonicalizes lowercase drive roots to the stored drive casing", async () => {
+    if (process.platform !== "win32") return
+    await using tmp = await tmpdir()
+
+    const raw = tmp.path.replace(/^[A-Z]:/, (x) => x.toLowerCase())
+    expect(String(Path.stored(raw))).toBe(tmp.path)
+  })
+
   test("expands Windows short-name aliases when one exists", async () => {
     if (process.platform !== "win32") return
     await using tmp = await tmpdir()
