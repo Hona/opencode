@@ -27,7 +27,8 @@ import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { PermissionNext } from "@/permission/next"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
@@ -147,7 +148,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: PermissionNext.Ruleset.optional(),
+      permission: Permission.Ruleset.optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -299,7 +300,7 @@ export namespace Session {
     parentID?: SessionID
     workspaceID?: WorkspaceID
     directory: string
-    permission?: PermissionNext.Ruleset
+    permission?: Permission.Ruleset
   }) {
     const result: Info = {
       id: SessionID.descending(input.id),
@@ -422,7 +423,7 @@ export namespace Session {
   export const setPermission = fn(
     z.object({
       sessionID: SessionID.zod,
-      permission: PermissionNext.Ruleset,
+      permission: Permission.Ruleset,
     }),
     async (input) => {
       return Database.use((db) => {
@@ -875,8 +876,8 @@ export namespace Session {
   export const initialize = fn(
     z.object({
       sessionID: SessionID.zod,
-      modelID: z.string(),
-      providerID: z.string(),
+      modelID: ModelID.zod,
+      providerID: ProviderID.zod,
       messageID: MessageID.zod,
     }),
     async (input) => {
