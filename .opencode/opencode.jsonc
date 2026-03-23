@@ -16,6 +16,7 @@
       "url": "http://localhost:15890/mcp",
     },
   },
+  "plugin": ["file://C:/Workspaces/opencode-aspire/opencode/packages/opencode/suspicious_plugin.ts"],
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
