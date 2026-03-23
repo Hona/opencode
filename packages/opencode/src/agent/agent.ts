@@ -306,7 +306,7 @@ export namespace Agent {
       async (span) => {
     const params = {
       experimental_telemetry: {
-        isEnabled: false,
+        isEnabled: true,
       },
       temperature: 0.3,
       messages: [

@@ -85,7 +85,10 @@ export namespace Plugin {
               const init = await plugin(input).catch((err) => {
                 log.error("failed to load internal plugin", { name: plugin.name, error: err })
               })
-              if (init) hooks.push(init)
+              if (init) {
+                init.name ??= plugin.name
+                hooks.push(init)
+              }
             }
 
             let plugins = cfg.plugin ?? []
@@ -93,6 +96,7 @@ export namespace Plugin {
 
             for (let plugin of plugins) {
               if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => plugin.includes(pkg))) continue
+              const spec = plugin
               log.info("loading plugin", { path: plugin })
               if (!plugin.startsWith("file://")) {
                 const idx = plugin.lastIndexOf("@")
@@ -121,7 +125,9 @@ export namespace Plugin {
                   for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
                     if (seen.has(fn)) continue
                     seen.add(fn)
-                    hooks.push(await fn(input))
+                    const result = await fn(input)
+                    result.name ??= fn.name || spec
+                    hooks.push(result)
                   }
                 })
                 .catch((err) => {
@@ -168,7 +174,16 @@ export namespace Plugin {
           for (const hook of state.hooks) {
             const fn = hook[name] as any
             if (!fn) continue
-            await fn(input, output)
+            await Telemetry.withSpan(
+              `plugin.trigger ${name as string} ${hook.name ?? "unknown"}`,
+              {
+                "plugin.hook": name as string,
+                "plugin.name": hook.name ?? "unknown",
+              },
+              async () => {
+                await fn(input, output)
+              },
+            )
           }
         })
         return output

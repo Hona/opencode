@@ -196,6 +196,47 @@ export namespace LLM {
           "gen_ai.event.content": JSON.stringify({ role: "user", content: userContent }),
         })
       }
+      // Add GenAI events for assistant and tool messages from conversation history
+      for (const msg of input.messages) {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const text = (msg.content as any[])
+            .filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join("\n") || undefined
+          const calls = (msg.content as any[])
+            .filter((p) => p.type === "tool-call")
+            .map((p) => ({
+              id: p.toolCallId,
+              type: "function",
+              function: {
+                name: p.toolName,
+                arguments: p.input,
+              },
+            }))
+          if (text || calls.length > 0) {
+            span.addEvent("gen_ai.assistant.message", {
+              "gen_ai.event.content": JSON.stringify({
+                content: text,
+                tool_calls: calls.length > 0 ? calls : undefined,
+              }),
+            })
+          }
+        }
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          for (const part of msg.content as any[]) {
+            if (part.type === "tool-result") {
+              const raw = part.output
+              const val = typeof raw === "object" && raw !== null && "output" in raw ? raw.output : raw
+              span.addEvent("gen_ai.tool.message", {
+                "gen_ai.event.content": JSON.stringify({
+                  id: part.toolCallId,
+                  content: typeof val === "string" ? val : JSON.stringify(val),
+                }),
+              })
+            }
+          }
+        }
+      }
     }
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
@@ -265,12 +306,24 @@ export namespace LLM {
     return streamText({
       onFinish(result) {
         // Add GenAI output event and token usage to the gen_ai.chat span
-        if (Telemetry.shouldCaptureMessageContent() && result.text) {
+        if (Telemetry.shouldCaptureMessageContent() && (result.text || result.toolCalls?.length)) {
+          const msg: Record<string, any> = {}
+          if (result.text) msg.content = result.text
+          if (result.toolCalls?.length) {
+            msg.tool_calls = result.toolCalls.map((tc: any) => ({
+              id: tc.toolCallId,
+              type: "function",
+              function: {
+                name: tc.toolName,
+                arguments: tc.args,
+              },
+            }))
+          }
           span.addEvent("gen_ai.choice", {
             "gen_ai.event.content": JSON.stringify({
               finish_reason: result.finishReason,
               index: 0,
-              message: { content: result.text },
+              message: msg,
             }),
           })
         }
@@ -344,7 +397,7 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled: false,
+        isEnabled: true,
       },
     })
   }

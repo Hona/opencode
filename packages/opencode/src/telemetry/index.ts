@@ -10,7 +10,6 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc"
 import { registerInstrumentations } from "@opentelemetry/instrumentation"
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici"
-import { FsInstrumentation } from "@opentelemetry/instrumentation-fs"
 import { DnsInstrumentation } from "@opentelemetry/instrumentation-dns"
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
 import { NetInstrumentation } from "@opentelemetry/instrumentation-net"
@@ -97,7 +96,6 @@ export namespace Telemetry {
             responseHeaders: ["content-type"],
           },
         }),
-        new FsInstrumentation(),
         new DnsInstrumentation(),
         new HttpInstrumentation(),
         new NetInstrumentation(),
