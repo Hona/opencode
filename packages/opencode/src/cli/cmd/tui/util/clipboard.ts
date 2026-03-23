@@ -30,11 +30,12 @@ export namespace Clipboard {
 
   // Checks clipboard for images first, then falls back to text.
   //
-  // On Windows this is triggered from multiple paths in prompt/ because
-  // terminals handle Ctrl+V differently:
-  //   1. Ctrl+V keypress forwarded to app (rare, most terminals consume it)
-  //   2. Empty bracketed paste (stable WT without kitty sends this for image-only clipboard)
-  //   3. Kitty Ctrl+V release event (WT 1.25+ swallows the press but leaks the release)
+  // On Windows prompt/ can call this from multiple paste signals because
+  // terminals surface image paste differently:
+  //   1. A forwarded Ctrl+V keypress
+  //   2. An empty bracketed-paste hint for image-only clipboard in Windows
+  //      Terminal <1.25
+  //   3. A kitty Ctrl+V key-release fallback for Windows Terminal 1.25+
   export async function read(): Promise<Content | undefined> {
     const os = platform()
 

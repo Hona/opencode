@@ -356,8 +356,8 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  // Windows Terminal 1.25+ with kitty keyboard swallows Ctrl+V press but
-  // leaks the release (CSI 118;modifier;3u). Detect it and probe clipboard.
+  // Windows Terminal 1.25+ handles Ctrl+V on keydown when kitty events are
+  // enabled, but still reports the kitty key-release event. Probe on release.
   if (process.platform === "win32") {
     useKeyboard(
       (evt) => {
@@ -864,8 +864,9 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Check clipboard for images before terminal handles the paste.
-                // On Windows most terminals consume Ctrl+V so this rarely fires.
+                // Check clipboard for images before terminal-handled paste runs.
+                // This helps terminals that forward Ctrl+V to the app; Windows
+                // Terminal 1.25+ usually handles Ctrl+V before this path.
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
@@ -949,8 +950,8 @@ export function Prompt(props: PromptProps) {
                 const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
 
-                // Empty paste = image-only clipboard. Stable WT sends an empty
-                // bracketed paste for this; WT 1.25+ with kitty does not.
+                // Windows Terminal <1.25 can surface image-only clipboard as an
+                // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
