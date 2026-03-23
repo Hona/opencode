@@ -74,15 +74,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         await assertExternalDirectory(ctx, filePath)
 
         // Track patch types
-        if (hunk.type === "add") {
-          patchTypes.add("add")
-        } else if (hunk.type === "delete") {
-          patchTypes.add("delete")
-        } else if (hunk.type === "update") {
-          patchTypes.add("update")
-        } else if (hunk.type === "move") {
-          patchTypes.add("move")
-        }
+        patchTypes.add(hunk.type as string)
 
         switch (hunk.type) {
         case "add": {

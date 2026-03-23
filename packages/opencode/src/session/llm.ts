@@ -222,12 +222,12 @@ export namespace LLM {
     if (toolNames.length > 0) {
       const toolDefs = toolNames.map((name) => {
         const tool = tools[name]
-        const params = tool.parameters as any
+        const schema = tool.inputSchema as any
         return {
           type: "function",
           name,
           description: tool.description,
-          parameters: params?.jsonSchema ?? params,
+          parameters: schema?.jsonSchema ?? schema,
         }
       })
       span.setAttribute("gen_ai.tool.definitions", JSON.stringify(toolDefs))
