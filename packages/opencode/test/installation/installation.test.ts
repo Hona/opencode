@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
+import { Process } from "../../src/util/process"
 
 const encoder = new TextEncoder()
 
@@ -47,6 +48,15 @@ function testLayer(
   return Installation.layer.pipe(Layer.provide(mockHttpClient(httpHandler)), Layer.provide(mockSpawner(spawnHandler)))
 }
 
+function mockProcess(opts: Partial<{ text: typeof Process.text; run: typeof Process.run }>) {
+  const mocks = [
+    opts.text ? spyOn(Process, "text").mockImplementation(opts.text) : undefined,
+    opts.run ? spyOn(Process, "run").mockImplementation(opts.run) : undefined,
+  ].filter((x) => x !== undefined)
+
+  return () => mocks.forEach((x) => x.mockRestore())
+}
+
 describe("installation", () => {
   describe("latest", () => {
     test("reads release version from GitHub releases", async () => {
@@ -68,30 +78,51 @@ describe("installation", () => {
     })
 
     test("reads npm registry versions", async () => {
+      const restore = mockProcess({
+        text: async (cmd) => ({
+          code: 0,
+          stdout: Buffer.from(cmd[0] === "npm" && cmd.includes("registry") ? "https://registry.npmjs.org\n" : ""),
+          stderr: Buffer.alloc(0),
+          text: cmd[0] === "npm" && cmd.includes("registry") ? "https://registry.npmjs.org\n" : "",
+        }),
+      })
       const layer = testLayer(
         () => jsonResponse({ version: "1.5.0" }),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org\n"
-          return ""
-        },
+        () => "",
       )
 
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("npm")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("1.5.0")
+      try {
+        const result = await Effect.runPromise(
+          Installation.Service.use((svc) => svc.latest("npm")).pipe(Effect.provide(layer)),
+        )
+        expect(result).toBe("1.5.0")
+      } finally {
+        restore()
+      }
     })
 
     test("reads npm registry versions for bun method", async () => {
+      const restore = mockProcess({
+        text: async () => ({
+          code: 0,
+          stdout: Buffer.from("https://registry.npmjs.org\n"),
+          stderr: Buffer.alloc(0),
+          text: "https://registry.npmjs.org\n",
+        }),
+      })
       const layer = testLayer(
         () => jsonResponse({ version: "1.6.0" }),
         () => "",
       )
 
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("bun")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("1.6.0")
+      try {
+        const result = await Effect.runPromise(
+          Installation.Service.use((svc) => svc.latest("bun")).pipe(Effect.provide(layer)),
+        )
+        expect(result).toBe("1.6.0")
+      } finally {
+        restore()
+      }
     })
 
     test("reads scoop manifest versions", async () => {
@@ -113,39 +144,129 @@ describe("installation", () => {
     })
 
     test("reads brew formulae API versions", async () => {
+      const restore = mockProcess({
+        text: async (cmd, opts) => {
+          const out =
+            cmd[0] === "brew" &&
+            cmd.includes("--formula") &&
+            cmd.includes("opencode") &&
+            !cmd.includes("anomalyco/tap/opencode")
+              ? "opencode"
+              : ""
+          return {
+            code: 0,
+            stdout: Buffer.from(out),
+            stderr: Buffer.alloc(0),
+            text: out,
+          }
+        },
+      })
       const layer = testLayer(
         () => jsonResponse({ versions: { stable: "2.0.0" } }),
-        (cmd, args) => {
-          // getBrewFormula: return core formula (no tap)
-          if (cmd === "brew" && args.includes("--formula") && args.includes("anomalyco/tap/opencode")) return ""
-          if (cmd === "brew" && args.includes("--formula") && args.includes("opencode")) return "opencode"
-          return ""
-        },
+        () => "",
       )
 
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("brew")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("2.0.0")
+      try {
+        const result = await Effect.runPromise(
+          Installation.Service.use((svc) => svc.latest("brew")).pipe(Effect.provide(layer)),
+        )
+        expect(result).toBe("2.0.0")
+      } finally {
+        restore()
+      }
     })
 
     test("reads brew tap info JSON via CLI", async () => {
       const brewInfoJson = JSON.stringify({
         formulae: [{ versions: { stable: "2.1.0" } }],
       })
+      const restore = mockProcess({
+        text: async (cmd) => {
+          const out =
+            cmd[0] === "brew" && cmd.includes("anomalyco/tap/opencode") && cmd.includes("--formula")
+              ? "opencode"
+              : cmd[0] === "brew" && cmd.includes("--json=v2")
+                ? brewInfoJson
+                : ""
+          return {
+            code: 0,
+            stdout: Buffer.from(out),
+            stderr: Buffer.alloc(0),
+            text: out,
+          }
+        },
+      })
       const layer = testLayer(
         () => jsonResponse({}), // HTTP not used for tap formula
-        (cmd, args) => {
-          if (cmd === "brew" && args.includes("anomalyco/tap/opencode") && args.includes("--formula")) return "opencode"
-          if (cmd === "brew" && args.includes("--json=v2")) return brewInfoJson
-          return ""
-        },
+        () => "",
       )
 
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("brew")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("2.1.0")
+      try {
+        const result = await Effect.runPromise(
+          Installation.Service.use((svc) => svc.latest("brew")).pipe(Effect.provide(layer)),
+        )
+        expect(result).toBe("2.1.0")
+      } finally {
+        restore()
+      }
+    })
+  })
+
+  describe("method", () => {
+    test("uses Process text for package manager detection", async () => {
+      const restore = mockProcess({
+        text: async (cmd) => {
+          const out = cmd[0] === "npm" ? "opencode-ai@1.3.0" : ""
+          return {
+            code: 0,
+            stdout: Buffer.from(out),
+            stderr: Buffer.alloc(0),
+            text: out,
+          }
+        },
+      })
+      const layer = testLayer(() => jsonResponse({ tag_name: "v0.0.0" }))
+
+      try {
+        const result = await Effect.runPromise(
+          Installation.Service.use((svc) => svc.method()).pipe(Effect.provide(layer)),
+        )
+        expect(result).toBe("npm")
+      } finally {
+        restore()
+      }
+    })
+  })
+
+  describe("upgrade", () => {
+    test("uses Process run for npm upgrades", async () => {
+      const seen: string[][] = []
+      const restore = mockProcess({
+        run: async (cmd) => {
+          seen.push([...cmd])
+          return {
+            code: 0,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.alloc(0),
+          }
+        },
+        text: async () => ({
+          code: 0,
+          stdout: Buffer.from("1.2.3"),
+          stderr: Buffer.alloc(0),
+          text: "1.2.3",
+        }),
+      })
+      const layer = testLayer(() => jsonResponse({ tag_name: "v0.0.0" }))
+
+      try {
+        await Effect.runPromise(
+          Installation.Service.use((svc) => svc.upgrade("npm", "1.2.3")).pipe(Effect.provide(layer)),
+        )
+        expect(seen).toContainEqual(["npm", "install", "-g", "opencode-ai@1.2.3"])
+      } finally {
+        restore()
+      }
     })
   })
 })

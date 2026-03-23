@@ -3,6 +3,7 @@ import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeRunPromise } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { Process } from "@/util/process"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
@@ -107,36 +108,32 @@ export namespace Installation {
 
         const text = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
-            const proc = ChildProcess.make(cmd[0], cmd.slice(1), {
-              cwd: opts?.cwd,
-              env: opts?.env,
-              extendEnv: true,
-            })
-            const handle = yield* spawner.spawn(proc)
-            const out = yield* Stream.mkString(Stream.decodeText(handle.stdout))
-            yield* handle.exitCode
-            return out
+            return (yield* Effect.promise(() =>
+              Process.text(cmd, {
+                cwd: opts?.cwd,
+                env: opts?.env,
+                nothrow: true,
+              }),
+            )).text
           },
-          Effect.scoped,
           Effect.catch(() => Effect.succeed("")),
         )
 
         const run = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
-            const proc = ChildProcess.make(cmd[0], cmd.slice(1), {
-              cwd: opts?.cwd,
-              env: opts?.env,
-              extendEnv: true,
-            })
-            const handle = yield* spawner.spawn(proc)
-            const [stdout, stderr] = yield* Effect.all(
-              [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-              { concurrency: 2 },
+            const out = yield* Effect.promise(() =>
+              Process.run(cmd, {
+                cwd: opts?.cwd,
+                env: opts?.env,
+                nothrow: true,
+              }),
             )
-            const code = yield* handle.exitCode
-            return { code, stdout, stderr }
+            return {
+              code: ChildProcessSpawner.ExitCode(out.code),
+              stdout: out.stdout.toString(),
+              stderr: out.stderr.toString(),
+            }
           },
-          Effect.scoped,
           Effect.catch(() => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
         )
 
