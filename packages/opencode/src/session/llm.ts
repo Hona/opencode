@@ -220,12 +220,16 @@ export namespace LLM {
     // Add tool definitions attribute
     const toolNames = Object.keys(tools)
     if (toolNames.length > 0) {
-      const toolDefs = toolNames.map((name) => ({
-        type: "function",
-        name,
-        description: tools[name].description,
-        parameters: tools[name].parameters,
-      }))
+      const toolDefs = toolNames.map((name) => {
+        const tool = tools[name]
+        const params = tool.parameters as any
+        return {
+          type: "function",
+          name,
+          description: tool.description,
+          parameters: params?.jsonSchema ?? params,
+        }
+      })
       span.setAttribute("gen_ai.tool.definitions", JSON.stringify(toolDefs))
     }
 
