@@ -125,21 +125,17 @@ export namespace Database {
   }>("database")
 
   export function use<T>(callback: (trx: TxOrDb) => T): T {
-    return Telemetry.withSpanSync("db.operation", {
-      "db.system": "sqlite",
-    }, () => {
-      try {
-        return callback(ctx.use().tx)
-      } catch (err) {
-        if (err instanceof Context.NotFound) {
-          const effects: (() => void | Promise<void>)[] = []
-          const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-          for (const effect of effects) effect()
-          return result
-        }
-        throw err
+    try {
+      return callback(ctx.use().tx)
+    } catch (err) {
+      if (err instanceof Context.NotFound) {
+        const effects: (() => void | Promise<void>)[] = []
+        const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
+        for (const effect of effects) effect()
+        return result
       }
-    }, SpanKind.CLIENT)
+      throw err
+    }
   }
 
   export function effect(fn: () => any | Promise<any>) {
