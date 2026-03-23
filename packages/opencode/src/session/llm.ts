@@ -53,6 +53,7 @@ export namespace LLM {
       "gen_ai.request.model": input.model.id,
       "session.id": input.sessionID,
       "agent.name": input.agent.name,
+      "server.address": input.model.providerID,
     }, SpanKind.CLIENT)
     return streamImpl(input, span)
   }

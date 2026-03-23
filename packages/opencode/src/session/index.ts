@@ -32,7 +32,7 @@ import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
-import { Telemetry } from "@/telemetry"
+import { Telemetry, SpanKind } from "@/telemetry"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -287,7 +287,8 @@ export namespace Session {
       "db.operation": "UPDATE",
       "db.table": "sessions",
       "session.id": sessionID,
-    })
+      "server.address": "sqlite",
+    }, SpanKind.CLIENT)
     Database.use((db) => {
       const row = db
         .update(SessionTable)
@@ -331,7 +332,8 @@ export namespace Session {
         "db.operation": "INSERT",
         "db.table": "sessions",
         "session.id": result.id,
-      })
+        "server.address": "sqlite",
+      }, SpanKind.CLIENT)
       Database.use((db) => {
         db.insert(SessionTable).values(toRow(result)).run()
         Database.effect(() =>
@@ -365,7 +367,8 @@ export namespace Session {
       "db.operation": "SELECT",
       "db.table": "sessions",
       "session.id": id,
-    })
+      "server.address": "sqlite",
+    }, SpanKind.CLIENT)
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
@@ -697,7 +700,8 @@ export namespace Session {
           "db.operation": "DELETE",
           "db.table": "sessions",
           "session.id": sessionID,
-        })
+          "server.address": "sqlite",
+        }, SpanKind.CLIENT)
         Database.use((db) => {
           db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
           Database.effect(() =>
@@ -721,7 +725,8 @@ export namespace Session {
       "db.table": "messages",
       "session.id": sessionID,
       "message.id": id,
-    })
+      "server.address": "sqlite",
+    }, SpanKind.CLIENT)
     Database.use((db) => {
       db.insert(MessageTable)
         .values({
@@ -798,7 +803,8 @@ export namespace Session {
       "session.id": sessionID,
       "message.id": messageID,
       "part.id": id,
-    })
+      "server.address": "sqlite",
+    }, SpanKind.CLIENT)
     Database.use((db) => {
       db.insert(PartTable)
         .values({
