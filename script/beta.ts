@@ -58,6 +58,8 @@ function lines(prs: PR[]) {
 }
 
 async function typecheck() {
+  console.log("  Running typecheck...")
+
   try {
     await $`bun typecheck`.cwd("packages/opencode")
     return true
@@ -68,6 +70,8 @@ async function typecheck() {
 }
 
 async function build() {
+  console.log("  Running final build smoke check...")
+
   try {
     await $`./script/build.ts --single`.cwd("packages/opencode")
     return true
@@ -110,7 +114,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
     "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
     "If a PR already changed an import, keep that change.",
     "After resolving the conflicts, run `bun typecheck` in `packages/opencode`.",
-    "If typecheck fails, you may also update any files reported by typecheck in `packages/opencode`.",
+    "If typecheck fails, you may also update any files reported by typecheck.",
     "Keep any non-conflict edits narrowly scoped to restoring a valid merged state for the current PR batch.",
     "Fix any merge-caused typecheck errors before finishing.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
@@ -216,7 +220,7 @@ async function main() {
   const failed: FailedPR[] = []
 
   for (const [idx, pr] of prs.entries()) {
-    console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
+    console.log(`\nProcessing PR ${idx + 1}/${prs.length} #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
     try {
