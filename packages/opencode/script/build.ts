@@ -70,9 +70,9 @@ const createEmbeddedWebUIBundle = async () => {
   const appDir = path.join(import.meta.dirname, "../../app")
   const dist = path.join(appDir, "dist")
   await $`bun run --cwd ${appDir} build`
-  const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist }))).map((file) =>
-    file.replaceAll("\\", "/"),
-  )
+  const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
+    .map((file) => file.replaceAll("\\", "/"))
+    .sort()
   const imports = files.map((file, i) => {
     const spec = path.relative(dir, path.join(dist, file)).replaceAll("\\", "/")
     return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
