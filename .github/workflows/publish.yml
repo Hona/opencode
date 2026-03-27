@@ -141,6 +141,7 @@ jobs:
           AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT || secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
         run: |
           ./script/sign-windows.ps1 `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe" `
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe" `
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
 
@@ -148,6 +149,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
           )
@@ -163,6 +165,7 @@ jobs:
         shell: pwsh
         working-directory: packages/opencode/dist
         run: |
+          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
           Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
           Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
 
@@ -173,6 +176,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.version.outputs.version }}" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
             --clobber `
@@ -182,6 +186,7 @@ jobs:
         with:
           name: opencode-cli-signed-windows
           path: |
+            packages/opencode/dist/opencode-windows-arm64
             packages/opencode/dist/opencode-windows-x64
             packages/opencode/dist/opencode-windows-x64-baseline
 
@@ -374,6 +379,7 @@ jobs:
   build-electron:
     needs:
       - build-cli
+      - sign-cli-windows
       - version
     continue-on-error: false
     strategy:
@@ -451,6 +457,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-signed-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
