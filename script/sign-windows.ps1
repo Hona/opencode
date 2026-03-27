@@ -16,7 +16,7 @@ $vars = @{
 }
 
 if ($vars.Values | Where-Object { -not $_ }) {
-  Write-Host "Skipping Windows signing because Trusted Signing is not configured"
+  Write-Host "Skipping Windows signing because Azure Artifact Signing is not configured"
   exit 0
 }
 
@@ -25,7 +25,7 @@ if (-not (Get-Command sign -ErrorAction SilentlyContinue)) {
   exit 0
 }
 
-$files = $Path | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path -Unique
+$files = @($Path | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path -Unique)
 
 if (-not $files -or $files.Count -eq 0) {
   throw "No files matched the requested paths"
@@ -35,17 +35,17 @@ $groups = $files | Group-Object { Split-Path $_ -Parent }
 
 foreach ($group in $groups) {
   $dir = $group.Name
-  $names = $group.Group | ForEach-Object { Split-Path $_ -Leaf }
+  $names = @($group.Group | ForEach-Object { Split-Path $_ -Leaf })
 
-  & sign code trusted-signing `
+  & sign code artifact-signing `
     -b $dir `
-    -tse $vars.endpoint `
-    -tscp $vars.profile `
-    -tsa $vars.account `
+    -ase $vars.endpoint `
+    -ascp $vars.profile `
+    -asa $vars.account `
     @names `
     -v Information
 
   if ($LASTEXITCODE -ne 0) {
-    throw "Trusted Signing failed for $($group.Name)"
+    throw "Azure Artifact Signing failed for $($group.Name)"
   }
 }
