@@ -1,4 +1,4 @@
-name: "Windows Trusted Signing"
+name: "Azure Artifact Signing"
 description: "Set up Azure Trusted Signing and optionally sign Windows binaries"
 inputs:
   azure-client-id:

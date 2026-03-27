@@ -25,7 +25,7 @@ if (-not (Get-Command sign -ErrorAction SilentlyContinue)) {
   exit 0
 }
 
-$files = $Path | ForEach-Object { Resolve-Path $_ } | Select-Object -ExpandProperty Path -Unique
+$files = $Path | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path -Unique
 
 if (-not $files -or $files.Count -eq 0) {
   throw "No files matched the requested paths"
