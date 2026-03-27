@@ -1,5 +1,5 @@
 import "@/index.css"
-import { I18nProvider } from "@opencode-ai/ui/context"
+import { FocusRestoreProvider, I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
@@ -51,9 +51,11 @@ const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
 const SessionRoute = () => (
-  <SessionProviders>
-    <Session />
-  </SessionProviders>
+  <FocusRestoreProvider>
+    <SessionProviders>
+      <Session />
+    </SessionProviders>
+  </FocusRestoreProvider>
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />

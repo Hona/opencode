@@ -12,8 +12,13 @@ import {
   type JSX,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
+import { useFocusRestore } from "./focus-restore"
 
 type DialogElement = () => JSX.Element
+type DialogShow = {
+  onClose?: () => void
+  restore?: true | (() => void)
+}
 
 type Active = {
   id: string
@@ -21,6 +26,7 @@ type Active = {
   dispose: () => void
   owner: Owner
   onClose?: () => void
+  restore?: () => void
   setClosing: (closing: boolean) => void
 }
 
@@ -30,6 +36,18 @@ function init() {
   const [active, setActive] = createSignal<Active | undefined>()
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
   const lock = { value: false }
+  const refocus = (fn?: () => void) => {
+    if (!fn) return
+    const run = () => {
+      if (active()) return
+      fn()
+    }
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(run)
+      return
+    }
+    queueMicrotask(run)
+  }
 
   onCleanup(() => {
     if (timer.current === undefined) return
@@ -55,6 +73,7 @@ function init() {
       current.dispose()
       if (active()?.id === id) setActive(undefined)
       lock.value = false
+      refocus(current.restore)
     }, 100)
   }
 
@@ -72,7 +91,7 @@ function init() {
     onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
   })
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const show = (element: DialogElement, owner: Owner, opts?: DialogShow) => {
     // Immediately dispose any existing dialog when showing a new one
     const current = active()
     if (current) {
@@ -115,7 +134,15 @@ function init() {
 
     if (!dispose || !setClosing) return
 
-    setActive({ id, node, dispose, owner, onClose, setClosing })
+    setActive({
+      id,
+      node,
+      dispose,
+      owner,
+      onClose: opts?.onClose,
+      restore: opts?.restore === true ? undefined : opts?.restore,
+      setClosing,
+    })
   }
 
   return {
@@ -140,6 +167,7 @@ export function DialogProvider(props: ParentProps) {
 export function useDialog() {
   const ctx = useContext(Context)
   const owner = getOwner()
+  const focus = useFocusRestore()
 
   if (!owner) {
     throw new Error("useDialog must be used within a DialogProvider")
@@ -152,9 +180,12 @@ export function useDialog() {
     get active() {
       return ctx.active
     },
-    show(element: DialogElement, onClose?: () => void) {
+    show(element: DialogElement, opts?: DialogShow) {
       const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose)
+      ctx.show(element, base, {
+        ...opts,
+        restore: opts?.restore === true ? focus.current() : opts?.restore,
+      })
     },
     close() {
       ctx.close()

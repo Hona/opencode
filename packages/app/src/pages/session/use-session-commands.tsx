@@ -255,7 +255,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "open",
         onSelect: () => {
           void import("@/components/dialog-select-file").then((x) => {
-            dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+            dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />, { restore: true })
           })
         },
       }),
@@ -353,7 +353,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "model",
         onSelect: () => {
           void import("@/components/dialog-select-model").then((x) => {
-            dialog.show(() => <x.DialogSelectModel model={local.model} />)
+            dialog.show(() => <x.DialogSelectModel model={local.model} />, { restore: true })
           })
         },
       }),
@@ -365,7 +365,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "mcp",
         onSelect: () => {
           void import("@/components/dialog-select-mcp").then((x) => {
-            dialog.show(() => <x.DialogSelectMcp />)
+            dialog.show(() => <x.DialogSelectMcp />, { restore: true })
           })
         },
       }),
@@ -497,7 +497,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         disabled: !params.id || visibleUserMessages().length === 0,
         onSelect: () => {
           void import("@/components/dialog-fork").then((x) => {
-            dialog.show(() => <x.DialogFork />)
+            dialog.show(() => <x.DialogFork />, { restore: true })
           })
         },
       }),

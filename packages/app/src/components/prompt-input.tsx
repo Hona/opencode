@@ -1305,7 +1305,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <PromptImageAttachments
           attachments={imageAttachments()}
           onOpen={(attachment) =>
-            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />, { restore: true })
           }
           onRemove={removeAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
@@ -1388,7 +1388,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="hidden"
               onChange={(e) => {
                 const list = e.currentTarget.files
-                if (list) void addAttachments(Array.from(list))
+                if (list) {
+                  const pos = prompt.cursor() ?? promptLength(prompt.current())
+                  void addAttachments(Array.from(list)).finally(() => {
+                    requestAnimationFrame(() => {
+                      if (!editorRef?.isConnected) return
+                      editorRef.focus()
+                      setCursorPosition(editorRef, prompt.cursor() ?? pos)
+                    })
+                  })
+                }
                 e.currentTarget.value = ""
               }}
             />
@@ -1468,6 +1477,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       options={agentNames()}
                       current={local.agent.current()?.name ?? ""}
                       onSelect={local.agent.set}
+                      restoreFocus
                       class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
@@ -1495,7 +1505,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           style={control()}
                           onClick={() => {
                             void import("@/components/dialog-select-model-unpaid").then((x) => {
-                              dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
+                              dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />, { restore: true })
                             })
                           }}
                         >
@@ -1559,6 +1569,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       current={local.model.variant.current() ?? "default"}
                       label={(x) => (x === "default" ? language.t("common.default") : x)}
                       onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                      restoreFocus
                       class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}

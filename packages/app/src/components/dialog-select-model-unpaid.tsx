@@ -21,13 +21,13 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
 
   const connect = (provider: string) => {
     void import("./dialog-connect-provider").then((x) => {
-      dialog.show(() => <x.DialogConnectProvider provider={provider} />)
+      dialog.show(() => <x.DialogConnectProvider provider={provider} />, { restore: true })
     })
   }
 
   const all = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider />, { restore: true })
     })
   }
 

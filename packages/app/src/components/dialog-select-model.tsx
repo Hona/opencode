@@ -3,6 +3,7 @@ import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useFocusRestore } from "@opencode-ai/ui/context/focus-restore"
 import { popularProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -94,26 +95,37 @@ export function ModelSelectorPopover(props: {
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
 }) {
+  type Reason = "escape" | "outside" | "select" | "handoff" | null
+
   const [store, setStore] = createStore<{
     open: boolean
-    dismiss: "escape" | "outside" | null
+    reason: Reason
   }>({
     open: false,
-    dismiss: null,
+    reason: null,
   })
   const dialog = useDialog()
+  const focus = useFocusRestore()
+  const refocus = () => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => focus.run())
+      return
+    }
+    queueMicrotask(() => focus.run())
+  }
+  const close = (reason: Exclude<Reason, null>) => setStore({ open: false, reason })
 
   const handleManage = () => {
-    setStore("open", false)
+    close("handoff")
     void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
+      dialog.show(() => <x.DialogManageModels />, { restore: true })
     })
   }
 
   const handleConnectProvider = () => {
-    setStore("open", false)
+    close("handoff")
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider />, { restore: true })
     })
   }
   const language = useLanguage()
@@ -122,7 +134,7 @@ export function ModelSelectorPopover(props: {
     <Kobalte
       open={store.open}
       onOpenChange={(next) => {
-        if (next) setStore("dismiss", null)
+        if (next) setStore("reason", null)
         setStore("open", next)
       }}
       modal={false}
@@ -136,29 +148,26 @@ export function ModelSelectorPopover(props: {
         <Kobalte.Content
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
-            setStore("dismiss", "escape")
-            setStore("open", false)
+            close("escape")
             event.preventDefault()
             event.stopPropagation()
           }}
-          onPointerDownOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
-          onFocusOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
+          onPointerDownOutside={() => close("outside")}
+          onFocusOutside={() => close("outside")}
           onCloseAutoFocus={(event) => {
-            if (store.dismiss === "outside") event.preventDefault()
-            setStore("dismiss", null)
+            const reason = store.reason
+            setStore("reason", null)
+            if (reason === "handoff") return
+            event.preventDefault()
+            if (reason === "outside") return
+            refocus()
           }}
         >
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
           <ModelList
             provider={props.provider}
             model={props.model}
-            onSelect={() => setStore("open", false)}
+            onSelect={() => close("select")}
             class="p-1"
             action={
               <div class="flex items-center gap-1">
@@ -197,13 +206,13 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
 
   const provider = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      dialog.show(() => <x.DialogSelectProvider />, { restore: true })
     })
   }
 
   const manage = () => {
     void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
+      dialog.show(() => <x.DialogManageModels />, { restore: true })
     })
   }
 

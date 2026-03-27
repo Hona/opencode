@@ -1,5 +1,6 @@
 import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useFocusRestore } from "@opencode-ai/ui/context/focus-restore"
 import { useMutation } from "@tanstack/solid-query"
 import {
   batch,
@@ -316,6 +317,7 @@ export default function Page() {
   const file = useFile()
   const sync = useSync()
   const dialog = useDialog()
+  const refocus = useFocusRestore()
   const language = useLanguage()
   const sdk = useSDK()
   const settings = useSettings()
@@ -904,7 +906,30 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
-  const focusInput = () => inputRef?.focus()
+  const focusInput = () => {
+    if (!inputRef?.isConnected) return
+    inputRef.focus()
+  }
+  const focusSoon = () => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(focusInput)
+      return
+    }
+    queueMicrotask(focusInput)
+  }
+
+  onMount(() => refocus.set(focusInput))
+  onCleanup(() => refocus.set())
+
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        focusSoon()
+      },
+      { defer: true },
+    ),
+  )
 
   useSessionCommands({
     navigateMessageByOffset,

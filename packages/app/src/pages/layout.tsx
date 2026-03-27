@@ -1483,10 +1483,9 @@ export default function Layout(props: ParentProps) {
       const run = ++dialogRun
       void import("@/components/dialog-select-directory").then((x) => {
         if (dialogDead || dialogRun !== run) return
-        dialog.show(
-          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
-          () => resolve(null),
-        )
+        dialog.show(() => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />, {
+          onClose: () => resolve(null),
+        })
       })
     }
   }

@@ -1,6 +1,7 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
+import { useFocusRestore } from "../context/focus-restore"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
 
@@ -20,6 +21,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
   triggerProps?: Record<string, string | number | boolean | undefined>
+  restoreFocus?: boolean
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -40,11 +42,22 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "triggerStyle",
     "triggerVariant",
     "triggerProps",
+    "restoreFocus",
   ])
+  const focus = useFocusRestore()
+  const refocus = () => {
+    const run = () => focus.run()
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(run))
+      return
+    }
+    queueMicrotask(run)
+  }
 
   const state = {
     key: undefined as string | undefined,
     cleanup: undefined as (() => void) | void,
+    esc: false,
   }
 
   const stop = () => {
@@ -126,8 +139,12 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       onChange={(v) => {
         local.onSelect?.(v ?? undefined)
         stop()
+        if (local.restoreFocus) refocus()
       }}
       onOpenChange={(open) => {
+        if (open) state.esc = false
+        if (!open && state.esc && local.restoreFocus) refocus()
+        if (!open) state.esc = false
         local.onOpenChange?.(open)
         if (!open) stop()
       }}
@@ -165,6 +182,10 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           }}
           data-component="select-content"
           data-trigger-style={local.triggerVariant}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return
+            state.esc = true
+          }}
         >
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>
