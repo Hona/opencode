@@ -909,16 +909,26 @@ export default function Page() {
   const focusInput = () => {
     if (!inputRef?.isConnected) return
     inputRef.focus()
+    const range = document.createRange()
+    const selection = window.getSelection()
+    range.selectNodeContents(inputRef)
+    range.collapse(false)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   }
   const focusSoon = () => {
+    const run = () => focusInput()
     if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(focusInput)
+      requestAnimationFrame(() => requestAnimationFrame(run))
       return
     }
-    queueMicrotask(focusInput)
+    queueMicrotask(run)
   }
 
-  onMount(() => refocus.set(focusInput))
+  onMount(() => {
+    refocus.set(focusInput)
+    focusSoon()
+  })
   onCleanup(() => refocus.set())
 
   createEffect(
