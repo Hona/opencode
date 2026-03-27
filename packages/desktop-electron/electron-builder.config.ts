@@ -63,7 +63,9 @@ const getBase = (): Configuration => ({
   },
   win: {
     icon: `resources/icons/icon.ico`,
-    sign: signWindows,
+    signtoolOptions: {
+      sign: signWindows,
+    },
     target: ["nsis"],
   },
   nsis: {
