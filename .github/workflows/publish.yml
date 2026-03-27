@@ -326,8 +326,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\opencode-cli-${{ matrix.settings.target }}.exe",
-            "${{ github.workspace }}\packages\desktop\src-tauri\target\${{ matrix.settings.target }}\release\OpenCode.exe"
+            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\opencode-cli-${{ matrix.settings.target }}.exe"
           )
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\src-tauri\target\${{ matrix.settings.target }}\release\bundle\nsis\*.exe" | Select-Object -ExpandProperty FullName
 
