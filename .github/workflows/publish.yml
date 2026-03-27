@@ -98,7 +98,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: opencode-cli
-          path: packages/opencode/dist
+          path: |
+            packages/opencode/dist/opencode-darwin*
+            packages/opencode/dist/opencode-linux*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist/opencode-windows*
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -113,7 +120,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: opencode-cli
+          name: opencode-cli-windows
           path: packages/opencode/dist
 
       - name: Setup git committer
@@ -168,7 +175,6 @@ jobs:
   build-tauri:
     needs:
       - build-cli
-      - sign-cli-windows
       - version
     continue-on-error: false
     strategy:
@@ -264,7 +270,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-signed-windows') || 'opencode-cli' }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -340,7 +346,6 @@ jobs:
   build-electron:
     needs:
       - build-cli
-      - sign-cli-windows
       - version
     continue-on-error: false
     strategy:
@@ -428,7 +433,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-signed-windows') || 'opencode-cli' }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -468,6 +473,7 @@ jobs:
           $files = @()
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*.exe" | Select-Object -ExpandProperty FullName
           $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
 
           foreach ($file in $files | Select-Object -Unique) {
             $sig = Get-AuthenticodeSignature $file
@@ -528,6 +534,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
