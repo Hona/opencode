@@ -61,6 +61,8 @@ import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { setCursorPosition } from "@/components/prompt-input/editor-dom"
+import { promptLength } from "@/components/prompt-input/history"
 
 const emptyUserMessages: UserMessage[] = []
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
@@ -909,15 +911,15 @@ export default function Page() {
   const focusInput = () => {
     if (!inputRef?.isConnected) return
     inputRef.focus()
-    const range = document.createRange()
-    const selection = window.getSelection()
-    range.selectNodeContents(inputRef)
-    range.collapse(false)
-    selection?.removeAllRanges()
-    selection?.addRange(range)
+    setCursorPosition(inputRef, prompt.cursor() ?? promptLength(prompt.current()))
+  }
+  const focusEnd = () => {
+    if (!inputRef?.isConnected) return
+    inputRef.focus()
+    setCursorPosition(inputRef, promptLength(prompt.current()))
   }
   const focusSoon = () => {
-    const run = () => focusInput()
+    const run = () => focusEnd()
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => requestAnimationFrame(run))
       return
