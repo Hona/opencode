@@ -52,19 +52,19 @@ runs:
     - name: Sign files
       if: inputs.files != ''
       shell: pwsh
+      env:
+        INPUT_FILES: ${{ inputs.files }}
       run: |
-        $files = @'
-${{ inputs.files }}
-'@ -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $files = $env:INPUT_FILES -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
         & ./script/sign-windows.ps1 @files
 
     - name: Verify signatures
       if: inputs.files != ''
       shell: pwsh
+      env:
+        INPUT_FILES: ${{ inputs.files }}
       run: |
-        $files = @'
-${{ inputs.files }}
-'@ -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $files = $env:INPUT_FILES -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
         foreach ($file in $files) {
           $sig = Get-AuthenticodeSignature $file
           if ($sig.Status -ne "Valid") {

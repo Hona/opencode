@@ -1,4 +1,23 @@
+import { execFile } from "node:child_process"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
+
 import type { Configuration } from "electron-builder"
+
+const execFileAsync = promisify(execFile)
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
+const signScript = path.join(rootDir, "script", "sign-windows.ps1")
+
+async function signWindows(configuration: { path: string }) {
+  if (process.platform !== "win32") return
+
+  await execFileAsync(
+    "pwsh",
+    ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", signScript, configuration.path],
+    { cwd: rootDir },
+  )
+}
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -44,6 +63,7 @@ const getBase = (): Configuration => ({
   },
   win: {
     icon: `resources/icons/icon.ico`,
+    sign: signWindows,
     target: ["nsis"],
   },
   nsis: {
