@@ -25,10 +25,21 @@ if ($vars.Values | Where-Object { -not $_ }) {
   exit 0
 }
 
-if (-not (Get-Command sign -ErrorAction SilentlyContinue)) {
-  Write-Host "Skipping Windows signing because sign was not found on PATH"
-  exit 0
+$moduleVersion = "0.5.8"
+$module = Get-Module -ListAvailable -Name TrustedSigning | Where-Object { $_.Version -eq [version] $moduleVersion }
+
+if (-not $module) {
+  try {
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
+  }
+  catch {
+    Write-Host "NuGet package provider install skipped: $($_.Exception.Message)"
+  }
+
+  Install-Module -Name TrustedSigning -RequiredVersion $moduleVersion -Force -Repository PSGallery -Scope CurrentUser
 }
+
+Import-Module TrustedSigning -RequiredVersion $moduleVersion -Force
 
 $files = @($Path | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path -Unique)
 
@@ -36,21 +47,24 @@ if (-not $files -or $files.Count -eq 0) {
   throw "No files matched the requested paths"
 }
 
-$groups = $files | Group-Object { Split-Path $_ -Parent }
-
-foreach ($group in $groups) {
-  $dir = $group.Name
-  $names = @($group.Group | ForEach-Object { Split-Path $_ -Leaf })
-
-  & sign code artifact-signing `
-    -b $dir `
-    -ase $vars.endpoint `
-    -ascp $vars.profile `
-    -asa $vars.account `
-    @names `
-    -v Information
-
-  if ($LASTEXITCODE -ne 0) {
-    throw "Azure Artifact Signing failed for $($group.Name)"
-  }
+$params = @{
+  Endpoint                         = $vars.endpoint
+  CodeSigningAccountName           = $vars.account
+  CertificateProfileName           = $vars.profile
+  Files                            = ($files -join ",")
+  FileDigest                       = "SHA256"
+  TimestampDigest                  = "SHA256"
+  TimestampRfc3161                 = "http://timestamp.acs.microsoft.com"
+  ExcludeEnvironmentCredential     = $true
+  ExcludeWorkloadIdentityCredential = $true
+  ExcludeManagedIdentityCredential = $true
+  ExcludeSharedTokenCacheCredential = $true
+  ExcludeVisualStudioCredential    = $true
+  ExcludeVisualStudioCodeCredential = $true
+  ExcludeAzureCliCredential        = $false
+  ExcludeAzurePowerShellCredential = $true
+  ExcludeAzureDeveloperCliCredential = $true
+  ExcludeInteractiveBrowserCredential = $true
 }
+
+Invoke-TrustedSigning @params
