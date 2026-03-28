@@ -11,6 +11,7 @@ const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
+  if (process.env.GITHUB_ACTIONS !== "true") return
 
   await execFileAsync(
     "pwsh",

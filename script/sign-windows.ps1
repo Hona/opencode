@@ -9,6 +9,11 @@ if (-not $Path -or $Path.Count -eq 0) {
   throw "At least one path is required"
 }
 
+if ($env:GITHUB_ACTIONS -ne "true") {
+  Write-Host "Skipping Windows signing because this is not running on GitHub Actions"
+  exit 0
+}
+
 $vars = @{
   endpoint = $env:AZURE_TRUSTED_SIGNING_ENDPOINT
   account = $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME
