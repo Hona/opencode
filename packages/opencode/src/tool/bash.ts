@@ -12,7 +12,7 @@ import { Language, type Node } from "web-tree-sitter"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { fileURLToPath } from "url"
-import { Flag } from "@/flag/flag.ts"
+import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
@@ -96,17 +96,12 @@ function parts(node: Node) {
   return out
 }
 
-function commandText(node: Node) {
+function source(node: Node) {
   return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
 }
 
 function commands(node: Node) {
-  const out: Node[] = []
-  for (const child of node.descendantsOfType("command")) {
-    if (!child) continue
-    out.push(child)
-  }
-  return out
+  return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
 }
 
 function unquote(text: string) {
@@ -129,7 +124,7 @@ function envValue(key: string) {
   return name ? process.env[name] : undefined
 }
 
-function expandEnv(text: string) {
+function expand(text: string) {
   const out = unquote(text)
     .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
@@ -150,7 +145,7 @@ function provider(text: string) {
   return text
 }
 
-function dynamicPath(text: string, ps: boolean) {
+function dynamic(text: string, ps: boolean) {
   if (text.startsWith("(") || text.startsWith("@(")) return true
   if (text.includes("$(") || text.includes("${") || text.includes("`")) return true
   if (ps) return /\$(?!env:)/i.test(text)
@@ -184,9 +179,9 @@ async function resolvePath(text: string, root: string, shell: string) {
 }
 
 async function argPath(arg: string, cwd: string, ps: boolean, shell: string) {
-  const text = ps ? expandEnv(arg) : home(unquote(arg))
+  const text = ps ? expand(arg) : home(unquote(arg))
   const file = text && prefix(text)
-  if (!file || dynamicPath(file, ps)) return
+  if (!file || dynamic(file, ps)) return
   const next = ps ? provider(file) : file
   if (!next) return
   return resolvePath(next, cwd, shell)
@@ -242,7 +237,7 @@ async function collect(root: Node, cwd: string, ps: boolean, shell: string): Pro
     }
 
     if (tokens.length && (!cmd || !CWD.has(cmd))) {
-      scan.patterns.add(commandText(node))
+      scan.patterns.add(source(node))
       scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
     }
   }
@@ -348,7 +343,7 @@ async function run(
   proc.stdout?.on("data", append)
   proc.stderr?.on("data", append)
 
-  let timedOut = false
+  let expired = false
   let aborted = false
   let exited = false
 
@@ -366,7 +361,7 @@ async function run(
 
   ctx.abort.addEventListener("abort", abort, { once: true })
   const timer = setTimeout(() => {
-    timedOut = true
+    expired = true
     void kill()
   }, input.timeout + 100)
 
@@ -394,7 +389,7 @@ async function run(
   })
 
   const metadata: string[] = []
-  if (timedOut) metadata.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
+  if (expired) metadata.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
   if (aborted) metadata.push("User aborted the command")
   if (metadata.length > 0) {
     output += "\n\n<bash_metadata>\n" + metadata.join("\n") + "\n</bash_metadata>"
