@@ -47,6 +47,15 @@ describe("shell", () => {
       })
     })
 
+    test("resolves /usr/bin/bash from env to Git Bash", async () => {
+      const bash = Shell.gitbash()
+      if (!bash) return
+      await withShell("/usr/bin/bash", async () => {
+        expect(Shell.acceptable()).toBe(bash)
+        expect(Shell.preferred()).toBe(bash)
+      })
+    })
+
     test("resolves bare PowerShell shells", async () => {
       const shell = Bun.which("pwsh") || Bun.which("powershell")
       if (!shell) return

@@ -324,6 +324,66 @@ describe("tool.bash permissions", () => {
 
     for (const item of ps) {
       test(
+        `asks for external_directory permission for PowerShell FileSystem paths [${item.label}]`,
+        withShell(item, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: `Get-Content -Path FileSystem::${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`,
+                    description: "Read Windows ini from FileSystem provider",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(
+                Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
+              )
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
+        `asks for external_directory permission for braced PowerShell env paths [${item.label}]`,
+        withShell(item, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: "Get-Content ${env:WINDIR}/win.ini",
+                    description: "Read Windows ini from braced env",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(
+                Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
+              )
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
         `treats Set-Location like cd for permissions [${item.label}]`,
         withShell(item, async () => {
           await Instance.provide({

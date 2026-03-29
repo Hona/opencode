@@ -138,10 +138,9 @@ function envValue(key: string) {
 }
 
 function expandEnv(text: string) {
-  const out = unquote(text).replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => {
-    const value = envValue(key)
-    return value || ""
-  })
+  const out = unquote(text)
+    .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
+    .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
   return home(out)
 }
 
@@ -150,7 +149,13 @@ function drive(text: string) {
 }
 
 function provider(text: string) {
-  return /^[A-Za-z]+:/.test(text) && !drive(text)
+  const match = text.match(/^([A-Za-z]+)::(.*)$/)
+  if (match) {
+    if (match[1].toLowerCase() !== "filesystem") return
+    return match[2]
+  }
+  if (/^[A-Za-z]+:/.test(text) && !drive(text)) return
+  return text
 }
 
 function dynamicPath(text: string, ps: boolean) {
@@ -178,8 +183,9 @@ function argPath(arg: string, cwd: string, ps: boolean) {
   const text = ps ? expandEnv(arg) : home(unquote(arg))
   const file = text && prefix(text)
   if (!file || dynamicPath(file, ps)) return
-  if (ps && provider(file)) return
-  return resolvePath(file, cwd)
+  const next = ps ? provider(file) : file
+  if (!next) return
+  return resolvePath(next, cwd)
 }
 
 function pathArgs(list: Part[], ps: boolean) {

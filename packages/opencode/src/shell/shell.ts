@@ -46,7 +46,10 @@ export namespace Shell {
   function full(file: string) {
     if (process.platform !== "win32") return file
     const shell = Filesystem.windowsPath(file)
-    if (path.win32.dirname(shell) !== ".") return shell
+    if (path.win32.dirname(shell) !== ".") {
+      if (shell.startsWith("/") && name(shell) === "bash") return gitbash() || shell
+      return shell
+    }
     return Bun.which(shell) || shell
   }
 
