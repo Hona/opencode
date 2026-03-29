@@ -466,7 +466,7 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = await resolvePath(params.workdir || Instance.directory, Instance.directory, shell)
+      const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
