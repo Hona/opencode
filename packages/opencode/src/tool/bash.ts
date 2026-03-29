@@ -295,6 +295,7 @@ function launch(shell: string, name: string, command: string, cwd: string, env: 
       env,
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
+      windowsHide: true,
     })
   }
 

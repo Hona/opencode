@@ -167,5 +167,32 @@ describe("tool.assertExternalDirectory", () => {
       expect(req!.patterns).toEqual([expected])
       expect(req!.always).toEqual([expected])
     })
+
+    test("uses drive root glob for root files", async () => {
+      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      const ctx: Tool.Context = {
+        ...baseCtx,
+        ask: async (req) => {
+          requests.push(req)
+        },
+      }
+
+      await using tmp = await tmpdir({ git: true })
+      const root = path.parse(tmp.path).root
+      const target = path.join(root, "boot.ini")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await assertExternalDirectory(ctx, target)
+        },
+      })
+
+      const req = requests.find((r) => r.permission === "external_directory")
+      const expected = path.join(root, "*")
+      expect(req).toBeDefined()
+      expect(req!.patterns).toEqual([expected])
+      expect(req!.always).toEqual([expected])
+    })
   }
 })

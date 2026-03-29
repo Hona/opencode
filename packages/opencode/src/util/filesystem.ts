@@ -119,7 +119,8 @@ export namespace Filesystem {
     if (p === "*") return p
     const match = p.match(/^(.*)[\\/]\*$/)
     if (!match) return normalizePath(p)
-    return join(normalizePath(match[1]), "*")
+    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
+    return join(normalizePath(dir), "*")
   }
 
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
