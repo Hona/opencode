@@ -230,6 +230,42 @@ describe("tool.bash permissions", () => {
   })
 
   if (process.platform === "win32") {
+    if (bash) {
+      test(
+        "asks for nested bash command permissions [bash]",
+        withShell({ label: "bash", shell: bash }, async () => {
+          await using outerTmp = await tmpdir({
+            init: async (dir) => {
+              await Bun.write(path.join(dir, "outside.txt"), "x")
+            },
+          })
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const file = path.join(outerTmp.path, "outside.txt").replaceAll("\\", "/")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await bash.execute(
+                {
+                  command: `echo $(cat "${file}")`,
+                  description: "Read nested bash file",
+                },
+                capture(requests),
+              )
+              const extDirReq = requests.find((r) => r.permission === "external_directory")
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(extDirReq).toBeDefined()
+              expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "*")))
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain(`cat "${file}"`)
+            },
+          })
+        }),
+      )
+    }
+  }
+
+  if (process.platform === "win32") {
     for (const item of ps) {
       test(
         `asks for external_directory permission for PowerShell paths after switches [${item.label}]`,
@@ -252,6 +288,35 @@ describe("tool.bash permissions", () => {
               const extDirReq = requests.find((r) => r.permission === "external_directory")
               expect(extDirReq).toBeDefined()
               expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
+        `asks for nested PowerShell command permissions [${item.label}]`,
+        withShell(item, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              const file = `${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`
+              await bash.execute(
+                {
+                  command: `Write-Output $(Get-Content ${file})`,
+                  description: "Read nested PowerShell file",
+                },
+                capture(requests),
+              )
+              const extDirReq = requests.find((r) => r.permission === "external_directory")
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(extDirReq).toBeDefined()
+              expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain(`Get-Content ${file}`)
             },
           })
         }),

@@ -100,19 +100,10 @@ function commandText(node: Node) {
   return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
 }
 
-function nested(node: Node) {
-  let parent = node.parent
-  while (parent) {
-    if (parent.type === "command") return true
-    parent = parent.parent
-  }
-  return false
-}
-
 function commands(node: Node) {
   const out: Node[] = []
   for (const child of node.descendantsOfType("command")) {
-    if (!child || nested(child)) continue
+    if (!child) continue
     out.push(child)
   }
   return out
