@@ -520,6 +520,67 @@ describe("tool.bash permissions", () => {
         },
       })
     })
+
+    if (bash) {
+      test(
+        "uses Git Bash /tmp semantics for external workdir",
+        withShell({ label: "bash", shell: bash }, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              const want = glob(path.join(os.tmpdir(), "*"))
+              await expect(
+                bash.execute(
+                  {
+                    command: "echo ok",
+                    workdir: "/tmp",
+                    description: "Echo from Git Bash tmp",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]).toMatchObject({
+                permission: "external_directory",
+                patterns: [want],
+                always: [want],
+              })
+            },
+          })
+        }),
+      )
+
+      test(
+        "uses Git Bash /tmp semantics for external file paths",
+        withShell({ label: "bash", shell: bash }, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              const want = glob(path.join(os.tmpdir(), "*"))
+              await expect(
+                bash.execute(
+                  {
+                    command: "cat /tmp/opencode-does-not-exist",
+                    description: "Read Git Bash tmp file",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]).toMatchObject({
+                permission: "external_directory",
+                patterns: [want],
+                always: [want],
+              })
+            },
+          })
+        }),
+      )
+    }
   }
 
   each("asks for external_directory permission when file arg is outside project", async () => {

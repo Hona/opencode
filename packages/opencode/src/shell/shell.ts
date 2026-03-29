@@ -11,6 +11,7 @@ const SIGKILL_TIMEOUT_MS = 200
 export namespace Shell {
   const BLACKLIST = new Set(["fish", "nu"])
   const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
+  const POSIX = new Set(["bash", "dash", "ksh", "sh", "zsh"])
 
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
@@ -97,6 +98,10 @@ export namespace Shell {
 
   export function login(file: string) {
     return LOGIN.has(name(file))
+  }
+
+  export function posix(file: string) {
+    return POSIX.has(name(file))
   }
 
   export const preferred = lazy(() => select(process.env.SHELL))

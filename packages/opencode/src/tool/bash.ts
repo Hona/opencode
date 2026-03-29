@@ -10,6 +10,7 @@ import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
 import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
@@ -172,20 +173,32 @@ function prefix(text: string) {
   return text.slice(0, match.index)
 }
 
-function resolvePath(text: string, root: string) {
+async function cygpath(shell: string, text: string) {
+  const out = await Process.text([shell, "-lc", 'cygpath -w -- "$1"', "_", text], { nothrow: true })
+  if (out.code !== 0) return
+  const file = out.text.trim()
+  if (!file) return
+  return Filesystem.normalizePath(file)
+}
+
+async function resolvePath(text: string, root: string, shell: string) {
   if (process.platform === "win32") {
+    if (Shell.posix(shell) && text.startsWith("/") && Filesystem.windowsPath(text) === text) {
+      const file = await cygpath(shell, text)
+      if (file) return file
+    }
     return Filesystem.normalizePath(path.resolve(root, Filesystem.windowsPath(text)))
   }
   return path.resolve(root, text)
 }
 
-function argPath(arg: string, cwd: string, ps: boolean) {
+async function argPath(arg: string, cwd: string, ps: boolean, shell: string) {
   const text = ps ? expandEnv(arg) : home(unquote(arg))
   const file = text && prefix(text)
   if (!file || dynamicPath(file, ps)) return
   const next = ps ? provider(file) : file
   if (!next) return
-  return resolvePath(next, cwd)
+  return resolvePath(next, cwd, shell)
 }
 
 function pathArgs(list: Part[], ps: boolean) {
@@ -215,7 +228,7 @@ function pathArgs(list: Part[], ps: boolean) {
   return out
 }
 
-async function collect(root: Node, cwd: string, ps: boolean): Promise<Scan> {
+async function collect(root: Node, cwd: string, ps: boolean, shell: string): Promise<Scan> {
   const scan: Scan = {
     dirs: new Set<string>(),
     patterns: new Set<string>(),
@@ -229,7 +242,7 @@ async function collect(root: Node, cwd: string, ps: boolean): Promise<Scan> {
 
     if (cmd && FILES.has(cmd)) {
       for (const arg of pathArgs(command, ps)) {
-        const resolved = argPath(arg, cwd, ps)
+        const resolved = await argPath(arg, cwd, ps, shell)
         log.info("resolved path", { arg, resolved })
         if (!resolved || Instance.containsPath(resolved)) continue
         const dir = (await Filesystem.isDir(resolved)) ? resolved : path.dirname(resolved)
@@ -305,6 +318,7 @@ function launch(shell: string, name: string, command: string, cwd: string, env: 
     env,
     stdio: ["ignore", "pipe", "pipe"],
     detached: process.platform !== "win32",
+    windowsHide: process.platform === "win32",
   })
 }
 
@@ -466,14 +480,14 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = resolvePath(params.workdir || Instance.directory, Instance.directory)
+      const cwd = await resolvePath(params.workdir || Instance.directory, Instance.directory, shell)
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const ps = PS.has(name)
       const root = await parse(params.command, ps)
-      const scan = await collect(root, cwd, ps)
+      const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
       await ask(ctx, scan)
 

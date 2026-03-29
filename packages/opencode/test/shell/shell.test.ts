@@ -33,6 +33,12 @@ describe("shell", () => {
     expect(Shell.login("C:/tools/pwsh.exe")).toBe(false)
   })
 
+  test("detects posix shells", () => {
+    expect(Shell.posix("/bin/bash")).toBe(true)
+    expect(Shell.posix("/bin/fish")).toBe(false)
+    expect(Shell.posix("C:/tools/pwsh.exe")).toBe(false)
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
