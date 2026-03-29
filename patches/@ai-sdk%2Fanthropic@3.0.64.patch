@@ -101,7 +101,7 @@
 --- a/src/anthropic-messages-language-model.ts
 +++ b/src/anthropic-messages-language-model.ts
 @@ -534,16 +534,6 @@
-
+ 
        // adjust max tokens to account for thinking:
        baseArgs.max_tokens = maxTokens + (thinkingBudget ?? 0);
 -    } else {
@@ -115,5 +115,5 @@
 -        baseArgs.top_p = undefined;
 -      }
      }
-
+ 
      // limit to max output tokens for known models to enable model switching without breaking it:
