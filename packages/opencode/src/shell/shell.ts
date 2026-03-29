@@ -66,16 +66,19 @@ export namespace Shell {
     return fallback()
   }
 
+  export function gitbash() {
+    if (process.platform !== "win32") return
+    if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
+    const git = which("git")
+    if (!git) return
+    const file = path.join(git, "..", "..", "bin", "bash.exe")
+    if (Filesystem.stat(file)?.size) return file
+  }
+
   function fallback() {
     if (process.platform === "win32") {
-      if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
-      const git = which("git")
-      if (git) {
-        // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
-        // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-        const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Filesystem.stat(bash)?.size) return bash
-      }
+      const file = gitbash()
+      if (file) return file
       return process.env.COMSPEC || "cmd.exe"
     }
     if (process.platform === "darwin") return "/bin/zsh"

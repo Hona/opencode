@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
+import { Shell } from "../../src/shell/shell"
 import { tmpdir } from "../fixture/fixture"
+
+Shell.preferred.reset()
 
 describe("pty shell args", () => {
   if (process.platform !== "win32") return
@@ -28,7 +31,11 @@ describe("pty shell args", () => {
     )
   }
 
-  const bash = Bun.which("bash")
+  const bash = (() => {
+    const shell = Shell.preferred()
+    if (Shell.name(shell) === "bash") return shell
+    return Shell.gitbash()
+  })()
   if (bash) {
     test(
       "adds login args to bash",

@@ -21,29 +21,45 @@ const ctx = {
   ask: async () => {},
 }
 
+Shell.acceptable.reset()
+const quote = (text: string) => `"${text}"`
+const squote = (text: string) => `'${text}'`
 const projectRoot = path.join(__dirname, "../..")
-const bin = process.execPath.replaceAll("\\", "/")
-const file = path.join(projectRoot, "test/tool/fixtures/output.ts").replaceAll("\\", "/")
+const bin = quote(process.execPath.replaceAll("\\", "/"))
+const bash = (() => {
+  const shell = Shell.acceptable()
+  if (Shell.name(shell) === "bash") return shell
+  return Shell.gitbash()
+})()
 const shells = (() => {
   if (process.platform !== "win32") {
-    const shell = process.env.SHELL || Bun.which("bash") || "/bin/sh"
-    return [{ label: path.basename(shell), shell }]
+    const shell = Shell.acceptable()
+    return [{ label: Shell.name(shell), shell }]
   }
 
-  const list = [
-    { label: "git bash", shell: process.env.SHELL || Bun.which("bash") },
-    { label: "pwsh", shell: Bun.which("pwsh") },
-    { label: "powershell", shell: Bun.which("powershell") },
-    { label: "cmd", shell: process.env.COMSPEC || Bun.which("cmd.exe") },
-  ].filter((item): item is { label: string; shell: string } => Boolean(item.shell))
+  const list = [bash, Bun.which("pwsh"), Bun.which("powershell"), process.env.COMSPEC || Bun.which("cmd.exe")]
+    .filter((shell): shell is string => Boolean(shell))
+    .map((shell) => ({ label: Shell.name(shell), shell }))
 
   return list.filter(
     (item, i) => list.findIndex((other) => other.shell.toLowerCase() === item.shell.toLowerCase()) === i,
   )
 })()
-const ps = shells.filter((item) => item.label === "pwsh" || item.label === "powershell")
+const PS = new Set(["pwsh", "powershell"])
+const ps = shells.filter((item) => PS.has(item.label))
 
-const fill = (mode: "lines" | "bytes", n: number) => `${bin} ${file} ${mode} ${n}`
+const sh = () => Shell.name(Shell.acceptable())
+const evalarg = (text: string) => (sh() === "cmd" ? quote(text) : squote(text))
+
+const fill = (mode: "lines" | "bytes", n: number) => {
+  const code =
+    mode === "lines"
+      ? "console.log(Array.from({length:Number(Bun.argv[1])},(_,i)=>i+1).join(String.fromCharCode(10)))"
+      : "process.stdout.write(String.fromCharCode(97).repeat(Number(Bun.argv[1])))"
+  const text = `${bin} -e ${evalarg(code)} ${n}`
+  if (PS.has(sh())) return `& ${text}`
+  return text
+}
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
