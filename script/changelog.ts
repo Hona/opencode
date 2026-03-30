@@ -16,6 +16,11 @@ type Commit = {
 }
 
 type User = Map<string, Set<string>>
+type Diff = {
+  sha: string
+  login: string | null
+  message: string
+}
 
 const repo = process.env.GH_REPO ?? "anomalyco/opencode"
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
@@ -53,6 +58,22 @@ async function latest() {
   return release.tag_name.replace(/^v/, "")
 }
 
+async function diff(base: string, head: string) {
+  const list: Diff[] = []
+  for (let page = 1; ; page++) {
+    const text =
+      await $`gh api "/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
+    const batch = text
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Diff)
+    if (batch.length === 0) break
+    list.push(...batch)
+    if (batch.length < 100) break
+  }
+  return list
+}
+
 function section(areas: Set<string>) {
   const priority = ["core", "tui", "app", "tauri", "sdk", "plugin", "extensions/zed", "extensions/vscode", "github"]
   for (const area of priority) {
@@ -88,12 +109,9 @@ function reverted(commits: Commit[]) {
 async function commits(from: string, to: string) {
   const base = ref(from)
   const head = ref(to)
-  const compare =
-    await $`gh api "/repos/${repo}/compare/${base}...${head}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
 
   const data = new Map<string, { login: string | null; message: string }>()
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const item = JSON.parse(line) as { sha: string; login: string | null; message: string }
+  for (const item of await diff(base, head)) {
     data.set(item.sha, { login: item.login, message: item.message.split("\n")[0] ?? "" })
   }
 
@@ -135,12 +153,9 @@ async function commits(from: string, to: string) {
 async function contributors(from: string, to: string) {
   const base = ref(from)
   const head = ref(to)
-  const compare =
-    await $`gh api "/repos/${repo}/compare/${base}...${head}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
 
   const users: User = new Map()
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const item = JSON.parse(line) as { login: string | null; message: string }
+  for (const item of await diff(base, head)) {
     const title = item.message.split("\n")[0] ?? ""
     if (!item.login || team.includes(item.login)) continue
     if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
@@ -162,8 +177,8 @@ async function published(to: string) {
   return lines.slice(start).join("\n").trim()
 }
 
-async function thanks(from: string, to: string) {
-  const release = await published(to)
+async function thanks(from: string, to: string, reuse: boolean) {
+  const release = reuse ? await published(to) : undefined
   if (release) return release.split(/\r?\n/)
 
   const users = await contributors(from, to)
@@ -242,5 +257,5 @@ Examples:
   const to = values.to!
   const from = values.from ?? (await latest())
   const list = await commits(from, to)
-  console.log(format(from, to, list, await thanks(from, to)))
+  console.log(format(from, to, list, await thanks(from, to, !values.from)))
 }

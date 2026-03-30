@@ -32,7 +32,8 @@ Rules:
 - Community attribution is deterministic: only preserve an existing `(@username)` suffix from the changelog input
 - If an input bullet has no `(@username)` suffix, do not add one
 - Never add a new `(@username)` suffix from `git show`, commit authors, names, or email addresses
-- If no notable entries remain, write exactly `No notable changes.`
+- If no notable entries remain and there is no contributor block, write exactly `No notable changes.`
+- If no notable entries remain but there is a contributor block, omit all release sections and return only the contributor block
 - If the input contains `## Community Contributors Input`, append the block below that heading to the end of the final file verbatim
 - Do not add, remove, rewrite, or reorder contributor names or commit titles in that block
 - Do not derive the thank-you section from the main summary bullets
