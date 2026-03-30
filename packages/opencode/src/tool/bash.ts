@@ -124,15 +124,19 @@ function envValue(key: string) {
   return name ? process.env[name] : undefined
 }
 
-function expand(text: string) {
+function auto(key: string, cwd: string, shell: string) {
+  const name = key.toUpperCase()
+  if (name === "HOME") return os.homedir()
+  if (name === "PWD") return cwd
+  if (name === "PSHOME") return path.dirname(shell)
+}
+
+function expand(text: string, cwd: string, shell: string) {
   const out = unquote(text)
     .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
+    .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => auto(key, cwd, shell) || "")
   return home(out)
-}
-
-function drive(text: string) {
-  return /^[A-Za-z]:($|[\\/])/.test(text)
 }
 
 function provider(text: string) {
@@ -141,8 +145,10 @@ function provider(text: string) {
     if (match[1].toLowerCase() !== "filesystem") return
     return match[2]
   }
-  if (/^[A-Za-z]+:/.test(text) && !drive(text)) return
-  return text
+  const prefix = text.match(/^([A-Za-z]+):(.*)$/)
+  if (!prefix) return text
+  if (prefix[1].length === 1) return text
+  return
 }
 
 function dynamic(text: string, ps: boolean) {
@@ -179,7 +185,7 @@ async function resolvePath(text: string, root: string, shell: string) {
 }
 
 async function argPath(arg: string, cwd: string, ps: boolean, shell: string) {
-  const text = ps ? expand(arg) : home(unquote(arg))
+  const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
   const file = text && prefix(text)
   if (!file || dynamic(file, ps)) return
   const next = ps ? provider(file) : file

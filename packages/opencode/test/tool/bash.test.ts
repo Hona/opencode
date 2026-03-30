@@ -325,6 +325,120 @@ describe("tool.bash permissions", () => {
 
     for (const item of ps) {
       test(
+        `asks for external_directory permission for drive-relative PowerShell paths [${item.label}]`,
+        withShell(item, async () => {
+          await using tmp = await tmpdir()
+          await Instance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: 'Get-Content "C:../outside.txt"',
+                    description: "Read drive-relative file",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(glob(path.join(path.dirname(tmp.path), "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
+        `asks for external_directory permission for $HOME PowerShell paths [${item.label}]`,
+        withShell(item, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: 'Get-Content "$HOME/.ssh/config"',
+                    description: "Read home config",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(glob(path.join(os.homedir(), ".ssh", "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
+        `asks for external_directory permission for $PWD PowerShell paths [${item.label}]`,
+        withShell(item, async () => {
+          await using tmp = await tmpdir()
+          await Instance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: 'Get-Content "$PWD/../outside.txt"',
+                    description: "Read pwd-relative file",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(glob(path.join(path.dirname(tmp.path), "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
+        `asks for external_directory permission for $PSHOME PowerShell paths [${item.label}]`,
+        withShell(item, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const bash = await BashTool.init()
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              await expect(
+                bash.execute(
+                  {
+                    command: 'Get-Content "$PSHOME/outside.txt"',
+                    description: "Read pshome file",
+                  },
+                  capture(requests, err),
+                ),
+              ).rejects.toThrow(err.message)
+              expect(requests[0]?.permission).toBe("external_directory")
+              if (requests[0]?.permission !== "external_directory") return
+              expect(requests[0].patterns).toContain(glob(path.join(path.dirname(item.shell), "*")))
+            },
+          })
+        }),
+      )
+    }
+
+    for (const item of ps) {
+      test(
         `asks for external_directory permission for missing PowerShell env paths [${item.label}]`,
         withShell(item, async () => {
           const key = "OPENCODE_TEST_MISSING"
