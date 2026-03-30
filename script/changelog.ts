@@ -187,7 +187,7 @@ function format(from: string, to: string, list: Commit[], thanks: string[]) {
     grouped.get(title)!.push(`- \`${commit.hash}\` ${commit.message}${attr}`)
   }
 
-  const lines = [`Last release: v${from}`, `Target ref: ${to}`, ""]
+  const lines = [`Last release: ${ref(from)}`, `Target ref: ${to}`, ""]
 
   if (list.length === 0) {
     lines.push("No notable changes.")
