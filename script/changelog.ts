@@ -11,6 +11,7 @@ const { values, positionals } = parseArgs({
   options: {
     from: { type: "string", short: "f" },
     to: { type: "string", short: "t" },
+    variant: { type: "string", default: "low" },
     quiet: { type: "boolean", default: false },
     print: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -31,6 +32,7 @@ Generates UPCOMING_CHANGELOG.md by running the opencode changelog command.
 Options:
   -f, --from <version>   Starting version (default: latest non-draft GitHub release)
   -t, --to <ref>         Ending ref (default: HEAD)
+      --variant <name>   Thinking variant for opencode run (default: low)
       --quiet            Suppress opencode command output unless it fails
       --print            Print the generated UPCOMING_CHANGELOG.md after success
   -h, --help             Show this help message
@@ -46,7 +48,11 @@ Examples:
 await rm(file, { force: true })
 
 const quiet = values.quiet
-const proc = Bun.spawn(["opencode", "run", "--command", "changelog", "--", ...args], {
+const cmd = ["opencode", "run"]
+cmd.push("--variant", values.variant)
+cmd.push("--command", "changelog", "--", ...args)
+
+const proc = Bun.spawn(cmd, {
   cwd: root,
   stdin: "inherit",
   stdout: quiet ? "pipe" : "inherit",
