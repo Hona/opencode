@@ -321,11 +321,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
-          current() {
+          selected() {
             const m = currentModel()
             if (!m) return undefined
             const key = `${m.providerID}/${m.modelID}`
             return modelStore.variant[key]
+          },
+          current() {
+            const v = this.selected()
+            if (!v) return undefined
+            if (!this.list().includes(v)) return undefined
+            return v
           },
           list() {
             const m = currentModel()
@@ -339,18 +345,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = currentModel()
             if (!m) return
             const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value)
+            setModelStore("variant", key, value ?? "default")
             save()
           },
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const current = this.current()
-            if (!current) {
+            const cur = this.current()
+            if (!cur) {
               this.set(variants[0])
               return
             }
-            const index = variants.indexOf(current)
+            const index = variants.indexOf(cur)
             if (index === -1 || index === variants.length - 1) {
               this.set(undefined)
               return

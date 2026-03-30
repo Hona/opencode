@@ -632,7 +632,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const variant = local.model.variant.current()
+    const variant = local.model.variant.selected()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
