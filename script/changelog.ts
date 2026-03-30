@@ -153,7 +153,7 @@ async function contributors(from: string, to: string) {
 
 async function published(to: string) {
   if (to === "HEAD") return
-  const body = await $`gh release view ${ref(to)} --json body --jq .body`.text().catch(() => "")
+  const body = await $`gh release view ${ref(to)} --repo ${repo} --json body --jq .body`.text().catch(() => "")
   if (!body) return
 
   const lines = body.split(/\r?\n/)
