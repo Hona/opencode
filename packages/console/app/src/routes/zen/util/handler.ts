@@ -471,7 +471,7 @@ export async function handler(
           reqModel,
           providerModel: modelProvider.model,
           adjustCacheUsage: providerProps.adjustCacheUsage,
-          safetyIdentifier: ip,
+          safetyIdentifier: providerProps.safetyIdentifier ? ip : undefined,
           workspaceID: authInfo?.workspaceID,
         }
         if (format === "anthropic") return anthropicHelper(opts)
