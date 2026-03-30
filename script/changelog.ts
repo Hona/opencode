@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
 
-import { rename, rm } from "fs/promises"
+import { rm } from "fs/promises"
 import path from "path"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
 const file = path.join(root, "UPCOMING_CHANGELOG.md")
-const bak = path.join(root, "UPCOMING_CHANGELOG.md.bak")
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
@@ -44,12 +43,7 @@ Examples:
   process.exit(0)
 }
 
-await rm(bak, { force: true })
-
-const moved = await Bun.file(file).exists()
-if (moved) {
-  await rename(file, bak)
-}
+await rm(file, { force: true })
 
 const quiet = values.quiet
 const proc = Bun.spawn(["opencode", "run", "--command", "changelog", "--", ...args], {
@@ -64,14 +58,8 @@ const [out, err] = quiet
   : ["", ""]
 const code = await proc.exited
 if (code === 0) {
-  if (moved) await rm(bak, { force: true })
   if (values.print) process.stdout.write(await Bun.file(file).text())
   process.exit(0)
-}
-
-if (moved) {
-  await rm(file, { force: true })
-  await rename(bak, file)
 }
 
 if (quiet) {
