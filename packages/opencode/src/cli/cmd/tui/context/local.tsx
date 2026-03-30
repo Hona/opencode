@@ -351,12 +351,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const cur = this.current()
-            if (!cur) {
+            const current = this.current()
+            if (!current) {
               this.set(variants[0])
               return
             }
-            const index = variants.indexOf(cur)
+            const index = variants.indexOf(current)
             if (index === -1 || index === variants.length - 1) {
               this.set(undefined)
               return
