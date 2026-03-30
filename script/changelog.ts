@@ -39,10 +39,11 @@ const sections = {
   github: "Extensions",
 } as const
 
-function tag(input: string) {
+function ref(input: string) {
   if (input === "HEAD") return input
   if (input.startsWith("v")) return input
-  return `v${input}`
+  if (input.match(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)) return `v${input}`
+  return input
 }
 
 async function latest() {
@@ -85,8 +86,8 @@ function reverted(commits: Commit[]) {
 }
 
 async function commits(from: string, to: string) {
-  const base = tag(from)
-  const head = tag(to)
+  const base = ref(from)
+  const head = ref(to)
   const compare =
     await $`gh api "/repos/${repo}/compare/${base}...${head}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
 
@@ -132,8 +133,8 @@ async function commits(from: string, to: string) {
 }
 
 async function contributors(from: string, to: string) {
-  const base = tag(from)
-  const head = tag(to)
+  const base = ref(from)
+  const head = ref(to)
   const compare =
     await $`gh api "/repos/${repo}/compare/${base}...${head}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
 
@@ -152,7 +153,7 @@ async function contributors(from: string, to: string) {
 
 async function published(to: string) {
   if (to === "HEAD") return
-  const body = await $`gh release view ${tag(to)} --json body --jq .body`.text().catch(() => "")
+  const body = await $`gh release view ${ref(to)} --json body --jq .body`.text().catch(() => "")
   if (!body) return
 
   const lines = body.split(/\r?\n/)
