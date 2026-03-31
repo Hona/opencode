@@ -1,4 +1,4 @@
-import { waitSessionIdle, withSession } from "../actions"
+import { waitSessionIdle, withSession, seed as seedAction } from "../actions"
 import { test, expect } from "../fixtures"
 import { createSdk } from "../utils"
 
@@ -40,20 +40,28 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
-async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patchText: string) {
-  await sdk.session.promptAsync({
+async function patch(
+  sdk: ReturnType<typeof createSdk>,
+  sessionID: string,
+  patchText: string,
+  probe: () => Promise<boolean | undefined>,
+) {
+  const result = await seedAction({
+    sdk,
     sessionID,
-    agent: "build",
-    system: [
+    prompt: [
       "You are seeding deterministic e2e UI state.",
       "Your only valid response is one apply_patch tool call.",
       `Use this JSON input: ${JSON.stringify({ patchText })}`,
       "Do not call any other tools.",
       "Do not output plain text.",
+      "Apply the provided patch exactly once.",
     ].join("\n"),
-    parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
+    timeout: 60_000,
+    probe,
   })
 
+  if (!result) throw new Error("Timed out seeding patch")
   await waitSessionIdle(sdk, sessionID, 120_000)
 }
 
@@ -246,7 +254,10 @@ test("review applies inline comment clicks without horizontal overflow", async (
     const sdk = createSdk(project.directory)
 
     await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+      await patch(sdk, session.id, seed([{ file, mark: tag }]), async () => {
+        const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+        return diff.length === 1 ? true : undefined
+      })
 
       await expect
         .poll(
@@ -295,7 +306,10 @@ test("review file comments submit on click without clipping actions", async ({ p
     const sdk = createSdk(project.directory)
 
     await withSession(sdk, `e2e review file comment ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+      await patch(sdk, session.id, seed([{ file, mark: tag }]), async () => {
+        const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+        return diff.length === 1 ? true : undefined
+      })
 
       await expect
         .poll(
@@ -347,7 +361,10 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
     const sdk = createSdk(project.directory)
 
     await withSession(sdk, `e2e review ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed(list))
+      await patch(sdk, session.id, seed(list), async () => {
+        const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+        return diff.length === list.length ? true : undefined
+      })
 
       await expect
         .poll(
@@ -396,7 +413,11 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
       const prev = await spot(page, hit.file)
       if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
-      await patch(sdk, session.id, edit(hit.file, hit.mark, next))
+      await patch(sdk, session.id, edit(hit.file, hit.mark, next), async () => {
+        const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+        const item = diff.find((item) => item.file === hit.file)
+        return typeof item?.after === "string" && item.after.includes(`mark ${next}`) ? true : undefined
+      })
 
       await expect
         .poll(

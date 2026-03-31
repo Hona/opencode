@@ -24,7 +24,9 @@ test("shell mode runs a command in the project directory", async ({ page, withPr
     await page.keyboard.type("!")
     await expect(prompt).toHaveAttribute("aria-label", /enter shell command/i)
 
-    await page.keyboard.type(cmd)
+    await prompt.fill(cmd)
+    await expect(prompt).toContainText(cmd)
+
     await page.keyboard.press("Enter")
 
     await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
