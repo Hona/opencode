@@ -40,6 +40,75 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
+function paths(text: string) {
+  return [...text.matchAll(/^\*\*\* (?:Add|Update) File: (.+)$/gm)].map((x) => x[1])
+}
+
+function issue(err: unknown) {
+  if (!err || typeof err !== "object") return undefined
+  if (!("name" in err) || !("data" in err)) return undefined
+  const data = err.data
+  if (!data || typeof data !== "object") return undefined
+  return {
+    name: typeof err.name === "string" ? err.name : undefined,
+    message: "message" in data && typeof data.message === "string" ? data.message : undefined,
+    status: "statusCode" in data && typeof data.statusCode === "number" ? data.statusCode : undefined,
+  }
+}
+
+async function snap(sdk: ReturnType<typeof createSdk>, sessionID: string, want: string[]) {
+  const [status, diff, items] = await Promise.all([
+    sdk.session
+      .status()
+      .then((x) => x.data?.[sessionID]?.type ?? "idle")
+      .catch((err) => `error:${err instanceof Error ? err.name : String(err)}`),
+    sdk.session
+      .diff({ sessionID })
+      .then((x) => x.data ?? [])
+      .catch(() => []),
+    sdk.session
+      .messages({ sessionID, limit: 50 })
+      .then((x) => x.data ?? [])
+      .catch(() => []),
+  ])
+
+  const seen = diff.filter((x) => want.includes(x.file)).map((x) => x.file)
+  const msg = items.findLast((x) => x.info.role === "assistant" && !!x.info.error)
+  const err = msg?.info.role === "assistant" ? issue(msg.info.error) : undefined
+
+  return {
+    status,
+    diff: {
+      count: diff.length,
+      files: diff.slice(0, 10).map((x) => x.file),
+      seen,
+      missing: want.filter((x) => !seen.includes(x)),
+    },
+    error: err,
+  }
+}
+
+function brief(list: Array<Record<string, unknown>>) {
+  return list
+    .map((x) => {
+      const data = "data" in x && x.data && typeof x.data === "object" ? x.data : undefined
+      const diff = data && "diff" in data && data.diff && typeof data.diff === "object" ? data.diff : undefined
+      const err = data && "error" in data && data.error && typeof data.error === "object" ? data.error : undefined
+      return [
+        `attempt=${x.attempt}`,
+        `busy=${x.busy}`,
+        `idle=${x.idle}`,
+        `first=${x.first}`,
+        `late=${x.late}`,
+        `next=${x.next}`,
+        `diff=${diff && "count" in diff ? diff.count : "?"}`,
+        `seen=${diff && "seen" in diff && Array.isArray(diff.seen) ? diff.seen.join(",") : ""}`,
+        `err=${err && "name" in err && typeof err.name === "string" ? err.name : "none"}`,
+      ].join(" ")
+    })
+    .join("\n")
+}
+
 async function waitSessionBusy(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 5_000) {
   await expect
     .poll(
@@ -73,10 +142,21 @@ async function patch(
   patchText: string,
   probe: () => Promise<boolean | undefined>,
 ) {
+  const want = paths(patchText)
+  const list: Array<Record<string, unknown>> = []
+
   for (let i = 0; i < 3; i++) {
+    const step: Record<string, unknown> = {
+      attempt: i + 1,
+      abort: Boolean(i),
+    }
+    list.push(step)
+
     if (i) {
       await sdk.session.abort({ sessionID }).catch(() => undefined)
-      await waitSessionIdle(sdk, sessionID, 30_000).catch(() => undefined)
+      step.drain = await waitSessionIdle(sdk, sessionID, 30_000)
+        .then(() => true)
+        .catch(() => false)
     }
 
     await sdk.session.promptAsync({
@@ -93,13 +173,19 @@ async function patch(
     })
 
     const first = await probe().catch(() => undefined)
+    step.first = Boolean(first)
 
     const busy = await waitSessionBusy(sdk, sessionID)
       .then(() => true)
       .catch(() => false)
+    step.busy = busy
+
     if (!busy) {
       if (first) return
+
       const late = await waitProbe(probe)
+      step.late = late
+      step.data = await snap(sdk, sessionID, want)
       if (late) return
       continue
     }
@@ -107,13 +193,32 @@ async function patch(
     const idle = await waitSessionIdle(sdk, sessionID, 45_000)
       .then(() => true)
       .catch(() => false)
+    step.idle = idle
+
     if (!idle) continue
 
     const next = await waitProbe(probe, 10_000)
+    step.next = next
+    step.data = await snap(sdk, sessionID, want)
+
     if (next) return
   }
 
-  throw new Error("Timed out seeding patch")
+  const body = JSON.stringify(
+    {
+      sessionID,
+      want,
+      attempts: list,
+    },
+    null,
+    2,
+  )
+  await test.info().attach("seed-trace", {
+    body,
+    contentType: "application/json",
+  })
+
+  throw new Error(["Timed out seeding patch", brief(list)].join("\n"))
 }
 
 async function show(page: Parameters<typeof test>[0]["page"]) {
