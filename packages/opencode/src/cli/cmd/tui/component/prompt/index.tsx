@@ -18,7 +18,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -387,20 +387,6 @@ export function Prompt(props: PromptProps) {
       },
     ]
   })
-
-  // Windows Terminal 1.25+ handles Ctrl+V on keydown when kitty events are
-  // enabled, but still reports the kitty key-release event. Probe on release.
-  if (process.platform === "win32") {
-    useKeyboard(
-      (evt) => {
-        if (!input.focused) return
-        if (evt.name === "v" && evt.ctrl && evt.eventType === "release") {
-          command.trigger("prompt.paste")
-        }
-      },
-      { release: true },
-    )
-  }
 
   const ref: PromptRef = {
     get focused() {
