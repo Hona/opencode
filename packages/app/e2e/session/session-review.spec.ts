@@ -70,6 +70,18 @@ async function patch(
       .catch(() => false)
     if (!idle) continue
 
+    const items = await sdk.session.messages({ sessionID, limit: 50 }).then((x) => x.data ?? [])
+    const msg = items.findLast((item) => item.info.role === "assistant" && !!item.info.error)
+    const err = msg?.info.role === "assistant" ? msg.info.error : undefined
+    if (err) {
+      const status = typeof err.data.statusCode === "number" ? ` status=${err.data.statusCode}` : ""
+      const body =
+        typeof err.data.responseBody === "string" && err.data.responseBody
+          ? ` body=${JSON.stringify(err.data.responseBody.slice(0, 300))}`
+          : ""
+      throw new Error(`Patch seed failed: ${err.name}${status} ${err.data.message}${body}`)
+    }
+
     const result = await probe().catch(() => undefined)
     if (result) return
   }
