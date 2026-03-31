@@ -46,7 +46,12 @@ async function patch(
   patchText: string,
   probe: () => Promise<boolean | undefined>,
 ) {
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
+    if (i) {
+      await sdk.session.abort({ sessionID }).catch(() => undefined)
+      await waitSessionIdle(sdk, sessionID, 30_000).catch(() => undefined)
+    }
+
     await sdk.session.promptAsync({
       sessionID,
       agent: "build",
@@ -60,7 +65,11 @@ async function patch(
       parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
     })
 
-    await waitSessionIdle(sdk, sessionID, 120_000)
+    const idle = await waitSessionIdle(sdk, sessionID, 45_000)
+      .then(() => true)
+      .catch(() => false)
+    if (!idle) continue
+
     const result = await probe().catch(() => undefined)
     if (result) return
   }
@@ -259,7 +268,11 @@ test("review applies inline comment clicks without horizontal overflow", async (
     await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
       await patch(sdk, session.id, seed([{ file, mark: tag }]), async () => {
         const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-        return diff.length === 1 ? true : undefined
+        return diff.some(
+          (item) => item.file === file && typeof item.after === "string" && item.after.includes(`mark ${tag}`),
+        )
+          ? true
+          : undefined
       })
 
       await project.gotoSession(session.id)
@@ -301,7 +314,11 @@ test("review file comments submit on click without clipping actions", async ({ p
     await withSession(sdk, `e2e review file comment ${tag}`, async (session) => {
       await patch(sdk, session.id, seed([{ file, mark: tag }]), async () => {
         const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-        return diff.length === 1 ? true : undefined
+        return diff.some(
+          (item) => item.file === file && typeof item.after === "string" && item.after.includes(`mark ${tag}`),
+        )
+          ? true
+          : undefined
       })
 
       await project.gotoSession(session.id)
@@ -346,7 +363,14 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
     await withSession(sdk, `e2e review ${tag}`, async (session) => {
       await patch(sdk, session.id, seed(list), async () => {
         const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-        return diff.length === list.length ? true : undefined
+        return list.every((item) =>
+          diff.some(
+            (entry) =>
+              entry.file === item.file && typeof entry.after === "string" && entry.after.includes(`mark ${item.mark}`),
+          ),
+        )
+          ? true
+          : undefined
       })
 
       await expect
