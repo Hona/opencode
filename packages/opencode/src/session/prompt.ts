@@ -384,7 +384,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: Provider.Model
         session: Session.Info
         tools?: Record<string, boolean>
-        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall">
+        processor: Pick<SessionProcessor.Handle, "message" | "metadata">
         bypassAgentCheck: boolean
         messages: MessageV2.WithParts[]
       }) {
@@ -399,23 +399,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
           agent: input.agent.name,
           messages: input.messages,
-          metadata: (val) =>
-            Effect.runPromise(
-              Effect.gen(function* () {
-                const match = input.processor.partFromToolCall(options.toolCallId)
-                if (!match || match.state.status !== "running") return
-                yield* sessions.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: { start: Date.now() },
-                  },
-                })
-              }),
-            ),
+          metadata: (val) => Effect.runPromise(input.processor.metadata(options.toolCallId, val)),
           ask: (req) =>
             Effect.runPromise(
               permission.ask({

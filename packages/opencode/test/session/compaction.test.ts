@@ -138,17 +138,7 @@ function fake(
       return msg
     },
     abort: Effect.fn("TestSessionProcessor.abort")(() => Effect.void),
-    partFromToolCall() {
-      return {
-        id: PartID.ascending(),
-        messageID: msg.id,
-        sessionID: msg.sessionID,
-        type: "tool",
-        callID: "fake",
-        tool: "fake",
-        state: { status: "pending", input: {}, raw: "" },
-      }
-    },
+    metadata: Effect.fn("TestSessionProcessor.metadata")(() => Effect.void),
     process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }

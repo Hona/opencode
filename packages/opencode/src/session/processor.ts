@@ -29,7 +29,10 @@ export namespace SessionProcessor {
 
   export interface Handle {
     readonly message: MessageV2.Assistant
-    readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
+    readonly metadata: (
+      toolCallID: string,
+      val: { title?: string; metadata?: Record<string, any> },
+    ) => Effect.Effect<void>
     readonly abort: () => Effect.Effect<void>
     readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
   }
@@ -46,6 +49,7 @@ export namespace SessionProcessor {
 
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
+    toolmeta: Record<string, { title?: string; metadata?: Record<string, any> }>
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
@@ -89,6 +93,7 @@ export namespace SessionProcessor {
           sessionID: input.sessionID,
           model: input.model,
           toolcalls: {},
+          toolmeta: {},
           shouldBreak: false,
           snapshot: undefined,
           blocked: false,
@@ -103,6 +108,53 @@ export namespace SessionProcessor {
             providerID: input.model.providerID,
             aborted,
           })
+
+        function merge(
+          prev: { title?: string; metadata?: Record<string, any> } | undefined,
+          next: { title?: string; metadata?: Record<string, any> },
+        ) {
+          return {
+            title: next.title ?? prev?.title,
+            metadata:
+              next.metadata === undefined
+                ? prev?.metadata
+                : {
+                    ...(prev?.metadata ?? {}),
+                    ...next.metadata,
+                  },
+          }
+        }
+
+        function patch(part: MessageV2.ToolPart, val: { title?: string; metadata?: Record<string, any> }) {
+          return {
+            ...part,
+            state: {
+              status: "running" as const,
+              input: part.state.input,
+              title: val.title ?? (part.state.status === "running" ? part.state.title : undefined),
+              metadata:
+                val.metadata === undefined
+                  ? part.state.status === "running"
+                    ? part.state.metadata
+                    : undefined
+                  : {
+                      ...(part.state.status === "running" ? part.state.metadata : undefined),
+                      ...val.metadata,
+                    },
+              time: part.state.status === "running" ? part.state.time : { start: Date.now() },
+            },
+          } satisfies MessageV2.ToolPart
+        }
+
+        const metadata = Effect.fn("SessionProcessor.metadata")(function* (
+          toolCallID: string,
+          val: { title?: string; metadata?: Record<string, any> },
+        ) {
+          ctx.toolmeta[toolCallID] = merge(ctx.toolmeta[toolCallID], val)
+          const part = ctx.toolcalls[toolCallID]
+          if (!part || (part.state.status !== "pending" && part.state.status !== "running")) return
+          ctx.toolcalls[toolCallID] = yield* session.updatePart(patch(part, ctx.toolmeta[toolCallID]))
+        })
 
         const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
           switch (value.type) {
@@ -159,6 +211,11 @@ export namespace SessionProcessor {
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
               } satisfies MessageV2.ToolPart)
+              if (ctx.toolmeta[value.id]) {
+                ctx.toolcalls[value.id] = yield* session.updatePart(
+                  patch(ctx.toolcalls[value.id], ctx.toolmeta[value.id]),
+                )
+              }
               return
 
             case "tool-input-delta":
@@ -173,10 +230,17 @@ export namespace SessionProcessor {
               }
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
+              const part = patch(match, ctx.toolmeta[value.toolCallId] ?? {})
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
-                ...match,
+                ...part,
                 tool: value.toolName,
-                state: { status: "running", input: value.input, time: { start: Date.now() } },
+                state: {
+                  status: "running",
+                  input: value.input,
+                  title: part.state.status === "running" ? part.state.title : undefined,
+                  metadata: part.state.status === "running" ? part.state.metadata : undefined,
+                  time: part.state.status === "running" ? part.state.time : { start: Date.now() },
+                },
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
@@ -223,6 +287,7 @@ export namespace SessionProcessor {
                   attachments: value.output.attachments,
                 },
               })
+              delete ctx.toolmeta[value.toolCallId]
               delete ctx.toolcalls[value.toolCallId]
               return
             }
@@ -236,12 +301,14 @@ export namespace SessionProcessor {
                   status: "error",
                   input: value.input ?? match.state.input,
                   error: value.error instanceof Error ? value.error.message : String(value.error),
+                  metadata: match.state.metadata,
                   time: { start: match.state.time.start, end: Date.now() },
                 },
               })
               if (value.error instanceof Permission.RejectedError || value.error instanceof Question.RejectedError) {
                 ctx.blocked = ctx.shouldBreak
               }
+              delete ctx.toolmeta[value.toolCallId]
               delete ctx.toolcalls[value.toolCallId]
               return
             }
@@ -429,6 +496,12 @@ export namespace SessionProcessor {
 
         const abort = Effect.fn("SessionProcessor.abort")(() =>
           Effect.gen(function* () {
+            log.warn("abort", {
+              sessionID: ctx.sessionID,
+              messageID: ctx.assistantMessage.id,
+              hasError: Boolean(ctx.assistantMessage.error),
+              completed: Boolean(ctx.assistantMessage.time.completed),
+            })
             if (!ctx.assistantMessage.error) {
               yield* halt(new DOMException("Aborted", "AbortError"))
             }
@@ -457,7 +530,17 @@ export namespace SessionProcessor {
                 Stream.runDrain,
               )
             }).pipe(
-              Effect.onInterrupt(() => Effect.sync(() => void (aborted = true))),
+              Effect.onInterrupt(() =>
+                Effect.sync(() => {
+                  aborted = true
+                  log.warn("stream interrupted", {
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.id,
+                    providerID: input.model.providerID,
+                    modelID: input.model.id,
+                  })
+                }),
+              ),
               Effect.catchCauseIf(
                 (cause) => !Cause.hasInterruptsOnly(cause),
                 (cause) => Effect.fail(Cause.squash(cause)),
@@ -491,9 +574,7 @@ export namespace SessionProcessor {
           get message() {
             return ctx.assistantMessage
           },
-          partFromToolCall(toolCallID: string) {
-            return ctx.toolcalls[toolCallID]
-          },
+          metadata,
           abort,
           process,
         } satisfies Handle

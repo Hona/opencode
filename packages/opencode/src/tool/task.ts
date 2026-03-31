@@ -102,6 +102,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
+
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      await ctx.metadata({
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+        },
+      })
+      if (ctx.abort.aborted) cancel()
+
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
@@ -110,7 +124,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         providerID: msg.info.providerID,
       }
 
-      ctx.metadata({
+      await ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: session.id,
@@ -119,12 +133,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       })
 
       const messageID = MessageID.ascending()
-
-      function cancel() {
-        SessionPrompt.cancel(session.id)
-      }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
       const result = await SessionPrompt.prompt({
