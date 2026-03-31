@@ -711,7 +711,7 @@ const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: n
   }
 }
 
-export const seed = async <T>(input: {
+const seed = async <T>(input: {
   sessionID: string
   prompt: string
   sdk: ReturnType<typeof createSdk>
