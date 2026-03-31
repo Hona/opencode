@@ -21,13 +21,15 @@ test("shell mode runs a command in the project directory", async ({ page, withPr
 
     await gotoSession()
     await prompt.click()
-    await page.keyboard.type("!")
+    await expect(prompt).toBeFocused()
+    await prompt.pressSequentially("!")
     await expect(prompt).toHaveAttribute("aria-label", /enter shell command/i)
+    await expect(prompt).toBeFocused()
 
-    await prompt.fill(cmd)
+    await prompt.pressSequentially(cmd)
     await expect(prompt).toContainText(cmd)
 
-    await page.keyboard.press("Enter")
+    await prompt.press("Enter")
 
     await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
 

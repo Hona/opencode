@@ -53,6 +53,20 @@ async function waitSessionBusy(sdk: ReturnType<typeof createSdk>, sessionID: str
     .not.toBe("idle")
 }
 
+async function waitProbe(probe: () => Promise<boolean | undefined>, timeout = 5_000) {
+  return expect
+    .poll(
+      () =>
+        probe()
+          .then((x) => Boolean(x))
+          .catch(() => false),
+      { timeout },
+    )
+    .toBe(true)
+    .then(() => true)
+    .catch(() => false)
+}
+
 async function patch(
   sdk: ReturnType<typeof createSdk>,
   sessionID: string,
@@ -79,19 +93,23 @@ async function patch(
     })
 
     const first = await probe().catch(() => undefined)
-    if (first) return
 
     const busy = await waitSessionBusy(sdk, sessionID)
       .then(() => true)
       .catch(() => false)
-    if (!busy) continue
+    if (!busy) {
+      if (first) return
+      const late = await waitProbe(probe)
+      if (late) return
+      continue
+    }
 
     const idle = await waitSessionIdle(sdk, sessionID, 45_000)
       .then(() => true)
       .catch(() => false)
     if (!idle) continue
 
-    const next = await probe().catch(() => undefined)
+    const next = await waitProbe(probe, 10_000)
     if (next) return
   }
 
