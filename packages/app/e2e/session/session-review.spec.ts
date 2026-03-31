@@ -1,6 +1,6 @@
 import { waitSessionIdle, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { createSdk } from "../utils"
+import { createSdk, e2eModel } from "../utils"
 
 const count = 14
 
@@ -41,8 +41,10 @@ function edit(file: string, prev: string, next: string) {
 }
 
 async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patchText: string) {
+  const model = e2eModel()
   await sdk.session.promptAsync({
     sessionID,
+    ...(model && { model }),
     agent: "build",
     system: [
       "You are seeding deterministic e2e UI state.",

@@ -8,14 +8,17 @@ import {
   withSession,
 } from "../actions"
 import { sessionItemSelector, inlineInputSelector } from "../selectors"
+import { e2eModel } from "../utils"
 
 const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
 
 type Sdk = Parameters<typeof withSession>[0]
 
 async function seedMessage(sdk: Sdk, sessionID: string) {
+  const model = e2eModel()
   await sdk.session.promptAsync({
     sessionID,
+    ...(model && { model }),
     noReply: true,
     parts: [{ type: "text", text: "e2e seed" }],
   })

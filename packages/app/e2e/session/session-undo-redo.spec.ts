@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { withSession } from "../actions"
-import { createSdk, modKey } from "../utils"
+import { createSdk, e2eModel, modKey } from "../utils"
 import { promptSelector } from "../selectors"
 
 async function seedConversation(input: {
@@ -17,8 +17,10 @@ async function seedConversation(input: {
 
   const prompt = input.page.locator(promptSelector)
   await expect(prompt).toBeVisible()
+  const model = e2eModel()
   await input.sdk.session.promptAsync({
     sessionID: input.sessionID,
+    ...(model && { model }),
     noReply: true,
     parts: [{ type: "text", text: input.token }],
   })

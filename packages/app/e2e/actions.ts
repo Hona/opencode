@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
 import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
-import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
+import { createSdk, e2eModel, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
@@ -719,9 +719,11 @@ const seed = async <T>(input: {
   timeout?: number
   attempts?: number
 }) => {
+  const model = e2eModel()
   for (let i = 0; i < (input.attempts ?? 2); i++) {
     await input.sdk.session.promptAsync({
       sessionID: input.sessionID,
+      ...(model && { model }),
       agent: "build",
       system: seedSystem,
       parts: [{ type: "text", text: input.prompt }],

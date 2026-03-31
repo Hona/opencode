@@ -1,12 +1,15 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
 import { withSession } from "../actions"
+import { e2eModel } from "../utils"
 
 const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
 
 async function seed(sdk: Parameters<typeof withSession>[0], sessionID: string) {
+  const model = e2eModel()
   await sdk.session.promptAsync({
     sessionID,
+    ...(model && { model }),
     noReply: true,
     parts: [{ type: "text", text: "e2e share seed" }],
   })

@@ -30,6 +30,15 @@ export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }
 
+export function e2eModel() {
+  const value = process.env.OPENCODE_E2E_MODEL
+  if (!value) return
+  const [providerID, ...rest] = value.split("/")
+  const modelID = rest.join("/")
+  if (!providerID || !modelID) return
+  return { providerID, modelID }
+}
+
 export async function resolveDirectory(directory: string) {
   return createSdk(directory)
     .path.get()

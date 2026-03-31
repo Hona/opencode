@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures"
 import type { Page } from "@playwright/test"
 import { promptSelector } from "../selectors"
 import { withSession } from "../actions"
+import { e2eModel } from "../utils"
 
 function contextButton(page: Page) {
   return page
@@ -11,8 +12,10 @@ function contextButton(page: Page) {
 }
 
 async function seedContextSession(input: { sessionID: string; sdk: Parameters<typeof withSession>[0] }) {
+  const model = e2eModel()
   await input.sdk.session.promptAsync({
     sessionID: input.sessionID,
+    ...(model && { model }),
     noReply: true,
     parts: [
       {

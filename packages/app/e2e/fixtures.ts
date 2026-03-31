@@ -11,7 +11,7 @@ import {
   waitSlug,
   waitSession,
 } from "./actions"
-import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
+import { createSdk, dirSlug, e2eModel, getWorktree, sessionPath } from "./utils"
 
 export const settingsKey = "settings.v3"
 
@@ -125,30 +125,33 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
-  await page.addInitScript(() => {
-    const win = window as E2EWindow
-    win.__opencode_e2e = {
-      ...win.__opencode_e2e,
-      model: {
-        enabled: true,
-      },
-      prompt: {
-        enabled: true,
-      },
-      terminal: {
-        enabled: true,
-        terminals: {},
-      },
-    }
-    localStorage.setItem(
-      "opencode.global.dat:model",
-      JSON.stringify({
-        recent: [{ providerID: "opencode", modelID: "big-pickle" }],
-        user: [],
-        variant: {},
-      }),
-    )
-  })
+  await page.addInitScript(
+    (model) => {
+      const win = window as E2EWindow
+      win.__opencode_e2e = {
+        ...win.__opencode_e2e,
+        model: {
+          enabled: true,
+        },
+        prompt: {
+          enabled: true,
+        },
+        terminal: {
+          enabled: true,
+          terminals: {},
+        },
+      }
+      localStorage.setItem(
+        "opencode.global.dat:model",
+        JSON.stringify({
+          recent: [model],
+          user: [],
+          variant: {},
+        }),
+      )
+    },
+    e2eModel() ?? { providerID: "opencode", modelID: "big-pickle" },
+  )
 }
 
 export { expect }
