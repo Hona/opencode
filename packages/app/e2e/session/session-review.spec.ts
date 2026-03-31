@@ -40,6 +40,19 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
+async function waitSessionBusy(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 5_000) {
+  await expect
+    .poll(
+      () =>
+        sdk.session
+          .status()
+          .then((x) => x.data?.[sessionID]?.type ?? "idle")
+          .catch(() => "idle"),
+      { timeout },
+    )
+    .not.toBe("idle")
+}
+
 async function patch(
   sdk: ReturnType<typeof createSdk>,
   sessionID: string,
@@ -65,25 +78,21 @@ async function patch(
       parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
     })
 
+    const first = await probe().catch(() => undefined)
+    if (first) return
+
+    const busy = await waitSessionBusy(sdk, sessionID)
+      .then(() => true)
+      .catch(() => false)
+    if (!busy) continue
+
     const idle = await waitSessionIdle(sdk, sessionID, 45_000)
       .then(() => true)
       .catch(() => false)
     if (!idle) continue
 
-    const items = await sdk.session.messages({ sessionID, limit: 50 }).then((x) => x.data ?? [])
-    const msg = items.findLast((item) => item.info.role === "assistant" && !!item.info.error)
-    const err = msg?.info.role === "assistant" ? msg.info.error : undefined
-    if (err) {
-      const status = typeof err.data.statusCode === "number" ? ` status=${err.data.statusCode}` : ""
-      const body =
-        typeof err.data.responseBody === "string" && err.data.responseBody
-          ? ` body=${JSON.stringify(err.data.responseBody.slice(0, 300))}`
-          : ""
-      throw new Error(`Patch seed failed: ${err.name}${status} ${err.data.message}${body}`)
-    }
-
-    const result = await probe().catch(() => undefined)
-    if (result) return
+    const next = await probe().catch(() => undefined)
+    if (next) return
   }
 
   throw new Error("Timed out seeding patch")
