@@ -1,7 +1,7 @@
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import semver from "semver"
-import { BunProc } from "@/bun"
+import { Npm } from "@/npm"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 
@@ -34,7 +34,7 @@ export type PluginEntry = {
   source: PluginSource
   target: string
   pkg?: PluginPackage
-  entry: string
+  entry?: string
 }
 
 const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
@@ -106,7 +106,7 @@ async function resolveDirectoryIndex(dir: string) {
 async function resolveTargetDirectory(target: string) {
   const file = targetPath(target)
   if (!file) return
-  const stat = await Filesystem.stat(file)
+  const stat = Filesystem.stat(file)
   if (!stat?.isDirectory()) return
   return file
 }
@@ -128,13 +128,8 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    if (source === "npm") {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
-    }
-
-    if (dir) {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"] or include index file`)
-    }
+    if (source === "npm") return
+    if (dir) return
 
     return target
   }
@@ -145,7 +140,7 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    throw new TypeError(`Plugin ${spec} must define package.json exports["./server"] or package.json main`)
+    return
   }
 
   return target
@@ -158,7 +153,7 @@ export function isPathPluginSpec(spec: string) {
 export async function resolvePathPluginTarget(spec: string) {
   const raw = spec.startsWith("file://") ? fileURLToPath(spec) : spec
   const file = path.isAbsolute(raw) || /^[A-Za-z]:[\\/]/.test(raw) ? raw : path.resolve(raw)
-  const stat = await Filesystem.stat(file)
+  const stat = Filesystem.stat(file)
   if (!stat?.isDirectory()) {
     if (spec.startsWith("file://")) return spec
     return pathToFileURL(file).href
@@ -189,12 +184,13 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
 
 export async function resolvePluginTarget(spec: string, parsed = parsePluginSpecifier(spec)) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
-  return BunProc.install(parsed.pkg, parsed.version)
+  const result = await Npm.add(parsed.pkg + "@" + parsed.version)
+  return result.directory
 }
 
 export async function readPluginPackage(target: string): Promise<PluginPackage> {
   const file = target.startsWith("file://") ? fileURLToPath(target) : target
-  const stat = await Filesystem.stat(file)
+  const stat = Filesystem.stat(file)
   const dir = stat?.isDirectory() ? file : path.dirname(file)
   const pkg = path.join(dir, "package.json")
   const json = await Filesystem.readJson<Record<string, unknown>>(pkg)
