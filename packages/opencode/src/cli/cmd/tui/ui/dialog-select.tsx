@@ -12,6 +12,7 @@ import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { useSync } from "@tui/context/sync"
 import { getScrollAcceleration } from "../util/scroll"
+import { useTuiConfig } from "../context/tui-config"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -53,7 +54,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const sync = useSync()
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(sync.data.config.tui))
+  const tuiConfig = useTuiConfig()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const [store, setStore] = createStore({
     selected: 0,
@@ -265,6 +267,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               }, 1)
             }}
             placeholder={props.placeholder ?? "Search"}
+            placeholderColor={theme.textMuted}
           />
         </box>
       </box>
