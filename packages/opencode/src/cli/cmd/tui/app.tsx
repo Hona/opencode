@@ -326,19 +326,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     const focus = renderer.currentFocusedRenderable
     if (focus?.hasSelection() && sel.selectedRenderables.includes(focus)) {
-      const item = focus
-      const anchor = sel.anchor
-      const end = sel.focus
-      queueMicrotask(() => {
-        const next = renderer.getSelection()
-        if (!next) return
-        if (renderer.currentFocusedRenderable !== item) return
-        if (!item.hasSelection()) return
-        if (!next.selectedRenderables.includes(item)) return
-        if (next.anchor.x !== anchor.x || next.anchor.y !== anchor.y) return
-        if (next.focus.x !== end.x || next.focus.y !== end.y) return
-        renderer.clearSelection()
-      })
       return
     }
 
