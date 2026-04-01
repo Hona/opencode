@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
