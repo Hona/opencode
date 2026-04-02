@@ -6,6 +6,7 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
+import { Flock } from "@/util/flock"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -14,6 +15,7 @@ import { Filesystem } from "../util/filesystem"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  const ttl = 5 * 60 * 1000
 
   export const Model = z.object({
     id: z.string(),
@@ -85,6 +87,19 @@ export namespace ModelsDev {
     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
   }
 
+  function fresh() {
+    return Date.now() - Number(Filesystem.stat(filepath)?.mtimeMs ?? 0) < ttl
+  }
+
+  let fetching: Promise<{ ok: boolean; text: string }> | undefined
+  const fetchApi = () =>
+    (fetching ??= fetch(`${url()}/api.json`, {
+      headers: { "User-Agent": Installation.USER_AGENT },
+      signal: AbortSignal.timeout(10000),
+    })
+      .then(async (x) => ({ ok: x.ok, text: await x.text() }))
+      .finally(() => (fetching = undefined)))
+
   export const Data = lazy(async () => {
     const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
     if (result) return result
@@ -94,8 +109,7 @@ export namespace ModelsDev {
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    return JSON.parse((await fetchApi()).text)
   })
 
   export async function get() {
@@ -104,18 +118,17 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
-    const result = await fetch(`${url()}/api.json`, {
-      headers: {
-        "User-Agent": Installation.USER_AGENT,
-      },
-      signal: AbortSignal.timeout(10 * 1000),
+    if (fresh()) return
+    const result = await Flock.withLock(`models-dev:${filepath}`, async () => {
+      if (fresh()) return
+      return fetchApi()
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,
       })
     })
     if (result && result.ok) {
-      await Filesystem.write(filepath, await result.text())
+      await Filesystem.write(filepath, result.text)
       ModelsDev.Data.reset()
     }
   }
