@@ -117,10 +117,10 @@ export namespace ModelsDev {
     return result as Record<string, Provider>
   }
 
-  export async function refresh() {
-    if (fresh()) return
+  export async function refresh(force = false) {
+    if (!force && fresh()) return ModelsDev.Data.reset()
     const result = await Flock.withLock(`models-dev:${filepath}`, async () => {
-      if (fresh()) return
+      if (!force && fresh()) return ModelsDev.Data.reset()
       return fetchApi()
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
