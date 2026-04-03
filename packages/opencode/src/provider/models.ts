@@ -134,18 +134,17 @@ export namespace ModelsDev {
 
   export async function refresh(force = false) {
     if (skip(force)) return ModelsDev.Data.reset()
-    const result = await Flock.withLock(`models-dev:${filepath}`, async () => {
+    await Flock.withLock(`models-dev:${filepath}`, async () => {
       if (skip(force)) return ModelsDev.Data.reset()
-      return fetchApi()
+      const result = await fetchApi()
+      if (!result.ok) return
+      await Filesystem.write(filepath, result.text)
+      ModelsDev.Data.reset()
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,
       })
     })
-    if (result && result.ok) {
-      await Filesystem.write(filepath, result.text)
-      ModelsDev.Data.reset()
-    }
   }
 }
 
