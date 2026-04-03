@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process"
 import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
 
@@ -86,11 +85,6 @@ export async function createOpencodeServer(options?: ServerOptions) {
   return {
     url,
     close() {
-      if (proc.exitCode !== null || proc.signalCode !== null) return
-      if (process.platform === "win32" && proc.pid) {
-        const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
-        if (!out.error && out.status === 0) return
-      }
       proc.kill()
     },
   }
@@ -123,11 +117,6 @@ export function createOpencodeTui(options?: TuiOptions) {
 
   return {
     close() {
-      if (proc.exitCode !== null || proc.signalCode !== null) return
-      if (process.platform === "win32" && proc.pid) {
-        const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
-        if (!out.error && out.status === 0) return
-      }
       proc.kill()
     },
   }
