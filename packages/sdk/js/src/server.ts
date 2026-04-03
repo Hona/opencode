@@ -1,6 +1,6 @@
 import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
-import { stop } from "./process.js"
+import { stop, bindAbort } from "./process.js"
 
 export type ServerOptions = {
   hostname?: string
@@ -76,22 +76,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
       clearTimeout(id)
       reject(error)
     })
-    if (options.signal) {
-      const abort = () => {
-        clear()
-        stop(proc)
-        clearTimeout(id)
-        reject(new Error("Aborted"))
-      }
-      clear = () => {
-        options.signal?.removeEventListener("abort", abort)
-        proc.off("exit", clear)
-        proc.off("error", clear)
-      }
-      options.signal.addEventListener("abort", abort, { once: true })
-      proc.on("exit", clear)
-      proc.on("error", clear)
-    }
+    clear = bindAbort(proc, options.signal, () => {
+      clearTimeout(id)
+      reject(new Error("Aborted"))
+    })
   })
 
   return {
@@ -128,30 +116,11 @@ export function createOpencodeTui(options?: TuiOptions) {
     },
   })
 
-  if (options?.signal) {
-    const abort = () => {
-      clear()
-      stop(proc)
-    }
-    const clear = () => {
-      options.signal?.removeEventListener("abort", abort)
-      proc.off("exit", clear)
-      proc.off("error", clear)
-    }
-    options.signal.addEventListener("abort", abort, { once: true })
-    proc.on("exit", clear)
-    proc.on("error", clear)
-
-    return {
-      close() {
-        clear()
-        stop(proc)
-      },
-    }
-  }
+  const clear = bindAbort(proc, options?.signal)
 
   return {
     close() {
+      clear()
       stop(proc)
     },
   }
