@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process"
 import { type Config } from "./gen/types.gen.js"
+import { Process } from "../process.js"
 
 export type ServerOptions = {
   hostname?: string
@@ -31,7 +31,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = spawn(`opencode`, args, {
+  const proc = Process.spawn(`opencode`, args, {
     signal: options.signal,
     env: {
       ...process.env,
@@ -84,8 +84,8 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   return {
     url,
-    close() {
-      proc.kill()
+    async close() {
+      await Process.stop(proc)
     },
   }
 }
@@ -106,7 +106,7 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`opencode`, args, {
+  const proc = Process.spawn(`opencode`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
@@ -116,8 +116,8 @@ export function createOpencodeTui(options?: TuiOptions) {
   })
 
   return {
-    close() {
-      proc.kill()
+    async close() {
+      await Process.stop(proc)
     },
   }
 }
