@@ -44,6 +44,23 @@ export namespace Process {
     }
 
     proc.kill()
+    const done = await new Promise<boolean>((resolve) => {
+      const id = setTimeout(() => resolve(false), 5_000)
+      void proc.exited.then(
+        () => {
+          clearTimeout(id)
+          resolve(true)
+        },
+        () => {
+          clearTimeout(id)
+          resolve(true)
+        },
+      )
+    })
+    if (done) return
+    if (proc.exitCode !== null || proc.signalCode !== null) return
+
+    proc.kill("SIGKILL")
     await proc.exited
   }
 }
