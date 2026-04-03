@@ -57,6 +57,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
           if (!match) {
             clear()
             stop(proc)
+            clearTimeout(id)
             reject(new Error(`Failed to parse server url from output: ${line}`))
             return
           }
@@ -81,9 +82,9 @@ export async function createOpencodeServer(options?: ServerOptions) {
       clearTimeout(id)
       reject(error)
     })
-    clear = bindAbort(proc, options.signal, () => {
+    clear = bindAbort(proc, options.signal, (err) => {
       clearTimeout(id)
-      reject(new Error("Aborted"))
+      reject(err)
     })
   })
 
