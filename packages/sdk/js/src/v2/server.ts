@@ -39,6 +39,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
   })
+  let clear = () => {}
 
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {
@@ -76,21 +77,27 @@ export async function createOpencodeServer(options?: ServerOptions) {
       reject(error)
     })
     if (options.signal) {
-      options.signal.addEventListener(
-        "abort",
-        () => {
-          stop(proc)
-          clearTimeout(id)
-          reject(new Error("Aborted"))
-        },
-        { once: true },
-      )
+      const abort = () => {
+        clear()
+        stop(proc)
+        clearTimeout(id)
+        reject(new Error("Aborted"))
+      }
+      clear = () => {
+        options.signal?.removeEventListener("abort", abort)
+        proc.off("exit", clear)
+        proc.off("error", clear)
+      }
+      options.signal.addEventListener("abort", abort, { once: true })
+      proc.on("exit", clear)
+      proc.on("error", clear)
     }
   })
 
   return {
     url,
     close() {
+      clear()
       stop(proc)
     },
   }
@@ -122,13 +129,25 @@ export function createOpencodeTui(options?: TuiOptions) {
   })
 
   if (options?.signal) {
-    options.signal.addEventListener(
-      "abort",
-      () => {
+    const abort = () => {
+      clear()
+      stop(proc)
+    }
+    const clear = () => {
+      options.signal?.removeEventListener("abort", abort)
+      proc.off("exit", clear)
+      proc.off("error", clear)
+    }
+    options.signal.addEventListener("abort", abort, { once: true })
+    proc.on("exit", clear)
+    proc.on("error", clear)
+
+    return {
+      close() {
+        clear()
         stop(proc)
       },
-      { once: true },
-    )
+    }
   }
 
   return {
