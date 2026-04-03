@@ -144,6 +144,10 @@ export namespace Process {
     throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
   }
 
+  // Note: The Windows tree-kill logic here is duplicated in
+  // `packages/sdk/js/src/process.ts`. The SDK cannot import this file
+  // directly because `opencode` depends on `@opencode-ai/sdk` (circular).
+  // If you change the shutdown behavior here, update the SDK copy too.
   export async function stop(proc: ChildProcess) {
     if (process.platform !== "win32" || !proc.pid) {
       proc.kill()

@@ -1,14 +1,6 @@
-import { type ChildProcess, spawnSync } from "node:child_process"
 import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
-
-function stop(proc: ChildProcess) {
-  if (process.platform === "win32" && proc.pid) {
-    const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
-    if (!out.error && out.status === 0) return
-  }
-  proc.kill()
-}
+import { stop } from "./process.js"
 
 export type ServerOptions = {
   hostname?: string
