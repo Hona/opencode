@@ -122,7 +122,11 @@ export namespace ModelsDev {
       const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
       if (result) return result
       const result2 = await fetchApi()
-      if (result2.ok) await Filesystem.write(filepath, result2.text)
+      if (result2.ok) {
+        await Filesystem.write(filepath, result2.text).catch((e) => {
+          log.error("Failed to write models cache", { error: e })
+        })
+      }
       return JSON.parse(result2.text)
     })
   })
