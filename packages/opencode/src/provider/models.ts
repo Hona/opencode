@@ -7,6 +7,7 @@ import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
 import { Flock } from "@/util/flock"
+import { Hash } from "@/util/hash"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -14,7 +15,11 @@ import { Flock } from "@/util/flock"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
-  const filepath = path.join(Global.Path.cache, "models.json")
+  const source = url()
+  const filepath = path.join(
+    Global.Path.cache,
+    source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+  )
   const ttl = 5 * 60 * 1000
 
   export const Model = z.object({
@@ -92,7 +97,7 @@ export namespace ModelsDev {
   }
 
   function skip(force: boolean) {
-    return !force && !Flag.OPENCODE_MODELS_URL && fresh()
+    return !force && fresh()
   }
 
   let fetching: Promise<{ ok: boolean; text: string }> | undefined
@@ -113,7 +118,13 @@ export namespace ModelsDev {
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    return JSON.parse((await fetchApi()).text)
+    return Flock.withLock(`models-dev:${filepath}`, async () => {
+      const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+      if (result) return result
+      const result2 = await fetchApi()
+      if (result2.ok) await Filesystem.write(filepath, result2.text)
+      return JSON.parse(result2.text)
+    })
   })
 
   export async function get() {
@@ -123,7 +134,7 @@ export namespace ModelsDev {
 
   export async function refresh(force = false) {
     if (skip(force)) return ModelsDev.Data.reset()
-    const result = await Flock.withLock(`models-dev:${url()}:${filepath}`, async () => {
+    const result = await Flock.withLock(`models-dev:${filepath}`, async () => {
       if (skip(force)) return ModelsDev.Data.reset()
       return fetchApi()
     }).catch((e) => {
