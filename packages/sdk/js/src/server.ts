@@ -1,5 +1,14 @@
+import { type ChildProcess, spawnSync } from "node:child_process"
 import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
+
+function stop(proc: ChildProcess) {
+  if (process.platform === "win32" && proc.pid) {
+    const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
+    if (!out.error && out.status === 0) return
+  }
+  proc.kill()
+}
 
 export type ServerOptions = {
   hostname?: string
@@ -27,12 +36,12 @@ export async function createOpencodeServer(options?: ServerOptions) {
     },
     options ?? {},
   )
+  options.signal?.throwIfAborted()
 
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
   const proc = launch(`opencode`, args, {
-    signal: options.signal,
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
@@ -75,22 +84,28 @@ export async function createOpencodeServer(options?: ServerOptions) {
       reject(error)
     })
     if (options.signal) {
-      options.signal.addEventListener("abort", () => {
-        clearTimeout(id)
-        reject(new Error("Aborted"))
-      })
+      options.signal.addEventListener(
+        "abort",
+        () => {
+          stop(proc)
+          clearTimeout(id)
+          reject(new Error("Aborted"))
+        },
+        { once: true },
+      )
     }
   })
 
   return {
     url,
     close() {
-      proc.kill()
+      stop(proc)
     },
   }
 }
 
 export function createOpencodeTui(options?: TuiOptions) {
+  options?.signal?.throwIfAborted()
   const args = []
 
   if (options?.project) {
@@ -107,7 +122,6 @@ export function createOpencodeTui(options?: TuiOptions) {
   }
 
   const proc = launch(`opencode`, args, {
-    signal: options?.signal,
     stdio: "inherit",
     env: {
       ...process.env,
@@ -115,9 +129,19 @@ export function createOpencodeTui(options?: TuiOptions) {
     },
   })
 
+  if (options?.signal) {
+    options.signal.addEventListener(
+      "abort",
+      () => {
+        stop(proc)
+      },
+      { once: true },
+    )
+  }
+
   return {
     close() {
-      proc.kill()
+      stop(proc)
     },
   }
 }
