@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process"
+import launch from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
-import { Process } from "./process.js"
 
 export type ServerOptions = {
   hostname?: string
@@ -31,7 +32,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = Process.spawn(`opencode`, args, {
+  const proc = launch(`opencode`, args, {
     signal: options.signal,
     env: {
       ...process.env,
@@ -84,8 +85,13 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   return {
     url,
-    async close() {
-      await Process.stop(proc)
+    close() {
+      if (proc.exitCode !== null || proc.signalCode !== null) return
+      if (process.platform === "win32" && proc.pid) {
+        const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
+        if (!out.error && out.status === 0) return
+      }
+      proc.kill()
     },
   }
 }
@@ -106,7 +112,7 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = Process.spawn(`opencode`, args, {
+  const proc = launch(`opencode`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
@@ -116,8 +122,13 @@ export function createOpencodeTui(options?: TuiOptions) {
   })
 
   return {
-    async close() {
-      await Process.stop(proc)
+    close() {
+      if (proc.exitCode !== null || proc.signalCode !== null) return
+      if (process.platform === "win32" && proc.pid) {
+        const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
+        if (!out.error && out.status === 0) return
+      }
+      proc.kill()
     },
   }
 }
