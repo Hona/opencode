@@ -28,7 +28,6 @@ export async function createOpencodeServer(options?: ServerOptions) {
     },
     options ?? {},
   )
-  options.signal?.throwIfAborted()
 
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
@@ -98,7 +97,6 @@ export async function createOpencodeServer(options?: ServerOptions) {
 }
 
 export function createOpencodeTui(options?: TuiOptions) {
-  options?.signal?.throwIfAborted()
   const args = []
 
   if (options?.project) {

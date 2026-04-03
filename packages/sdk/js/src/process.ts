@@ -15,7 +15,9 @@ export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: (e
   const abort = () => {
     clear()
     stop(proc)
-    onAbort?.(signal.reason)
+    const err = new Error("The operation was aborted", { cause: signal.reason })
+    err.name = "AbortError"
+    onAbort?.(err)
   }
   const clear = () => {
     signal.removeEventListener("abort", abort)
@@ -25,5 +27,6 @@ export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: (e
   signal.addEventListener("abort", abort, { once: true })
   proc.on("exit", clear)
   proc.on("error", clear)
+  if (signal.aborted) abort()
   return clear
 }
