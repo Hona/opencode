@@ -43,6 +43,8 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {
+      clear()
+      stop(proc)
       reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
     }, options.timeout)
     let output = ""
@@ -53,7 +55,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
         if (line.startsWith("opencode server listening")) {
           const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
           if (!match) {
-            throw new Error(`Failed to parse server url from output: ${line}`)
+            clear()
+            stop(proc)
+            reject(new Error(`Failed to parse server url from output: ${line}`))
+            return
           }
           clearTimeout(id)
           resolve(match[1]!)
