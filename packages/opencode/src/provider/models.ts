@@ -91,6 +91,10 @@ export namespace ModelsDev {
     return Date.now() - Number(Filesystem.stat(filepath)?.mtimeMs ?? 0) < ttl
   }
 
+  function skip(force: boolean) {
+    return !force && !Flag.OPENCODE_MODELS_URL && fresh()
+  }
+
   let fetching: Promise<{ ok: boolean; text: string }> | undefined
   const fetchApi = () =>
     (fetching ??= fetch(`${url()}/api.json`, {
@@ -118,9 +122,9 @@ export namespace ModelsDev {
   }
 
   export async function refresh(force = false) {
-    if (!force && fresh()) return ModelsDev.Data.reset()
-    const result = await Flock.withLock(`models-dev:${filepath}`, async () => {
-      if (!force && fresh()) return ModelsDev.Data.reset()
+    if (skip(force)) return ModelsDev.Data.reset()
+    const result = await Flock.withLock(`models-dev:${url()}:${filepath}`, async () => {
+      if (skip(force)) return ModelsDev.Data.reset()
       return fetchApi()
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
