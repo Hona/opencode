@@ -81,9 +81,9 @@ export async function createOpencodeServer(options?: ServerOptions) {
       clearTimeout(id)
       reject(error)
     })
-    clear = bindAbort(proc, options.signal, (err) => {
+    clear = bindAbort(proc, options.signal, () => {
       clearTimeout(id)
-      reject(err)
+      reject(options.signal?.reason)
     })
   })
 

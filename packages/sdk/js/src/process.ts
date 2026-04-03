@@ -10,14 +10,12 @@ export function stop(proc: ChildProcess) {
   proc.kill()
 }
 
-export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: (err: unknown) => void) {
+export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
   if (!signal) return () => {}
   const abort = () => {
     clear()
     stop(proc)
-    const err = new Error("The operation was aborted", { cause: signal.reason })
-    err.name = "AbortError"
-    onAbort?.(err)
+    onAbort?.()
   }
   const clear = () => {
     signal.removeEventListener("abort", abort)
