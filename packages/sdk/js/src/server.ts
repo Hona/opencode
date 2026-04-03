@@ -47,7 +47,9 @@ export async function createOpencodeServer(options?: ServerOptions) {
       reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
     }, options.timeout)
     let output = ""
+    let resolved = false
     proc.stdout?.on("data", (chunk) => {
+      if (resolved) return
       output += chunk.toString()
       const lines = output.split("\n")
       for (const line of lines) {
@@ -61,6 +63,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
             return
           }
           clearTimeout(id)
+          resolved = true
           resolve(match[1]!)
           return
         }
