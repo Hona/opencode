@@ -100,14 +100,13 @@ export namespace ModelsDev {
     return !force && fresh()
   }
 
-  let fetching: Promise<{ ok: boolean; text: string }> | undefined
-  const fetchApi = () =>
-    (fetching ??= fetch(`${url()}/api.json`, {
+  const fetchApi = async () => {
+    const result = await fetch(`${url()}/api.json`, {
       headers: { "User-Agent": Installation.USER_AGENT },
       signal: AbortSignal.timeout(10000),
     })
-      .then(async (x) => ({ ok: x.ok, text: await x.text() }))
-      .finally(() => (fetching = undefined)))
+    return { ok: result.ok, text: await result.text() }
+  }
 
   export const Data = lazy(async () => {
     const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
