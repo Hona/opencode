@@ -13,7 +13,8 @@ export function isDeprecatedPlugin(spec: string) {
 }
 
 export function parsePluginSpecifier(spec: string) {
-  const lastAt = spec.lastIndexOf("@")
+  // Split on the version separator while keeping scoped names and git URLs intact.
+  const lastAt = spec.indexOf("@", 1)
   const pkg = lastAt > 0 ? spec.substring(0, lastAt) : spec
   const version = lastAt > 0 ? spec.substring(lastAt + 1) : "latest"
   return { pkg, version }
