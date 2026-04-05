@@ -1,5 +1,6 @@
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
+import npa from "npm-package-arg"
 import semver from "semver"
 import { Npm } from "@/npm"
 import { Filesystem } from "@/util/filesystem"
@@ -12,12 +13,24 @@ export function isDeprecatedPlugin(spec: string) {
   return DEPRECATED_PLUGIN_PACKAGES.some((pkg) => spec.includes(pkg))
 }
 
+function parse(spec: string) {
+  try {
+    return npa(spec)
+  } catch {}
+}
+
 export function parsePluginSpecifier(spec: string) {
-  // Split on the version separator while keeping scoped names and git URLs intact.
-  const lastAt = spec.indexOf("@", 1)
-  const pkg = lastAt > 0 ? spec.substring(0, lastAt) : spec
-  const version = lastAt > 0 ? spec.substring(lastAt + 1) : "latest"
-  return { pkg, version }
+  const hit = parse(spec)
+  const sub =
+    hit && "subSpec" in hit
+      ? (hit as typeof hit & { subSpec?: { name?: string; rawSpec?: string } }).subSpec
+      : undefined
+  if (hit?.type === "alias" && !hit.name && sub?.name) {
+    return { pkg: sub.name, version: !sub.rawSpec || sub.rawSpec === "*" ? "latest" : sub.rawSpec }
+  }
+  if (!hit?.name) return { pkg: spec, version: "" }
+  if (hit.raw === hit.name) return { pkg: hit.name, version: "latest" }
+  return { pkg: hit.name, version: hit.rawSpec }
 }
 
 export type PluginSource = "file" | "npm"
@@ -191,9 +204,11 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
   }
 }
 
-export async function resolvePluginTarget(spec: string, parsed = parsePluginSpecifier(spec)) {
+export async function resolvePluginTarget(spec: string) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
-  const result = await Npm.add(parsed.pkg + "@" + parsed.version)
+  const hit = parse(spec)
+  const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : spec
+  const result = await Npm.add(pkg)
   return result.directory
 }
 

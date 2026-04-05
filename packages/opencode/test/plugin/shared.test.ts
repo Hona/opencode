@@ -57,4 +57,32 @@ describe("parsePluginSpecifier", () => {
       version: "git+ssh://git@github.com/opencode/acme.git",
     })
   })
+
+  test("parses unaliased git+ssh url", () => {
+    expect(parsePluginSpecifier("git+ssh://git@github.com/opencode/acme.git")).toEqual({
+      pkg: "git+ssh://git@github.com/opencode/acme.git",
+      version: "",
+    })
+  })
+
+  test("parses npm alias using the alias name", () => {
+    expect(parsePluginSpecifier("acme@npm:@opencode/acme@1.0.0")).toEqual({
+      pkg: "acme",
+      version: "npm:@opencode/acme@1.0.0",
+    })
+  })
+
+  test("parses bare npm protocol specifier using the target package", () => {
+    expect(parsePluginSpecifier("npm:@opencode/acme@1.0.0")).toEqual({
+      pkg: "@opencode/acme",
+      version: "1.0.0",
+    })
+  })
+
+  test("parses unversioned npm protocol specifier", () => {
+    expect(parsePluginSpecifier("npm:@opencode/acme")).toEqual({
+      pkg: "@opencode/acme",
+      version: "latest",
+    })
+  })
 })
