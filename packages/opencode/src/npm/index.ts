@@ -11,7 +11,7 @@ import { Arborist } from "@npmcli/arborist"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
-  const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
+  const illegal = new Set(["<", ">", ":", '"', "|", "?", "*"])
 
   export const InstallFailedError = NamedError.create(
     "NpmInstallFailedError",
@@ -20,8 +20,8 @@ export namespace Npm {
     }),
   )
 
-  function sanitize(pkg: string) {
-    if (!illegal) return pkg
+  export function sanitize(pkg: string) {
+    if (process.platform !== "win32") return pkg
     return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
   }
 
