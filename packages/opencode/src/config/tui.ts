@@ -115,7 +115,9 @@ export namespace TuiConfig {
     if (process.platform === "win32") {
       // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
       keybinds.terminal_suspend = "none"
-      keybinds.input_undo ??= "ctrl+z,ctrl+-,super+z"
+      keybinds.input_undo ??= unique(["ctrl+z", ...Config.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(
+        ",",
+      )
     }
     acc.result.keybinds = Config.Keybinds.parse(keybinds)
 
