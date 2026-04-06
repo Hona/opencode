@@ -760,8 +760,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       hidden: true,
       enabled: process.platform !== "win32",
       onSelect: () => {
-        if (process.platform === "win32") return
-
         process.once("SIGCONT", () => {
           renderer.resume()
         })
