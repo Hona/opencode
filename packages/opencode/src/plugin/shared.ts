@@ -21,12 +21,12 @@ function parse(spec: string) {
 
 export function parsePluginSpecifier(spec: string) {
   const hit = parse(spec)
-  const sub =
-    hit && "subSpec" in hit
-      ? (hit as typeof hit & { subSpec?: { name?: string; rawSpec?: string } }).subSpec
-      : undefined
-  if (hit?.type === "alias" && !hit.name && sub?.name) {
-    return { pkg: sub.name, version: !sub.rawSpec || sub.rawSpec === "*" ? "latest" : sub.rawSpec }
+  if (hit?.type === "alias" && !hit.name) {
+    const sub = (hit as npa.AliasResult).subSpec
+    if (sub?.name) {
+      const version = !sub.rawSpec || sub.rawSpec === "*" ? "latest" : sub.rawSpec
+      return { pkg: sub.name, version }
+    }
   }
   if (!hit?.name) return { pkg: spec, version: "" }
   if (hit.raw === hit.name) return { pkg: hit.name, version: "latest" }
