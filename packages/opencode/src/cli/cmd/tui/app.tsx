@@ -758,7 +758,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       keybind: "terminal_suspend",
       category: "System",
       hidden: true,
-      enabled: process.platform !== "win32",
+      enabled: tuiConfig.keybinds?.terminal_suspend !== "none",
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()

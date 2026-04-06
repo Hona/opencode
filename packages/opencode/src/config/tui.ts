@@ -50,20 +50,6 @@ export namespace TuiConfig {
     }
   }
 
-  function resolvePlatformKeybinds(keybinds?: z.input<typeof Config.Keybinds>) {
-    const result = { ...(keybinds ?? {}) }
-
-    if (process.platform === "win32") {
-      // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
-      if (result.terminal_suspend === undefined) result.terminal_suspend = "none"
-      if (result.input_undo === undefined) {
-        result.input_undo = result.terminal_suspend === "none" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
-      }
-    }
-
-    return result
-  }
-
   function installDeps(dir: string): Promise<void> {
     return Config.installDependencies(dir)
   }
@@ -125,7 +111,13 @@ export namespace TuiConfig {
       }
     }
 
-    acc.result.keybinds = Config.Keybinds.parse(resolvePlatformKeybinds(acc.result.keybinds))
+    const keybinds = { ...(acc.result.keybinds ?? {}) }
+    if (process.platform === "win32") {
+      // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
+      keybinds.terminal_suspend = "none"
+      keybinds.input_undo ??= "ctrl+z,ctrl+-,super+z"
+    }
+    acc.result.keybinds = Config.Keybinds.parse(keybinds)
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {

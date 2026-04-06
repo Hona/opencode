@@ -472,7 +472,7 @@ wintest("keeps explicit input undo overrides on Windows", async () => {
   })
 })
 
-wintest("keeps explicit terminal suspend bindings on Windows", async () => {
+wintest("ignores terminal suspend bindings on Windows", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { terminal_suspend: "alt+z" } }))
@@ -483,8 +483,8 @@ wintest("keeps explicit terminal suspend bindings on Windows", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await TuiConfig.get()
-      expect(config.keybinds?.terminal_suspend).toBe("alt+z")
-      expect(config.keybinds?.input_undo).toBe("ctrl+-,super+z")
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
     },
   })
 })
