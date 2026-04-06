@@ -758,6 +758,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       keybind: "terminal_suspend",
       category: "System",
       hidden: true,
+      enabled: process.platform !== "win32",
       onSelect: () => {
         if (process.platform === "win32") return
 
