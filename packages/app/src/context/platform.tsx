@@ -8,6 +8,30 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
+type SocketOpts = { headers?: Record<string, string> }
+type SocketListener = {
+  open: (event: Event) => void
+  message: (event: MessageEvent) => void
+  error: (event: Event) => void
+  close: (event: CloseEvent) => void
+}
+
+export type Socket = {
+  binaryType?: BinaryType
+  readonly readyState: number
+  send(data: string): void
+  close(code?: number, reason?: string): void
+  addEventListener<K extends keyof SocketListener>(
+    type: K,
+    listener: SocketListener[K],
+    options?: boolean | AddEventListenerOptions,
+  ): void
+  removeEventListener<K extends keyof SocketListener>(
+    type: K,
+    listener: SocketListener[K],
+    options?: boolean | EventListenerOptions,
+  ): void
+}
 
 export type Platform = {
   /** Platform discriminator */
@@ -57,6 +81,9 @@ export type Platform = {
 
   /** Fetch override */
   fetch?: typeof fetch
+
+  /** Socket override */
+  socket?: (url: string, opts?: SocketOpts) => Socket
 
   /** Get the configured default server URL (platform-specific) */
   getDefaultServer?(): Promise<ServerConnection.Key | null>

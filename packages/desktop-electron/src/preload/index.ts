@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import { socket } from "./socket"
 import type { ElectronAPI, InitStep, SqliteMigrationProgress } from "./types"
 
 const api: ElectronAPI = {
@@ -11,6 +12,9 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener("init-step", handler)
     })
   },
+  openSocket: (url, headers, cb) => socket.open(url, headers, cb),
+  writeSocket: (id, data) => socket.write(id, data),
+  closeSocket: (id, code, reason) => socket.close(id, code, reason),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
   getWslConfig: () => ipcRenderer.invoke("get-wsl-config"),
@@ -65,5 +69,7 @@ const api: ElectronAPI = {
   installUpdate: () => ipcRenderer.invoke("install-update"),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
 }
+
+window.addEventListener("unload", () => socket.shutdown())
 
 contextBridge.exposeInMainWorld("api", api)

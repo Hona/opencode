@@ -20,6 +20,7 @@ import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
+import { socket } from "./socket"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
@@ -193,6 +194,8 @@ const createPlatform = (): Platform => {
       if (input instanceof Request) return fetch(input)
       return fetch(input, init)
     },
+
+    socket,
 
     getWslEnabled: async () => {
       const next = await window.api.getWslConfig().catch(() => null)

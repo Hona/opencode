@@ -8,6 +8,18 @@ export type ServerReadyData = {
 
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" }
 
+export type SocketHead = {
+  name: string
+  value: string
+}
+
+export type SocketEvt =
+  | { type: "open" }
+  | { type: "text"; data: string }
+  | { type: "binary"; data: ArrayBuffer }
+  | { type: "error"; message: string }
+  | { type: "close"; code: number | null; reason: string | null; clean: boolean }
+
 export type WslConfig = { enabled: boolean }
 
 export type LinuxDisplayBackend = "wayland" | "auto"
@@ -19,6 +31,9 @@ export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  openSocket: (url: string, headers: SocketHead[], cb: (event: SocketEvt) => void) => string
+  writeSocket: (id: string, data: string) => void
+  closeSocket: (id: string, code?: number | null, reason?: string | null) => void
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
   getWslConfig: () => Promise<WslConfig>

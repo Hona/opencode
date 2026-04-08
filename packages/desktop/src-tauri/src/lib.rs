@@ -8,6 +8,7 @@ mod logging;
 mod markdown;
 mod os;
 mod server;
+mod socket;
 mod window_customizer;
 mod windows;
 
@@ -377,6 +378,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             kill_sidecar,
             cli::install_cli,
             await_initialization,
+            socket::open_socket,
+            socket::write_socket,
+            socket::close_socket,
             server::get_default_server_url,
             server::set_default_server_url,
             server::get_wsl_config,
@@ -537,6 +541,7 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     app.deep_link().register_all().ok();
 
     app.manage(InitState { current: init_rx });
+    app.manage(socket::SocketState::default());
 }
 
 fn spawn_cli_sync_task(app: AppHandle) {

@@ -8,9 +8,8 @@ import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, spli
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
+import { type Socket as Sock, usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
@@ -167,13 +166,8 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  const server = useServer()
   const directory = sdk.directory
   const client = sdk.client
-  const url = sdk.url
-  const auth = server.current?.http
-  const username = auth?.username ?? "opencode"
-  const password = auth?.password ?? ""
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -190,7 +184,7 @@ export const Terminal = (props: TerminalProps) => {
       ? { cols: local.pty.cols, rows: local.pty.rows }
       : undefined
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
-  let ws: WebSocket | undefined
+  let ws: Sock | undefined
   let term: Term | undefined
   let ghostty: Ghostty
   let serializeAddon: SerializeAddon
@@ -515,14 +509,11 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const next = new URL(url + `/pty/${id}/connect`)
-        next.searchParams.set("directory", directory)
-        next.searchParams.set("cursor", String(seek))
-        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
-
-        const socket = new WebSocket(next)
+        const q = new URLSearchParams({
+          directory,
+          cursor: String(seek),
+        })
+        const socket = sdk.socket(`/pty/${id}/connect?${q}`)
         socket.binaryType = "arraybuffer"
         ws = socket
 

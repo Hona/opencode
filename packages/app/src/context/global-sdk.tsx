@@ -4,7 +4,7 @@ import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { batch, onCleanup, onMount } from "solid-js"
 import z from "zod"
-import { createSdkForServer } from "@/utils/server"
+import { createSdkForServer, createSocketForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
@@ -231,6 +231,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     return {
       url: currentServer.http.url,
       client: sdk,
+      socket(input: string) {
+        return createSocketForServer({
+          input,
+          server: currentServer.http,
+          socket: platform.socket,
+        })
+      },
       event: {
         on: emitter.on.bind(emitter),
         listen: emitter.listen.bind(emitter),

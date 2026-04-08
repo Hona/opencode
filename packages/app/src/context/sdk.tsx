@@ -41,6 +41,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get url() {
         return globalSDK.url
       },
+      socket(input: string) {
+        return globalSDK.socket(input)
+      },
       createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
         return globalSDK.createClient(opts)
       },

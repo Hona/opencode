@@ -36,6 +36,7 @@ import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
+import { socket } from "./socket"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -342,6 +343,8 @@ const createPlatform = (): Platform => {
         return tauriFetch(input, init)
       }
     },
+
+    socket,
 
     getWslEnabled: async () => {
       const next = await commands.getWslConfig().catch(() => null)

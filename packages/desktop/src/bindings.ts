@@ -8,6 +8,9 @@ export const commands = {
 	killSidecar: () => __TAURI_INVOKE<void>("kill_sidecar"),
 	installCli: () => __TAURI_INVOKE<string>("install_cli"),
 	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
+	openSocket: (url: string, headers: SocketHead[], events: Channel) => __TAURI_INVOKE<string>("open_socket", { url, headers, events }),
+	writeSocket: (id: string, data: string) => __TAURI_INVOKE<null>("write_socket", { id, data }),
+	closeSocket: (id: string, code: number | null, reason: string | null) => __TAURI_INVOKE<null>("close_socket", { id, code, reason }),
 	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
 	getWslConfig: () => __TAURI_INVOKE<WslConfig>("get_wsl_config"),
@@ -38,6 +41,13 @@ export type ServerReadyData = {
 		url: string,
 		username: string | null,
 		password: string | null,
+	};
+
+export type SocketEvt = { type: "open" } | { type: "text"; data: string } | { type: "binary"; data: number[] } | { type: "error"; message: string } | { type: "close"; code: number | null; reason: string | null; clean: boolean };
+
+export type SocketHead = {
+		name: string,
+		value: string,
 	};
 
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" };
