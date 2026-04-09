@@ -89,7 +89,7 @@ jobs:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
-            host: windows-2025
+            host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers

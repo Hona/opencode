@@ -98,6 +98,29 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
+function live(label: string, url: string, kind: string, on: boolean) {
+  let rest = ""
+  const write = (line: string) => {
+    if (!on || !line) return
+    console.error(`[e2e:backend] ${label} ${kind} ${url} ${line}`)
+  }
+  return {
+    push(chunk: string) {
+      rest += chunk
+      while (true) {
+        const i = rest.indexOf("\n")
+        if (i < 0) return
+        write(rest.slice(0, i).replace(/\r$/, ""))
+        rest = rest.slice(i + 1)
+      }
+    },
+    flush() {
+      write(rest.trimEnd())
+      rest = ""
+    },
+  }
+}
+
 function dump(label: string, url: string, out: string[], err: string[], kind: string) {
   const stdout = tail(out).trimEnd()
   const stderr = tail(err).trimEnd()
@@ -117,7 +140,6 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
     OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
-    OPENCODE_E2E_LOG_CLEANUP: "1",
     OPENCODE_TEST_HOME: path.join(sandbox, "home"),
     XDG_DATA_HOME: path.join(sandbox, "share"),
     XDG_CACHE_HOME: path.join(sandbox, "cache"),
@@ -127,12 +149,27 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     OPENCODE_STRICT_CONFIG_DEPS: "true",
     OPENCODE_E2E_LLM_URL: input?.llmUrl,
   } satisfies Record<string, string | undefined>
+  delete env.OPENCODE_E2E_LOG_CLEANUP
   const out: string[] = []
   const err: string[] = []
+  const stderr = live(label, url, "stderr", true)
+  const stdout = live(label, url, "stdout", false)
   let stop = false
   const proc = spawn(
     "bun",
-    ["run", "--conditions=browser", "./src/index.ts", "serve", "--port", String(port), "--hostname", "127.0.0.1"],
+    [
+      "run",
+      "--conditions=browser",
+      "./src/index.ts",
+      "--print-logs",
+      "--log-level",
+      "WARN",
+      "serve",
+      "--port",
+      String(port),
+      "--hostname",
+      "127.0.0.1",
+    ],
     {
       cwd: opencodeDir,
       env,
@@ -140,25 +177,35 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     },
   )
   proc.stdout?.on("data", (chunk) => {
-    out.push(String(chunk))
+    const text = String(chunk)
+    out.push(text)
     cap(out)
+    stdout.push(text)
   })
   proc.stderr?.on("data", (chunk) => {
-    err.push(String(chunk))
+    const text = String(chunk)
+    err.push(text)
     cap(err)
+    stderr.push(text)
   })
   proc.once("error", (cause) => {
+    stdout.flush()
+    stderr.flush()
     console.error(`[e2e:backend] ${label} process error ${url}`)
     console.error(cause)
     dump(label, url, out, err, "error")
   })
   proc.on("exit", (code, signal) => {
+    stdout.flush()
+    stderr.flush()
     console.error(
       `[e2e:backend] ${label} exit ${url} code=${code ?? "null"} signal=${signal ?? "null"} stop=${stop ? 1 : 0}`,
     )
     if (!stop && (code !== 0 || signal !== null)) dump(label, url, out, err, "unexpected exit")
   })
   proc.on("close", (code, signal) => {
+    stdout.flush()
+    stderr.flush()
     console.error(
       `[e2e:backend] ${label} close ${url} code=${code ?? "null"} signal=${signal ?? "null"} stop=${stop ? 1 : 0}`,
     )
