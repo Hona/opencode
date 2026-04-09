@@ -47,14 +47,27 @@ async function pick(page: Page, select: Locator, value: string) {
     .toBe(true)
 }
 
-async function swap(page: Page, select: Locator, skip: string) {
+async function swap(page: Page, select: Locator, skip: string[]) {
   const trigger = select.locator('[data-slot="select-select-trigger"]').first()
+  const list = skip.filter((x) => x.length > 0)
   await expect(trigger).toBeVisible()
   await expect
     .poll(
       async () => {
         const items = page.locator('[data-slot="select-select-item"]')
-        const item = items.filter({ hasNotText: skip }).first()
+        const next = (
+          await items
+            .locator('[data-slot="select-select-item-label"]')
+            .allTextContents()
+            .catch(() => [])
+        )
+          .map((x) => x.trim())
+          .find((x) => x && !list.includes(x))
+        if (!next) {
+          await trigger.click().catch(() => undefined)
+          return false
+        }
+        const item = items.filter({ hasText: next }).first()
         if (!(await item.isVisible().catch(() => false))) {
           await trigger.click().catch(() => undefined)
           return false
@@ -474,7 +487,7 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   await expect(select).toBeVisible()
 
   const current = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await swap(page, select, current)
+  await swap(page, select, [current, "None"])
   await expect.poll(() => saved(page).then((x) => x?.sounds?.agent)).not.toBe("staplebops-01")
 })
 
@@ -505,11 +518,11 @@ test("changing permissions and errors sounds updates localStorage", async ({ pag
 
   const permissionsCurrent =
     (await permissionsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await swap(page, permissionsSelect, permissionsCurrent)
+  await swap(page, permissionsSelect, [permissionsCurrent, "None"])
 
   const errorsCurrent =
     (await errorsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await swap(page, errorsSelect, errorsCurrent)
+  await swap(page, errorsSelect, [errorsCurrent, "None"])
 
   await expect
     .poll(async () => {

@@ -316,7 +316,7 @@ export async function openSettings(page: Page) {
   await assertHealthy(page, "openSettings")
   await defocus(page)
 
-  const dialog = page.locator(".settings-dialog").first()
+  const dialog = page.locator(".settings-dialog:visible").first()
   await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
 
   const opened = await dialog
