@@ -8,7 +8,7 @@ import {
   workspaceItemSelector,
   workspaceNewSessionSelector,
 } from "../selectors"
-import { sessionPath } from "../utils"
+import { modKey, sessionPath } from "../utils"
 
 test.setTimeout(120_000)
 
@@ -127,15 +127,25 @@ async function openModels(page: Page) {
           clicked &&
           (await items
             .first()
-            .isVisible()
+            .waitFor({ state: "visible", timeout: 1500 })
+            .then(() => true)
             .catch(() => false))
         )
           return true
         await trigger.focus().catch(() => undefined)
         await trigger.press("Enter").catch(() => undefined)
+        const entered = await items
+          .first()
+          .waitFor({ state: "visible", timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (entered) return true
+
+        await page.keyboard.press(`${modKey}+'`).catch(() => undefined)
         return items
           .first()
-          .isVisible()
+          .waitFor({ state: "visible", timeout: 1500 })
+          .then(() => true)
           .catch(() => false)
       },
       { timeout: 10_000 },

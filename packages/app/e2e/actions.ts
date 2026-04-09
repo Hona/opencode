@@ -859,14 +859,22 @@ export async function openStatusPopover(page: Page) {
   const rightSection = page.locator(titlebarRightSelector)
   const trigger = rightSection.getByRole("button", { name: /status/i }).first()
 
-  const popoverBody = page.locator(popoverBodySelector).last()
+  const body = page.locator(popoverBodySelector).last()
+  const popoverBody = page
+    .locator(popoverBodySelector)
+    .filter({ has: page.locator('[data-component="tabs"]') })
+    .filter({ has: page.getByRole("tab", { name: /servers/i }) })
+    .filter({ has: page.getByRole("tab", { name: /mcp/i }) })
+    .filter({ has: page.getByRole("tab", { name: /lsp/i }) })
+    .filter({ has: page.getByRole("tab", { name: /plugins/i }) })
+    .last()
   const tabs = popoverBody.locator('[data-component="tabs"]').first()
   const servers = popoverBody.getByRole("tab", { name: /servers/i }).first()
   const mcp = popoverBody.getByRole("tab", { name: /mcp/i }).first()
   const lsp = popoverBody.getByRole("tab", { name: /lsp/i }).first()
   const plugins = popoverBody.getByRole("tab", { name: /plugins/i }).first()
 
-  const opened = await popoverBody
+  const opened = await body
     .isVisible()
     .then((x) => x)
     .catch(() => false)
@@ -876,9 +884,10 @@ export async function openStatusPopover(page: Page) {
     await expect
       .poll(
         async () => {
-          const body = await popoverBody.isVisible().catch(() => false)
-          const ready = body
+          const visible = await body.isVisible().catch(() => false)
+          const ready = visible
             ? await Promise.all([
+                popoverBody.isVisible().catch(() => false),
                 tabs.isVisible().catch(() => false),
                 servers.isVisible().catch(() => false),
                 mcp.isVisible().catch(() => false),
@@ -888,7 +897,7 @@ export async function openStatusPopover(page: Page) {
             : false
           if (ready) return true
 
-          if (!body) {
+          if (!visible) {
             const clicked = await trigger
               .click({ timeout: 1500 })
               .then(() => true)
@@ -899,7 +908,7 @@ export async function openStatusPopover(page: Page) {
               await trigger.press("Enter").catch(() => undefined)
             }
 
-            const opened = await popoverBody
+            const opened = await body
               .waitFor({ state: "visible", timeout: 1500 })
               .then(() => true)
               .catch(() => false)
@@ -907,6 +916,7 @@ export async function openStatusPopover(page: Page) {
             if (!opened) return false
 
             return Promise.all([
+              popoverBody.isVisible().catch(() => false),
               tabs.isVisible().catch(() => false),
               servers.isVisible().catch(() => false),
               mcp.isVisible().catch(() => false),
@@ -924,6 +934,7 @@ export async function openStatusPopover(page: Page) {
       .poll(
         async () => {
           return Promise.all([
+            popoverBody.isVisible().catch(() => false),
             tabs.isVisible().catch(() => false),
             servers.isVisible().catch(() => false),
             mcp.isVisible().catch(() => false),
@@ -936,6 +947,7 @@ export async function openStatusPopover(page: Page) {
       .toBe(true)
   }
 
+  await expect(popoverBody).toBeVisible()
   await expect(tabs).toBeVisible()
   await expect(servers).toBeVisible()
   await expect(mcp).toBeVisible()
