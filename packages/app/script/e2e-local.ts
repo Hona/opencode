@@ -91,6 +91,36 @@ let server: { stop: (close?: boolean) => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
 
+const phase = async (name: string, fn: () => Promise<void> | void) => {
+  const start = Date.now()
+  console.error(`e2e-local cleanup start: ${name}`)
+  return Promise.resolve(fn()).then(
+    () => {
+      console.error(`e2e-local cleanup done: ${name} (${Date.now() - start}ms)`)
+    },
+    (err) => {
+      console.error(`e2e-local cleanup failed: ${name} (${Date.now() - start}ms)`)
+      console.error(err)
+      throw err
+    },
+  )
+}
+
+const step = async (name: string, fn: () => Promise<void> | void) => {
+  const start = Date.now()
+  console.error(`e2e-local start: ${name}`)
+  return Promise.resolve(fn()).then(
+    () => {
+      console.error(`e2e-local done: ${name} (${Date.now() - start}ms)`)
+    },
+    (err) => {
+      console.error(`e2e-local failed: ${name} (${Date.now() - start}ms)`)
+      console.error(err)
+      throw err
+    },
+  )
+}
+
 const cleanup = async () => {
   if (cleaned) return
   cleaned = true
@@ -98,12 +128,19 @@ const cleanup = async () => {
   if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
-  const jobs = [
-    inst?.Instance.disposeAll(),
-    typeof server?.stop === "function" ? server.stop() : undefined,
-    keepSandbox ? undefined : fs.rm(sandbox, { recursive: true, force: true }),
-  ].filter(Boolean)
-  await Promise.allSettled(jobs)
+  await phase("instances", async () => {
+    await inst?.Instance.disposeAll()
+  }).catch(() => undefined)
+
+  await phase("server", async () => {
+    if (typeof server?.stop !== "function") return
+    await server.stop(true)
+  }).catch(() => undefined)
+
+  await phase("sandbox", async () => {
+    if (keepSandbox) return
+    await fs.rm(sandbox, { recursive: true, force: true })
+  }).catch(() => undefined)
 }
 
 const shutdown = (code: number, reason: string) => {
@@ -132,14 +169,19 @@ process.once("unhandledRejection", (error) => {
 let code = 1
 
 try {
-  seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
-    cwd: opencodeDir,
-    env: serverEnv,
-    stdout: "inherit",
-    stderr: "inherit",
+  console.error(`e2e-local bootstrap: sandbox=${sandbox} server=${serverPort} web=${webPort}`)
+
+  let seedExit = 1
+  await step("seed", async () => {
+    seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
+      cwd: opencodeDir,
+      env: serverEnv,
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    seedExit = await seed.exited
   })
 
-  const seedExit = await seed.exited
   if (seedExit !== 0) {
     code = seedExit
   } else {
@@ -148,27 +190,39 @@ try {
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    const log = await import("../../opencode/src/util/log")
-    const install = await import("../../opencode/src/installation")
-    await log.Log.init({
-      print: true,
-      dev: install.Installation.isLocal(),
-      level: "WARN",
+    await step("server boot", async () => {
+      const log = await import("../../opencode/src/util/log")
+      const install = await import("../../opencode/src/installation")
+      await log.Log.init({
+        print: true,
+        dev: install.Installation.isLocal(),
+        level: "WARN",
+      })
+
+      const servermod = await import("../../opencode/src/server/server")
+      inst = await import("../../opencode/src/project/instance")
+      server = await servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
+      console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
     })
 
-    const servermod = await import("../../opencode/src/server/server")
-    inst = await import("../../opencode/src/project/instance")
-    server = await servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
-    console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
+    await step(`server health http://127.0.0.1:${serverPort}/global/health`, () =>
+      waitForHealth(`http://127.0.0.1:${serverPort}/global/health`),
+    )
 
-    await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
-    runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
-      cwd: appDir,
-      env: runnerEnv,
-      stdout: "inherit",
-      stderr: "inherit",
+    await step("playwright spawn", async () => {
+      runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+        cwd: appDir,
+        env: runnerEnv,
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      console.error(`e2e-local runner pid: ${runner.pid}`)
     })
-    code = await runner.exited
+
+    await step("playwright run", async () => {
+      if (!runner) throw new Error("Playwright runner did not start")
+      code = await runner.exited
+    })
   }
 } catch (error) {
   console.error(error)

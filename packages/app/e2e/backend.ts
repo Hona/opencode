@@ -10,6 +10,21 @@ type Handle = {
   stop: () => Promise<void>
 }
 
+const phase = async (name: string, fn: () => Promise<void> | void) => {
+  const start = Date.now()
+  console.error(`[e2e:backend] start ${name}`)
+  return Promise.resolve(fn()).then(
+    () => {
+      console.error(`[e2e:backend] done ${name} (${Date.now() - start}ms)`)
+    },
+    (err) => {
+      console.error(`[e2e:backend] failed ${name} (${Date.now() - start}ms)`)
+      console.error(err)
+      throw err
+    },
+  )
+}
+
 function freePort() {
   return new Promise<number>((resolve, reject) => {
     const server = net.createServer()
@@ -104,7 +119,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
 
   const url = `http://127.0.0.1:${port}`
   try {
-    await waitForHealth(url)
+    await phase(`${label} health ${url}`, () => waitForHealth(url))
   } catch (error) {
     proc.kill("SIGTERM")
     await fs.rm(sandbox, { recursive: true, force: true }).catch(() => undefined)
@@ -123,15 +138,20 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   return {
     url,
     async stop() {
-      if (proc.exitCode === null) {
-        proc.kill("SIGTERM")
-        await waitExit(proc)
-      }
-      if (proc.exitCode === null) {
-        proc.kill("SIGKILL")
-        await waitExit(proc)
-      }
-      await fs.rm(sandbox, { recursive: true, force: true }).catch(() => undefined)
+      await phase(`${label} stop ${url}`, async () => {
+        if (proc.exitCode === null) {
+          proc.kill("SIGTERM")
+          await waitExit(proc)
+        }
+        if (proc.exitCode === null) {
+          console.error(`[e2e:backend] ${label} forcing SIGKILL ${url}`)
+          proc.kill("SIGKILL")
+          await waitExit(proc)
+        }
+      }).catch(() => undefined)
+      await phase(`${label} sandbox ${url}`, () => fs.rm(sandbox, { recursive: true, force: true })).catch(
+        () => undefined,
+      )
     },
   }
 }
