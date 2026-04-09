@@ -5,6 +5,23 @@ import { InstanceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
 
 const TypeId = "~opencode/InstanceState"
+const debug = process.env.OPENCODE_E2E_LOG_CLEANUP === "1"
+
+function source() {
+  return (
+    new Error().stack
+      ?.split("\n")
+      .map((line) => line.trim())
+      .find(
+        (line) =>
+          line &&
+          !line.startsWith("Error") &&
+          !line.includes("instance-state.ts") &&
+          !line.includes("node:internal") &&
+          !line.includes("bun:wrap"),
+      ) ?? "unknown"
+  )
+}
 
 export interface InstanceState<A, E = never, R = never> {
   readonly [TypeId]: typeof TypeId
@@ -34,6 +51,7 @@ export namespace InstanceState {
     init: (ctx: InstanceContext) => Effect.Effect<A, E, R | Scope.Scope>,
   ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
     Effect.gen(function* () {
+      const src = debug ? source() : ""
       const cache = yield* ScopedCache.make<string, A, E, R>({
         capacity: Number.POSITIVE_INFINITY,
         lookup: () =>
@@ -42,7 +60,24 @@ export namespace InstanceState {
           }),
       })
 
-      const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory)))
+      if (debug) console.error(`[e2e:instance] register ${src}`)
+      const off = registerDisposer((directory) => {
+        const start = Date.now()
+        if (debug) console.error(`[e2e:instance] invalidate start dir=${directory} src=${src}`)
+        return Effect.runPromise(ScopedCache.invalidate(cache, directory)).then(
+          () => {
+            if (debug)
+              console.error(`[e2e:instance] invalidate done dir=${directory} src=${src} (${Date.now() - start}ms)`)
+          },
+          (err) => {
+            if (debug) {
+              console.error(`[e2e:instance] invalidate failed dir=${directory} src=${src} (${Date.now() - start}ms)`)
+              console.error(err)
+            }
+            throw err
+          },
+        )
+      })
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       return {

@@ -57,6 +57,7 @@ export namespace Config {
   }
 
   const log = Log.create({ service: "config" })
+  const debug = process.env.OPENCODE_E2E_LOG_CLEANUP === "1"
 
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
   // These settings override all user and project settings
@@ -1395,6 +1396,15 @@ export namespace Config {
           }
 
           const deps: Promise<void>[] = []
+          yield* Effect.addFinalizer(() =>
+            Effect.promise(() => {
+              const start = Date.now()
+              if (debug) console.error(`[e2e:config] cleanup start dir=${ctx.directory}`)
+              return Promise.allSettled(deps).then(() => {
+                if (debug) console.error(`[e2e:config] cleanup done dir=${ctx.directory} (${Date.now() - start}ms)`)
+              })
+            }),
+          )
 
           for (const dir of unique(directories)) {
             if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
@@ -1409,7 +1419,20 @@ export namespace Config {
             }
 
             const dep = iife(async () => {
-              await installDependencies(dir)
+              const start = Date.now()
+              if (debug) console.error(`[e2e:config] dep start dir=${dir}`)
+              return installDependencies(dir).then(
+                () => {
+                  if (debug) console.error(`[e2e:config] dep done dir=${dir} (${Date.now() - start}ms)`)
+                },
+                (err) => {
+                  if (debug) {
+                    console.error(`[e2e:config] dep failed dir=${dir} (${Date.now() - start}ms)`)
+                    console.error(err)
+                  }
+                  throw err
+                },
+              )
             })
             void dep.catch((err) => {
               log.warn("background dependency install failed", { dir, error: err })
@@ -1550,7 +1573,9 @@ export namespace Config {
         })
 
         const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+          if (debug) console.error(`[e2e:config] wait start dir=${Instance.directory}`)
           yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
+          if (debug) console.error(`[e2e:config] wait done dir=${Instance.directory}`)
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {

@@ -140,6 +140,10 @@ export const Instance = {
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
     emit(directory)
+    if (cache.size === 0) {
+      const db = await import("../storage/db")
+      db.Database.close()
+    }
   },
   async disposeAll() {
     if (disposal.all) return disposal.all
@@ -165,6 +169,11 @@ export const Instance = {
         await context.provide(ctx, async () => {
           await Instance.dispose()
         })
+      }
+
+      if (cache.size === 0) {
+        const db = await import("../storage/db")
+        db.Database.close()
       }
     }).finally(() => {
       disposal.all = undefined

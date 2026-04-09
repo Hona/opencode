@@ -180,13 +180,6 @@ const cleanup = async () => {
 
   await db("after server")
 
-  await phase("db", time.cleanup, async () => {
-    const mod = await import("../../opencode/src/storage/db")
-    mod.Database.close()
-  }).catch(() => undefined)
-
-  await db("after db")
-
   await phase("sandbox", time.cleanup, async () => {
     if (keepSandbox) return
     await fs.rm(sandbox, { recursive: true, force: true })
