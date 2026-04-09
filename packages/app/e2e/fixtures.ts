@@ -10,8 +10,10 @@ import {
   cleanupSession,
   cleanupTestProject,
   createTestProject,
+  resolveSlug,
   setHealthPhase,
   sessionIDFromUrl,
+  slugFromUrl,
   waitSession,
   waitSessionIdle,
   waitSessionSaved,
@@ -409,30 +411,22 @@ function makeProject(
   const send = async (text: string, input: { noReply: boolean; shell: boolean }) => {
     if (input.noReply) {
       const cur = need()
-      const state = await page.evaluate(() => {
-        const model = (window as E2EWindow).__opencode_e2e?.model?.current
-        if (!model) return null
-        return {
-          dir: model.dir,
-          sessionID: model.sessionID,
-          agent: model.agent,
-          model: model.model ? { providerID: model.model.providerID, modelID: model.model.modelID } : undefined,
-          variant: model.variant ?? undefined,
-        }
-      })
-      const dir = state?.dir ?? cur.directory
+      const slug = slugFromUrl(page.url())
+      const dir = slug
+        ? await resolveSlug(slug, { serverUrl: backend.url })
+            .then((item) => item.directory)
+            .catch(() => cur.directory)
+        : cur.directory
       const sdk = backend.sdk(dir)
-      const sessionID = state?.sessionID
-        ? state.sessionID
+      const sessionID = sessionIDFromUrl(page.url())
+        ? sessionIDFromUrl(page.url())
         : await sdk.session.create({ directory: dir, title: "E2E Session" }).then((res) => {
             if (!res.data?.id) throw new Error("Failed to create no-reply session")
             return res.data.id
           })
+      if (!sessionID) throw new Error("Failed to resolve no-reply session id")
       await sdk.session.prompt({
         sessionID,
-        agent: state?.agent,
-        model: state?.model,
-        variant: state?.variant,
         noReply: true,
         parts: [{ type: "text", text }],
       })
@@ -623,7 +617,6 @@ async function seedStorage(
       const win = window as E2EWindow
       win.__opencode_e2e = {
         ...win.__opencode_e2e,
-        model: { enabled: true },
         prompt: { enabled: true },
         terminal: { enabled: true, terminals: {} },
       }

@@ -8,7 +8,7 @@ import {
   workspaceItemSelector,
   workspaceNewSessionSelector,
 } from "../selectors"
-import { createSdk, sessionPath } from "../utils"
+import { sessionPath } from "../utils"
 
 test.setTimeout(120_000)
 
@@ -18,119 +18,166 @@ type Footer = {
   variant: string
 }
 
-type Probe = {
-  dir?: string
-  sessionID?: string
-  agent?: string
-  model?: { providerID: string; modelID: string; name?: string }
-  variant?: string | null
-  pick?: {
-    agent?: string
-    model?: { providerID: string; modelID: string }
-    variant?: string | null
-  }
-  variants?: string[]
-  models?: Array<{ providerID: string; modelID: string; name: string }>
-  agents?: Array<{ name: string }>
+type Choice = {
+  key: string
+  footer: Footer
 }
-
-const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const text = async (locator: Locator) => ((await locator.textContent()) ?? "").trim()
 
-const modelKey = (state: Probe | null) => (state?.model ? `${state.model.providerID}:${state.model.modelID}` : null)
-
-async function probe(page: Page): Promise<Probe | null> {
-  return page.evaluate(() => {
-    const win = window as Window & {
-      __opencode_e2e?: {
-        model?: {
-          current?: Probe
-        }
-      }
-    }
-    return win.__opencode_e2e?.model?.current ?? null
-  })
-}
-
-async function currentModel(page: Page) {
-  await expect.poll(() => probe(page).then(modelKey), { timeout: 30_000 }).not.toBe(null)
-  const value = await probe(page).then(modelKey)
-  if (!value) throw new Error("Failed to resolve current model key")
-  return value
-}
-
-async function waitControl(page: Page, key: "setAgent" | "setModel" | "setVariant") {
+async function openSelect(page: Page, trigger: Locator) {
+  const items = page.locator('[data-slot="select-select-item"]')
   await expect
     .poll(
-      () =>
-        page.evaluate((key) => {
-          const win = window as Window & {
-            __opencode_e2e?: {
-              model?: {
-                controls?: Record<string, unknown>
-              }
-            }
-          }
-          return !!win.__opencode_e2e?.model?.controls?.[key]
-        }, key),
-      { timeout: 30_000 },
+      async () => {
+        if (
+          await items
+            .first()
+            .isVisible()
+            .catch(() => false)
+        )
+          return true
+        const clicked = await trigger
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (
+          clicked &&
+          (await items
+            .first()
+            .isVisible()
+            .catch(() => false))
+        )
+          return true
+        await trigger.focus().catch(() => undefined)
+        await trigger.press("Enter").catch(() => undefined)
+        return items
+          .first()
+          .isVisible()
+          .catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
+  return items
+}
+
+async function pickSelect(page: Page, root: string, value: string) {
+  const trigger = page.locator(`${root} [data-slot="select-select-trigger"]`).first()
+  const label = page.locator(`${root} [data-slot="select-select-trigger-value"]`).first()
+  await expect(trigger).toBeVisible()
+  const items = await openSelect(page, trigger)
+  const list = (await items.allTextContents()).map((item) => item.trim()).filter(Boolean)
+  const index = list.indexOf(value)
+  if (index === -1) throw new Error(`Failed to find select option: ${value}`)
+  await expect
+    .poll(
+      async () => {
+        if ((await text(label)) === value) return true
+        if (
+          !(await items
+            .first()
+            .isVisible()
+            .catch(() => false))
+        ) {
+          await openSelect(page, trigger)
+        }
+        await items
+          .first()
+          .focus()
+          .catch(() => undefined)
+        await page.keyboard.press("Home").catch(() => undefined)
+        for (const _ of list.slice(0, index)) {
+          await page.keyboard.press("ArrowDown").catch(() => undefined)
+        }
+        await page.keyboard.press("Enter").catch(() => undefined)
+        return (await text(label)) === value
+      },
+      { timeout: 10_000 },
     )
     .toBe(true)
 }
 
-async function pickAgent(page: Page, value: string) {
-  await waitControl(page, "setAgent")
-  await page.evaluate((value) => {
-    const win = window as Window & {
-      __opencode_e2e?: {
-        model?: {
-          controls?: {
-            setAgent?: (value: string | undefined) => void
-          }
-        }
-      }
-    }
-    const fn = win.__opencode_e2e?.model?.controls?.setAgent
-    if (!fn) throw new Error("Model e2e agent control is not enabled")
-    fn(value)
-  }, value)
+async function selectTexts(page: Page, root: string) {
+  const items = await openSelect(page, page.locator(`${root} [data-slot="select-select-trigger"]`).first())
+  const list = [...new Set((await items.allTextContents()).map((item) => item.trim()).filter(Boolean))]
+  await page.keyboard.press("Escape").catch(() => undefined)
+  return list
 }
 
-async function pickModel(page: Page, value: { providerID: string; modelID: string }) {
-  await waitControl(page, "setModel")
-  await page.evaluate((value) => {
-    const win = window as Window & {
-      __opencode_e2e?: {
-        model?: {
-          controls?: {
-            setModel?: (value: { providerID: string; modelID: string } | undefined) => void
-          }
-        }
-      }
-    }
-    const fn = win.__opencode_e2e?.model?.controls?.setModel
-    if (!fn) throw new Error("Model e2e model control is not enabled")
-    fn(value)
-  }, value)
+async function openModels(page: Page) {
+  const trigger = page.locator(`${promptModelSelector} [data-action="prompt-model"]`).first()
+  const items = page.locator('[data-slot="list-item"][data-key*=":"]')
+  await expect(trigger).toBeVisible()
+  await expect
+    .poll(
+      async () => {
+        if (
+          await items
+            .first()
+            .isVisible()
+            .catch(() => false)
+        )
+          return true
+        const clicked = await trigger
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (
+          clicked &&
+          (await items
+            .first()
+            .isVisible()
+            .catch(() => false))
+        )
+          return true
+        await trigger.focus().catch(() => undefined)
+        await trigger.press("Enter").catch(() => undefined)
+        return items
+          .first()
+          .isVisible()
+          .catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
+  return items
 }
 
-async function pickVariant(page: Page, value: string) {
-  await waitControl(page, "setVariant")
-  await page.evaluate((value) => {
-    const win = window as Window & {
-      __opencode_e2e?: {
-        model?: {
-          controls?: {
-            setVariant?: (value: string | undefined) => void
-          }
+async function modelChoices(page: Page) {
+  const items = await openModels(page)
+  return items.evaluateAll((nodes) =>
+    nodes
+      .map((node) => ({
+        key: node.getAttribute("data-key") ?? "",
+        name: (node.querySelector("span")?.textContent ?? "").trim(),
+      }))
+      .filter((item) => item.key && item.name),
+  )
+}
+
+async function pickModel(page: Page, input: { key: string; name: string }) {
+  const label = page.locator(`${promptModelSelector} [data-action="prompt-model"] span`).first()
+  await expect
+    .poll(
+      async () => {
+        if ((await text(label)) === input.name) return true
+        await openModels(page)
+        const item = page.locator(`[data-slot="list-item"][data-key="${input.key}"]`).first()
+        if (!(await item.isVisible().catch(() => false))) return false
+        const clicked = await item
+          .click({ force: true, timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (!clicked) {
+          await item.focus().catch(() => undefined)
+          await item.press("Enter").catch(() => undefined)
         }
-      }
-    }
-    const fn = win.__opencode_e2e?.model?.controls?.setVariant
-    if (!fn) throw new Error("Model e2e variant control is not enabled")
-    fn(value)
-  }, value)
+        return (await text(label)) === input.name
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
 }
 
 async function read(page: Page): Promise<Footer> {
@@ -158,64 +205,57 @@ async function waitFooter(page: Page, expected: Partial<Footer>) {
   return hit
 }
 
-async function waitModel(page: Page, value: string) {
-  await expect.poll(() => probe(page).then(modelKey), { timeout: 30_000 }).toBe(value)
-}
-
 async function choose(page: Page, root: string, value: string) {
   const select = page.locator(root)
   await expect(select).toBeVisible()
-  await pickAgent(page, value)
-}
-
-async function variantCount(page: Page) {
-  return (await probe(page))?.variants?.length ?? 0
+  await pickSelect(page, root, value)
 }
 
 async function agents(page: Page) {
-  return ((await probe(page))?.agents ?? []).map((item) => item.name).filter(Boolean)
+  return selectTexts(page, promptAgentSelector)
 }
 
-async function ensureVariant(page: Page, directory: string): Promise<Footer> {
+async function variants(page: Page) {
+  return selectTexts(page, promptVariantSelector)
+}
+
+async function ensureVariant(page: Page): Promise<Footer> {
   const current = await read(page)
-  if ((await variantCount(page)) >= 2) return current
+  if ((await variants(page)).some((item) => item !== current.variant)) return current
 
-  const cfg = await createSdk(directory)
-    .config.get()
-    .then((x) => x.data)
-  const visible = new Set(await agents(page))
-  const entry = Object.entries(cfg?.agent ?? {}).find((item) => {
-    const value = item[1]
-    return !!value && typeof value === "object" && "variant" in value && "model" in value && visible.has(item[0])
-  })
-  const name = entry?.[0]
-  test.skip(!name, "no agent with alternate variants available")
-  if (!name) return current
+  const names = await agents(page)
+  const rest = names.filter((name) => name !== current.agent)
+  test.skip(rest.length === 0, "only one agent available")
+  if (rest.length === 0) return current
 
-  await choose(page, promptAgentSelector, name)
-  await expect.poll(() => variantCount(page), { timeout: 30_000 }).toBeGreaterThanOrEqual(2)
-  return waitFooter(page, { agent: name })
+  for (const name of rest) {
+    await choose(page, promptAgentSelector, name)
+    const next = await waitFooter(page, { agent: name })
+    if ((await variants(page)).some((item) => item !== next.variant)) return next
+  }
+
+  test.skip(true, "no agent with alternate variants available")
+  return current
 }
 
 async function chooseDifferentVariant(page: Page): Promise<Footer> {
   const current = await read(page)
-  const next = (await probe(page))?.variants?.find((item) => item !== current.variant)
+  const next = (await variants(page)).find((item) => item !== current.variant)
   if (!next) throw new Error("Current model has no alternate variant to select")
 
-  await pickVariant(page, next)
+  await pickSelect(page, promptVariantSelector, next)
   return waitFooter(page, { agent: current.agent, model: current.model, variant: next })
 }
 
-async function chooseOtherModel(page: Page, skip: string[] = []): Promise<Footer> {
-  const current = await currentModel(page)
-  const next = (await probe(page))?.models?.find((item) => {
-    const key = `${item.providerID}:${item.modelID}`
-    return key !== current && !skip.includes(key)
-  })
+async function chooseOtherModel(page: Page, skip: string[] = []): Promise<Choice> {
+  const current = await read(page)
+  const next = (await modelChoices(page)).find(
+    (item) => item.key && item.name !== current.model && !skip.includes(item.key),
+  )
   if (!next) throw new Error("Failed to choose a different model")
-  await pickModel(page, { providerID: next.providerID, modelID: next.modelID })
+  await pickModel(page, next)
   await expect.poll(async () => (await read(page)).model, { timeout: 30_000 }).toBe(next.name)
-  return read(page)
+  return { key: next.key, footer: await read(page) }
 }
 
 async function goto(page: Page, directory: string, sessionID?: string) {
@@ -273,8 +313,9 @@ test("session model restore per session without leaking into new sessions", asyn
   await project.open()
   await goto(page, project.directory)
 
-  const firstState = await chooseOtherModel(page)
-  const firstKey = await currentModel(page)
+  const firstPick = await chooseOtherModel(page)
+  const firstState = firstPick.footer
+  const firstKey = firstPick.key
   const first = await submit(project, `session variant ${Date.now()}`)
 
   await page.reload()
@@ -286,7 +327,8 @@ test("session model restore per session without leaking into new sessions", asyn
   const fresh = await read(page)
   expect(fresh.model).not.toBe(firstState.model)
 
-  const secondState = await chooseOtherModel(page, [firstKey])
+  const secondPick = await chooseOtherModel(page, [firstKey])
+  const secondState = secondPick.footer
   const second = await submit(project, `session model ${Date.now()}`)
 
   await goto(page, project.directory, first)
@@ -316,8 +358,9 @@ test("session model restore across workspaces", async ({ page, project }) => {
   const root = project.directory
   await goto(page, root)
 
-  const firstState = await chooseOtherModel(page)
-  const firstKey = await currentModel(page)
+  const firstPick = await chooseOtherModel(page)
+  const firstState = firstPick.footer
+  const firstKey = firstPick.key
   const first = await submit(project, `root session ${Date.now()}`)
 
   await openSidebar(page)
@@ -327,15 +370,17 @@ test("session model restore across workspaces", async ({ page, project }) => {
   const oneDir = await newWorkspaceSession(page, one.slug)
   project.trackDirectory(oneDir)
 
-  const secondState = await chooseOtherModel(page, [firstKey])
-  const secondKey = await currentModel(page)
+  const secondPick = await chooseOtherModel(page, [firstKey])
+  const secondState = secondPick.footer
+  const secondKey = secondPick.key
   const second = await submit(project, `workspace one ${Date.now()}`)
 
   const two = await createWorkspace(page, project.slug, [one.slug])
   const twoDir = await newWorkspaceSession(page, two.slug)
   project.trackDirectory(twoDir)
 
-  const thirdState = await chooseOtherModel(page, [firstKey, secondKey])
+  const thirdPick = await chooseOtherModel(page, [firstKey, secondKey])
+  const thirdState = thirdPick.footer
   const third = await submit(project, `workspace two ${Date.now()}`)
 
   await goto(page, root, first)
@@ -357,7 +402,7 @@ test("variant preserved when switching agent modes", async ({ page, project }) =
   await project.open()
   await goto(page, project.directory)
 
-  await ensureVariant(page, project.directory)
+  await ensureVariant(page)
   const updated = await chooseDifferentVariant(page)
 
   const available = await agents(page)

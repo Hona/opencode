@@ -14,8 +14,16 @@ async function open(page: Page) {
 
 test("terminal reconnects without replacing the pty", async ({ page, project }) => {
   await project.open()
-  const name = `OPENCODE_E2E_RECONNECT_${Date.now()}`
-  const token = `E2E_RECONNECT_${Date.now()}`
+  const one = `E2E_RECONNECT_${Date.now()}_ONE`
+  const two = `E2E_RECONNECT_${Date.now()}_TWO`
+  const set =
+    process.platform === "win32"
+      ? `$Env:OPENCODE_E2E_RECONNECT='${one}'; Write-Output $Env:OPENCODE_E2E_RECONNECT`
+      : `export OPENCODE_E2E_RECONNECT='${one}'; echo $OPENCODE_E2E_RECONNECT`
+  const check =
+    process.platform === "win32"
+      ? `Write-Output "$Env:OPENCODE_E2E_RECONNECT ${two}"`
+      : `echo "$OPENCODE_E2E_RECONNECT ${two}"`
 
   await project.gotoSession()
 
@@ -27,8 +35,8 @@ test("terminal reconnects without replacing the pty", async ({ page, project }) 
 
   await runTerminal(page, {
     term,
-    cmd: `export ${name}=${token}; echo ${token}`,
-    token,
+    cmd: set,
+    token: one,
   })
 
   await disconnectTerminal(page, { term })
@@ -38,8 +46,8 @@ test("terminal reconnects without replacing the pty", async ({ page, project }) 
 
   await runTerminal(page, {
     term,
-    cmd: `echo $${name}`,
-    token,
+    cmd: check,
+    token: `${one} ${two}`,
     timeout: 15_000,
   })
 })

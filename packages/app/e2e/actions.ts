@@ -333,8 +333,23 @@ export async function openSettings(page: Page) {
 
   const trigger = page.getByRole("button", { name: /settings/i }).first()
   await expect(trigger).toBeVisible()
-  await trigger.click()
-  await expect(dialog).toBeVisible()
+  await expect
+    .poll(
+      async () => {
+        if (await dialog.isVisible().catch(() => false)) return true
+        const clicked = await trigger
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (!clicked) {
+          await trigger.focus().catch(() => undefined)
+          await trigger.press("Enter").catch(() => undefined)
+        }
+        return dialog.isVisible().catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
   return dialog
 }
 
@@ -366,17 +381,6 @@ export async function cleanupTestProject(directory: string) {
 
 export function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:[/?#]|$)/.exec(url)?.[1] ?? ""
-}
-
-async function probeSession(page: Page) {
-  return page
-    .evaluate(() => {
-      const win = window as E2EWindow
-      const current = win.__opencode_e2e?.model?.current
-      if (!current) return null
-      return { dir: current.dir, sessionID: current.sessionID }
-    })
-    .catch(() => null as { dir?: string; sessionID?: string } | null)
 }
 
 export async function waitSlug(page: Page, skip: string[] = []) {
@@ -438,6 +442,7 @@ export async function waitSession(
   },
 ) {
   const target = await resolveDirectory(input.directory, input.serverUrl)
+  const sdk = input.sessionID ? createSdk(target, input.serverUrl) : undefined
   await expect
     .poll(
       async () => {
@@ -450,12 +455,17 @@ export async function waitSession(
         if (input.sessionID && current !== input.sessionID) return false
         if (!input.sessionID && !input.allowAnySession && current) return false
 
-        const state = await probeSession(page)
-        if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
-        if (!input.sessionID && !input.allowAnySession && state?.sessionID) return false
-        if (state?.dir) {
-          const dir = await resolveDirectory(state.dir, input.serverUrl).catch(() => state.dir ?? "")
-          if (dir !== target) return false
+        if (input.sessionID) {
+          const heading = page.locator(".scroll-view__viewport").getByRole("heading", { level: 1 }).first()
+          if (!(await heading.isVisible().catch(() => false))) return false
+          const title = await sdk?.session
+            .get({ sessionID: input.sessionID })
+            .then((x) => x.data?.title?.trim())
+            .catch(() => undefined)
+          if (title) {
+            const next = ((await heading.textContent().catch(() => "")) ?? "").trim()
+            if (next !== title) return false
+          }
         }
 
         return page
@@ -852,10 +862,8 @@ export async function openStatusPopover(page: Page) {
   const rightSection = page.locator(titlebarRightSelector)
   const trigger = rightSection.getByRole("button", { name: /status/i }).first()
 
-  const popoverBody = page
-    .locator(popoverBodySelector)
-    .filter({ has: page.locator('[data-component="tabs"]') })
-    .last()
+  const popoverBody = page.locator(popoverBodySelector).last()
+  const tabs = popoverBody.locator('[data-component="tabs"]').first()
   const servers = popoverBody.getByRole("tab", { name: /servers/i }).first()
   const mcp = popoverBody.getByRole("tab", { name: /mcp/i }).first()
   const lsp = popoverBody.getByRole("tab", { name: /lsp/i }).first()
@@ -871,24 +879,15 @@ export async function openStatusPopover(page: Page) {
     await expect
       .poll(
         async () => {
-          const body = await popoverBody.isVisible().catch(() => false)
-          const ready = await Promise.all([
-            servers.isVisible().catch(() => false),
-            mcp.isVisible().catch(() => false),
-            lsp.isVisible().catch(() => false),
-            plugins.isVisible().catch(() => false),
-          ]).then((items) => items.every(Boolean))
-          if (body && ready) return true
-          if (!body) {
-            const clicked = await trigger
-              .click({ timeout: 1500 })
-              .then(() => true)
-              .catch(() => false)
+          if (await popoverBody.isVisible().catch(() => false)) return true
+          const clicked = await trigger
+            .click({ timeout: 1500 })
+            .then(() => true)
+            .catch(() => false)
 
-            if (!clicked) {
-              await trigger.focus()
-              await trigger.press("Enter").catch(() => undefined)
-            }
+          if (!clicked) {
+            await trigger.focus().catch(() => undefined)
+            await trigger.press("Enter").catch(() => undefined)
           }
           return false
         },
@@ -897,6 +896,7 @@ export async function openStatusPopover(page: Page) {
       .toBe(true)
   }
 
+  await expect(tabs).toBeVisible()
   await expect(servers).toBeVisible()
   await expect(mcp).toBeVisible()
   await expect(lsp).toBeVisible()
