@@ -10,19 +10,36 @@ type Handle = {
   stop: () => Promise<void>
 }
 
-const phase = async (name: string, fn: () => Promise<void> | void) => {
+const time = {
+  health: 60_000,
+  sandbox: 30_000,
+  stop: 30_000,
+} as const
+
+const phase = async <T>(name: string, timeout: number, fn: () => Promise<T> | T) => {
   const start = Date.now()
-  console.error(`[e2e:backend] start ${name}`)
-  return Promise.resolve(fn()).then(
-    () => {
-      console.error(`[e2e:backend] done ${name} (${Date.now() - start}ms)`)
-    },
-    (err) => {
-      console.error(`[e2e:backend] failed ${name} (${Date.now() - start}ms)`)
-      console.error(err)
-      throw err
-    },
-  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  console.error(`[e2e:backend] start ${name} timeout=${timeout}ms`)
+  return Promise.race([
+    Promise.resolve().then(fn),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timed out after ${timeout}ms: backend ${name}`)), timeout)
+    }),
+  ])
+    .then(
+      (value) => {
+        console.error(`[e2e:backend] done ${name} (${Date.now() - start}ms)`)
+        return value
+      },
+      (err) => {
+        console.error(`[e2e:backend] failed ${name} (${Date.now() - start}ms)`)
+        console.error(err)
+        throw err
+      },
+    )
+    .finally(() => {
+      if (timer) clearTimeout(timer)
+    })
 }
 
 function freePort() {
@@ -44,7 +61,7 @@ function freePort() {
 }
 
 async function waitForHealth(url: string, probe = "/global/health") {
-  const end = Date.now() + 120_000
+  const end = Date.now() + time.health
   let last = ""
   while (Date.now() < end) {
     try {
@@ -144,7 +161,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   console.error(`[e2e:backend] ${label} spawn pid=${proc.pid} ${url} sandbox=${sandbox}`)
 
   try {
-    await phase(`${label} health ${url}`, () => waitForHealth(url))
+    await phase(`${label} health ${url}`, time.health, () => waitForHealth(url))
   } catch (error) {
     stop = true
     proc.kill("SIGTERM")
@@ -165,7 +182,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     url,
     async stop() {
       stop = true
-      await phase(`${label} stop ${url}`, async () => {
+      await phase(`${label} stop ${url}`, time.stop, async () => {
         if (proc.exitCode === null) {
           proc.kill("SIGTERM")
           await waitExit(proc)
@@ -177,9 +194,9 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
           await waitExit(proc)
         }
       }).catch(() => undefined)
-      await phase(`${label} sandbox ${url}`, () => fs.rm(sandbox, { recursive: true, force: true })).catch(
-        () => undefined,
-      )
+      await phase(`${label} sandbox ${url}`, time.sandbox, () =>
+        fs.rm(sandbox, { recursive: true, force: true }),
+      ).catch(() => undefined)
     },
   }
 }

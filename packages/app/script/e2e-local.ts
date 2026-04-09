@@ -25,7 +25,7 @@ async function freePort() {
 }
 
 async function waitForHealth(url: string) {
-  const timeout = Date.now() + 120_000
+  const timeout = Date.now() + 60_000
   const errors: string[] = []
   while (Date.now() < timeout) {
     const result = await fetch(url)
@@ -91,34 +91,65 @@ let server: { stop: (close?: boolean) => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
 
-const phase = async (name: string, fn: () => Promise<void> | void) => {
+const time = {
+  cleanup: 30_000,
+  health: 60_000,
+  run: 25 * 60_000,
+  seed: 60_000,
+  server: 30_000,
+  spawn: 30_000,
+} as const
+
+const phase = async <T>(name: string, timeout: number, fn: () => Promise<T> | T) => {
   const start = Date.now()
-  console.error(`e2e-local cleanup start: ${name}`)
-  return Promise.resolve(fn()).then(
-    () => {
-      console.error(`e2e-local cleanup done: ${name} (${Date.now() - start}ms)`)
-    },
-    (err) => {
-      console.error(`e2e-local cleanup failed: ${name} (${Date.now() - start}ms)`)
-      console.error(err)
-      throw err
-    },
-  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  console.error(`e2e-local cleanup start: ${name} timeout=${timeout}ms`)
+  return Promise.race([
+    Promise.resolve().then(fn),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timed out after ${timeout}ms: cleanup ${name}`)), timeout)
+    }),
+  ])
+    .then(
+      (value) => {
+        console.error(`e2e-local cleanup done: ${name} (${Date.now() - start}ms)`)
+        return value
+      },
+      (err) => {
+        console.error(`e2e-local cleanup failed: ${name} (${Date.now() - start}ms)`)
+        console.error(err)
+        throw err
+      },
+    )
+    .finally(() => {
+      if (timer) clearTimeout(timer)
+    })
 }
 
-const step = async (name: string, fn: () => Promise<void> | void) => {
+const step = async <T>(name: string, timeout: number, fn: () => Promise<T> | T) => {
   const start = Date.now()
-  console.error(`e2e-local start: ${name}`)
-  return Promise.resolve(fn()).then(
-    () => {
-      console.error(`e2e-local done: ${name} (${Date.now() - start}ms)`)
-    },
-    (err) => {
-      console.error(`e2e-local failed: ${name} (${Date.now() - start}ms)`)
-      console.error(err)
-      throw err
-    },
-  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  console.error(`e2e-local start: ${name} timeout=${timeout}ms`)
+  return Promise.race([
+    Promise.resolve().then(fn),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timed out after ${timeout}ms: ${name}`)), timeout)
+    }),
+  ])
+    .then(
+      (value) => {
+        console.error(`e2e-local done: ${name} (${Date.now() - start}ms)`)
+        return value
+      },
+      (err) => {
+        console.error(`e2e-local failed: ${name} (${Date.now() - start}ms)`)
+        console.error(err)
+        throw err
+      },
+    )
+    .finally(() => {
+      if (timer) clearTimeout(timer)
+    })
 }
 
 const cleanup = async () => {
@@ -128,16 +159,16 @@ const cleanup = async () => {
   if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
-  await phase("instances", async () => {
+  await phase("instances", time.cleanup, async () => {
     await inst?.Instance.disposeAll()
   }).catch(() => undefined)
 
-  await phase("server", async () => {
+  await phase("server", time.cleanup, async () => {
     if (typeof server?.stop !== "function") return
     await server.stop(true)
   }).catch(() => undefined)
 
-  await phase("sandbox", async () => {
+  await phase("sandbox", time.cleanup, async () => {
     if (keepSandbox) return
     await fs.rm(sandbox, { recursive: true, force: true })
   }).catch(() => undefined)
@@ -172,7 +203,7 @@ try {
   console.error(`e2e-local bootstrap: sandbox=${sandbox} server=${serverPort} web=${webPort}`)
 
   let seedExit = 1
-  await step("seed", async () => {
+  await step("seed", time.seed, async () => {
     seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
       cwd: opencodeDir,
       env: serverEnv,
@@ -190,7 +221,7 @@ try {
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    await step("server boot", async () => {
+    await step("server boot", time.server, async () => {
       const log = await import("../../opencode/src/util/log")
       const install = await import("../../opencode/src/installation")
       await log.Log.init({
@@ -205,11 +236,11 @@ try {
       console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
     })
 
-    await step(`server health http://127.0.0.1:${serverPort}/global/health`, () =>
+    await step(`server health http://127.0.0.1:${serverPort}/global/health`, time.health, () =>
       waitForHealth(`http://127.0.0.1:${serverPort}/global/health`),
     )
 
-    await step("playwright spawn", async () => {
+    await step("playwright spawn", time.spawn, async () => {
       runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
         cwd: appDir,
         env: runnerEnv,
@@ -219,7 +250,7 @@ try {
       console.error(`e2e-local runner pid: ${runner.pid}`)
     })
 
-    await step("playwright run", async () => {
+    await step("playwright run", time.run, async () => {
       if (!runner) throw new Error("Playwright runner did not start")
       code = await runner.exited
     })
