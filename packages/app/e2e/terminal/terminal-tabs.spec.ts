@@ -38,6 +38,7 @@ async function store(page: Page, key: string) {
 
 test("inactive terminal tab buffers persist across tab switches", async ({ page, project }) => {
   await project.open()
+  const key = workspacePersistKey(project.directory, "terminal")
   const one = `E2E_TERM_ONE_${Date.now()}`
   const two = `E2E_TERM_TWO_${Date.now()}`
   const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
@@ -58,6 +59,20 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
 
   await first.click()
   await expect(first).toHaveAttribute("aria-selected", "true")
+
+  await expect
+    .poll(
+      async () => {
+        const state = await store(page, key)
+        return {
+          one: state?.all.find((item) => item.titleNumber === 1)?.buffer?.includes(one) ?? false,
+          two: state?.all.find((item) => item.titleNumber === 2)?.buffer?.includes(two) ?? false,
+        }
+      },
+      { timeout: 30_000 },
+    )
+    .toEqual({ one: false, two: true })
+
   await waitTerminalFocusIdle(page, { timeout: 30_000 })
 
   await expect
@@ -74,6 +89,19 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
 
   await second.click()
   await expect(second).toHaveAttribute("aria-selected", "true")
+  await expect
+    .poll(
+      async () => {
+        const state = await store(page, key)
+        return {
+          one: state?.all.find((item) => item.titleNumber === 1)?.buffer?.includes(one) ?? false,
+          two: state?.all.find((item) => item.titleNumber === 2)?.buffer?.includes(two) ?? false,
+        }
+      },
+      { timeout: 30_000 },
+    )
+    .toEqual({ one: true, two: false })
+
   await waitTerminalFocusIdle(page, { timeout: 30_000 })
   await expect
     .poll(

@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test"
+import { test as base, expect, type Locator, type Page } from "@playwright/test"
 import { inspect } from "node:util"
 import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
@@ -18,8 +18,8 @@ import {
   waitSessionIdle,
   waitSessionSaved,
 } from "./actions"
-import { promptSelector } from "./selectors"
-import { createSdk, dirSlug, getWorktree, serverUrl, sessionPath } from "./utils"
+import { promptAgentSelector, promptModelSelector, promptSelector, promptVariantSelector } from "./selectors"
+import { createSdk, dirSlug, getWorktree, serverUrl, sessionPath, workspacePersistKey } from "./utils"
 
 type LLMFixture = {
   url: string
@@ -85,6 +85,91 @@ const seedModel = (() => {
 
 function clean(value: string | null) {
   return (value ?? "").replace(/\u200B/g, "").trim()
+}
+
+async function text(locator: Locator) {
+  return clean(await locator.textContent().catch(() => ""))
+}
+
+async function selection(page: Page, directory: string, sessionID?: string) {
+  if (sessionID) {
+    const key = workspacePersistKey(directory, "model-selection")
+    const saved = await page
+      .evaluate(
+        (input) => {
+          const raw = localStorage.getItem(input.key)
+          if (!raw) return
+          const item = JSON.parse(raw)?.session?.[input.sessionID]
+          if (!item || typeof item !== "object") return
+          return {
+            agent: typeof item.agent === "string" ? item.agent : undefined,
+            model:
+              item.model && typeof item.model === "object"
+                ? {
+                    providerID: typeof item.model.providerID === "string" ? item.model.providerID : undefined,
+                    modelID: typeof item.model.modelID === "string" ? item.model.modelID : undefined,
+                  }
+                : undefined,
+            variant: typeof item.variant === "string" ? item.variant : undefined,
+          }
+        },
+        { key, sessionID },
+      )
+      .catch(() => undefined)
+
+    if (saved?.agent || saved?.model?.providerID || saved?.variant) {
+      return {
+        agent: saved.agent,
+        model:
+          saved.model?.providerID && saved.model?.modelID
+            ? { providerID: saved.model.providerID, modelID: saved.model.modelID }
+            : undefined,
+        variant: saved.variant,
+      }
+    }
+  }
+
+  const agent = await text(page.locator(`${promptAgentSelector} [data-slot="select-select-trigger-value"]`).first())
+  const variant = await text(page.locator(`${promptVariantSelector} [data-slot="select-select-trigger-value"]`).first())
+
+  const trigger = page.locator(`${promptModelSelector} [data-action="prompt-model"]`).first()
+  const selected = page.locator('[data-slot="list-item"][data-key*=":"][data-selected="true"]:visible').first()
+  let opened = false
+  if (await trigger.isVisible().catch(() => false)) {
+    if (!(await selected.isVisible().catch(() => false))) {
+      opened = await trigger
+        .click({ timeout: 1500 })
+        .then(() =>
+          selected
+            .waitFor({ state: "visible", timeout: 1500 })
+            .then(() => true)
+            .catch(() => false),
+        )
+        .catch(() => false)
+      if (!opened) {
+        await trigger.focus().catch(() => undefined)
+        opened = await trigger
+          .press("Space")
+          .then(() =>
+            selected
+              .waitFor({ state: "visible", timeout: 1500 })
+              .then(() => true)
+              .catch(() => false),
+          )
+          .catch(() => false)
+      }
+    }
+  }
+
+  const key = await selected.getAttribute("data-key").catch(() => null)
+  if (opened) await page.keyboard.press("Escape").catch(() => undefined)
+
+  const [providerID, modelID] = (key ?? "").split(":")
+  return {
+    agent: agent || undefined,
+    model: providerID && modelID ? { providerID, modelID } : undefined,
+    variant: variant && variant.toLowerCase() !== "default" ? variant : undefined,
+  }
 }
 
 function failText(err: unknown) {
@@ -429,8 +514,12 @@ function makeProject(
             return res.data.id
           })
       if (!sessionID) throw new Error("Failed to resolve no-reply session id")
+      const item = await selection(page, dir, sessionID)
       await sdk.session.prompt({
         sessionID,
+        agent: item.agent,
+        model: item.model,
+        variant: item.variant,
         noReply: true,
         parts: [{ type: "text", text }],
       })

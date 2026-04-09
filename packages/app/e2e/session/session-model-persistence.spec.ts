@@ -8,7 +8,7 @@ import {
   workspaceItemSelector,
   workspaceNewSessionSelector,
 } from "../selectors"
-import { modKey, sessionPath } from "../utils"
+import { sessionPath } from "../utils"
 
 test.setTimeout(120_000)
 
@@ -107,7 +107,7 @@ async function selectTexts(page: Page, root: string) {
 
 async function openModels(page: Page) {
   const trigger = page.locator(`${promptModelSelector} [data-action="prompt-model"]`).first()
-  const items = page.locator('[data-slot="list-item"][data-key*=":"]')
+  const items = page.locator('[data-slot="list-item"][data-key*=":"]:visible')
   await expect(trigger).toBeVisible()
   await expect
     .poll(
@@ -133,15 +133,7 @@ async function openModels(page: Page) {
         )
           return true
         await trigger.focus().catch(() => undefined)
-        await trigger.press("Enter").catch(() => undefined)
-        const entered = await items
-          .first()
-          .waitFor({ state: "visible", timeout: 1500 })
-          .then(() => true)
-          .catch(() => false)
-        if (entered) return true
-
-        await page.keyboard.press(`${modKey}+'`).catch(() => undefined)
+        await trigger.press("Space").catch(() => undefined)
         return items
           .first()
           .waitFor({ state: "visible", timeout: 1500 })
@@ -173,7 +165,7 @@ async function pickModel(page: Page, input: { key: string; name: string }) {
       async () => {
         if ((await text(label)) === input.name) return true
         await openModels(page)
-        const item = page.locator(`[data-slot="list-item"][data-key="${input.key}"]`).first()
+        const item = page.locator(`[data-slot="list-item"][data-key="${input.key}"]:visible`).first()
         if (!(await item.isVisible().catch(() => false))) return false
         const clicked = await item
           .click({ force: true, timeout: 1500 })
