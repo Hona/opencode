@@ -87,9 +87,34 @@ function clean(value: string | null) {
 }
 
 function failText(err: unknown) {
-  if (err instanceof Error && err.stack) return err.stack
-  if (typeof err === "object" && err && "stack" in err && typeof err.stack === "string") return err.stack
-  return inspect(err, { depth: 8, breakLength: 120 })
+  const stack = (() => {
+    if (err instanceof Error) return err.stack
+    if (typeof err === "object" && err && "stack" in err && typeof err.stack === "string") return err.stack
+  })()?.trim()
+
+  if (stack) return stack
+
+  const name = (() => {
+    if (err instanceof Error) return err.name
+    if (typeof err === "object" && err && "name" in err && typeof err.name === "string") return err.name
+  })()
+
+  const message = (() => {
+    if (err instanceof Error) return err.message
+    if (typeof err === "object" && err && "message" in err && typeof err.message === "string") return err.message
+  })()?.trim()
+
+  const keys = typeof err === "object" && err ? Reflect.ownKeys(err).map(String) : []
+  const raw = inspect(err, { depth: 8, showHidden: true, breakLength: 120 }).trim()
+
+  return [
+    name ? `name=${name}` : "",
+    message ? `message=${message}` : "",
+    keys.length ? `keys=${keys.join(",")}` : "",
+    raw ? `raw=${raw}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
 }
 
 async function visit(page: Page, url: string) {
