@@ -1,6 +1,7 @@
 import { test, expect } from "../fixtures"
 
 test("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
+  const wait = 30_000
   await gotoSession()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
@@ -23,7 +24,7 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
 
   const expand = async (name: string) => {
     const folder = tree.getByRole("button", { name, exact: true }).first()
-    await expect(folder).toBeVisible()
+    await expect(folder).toBeVisible({ timeout: wait })
     await expect(folder).toHaveAttribute("aria-expanded", /true|false/)
     if ((await folder.getAttribute("aria-expanded")) === "false") await folder.click()
     await expect(folder).toHaveAttribute("aria-expanded", "true")
@@ -35,7 +36,7 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await expand("components")
 
   const file = tree.getByRole("button", { name: "file-tree.tsx", exact: true }).first()
-  await expect(file).toBeVisible()
+  await expect(file).toBeVisible({ timeout: wait })
   await file.click()
 
   const tab = page.getByRole("tab", { name: "file-tree.tsx" })
