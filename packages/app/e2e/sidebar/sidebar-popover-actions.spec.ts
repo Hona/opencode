@@ -51,7 +51,7 @@ test("collapsed sidebar popover stays open when archiving a session", async ({ p
 test("open sidebar project popover stays closed after clicking avatar", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const other = await createTestProject()
+  const other = await createTestProject({ serverUrl: project.serverUrl })
   const slug = dirSlug(other)
 
   try {
@@ -68,7 +68,7 @@ test("open sidebar project popover stays closed after clicking avatar", async ({
     await projectButton.click()
     await expect(card).toHaveCount(0)
 
-    await waitSession(page, { directory: other })
+    await waitSession(page, { directory: other, serverUrl: project.serverUrl })
     await expect(card).toHaveCount(0)
   } finally {
     await cleanupTestProject(other)
@@ -78,7 +78,7 @@ test("open sidebar project popover stays closed after clicking avatar", async ({
 test("open sidebar project switch activates on first tabbed enter", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const other = await createTestProject()
+  const other = await createTestProject({ serverUrl: project.serverUrl })
   const slug = dirSlug(other)
 
   try {
@@ -102,7 +102,7 @@ test("open sidebar project switch activates on first tabbed enter", async ({ pag
     expect(hit).toBe(true)
 
     await page.keyboard.press("Enter")
-    await waitSession(page, { directory: other })
+    await waitSession(page, { directory: other, serverUrl: project.serverUrl })
   } finally {
     await cleanupTestProject(other)
   }

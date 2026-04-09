@@ -258,21 +258,21 @@ async function chooseOtherModel(page: Page, skip: string[] = []): Promise<Choice
   return { key: next.key, footer: await read(page) }
 }
 
-async function goto(page: Page, directory: string, sessionID?: string) {
+async function goto(page: Page, directory: string, serverUrl: string, sessionID?: string) {
   await page.goto(sessionPath(directory, sessionID))
-  await waitSession(page, { directory, sessionID })
+  await waitSession(page, { directory, sessionID, serverUrl })
 }
 
 async function submit(project: Parameters<typeof test>[0]["project"], value: string) {
   return project.prompt(value)
 }
 
-async function createWorkspace(page: Page, root: string, seen: string[]) {
+async function createWorkspace(page: Page, root: string, seen: string[], serverUrl: string) {
   await openSidebar(page)
   await page.getByRole("button", { name: "New workspace" }).first().click()
 
-  const next = await resolveSlug(await waitSlug(page, [root, ...seen]))
-  await waitSession(page, { directory: next.directory })
+  const next = await resolveSlug(await waitSlug(page, [root, ...seen]), { serverUrl })
+  await waitSession(page, { directory: next.directory, serverUrl })
   return next
 }
 
@@ -294,7 +294,7 @@ async function waitWorkspace(page: Page, slug: string) {
     .toBe(true)
 }
 
-async function newWorkspaceSession(page: Page, slug: string) {
+async function newWorkspaceSession(page: Page, slug: string, serverUrl: string) {
   await waitWorkspace(page, slug)
   const item = page.locator(workspaceItemSelector(slug)).first()
   await item.hover()
@@ -303,15 +303,15 @@ async function newWorkspaceSession(page: Page, slug: string) {
   await expect(button).toBeVisible()
   await button.click()
 
-  const next = await resolveSlug(await waitSlug(page))
-  return waitSession(page, { directory: next.directory }).then((item) => item.directory)
+  const next = await resolveSlug(await waitSlug(page), { serverUrl })
+  return waitSession(page, { directory: next.directory, serverUrl }).then((item) => item.directory)
 }
 
 test("session model restore per session without leaking into new sessions", async ({ page, project }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await project.open()
-  await goto(page, project.directory)
+  await goto(page, project.directory, project.serverUrl)
 
   const firstPick = await chooseOtherModel(page)
   const firstState = firstPick.footer
@@ -319,10 +319,10 @@ test("session model restore per session without leaking into new sessions", asyn
   const first = await submit(project, `session variant ${Date.now()}`)
 
   await page.reload()
-  await waitSession(page, { directory: project.directory, sessionID: first })
+  await waitSession(page, { directory: project.directory, sessionID: first, serverUrl: project.serverUrl })
   await waitFooter(page, firstState)
 
-  await goto(page, project.directory)
+  await goto(page, project.directory, project.serverUrl)
   await expect.poll(async () => (await read(page)).model !== firstState.model, { timeout: 30_000 }).toBe(true)
   const fresh = await read(page)
   expect(fresh.model).not.toBe(firstState.model)
@@ -331,15 +331,15 @@ test("session model restore per session without leaking into new sessions", asyn
   const secondState = secondPick.footer
   const second = await submit(project, `session model ${Date.now()}`)
 
-  await goto(page, project.directory, first)
+  await goto(page, project.directory, project.serverUrl, first)
   await waitFooter(page, firstState)
 
-  await goto(page, project.directory, second)
+  await goto(page, project.directory, project.serverUrl, second)
   await waitFooter(page, secondState)
 
-  await goto(page, project.directory)
+  await goto(page, project.directory, project.serverUrl)
   await page.reload()
-  await waitSession(page, { directory: project.directory })
+  await waitSession(page, { directory: project.directory, serverUrl: project.serverUrl })
   await expect
     .poll(
       async () => {
@@ -356,7 +356,7 @@ test("session model restore across workspaces", async ({ page, project }) => {
 
   await project.open()
   const root = project.directory
-  await goto(page, root)
+  await goto(page, root, project.serverUrl)
 
   const firstPick = await chooseOtherModel(page)
   const firstState = firstPick.footer
@@ -366,8 +366,8 @@ test("session model restore across workspaces", async ({ page, project }) => {
   await openSidebar(page)
   await setWorkspacesEnabled(page, project.slug, true)
 
-  const one = await createWorkspace(page, project.slug, [])
-  const oneDir = await newWorkspaceSession(page, one.slug)
+  const one = await createWorkspace(page, project.slug, [], project.serverUrl)
+  const oneDir = await newWorkspaceSession(page, one.slug, project.serverUrl)
   project.trackDirectory(oneDir)
 
   const secondPick = await chooseOtherModel(page, [firstKey])
@@ -375,24 +375,24 @@ test("session model restore across workspaces", async ({ page, project }) => {
   const secondKey = secondPick.key
   const second = await submit(project, `workspace one ${Date.now()}`)
 
-  const two = await createWorkspace(page, project.slug, [one.slug])
-  const twoDir = await newWorkspaceSession(page, two.slug)
+  const two = await createWorkspace(page, project.slug, [one.slug], project.serverUrl)
+  const twoDir = await newWorkspaceSession(page, two.slug, project.serverUrl)
   project.trackDirectory(twoDir)
 
   const thirdPick = await chooseOtherModel(page, [firstKey, secondKey])
   const thirdState = thirdPick.footer
   const third = await submit(project, `workspace two ${Date.now()}`)
 
-  await goto(page, root, first)
+  await goto(page, root, project.serverUrl, first)
   await waitFooter(page, firstState)
 
-  await goto(page, oneDir, second)
+  await goto(page, oneDir, project.serverUrl, second)
   await waitFooter(page, secondState)
 
-  await goto(page, twoDir, third)
+  await goto(page, twoDir, project.serverUrl, third)
   await waitFooter(page, thirdState)
 
-  await goto(page, root, first)
+  await goto(page, root, project.serverUrl, first)
   await waitFooter(page, firstState)
 })
 
@@ -400,7 +400,7 @@ test("variant preserved when switching agent modes", async ({ page, project }) =
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await project.open()
-  await goto(page, project.directory)
+  await goto(page, project.directory, project.serverUrl)
 
   await ensureVariant(page)
   const updated = await chooseDifferentVariant(page)

@@ -15,7 +15,7 @@ import { dirSlug, resolveDirectory } from "../utils"
 test("can switch between projects from sidebar", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const other = await createTestProject()
+  const other = await createTestProject({ serverUrl: project.serverUrl })
   const otherSlug = dirSlug(other)
 
   try {
@@ -42,7 +42,7 @@ test("can switch between projects from sidebar", async ({ page, project }) => {
 test("switching back to a project opens the latest workspace session", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const other = await createTestProject()
+  const other = await createTestProject({ serverUrl: project.serverUrl })
   const otherSlug = dirSlug(other)
   try {
     await project.open({ extra: [other] })
@@ -56,7 +56,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
     const raw = await waitSlug(page, [project.slug])
     const dir = base64Decode(raw)
     if (!dir) throw new Error(`Failed to decode workspace slug: ${raw}`)
-    const space = await resolveDirectory(dir)
+    const space = await resolveDirectory(dir, project.serverUrl)
     const next = dirSlug(space)
     project.trackDirectory(space)
     await openSidebar(page)
@@ -69,7 +69,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
     await expect(btn).toBeVisible()
     await btn.click()
 
-    await waitSession(page, { directory: space })
+    await waitSession(page, { directory: space, serverUrl: project.serverUrl })
 
     const created = await project.user("test")
 
@@ -80,13 +80,13 @@ test("switching back to a project opens the latest workspace session", async ({ 
     const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
     await expect(otherButton).toBeVisible()
     await otherButton.click()
-    await waitSession(page, { directory: other })
+    await waitSession(page, { directory: other, serverUrl: project.serverUrl })
 
     const rootButton = page.locator(projectSwitchSelector(project.slug)).first()
     await expect(rootButton).toBeVisible()
     await rootButton.click()
 
-    await waitSession(page, { directory: space, sessionID: created })
+    await waitSession(page, { directory: space, sessionID: created, serverUrl: project.serverUrl })
     await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
   } finally {
     await cleanupTestProject(other)

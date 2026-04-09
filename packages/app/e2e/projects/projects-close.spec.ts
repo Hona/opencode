@@ -6,7 +6,7 @@ import { dirSlug } from "../utils"
 test("closing active project navigates to another open project", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  const other = await createTestProject()
+  const other = await createTestProject({ serverUrl: project.serverUrl })
   const otherSlug = dirSlug(other)
 
   try {

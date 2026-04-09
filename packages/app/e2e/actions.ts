@@ -898,6 +898,21 @@ export async function openStatusPopover(page: Page) {
               await trigger.focus().catch(() => undefined)
               await trigger.press("Enter").catch(() => undefined)
             }
+
+            const opened = await popoverBody
+              .waitFor({ state: "visible", timeout: 1500 })
+              .then(() => true)
+              .catch(() => false)
+
+            if (!opened) return false
+
+            return Promise.all([
+              tabs.isVisible().catch(() => false),
+              servers.isVisible().catch(() => false),
+              mcp.isVisible().catch(() => false),
+              lsp.isVisible().catch(() => false),
+              plugins.isVisible().catch(() => false),
+            ]).then((items) => items.every(Boolean))
           }
           return false
         },
@@ -997,17 +1012,34 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
   }
 
   const flip = async (timeout?: number) => {
-    const menu = await openProjectMenu(page, projectSlug)
-    const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
-    await expect(toggle).toBeVisible()
-    await expect(toggle).toBeEnabled({ timeout: 30_000 })
-    const clicked = await toggle
-      .click({ timeout })
-      .then(() => true)
-      .catch(() => false)
-    if (clicked) return
-    await toggle.focus()
-    await toggle.press("Enter")
+    await expect
+      .poll(
+        async () => {
+          const menu = await openProjectMenu(page, projectSlug).catch(() => undefined)
+          if (!menu) return false
+
+          const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
+          if (!(await toggle.isVisible().catch(() => false))) return false
+          if (!(await toggle.isEnabled().catch(() => false))) {
+            await page.keyboard.press("Escape").catch(() => undefined)
+            return false
+          }
+
+          const clicked = await toggle
+            .click({ timeout })
+            .then(() => true)
+            .catch(() => false)
+          if (clicked) return true
+
+          await toggle.focus().catch(() => undefined)
+          return toggle
+            .press("Enter")
+            .then(() => true)
+            .catch(() => false)
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true)
   }
 
   for (const timeout of [1500, undefined, undefined]) {

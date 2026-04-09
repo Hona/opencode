@@ -17,7 +17,6 @@ import {
   waitSession,
   waitSessionIdle,
   waitSessionSaved,
-  waitSlug,
 } from "./actions"
 import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, serverUrl, sessionPath } from "./utils"
@@ -152,6 +151,7 @@ async function promptSend(page: Page) {
 type ProjectHandle = {
   directory: string
   slug: string
+  serverUrl: string
   gotoSession: (sessionID?: string) => Promise<void>
   trackSession: (sessionID: string, directory?: string) => void
   trackDirectory: (directory: string) => void
@@ -372,17 +372,22 @@ function makeProject(
     if (directory !== cur.directory) cur.dirs.add(directory)
   }
 
-  const gotoSession = async (sessionID?: string) => {
+  const show = async (sessionID?: string) => {
     const cur = need()
     await visit(page, sessionPath(cur.directory, sessionID))
-    await waitSession(page, {
+    const next = await waitSession(page, {
       directory: cur.directory,
       sessionID,
       serverUrl: backend.url,
       allowAnySession: !sessionID,
     })
     const current = sessionIDFromUrl(page.url())
-    if (current) trackSession(current)
+    if (current) trackSession(current, next.directory)
+    return next
+  }
+
+  const gotoSession = async (sessionID?: string) => {
+    await show(sessionID)
   }
 
   const open = async (options?: ProjectOptions) => {
@@ -404,8 +409,7 @@ function makeProject(
       dirs: new Set(),
     }
     await options?.beforeGoto?.({ directory, sdk })
-    await gotoSession()
-    need().slug = await waitSlug(page)
+    need().slug = (await show()).slug
   }
 
   const send = async (text: string, input: { noReply: boolean; shell: boolean }) => {
@@ -548,6 +552,9 @@ function makeProject(
       },
       get slug() {
         return need().slug
+      },
+      get serverUrl() {
+        return backend.url
       },
       get sdk() {
         return need().sdk
