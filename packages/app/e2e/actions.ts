@@ -879,17 +879,45 @@ export async function openStatusPopover(page: Page) {
     await expect
       .poll(
         async () => {
-          if (await popoverBody.isVisible().catch(() => false)) return true
-          const clicked = await trigger
-            .click({ timeout: 1500 })
-            .then(() => true)
-            .catch(() => false)
+          const body = await popoverBody.isVisible().catch(() => false)
+          const ready = body
+            ? await Promise.all([
+                tabs.isVisible().catch(() => false),
+                servers.isVisible().catch(() => false),
+                mcp.isVisible().catch(() => false),
+                lsp.isVisible().catch(() => false),
+                plugins.isVisible().catch(() => false),
+              ]).then((items) => items.every(Boolean))
+            : false
+          if (ready) return true
 
-          if (!clicked) {
-            await trigger.focus().catch(() => undefined)
-            await trigger.press("Enter").catch(() => undefined)
+          if (!body) {
+            const clicked = await trigger
+              .click({ timeout: 1500 })
+              .then(() => true)
+              .catch(() => false)
+
+            if (!clicked) {
+              await trigger.focus().catch(() => undefined)
+              await trigger.press("Enter").catch(() => undefined)
+            }
           }
           return false
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true)
+  } else {
+    await expect
+      .poll(
+        async () => {
+          return Promise.all([
+            tabs.isVisible().catch(() => false),
+            servers.isVisible().catch(() => false),
+            mcp.isVisible().catch(() => false),
+            lsp.isVisible().catch(() => false),
+            plugins.isVisible().catch(() => false),
+          ]).then((items) => items.every(Boolean))
         },
         { timeout: 10_000 },
       )
