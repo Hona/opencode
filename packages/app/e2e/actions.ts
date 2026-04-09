@@ -294,7 +294,10 @@ export async function openSettings(page: Page) {
   await assertHealthy(page, "openSettings")
   await defocus(page)
 
-  const dialog = page.locator(".settings-dialog").first()
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.locator(".settings-dialog") })
+    .first()
   await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
 
   const opened = await dialog
@@ -426,7 +429,7 @@ export async function waitSession(
         if (!input.sessionID && !input.allowAnySession && current) return false
 
         const state = await probeSession(page)
-        if (input.sessionID && state?.sessionID && state.sessionID !== input.sessionID) return false
+        if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
         if (!input.sessionID && !input.allowAnySession && state?.sessionID) return false
         if (state?.dir) {
           const dir = await resolveDirectory(state.dir, input.serverUrl).catch(() => state.dir ?? "")
@@ -827,7 +830,10 @@ export async function openStatusPopover(page: Page) {
   const rightSection = page.locator(titlebarRightSelector)
   const trigger = rightSection.getByRole("button", { name: /status/i }).first()
 
-  const popoverBody = page.locator(popoverBodySelector).last()
+  const popoverBody = page
+    .locator(popoverBodySelector)
+    .filter({ has: page.locator('[data-component="tabs"]') })
+    .last()
   const tabs = popoverBody.locator('[data-component="tabs"]').first()
 
   const opened = await popoverBody

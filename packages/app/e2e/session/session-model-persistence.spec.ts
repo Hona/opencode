@@ -271,7 +271,7 @@ test("session model restore per session without leaking into new sessions", asyn
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await project.open()
-  await project.gotoSession()
+  await goto(page, project.directory)
 
   const firstState = await chooseOtherModel(page)
   const firstKey = await currentModel(page)
@@ -281,8 +281,7 @@ test("session model restore per session without leaking into new sessions", asyn
   await waitSession(page, { directory: project.directory, sessionID: first })
   await waitFooter(page, firstState)
 
-  await project.gotoSession()
-  await expect.poll(async () => (await read(page)).model !== firstState.model, { timeout: 30_000 }).toBe(true)
+  await goto(page, project.directory)
   const fresh = await read(page)
   expect(fresh.model).not.toBe(firstState.model)
 
@@ -295,7 +294,7 @@ test("session model restore per session without leaking into new sessions", asyn
   await goto(page, project.directory, second)
   await waitFooter(page, secondState)
 
-  await project.gotoSession()
+  await goto(page, project.directory)
   await page.reload()
   await waitSession(page, { directory: project.directory })
   await waitFooter(page, fresh)
@@ -306,7 +305,7 @@ test("session model restore across workspaces", async ({ page, project }) => {
 
   await project.open()
   const root = project.directory
-  await project.gotoSession()
+  await goto(page, root)
 
   const firstState = await chooseOtherModel(page)
   const firstKey = await currentModel(page)
@@ -347,7 +346,7 @@ test("variant preserved when switching agent modes", async ({ page, project }) =
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await project.open()
-  await project.gotoSession()
+  await goto(page, project.directory)
 
   await ensureVariant(page, project.directory)
   const updated = await chooseDifferentVariant(page)

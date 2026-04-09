@@ -61,7 +61,9 @@ async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>
 async function clearPermissionDock(page: any, label: RegExp) {
   const dock = page.locator(permissionDockSelector)
   await expect(dock).toBeVisible()
-  await dock.getByRole("button", { name: label }).click()
+  const button = dock.getByRole("button", { name: label }).first()
+  await expect(button).toBeEnabled()
+  await button.click()
 }
 
 async function setAutoAccept(page: any, enabled: boolean) {
@@ -77,21 +79,21 @@ async function setAutoAccept(page: any, enabled: boolean) {
 
 async function expectQuestionBlocked(page: any) {
   await expect(page.locator(questionDockSelector)).toBeVisible()
-  await expect(page.locator(promptSelector)).toHaveCount(0)
+  await expect(page.locator(`${promptSelector}:visible`)).toHaveCount(0)
 }
 
 async function expectQuestionOpen(page: any) {
-  await expect(page.locator(questionDockSelector)).toHaveCount(0)
+  await expect(page.locator(`${questionDockSelector}:visible`)).toHaveCount(0)
   await expect(page.locator(promptSelector)).toBeVisible()
 }
 
 async function expectPermissionBlocked(page: any) {
   await expect(page.locator(permissionDockSelector)).toBeVisible()
-  await expect(page.locator(promptSelector)).toHaveCount(0)
+  await expect(page.locator(`${promptSelector}:visible`)).toHaveCount(0)
 }
 
 async function expectPermissionOpen(page: any) {
-  await expect(page.locator(permissionDockSelector)).toHaveCount(0)
+  await expect(page.locator(`${permissionDockSelector}:visible`)).toHaveCount(0)
   await expect(page.locator(promptSelector)).toBeVisible()
 }
 
@@ -200,7 +202,7 @@ async function withMockPermission<T>(
     always?: string[]
   },
   opts: { child?: any } | undefined,
-  fn: () => Promise<T>,
+  fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
 ) {
   const listUrl = /\/permission(?:\?.*)?$/
   const replyUrls = [/\/session\/[^/]+\/permissions\/[^/?]+(?:\?.*)?$/, /\/permission\/[^/]+\/reply(?:\?.*)?$/]
@@ -252,8 +254,14 @@ async function withMockPermission<T>(
 
   if (sessionList) await page.route("**/session?*", sessionList)
 
+  const state = {
+    async resolved() {
+      await expect.poll(() => pending.length, { timeout: 10_000 }).toBe(0)
+    },
+  }
+
   try {
-    return await fn()
+    return await fn(state)
   } finally {
     await page.unroute(listUrl, list)
     for (const item of replyUrls) {
@@ -400,11 +408,12 @@ test("blocked permission flow supports allow once", async ({ page, project }) =>
           metadata: { description: "Need permission for command" },
         },
         undefined,
-        async () => {
+        async (state) => {
           await page.reload()
           await expectPermissionBlocked(page)
 
           await clearPermissionDock(page, /allow once/i)
+          await state.resolved()
           await page.reload()
           await expectPermissionOpen(page)
         },
@@ -431,11 +440,12 @@ test("blocked permission flow supports reject", async ({ page, project }) => {
           patterns: ["/tmp/opencode-e2e-perm-reject"],
         },
         undefined,
-        async () => {
+        async (state) => {
           await page.reload()
           await expectPermissionBlocked(page)
 
           await clearPermissionDock(page, /deny/i)
+          await state.resolved()
           await page.reload()
           await expectPermissionOpen(page)
         },
@@ -463,11 +473,12 @@ test("blocked permission flow supports allow always", async ({ page, project }) 
           metadata: { description: "Need permission for command" },
         },
         undefined,
-        async () => {
+        async (state) => {
           await page.reload()
           await expectPermissionBlocked(page)
 
           await clearPermissionDock(page, /allow always/i)
+          await state.resolved()
           await page.reload()
           await expectPermissionOpen(page)
         },
@@ -557,11 +568,12 @@ test("child session permission request blocks parent dock and supports allow onc
             metadata: { description: "Need child permission" },
           },
           { child },
-          async () => {
+          async (state) => {
             await page.reload()
             await expectPermissionBlocked(page)
 
             await clearPermissionDock(page, /allow once/i)
+            await state.resolved()
             await page.reload()
             await expectPermissionOpen(page)
           },
