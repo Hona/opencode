@@ -34,6 +34,7 @@ export namespace Server {
   }
 
   const log = Log.create({ service: "server" })
+  const debug = process.env.OPENCODE_E2E_LOG_CLEANUP === "1"
   const zipped = compress()
 
   const skipCompress = (path: string, method: string) => {
@@ -332,8 +333,11 @@ export namespace Server {
       url: next,
       stop(close?: boolean) {
         closing ??= new Promise((resolve, reject) => {
+          if (debug) console.error(`[e2e:server] stop start pid=${process.pid} url=${next.href} close=${close ? 1 : 0}`)
           if (mdns) MDNS.unpublish()
           server.close((err) => {
+            if (debug)
+              console.error(`[e2e:server] stop callback pid=${process.pid} url=${next.href} err=${err ? 1 : 0}`)
             if (err) {
               reject(err)
               return
@@ -342,9 +346,11 @@ export namespace Server {
           })
           if (close) {
             if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
+              if (debug) console.error(`[e2e:server] closeAllConnections pid=${process.pid} url=${next.href}`)
               server.closeAllConnections()
             }
             if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
+              if (debug) console.error(`[e2e:server] closeIdleConnections pid=${process.pid} url=${next.href}`)
               server.closeIdleConnections()
             }
           }

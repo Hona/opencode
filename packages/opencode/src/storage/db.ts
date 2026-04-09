@@ -26,6 +26,7 @@ export const NotFoundError = NamedError.create(
 )
 
 const log = Log.create({ service: "db" })
+const debug = process.env.OPENCODE_E2E_LOG_CLEANUP === "1"
 
 export namespace Database {
   export function getChannelPath() {
@@ -84,6 +85,7 @@ export namespace Database {
 
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
+    if (debug) console.error(`[e2e:db] open pid=${process.pid} path=${Path}`)
 
     const db = init(Path)
 
@@ -116,8 +118,18 @@ export namespace Database {
   })
 
   export function close() {
+    if (!Client.loaded()) {
+      if (debug) console.error(`[e2e:db] close skip pid=${process.pid} path=${Path}`)
+      return
+    }
+    if (debug) console.error(`[e2e:db] close start pid=${process.pid} path=${Path}`)
     Client().$client.close()
     Client.reset()
+    if (debug) console.error(`[e2e:db] close done pid=${process.pid} path=${Path}`)
+  }
+
+  export function loaded() {
+    return Client.loaded()
   }
 
   export type TxOrDb = Transaction | Client

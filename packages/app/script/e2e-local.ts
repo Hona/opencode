@@ -63,6 +63,7 @@ const serverEnv = {
   OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
   OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
   OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+  OPENCODE_E2E_LOG_CLEANUP: "1",
   OPENCODE_TEST_HOME: path.join(sandbox, "home"),
   XDG_DATA_HOME: path.join(sandbox, "share"),
   XDG_CACHE_HOME: path.join(sandbox, "cache"),
@@ -152,6 +153,11 @@ const step = async <T>(name: string, timeout: number, fn: () => Promise<T> | T) 
     })
 }
 
+const db = async (name: string) => {
+  const mod = await import("../../opencode/src/storage/db")
+  console.error(`e2e-local db ${name}: loaded=${mod.Database.loaded() ? 1 : 0} path=${mod.Database.Path}`)
+}
+
 const cleanup = async () => {
   if (cleaned) return
   cleaned = true
@@ -159,14 +165,27 @@ const cleanup = async () => {
   if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
+  await db("before instances")
+
   await phase("instances", time.cleanup, async () => {
     await inst?.Instance.disposeAll()
   }).catch(() => undefined)
+
+  await db("after instances")
 
   await phase("server", time.cleanup, async () => {
     if (typeof server?.stop !== "function") return
     await server.stop(true)
   }).catch(() => undefined)
+
+  await db("after server")
+
+  await phase("db", time.cleanup, async () => {
+    const mod = await import("../../opencode/src/storage/db")
+    mod.Database.close()
+  }).catch(() => undefined)
+
+  await db("after db")
 
   await phase("sandbox", time.cleanup, async () => {
     if (keepSandbox) return
