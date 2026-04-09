@@ -8,6 +8,7 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
 
   const terminals = page.locator(terminalSelector)
   const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
+  const second = tabs.filter({ hasText: /Terminal 2/ }).first()
   const opened = await terminals.first().isVisible()
 
   if (!opened) {
@@ -19,10 +20,13 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
 
   // Ghostty captures a lot of keybinds when focused; move focus back
   // to the app shell before triggering `terminal.new`.
-  await page.locator(promptSelector).click()
+  const prompt = page.locator(promptSelector)
+  await prompt.click()
+  await expect(prompt).toBeFocused()
   await page.keyboard.press("Control+Alt+T")
 
   await expect(tabs).toHaveCount(2)
+  await expect(second).toHaveAttribute("aria-selected", "true")
   await expect(terminals).toHaveCount(1)
   await waitTerminalReady(page, { term: terminals.first() })
 })

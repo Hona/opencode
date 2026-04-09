@@ -9,7 +9,7 @@ import {
   waitSession,
   waitSlug,
 } from "../actions"
-import { workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 
 function item(space: { slug: string; raw: string }) {
   return `${workspaceItemSelector(space.slug)}, ${workspaceItemSelector(space.raw)}`
@@ -41,7 +41,7 @@ async function openWorkspaceNewSession(page: Page, space: { slug: string; raw: s
 
   const next = page.locator(button(space)).first()
   await expect(next).toBeVisible()
-  await next.click({ force: true })
+  await next.click()
 
   await waitSession(page, { directory: space.directory })
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "").toBe("")
@@ -54,7 +54,13 @@ async function createSessionFromWorkspace(
   text: string,
 ) {
   await openWorkspaceNewSession(page, space)
-  return project.user(text)
+  const sessionID = await project.user(text)
+  await page
+    .getByRole("button", { name: /toggle sidebar/i })
+    .first()
+    .waitFor({ state: "visible", timeout: 30_000 })
+  await expect(page.locator(promptSelector)).toBeVisible()
+  return sessionID
 }
 
 test("new sessions from sidebar workspace actions stay in selected workspace", async ({ page, project }) => {

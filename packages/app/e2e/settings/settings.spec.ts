@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test"
 import { test, expect, settingsKey } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
 import {
@@ -15,6 +16,15 @@ import {
   settingsUIFontSelector,
   settingsUpdatesStartupSelector,
 } from "../selectors"
+
+const saved = (page: Page) =>
+  page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+const css = (page: Page, key: string) =>
+  page.evaluate((key) => getComputedStyle(document.documentElement).getPropertyValue(key).trim(), key)
 
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -62,19 +72,11 @@ test("changing color scheme persists in localStorage", async ({ page, gotoSessio
 
   await select.locator('[data-slot="select-select-trigger"]').click()
   await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
-
-  const colorScheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-color-scheme")
-  })
-  expect(colorScheme).toBe("dark")
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
   await select.locator('[data-slot="select-select-trigger"]').click()
   await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Light" }).click()
-
-  const lightColorScheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-color-scheme")
-  })
-  expect(lightColorScheme).toBe("light")
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light")
 })
 
 test("changing theme persists in localStorage", async ({ page, gotoSession }) => {
@@ -114,17 +116,12 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
 
   await page.keyboard.press("Escape")
 
-  const storedThemeId = await page.evaluate(() => {
-    return localStorage.getItem("opencode-theme-id")
-  })
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("opencode-theme-id") ?? "")).not.toBe("")
+  const storedThemeId = await page.evaluate(() => localStorage.getItem("opencode-theme-id"))
 
   expect(storedThemeId).not.toBeNull()
   expect(storedThemeId).not.toBe(currentThemeId)
-
-  const dataTheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-theme")
-  })
-  expect(dataTheme).toBe(storedThemeId)
+  await expect(page.locator("html")).toHaveAttribute("data-theme", storedThemeId!)
 })
 
 test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
@@ -171,12 +168,8 @@ test("typing a code font with spaces persists and updates CSS variable", async (
   await expect(input).toBeVisible()
   await expect(input).toHaveAttribute("placeholder", "System Mono")
 
-  const initialFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const initialUIFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
+  const initialFontFamily = await css(page, "--font-family-mono")
+  const initialUIFamily = await css(page, "--font-family-sans")
   expect(initialFontFamily).toContain("ui-monospace")
 
   const next = "Test Mono"
@@ -187,27 +180,16 @@ test("typing a code font with spaces persists and updates CSS variable", async (
   await expect(input).toHaveValue(next)
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         mono: next,
       },
     })
 
-  const newFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const newUIFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(newFontFamily).toContain(next)
-  expect(newFontFamily).not.toBe(initialFontFamily)
-  expect(newUIFamily).toBe(initialUIFamily)
+  await expect.poll(() => css(page, "--font-family-mono")).toContain(next)
+  await expect.poll(() => css(page, "--font-family-sans")).toBe(initialUIFamily)
+  expect(await css(page, "--font-family-mono")).not.toBe(initialFontFamily)
 })
 
 test("typing a UI font with spaces persists and updates CSS variable", async ({ page, gotoSession }) => {
@@ -218,12 +200,8 @@ test("typing a UI font with spaces persists and updates CSS variable", async ({ 
   await expect(input).toBeVisible()
   await expect(input).toHaveAttribute("placeholder", "System Sans")
 
-  const initialFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  const initialCodeFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
+  const initialFontFamily = await css(page, "--font-family-sans")
+  const initialCodeFamily = await css(page, "--font-family-mono")
   expect(initialFontFamily).toContain("ui-sans-serif")
 
   const next = "Test Sans"
@@ -234,27 +212,16 @@ test("typing a UI font with spaces persists and updates CSS variable", async ({ 
   await expect(input).toHaveValue(next)
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         sans: next,
       },
     })
 
-  const newFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  const newCodeFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  expect(newFontFamily).toContain(next)
-  expect(newFontFamily).not.toBe(initialFontFamily)
-  expect(newCodeFamily).toBe(initialCodeFamily)
+  await expect.poll(() => css(page, "--font-family-sans")).toContain(next)
+  await expect.poll(() => css(page, "--font-family-mono")).toBe(initialCodeFamily)
+  expect(await css(page, "--font-family-sans")).not.toBe(initialFontFamily)
 })
 
 test("clearing the code font field restores the default placeholder and stack", async ({ page, gotoSession }) => {
@@ -269,12 +236,7 @@ test("clearing the code font field restores the default placeholder and stack", 
   await input.pressSequentially("Reset Mono")
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         mono: "Reset Mono",
@@ -287,23 +249,15 @@ test("clearing the code font field restores the default placeholder and stack", 
   await expect(input).toHaveAttribute("placeholder", "System Mono")
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         mono: "",
       },
     })
 
-  const fontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  expect(fontFamily).toContain("ui-monospace")
-  expect(fontFamily).not.toContain("Reset Mono")
+  await expect.poll(() => css(page, "--font-family-mono")).toContain("ui-monospace")
+  await expect.poll(() => css(page, "--font-family-mono")).not.toContain("Reset Mono")
 })
 
 test("clearing the UI font field restores the default placeholder and stack", async ({ page, gotoSession }) => {
@@ -318,12 +272,7 @@ test("clearing the UI font field restores the default placeholder and stack", as
   await input.pressSequentially("Reset Sans")
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         sans: "Reset Sans",
@@ -336,23 +285,15 @@ test("clearing the UI font field restores the default placeholder and stack", as
   await expect(input).toHaveAttribute("placeholder", "System Sans")
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         sans: "",
       },
     })
 
-  const fontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(fontFamily).toContain("ui-sans-serif")
-  expect(fontFamily).not.toContain("Reset Sans")
+  await expect.poll(() => css(page, "--font-family-sans")).toContain("ui-sans-serif")
+  await expect.poll(() => css(page, "--font-family-sans")).not.toContain("Reset Sans")
 })
 
 test("color scheme, code font, and UI font rehydrate after reload", async ({ page, gotoSession }) => {
@@ -371,17 +312,9 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   await expect(code).toBeVisible()
   await expect(ui).toBeVisible()
 
-  const initialMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const initialSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-
-  const initialSettings = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
+  const initialMono = await css(page, "--font-family-mono")
+  const initialSans = await css(page, "--font-family-sans")
+  const initialSettings = await saved(page)
 
   const mono = initialSettings?.appearance?.mono === "Reload Mono" ? "Reload Mono 2" : "Reload Mono"
   const sans = initialSettings?.appearance?.sans === "Reload Sans" ? "Reload Sans 2" : "Reload Sans"
@@ -397,12 +330,7 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   await expect(ui).toHaveValue(sans)
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         mono,
@@ -410,17 +338,9 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
       },
     })
 
-  const updatedSettings = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  const updatedMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const updatedSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
+  const updatedSettings = await saved(page)
+  const updatedMono = await css(page, "--font-family-mono")
+  const updatedSans = await css(page, "--font-family-sans")
   expect(updatedMono).toContain(mono)
   expect(updatedMono).not.toBe(initialMono)
   expect(updatedSans).toContain(sans)
@@ -434,12 +354,7 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
   await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
+    .poll(() => saved(page))
     .toMatchObject({
       appearance: {
         mono,
@@ -447,33 +362,14 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
       },
     })
 
-  const rehydratedSettings = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
+  const rehydratedSettings = await saved(page)
 
-  await expect
-    .poll(async () => {
-      return await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-      )
-    })
-    .toContain(mono)
+  await expect.poll(() => css(page, "--font-family-mono")).toContain(mono)
 
-  await expect
-    .poll(async () => {
-      return await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-      )
-    })
-    .toContain(sans)
+  await expect.poll(() => css(page, "--font-family-sans")).toContain(sans)
 
-  const rehydratedMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const rehydratedSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
+  const rehydratedMono = await css(page, "--font-family-mono")
+  const rehydratedSans = await css(page, "--font-family-sans")
   expect(rehydratedMono).toContain(mono)
   expect(rehydratedMono).not.toBe(initialMono)
   expect(rehydratedSans).toContain(sans)
@@ -494,17 +390,8 @@ test("toggling notification agent switch updates localStorage", async ({ page, g
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.agent).toBe(false)
+  await expect(toggleInput).not.toBeChecked()
+  await expect.poll(() => saved(page).then((x) => x?.notifications?.agent)).toBe(false)
 })
 
 test("toggling notification permissions switch updates localStorage", async ({ page, gotoSession }) => {
@@ -519,17 +406,8 @@ test("toggling notification permissions switch updates localStorage", async ({ p
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.permissions).toBe(false)
+  await expect(toggleInput).not.toBeChecked()
+  await expect.poll(() => saved(page).then((x) => x?.notifications?.permissions)).toBe(false)
 })
 
 test("toggling notification errors switch updates localStorage", async ({ page, gotoSession }) => {
@@ -544,17 +422,8 @@ test("toggling notification errors switch updates localStorage", async ({ page, 
   expect(initialState).toBe(false)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(true)
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.notifications?.errors).toBe(true)
+  await expect(toggleInput).toBeChecked()
+  await expect.poll(() => saved(page).then((x) => x?.notifications?.errors)).toBe(true)
 })
 
 test("changing sound agent selection persists in localStorage", async ({ page, gotoSession }) => {
@@ -568,13 +437,7 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
 
   const items = page.locator('[data-slot="select-select-item"]')
   await items.nth(2).click()
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.sounds?.agent).not.toBe("staplebops-01")
+  await expect.poll(() => saved(page).then((x) => x?.sounds?.agent)).not.toBe("staplebops-01")
 })
 
 test("selecting none disables agent sound", async ({ page, gotoSession }) => {
@@ -590,13 +453,7 @@ test("selecting none disables agent sound", async ({ page, gotoSession }) => {
   const items = page.locator('[data-slot="select-select-item"]')
   await expect(items.first()).toBeVisible()
   await items.first().click()
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.sounds?.agentEnabled).toBe(false)
+  await expect.poll(() => saved(page).then((x) => x?.sounds?.agentEnabled)).toBe(false)
 })
 
 test("changing permissions and errors sounds updates localStorage", async ({ page, gotoSession }) => {
@@ -679,17 +536,8 @@ test("toggling updates startup switch updates localStorage", async ({ page, goto
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.updates?.startup).toBe(false)
+  await expect(toggleInput).not.toBeChecked()
+  await expect.poll(() => saved(page).then((x) => x?.updates?.startup)).toBe(false)
 })
 
 test("toggling release notes switch updates localStorage", async ({ page, gotoSession }) => {
@@ -704,15 +552,6 @@ test("toggling release notes switch updates localStorage", async ({ page, gotoSe
   expect(initialState).toBe(true)
 
   await switchContainer.locator('[data-slot="switch-control"]').click()
-  await page.waitForTimeout(100)
-
-  const newState = await toggleInput.evaluate((el: HTMLInputElement) => el.checked)
-  expect(newState).toBe(false)
-
-  const stored = await page.evaluate((key) => {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
-  }, settingsKey)
-
-  expect(stored?.general?.releaseNotes).toBe(false)
+  await expect(toggleInput).not.toBeChecked()
+  await expect.poll(() => saved(page).then((x) => x?.general?.releaseNotes)).toBe(false)
 })

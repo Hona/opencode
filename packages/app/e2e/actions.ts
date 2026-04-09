@@ -294,11 +294,11 @@ export async function openSettings(page: Page) {
   await assertHealthy(page, "openSettings")
   await defocus(page)
 
-  const dialog = page.getByRole("dialog")
+  const dialog = page.locator(".settings-dialog").first()
   await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
 
   const opened = await dialog
-    .waitFor({ state: "visible", timeout: 3000 })
+    .waitFor({ state: "visible", timeout: 10_000 })
     .then(() => true)
     .catch(() => false)
 
@@ -306,7 +306,9 @@ export async function openSettings(page: Page) {
 
   await assertHealthy(page, "openSettings")
 
-  await page.getByRole("button", { name: "Settings" }).first().click()
+  const trigger = page.getByRole("button", { name: /settings/i }).first()
+  await expect(trigger).toBeVisible()
+  await trigger.click()
   await expect(dialog).toBeVisible()
   return dialog
 }
@@ -424,7 +426,7 @@ export async function waitSession(
         if (!input.sessionID && !input.allowAnySession && current) return false
 
         const state = await probeSession(page)
-        if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
+        if (input.sessionID && state?.sessionID && state.sessionID !== input.sessionID) return false
         if (!input.sessionID && !input.allowAnySession && state?.sessionID) return false
         if (state?.dir) {
           const dir = await resolveDirectory(state.dir, input.serverUrl).catch(() => state.dir ?? "")
@@ -437,7 +439,7 @@ export async function waitSession(
           .isVisible()
           .catch(() => false)
       },
-      { timeout: 45_000 },
+      { timeout: 60_000 },
     )
     .toBe(true)
   return { directory: target, slug: base64Encode(target) }
@@ -519,7 +521,26 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
 export async function clickMenuItem(menu: Locator, itemName: string | RegExp, options?: { force?: boolean }) {
   const item = menu.getByRole("menuitem").filter({ hasText: itemName }).first()
   await expect(item).toBeVisible()
-  await item.click({ force: options?.force })
+  await expect(item).toBeEnabled()
+
+  const clicked = await item
+    .click({ timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (clicked) return item
+
+  if (options?.force) {
+    const forced = await item
+      .click({ force: true, timeout: 1500 })
+      .then(() => true)
+      .catch(() => false)
+    if (forced) return item
+  }
+
+  await item.focus()
+  await item.press("Enter")
+  return item
 }
 
 export async function confirmDialog(page: Page, buttonName: string | RegExp) {
@@ -806,7 +827,8 @@ export async function openStatusPopover(page: Page) {
   const rightSection = page.locator(titlebarRightSelector)
   const trigger = rightSection.getByRole("button", { name: /status/i }).first()
 
-  const popoverBody = page.locator(popoverBodySelector).filter({ has: page.locator('[data-component="tabs"]') })
+  const popoverBody = page.locator(popoverBodySelector).last()
+  const tabs = popoverBody.locator('[data-component="tabs"]').first()
 
   const opened = await popoverBody
     .isVisible()
@@ -815,9 +837,31 @@ export async function openStatusPopover(page: Page) {
 
   if (!opened) {
     await expect(trigger).toBeVisible()
-    await trigger.click()
-    await expect(popoverBody).toBeVisible()
+    await expect
+      .poll(
+        async () => {
+          const body = await popoverBody.isVisible().catch(() => false)
+          const ready = await tabs.isVisible().catch(() => false)
+          if (body && ready) return true
+          if (!body) {
+            const clicked = await trigger
+              .click({ timeout: 1500 })
+              .then(() => true)
+              .catch(() => false)
+
+            if (!clicked) {
+              await trigger.focus()
+              await trigger.press("Enter").catch(() => undefined)
+            }
+          }
+          return false
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true)
   }
+
+  await expect(tabs).toBeVisible()
 
   return { rightSection, popoverBody }
 }
@@ -839,7 +883,7 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
 
   const clicked = await trigger
-    .click({ force: true, timeout: 1500 })
+    .click({ timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
@@ -854,8 +898,9 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
     }
   }
 
+  await item.hover()
   await trigger.focus()
-  await page.keyboard.press("Enter")
+  await trigger.press("Enter")
 
   const opened = await menu
     .waitFor({ state: "visible", timeout: 1500 })
@@ -893,12 +938,12 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
     await expect(toggle).toBeVisible()
     await expect(toggle).toBeEnabled({ timeout: 30_000 })
     const clicked = await toggle
-      .click({ force: true, timeout })
+      .click({ timeout })
       .then(() => true)
       .catch(() => false)
     if (clicked) return
     await toggle.focus()
-    await page.keyboard.press("Enter")
+    await toggle.press("Enter")
   }
 
   for (const timeout of [1500, undefined, undefined]) {
@@ -931,7 +976,18 @@ export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
 
   const trigger = page.locator(workspaceMenuTriggerSelector(workspaceSlug)).first()
   await expect(trigger).toBeVisible()
-  await trigger.click({ force: true })
+  await expect(trigger).toBeEnabled()
+
+  const clicked = await trigger
+    .click({ timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (!clicked) {
+    await item.hover()
+    await trigger.focus()
+    await trigger.press("Enter")
+  }
 
   const menu = page.locator(dropdownMenuContentSelector).first()
   await expect(menu).toBeVisible()

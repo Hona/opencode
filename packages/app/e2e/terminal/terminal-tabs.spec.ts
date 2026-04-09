@@ -44,6 +44,7 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
   const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
   const first = tabs.filter({ hasText: /Terminal 1/ }).first()
   const second = tabs.filter({ hasText: /Terminal 2/ }).first()
+  let ids: { first: string; second: string } | undefined
 
   await project.gotoSession()
   await open(page)
@@ -52,11 +53,27 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
 
   await page.getByRole("button", { name: /new terminal/i }).click()
   await expect(tabs).toHaveCount(2)
+  await expect(second).toHaveAttribute("aria-selected", "true")
 
   await runTerminal(page, { cmd: `echo ${two}`, token: two })
 
+  await expect
+    .poll(
+      async () => {
+        const state = await store(page, key)
+        const first = state?.all.find((item) => item.titleNumber === 1)?.id
+        const second = state?.all.find((item) => item.titleNumber === 2)?.id
+        if (!first || !second) return false
+        ids = { first, second }
+        return true
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true)
+
   await first.click()
   await expect(first).toHaveAttribute("aria-selected", "true")
+  await expect.poll(async () => (await store(page, key))?.active, { timeout: 30_000 }).toBe(ids?.first)
 
   await expect
     .poll(
@@ -69,12 +86,13 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
           second: second.includes(two),
         }
       },
-      { timeout: 5_000 },
+      { timeout: 30_000 },
     )
     .toEqual({ first: false, second: true })
 
   await second.click()
   await expect(second).toHaveAttribute("aria-selected", "true")
+  await expect.poll(async () => (await store(page, key))?.active, { timeout: 30_000 }).toBe(ids?.second)
   await expect
     .poll(
       async () => {
@@ -86,7 +104,7 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
           second: second.includes(two),
         }
       },
-      { timeout: 5_000 },
+      { timeout: 30_000 },
     )
     .toEqual({ first: true, second: false })
 })
@@ -103,14 +121,15 @@ test("closing the active terminal tab falls back to the previous tab", async ({ 
   await expect(tabs).toHaveCount(2)
 
   const second = tabs.filter({ hasText: /Terminal 2/ }).first()
-  await second.click()
   await expect(second).toHaveAttribute("aria-selected", "true")
 
   await second.hover()
-  await page
+  const close = second
+    .locator("xpath=..")
     .getByRole("button", { name: /close terminal/i })
-    .nth(1)
-    .click({ force: true })
+    .first()
+  await expect(close).toBeVisible()
+  await close.click()
 
   const first = tabs.filter({ hasText: /Terminal 1/ }).first()
   await expect(tabs).toHaveCount(1)

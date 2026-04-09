@@ -26,6 +26,5 @@ test("can open a file tab from the search palette", async ({ page, gotoSession }
 
   await expect(dialog).toHaveCount(0)
 
-  const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
-  await expect(tabs.locator('[data-slot="tabs-trigger"]').first()).toBeVisible()
+  await expect(page.getByRole("tab", { name: "package.json" }).first()).toBeVisible()
 })

@@ -1,5 +1,22 @@
+import type { Locator } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { openStatusPopover } from "../actions"
+
+async function pick(popoverBody: Locator, name: RegExp) {
+  await expect
+    .poll(
+      async () => {
+        const tab = popoverBody.getByRole("tab", { name }).first()
+        const value = await tab.getAttribute("aria-selected").catch(() => null)
+        if (value === "true") return true
+        if (!(await tab.isVisible().catch(() => false))) return false
+        await tab.click().catch(() => undefined)
+        return false
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true)
+}
 
 test("status popover opens and shows tabs", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -33,10 +50,8 @@ test("status popover can switch to mcp tab", async ({ page, gotoSession }) => {
   const { popoverBody } = await openStatusPopover(page)
 
   const mcpTab = popoverBody.getByRole("tab", { name: /mcp/i })
-  await mcpTab.click()
-
-  const ariaSelected = await mcpTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await pick(popoverBody, /mcp/i)
+  await expect(mcpTab).toHaveAttribute("aria-selected", "true")
 
   const mcpContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(mcpContent).toBeVisible()
@@ -48,10 +63,8 @@ test("status popover can switch to lsp tab", async ({ page, gotoSession }) => {
   const { popoverBody } = await openStatusPopover(page)
 
   const lspTab = popoverBody.getByRole("tab", { name: /lsp/i })
-  await lspTab.click()
-
-  const ariaSelected = await lspTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await pick(popoverBody, /lsp/i)
+  await expect(lspTab).toHaveAttribute("aria-selected", "true")
 
   const lspContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(lspContent).toBeVisible()
@@ -63,10 +76,8 @@ test("status popover can switch to plugins tab", async ({ page, gotoSession }) =
   const { popoverBody } = await openStatusPopover(page)
 
   const pluginsTab = popoverBody.getByRole("tab", { name: /plugins/i })
-  await pluginsTab.click()
-
-  const ariaSelected = await pluginsTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+  await pick(popoverBody, /plugins/i)
+  await expect(pluginsTab).toHaveAttribute("aria-selected", "true")
 
   const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(pluginsContent).toBeVisible()

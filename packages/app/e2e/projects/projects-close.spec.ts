@@ -20,7 +20,7 @@ test("closing active project navigates to another open project", async ({ page, 
     await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
 
     const menu = await openProjectMenu(page, otherSlug)
-    await clickMenuItem(menu, /^Close$/i, { force: true })
+    await clickMenuItem(menu, /^Close$/i)
 
     await expect
       .poll(

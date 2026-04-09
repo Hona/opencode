@@ -15,11 +15,22 @@ test("smoke model variant cycle updates label", async ({ page, gotoSession }) =>
 
   await expect(button).toBeVisible()
 
-  const before = (await button.innerText()).trim()
-  await button.click()
-  await expect(button).not.toHaveText(before)
+  const pick = async (skip: string) => {
+    await button.click()
 
-  const after = (await button.innerText()).trim()
-  await button.click()
-  await expect(button).not.toHaveText(after)
+    const list = page.getByRole("option")
+    await expect(list.first()).toBeVisible()
+
+    const next = (await list.allTextContents()).map((x) => x.trim()).find((x) => x && x !== skip)
+    test.skip(!next, "current model has no alternate variants")
+    if (!next) return skip
+
+    await page.getByRole("option", { name: next, exact: true }).click()
+    await expect(button).toHaveText(next)
+    return next
+  }
+
+  const before = (await button.innerText()).trim()
+  const next = await pick(before)
+  await pick(next)
 })

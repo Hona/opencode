@@ -138,7 +138,7 @@ test("can rename a workspace", async ({ page, project }) => {
 
   const rename = `e2e workspace ${Date.now()}`
   const menu = await openWorkspaceMenu(page, slug)
-  await clickMenuItem(menu, /^Rename$/i, { force: true })
+  await clickMenuItem(menu, /^Rename$/i)
 
   await expect(menu).toHaveCount(0)
 
@@ -151,7 +151,7 @@ test("can rename a workspace", async ({ page, project }) => {
     .catch(() => false)
   if (!shown) {
     const retry = await openWorkspaceMenu(page, slug)
-    await clickMenuItem(retry, /^Rename$/i, { force: true })
+    await clickMenuItem(retry, /^Rename$/i)
     await expect(retry).toHaveCount(0)
   }
   await expect(input).toBeVisible()
@@ -193,7 +193,7 @@ test("can reset a workspace", async ({ page, project }) => {
     .toBeGreaterThan(0)
 
   const menu = await openWorkspaceMenu(page, slug)
-  await clickMenuItem(menu, /^Reset$/i, { force: true })
+  await clickMenuItem(menu, /^Reset$/i)
   await confirmDialog(page, /^Reset workspace$/i)
 
   await expect
@@ -344,7 +344,7 @@ test("can delete a workspace", async ({ page, project }) => {
     .toBe(true)
 
   const menu = await openWorkspaceMenu(page, slug)
-  await clickMenuItem(menu, /^Delete$/i, { force: true })
+  await clickMenuItem(menu, /^Delete$/i)
   await confirmDialog(page, /^Delete workspace$/i)
 
   await expect.poll(() => base64Decode(slugFromUrl(page.url()))).toBe(project.directory)

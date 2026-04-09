@@ -67,7 +67,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
     const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
     await expect(btn).toBeVisible()
-    await btn.click({ force: true })
+    await btn.click()
 
     await waitSession(page, { directory: space })
 
@@ -79,12 +79,12 @@ test("switching back to a project opens the latest workspace session", async ({ 
 
     const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
     await expect(otherButton).toBeVisible()
-    await otherButton.click({ force: true })
+    await otherButton.click()
     await waitSession(page, { directory: other })
 
     const rootButton = page.locator(projectSwitchSelector(project.slug)).first()
     await expect(rootButton).toBeVisible()
-    await rootButton.click({ force: true })
+    await rootButton.click()
 
     await waitSession(page, { directory: space, sessionID: created })
     await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))

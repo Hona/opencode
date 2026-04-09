@@ -1,7 +1,20 @@
+import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { openSettings, closeDialog, waitTerminalFocusIdle, withSession } from "../actions"
 import { keybindButtonSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
+
+const saved = (page: Page) =>
+  page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
+  })
+
+async function bind(page: Page, button: Locator, combo: string) {
+  await button.click()
+  await expect(button).toHaveText(/press/i)
+  await page.keyboard.press(combo)
+}
 
 test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -15,20 +28,9 @@ test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
   const initialKeybind = await keybindButton.textContent()
   expect(initialKeybind).toContain("B")
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyH`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("H")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["sidebar.toggle"]).toBe("mod+shift+h")
+  await bind(page, keybindButton, `${modKey}+Shift+KeyH`)
+  await expect(keybindButton).toContainText("H")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["sidebar.toggle"])).toBe("mod+shift+h")
 
   await closeDialog(page, dialog)
 
@@ -60,11 +62,7 @@ test("sidebar toggle keybind guards against shortcut conflicts", async ({ page, 
   const initialKeybind = await keybindButton.textContent()
   expect(initialKeybind).toContain("B")
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyP`)
-  await page.waitForTimeout(100)
+  await bind(page, keybindButton, `${modKey}+Shift+KeyP`)
 
   const toast = page.locator('[data-component="toast"]').last()
   await expect(toast).toBeVisible()
@@ -73,11 +71,7 @@ test("sidebar toggle keybind guards against shortcut conflicts", async ({ page, 
   await keybindButton.click()
   await expect(keybindButton).toContainText("B")
 
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["sidebar.toggle"])).toBeUndefined()
 
   await closeDialog(page, dialog)
 })
@@ -102,16 +96,8 @@ test("resetting all keybinds to defaults works", async ({ page, gotoSession }) =
   await expect(resetButton).toBeVisible()
   await expect(resetButton).toBeEnabled()
   await resetButton.click()
-  await page.waitForTimeout(100)
-
-  const restoredKeybind = await keybindButton.textContent()
-  expect(restoredKeybind).toContain("B")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+  await expect(keybindButton).toContainText("B")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["sidebar.toggle"])).toBeUndefined()
 
   await closeDialog(page, dialog)
 })
@@ -130,26 +116,16 @@ test("clearing a keybind works", async ({ page, gotoSession }) => {
 
   await keybindButton.click()
   await expect(keybindButton).toHaveText(/press/i)
-
   await page.keyboard.press("Delete")
-  await page.waitForTimeout(100)
-
-  const clearedKeybind = await keybindButton.textContent()
-  expect(clearedKeybind).toMatch(/unassigned|press/i)
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["sidebar.toggle"]).toBe("none")
+  await expect(keybindButton).toHaveText(/unassigned|press/i)
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["sidebar.toggle"])).toBe("none")
 
   await closeDialog(page, dialog)
 
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const before = await button.getAttribute("aria-expanded")
   await page.keyboard.press(`${modKey}+B`)
-  await page.waitForTimeout(100)
-
-  const stillOnSession = page.url().includes("/session")
-  expect(stillOnSession).toBe(true)
+  await expect(button).toHaveAttribute("aria-expanded", before ?? "false")
 })
 
 test("changing settings open keybind works", async ({ page, gotoSession }) => {
@@ -164,20 +140,9 @@ test("changing settings open keybind works", async ({ page, gotoSession }) => {
   const initialKeybind = await keybindButton.textContent()
   expect(initialKeybind).toContain(",")
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Slash`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("/")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["settings.open"]).toBe("mod+/")
+  await bind(page, keybindButton, `${modKey}+Slash`)
+  await expect(keybindButton).toContainText("/")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["settings.open"])).toBe("mod+/")
 
   await closeDialog(page, dialog)
 
@@ -185,7 +150,6 @@ test("changing settings open keybind works", async ({ page, gotoSession }) => {
   await expect(settingsDialog).toHaveCount(0)
 
   await page.keyboard.press(`${modKey}+Slash`)
-  await page.waitForTimeout(100)
 
   await expect(settingsDialog).toBeVisible()
 
@@ -205,29 +169,15 @@ test("changing new session keybind works", async ({ page, sdk, gotoSession }) =>
     const keybindButton = dialog.locator(keybindButtonSelector("session.new"))
     await expect(keybindButton).toBeVisible()
 
-    await keybindButton.click()
-    await expect(keybindButton).toHaveText(/press/i)
-
-    await page.keyboard.press(`${modKey}+Shift+KeyN`)
-    await page.waitForTimeout(100)
-
-    const newKeybind = await keybindButton.textContent()
-    expect(newKeybind).toContain("N")
-
-    const stored = await page.evaluate(() => {
-      const raw = localStorage.getItem("settings.v3")
-      return raw ? JSON.parse(raw) : null
-    })
-    expect(stored?.keybinds?.["session.new"]).toBe("mod+shift+n")
+    await bind(page, keybindButton, `${modKey}+Shift+KeyN`)
+    await expect(keybindButton).toContainText("N")
+    await expect.poll(() => saved(page).then((x) => x?.keybinds?.["session.new"])).toBe("mod+shift+n")
 
     await closeDialog(page, dialog)
 
     await page.keyboard.press(`${modKey}+Shift+N`)
-    await page.waitForTimeout(200)
-
-    const newUrl = page.url()
-    expect(newUrl).toMatch(/\/session\/?$/)
-    expect(newUrl).not.toContain(session.id)
+    await expect.poll(() => page.url().includes(session.id)).toBe(false)
+    await expect(page).toHaveURL(/\/session\/?$/)
   })
 })
 
@@ -243,20 +193,9 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
   const initialKeybind = await keybindButton.textContent()
   expect(initialKeybind).toContain("K")
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyF`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("F")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["file.open"]).toBe("mod+shift+f")
+  await bind(page, keybindButton, `${modKey}+Shift+KeyF`)
+  await expect(keybindButton).toContainText("F")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["file.open"])).toBe("mod+shift+f")
 
   await closeDialog(page, dialog)
 
@@ -264,7 +203,6 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
   await expect(filePickerDialog).toHaveCount(0)
 
   await page.keyboard.press(`${modKey}+Shift+F`)
-  await page.waitForTimeout(100)
 
   await expect(filePickerDialog).toBeVisible()
 
@@ -281,20 +219,9 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
   const keybindButton = dialog.locator(keybindButtonSelector("terminal.toggle"))
   await expect(keybindButton).toBeVisible()
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+KeyY`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("Y")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["terminal.toggle"]).toBe("mod+y")
+  await bind(page, keybindButton, `${modKey}+KeyY`)
+  await expect(keybindButton).toContainText("Y")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["terminal.toggle"])).toBe("mod+y")
 
   await closeDialog(page, dialog)
 
@@ -317,12 +244,7 @@ test("terminal toggle keybind persists after reload", async ({ page, gotoSession
   const keybindButton = dialog.locator(keybindButtonSelector("terminal.toggle"))
   await expect(keybindButton).toBeVisible()
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyY`)
-  await page.waitForTimeout(100)
-
+  await bind(page, keybindButton, `${modKey}+Shift+KeyY`)
   await expect(keybindButton).toContainText("Y")
   await closeDialog(page, dialog)
 
@@ -358,20 +280,9 @@ test("changing command palette keybind works", async ({ page, gotoSession }) => 
   const initialKeybind = await keybindButton.textContent()
   expect(initialKeybind).toContain("P")
 
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyK`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("K")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["command.palette"]).toBe("mod+shift+k")
+  await bind(page, keybindButton, `${modKey}+Shift+KeyK`)
+  await expect(keybindButton).toContainText("K")
+  await expect.poll(() => saved(page).then((x) => x?.keybinds?.["command.palette"])).toBe("mod+shift+k")
 
   await closeDialog(page, dialog)
 
@@ -379,7 +290,6 @@ test("changing command palette keybind works", async ({ page, gotoSession }) => 
   await expect(palette).toHaveCount(0)
 
   await page.keyboard.press(`${modKey}+Shift+K`)
-  await page.waitForTimeout(100)
 
   await expect(palette).toBeVisible()
   await expect(palette.getByRole("textbox").first()).toBeVisible()

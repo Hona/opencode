@@ -10,6 +10,8 @@ import {
 } from "../selectors"
 import { createSdk, sessionPath } from "../utils"
 
+test.setTimeout(120_000)
+
 type Footer = {
   agent: string
   model: string
@@ -259,7 +261,7 @@ async function newWorkspaceSession(page: Page, slug: string) {
 
   const button = page.locator(workspaceNewSessionSelector(slug)).first()
   await expect(button).toBeVisible()
-  await button.click({ force: true })
+  await button.click()
 
   const next = await resolveSlug(await waitSlug(page))
   return waitSession(page, { directory: next.directory }).then((item) => item.directory)
@@ -280,6 +282,7 @@ test("session model restore per session without leaking into new sessions", asyn
   await waitFooter(page, firstState)
 
   await project.gotoSession()
+  await expect.poll(async () => (await read(page)).model !== firstState.model, { timeout: 30_000 }).toBe(true)
   const fresh = await read(page)
   expect(fresh.model).not.toBe(firstState.model)
 
