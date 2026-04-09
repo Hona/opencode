@@ -77,8 +77,16 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
+function dump(label: string, url: string, out: string[], err: string[], kind: string) {
+  const stdout = tail(out).trimEnd()
+  const stderr = tail(err).trimEnd()
+  if (stdout) console.error(`[e2e:backend] ${label} ${kind} stdout ${url}\n${stdout}`)
+  if (stderr) console.error(`[e2e:backend] ${label} ${kind} stderr ${url}\n${stderr}`)
+}
+
 export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
+  const url = `http://127.0.0.1:${port}`
   const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
   const repoDir = path.resolve(appDir, "../..")
@@ -99,6 +107,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   } satisfies Record<string, string | undefined>
   const out: string[] = []
   const err: string[] = []
+  let stop = false
   const proc = spawn(
     "bun",
     ["run", "--conditions=browser", "./src/index.ts", "serve", "--port", String(port), "--hostname", "127.0.0.1"],
@@ -116,19 +125,36 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
     err.push(String(chunk))
     cap(err)
   })
+  proc.once("error", (cause) => {
+    console.error(`[e2e:backend] ${label} process error ${url}`)
+    console.error(cause)
+    dump(label, url, out, err, "error")
+  })
+  proc.on("exit", (code, signal) => {
+    console.error(
+      `[e2e:backend] ${label} exit ${url} code=${code ?? "null"} signal=${signal ?? "null"} stop=${stop ? 1 : 0}`,
+    )
+    if (!stop && (code !== 0 || signal !== null)) dump(label, url, out, err, "unexpected exit")
+  })
+  proc.on("close", (code, signal) => {
+    console.error(
+      `[e2e:backend] ${label} close ${url} code=${code ?? "null"} signal=${signal ?? "null"} stop=${stop ? 1 : 0}`,
+    )
+  })
+  console.error(`[e2e:backend] ${label} spawn pid=${proc.pid} ${url} sandbox=${sandbox}`)
 
-  const url = `http://127.0.0.1:${port}`
   try {
     await phase(`${label} health ${url}`, () => waitForHealth(url))
   } catch (error) {
+    stop = true
     proc.kill("SIGTERM")
     await fs.rm(sandbox, { recursive: true, force: true }).catch(() => undefined)
     throw new Error(
       [
         `Failed to start isolated e2e backend for ${label}`,
         error instanceof Error ? error.message : String(error),
-        tail(out),
-        tail(err),
+        out.length ? `stdout tail:\n${tail(out).trimEnd()}` : "",
+        err.length ? `stderr tail:\n${tail(err).trimEnd()}` : "",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -138,6 +164,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   return {
     url,
     async stop() {
+      stop = true
       await phase(`${label} stop ${url}`, async () => {
         if (proc.exitCode === null) {
           proc.kill("SIGTERM")
@@ -145,6 +172,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
         }
         if (proc.exitCode === null) {
           console.error(`[e2e:backend] ${label} forcing SIGKILL ${url}`)
+          dump(label, url, out, err, "pre-sigkill")
           proc.kill("SIGKILL")
           await waitExit(proc)
         }
