@@ -73,6 +73,14 @@ async function terminalReady(page: Page, term?: Locator) {
   }, id)
 }
 
+async function terminalSettles(page: Page, term?: Locator) {
+  const next = term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate((id) => {
+    return (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]?.settled ?? 0
+  }, id)
+}
+
 async function terminalFocusIdle(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
@@ -82,7 +90,7 @@ async function terminalFocusIdle(page: Page, term?: Locator) {
   }, id)
 }
 
-async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
+export async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
   const next = input.term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
   return page.evaluate(
@@ -123,6 +131,20 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
   await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
+
+  let prev = -1
+  let same = 0
+  await expect
+    .poll(
+      async () => {
+        const next = await terminalSettles(page, term)
+        same = next === prev ? same + 1 : 0
+        prev = next
+        return same
+      },
+      { timeout },
+    )
+    .toBeGreaterThanOrEqual(2)
 }
 
 export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
@@ -834,7 +856,10 @@ export async function openStatusPopover(page: Page) {
     .locator(popoverBodySelector)
     .filter({ has: page.locator('[data-component="tabs"]') })
     .last()
-  const tabs = popoverBody.locator('[data-component="tabs"]').first()
+  const servers = popoverBody.getByRole("tab", { name: /servers/i }).first()
+  const mcp = popoverBody.getByRole("tab", { name: /mcp/i }).first()
+  const lsp = popoverBody.getByRole("tab", { name: /lsp/i }).first()
+  const plugins = popoverBody.getByRole("tab", { name: /plugins/i }).first()
 
   const opened = await popoverBody
     .isVisible()
@@ -847,7 +872,12 @@ export async function openStatusPopover(page: Page) {
       .poll(
         async () => {
           const body = await popoverBody.isVisible().catch(() => false)
-          const ready = await tabs.isVisible().catch(() => false)
+          const ready = await Promise.all([
+            servers.isVisible().catch(() => false),
+            mcp.isVisible().catch(() => false),
+            lsp.isVisible().catch(() => false),
+            plugins.isVisible().catch(() => false),
+          ]).then((items) => items.every(Boolean))
           if (body && ready) return true
           if (!body) {
             const clicked = await trigger
@@ -867,7 +897,10 @@ export async function openStatusPopover(page: Page) {
       .toBe(true)
   }
 
-  await expect(tabs).toBeVisible()
+  await expect(servers).toBeVisible()
+  await expect(mcp).toBeVisible()
+  await expect(lsp).toBeVisible()
+  await expect(plugins).toBeVisible()
 
   return { rightSection, popoverBody }
 }

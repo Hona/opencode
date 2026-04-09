@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { test, expect, settingsKey } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
 import {
@@ -25,6 +25,27 @@ const saved = (page: Page) =>
 
 const css = (page: Page, key: string) =>
   page.evaluate((key) => getComputedStyle(document.documentElement).getPropertyValue(key).trim(), key)
+
+async function pick(page: Page, select: Locator, value: string) {
+  const trigger = select.locator('[data-slot="select-select-trigger"]').first()
+  await expect(trigger).toBeVisible()
+  await expect
+    .poll(
+      async () => {
+        const item = page.locator('[data-slot="select-select-item"]').filter({ hasText: value }).first()
+        if (!(await item.isVisible().catch(() => false))) {
+          await trigger.click().catch(() => undefined)
+          return false
+        }
+        return item
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
+}
 
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -70,12 +91,10 @@ test("changing color scheme persists in localStorage", async ({ page, gotoSessio
   const select = dialog.locator(settingsColorSchemeSelector)
   await expect(select).toBeVisible()
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
+  await pick(page, select, "Dark")
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Light" }).click()
+  await pick(page, select, "Light")
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light")
 })
 

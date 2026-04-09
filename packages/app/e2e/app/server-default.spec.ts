@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { serverNamePattern, serverUrls } from "../utils"
-import { closeDialog, clickMenuItem } from "../actions"
+import { closeDialog, clickMenuItem, openStatusPopover } from "../actions"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -15,17 +15,13 @@ test("can set a default server on web", async ({ page, gotoSession }) => {
 
   await gotoSession()
 
-  const status = page.getByRole("button", { name: "Status" })
-  await expect(status).toBeVisible()
-  const popover = page.locator('[data-component="popover-content"]').filter({ hasText: "Manage servers" })
-
-  const ensurePopoverOpen = async () => {
-    if (await popover.isVisible()) return
-    await status.click()
-    await expect(popover).toBeVisible()
+  const open = async () => {
+    const { popoverBody } = await openStatusPopover(page)
+    await expect(popoverBody.getByRole("button", { name: "Manage servers" })).toBeVisible()
+    return popoverBody
   }
 
-  await ensurePopoverOpen()
+  const popover = await open()
   await popover.getByRole("button", { name: "Manage servers" }).click()
 
   const dialog = page.getByRole("dialog")
@@ -50,9 +46,9 @@ test("can set a default server on web", async ({ page, gotoSession }) => {
 
   await closeDialog(page, dialog)
 
-  await ensurePopoverOpen()
+  const next = await open()
 
-  const serverRow = popover.locator("button").filter({ hasText: serverNamePattern }).first()
+  const serverRow = next.locator("button").filter({ hasText: serverNamePattern }).first()
   await expect(serverRow).toBeVisible()
   await expect(serverRow.getByText("Default", { exact: true })).toBeVisible()
 })

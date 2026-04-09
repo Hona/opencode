@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test"
+import { inspect } from "node:util"
 import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
 import type { Item, Reply, Usage } from "../../opencode/test/lib/llm-server"
@@ -83,6 +84,12 @@ const seedModel = (() => {
 
 function clean(value: string | null) {
   return (value ?? "").replace(/\u200B/g, "").trim()
+}
+
+function failText(err: unknown) {
+  if (err instanceof Error && err.stack) return err.stack
+  if (typeof err === "object" && err && "stack" in err && typeof err.stack === "string") return err.stack
+  return inspect(err, { depth: 8, breakLength: 120 })
 }
 
 async function visit(page: Page, url: string) {
@@ -259,8 +266,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       boundary ||= text
       console.log(text)
     }
-    const pageErrorHandler = (err: Error) => {
-      console.log(`[e2e:pageerror] ${err.stack || err.message}`)
+    const pageErrorHandler = (err: unknown) => {
+      console.log(`[e2e:pageerror] ${failText(err)}`)
     }
     page.on("console", consoleHandler)
     page.on("pageerror", pageErrorHandler)

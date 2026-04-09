@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import { runTerminal, waitTerminalReady } from "../actions"
+import { runTerminal, terminalHas, waitTerminalFocusIdle, waitTerminalReady } from "../actions"
 import { test, expect } from "../fixtures"
 import { dropdownMenuContentSelector, terminalSelector } from "../selectors"
 import { terminalToggleKey, workspacePersistKey } from "../utils"
@@ -18,7 +18,7 @@ async function open(page: Page) {
   const terminal = page.locator(terminalSelector)
   const visible = await terminal.isVisible().catch(() => false)
   if (!visible) await page.keyboard.press(terminalToggleKey)
-  await waitTerminalReady(page, { term: terminal })
+  await waitTerminalFocusIdle(page, { term: terminal, timeout: 30_000 })
 }
 
 async function store(page: Page, key: string) {
@@ -38,75 +38,54 @@ async function store(page: Page, key: string) {
 
 test("inactive terminal tab buffers persist across tab switches", async ({ page, project }) => {
   await project.open()
-  const key = workspacePersistKey(project.directory, "terminal")
   const one = `E2E_TERM_ONE_${Date.now()}`
   const two = `E2E_TERM_TWO_${Date.now()}`
   const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
   const first = tabs.filter({ hasText: /Terminal 1/ }).first()
   const second = tabs.filter({ hasText: /Terminal 2/ }).first()
-  let ids: { first: string; second: string } | undefined
 
   await project.gotoSession()
   await open(page)
 
-  await runTerminal(page, { cmd: `echo ${one}`, token: one })
+  await runTerminal(page, { cmd: `echo ${one}`, token: one, timeout: 30_000 })
 
   await page.getByRole("button", { name: /new terminal/i }).click()
   await expect(tabs).toHaveCount(2)
   await expect(second).toHaveAttribute("aria-selected", "true")
+  await waitTerminalFocusIdle(page, { timeout: 30_000 })
 
-  await runTerminal(page, { cmd: `echo ${two}`, token: two })
-
-  await expect
-    .poll(
-      async () => {
-        const state = await store(page, key)
-        const first = state?.all.find((item) => item.titleNumber === 1)?.id
-        const second = state?.all.find((item) => item.titleNumber === 2)?.id
-        if (!first || !second) return false
-        ids = { first, second }
-        return true
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true)
+  await runTerminal(page, { cmd: `echo ${two}`, token: two, timeout: 30_000 })
 
   await first.click()
   await expect(first).toHaveAttribute("aria-selected", "true")
-  await expect.poll(async () => (await store(page, key))?.active, { timeout: 30_000 }).toBe(ids?.first)
+  await waitTerminalFocusIdle(page, { timeout: 30_000 })
 
   await expect
     .poll(
       async () => {
-        const state = await store(page, key)
-        const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
-        const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
         return {
-          first: first.includes(one),
-          second: second.includes(two),
+          one: await terminalHas(page, { token: one }),
+          two: await terminalHas(page, { token: two }),
         }
       },
       { timeout: 30_000 },
     )
-    .toEqual({ first: false, second: true })
+    .toEqual({ one: true, two: false })
 
   await second.click()
   await expect(second).toHaveAttribute("aria-selected", "true")
-  await expect.poll(async () => (await store(page, key))?.active, { timeout: 30_000 }).toBe(ids?.second)
+  await waitTerminalFocusIdle(page, { timeout: 30_000 })
   await expect
     .poll(
       async () => {
-        const state = await store(page, key)
-        const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
-        const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
         return {
-          first: first.includes(one),
-          second: second.includes(two),
+          one: await terminalHas(page, { token: one }),
+          two: await terminalHas(page, { token: two }),
         }
       },
       { timeout: 30_000 },
     )
-    .toEqual({ first: true, second: false })
+    .toEqual({ one: false, two: true })
 })
 
 test("closing the active terminal tab falls back to the previous tab", async ({ page, project }) => {

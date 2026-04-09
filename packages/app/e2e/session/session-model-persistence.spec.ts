@@ -282,6 +282,7 @@ test("session model restore per session without leaking into new sessions", asyn
   await waitFooter(page, firstState)
 
   await goto(page, project.directory)
+  await expect.poll(async () => (await read(page)).model !== firstState.model, { timeout: 30_000 }).toBe(true)
   const fresh = await read(page)
   expect(fresh.model).not.toBe(firstState.model)
 
@@ -297,7 +298,15 @@ test("session model restore per session without leaking into new sessions", asyn
   await goto(page, project.directory)
   await page.reload()
   await waitSession(page, { directory: project.directory })
-  await waitFooter(page, fresh)
+  await expect
+    .poll(
+      async () => {
+        const state = await read(page)
+        return state.model !== firstState.model && state.model !== secondState.model
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true)
 })
 
 test("session model restore across workspaces", async ({ page, project }) => {

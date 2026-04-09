@@ -10,7 +10,14 @@ async function pick(popoverBody: Locator, name: RegExp) {
         const value = await tab.getAttribute("aria-selected").catch(() => null)
         if (value === "true") return true
         if (!(await tab.isVisible().catch(() => false))) return false
-        await tab.click().catch(() => undefined)
+        const clicked = await tab
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+        if (!clicked) {
+          await tab.focus().catch(() => undefined)
+          await tab.press("Enter").catch(() => undefined)
+        }
         return false
       },
       { timeout: 15_000 },
