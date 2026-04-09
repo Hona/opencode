@@ -47,6 +47,28 @@ async function pick(page: Page, select: Locator, value: string) {
     .toBe(true)
 }
 
+async function swap(page: Page, select: Locator, skip: string) {
+  const trigger = select.locator('[data-slot="select-select-trigger"]').first()
+  await expect(trigger).toBeVisible()
+  await expect
+    .poll(
+      async () => {
+        const items = page.locator('[data-slot="select-select-item"]')
+        const item = items.filter({ hasNotText: skip }).first()
+        if (!(await item.isVisible().catch(() => false))) {
+          await trigger.click().catch(() => undefined)
+          return false
+        }
+        return item
+          .click({ timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
+}
+
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
 
@@ -322,8 +344,7 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
 
   const colorSchemeSelect = dialog.locator(settingsColorSchemeSelector)
   await expect(colorSchemeSelect).toBeVisible()
-  await colorSchemeSelect.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
+  await pick(page, colorSchemeSelect, "Dark")
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
   const code = dialog.locator(settingsCodeFontSelector)
@@ -452,10 +473,8 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   const select = dialog.locator(settingsSoundsAgentSelector)
   await expect(select).toBeVisible()
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-
-  const items = page.locator('[data-slot="select-select-item"]')
-  await items.nth(2).click()
+  const current = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+  await swap(page, select, current)
   await expect.poll(() => saved(page).then((x) => x?.sounds?.agent)).not.toBe("staplebops-01")
 })
 
@@ -464,14 +483,9 @@ test("selecting none disables agent sound", async ({ page, gotoSession }) => {
 
   const dialog = await openSettings(page)
   const select = dialog.locator(settingsSoundsAgentSelector)
-  const trigger = select.locator('[data-slot="select-select-trigger"]')
   await expect(select).toBeVisible()
-  await expect(trigger).toBeEnabled()
 
-  await trigger.click()
-  const items = page.locator('[data-slot="select-select-item"]')
-  await expect(items.first()).toBeVisible()
-  await items.first().click()
+  await pick(page, select, "None")
   await expect.poll(() => saved(page).then((x) => x?.sounds?.agentEnabled)).toBe(false)
 })
 
@@ -491,27 +505,11 @@ test("changing permissions and errors sounds updates localStorage", async ({ pag
 
   const permissionsCurrent =
     (await permissionsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await permissionsSelect.locator('[data-slot="select-select-trigger"]').click()
-  const permissionItems = page.locator('[data-slot="select-select-item"]')
-  expect(await permissionItems.count()).toBeGreaterThan(1)
-  if (permissionsCurrent) {
-    await permissionItems.filter({ hasNotText: permissionsCurrent }).first().click()
-  }
-  if (!permissionsCurrent) {
-    await permissionItems.nth(1).click()
-  }
+  await swap(page, permissionsSelect, permissionsCurrent)
 
   const errorsCurrent =
     (await errorsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await errorsSelect.locator('[data-slot="select-select-trigger"]').click()
-  const errorItems = page.locator('[data-slot="select-select-item"]')
-  expect(await errorItems.count()).toBeGreaterThan(1)
-  if (errorsCurrent) {
-    await errorItems.filter({ hasNotText: errorsCurrent }).first().click()
-  }
-  if (!errorsCurrent) {
-    await errorItems.nth(1).click()
-  }
+  await swap(page, errorsSelect, errorsCurrent)
 
   await expect
     .poll(async () => {
