@@ -36,7 +36,6 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
-import { Env } from "../env"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "../lsp"
@@ -78,7 +77,6 @@ export namespace ToolRegistry {
     Service,
     never,
     | Config.Service
-    | Env.Service
     | Plugin.Service
     | Question.Service
     | Todo.Service
@@ -100,7 +98,6 @@ export namespace ToolRegistry {
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
-      const env = yield* Env.Service
       const plugin = yield* Plugin.Service
       const agents = yield* Agent.Service
       const skill = yield* Skill.Service
@@ -326,7 +323,6 @@ export namespace ToolRegistry {
   export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(Config.defaultLayer),
-      Layer.provide(Env.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
