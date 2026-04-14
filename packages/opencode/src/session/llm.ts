@@ -206,7 +206,7 @@ export namespace LLM {
           // during compaction), inject a stub tool to satisfy the validation requirement.
           // The stub description explicitly tells the model not to call it.
           if (
-            (isLiteLLMProxy || input.model.api.npm === "@ai-sdk/github-copilot") &&
+            (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
             Object.keys(tools).length === 0 &&
             hasToolCalls(input.messages)
           ) {
