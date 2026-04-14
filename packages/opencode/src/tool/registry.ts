@@ -274,15 +274,13 @@ export namespace ToolRegistry {
       })
 
       const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-        const e2e = !!(yield* env.get("OPENCODE_E2E_LLM_URL"))
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
             return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           const usePatch =
-            e2e ||
-            (input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4"))
+            input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
           if (tool.id === ApplyPatchTool.id) return usePatch
           if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 
