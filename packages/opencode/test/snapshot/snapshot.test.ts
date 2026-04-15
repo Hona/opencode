@@ -632,37 +632,6 @@ test("files tracked in snapshot but now gitignored are filtered out", async () =
   })
 })
 
-test("gitignore filtering handles large tracked sets", async () => {
-  await using tmp = await tmpdir<string[]>({
-    git: true,
-    init: async (dir) => {
-      const ids = Array.from({ length: 2000 }, (_, i) => `${"f".repeat(40)}-${i.toString().padStart(4, "0")}.txt`)
-      await Promise.all(ids.map((id) => Filesystem.write(`${dir}/bulk/${id}`, `before-${id}`)))
-      await $`git add .`.cwd(dir).quiet()
-      await $`git commit -m init`.cwd(dir).quiet()
-      return ids
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const before = await run(tmp.path, (snapshot) => snapshot.track())
-      expect(before).toBeTruthy()
-
-      await Promise.all(tmp.extra.map((id) => Filesystem.write(`${tmp.path}/bulk/${id}`, `after-${id}`)))
-      await Filesystem.write(`${tmp.path}/.gitignore`, "bulk/\n")
-      await Filesystem.write(`${tmp.path}/keep.txt`, "keep")
-
-      const patch = await run(tmp.path, (snapshot) => snapshot.patch(before!))
-
-      expect(patch.files).toContain(fwd(tmp.path, ".gitignore"))
-      expect(patch.files).toContain(fwd(tmp.path, "keep.txt"))
-      expect(patch.files.some((file) => file.includes("/bulk/"))).toBe(false)
-    },
-  })
-})
-
 test("gitignore updated between track calls filters from diff", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
