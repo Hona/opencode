@@ -267,12 +267,9 @@ export namespace Snapshot {
                 { concurrency: 8 },
               )).filter((item): item is string => Boolean(item)),
             )
-            const list = allow.filter((item) => !large.has(item))
             yield* sync(Array.from(large))
-            if (!list.length) return
-            // Stage only the allowed candidate paths so snapshot updates stay scoped
-            // to the files we already decided to keep.
-            yield* stage(list)
+            // Stage only the allowed candidate paths so snapshot updates stay scoped.
+            yield* stage(allow.filter((item) => !large.has(item)))
           })
 
           const cleanup = Effect.fnUntraced(function* () {
@@ -339,20 +336,13 @@ export namespace Snapshot {
                   .filter(Boolean)
 
                 // Hide ignored-file removals from the user-facing patch output.
-                if (files.length > 0) {
-                  const ignored = yield* ignore(files)
-                  if (ignored.size > 0) {
-                    const filtered = files.filter((item) => !ignored.has(item))
-                    return {
-                      hash,
-                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
-                    }
-                  }
-                }
+                const ignored = yield* ignore(files)
 
                 return {
                   hash,
-                  files: files.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files
+                    .filter((item) => !ignored.has(item))
+                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
             )
@@ -704,13 +694,11 @@ export namespace Snapshot {
                   })
 
                 // Hide ignored-file removals from the user-facing diff output.
-                if (rows.length > 0) {
-                  const ignored = yield* ignore(rows.map((r) => r.file))
-                  if (ignored.size > 0) {
-                    const filtered = rows.filter((r) => !ignored.has(r.file))
-                    rows.length = 0
-                    rows.push(...filtered)
-                  }
+                const ignored = yield* ignore(rows.map((r) => r.file))
+                if (ignored.size > 0) {
+                  const filtered = rows.filter((r) => !ignored.has(r.file))
+                  rows.length = 0
+                  rows.push(...filtered)
                 }
 
                 const step = 100
