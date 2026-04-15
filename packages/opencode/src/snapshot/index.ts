@@ -159,6 +159,22 @@ export namespace Snapshot {
             )
           })
 
+          const stage = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            const result = yield* git(
+              [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (result.code === 0) return
+            log.warn("failed to add snapshot files", {
+              exitCode: result.code,
+              stderr: result.stderr,
+            })
+          })
+
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
           const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
@@ -220,12 +236,9 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
-            // Filter out files that are now gitignored even if previously tracked
-            // Files may have been tracked before being gitignored, so we need to check
-            // against the source project's current gitignore rules
-            // Use --no-index to check purely against patterns (ignoring whether file is tracked)
+            // Resolve source-repo ignore rules against the exact candidate set.
+            // --no-index keeps this pattern-based even when a path is already tracked.
             const ignored = yield* ignore(all)
-            const filtered = all.filter((item) => !ignored.has(item))
 
             // Remove newly-ignored files from snapshot index to prevent re-adding
             if (ignored.size > 0) {
@@ -234,31 +247,32 @@ export namespace Snapshot {
               yield* drop(ignoredFiles)
             }
 
-            if (!filtered.length) return
+            const allow = all.filter((item) => !ignored.has(item))
+            if (!allow.length) return
 
-            const large = (yield* Effect.all(
-              filtered.map((item) =>
-                fs
-                  .stat(path.join(state.directory, item))
-                  .pipe(Effect.catch(() => Effect.void))
-                  .pipe(
-                    Effect.map((stat) => {
-                      if (!stat || stat.type !== "File") return
-                      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-                      return size > limit ? item : undefined
-                    }),
-                  ),
-              ),
-              { concurrency: 8 },
-            )).filter((item): item is string => Boolean(item))
-            yield* sync(large)
-            const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
-            if (result.code !== 0) {
-              log.warn("failed to add snapshot files", {
-                exitCode: result.code,
-                stderr: result.stderr,
-              })
-            }
+            const large = new Set(
+              (yield* Effect.all(
+                allow.map((item) =>
+                  fs
+                    .stat(path.join(state.directory, item))
+                    .pipe(Effect.catch(() => Effect.void))
+                    .pipe(
+                      Effect.map((stat) => {
+                        if (!stat || stat.type !== "File") return
+                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                        return size > limit ? item : undefined
+                      }),
+                    ),
+                ),
+                { concurrency: 8 },
+              )).filter((item): item is string => Boolean(item)),
+            )
+            const list = allow.filter((item) => !large.has(item))
+            yield* sync(Array.from(large))
+            if (!list.length) return
+            // Stage only the allowed candidate paths so snapshot updates stay scoped
+            // to the files we already decided to keep.
+            yield* stage(list)
           })
 
           const cleanup = Effect.fnUntraced(function* () {
@@ -324,7 +338,7 @@ export namespace Snapshot {
                   .map((x) => x.trim())
                   .filter(Boolean)
 
-                // Filter out files that are now gitignored
+                // Hide ignored-file removals from the user-facing patch output.
                 if (files.length > 0) {
                   const ignored = yield* ignore(files)
                   if (ignored.size > 0) {
@@ -689,7 +703,7 @@ export namespace Snapshot {
                     ]
                   })
 
-                // Filter out files that are now gitignored
+                // Hide ignored-file removals from the user-facing diff output.
                 if (rows.length > 0) {
                   const ignored = yield* ignore(rows.map((r) => r.file))
                   if (ignored.size > 0) {
