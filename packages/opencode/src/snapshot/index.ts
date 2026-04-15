@@ -267,9 +267,10 @@ export namespace Snapshot {
                 { concurrency: 8 },
               )).filter((item): item is string => Boolean(item)),
             )
-            yield* sync(Array.from(large))
+            const block = new Set(untracked.filter((item) => large.has(item)))
+            yield* sync(Array.from(block))
             // Stage only the allowed candidate paths so snapshot updates stay scoped.
-            yield* stage(allow.filter((item) => !large.has(item)))
+            yield* stage(allow.filter((item) => !block.has(item)))
           })
 
           const cleanup = Effect.fnUntraced(function* () {
