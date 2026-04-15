@@ -90,12 +90,19 @@ export namespace Snapshot {
 
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
+          const enc = new TextEncoder()
+          const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
+
           const git = Effect.fnUntraced(
-            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+            function* (
+              cmd: string[],
+              opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
+            ) {
               const proc = ChildProcess.make("git", cmd, {
                 cwd: opts?.cwd,
                 env: opts?.env,
                 extendEnv: true,
+                stdin: opts?.stdin,
               })
               const handle = yield* spawner.spawn(proc)
               const [text, stderr] = yield* Effect.all(
@@ -114,6 +121,43 @@ export namespace Snapshot {
               }),
             ),
           )
+
+          const ignore = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return new Set<string>()
+            const check = yield* git(
+              [
+                ...quote,
+                "--git-dir",
+                path.join(state.worktree, ".git"),
+                "--work-tree",
+                state.worktree,
+                "check-ignore",
+                "--no-index",
+                "--stdin",
+                "-z",
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (check.code !== 0 && check.code !== 1) return new Set<string>()
+            return new Set(check.text.split("\0").filter(Boolean))
+          })
+
+          const drop = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            yield* git(
+              [
+                ...cfg,
+                ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+          })
 
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
@@ -180,29 +224,14 @@ export namespace Snapshot {
             // Files may have been tracked before being gitignored, so we need to check
             // against the source project's current gitignore rules
             // Use --no-index to check purely against patterns (ignoring whether file is tracked)
-            const checkArgs = [
-              ...quote,
-              "--git-dir",
-              path.join(state.worktree, ".git"),
-              "--work-tree",
-              state.worktree,
-              "check-ignore",
-              "--no-index",
-              "--",
-              ...all,
-            ]
-            const check = yield* git(checkArgs, { cwd: state.directory })
-            const ignored =
-              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
+            const ignored = yield* ignore(all)
             const filtered = all.filter((item) => !ignored.has(item))
 
             // Remove newly-ignored files from snapshot index to prevent re-adding
             if (ignored.size > 0) {
               const ignoredFiles = Array.from(ignored)
               log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
-              yield* git([...cfg, ...args(["rm", "--cached", "-f", "--", ...ignoredFiles])], {
-                cwd: state.directory,
-              })
+              yield* drop(ignoredFiles)
             }
 
             if (!filtered.length) return
@@ -297,20 +326,8 @@ export namespace Snapshot {
 
                 // Filter out files that are now gitignored
                 if (files.length > 0) {
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                  const ignored = yield* ignore(files)
+                  if (ignored.size > 0) {
                     const filtered = files.filter((item) => !ignored.has(item))
                     return {
                       hash,
@@ -674,21 +691,8 @@ export namespace Snapshot {
 
                 // Filter out files that are now gitignored
                 if (rows.length > 0) {
-                  const files = rows.map((r) => r.file)
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                  const ignored = yield* ignore(rows.map((r) => r.file))
+                  if (ignored.size > 0) {
                     const filtered = rows.filter((r) => !ignored.has(r.file))
                     rows.length = 0
                     rows.push(...filtered)
