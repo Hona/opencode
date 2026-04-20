@@ -254,10 +254,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
           const result = yield* run(shell, [
             "-NoProfile",
+            "-NonInteractive",
             "-Command",
-            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-            archive,
-            dir,
+            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
           ])
           if (result.code !== 0) {
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
