@@ -225,13 +225,6 @@ function raceAbort<A, E, R>(effect: Effect.Effect<A, E, R>, signal?: AbortSignal
   return signal ? effect.pipe(Effect.raceFirst(waitForAbort(signal))) : effect
 }
 
-function samePath(left: string, right: string) {
-  const a = path.resolve(left)
-  const b = path.resolve(right)
-  if (process.platform === "win32") return a.toLowerCase() === b.toLowerCase()
-  return a === b
-}
-
 export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildProcessSpawner | HttpClient.HttpClient> =
   Layer.effect(
     Service,
@@ -294,14 +287,11 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
 
       const filepath = yield* Effect.cached(
         Effect.gen(function* () {
-          const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
-          const version = path.join(Global.Path.bin, "rg.version")
           const system = yield* Effect.sync(() => which("rg"))
-          if (system && !samePath(system, target) && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
+          if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
-          const installed = yield* fs.isFile(target).pipe(Effect.orDie)
-          const current = yield* fs.readFileString(version).pipe(Effect.catch(() => Effect.succeed("")))
-          if (installed && current === VERSION) return target
+          const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
+          if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
 
           const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
           const config = PLATFORM[platformKey]
@@ -325,16 +315,10 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
             return yield* Effect.fail(new Error(`failed to download ripgrep from ${url}`))
           }
 
-          const install = Effect.gen(function* () {
-            yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
-            yield* extract(archive, config, target)
-            yield* fs.writeFileString(version, VERSION)
-            yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
-            return target
-          })
-
-          if (installed) return yield* install.pipe(Effect.catch(() => Effect.succeed(target)))
-          return yield* install
+          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+          yield* extract(archive, config, target)
+          yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
+          return target
         }),
       )
 
