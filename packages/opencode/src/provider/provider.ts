@@ -1507,8 +1507,8 @@ const layer: Layer.Layer<
           installedPath = model.api.npm
         }
 
-        // Node's ESM loader on Windows rejects bare absolute paths; dynamic import() needs
-        // a file:// URL. Bun accepts both, so this conversion is safe on either runtime.
+        // `installedPath` is a local entry path or an existing `file://` URL. Normalize
+        // only path inputs so Node on Windows accepts the dynamic import.
         const importSpec = installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
         const mod = await import(importSpec)
 
