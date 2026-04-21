@@ -19,6 +19,7 @@ import { zod } from "@/util/effect-zod"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
@@ -1506,7 +1507,10 @@ const layer: Layer.Layer<
           installedPath = model.api.npm
         }
 
-        const mod = await import(installedPath)
+        // Node's ESM loader on Windows rejects bare absolute paths; dynamic import() needs
+        // a file:// URL. Bun accepts both, so this conversion is safe on either runtime.
+        const importSpec = installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
+        const mod = await import(importSpec)
 
         const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
         const loaded = fn({
