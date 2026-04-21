@@ -296,15 +296,16 @@ function createGlobalSync() {
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (event.type === "session.error") {
-      const props = event.properties as { sessionID?: string; error?: unknown }
-      console.error("[global-sync] session error", {
-        scope: directory === "global" ? "global" : "workspace",
-        directory: directory === "global" ? undefined : directory,
-        project: directory === "global" ? undefined : getFilename(directory),
-        sessionID: props.sessionID,
-        message: formatServerError(props.error, language.t),
-        error: props.error,
-      })
+      const error = event.properties.error
+      if (error?.name !== "MessageAbortedError") {
+        console.error("[global-sync] session error", {
+          scope: directory === "global" ? "global" : "workspace",
+          directory: directory === "global" ? undefined : directory,
+          project: directory === "global" ? undefined : getFilename(directory),
+          sessionID: event.properties.sessionID,
+          error,
+        })
+      }
     }
 
     if (directory === "global") {
