@@ -131,13 +131,13 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     new StreamMessageReader(input.server.process.stdout as any),
     new StreamMessageWriter(input.server.process.stdin as any),
   )
-  // LSP servers rarely write to stderr - when they do, it's almost always a
-  // misconfiguration (wrong binary, bad args, missing deps) that otherwise
-  // manifests as a silent 45s initialize timeout. Surface it at error level so
-  // operators don't have to hunt.
+  // Server stderr can contain both real errors and routine informational logs,
+  // which is normal stderr practice for some tools. Keep the raw stream at
+  // debug so users can opt in with --print-logs --log-level DEBUG without
+  // polluting normal logs.
   input.server.process.stderr?.on("data", (data: Buffer) => {
     const text = data.toString().trim()
-    if (text) l.error("server stderr", { text: text.slice(0, 1000) })
+    if (text) l.debug("server stderr", { text: text.slice(0, 1000) })
   })
 
   const pushDiagnostics = new Map<string, Diagnostic[]>()
