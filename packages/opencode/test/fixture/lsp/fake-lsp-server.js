@@ -3,8 +3,10 @@
 let nextId = 1
 let readBuffer = Buffer.alloc(0)
 let lastChange = null
+let initializeParams = null
 let diagnosticRequestCount = 0
 let registeredCapability = false
+const pendingClientRequests = new Map()
 let pullConfig = {
   delayMs: 0,
   registerOn: undefined,
@@ -101,7 +103,16 @@ function handle(raw) {
     return
   }
 
+  if (typeof data.method === "undefined" && typeof data.id !== "undefined") {
+    const pending = pendingClientRequests.get(data.id)
+    if (!pending) return
+    pendingClientRequests.delete(data.id)
+    sendResponse(pending, data.result ?? null)
+    return
+  }
+
   if (data.method === "initialize") {
+    initializeParams = data.params
     sendResponse(data.id, {
       capabilities: {
         textDocumentSync: {
@@ -109,6 +120,17 @@ function handle(raw) {
         },
       },
     })
+    return
+  }
+
+  if (data.method === "test/get-initialize-params") {
+    sendResponse(data.id, initializeParams)
+    return
+  }
+
+  if (data.method === "test/request-configuration") {
+    const id = sendRequest("workspace/configuration", data.params)
+    pendingClientRequests.set(id, data.id)
     return
   }
 

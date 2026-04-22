@@ -114,6 +114,15 @@ function dedupeDiagnostics(items: Diagnostic[]) {
   })
 }
 
+function configurationValue(settings: unknown, section?: string) {
+  if (!section) return settings ?? null
+  const result = section.split(".").reduce<unknown>((acc, key) => {
+    if (!acc || typeof acc !== "object" || !(key in acc)) return undefined
+    return (acc as Record<string, unknown>)[key]
+  }, settings)
+  return result ?? null
+}
+
 export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; directory: string }) {
   const l = log.clone().tag("serverID", input.serverID)
   l.info("starting client")
@@ -171,8 +180,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     l.info("window/workDoneProgress/create", params)
     return null
   })
-  connection.onRequest("workspace/configuration", async () => {
-    return [input.server.initialization ?? {}]
+  connection.onRequest("workspace/configuration", async (params) => {
+    const items = (params as { items?: { section?: string }[] }).items ?? []
+    return items.map((item) => configurationValue(input.server.initialization, item.section))
   })
   connection.onRequest("client/registerCapability", async (params) => {
     const registrations = (params as { registrations?: CapabilityRegistration[] }).registrations ?? []
@@ -227,7 +237,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
             dynamicRegistration: true,
           },
           diagnostics: {
-            refreshSupport: true,
+            refreshSupport: false,
           },
         },
         textDocument: {
@@ -240,7 +250,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
             relatedDocumentSupport: true,
           },
           publishDiagnostics: {
-            versionSupport: true,
+            versionSupport: false,
           },
         },
       },

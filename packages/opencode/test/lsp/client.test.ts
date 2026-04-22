@@ -91,6 +91,59 @@ describe("LSPClient interop", () => {
     await client.shutdown()
   })
 
+  test("initialize does not overclaim unsupported diagnostics capabilities", async () => {
+    const handle = spawnFakeServer() as any
+
+    const client = await Instance.provide({
+      directory: process.cwd(),
+      fn: () =>
+        LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: process.cwd(),
+          directory: process.cwd(),
+        }),
+    })
+
+    const params = await client.connection.sendRequest<any>("test/get-initialize-params", {})
+    expect(params.capabilities.workspace.diagnostics.refreshSupport).toBe(false)
+    expect(params.capabilities.textDocument.publishDiagnostics.versionSupport).toBe(false)
+
+    await client.shutdown()
+  })
+
+  test("workspace/configuration returns one result per requested item", async () => {
+    const handle = spawnFakeServer() as any
+    const initialization = {
+      alpha: {
+        beta: 1,
+      },
+      gamma: true,
+    }
+
+    const client = await Instance.provide({
+      directory: process.cwd(),
+      fn: () =>
+        LSPClient.create({
+          serverID: "fake",
+          server: {
+            ...(handle as unknown as LSPServer.Handle),
+            initialization,
+          },
+          root: process.cwd(),
+          directory: process.cwd(),
+        }),
+    })
+
+    const response = await client.connection.sendRequest<any[]>("test/request-configuration", {
+      items: [{ section: "alpha" }, { section: "alpha.beta" }, { section: "missing" }, {}],
+    })
+
+    expect(response).toEqual([{ beta: 1 }, 1, null, initialization])
+
+    await client.shutdown()
+  })
+
   test("sends ranged didChange for incremental sync servers", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()
