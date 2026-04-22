@@ -122,6 +122,14 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     new StreamMessageReader(input.server.process.stdout as any),
     new StreamMessageWriter(input.server.process.stdin as any),
   )
+  // LSP servers rarely write to stderr - when they do, it's almost always a
+  // misconfiguration (wrong binary, bad args, missing deps) that otherwise
+  // manifests as a silent 45s initialize timeout. Surface it at error level so
+  // operators don't have to hunt.
+  input.server.process.stderr?.on("data", (data: Buffer) => {
+    const text = data.toString().trim()
+    if (text) l.error("server stderr", { text: text.slice(0, 1000) })
+  })
 
   const pushDiagnostics = new Map<string, Diagnostic[]>()
   const pullDiagnostics = new Map<string, Diagnostic[]>()
