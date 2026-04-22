@@ -228,6 +228,61 @@ describe("LSPClient interop", () => {
     })
   })
 
+  test("document mode issues identifier pulls in parallel without settle delay", async () => {
+    // Guards against two latency regressions:
+    //   1. Sequentially sweeping identifier pulls (would be ~5 * 300ms = 1500ms).
+    //   2. Re-introducing a settle/debounce wait after a matching pull response.
+    // Parallel dispatch completes in ~300ms; threshold leaves headroom for CI jitter.
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.cs")
+    await Bun.write(file, "class C {}\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        const identifiers = ["syntax", "compiler", "analyzer-semantic", "analyzer-syntax", "non-local"]
+        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+          registerOn: "didOpen",
+          delayMs: 300,
+          registrations: identifiers.map((identifier) => ({ identifier })),
+          documentDiagnosticsByIdentifier: Object.fromEntries(
+            identifiers.map((identifier) => [
+              identifier,
+              [
+                {
+                  range: {
+                    start: { line: 0, character: 0 },
+                    end: { line: 0, character: 5 },
+                  },
+                  message: `from ${identifier}`,
+                  severity: 1,
+                },
+              ],
+            ]),
+          ),
+        })
+
+        const version = await client.notify.open({ path: file })
+        const started = Date.now()
+        await client.waitForDiagnostics({ path: file, version, mode: "document" })
+        const duration = Date.now() - started
+
+        expect(duration).toBeLessThan(1000)
+        expect(client.diagnostics.get(file)?.length ?? 0).toBeGreaterThan(0)
+
+        await client.shutdown()
+      },
+    })
+  })
+
   test("full mode includes workspace pull diagnostics", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()
