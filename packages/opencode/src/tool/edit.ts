@@ -85,8 +85,10 @@ export const EditTool = Tool.define(
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)
+                const source = existed ? yield* Bom.readFile(afs, filePath) : { bom: false, text: "" }
                 const next = Bom.split(params.newString)
-                const desiredBom = next.bom
+                const desiredBom = source.bom || next.bom
+                contentOld = source.text
                 contentNew = next.text
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
                 yield* ctx.ask({
