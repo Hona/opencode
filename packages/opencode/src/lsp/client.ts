@@ -18,6 +18,13 @@ const DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS = 5_000
 const DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS = 10_000
 const DIAGNOSTICS_REQUEST_TIMEOUT_MS = 3_000
 
+const INITIALIZE_TIMEOUT_MS = 45_000
+
+// LSP spec constants
+const FILE_CHANGE_CREATED = 1
+const FILE_CHANGE_CHANGED = 2
+const TEXT_DOCUMENT_SYNC_INCREMENTAL = 2
+
 const log = Log.create({ service: "lsp.client" })
 
 export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
@@ -123,9 +130,16 @@ function configurationValue(settings: unknown, section?: string) {
   return result ?? null
 }
 
+// TypeScript's built-in LSP pushes diagnostics aggressively on first open.
+// We seed the push cache on the very first publish so waitForFreshPush can
+// resolve immediately instead of waiting for a second debounced push.
+function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
+  return serverID === "typescript"
+}
+
 export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; directory: string }) {
-  const l = log.clone().tag("serverID", input.serverID)
-  l.info("starting client")
+  const logger = log.clone().tag("serverID", input.serverID)
+  logger.info("starting client")
 
   const connection = createMessageConnection(
     new StreamMessageReader(input.server.process.stdout as any),
@@ -137,8 +151,10 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
   // polluting normal logs.
   input.server.process.stderr?.on("data", (data: Buffer) => {
     const text = data.toString().trim()
-    if (text) l.debug("server stderr", { text: text.slice(0, 1000) })
+    if (text) logger.debug("server stderr", { text: text.slice(0, 1000) })
   })
+
+  // --- Connection state ---
 
   const pushDiagnostics = new Map<string, Diagnostic[]>()
   const pullDiagnostics = new Map<string, Diagnostic[]>()
@@ -158,10 +174,12 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     for (const listener of [...registrationListeners]) listener()
   }
 
+  // --- LSP connection handlers ---
+
   connection.onNotification("textDocument/publishDiagnostics", (params) => {
     const filePath = getFilePath(params.uri)
     if (!filePath) return
-    l.info("textDocument/publishDiagnostics", {
+    logger.info("textDocument/publishDiagnostics", {
       path: filePath,
       count: params.diagnostics.length,
       version: params.version,
@@ -170,14 +188,14 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       at: Date.now(),
       version: typeof params.version === "number" ? params.version : undefined,
     })
-    if (input.serverID === "typescript" && !pushDiagnostics.has(filePath)) {
+    if (shouldSeedDiagnosticsOnFirstPush(input.serverID) && !pushDiagnostics.has(filePath)) {
       pushDiagnostics.set(filePath, params.diagnostics)
       return
     }
     updatePushDiagnostics(filePath, params.diagnostics)
   })
   connection.onRequest("window/workDoneProgress/create", (params) => {
-    l.info("window/workDoneProgress/create", params)
+    logger.info("window/workDoneProgress/create", params)
     return null
   })
   connection.onRequest("workspace/configuration", async (params) => {
@@ -213,7 +231,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
   connection.onRequest("workspace/diagnostic/refresh", async () => null)
   connection.listen()
 
-  l.info("sending initialize")
+  // --- Initialize handshake ---
+
+  logger.info("sending initialize")
   const initialized = await withTimeout(
     connection.sendRequest<{ capabilities?: ServerCapabilities }>("initialize", {
       rootUri: pathToFileURL(input.root).href,
@@ -255,9 +275,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
         },
       },
     }),
-    45_000,
+    INITIALIZE_TIMEOUT_MS,
   ).catch((err) => {
-    l.error("initialize error", { error: err })
+    logger.error("initialize error", { error: err })
     throw new InitializeError(
       { serverID: input.serverID },
       {
@@ -278,6 +298,8 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
   }
 
   const files: Record<string, { version: number; text: string }> = {}
+
+  // --- Diagnostic helpers ---
 
   const mergeResults = (filePath: string, results: DiagnosticRequestResult[]) => {
     const handled = results.some((result) => result.handled)
@@ -539,6 +561,8 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
   }
 
+  // --- Public API ---
+
   const result = {
     root: input.root,
     get serverID() {
@@ -562,19 +586,19 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
           // re-emit diagnostics when the content actually changes, so clearing
           // here would lose errors for no-op touchFile calls. Let the server's
           // next push/pull overwrite naturally.
-          log.info("workspace/didChangeWatchedFiles", request)
+          logger.info("workspace/didChangeWatchedFiles", request)
           await connection.sendNotification("workspace/didChangeWatchedFiles", {
             changes: [
               {
                 uri: pathToFileURL(request.path).href,
-                type: 2,
+                type: FILE_CHANGE_CHANGED,
               },
             ],
           })
 
           const next = document.version + 1
           files[request.path] = { version: next, text }
-          log.info("textDocument/didChange", {
+          logger.info("textDocument/didChange", {
             path: request.path,
             version: next,
           })
@@ -584,7 +608,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
               version: next,
             },
             contentChanges:
-              syncKind === 2
+              syncKind === TEXT_DOCUMENT_SYNC_INCREMENTAL
                 ? [
                     {
                       range: {
@@ -599,17 +623,17 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
           return next
         }
 
-        log.info("workspace/didChangeWatchedFiles", request)
+        logger.info("workspace/didChangeWatchedFiles", request)
         await connection.sendNotification("workspace/didChangeWatchedFiles", {
           changes: [
             {
               uri: pathToFileURL(request.path).href,
-              type: 1,
+              type: FILE_CHANGE_CREATED,
             },
           ],
         })
 
-        log.info("textDocument/didOpen", request)
+        logger.info("textDocument/didOpen", request)
         pushDiagnostics.delete(request.path)
         pullDiagnostics.delete(request.path)
         await connection.sendNotification("textDocument/didOpen", {
@@ -635,7 +659,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       const normalizedPath = Filesystem.normalizePath(
         path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
       )
-      log.info("waiting for diagnostics", {
+      logger.info("waiting for diagnostics", {
         path: normalizedPath,
         mode: request.mode ?? "full",
         version: request.version,
@@ -647,15 +671,15 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       await waitForFullDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
     },
     async shutdown() {
-      l.info("shutting down")
+      logger.info("shutting down")
       connection.end()
       connection.dispose()
       await Process.stop(input.server.process)
-      l.info("shutdown")
+      logger.info("shutdown")
     },
   }
 
-  l.info("initialized")
+  logger.info("initialized")
 
   return result
 }
