@@ -114,6 +114,22 @@ describe("tool.write", () => {
       ),
     )
 
+    it.live("preserves BOM when overwriting existing files", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "existing.cs")
+          const bom = String.fromCharCode(0xfeff)
+          yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+          yield* run({ filePath: filepath, content: "using Up;\n" })
+
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
+        }),
+      ),
+    )
+
     it.live("returns diff in metadata for existing files", () =>
       provideTmpdirInstance((dir) =>
         Effect.gen(function* () {
