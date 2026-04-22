@@ -99,8 +99,9 @@ export const EditTool = Tool.define(
                   },
                 })
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
-                yield* format.file(filePath)
-                contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                if (yield* format.file(filePath)) {
+                  contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                }
                 yield* bus.publish(File.Event.Edited, { file: filePath })
                 yield* bus.publish(FileWatcher.Event.Updated, {
                   file: filePath,
@@ -142,13 +143,14 @@ export const EditTool = Tool.define(
               })
 
               yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
-              yield* format.file(filePath)
               yield* bus.publish(File.Event.Edited, { file: filePath })
               yield* bus.publish(FileWatcher.Event.Updated, {
                 file: filePath,
                 event: "change",
               })
-              contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+              if (yield* format.file(filePath)) {
+                contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+              }
               diff = trimDiff(
                 createTwoFilesPatch(
                   filePath,

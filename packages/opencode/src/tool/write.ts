@@ -57,8 +57,9 @@ export const WriteTool = Tool.define(
           })
 
           yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
-          yield* format.file(filepath)
-          yield* Bom.syncFile(fs, filepath, desiredBom)
+          if (yield* format.file(filepath)) {
+            yield* Bom.syncFile(fs, filepath, desiredBom)
+          }
           yield* bus.publish(File.Event.Edited, { file: filepath })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,
