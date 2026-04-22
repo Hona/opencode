@@ -42,8 +42,6 @@ export const Event = {
 }
 
 type DocumentDiagnosticReport = {
-  kind?: "full" | "unchanged"
-  resultId?: string
   items?: Diagnostic[]
   relatedDocuments?: Record<string, DocumentDiagnosticReport>
 }
@@ -51,7 +49,6 @@ type DocumentDiagnosticReport = {
 type WorkspaceDiagnosticReport = {
   items?: {
     uri?: string
-    kind?: "full" | "unchanged"
     items?: Diagnostic[]
   }[]
 }
@@ -305,11 +302,6 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
 
     let handled = false
     let matched = false
-    if (report.kind === "unchanged") {
-      push(filePath, mergedDiagnostics(filePath))
-      handled = true
-      matched = true
-    }
     if (Array.isArray(report.items)) {
       push(filePath, report.items)
       handled = true
@@ -317,14 +309,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
     for (const [uri, related] of Object.entries(report.relatedDocuments ?? {})) {
       const relatedPath = getFilePath(uri)
-      if (!relatedPath) continue
-      if (related.kind === "unchanged") {
-        push(relatedPath, mergedDiagnostics(relatedPath))
-        handled = true
-        matched = matched || relatedPath === filePath
-        continue
-      }
-      if (!Array.isArray(related.items)) continue
+      if (!relatedPath || !Array.isArray(related.items)) continue
       push(relatedPath, related.items)
       handled = true
       matched = matched || relatedPath === filePath
@@ -347,10 +332,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     let matched = false
     for (const item of report.items ?? []) {
       const relatedPath = item.uri ? getFilePath(item.uri) : undefined
-      if (!relatedPath) continue
-      const items = item.kind === "unchanged" ? mergedDiagnostics(relatedPath) : (item.items ?? [])
+      if (!relatedPath || !Array.isArray(item.items)) continue
       const existing = byFile.get(relatedPath) ?? []
-      byFile.set(relatedPath, existing.concat(items))
+      byFile.set(relatedPath, existing.concat(item.items))
       matched = matched || relatedPath === filePath
     }
 
