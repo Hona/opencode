@@ -346,7 +346,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       matched = matched || relatedPath === filePath
     }
 
-    return { handled: byFile.size > 0, matched, byFile }
+    return { handled: true, matched, byFile }
   }
 
   function documentPullState() {
@@ -369,21 +369,53 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
   }
 
-  // LATENCY-CRITICAL: dispatch identifier pulls in parallel and return on the first
-  // resolved batch. Do NOT sequentially await identifier-by-identifier, and do NOT
-  // add a post-match settle/debounce delay. Servers like Roslyn register many
-  // diagnostic identifiers (syntax, compiler, analyzer, non-local, ...) and each
-  // pull is network+compute bound. Sequencing them or waiting for "stability"
-  // after a match turned `edit`/`apply_patch` UX into 4s+ pauses. See PR #23771.
+  const hasCurrentFileDiagnostics = (filePath: string, results: DiagnosticRequestResult[]) =>
+    results.some((result) => (result.byFile.get(filePath)?.length ?? 0) > 0)
+
+  async function requestDiagnostics(
+    filePath: string,
+    requests: Promise<DiagnosticRequestResult>[],
+    done: (results: DiagnosticRequestResult[]) => boolean,
+  ) {
+    if (!requests.length) return { handled: false, matched: false }
+
+    const results: DiagnosticRequestResult[] = []
+    return new Promise<{ handled: boolean; matched: boolean }>((resolve) => {
+      let pending = requests.length
+      let resolved = false
+      const finish = (merged: { handled: boolean; matched: boolean }, force = false) => {
+        if (resolved) return
+        if (!force && !done(results)) return
+        resolved = true
+        resolve(merged)
+      }
+
+      for (const request of requests) {
+        request.then((result) => {
+          results.push(result)
+          pending -= 1
+          const merged = mergeResults(filePath, results)
+          finish(merged)
+          if (pending === 0) finish(merged, true)
+        })
+      }
+    })
+  }
+
+  // LATENCY-CRITICAL: dispatch identifier pulls in parallel and unblock once one
+  // batch already produced diagnostics for the current file. Let slower pulls keep
+  // merging in the background; do not sequence identifier-by-identifier, and do
+  // not add a post-match settle/debounce delay. See PR #23771.
   async function requestDocumentDiagnostics(filePath: string) {
     const state = documentPullState()
     if (!state.supported) return { handled: false, matched: false }
-    return mergeResults(
+    return requestDiagnostics(
       filePath,
-      await Promise.all([
+      [
         requestDiagnosticReport(filePath),
         ...state.documentIdentifiers.map((identifier) => requestDiagnosticReport(filePath, identifier)),
-      ]),
+      ],
+      (results) => hasCurrentFileDiagnostics(filePath, results),
     )
   }
 
@@ -437,8 +469,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       }
       const schedule = () => {
         const hit = published.get(request.path)
-        if (!hit || hit.at < request.after) return
+        if (!hit) return
         if (typeof hit.version === "number" && hit.version !== request.version) return
+        if (hit.at < request.after && hit.version !== request.version) return
         if (debounceTimer) clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => finish(true), Math.max(0, DIAGNOSTICS_DEBOUNCE_MS - (Date.now() - hit.at)))
       }
@@ -452,8 +485,8 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     })
   }
 
-  async function waitForDocumentDiagnostics(request: { path: string; version: number }) {
-    const startedAt = Date.now()
+  async function waitForDocumentDiagnostics(request: { path: string; version: number; after?: number }) {
+    const startedAt = request.after ?? Date.now()
     const pushWait = waitForFreshPush({
       path: request.path,
       version: request.version,
@@ -474,8 +507,8 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
   }
 
-  async function waitForFullDiagnostics(request: { path: string; version: number }) {
-    const startedAt = Date.now()
+  async function waitForFullDiagnostics(request: { path: string; version: number; after?: number }) {
+    const startedAt = request.after ?? Date.now()
     const pushWait = waitForFreshPush({
       path: request.path,
       version: request.version,
@@ -588,7 +621,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       }
       return result
     },
-    async waitForDiagnostics(request: { path: string; version: number; mode?: "document" | "full" }) {
+    async waitForDiagnostics(request: { path: string; version: number; mode?: "document" | "full"; after?: number }) {
       const normalizedPath = Filesystem.normalizePath(
         path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
       )
@@ -598,10 +631,10 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
         version: request.version,
       })
       if (request.mode === "document") {
-        await waitForDocumentDiagnostics({ path: normalizedPath, version: request.version })
+        await waitForDocumentDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
         return
       }
-      await waitForFullDiagnostics({ path: normalizedPath, version: request.version })
+      await waitForFullDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
     },
     async shutdown() {
       l.info("shutting down")

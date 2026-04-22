@@ -11,8 +11,10 @@ let pullConfig = {
   registrations: [],
   documentDiagnostics: [],
   documentDiagnosticsByIdentifier: {},
+  documentDelayMsByIdentifier: {},
   workspaceDiagnostics: [],
   workspaceDiagnosticsByIdentifier: {},
+  workspaceDelayMsByIdentifier: {},
 }
 
 function encode(message) {
@@ -67,12 +69,12 @@ function maybeRegister(method) {
   })
 }
 
-function delayed(id, result) {
-  if (!pullConfig.delayMs) {
+function delayed(id, result, delayMs = pullConfig.delayMs) {
+  if (!delayMs) {
     sendResponse(id, result)
     return
   }
-  setTimeout(() => sendResponse(id, result), pullConfig.delayMs)
+  setTimeout(() => sendResponse(id, result), delayMs)
 }
 
 function diagnosticsForIdentifier(identifier) {
@@ -81,6 +83,14 @@ function diagnosticsForIdentifier(identifier) {
 
 function workspaceDiagnosticsForIdentifier(identifier) {
   return pullConfig.workspaceDiagnosticsByIdentifier[identifier] ?? pullConfig.workspaceDiagnostics
+}
+
+function documentDelayForIdentifier(identifier) {
+  return pullConfig.documentDelayMsByIdentifier[identifier] ?? pullConfig.delayMs
+}
+
+function workspaceDelayForIdentifier(identifier) {
+  return pullConfig.workspaceDelayMsByIdentifier[identifier] ?? pullConfig.delayMs
 }
 
 function handle(raw) {
@@ -148,10 +158,18 @@ function handle(raw) {
       registrations: data.params?.registrations ?? [],
       documentDiagnostics: data.params?.documentDiagnostics ?? [],
       documentDiagnosticsByIdentifier: data.params?.documentDiagnosticsByIdentifier ?? {},
+      documentDelayMsByIdentifier: data.params?.documentDelayMsByIdentifier ?? {},
       workspaceDiagnostics: data.params?.workspaceDiagnostics ?? [],
       workspaceDiagnosticsByIdentifier: data.params?.workspaceDiagnosticsByIdentifier ?? {},
+      workspaceDelayMsByIdentifier: data.params?.workspaceDelayMsByIdentifier ?? {},
     }
     registeredCapability = false
+    sendResponse(data.id, null)
+    return
+  }
+
+  if (data.method === "test/register-configured-pull-diagnostics") {
+    maybeRegister(undefined)
     sendResponse(data.id, null)
     return
   }
@@ -173,18 +191,26 @@ function handle(raw) {
 
   if (data.method === "textDocument/diagnostic") {
     diagnosticRequestCount += 1
-    delayed(data.id, {
-      kind: "full",
-      items: diagnosticsForIdentifier(data.params?.identifier ?? ""),
-    })
+    delayed(
+      data.id,
+      {
+        kind: "full",
+        items: diagnosticsForIdentifier(data.params?.identifier ?? ""),
+      },
+      documentDelayForIdentifier(data.params?.identifier ?? ""),
+    )
     return
   }
 
   if (data.method === "workspace/diagnostic") {
     diagnosticRequestCount += 1
-    delayed(data.id, {
-      items: workspaceDiagnosticsForIdentifier(data.params?.identifier ?? ""),
-    })
+    delayed(
+      data.id,
+      {
+        items: workspaceDiagnosticsForIdentifier(data.params?.identifier ?? ""),
+      },
+      workspaceDelayForIdentifier(data.params?.identifier ?? ""),
+    )
     return
   }
 

@@ -364,12 +364,14 @@ export const layer = Layer.effect(
       yield* Effect.promise(() =>
         Promise.all(
           clients.map(async (client) => {
+            const after = Date.now()
             const version = await client.notify.open({ path: input })
             if (!diagnostics) return
             return client.waitForDiagnostics({
               path: input,
               version,
               mode: diagnostics,
+              after,
             })
           }),
         ).catch((err) => {

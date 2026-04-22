@@ -180,6 +180,53 @@ describe("LSPClient interop", () => {
     })
   })
 
+  test("document mode accepts matching push diagnostics published before waiting", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.ts")
+    await Bun.write(file, "const x = 1\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        const version = await client.notify.open({ path: file })
+        await client.connection.sendNotification("test/publish-diagnostics", {
+          uri: pathToFileURL(file).href,
+          version,
+          diagnostics: [
+            {
+              range: {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 5 },
+              },
+              message: "push diagnostic",
+              severity: 1,
+            },
+          ],
+        })
+
+        for (let i = 0; i < 20 && (client.diagnostics.get(file)?.length ?? 0) === 0; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+
+        expect(client.diagnostics.get(file)?.[0]?.message).toBe("push diagnostic")
+
+        const started = Date.now()
+        await client.waitForDiagnostics({ path: file, version, mode: "document" })
+        expect(Date.now() - started).toBeLessThan(1_000)
+
+        await client.shutdown()
+      },
+    })
+  })
+
   test("document mode waits for pull diagnostics", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()
@@ -222,6 +269,57 @@ describe("LSPClient interop", () => {
 
         const count = await client.connection.sendRequest("test/get-diagnostic-request-count", {})
         expect(count).toBeGreaterThan(0)
+
+        await client.shutdown()
+      },
+    })
+  })
+
+  test("document mode does not wait for the slowest pull identifier after current-file diagnostics arrive", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.cs")
+    await Bun.write(file, "class C {}\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+          registrations: [{ identifier: "fast" }, { identifier: "slow" }],
+          documentDiagnosticsByIdentifier: {
+            fast: [
+              {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 5 },
+                },
+                message: "fast diagnostic",
+                severity: 1,
+              },
+            ],
+            slow: [],
+          },
+          documentDelayMsByIdentifier: {
+            slow: 2_500,
+          },
+        })
+
+        const version = await client.notify.open({ path: file })
+        await client.connection.sendRequest("test/register-configured-pull-diagnostics", {})
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        const started = Date.now()
+        await client.waitForDiagnostics({ path: file, version, mode: "document" })
+
+        expect(Date.now() - started).toBeLessThan(1_000)
+        expect(client.diagnostics.get(file)?.[0]?.message).toBe("fast diagnostic")
+        expect(await client.connection.sendRequest("test/get-diagnostic-request-count", {})).toBeGreaterThan(1)
 
         await client.shutdown()
       },
@@ -288,6 +386,41 @@ describe("LSPClient interop", () => {
 
         expect(client.diagnostics.get(file)?.[0]?.message).toBe("current file")
         expect(client.diagnostics.get(related)?.[0]?.message).toBe("workspace file")
+
+        await client.shutdown()
+      },
+    })
+  })
+
+  test("full mode treats an empty workspace pull response as handled", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.cs")
+    await Bun.write(file, "class C {}\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+          registerOn: "didOpen",
+          registrations: [{ identifier: "WorkspaceDocumentsAndProject", workspaceDiagnostics: true }],
+          workspaceDiagnosticsByIdentifier: {
+            WorkspaceDocumentsAndProject: [],
+          },
+        })
+
+        const version = await client.notify.open({ path: file })
+        const started = Date.now()
+        await client.waitForDiagnostics({ path: file, version, mode: "full" })
+
+        expect(Date.now() - started).toBeLessThan(1_000)
 
         await client.shutdown()
       },
