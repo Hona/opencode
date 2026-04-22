@@ -70,7 +70,9 @@ export const layer = Layer.effect(
               }
             }),
           )
-          return checks.filter((x) => x.cmd).map((x) => ({ item: x.item, cmd: x.cmd! }))
+          return checks
+            .filter((x): x is { item: Formatter.Info; cmd: string[] } => x.cmd !== false)
+            .map((x) => ({ item: x.item, cmd: x.cmd }))
         }
 
         function formatFile(filepath: string) {
@@ -81,7 +83,6 @@ export const layer = Layer.effect(
             if (!formatters.length) return false
 
             for (const { item, cmd } of formatters) {
-              if (cmd === false) continue
               log.info("running", { command: cmd })
               const replaced = cmd.map((x) => x.replace("$FILE", filepath))
               const dir = yield* InstanceState.directory
