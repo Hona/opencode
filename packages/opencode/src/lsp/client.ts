@@ -507,8 +507,10 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
 
         const document = files[request.path]
         if (document !== undefined) {
-          pushDiagnostics.delete(request.path)
-          pullDiagnostics.delete(request.path)
+          // Do not wipe diagnostics on didChange. Some servers (e.g. clangd) only
+          // re-emit diagnostics when the content actually changes, so clearing
+          // here would lose errors for no-op touchFile calls. Let the server's
+          // next push/pull overwrite naturally.
           log.info("workspace/didChangeWatchedFiles", request)
           await connection.sendNotification("workspace/didChangeWatchedFiles", {
             changes: [
