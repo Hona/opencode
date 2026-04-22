@@ -1,7 +1,19 @@
 // Simple JSON-RPC 2.0 LSP-like fake server over stdio
-// Implements a minimal LSP handshake and triggers a request upon notification
 
 let nextId = 1
+let readBuffer = Buffer.alloc(0)
+let lastChange = null
+let diagnosticRequestCount = 0
+let registeredCapability = false
+let pullConfig = {
+  delayMs: 0,
+  registerOn: undefined,
+  registrations: [],
+  documentDiagnostics: [],
+  documentDiagnosticsByIdentifier: {},
+  workspaceDiagnostics: [],
+  workspaceDiagnosticsByIdentifier: {},
+}
 
 function encode(message) {
   const json = JSON.stringify(message)
@@ -14,35 +26,61 @@ function decodeFrames(buffer) {
   let idx
   while ((idx = buffer.indexOf("\r\n\r\n")) !== -1) {
     const header = buffer.slice(0, idx).toString("utf8")
-    const m = /Content-Length:\s*(\d+)/i.exec(header)
-    const len = m ? parseInt(m[1], 10) : 0
+    const match = /Content-Length:\s*(\d+)/i.exec(header)
+    const length = match ? parseInt(match[1], 10) : 0
     const bodyStart = idx + 4
-    const bodyEnd = bodyStart + len
+    const bodyEnd = bodyStart + length
     if (buffer.length < bodyEnd) break
-    const body = buffer.slice(bodyStart, bodyEnd).toString("utf8")
-    results.push(body)
+    results.push(buffer.slice(bodyStart, bodyEnd).toString("utf8"))
     buffer = buffer.slice(bodyEnd)
   }
   return { messages: results, rest: buffer }
 }
 
-let readBuffer = Buffer.alloc(0)
-
-process.stdin.on("data", (chunk) => {
-  readBuffer = Buffer.concat([readBuffer, chunk])
-  const { messages, rest } = decodeFrames(readBuffer)
-  readBuffer = rest
-  for (const m of messages) handle(m)
-})
-
-function send(msg) {
-  process.stdout.write(encode(msg))
+function send(message) {
+  process.stdout.write(encode(message))
 }
 
 function sendRequest(method, params) {
   const id = nextId++
   send({ jsonrpc: "2.0", id, method, params })
   return id
+}
+
+function sendResponse(id, result) {
+  send({ jsonrpc: "2.0", id, result })
+}
+
+function sendNotification(method, params) {
+  send({ jsonrpc: "2.0", method, params })
+}
+
+function maybeRegister(method) {
+  if (pullConfig.registerOn !== method || registeredCapability) return
+  registeredCapability = true
+  sendRequest("client/registerCapability", {
+    registrations: pullConfig.registrations.map((registration, index) => ({
+      id: registration.id ?? `pull-${index}`,
+      method: registration.method ?? "textDocument/diagnostic",
+      registerOptions: registration.registerOptions ?? registration,
+    })),
+  })
+}
+
+function delayed(id, result) {
+  if (!pullConfig.delayMs) {
+    sendResponse(id, result)
+    return
+  }
+  setTimeout(() => sendResponse(id, result), pullConfig.delayMs)
+}
+
+function diagnosticsForIdentifier(identifier) {
+  return pullConfig.documentDiagnosticsByIdentifier[identifier] ?? pullConfig.documentDiagnostics
+}
+
+function workspaceDiagnosticsForIdentifier(identifier) {
+  return pullConfig.workspaceDiagnosticsByIdentifier[identifier] ?? pullConfig.workspaceDiagnostics
 }
 
 function handle(raw) {
@@ -52,24 +90,112 @@ function handle(raw) {
   } catch {
     return
   }
+
   if (data.method === "initialize") {
-    send({ jsonrpc: "2.0", id: data.id, result: { capabilities: {} } })
+    sendResponse(data.id, {
+      capabilities: {
+        textDocumentSync: {
+          change: 2,
+        },
+      },
+    })
     return
   }
-  if (data.method === "initialized") {
+
+  if (data.method === "initialized" || data.method === "workspace/didChangeConfiguration") {
     return
   }
-  if (data.method === "workspace/didChangeConfiguration") {
+
+  if (data.method === "textDocument/didOpen") {
+    maybeRegister("didOpen")
     return
   }
+
+  if (data.method === "textDocument/didChange") {
+    lastChange = data.params
+    maybeRegister("didChange")
+    return
+  }
+
   if (data.method === "test/trigger") {
     const method = data.params && data.params.method
+    if (method === "client/registerCapability") {
+      sendRequest(method, {
+        registrations: [
+          {
+            id: "test-diagnostic-registration",
+            method: "textDocument/diagnostic",
+            registerOptions: { identifier: "syntax" },
+          },
+        ],
+      })
+      return
+    }
+    if (method === "client/unregisterCapability") {
+      sendRequest(method, {
+        unregisterations: [{ id: "test-diagnostic-registration", method: "textDocument/diagnostic" }],
+      })
+      return
+    }
     if (method) sendRequest(method, {})
     return
   }
-  if (typeof data.id !== "undefined") {
-    // Respond OK to any request from client to keep transport flowing
-    send({ jsonrpc: "2.0", id: data.id, result: null })
+
+  if (data.method === "test/configure-pull-diagnostics") {
+    pullConfig = {
+      delayMs: data.params?.delayMs ?? 0,
+      registerOn: data.params?.registerOn,
+      registrations: data.params?.registrations ?? [],
+      documentDiagnostics: data.params?.documentDiagnostics ?? [],
+      documentDiagnosticsByIdentifier: data.params?.documentDiagnosticsByIdentifier ?? {},
+      workspaceDiagnostics: data.params?.workspaceDiagnostics ?? [],
+      workspaceDiagnosticsByIdentifier: data.params?.workspaceDiagnosticsByIdentifier ?? {},
+    }
+    registeredCapability = false
+    sendResponse(data.id, null)
     return
   }
+
+  if (data.method === "test/publish-diagnostics") {
+    sendNotification("textDocument/publishDiagnostics", data.params)
+    return
+  }
+
+  if (data.method === "test/get-last-change") {
+    sendResponse(data.id, lastChange)
+    return
+  }
+
+  if (data.method === "test/get-diagnostic-request-count") {
+    sendResponse(data.id, diagnosticRequestCount)
+    return
+  }
+
+  if (data.method === "textDocument/diagnostic") {
+    diagnosticRequestCount += 1
+    delayed(data.id, {
+      kind: "full",
+      items: diagnosticsForIdentifier(data.params?.identifier ?? ""),
+    })
+    return
+  }
+
+  if (data.method === "workspace/diagnostic") {
+    diagnosticRequestCount += 1
+    delayed(data.id, {
+      items: workspaceDiagnosticsForIdentifier(data.params?.identifier ?? ""),
+    })
+    return
+  }
+
+  if (typeof data.id !== "undefined") {
+    sendResponse(data.id, null)
+  }
 }
+
+process.stdin.on("data", (chunk) => {
+  readBuffer = Buffer.concat([readBuffer, chunk])
+  const { messages, rest } = decodeFrames(readBuffer)
+  readBuffer = rest
+  for (const message of messages) handle(message)
+})
