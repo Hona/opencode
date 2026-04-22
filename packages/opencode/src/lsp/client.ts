@@ -361,6 +361,12 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
   }
 
+  // LATENCY-CRITICAL: dispatch identifier pulls in parallel and return on the first
+  // resolved batch. Do NOT sequentially await identifier-by-identifier, and do NOT
+  // add a post-match settle/debounce delay. Servers like Roslyn register many
+  // diagnostic identifiers (syntax, compiler, analyzer, non-local, ...) and each
+  // pull is network+compute bound. Sequencing them or waiting for "stability"
+  // after a match turned `edit`/`apply_patch` UX into 4s+ pauses. See PR #23771.
   async function requestDocumentDiagnostics(filePath: string) {
     const state = documentPullState()
     if (!state.supported) return { handled: false, matched: false }
