@@ -113,7 +113,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
     "If bun.lock is conflicted, do not hand-merge it. Delete bun.lock and run bun install after the code conflicts are resolved.",
     "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
     "If a PR already changed an import, keep that change.",
-    "After resolving the conflicts, run \`bun typecheck\` at the repo root.",
+    "After resolving the conflicts, run `bun typecheck` at the repo root.",
     "If typecheck fails, you may also update any files reported by typecheck.",
     "Keep any non-conflict edits narrowly scoped to restoring a valid merged state for the current PR batch.",
     "Fix any merge-caused typecheck errors before finishing.",
@@ -149,8 +149,8 @@ async function smoke(prs: PR[], applied: number[]) {
   const prompt = [
     "The beta merge batch is complete.",
     `Merged PRs on HEAD:\n${done}`,
-    "Run \`bun typecheck\` at the repo root.",
-    "Run \`./script/build.ts --single\` in \`packages/opencode\`.",
+    "Run `bun typecheck` at the repo root.",
+    "Run `./script/build.ts --single` in `packages/opencode`.",
     "Fix any merge-caused issues until both commands pass.",
     "Do not create a commit.",
   ].join("\n")
