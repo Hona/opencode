@@ -726,7 +726,7 @@ export const Razor: Info = {
 
     const razor = await findVscodeRazorExtension()
     if (!razor) {
-      log.info("VS Code Razor extension not found, skipping Razor LSP")
+      log.info("VS Code C# extension with Razor support not found, skipping Razor LSP")
       return
     }
 
@@ -750,10 +750,19 @@ export const Razor: Info = {
   },
 }
 
+let roslynLanguageServerInstall: Promise<string | undefined> | undefined
+
 async function getRoslynLanguageServer() {
   const existing = which("roslyn-language-server")
   if (existing) return existing
 
+  roslynLanguageServerInstall ||= installRoslynLanguageServer().finally(() => {
+    roslynLanguageServerInstall = undefined
+  })
+  return roslynLanguageServerInstall
+}
+
+async function installRoslynLanguageServer() {
   if (!which("dotnet")) {
     log.error(".NET SDK is required to install roslyn-language-server")
     return
@@ -772,7 +781,23 @@ async function getRoslynLanguageServer() {
     return
   }
 
-  const bin = path.join(Global.Path.bin, "roslyn-language-server" + (process.platform === "win32" ? ".exe" : ""))
+  const resolved = which("roslyn-language-server")
+  if (resolved) {
+    log.info(`installed roslyn-language-server`, { bin: resolved })
+    return resolved
+  }
+
+  const bin = path.join(
+    process.env.DOTNET_CLI_HOME ?? os.homedir(),
+    ".dotnet",
+    "tools",
+    "roslyn-language-server" + (process.platform === "win32" ? ".cmd" : ""),
+  )
+  if (!(await pathExists(bin))) {
+    log.error("Installed roslyn-language-server but could not resolve executable", { bin })
+    return
+  }
+
   log.info(`installed roslyn-language-server`, { bin })
   return bin
 }
@@ -786,11 +811,15 @@ async function findVscodeRazorExtension() {
 
   for (const root of [...new Set(roots)]) {
     const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
-    for (const entry of entries
-      .filter((entry) => entry.isDirectory() && entry.name.startsWith("ms-dotnettools.csharp-"))
-      .map((entry) => path.join(root, entry.name, ".razorExtension"))
-      .sort()
-      .reverse()) {
+    const candidates = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith("ms-dotnettools.csharp-"))
+        .map(async (entry) => ({
+          path: path.join(root, entry.name, ".razorExtension"),
+          modified: (await fs.stat(path.join(root, entry.name)).catch(() => undefined))?.mtimeMs ?? 0,
+        })),
+    )
+    for (const entry of candidates.sort((a, b) => b.modified - a.modified).map((candidate) => candidate.path)) {
       const result = {
         compiler: path.join(entry, "Microsoft.CodeAnalysis.Razor.Compiler.dll"),
         targets: path.join(entry, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets"),
