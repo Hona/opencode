@@ -756,6 +756,9 @@ async function getRoslynLanguageServer() {
   const existing = which("roslyn-language-server")
   if (existing) return existing
 
+  const global = await roslynLanguageServerGlobalPath()
+  if (global) return global
+
   roslynLanguageServerInstall ||= installRoslynLanguageServer().finally(() => {
     roslynLanguageServerInstall = undefined
   })
@@ -787,19 +790,23 @@ async function installRoslynLanguageServer() {
     return resolved
   }
 
+  const global = await roslynLanguageServerGlobalPath()
+  if (global) {
+    log.info(`installed roslyn-language-server`, { bin: global })
+    return global
+  }
+
+  log.error("Installed roslyn-language-server but could not resolve executable")
+}
+
+async function roslynLanguageServerGlobalPath() {
   const bin = path.join(
     process.env.DOTNET_CLI_HOME ?? os.homedir(),
     ".dotnet",
     "tools",
     "roslyn-language-server" + (process.platform === "win32" ? ".cmd" : ""),
   )
-  if (!(await pathExists(bin))) {
-    log.error("Installed roslyn-language-server but could not resolve executable", { bin })
-    return
-  }
-
-  log.info(`installed roslyn-language-server`, { bin })
-  return bin
+  return (await pathExists(bin)) ? bin : undefined
 }
 
 async function findVscodeRazorExtension() {
