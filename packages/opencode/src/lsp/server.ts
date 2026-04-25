@@ -807,6 +807,8 @@ async function findVscodeRazorExtension() {
     process.env.VSCODE_EXTENSIONS,
     path.join(os.homedir(), ".vscode", "extensions"),
     path.join(os.homedir(), ".vscode-insiders", "extensions"),
+    path.join(os.homedir(), ".vscode-server", "extensions"),
+    path.join(os.homedir(), ".vscode-server-insiders", "extensions"),
   ].filter((item) => item !== undefined)
 
   for (const root of [...new Set(roots)]) {
