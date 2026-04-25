@@ -703,31 +703,10 @@ export const Zls: Info = {
 export const CSharp: Info = {
   id: "csharp",
   root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
-  extensions: [".cs"],
+  extensions: [".cs", ".csx"],
   async spawn(root) {
-    let bin = which("roslyn-language-server")
-    if (!bin) {
-      if (!which("dotnet")) {
-        log.error(".NET SDK is required to install roslyn-language-server")
-        return
-      }
-
-      if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-      log.info("installing roslyn-language-server via dotnet tool")
-      const proc = Process.spawn(["dotnet", "tool", "install", "--global", "roslyn-language-server", "--prerelease"], {
-        stdout: "pipe",
-        stderr: "pipe",
-        stdin: "pipe",
-      })
-      const exit = await proc.exited
-      if (exit !== 0) {
-        log.error("Failed to install roslyn-language-server")
-        return
-      }
-
-      bin = path.join(Global.Path.bin, "roslyn-language-server" + (process.platform === "win32" ? ".exe" : ""))
-      log.info(`installed roslyn-language-server`, { bin })
-    }
+    const bin = await getRoslynLanguageServer()
+    if (!bin) return
 
     return {
       process: spawn(bin, ["--stdio", "--autoLoadProjects"], {
@@ -735,6 +714,97 @@ export const CSharp: Info = {
       }),
     }
   },
+}
+
+export const Razor: Info = {
+  id: "razor",
+  root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
+  extensions: [".razor", ".cshtml"],
+  async spawn(root) {
+    const bin = await getRoslynLanguageServer()
+    if (!bin) return
+
+    const razor = await findVscodeRazorExtension()
+    if (!razor) {
+      log.info("VS Code Razor extension not found, skipping Razor LSP")
+      return
+    }
+
+    log.info("using VS Code Razor extension for roslyn-language-server", { extension: razor.extension })
+    return {
+      process: spawn(
+        bin,
+        [
+          "--stdio",
+          "--autoLoadProjects",
+          `--razorSourceGenerator=${razor.compiler}`,
+          `--razorDesignTimePath=${razor.targets}`,
+          "--extension",
+          razor.extension,
+        ],
+        {
+          cwd: root,
+        },
+      ),
+    }
+  },
+}
+
+async function getRoslynLanguageServer() {
+  const existing = which("roslyn-language-server")
+  if (existing) return existing
+
+  if (!which("dotnet")) {
+    log.error(".NET SDK is required to install roslyn-language-server")
+    return
+  }
+
+  if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+  log.info("installing roslyn-language-server via dotnet tool")
+  const proc = Process.spawn(["dotnet", "tool", "install", "--global", "roslyn-language-server", "--prerelease"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "pipe",
+  })
+  const exit = await proc.exited
+  if (exit !== 0) {
+    log.error("Failed to install roslyn-language-server")
+    return
+  }
+
+  const bin = path.join(Global.Path.bin, "roslyn-language-server" + (process.platform === "win32" ? ".exe" : ""))
+  log.info(`installed roslyn-language-server`, { bin })
+  return bin
+}
+
+async function findVscodeRazorExtension() {
+  const roots = [
+    process.env.VSCODE_EXTENSIONS,
+    path.join(os.homedir(), ".vscode", "extensions"),
+    path.join(os.homedir(), ".vscode-insiders", "extensions"),
+  ].filter((item) => item !== undefined)
+
+  for (const root of [...new Set(roots)]) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("ms-dotnettools.csharp-"))
+      .map((entry) => path.join(root, entry.name, ".razorExtension"))
+      .sort()
+      .reverse()) {
+      const result = {
+        compiler: path.join(entry, "Microsoft.CodeAnalysis.Razor.Compiler.dll"),
+        targets: path.join(entry, "Targets", "Microsoft.NET.Sdk.Razor.DesignTime.targets"),
+        extension: path.join(entry, "Microsoft.VisualStudioCode.RazorExtension.dll"),
+      }
+      if (
+        (await pathExists(result.compiler)) &&
+        (await pathExists(result.targets)) &&
+        (await pathExists(result.extension))
+      ) {
+        return result
+      }
+    }
+  }
 }
 
 export const FSharp: Info = {
