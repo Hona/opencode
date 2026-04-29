@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
+type PersistType = typeof import("./persist").Persist
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -45,6 +46,7 @@ class MemoryStorage implements Storage {
 const storage = new MemoryStorage()
 
 let persistTesting: PersistTestingType
+let Persist: PersistType
 
 beforeAll(async () => {
   mock.module("@/context/platform", () => ({
@@ -53,6 +55,7 @@ beforeAll(async () => {
 
   const mod = await import("./persist")
   persistTesting = mod.PersistTesting
+  Persist = mod.Persist
 })
 
 beforeEach(() => {
@@ -111,5 +114,12 @@ describe("persist localStorage resilience", () => {
     expect(result).toStartWith("opencode.workspace.")
     expect(result.endsWith(".dat")).toBeTrue()
     expect(/[:\\/]/.test(result)).toBeFalse()
+  })
+
+  test("workspace target keeps raw path storage as legacy fallback", () => {
+    const target = Persist.workspace("C:\\Users\\foo", "vcs")
+
+    expect(target.storage).toBe(persistTesting.workspaceStorage("C:/Users/foo"))
+    expect(target.legacyStorage).toEqual([persistTesting.workspaceStorage("C:\\Users\\foo")])
   })
 })
