@@ -170,6 +170,7 @@ function createGlobalSync() {
 
   const queue = createRefreshQueue({
     paused,
+    key: directoryKey,
     bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
     bootstrapInstance,
   })
