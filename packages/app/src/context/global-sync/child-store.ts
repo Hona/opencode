@@ -26,7 +26,7 @@ export function createChildStoreManager(input: {
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
-  getSdk: (directory: DirectoryKey) => OpencodeClient
+  getSdk: (directory: string) => OpencodeClient
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -134,12 +134,13 @@ export function createChildStoreManager(input: {
     }
   }
 
-  function ensureChild(key: DirectoryKey) {
+  function ensureChild(directory: string) {
+    const key = directoryKey(directory)
     if (!key) console.error("No directory provided")
     if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
         persisted(
-          Persist.workspace(key, "vcs", ["vcs.v1"]),
+          Persist.workspace(directory, "vcs", ["vcs.v1"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
@@ -149,7 +150,7 @@ export function createChildStoreManager(input: {
 
       const meta = runWithOwner(input.owner, () =>
         persisted(
-          Persist.workspace(key, "project", ["project.v1"]),
+          Persist.workspace(directory, "project", ["project.v1"]),
           createStore({ value: undefined as ProjectMeta | undefined }),
         ),
       )
@@ -158,7 +159,7 @@ export function createChildStoreManager(input: {
 
       const icon = runWithOwner(input.owner, () =>
         persisted(
-          Persist.workspace(key, "icon", ["icon.v1"]),
+          Persist.workspace(directory, "icon", ["icon.v1"]),
           createStore({ value: undefined as string | undefined }),
         ),
       )
@@ -167,7 +168,7 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
-          const sdk = input.getSdk(key)
+          const sdk = input.getSdk(directory)
 
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
@@ -260,28 +261,28 @@ export function createChildStoreManager(input: {
 
   function child(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
-    const childStore = ensureChild(key)
+    const childStore = ensureChild(directory)
     pinForOwner(key)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
-      input.onBootstrap(key)
+      input.onBootstrap(directory)
     }
     return childStore
   }
 
   function peek(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
-    const childStore = ensureChild(key)
+    const childStore = ensureChild(directory)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
-      input.onBootstrap(key)
+      input.onBootstrap(directory)
     }
     return childStore
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {
     const key = directoryKey(directory)
-    const [store, setStore] = ensureChild(key)
+    const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(key)
     if (!cached) return
     const previous = store.projectMeta ?? {}
@@ -299,7 +300,7 @@ export function createChildStoreManager(input: {
 
   function projectIcon(directory: string, value: string | undefined) {
     const key = directoryKey(directory)
-    const [store, setStore] = ensureChild(key)
+    const [store, setStore] = ensureChild(directory)
     const cached = iconCache.get(key)
     if (!cached) return
     if (store.icon === value) return

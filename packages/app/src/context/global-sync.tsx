@@ -33,7 +33,7 @@ import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey, type DirectoryKey } from "./global-sync/utils"
+import { directoryKey } from "./global-sync/utils"
 
 type GlobalStore = {
   ready: boolean
@@ -174,12 +174,12 @@ function createGlobalSync() {
     bootstrapInstance,
   })
 
-  const sdkFor = (directory: DirectoryKey) => {
-    const key = directory
+  const sdkFor = (directory: string) => {
+    const key = directoryKey(directory)
     const cached = sdkCache.get(key)
     if (cached) return cached
     const sdk = globalSDK.createClient({
-      directory: key,
+      directory,
       throwOnError: true,
     })
     sdkCache.set(key, sdk)
@@ -211,7 +211,7 @@ function createGlobalSync() {
     if (pending) return pending
 
     children.pin(key)
-    const [store, setStore] = children.child(key, { bootstrap: false })
+    const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
@@ -232,7 +232,7 @@ function createGlobalSync() {
         ...loadSessionsQuery(key),
         queryFn: () =>
           loadRootSessionsWithFallback({
-            directory: key,
+            directory,
             limit,
             list: (query) => globalSDK.client.session.list(query),
           })
@@ -263,7 +263,7 @@ function createGlobalSync() {
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
-              const project = getFilename(key)
+              const project = getFilename(directory)
               showToast({
                 variant: "error",
                 title: language.t("toast.session.listFailed.title", { project }),
@@ -290,12 +290,12 @@ function createGlobalSync() {
 
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
-      const child = children.ensureChild(key)
+      const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(key)
       if (!cache) return
-      const sdk = sdkFor(key)
+      const sdk = sdkFor(directory)
       await bootstrapDirectory({
-        directory: key,
+        directory,
         global: {
           config: globalStore.config,
           path: globalStore.path,
@@ -321,7 +321,8 @@ function createGlobalSync() {
   }
 
   const unsub = globalSDK.event.listen((e) => {
-    const directory = directoryKey(e.name)
+    const directory = e.name
+    const key = directoryKey(directory)
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
@@ -344,9 +345,9 @@ function createGlobalSync() {
       return
     }
 
-    const existing = children.children[directory]
+    const existing = children.children[key]
     if (!existing) return
-    children.mark(directory)
+    children.mark(key)
     const [store, setStore] = existing
     applyDirectoryEvent({
       event,
@@ -355,9 +356,9 @@ function createGlobalSync() {
       setStore,
       push: queue.push,
       setSessionTodo,
-      vcsCache: children.vcsCache.get(directory),
+      vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
-        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory)))
+        void queryClient.fetchQuery(loadLspQuery(key, sdkFor(directory)))
       },
     })
   })
