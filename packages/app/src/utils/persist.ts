@@ -15,7 +15,7 @@ type PersistedWithReady<T> = [
 
 type PersistTarget = {
   storage?: string
-  legacyStorage?: string[]
+  legacyStorageNames?: string[]
   key: string
   legacy?: string[]
   migrate?: (value: unknown) => unknown
@@ -229,6 +229,7 @@ function readCurrent(input: {
 
 function migrateLegacy(input: {
   current: SyncStorage
+  legacyStore?: SyncStorage
   stores: SyncStorage[]
   keys: string[]
   key: string
@@ -249,17 +250,19 @@ function migrateLegacy(input: {
     return next
   }
 
+  if (!input.legacyStore) return null
+
   for (const key of input.keys) {
-    const raw = input.current.getItem(key)
+    const raw = input.legacyStore.getItem(key)
     if (raw === null) continue
 
     const next = normalize(input.defaults, raw, input.migrate)
     if (next === undefined) {
-      input.current.removeItem(key)
+      input.legacyStore.removeItem(key)
       continue
     }
     input.current.setItem(input.key, next)
-    input.current.removeItem(key)
+    input.legacyStore.removeItem(key)
     return next
   }
 
@@ -335,6 +338,23 @@ function workspaceStorage(dir: string) {
   const head = (dir.slice(0, 12) || "workspace").replace(/[^a-zA-Z0-9._-]/g, "-")
   const sum = checksum(dir) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat`
+}
+
+function legacyWorkspaceStorage(dir: string) {
+  const storage = workspaceStorage(pathKey(dir))
+  const result = new Set<string>()
+  const raw = workspaceStorage(dir)
+  if (raw !== storage) result.add(raw)
+
+  const key = pathKey(dir)
+  const drive = key.length >= 3 && key[1] === ":" && key[2] === "/"
+  if (drive) {
+    const backslash = workspaceStorage(key.replaceAll("/", "\\"))
+    if (backslash !== storage) result.add(backslash)
+  }
+
+  if (result.size === 0) return
+  return [...result]
 }
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
@@ -427,6 +447,7 @@ function localStorageDirect(): SyncStorage {
 export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
+  migrateLegacy,
   normalize,
   workspaceStorage,
 }
@@ -437,15 +458,13 @@ export const Persist = {
   },
   workspace(dir: string, key: string, legacy?: string[]): PersistTarget {
     const storage = workspaceStorage(pathKey(dir))
-    const legacyStorage = workspaceStorage(dir)
-    return { storage, legacyStorage: legacyStorage === storage ? undefined : [legacyStorage], key: `workspace:${key}`, legacy }
+    return { storage, legacyStorageNames: legacyWorkspaceStorage(dir), key: `workspace:${key}`, legacy }
   },
   session(dir: string, session: string, key: string, legacy?: string[]): PersistTarget {
     const storage = workspaceStorage(pathKey(dir))
-    const legacyStorage = workspaceStorage(dir)
     return {
       storage,
-      legacyStorage: legacyStorage === storage ? undefined : [legacyStorage],
+      legacyStorageNames: legacyWorkspaceStorage(dir),
       key: `session:${session}:${key}`,
       legacy,
     }
@@ -456,11 +475,15 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }, platform?: Platform) {
+export function removePersisted(target: { storage?: string; legacyStorageNames?: string[]; key: string }, platform?: Platform) {
   const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
-    return platform.storage?.(target.storage)?.removeItem(target.key)
+    void platform.storage?.(target.storage)?.removeItem(target.key)
+    for (const storage of target.legacyStorageNames ?? []) {
+      void platform.storage?.(storage)?.removeItem(target.key)
+    }
+    return
   }
 
   if (!target.storage) {
@@ -469,6 +492,9 @@ export function removePersisted(target: { storage?: string; key: string }, platf
   }
 
   localStorageWithPrefix(target.storage).removeItem(target.key)
+  for (const storage of target.legacyStorageNames ?? []) {
+    localStorageWithPrefix(storage).removeItem(target.key)
+  }
 }
 
 export function persisted<T>(
@@ -495,7 +521,7 @@ export function persisted<T>(
     return platform.storage?.(LEGACY_STORAGE)
   })()
 
-  const legacyStorageNames = config.legacyStorage ?? []
+  const legacyStorageNames = config.legacyStorageNames ?? []
 
   const storage = (() => {
     if (!isDesktop) {
@@ -507,7 +533,15 @@ export function persisted<T>(
         getItem: (key) => {
           const value = readCurrent({ storage: current, key, defaults, migrate: config.migrate })
           if (value !== undefined) return value
-          return migrateLegacy({ current, stores: legacyStores, keys: legacy, key, defaults, migrate: config.migrate })
+          return migrateLegacy({
+            current,
+            legacyStore,
+            stores: legacyStores,
+            keys: legacy,
+            key,
+            defaults,
+            migrate: config.migrate,
+          })
         },
         setItem: (key, value) => {
           current.setItem(key, value)
