@@ -749,7 +749,7 @@ describe("tool.shell permissions", () => {
             await Effect.runPromise(
               bash.execute(
                 {
-                  command: `type "${path.join(process.env.WINDIR!, "win.ini")}"`,
+                  command: `TYPE "${path.join(process.env.WINDIR!, "win.ini")}"`,
                   description: "Read Windows ini with cmd",
                 },
                 capture(requests),

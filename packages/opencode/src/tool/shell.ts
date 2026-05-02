@@ -374,7 +374,7 @@ export const ShellTool = Tool.define(
       for (const node of commands(root)) {
         const command = parts(node)
         const tokens = command.map((item) => item.text)
-        const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
+        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
           for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
