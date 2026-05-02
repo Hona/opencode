@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 import DESCRIPTION from "./shell.txt"
+import { PositiveInt } from "@/util/schema"
+import { Global } from "@opencode-ai/core/global"
 
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
@@ -21,7 +23,7 @@ export type Limits = {
 export function parameterSchema(description: string) {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
-    timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in milliseconds" }),
+    timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
@@ -281,6 +283,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits) 
       intro: selected.intro,
       os: platform,
       shell: name,
+      tmp: Global.Path.tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
       gitCommands: selected.gitCommands,

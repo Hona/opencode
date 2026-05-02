@@ -133,6 +133,8 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
+    // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
+    void renderer.getPalette({ size: 16 }).catch(() => undefined)
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     await render(() => {
@@ -301,6 +303,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
+    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
+  )
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -733,6 +738,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
       onSelect: (dialog) => {
         kv.set("file_context_enabled", !kv.get("file_context_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
+      value: "app.toggle.paste_summary",
+      category: "System",
+      onSelect: (dialog) => {
+        setPasteSummaryEnabled((prev) => {
+          const next = !prev
+          kv.set("paste_summary_enabled", next)
+          return next
+        })
         dialog.clear()
       },
     },

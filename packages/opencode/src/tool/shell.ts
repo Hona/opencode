@@ -4,7 +4,8 @@ import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
 import path from "path"
 import * as Log from "@opencode-ai/core/util/log"
-import { Instance } from "../project/instance"
+import { containsPath, type InstanceContext } from "../project/instance-context"
+import { InstanceState } from "@/effect/instance-state"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
@@ -356,7 +357,13 @@ export const ShellTool = Tool.define(
       return yield* resolvePath(next, cwd, shell)
     })
 
-    const collect = Effect.fn("ShellTool.collect")(function* (root: Node, cwd: string, ps: boolean, shell: string) {
+    const collect = Effect.fn("ShellTool.collect")(function* (
+      root: Node,
+      cwd: string,
+      ps: boolean,
+      shell: string,
+      instance: InstanceContext,
+    ) {
       const scan: Scan = {
         dirs: new Set<string>(),
         patterns: new Set<string>(),
@@ -373,7 +380,7 @@ export const ShellTool = Tool.define(
           for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
             log.info("resolved path", { arg, resolved })
-            if (!resolved || Instance.containsPath(resolved)) continue
+            if (!resolved || containsPath(resolved, instance)) continue
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
           }
@@ -573,9 +580,10 @@ export const ShellTool = Tool.define(
           parameters: prompt.parameters,
           execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
+              const executeInstance = yield* InstanceState.context
               const cwd = params.workdir
-                ? yield* resolvePath(params.workdir, Instance.directory, shell)
-                : Instance.directory
+                ? yield* resolvePath(params.workdir, executeInstance.directory, shell)
+                : executeInstance.directory
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
@@ -586,8 +594,8 @@ export const ShellTool = Tool.define(
                   const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
                     Effect.sync(() => tree.delete()),
                   )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell)
-                  if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, executeInstance)
+                  if (!containsPath(cwd, executeInstance)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan)
                 }),
               )
