@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import DESCRIPTION from "./shell.txt"
 import { PositiveInt } from "@/util/schema"
 import { Global } from "@opencode-ai/core/global"
+import { ShellID } from "./id"
 
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
@@ -76,10 +77,10 @@ function chainGuidance(name: string) {
     return "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell (5.1) does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
   }
   if (PS.has(name)) {
-    return "If the commands depend on each other and must run sequentially, use a single Shell call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before Shell for git operations, or git add before git commit), run these operations sequentially instead."
+    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before bash for git operations, or git add before git commit), run these operations sequentially instead."
   }
   if (CMD.has(name)) {
-    return "If the commands depend on each other and must run sequentially, use a single Shell call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
+    return "If the commands depend on each other and must run sequentially, use a single bash tool call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
   }
   return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
 }
@@ -115,7 +116,7 @@ Usage notes:
     - Write files: Use Write (NOT echo >/cat <<EOF)
     - Communication: Output text directly (NOT echo/printf)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple Shell tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Shell tool calls in parallel.
+    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
     - ${chain}
     - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
@@ -161,7 +162,7 @@ Usage notes:
     - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
     - Communication: Output text directly (NOT Write-Output/Write-Host)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple Shell tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Shell tool calls in parallel.
+    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
     - ${chain}
     - Use \`;\` only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
@@ -211,7 +212,7 @@ Usage notes:
     - Write files: Use Write (NOT echo > file)
     - Communication: Output text directly (NOT echo)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple Shell tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two Shell tool calls in parallel.
+    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two bash tool calls in parallel.
     - ${chain}
     - Use \`&\` only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
@@ -234,7 +235,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
         "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
       commandSection: cmdCommandSection(chain, limits),
       gitCommands: "git commands",
-      toolName: "Shell",
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
       createPrExample: `(\n  echo ## Summary\n  echo - ^<1-3 bullet points^>\n) > pr-body.txt\ngh pr create --title "the pr title" --body-file pr-body.txt`,
@@ -248,7 +248,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
         "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
       commandSection: powershellCommandSection(name, chain, platform === "win32" ? "\\" : "/", limits),
       gitCommands: "git commands",
-      toolName: "Shell",
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using gh pr create with a PowerShell here-string to pass the body correctly.",
       createPrExample: `gh pr create --title "the pr title" --body @'
@@ -265,7 +264,6 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
       "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.",
     commandSection: bashCommandSection(chain, limits),
     gitCommands: "bash commands",
-    toolName: "Shell",
     gitCommandRestriction: "git bash commands",
     createPrInstruction:
       "Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.",
@@ -287,7 +285,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits) 
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
       gitCommands: selected.gitCommands,
-      toolName: selected.toolName,
+      toolName: ShellID.ToolID,
       gitCommandRestriction: selected.gitCommandRestriction,
       createPrInstruction: selected.createPrInstruction,
       createPrExample: selected.createPrExample,
