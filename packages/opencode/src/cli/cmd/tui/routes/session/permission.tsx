@@ -15,7 +15,7 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@opencode-ai/core/global"
-import { ShellToolID } from "@/tool/shell/id"
+import { ShellID } from "@/tool/shell/id"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
@@ -288,7 +288,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
-            if (permission === ShellToolID.id) {
+            if (permission === ShellID.ToolID) {
               const title =
                 typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""

@@ -14,7 +14,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Shell } from "@/shell/shell"
-import { ShellKind, ShellToolID } from "./shell/id"
+import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
@@ -267,7 +267,7 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan)
 
   if (scan.patterns.size === 0) return
   yield* ctx.ask({
-    permission: ShellToolID.id,
+    permission: ShellID.ToolID,
     patterns: Array.from(scan.patterns),
     always: Array.from(scan.always),
     metadata: {},
@@ -320,7 +320,7 @@ const parser = lazy(async () => {
 })
 
 export const ShellTool = Tool.define(
-  ShellToolID.id,
+  ShellID.ToolID,
   Effect.gen(function* () {
     const config = yield* Config.Service
     const spawner = yield* ChildProcessSpawner
@@ -369,7 +369,7 @@ export const ShellTool = Tool.define(
         patterns: new Set<string>(),
         always: new Set<string>(),
       }
-      const shellKind = ShellKind.from(Shell.name(shell))
+      const shellKind = ShellID.toKind(Shell.name(shell))
 
       for (const node of commands(root)) {
         const command = parts(node)

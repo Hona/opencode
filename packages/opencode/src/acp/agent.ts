@@ -51,7 +51,7 @@ import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { ShellToolID } from "@/tool/shell/id"
+import { ShellID } from "@/tool/shell/id"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -292,7 +292,7 @@ export class Agent implements ACPAgent {
               const content: ToolCallContent[] = []
               if (output) {
                 const hash = Hash.fast(output)
-                if (part.tool === ShellToolID.id) {
+                if (part.tool === ShellID.ToolID) {
                   if (this.shellSnapshots.get(part.callID) === hash) {
                     await this.connection
                       .sessionUpdate({
@@ -1107,7 +1107,7 @@ export class Agent implements ACPAgent {
   }
 
   private shellOutput(part: ToolPart) {
-    if (part.tool !== ShellToolID.id) return
+    if (part.tool !== ShellID.ToolID) return
     if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
     const output = part.state.metadata["output"]
     if (typeof output !== "string") return
@@ -1552,7 +1552,7 @@ function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
 
   switch (tool) {
-    case ShellToolID.id:
+    case ShellID.ToolID:
       return "execute"
 
     case "webfetch":
@@ -1588,7 +1588,7 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
     case "glob":
     case "grep":
       return input["path"] ? [{ path: input["path"] }] : []
-    case ShellToolID.id:
+    case ShellID.ToolID:
       return []
     default:
       return []

@@ -38,7 +38,7 @@ import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
 import { ShellTool } from "@/tool/shell"
-import { ShellToolID } from "@/tool/shell/id"
+import { ShellID } from "@/tool/shell/id"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
@@ -1553,7 +1553,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === ShellToolID.id}>
+        <Match when={props.part.tool === ShellID.ToolID}>
           <Shell {...toolprops} />
         </Match>
         <Match when={props.part.tool === "glob"}>

@@ -1,28 +1,17 @@
-export namespace ShellKind {
-  export const ids = ["bash", "pwsh", "powershell", "cmd"] as const
-  export type ID = (typeof ids)[number]
+const kinds = ["bash", "pwsh", "powershell", "cmd"] as const
+export type Kind = (typeof kinds)[number]
 
-  const kind = new Set<string>(ids)
-  const ps = new Set<string>(["pwsh", "powershell"])
+const shellKinds = new Set<string>(kinds)
 
-  export function has(value: string): value is ID {
-    return kind.has(value)
-  }
-
-  export function from(value: string): ID {
-    return has(value) ? value : "bash"
-  }
-
-  export function powershell(value: string) {
-    return ps.has(value)
-  }
+function isKind(value: string): value is Kind {
+  return shellKinds.has(value)
 }
 
-export namespace ShellToolID {
-  export const id = "bash"
-  export type ID = typeof id
-
-  export function has(value: string): value is ID {
-    return value === id
-  }
+export function toKind(value: string): Kind {
+  return isKind(value) ? value : "bash"
 }
+
+export const ToolID = "bash"
+export type ToolID = typeof ToolID
+
+export * as ShellID from "./id"
