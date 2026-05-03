@@ -219,7 +219,7 @@ async function initialize() {
 function wireMenu() {
   if (!mainWindow) return
   createMenu({
-    trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
+    trigger: (id, win) => sendMenuCommand(win ?? mainWindow!, id),
     checkForUpdates: () => {
       void checkForUpdates(true)
     },

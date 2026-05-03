@@ -1,10 +1,10 @@
-import { Menu, shell } from "electron"
+import { BrowserWindow, Menu, shell, type BaseWindow } from "electron"
 
 import { UPDATER_ENABLED } from "./constants"
 import { createMainWindow } from "./windows"
 
 type Deps = {
-  trigger: (id: string) => void
+  trigger: (id: string, win?: BrowserWindow | null) => void
   checkForUpdates: () => void
   reload: () => void
   relaunch: () => void
@@ -12,6 +12,8 @@ type Deps = {
 
 export function createMenu(deps: Deps) {
   if (process.platform !== "darwin") return
+
+  const windowTarget = (win?: BaseWindow) => (win instanceof BrowserWindow ? win : BrowserWindow.getFocusedWindow())
 
   const template: Electron.MenuItemConstructorOptions[] = [
     {
@@ -75,9 +77,9 @@ export function createMenu(deps: Deps) {
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" },
-        { label: "Actual Size", accelerator: "Cmd+0", click: () => deps.trigger("zoom.reset") },
-        { label: "Zoom In", accelerator: "Cmd+=", click: () => deps.trigger("zoom.in") },
-        { label: "Zoom Out", accelerator: "Cmd+-", click: () => deps.trigger("zoom.out") },
+        { label: "Actual Size", accelerator: "Cmd+0", click: (_item, win) => deps.trigger("zoom.reset", windowTarget(win)) },
+        { label: "Zoom In", accelerator: "Cmd+=", click: (_item, win) => deps.trigger("zoom.in", windowTarget(win)) },
+        { label: "Zoom Out", accelerator: "Cmd+-", click: (_item, win) => deps.trigger("zoom.out", windowTarget(win)) },
         { type: "separator" },
         { role: "togglefullscreen" },
       ],
