@@ -62,6 +62,7 @@ window.addEventListener(
   "wheel",
   (event) => {
     if (!event.ctrlKey && !event.metaKey) return
+    if (event.deltaY === 0) return
     event.preventDefault()
     apply(webviewZoom() + (event.deltaY > 0 ? -WHEEL_STEP : WHEEL_STEP))
   },
