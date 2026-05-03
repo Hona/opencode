@@ -21,7 +21,7 @@ import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
-import { webviewZoom, zoomIn, zoomOut, zoomReset } from "./webview-zoom"
+import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { useTheme } from "@opencode-ai/ui/theme"
 
@@ -267,9 +267,6 @@ const createPlatform = (): Platform => {
 
 let menuTrigger = null as null | ((id: string) => void)
 window.api.onMenuCommand((id) => {
-  if (id === "zoom.in") return zoomIn()
-  if (id === "zoom.out") return zoomOut()
-  if (id === "zoom.reset") return zoomReset()
   menuTrigger?.(id)
 })
 listenForDeepLinks()
