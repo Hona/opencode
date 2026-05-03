@@ -83,7 +83,7 @@ Each formatter configuration supports the following:
 | Property      | Type     | Description                                             |
 | ------------- | -------- | ------------------------------------------------------- |
 | `disabled`    | boolean  | Set this to `true` to disable the formatter             |
-| `command`     | string[] | The command to run for formatting                       |
+| `command`     | string[] | The command to run for formatting. Required for custom formatters; optional for built-ins. |
 | `environment` | object   | Environment variables to set when running the formatter |
 | `extensions`  | string[] | File extensions this formatter should handle            |
 
@@ -119,7 +119,7 @@ To disable a **specific** formatter, set `disabled` to `true`:
 
 ### Custom formatters
 
-You can configure built-in formatters or add new ones by specifying the command, environment variables, and file extensions:
+You can configure built-in formatters with options like `environment` or `extensions`. To add a custom formatter, specify a `command` and `extensions`:
 
 ```json title="opencode.json" {4-14}
 {
