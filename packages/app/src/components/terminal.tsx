@@ -489,13 +489,12 @@ export const Terminal = (props: TerminalProps) => {
             },
           )
           .catch((err: unknown) => {
-            if (password && err instanceof Error && err.message.includes("Request is not supported")) return
+            if (err instanceof Error && err.message.includes("Request is not supported")) return
             throw err
           })
         if (!result) return
         if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
-        if ((result.response.status === 200 || result.response.status === 404 || result.response.status === 405) && password)
-          return
+        if (result.response.status === 200 || result.response.status === 404 || result.response.status === 405) return
         if (result.response.status === 403)
           throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
         throw new Error(`PTY connect ticket failed with ${result.response.status}`)

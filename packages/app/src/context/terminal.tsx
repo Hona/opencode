@@ -88,13 +88,14 @@ export function getWorkspaceTerminalCacheKey(dir: string, scope?: string) {
   return `${dir}:${WORKSPACE_KEY}`
 }
 
-function getTerminalServerScope(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
+export function getTerminalServerScope(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
   if (!conn) return
   if (conn.type === "sidecar" && conn.variant === "base") return
   if (conn.type === "http") {
     try {
       const url = new URL(conn.http.url)
-      if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1") return
+      if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1" || url.hostname === "[::1]")
+        return
     } catch {
       return key
     }
@@ -126,14 +127,22 @@ const trimTerminal = (pty: LocalPTY) => {
   }
 }
 
-export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
-  const key = getWorkspaceTerminalCacheKey(dir)
+export function clearWorkspaceTerminals(
+  dir: string,
+  sessionIDs?: string[],
+  platform?: Platform,
+  scope?: string,
+) {
+  const keys = [getWorkspaceTerminalCacheKey(dir), ...(scope ? [getWorkspaceTerminalCacheKey(dir, scope)] : [])]
   for (const cache of caches) {
-    const entry = cache.get(key)
-    entry?.value.clear()
+    for (const key of keys) {
+      const entry = cache.get(key)
+      entry?.value.clear()
+    }
   }
 
   void removePersisted(Persist.workspace(dir, "terminal"), platform)
+  if (scope) void removePersisted(Persist.workspace(dir, `terminal:${scope}`), platform)
 
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
@@ -407,7 +416,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const loadWorkspace = (dir: string, legacySessionID?: string, serverScope = scope()) => {
+    const loadWorkspace = (dir: string, legacySessionID: string | undefined, serverScope: string | undefined) => {
       // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
       const key = getWorkspaceTerminalCacheKey(dir, serverScope)
       const existing = cache.get(key)
