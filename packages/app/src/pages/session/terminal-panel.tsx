@@ -37,6 +37,7 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
+    recovered: false,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
@@ -144,6 +145,12 @@ export function TerminalPanel() {
 
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
+
+  const recoverTerminal = (id: string, clone: (id: string) => Promise<void>) => {
+    if (store.recovered) return
+    setStore("recovered", true)
+    void clone(id)
+  }
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -282,7 +289,7 @@ export function TerminalPanel() {
                               autoFocus={opened()}
                               onConnect={() => ops.trim(id)}
                               onCleanup={ops.update}
-                              onConnectError={() => ops.clone(id)}
+                              onConnectError={() => recoverTerminal(id, ops.clone)}
                             />
                           </div>
                         )}

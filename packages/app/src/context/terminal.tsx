@@ -4,6 +4,7 @@ import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "soli
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
+import { ServerConnection, useServer } from "./server"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 
@@ -82,8 +83,23 @@ export function migrateTerminalState(value: unknown) {
   }
 }
 
-export function getWorkspaceTerminalCacheKey(dir: string) {
+export function getWorkspaceTerminalCacheKey(dir: string, scope?: string) {
+  if (scope) return `${scope}:${dir}:${WORKSPACE_KEY}`
   return `${dir}:${WORKSPACE_KEY}`
+}
+
+function getTerminalServerScope(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
+  if (!conn) return
+  if (conn.type === "sidecar" && conn.variant === "base") return
+  if (conn.type === "http") {
+    try {
+      const url = new URL(conn.http.url)
+      if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1") return
+    } catch {
+      return key
+    }
+  }
+  return key
 }
 
 export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: string) {
@@ -130,12 +146,17 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
   }
 }
 
-function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
-  const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
+function createWorkspaceTerminalSession(
+  sdk: ReturnType<typeof useSDK>,
+  dir: string,
+  legacySessionID?: string,
+  scope?: string,
+) {
+  const legacy = scope ? [] : getLegacyTerminalStorageKeys(dir, legacySessionID)
 
   const [store, setStore, _, ready] = persisted(
     {
-      ...Persist.workspace(dir, "terminal", legacy),
+      ...Persist.workspace(dir, scope ? `terminal:${scope}` : "terminal", legacy),
       migrate: migrateTerminalState,
     },
     createStore<{
@@ -357,8 +378,12 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   gate: false,
   init: () => {
     const sdk = useSDK()
+    const server = useServer()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
+    const scope = createMemo(() => {
+      return getTerminalServerScope(server.current, server.key)
+    })
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
@@ -382,9 +407,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const loadWorkspace = (dir: string, legacySessionID?: string) => {
+    const loadWorkspace = (dir: string, legacySessionID?: string, serverScope = scope()) => {
       // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
-      const key = getWorkspaceTerminalCacheKey(dir)
+      const key = getWorkspaceTerminalCacheKey(dir, serverScope)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -393,7 +418,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID),
+        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID, serverScope),
         dispose,
       }))
 
@@ -402,16 +427,16 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
+    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope()))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id }),
+        () => ({ dir: params.dir, id: params.id, scope: scope() }),
         (next, prev) => {
           if (!prev?.dir) return
-          if (next.dir === prev.dir && next.id === prev.id) return
-          if (next.dir === prev.dir && next.id) return
-          loadWorkspace(prev.dir, prev.id).trimAll()
+          if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return
+          if (next.dir === prev.dir && next.id && next.scope === prev.scope) return
+          loadWorkspace(prev.dir, prev.id, prev.scope).trimAll()
         },
         { defer: true },
       ),
