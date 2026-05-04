@@ -445,15 +445,18 @@ pub fn spawn_command(
         let shell = get_user_shell();
         let envs = merge_shell_env(load_shell_env(&shell), envs);
 
-        let line = if shell.ends_with("/nu") {
-            format!("^\"{}\" {}", sidecar.display(), args)
+        let mut cmd = if is_nushell(&shell) {
+            let line = format!("^\"{}\" {}", sidecar.display(), args);
+            let mut cmd = Command::new(shell);
+            cmd.current_dir(app.path().home_dir().unwrap());
+            cmd.args(["-l", "-c", &line]);
+            cmd
         } else {
-            format!("\"{}\" {}", sidecar.display(), args)
+            let mut cmd = Command::new(sidecar);
+            cmd.current_dir(app.path().home_dir().unwrap());
+            cmd.args(args.split_whitespace());
+            cmd
         };
-
-        let mut cmd = Command::new(shell);
-        cmd.current_dir(app.path().home_dir().unwrap());
-        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
             cmd.env(key, value);
