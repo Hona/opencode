@@ -133,17 +133,15 @@ export function clearWorkspaceTerminals(
   platform?: Platform,
   scope?: string,
 ) {
-  const keys = [getWorkspaceTerminalCacheKey(dir), ...(scope ? [getWorkspaceTerminalCacheKey(dir, scope)] : [])]
+  const key = getWorkspaceTerminalCacheKey(dir, scope)
   for (const cache of caches) {
-    for (const key of keys) {
-      const entry = cache.get(key)
-      entry?.value.clear()
-    }
+    const entry = cache.get(key)
+    entry?.value.clear()
   }
 
-  void removePersisted(Persist.workspace(dir, "terminal"), platform)
-  if (scope) void removePersisted(Persist.workspace(dir, `terminal:${scope}`), platform)
+  void removePersisted(Persist.workspace(dir, scope ? `terminal:${scope}` : "terminal"), platform)
 
+  if (scope) return
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
     for (const key of getLegacyTerminalStorageKeys(dir, id)) {
