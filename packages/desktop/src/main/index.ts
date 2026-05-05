@@ -137,8 +137,8 @@ function useSystemCertificates() {
 
 function useEnvProxy() {
   try {
-    const setGlobalProxyFromEnv = (http as typeof http & { setGlobalProxyFromEnv: () => void }).setGlobalProxyFromEnv
-    setGlobalProxyFromEnv()
+    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
+    ;(http as any).setGlobalProxyFromEnv()
   } catch (error) {
     logger.warn("failed to load proxy environment", error)
   }
