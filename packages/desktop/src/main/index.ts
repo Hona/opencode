@@ -43,7 +43,7 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import { getDefaultServerUrl, getWslConfig, prepareServerEnv, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -171,6 +171,9 @@ async function initialize() {
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
+  prepareServerEnv(password)
+  ensureLoopbackNoProxy()
+  useEnvProxy()
 
   const loadingTask = (async () => {
     logger.log("sidecar connection started", { url })
@@ -200,10 +203,7 @@ async function initialize() {
     }
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(hostname, port, password, () => {
-      ensureLoopbackNoProxy()
-      useEnvProxy()
-    })
+    const { listener, health } = await spawnLocalServer(hostname, port, password)
     server = listener
     serverReady.resolve({
       url,

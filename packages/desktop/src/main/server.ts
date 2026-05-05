@@ -30,9 +30,7 @@ export function setWslConfig(config: WslConfig) {
   getStore().set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export async function spawnLocalServer(hostname: string, port: number, password: string, configureEnv?: () => void) {
-  prepareServerEnv(password)
-  configureEnv?.()
+export async function spawnLocalServer(hostname: string, port: number, password: string) {
   const { Log, Server } = await import("virtual:opencode-server")
   await Log.init({ level: "WARN" })
   const listener = await Server.listen({
@@ -59,7 +57,7 @@ export async function spawnLocalServer(hostname: string, port: number, password:
   return { listener, health: { wait } }
 }
 
-function prepareServerEnv(password: string) {
+export function prepareServerEnv(password: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
   const env = {
