@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
+import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -77,6 +78,7 @@ setupApp()
 
 function setupApp() {
   ensureLoopbackNoProxy()
+  useEnvProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
@@ -130,6 +132,15 @@ function useSystemCertificates() {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
   } catch (error) {
     logger.warn("failed to load system certificates", error)
+  }
+}
+
+function useEnvProxy() {
+  try {
+    const setGlobalProxyFromEnv = (http as typeof http & { setGlobalProxyFromEnv: () => void }).setGlobalProxyFromEnv
+    setGlobalProxyFromEnv()
+  } catch (error) {
+    logger.warn("failed to load proxy environment", error)
   }
 }
 
