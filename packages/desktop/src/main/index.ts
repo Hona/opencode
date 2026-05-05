@@ -66,6 +66,11 @@ const pendingDeepLinks: string[] = []
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
 
+type Node24TLS = typeof tls & {
+  getCACertificates?: (type?: "default" | "system" | "bundled" | "extra") => string[]
+  setDefaultCACertificates?: (certs: readonly string[]) => void
+}
+
 useSystemCertificates()
 
 logger.log("app starting", {
@@ -126,9 +131,12 @@ function setupApp() {
 }
 
 function useSystemCertificates() {
+  const nodeTLS = tls as Node24TLS
   try {
-    if (!tls.getCACertificates || !tls.setDefaultCACertificates) return
-    tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])])
+    if (!nodeTLS.getCACertificates || !nodeTLS.setDefaultCACertificates) return
+    nodeTLS.setDefaultCACertificates([
+      ...new Set([...nodeTLS.getCACertificates("default"), ...nodeTLS.getCACertificates("system")]),
+    ])
   } catch (error) {
     logger.warn("failed to load system certificates", error)
   }
