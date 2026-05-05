@@ -4,7 +4,7 @@ import { existsSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import * as tls from "node:tls"
+import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
@@ -66,11 +66,6 @@ const pendingDeepLinks: string[] = []
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
 
-type Node24TLS = typeof tls & {
-  getCACertificates?: (type?: "default" | "system" | "bundled" | "extra") => string[]
-  setDefaultCACertificates?: (certs: readonly string[]) => void
-}
-
 useSystemCertificates()
 
 logger.log("app starting", {
@@ -131,12 +126,8 @@ function setupApp() {
 }
 
 function useSystemCertificates() {
-  const nodeTLS = tls as Node24TLS
   try {
-    if (!nodeTLS.getCACertificates || !nodeTLS.setDefaultCACertificates) return
-    nodeTLS.setDefaultCACertificates([
-      ...new Set([...nodeTLS.getCACertificates("default"), ...nodeTLS.getCACertificates("system")]),
-    ])
+    setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
   } catch (error) {
     logger.warn("failed to load system certificates", error)
   }

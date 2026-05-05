@@ -4,9 +4,17 @@ import type { Hono } from "hono"
 import type { Adapter, FetchApp, Opts } from "./adapter"
 
 async function listen(app: FetchApp, opts: Opts, inject?: (server: ServerType) => void) {
+  type ServerEvents = {
+    off(event: "error", listener: (err: Error) => void): void
+    off(event: "listening", listener: () => void): void
+    once(event: "error", listener: (err: Error) => void): void
+    once(event: "listening", listener: () => void): void
+  }
+
   const start = (port: number) =>
     new Promise<ServerType>((resolve, reject) => {
       const server = createAdaptorServer({ fetch: app.fetch })
+      const events = server as ServerEvents
       inject?.(server)
       const fail = (err: Error) => {
         cleanup()
@@ -17,11 +25,11 @@ async function listen(app: FetchApp, opts: Opts, inject?: (server: ServerType) =
         resolve(server)
       }
       const cleanup = () => {
-        server.off("error", fail)
-        server.off("listening", ready)
+        events.off("error", fail)
+        events.off("listening", ready)
       }
-      server.once("error", fail)
-      server.once("listening", ready)
+      events.once("error", fail)
+      events.once("listening", ready)
       server.listen(port, opts.hostname)
     })
 
