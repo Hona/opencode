@@ -200,7 +200,10 @@ async function initialize() {
     }
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(hostname, port, password)
+    const { listener, health } = await spawnLocalServer(hostname, port, password, () => {
+      ensureLoopbackNoProxy()
+      useEnvProxy()
+    })
     server = listener
     serverReady.resolve({
       url,
