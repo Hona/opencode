@@ -1,20 +1,14 @@
+import { EventEmitter } from "node:events"
 import { createAdaptorServer, type ServerType } from "@hono/node-server"
 import { createNodeWebSocket } from "@hono/node-ws"
 import type { Hono } from "hono"
 import type { Adapter, FetchApp, Opts } from "./adapter"
 
 async function listen(app: FetchApp, opts: Opts, inject?: (server: ServerType) => void) {
-  type ServerEvents = {
-    off(event: "error", listener: (err: Error) => void): void
-    off(event: "listening", listener: () => void): void
-    once(event: "error", listener: (err: Error) => void): void
-    once(event: "listening", listener: () => void): void
-  }
-
   const start = (port: number) =>
     new Promise<ServerType>((resolve, reject) => {
       const server = createAdaptorServer({ fetch: app.fetch })
-      const events = server as ServerEvents
+      const events = server as EventEmitter
       inject?.(server)
       const fail = (err: Error) => {
         cleanup()
