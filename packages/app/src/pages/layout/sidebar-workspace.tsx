@@ -320,7 +320,7 @@ export const SortableWorkspace = (props: {
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
-  const fetching = useIsFetching(() => ({ queryKey: loadSessionsQueryKey(props.project.worktree) }))
+  const fetching = useIsFetching(() => ({ queryKey: loadSessionsQueryKey(props.directory) }))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const loading = () => fetching() > 0 && count() === 0
   const touch = createMediaQuery("(hover: none)")

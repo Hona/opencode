@@ -229,7 +229,7 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
         input.queryClient
-          .fetchQuery(loadAgentsQuery(input.directory, input.sdk))
+          .ensureQueryData(loadAgentsQuery(input.directory, input.sdk))
           .then((data) => input.setStore("agent", data)),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
@@ -238,7 +238,7 @@ export async function bootstrapDirectory(input: {
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
       !seededPath &&
         (() =>
-          input.queryClient.fetchQuery(loadPathQuery(input.directory, input.sdk)).then((data) => {
+          input.queryClient.ensureQueryData(loadPathQuery(input.directory, input.sdk)).then((data) => {
             const next = projectID(data.directory ?? input.directory, input.global.project)
             if (next) input.setStore("project", next)
           })),
