@@ -4,6 +4,7 @@ import { existsSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import * as tls from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
@@ -65,6 +66,8 @@ const pendingDeepLinks: string[] = []
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
 
+useSystemCertificates()
+
 logger.log("app starting", {
   version: app.getVersion(),
   packaged: app.isPackaged,
@@ -120,6 +123,15 @@ function setupApp() {
     setupAutoUpdater()
     await initialize()
   })
+}
+
+function useSystemCertificates() {
+  try {
+    if (!tls.getCACertificates || !tls.setDefaultCACertificates) return
+    tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])])
+  } catch (error) {
+    logger.warn("failed to load system certificates", error)
+  }
 }
 
 function emitDeepLinks(urls: string[]) {
