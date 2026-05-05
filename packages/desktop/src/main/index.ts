@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
-import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -43,7 +42,7 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { getDefaultServerUrl, getWslConfig, prepareServerEnv, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import { configureProxyEnv, getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -77,8 +76,7 @@ logger.log("app starting", {
 setupApp()
 
 function setupApp() {
-  ensureLoopbackNoProxy()
-  useEnvProxy()
+  configureProxyEnv()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
@@ -135,15 +133,6 @@ function useSystemCertificates() {
   }
 }
 
-function useEnvProxy() {
-  try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
-}
-
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
   pendingDeepLinks.push(...urls)
@@ -171,9 +160,6 @@ async function initialize() {
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
-  prepareServerEnv(password)
-  ensureLoopbackNoProxy()
-  useEnvProxy()
 
   const loadingTask = (async () => {
     logger.log("sidecar connection started", { url })
@@ -298,26 +284,6 @@ function killSidecar() {
   if (!server) return
   server.stop()
   server = null
-}
-
-function ensureLoopbackNoProxy() {
-  const loopback = ["127.0.0.1", "localhost", "::1"]
-  const upsert = (key: string) => {
-    const items = (process.env[key] ?? "")
-      .split(",")
-      .map((value: string) => value.trim())
-      .filter((value: string) => Boolean(value))
-
-    for (const host of loopback) {
-      if (items.some((value: string) => value.toLowerCase() === host)) continue
-      items.push(host)
-    }
-
-    process.env[key] = items.join(",")
-  }
-
-  upsert("NO_PROXY")
-  upsert("no_proxy")
 }
 
 async function getSidecarPort() {
