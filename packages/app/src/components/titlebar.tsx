@@ -56,7 +56,11 @@ export function Titlebar() {
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
-  const minHeight = () => (mac() || windows() ? `${titlebarHeight / Math.min(titlebarZoom(), 1)}px` : undefined)
+  const minHeight = () => {
+    if (mac()) return `${titlebarHeight / zoom()}px`
+    if (windows()) return `${titlebarHeight / Math.min(titlebarZoom(), 1)}px`
+    return undefined
+  }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
   const [history, setHistory] = createStore({

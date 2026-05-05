@@ -24,6 +24,9 @@ const applyZoom = (next: number) => {
   void window.api.setZoomFactor(next).then(() => {
     if (requestedZoom !== next) return
     setWebviewZoom(next)
+  }).catch(() => {
+    if (requestedZoom !== next) return
+    requestedZoom = webviewZoom()
   })
 }
 
