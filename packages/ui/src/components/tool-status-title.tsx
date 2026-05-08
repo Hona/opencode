@@ -19,6 +19,17 @@ function contentWidth(el: HTMLSpanElement | undefined) {
   return `${Math.ceil(el.getBoundingClientRect().width)}px`
 }
 
+function flipElements(el: HTMLSpanElement | undefined) {
+  const row = el?.closest('[data-slot="context-tool-group-title"]')
+  if (row instanceof HTMLElement) return [...row.children].filter((item) => item instanceof HTMLElement)
+  if (el?.parentElement) return [el.parentElement]
+  return el ? [el] : []
+}
+
+function flipRects(elements: HTMLElement[]) {
+  return new Map(elements.map((element) => [element, element.getBoundingClientRect()]))
+}
+
 export function ToolStatusTitle(props: {
   active: boolean
   activeText: string
@@ -42,41 +53,64 @@ export function ToolStatusTitle(props: {
   const width = () => state.width
   const active = () => state.active
   const animating = () => state.animating
+  let rootRef: HTMLSpanElement | undefined
   let activeRef: HTMLSpanElement | undefined
   let doneRef: HTMLSpanElement | undefined
   let widthRef: HTMLSpanElement | undefined
   let frame: number | undefined
   let finishTimer: ReturnType<typeof setTimeout> | undefined
+  let animations: Animation[] = []
 
   const finish = () => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     if (finishTimer !== undefined) clearTimeout(finishTimer)
+    for (const animation of animations) animation.cancel()
     frame = undefined
     finishTimer = undefined
+    animations = []
     setState("animating", false)
     setState("width", undefined)
   }
 
+  const play = (firstRects: Map<HTMLElement, DOMRect>, elements: HTMLElement[]) => {
+    const style = rootRef ? getComputedStyle(rootRef) : undefined
+    const duration = Number.parseFloat(style?.getPropertyValue("--tool-motion-spring-ms") ?? "") || 480
+    const easing = style?.getPropertyValue("--tool-motion-ease") || "cubic-bezier(0.22, 1, 0.36, 1)"
+
+    animations = elements.flatMap((element) => {
+      const first = firstRects.get(element)
+      if (!first) return []
+      const last = element.getBoundingClientRect()
+      const x = first.left - last.left
+      const y = first.top - last.top
+      const scaleX = last.width === 0 ? 1 : first.width / last.width
+      if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && Math.abs(scaleX - 1) < 0.01) return []
+      return element.animate(
+        [
+          { transform: `translate(${x}px, ${y}px) scaleX(${scaleX})`, transformOrigin: "top left" },
+          { transform: "none", transformOrigin: "top left" },
+        ],
+        { duration, easing },
+      )
+    })
+  }
+
   const animate = () => {
-    const first = contentWidth(widthRef)
+    const elements = flipElements(rootRef)
+    const firstRects = flipRects(elements)
     finish()
     setState("animating", true)
     setState("active", props.active)
     const last = contentWidth(props.active ? activeRef : doneRef)
-    if (!first || !last) {
+    if (!last) {
       finish()
       return
     }
 
-    setState("width", first)
-    if (first === last) {
-      finishTimer = setTimeout(finish, 600)
-      return
-    }
-
+    setState("width", last)
     frame = requestAnimationFrame(() => {
       frame = undefined
-      setState("width", last)
+      play(firstRects, elements)
       finishTimer = setTimeout(finish, 600)
     })
   }
@@ -89,6 +123,7 @@ export function ToolStatusTitle(props: {
 
   return (
     <span
+      ref={rootRef}
       data-component="tool-status-title"
       data-active={active() ? "true" : "false"}
       data-ready={animating() ? "true" : "false"}
