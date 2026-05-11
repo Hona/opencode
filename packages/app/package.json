@@ -60,6 +60,7 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "3.13.24",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "effect": "catalog:",

@@ -737,6 +737,7 @@ export default function Page() {
   let dockHeight = 0
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
+  let revealMessage = (_id: string) => {}
   let scrollMark = 0
   let messageMark = 0
 
@@ -1763,6 +1764,7 @@ export default function Page() {
     autoScroll,
     scroller: () => scroller,
     anchor,
+    revealMessage: (id) => revealMessage(id),
     scheduleScrollState,
     consumePendingMessage: layout.pendingMessage.consume,
   })
@@ -1851,6 +1853,8 @@ export default function Page() {
                     })}
                     actions={actions}
                     scroll={ui.scroll}
+                    userScrolled={autoScroll.userScrolled()}
+                    currentMessageID={store.messageId}
                     onResumeScroll={resumeScroll}
                     setScrollRef={setScrollRef}
                     onScheduleScrollState={scheduleScrollState}
@@ -1858,7 +1862,6 @@ export default function Page() {
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
                     onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
                     setContentRef={(el) => {
@@ -1868,7 +1871,6 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    turnStart={historyWindow.turnStart()}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
@@ -1876,6 +1878,9 @@ export default function Page() {
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
+                    setRevealMessage={(fn) => {
+                      revealMessage = fn
+                    }}
                   />
                 </Show>
               </Match>

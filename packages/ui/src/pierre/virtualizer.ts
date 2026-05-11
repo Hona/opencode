@@ -24,6 +24,9 @@ function scrollable(value: string) {
 }
 
 function scrollRoot(container: HTMLElement) {
+  const viewport = container.closest(".scroll-view__viewport")
+  if (viewport instanceof HTMLElement) return viewport
+
   let node = container.parentElement
   while (node) {
     const style = getComputedStyle(node)

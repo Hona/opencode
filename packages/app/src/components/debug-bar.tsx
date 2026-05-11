@@ -12,11 +12,6 @@ type Mem = Performance & {
   }
 }
 
-type Evt = PerformanceEntry & {
-  interactionId?: number
-  processingStart?: number
-}
-
 type Shift = PerformanceEntry & {
   hadRecentInput: boolean
   value: number
@@ -165,7 +160,6 @@ export function DebugBar() {
     const obs: PerformanceObserver[] = []
     const fps: Array<{ at: number; dur: number }> = []
     const long: Array<{ at: number; dur: number }> = []
-    const seen = new Map<number | string, { at: number; delay: number; dur: number }>()
     let hasLong = false
     let poll: number | undefined
     let raf = 0
@@ -196,22 +190,6 @@ export function DebugBar() {
       setState("long", { block, count: long.length, max })
     }
 
-    const syncInp = (at = performance.now()) => {
-      for (const [key, entry] of seen) {
-        if (at - entry.at > span) seen.delete(key)
-      }
-      let delay = 0
-      let inp = 0
-      for (const entry of seen.values()) {
-        delay = Math.max(delay, entry.delay)
-        inp = Math.max(inp, entry.dur)
-      }
-      batch(() => {
-        setState("delay", delay > 0 ? delay : undefined)
-        setState("inp", inp > 0 ? inp : undefined)
-      })
-    }
-
     const syncHeap = () => {
       const mem = (performance as Mem).memory
       if (!mem) return
@@ -221,7 +199,6 @@ export function DebugBar() {
     const reset = () => {
       fps.length = 0
       long.length = 0
-      seen.clear()
       last = 0
       snap = 0
       batch(() => {
@@ -273,28 +250,6 @@ export function DebugBar() {
       setState("long", { block: 0, count: 0, max: 0 })
     }
 
-    watch("event", { buffered: true, durationThreshold: 16, type: "event" }, (entries) => {
-      for (const raw of entries) {
-        const entry = raw as Evt
-        if (entry.duration < 16) continue
-        const key =
-          entry.interactionId && entry.interactionId > 0
-            ? entry.interactionId
-            : `${entry.name}:${Math.round(entry.startTime)}`
-        const prev = seen.get(key)
-        const delay = Math.max(0, (entry.processingStart ?? entry.startTime) - entry.startTime)
-        seen.set(key, {
-          at: entry.startTime,
-          delay: Math.max(prev?.delay ?? 0, delay),
-          dur: Math.max(prev?.dur ?? 0, entry.duration),
-        })
-        if (seen.size <= 200) continue
-        const first = seen.keys().next().value
-        if (first !== undefined) seen.delete(first)
-      }
-      syncInp()
-    })
-
     const loop = (at: number) => {
       if (document.visibilityState !== "visible") {
         raf = 0
@@ -331,7 +286,6 @@ export function DebugBar() {
       if (poll === undefined) {
         poll = window.setInterval(() => {
           syncLong()
-          syncInp()
           syncHeap()
         }, 1000)
       }

@@ -501,6 +501,8 @@ function renderViewer<I extends RenderTarget>(opts: {
 }
 
 function preserve(viewer: Viewer) {
+  if (!viewer.container.firstChild) return () => {}
+
   const root = scrollParent(viewer.wrapper)
   if (!root) return () => {}
 
@@ -524,6 +526,9 @@ function preserve(viewer: Viewer) {
 }
 
 function scrollParent(el: HTMLElement): HTMLElement | undefined {
+  const viewport = el.closest(".scroll-view__viewport")
+  if (viewport instanceof HTMLElement) return viewport
+
   let parent = el.parentElement
   while (parent) {
     const style = getComputedStyle(parent)
@@ -1055,7 +1060,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
-    const virtualizer = virtuals.get()
+    const virtualizer = large() ? virtuals.get() : undefined
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
     const done = preserve(viewer)

@@ -26,6 +26,8 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
       return
     }
 
+    if (!run()) return
+
     timer = setTimeout(() => {
       timer = undefined
       setRun(false)

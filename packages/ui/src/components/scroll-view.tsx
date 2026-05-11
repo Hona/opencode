@@ -1,4 +1,4 @@
-import { onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
@@ -92,6 +92,19 @@ export function ScrollView(props: ScrollViewProps) {
     setState("thumbHeight", height)
     setState("thumbTop", boundedTop)
   }
+
+  let thumbFrame: number | undefined
+  const scheduleThumb = () => {
+    if (thumbFrame !== undefined) return
+    thumbFrame = requestAnimationFrame(() => {
+      thumbFrame = undefined
+      updateThumb()
+    })
+  }
+
+  onCleanup(() => {
+    if (thumbFrame !== undefined) cancelAnimationFrame(thumbFrame)
+  })
 
   onMount(() => {
     if (local.viewportRef) {
@@ -196,7 +209,7 @@ export function ScrollView(props: ScrollViewProps) {
         ref={viewportRef}
         class="scroll-view__viewport"
         onScroll={(e) => {
-          updateThumb()
+          scheduleThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
         onWheel={events.onWheel as any}
