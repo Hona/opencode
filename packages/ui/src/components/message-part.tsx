@@ -526,38 +526,6 @@ function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[]
   return a.every((item, i) => sameGroup(item, b[i]!))
 }
 
-export type TimelineRowControls = {
-  visibleRows?: Set<string>
-  rowIndex?: (key: string) => number | undefined
-  onRowMount?: (key: string, el: HTMLElement) => void | (() => void)
-  onRowInteracted?: (key: string) => void
-}
-
-function TimelinePartRow(props: { rowKey: string; controls?: TimelineRowControls; children: JSX.Element }) {
-  let el!: HTMLDivElement
-  let cleanup: void | (() => void)
-
-  onMount(() => {
-    cleanup = props.controls?.onRowMount?.(props.rowKey, el)
-  })
-
-  onCleanup(() => {
-    cleanup?.()
-  })
-
-  return (
-    <div
-      ref={el}
-      data-row-key={props.rowKey}
-      data-row-index={props.controls?.rowIndex?.(props.rowKey)}
-      onPointerDown={() => props.controls?.onRowInteracted?.(props.rowKey)}
-      onFocusIn={() => props.controls?.onRowInteracted?.(props.rowKey)}
-    >
-      {props.children}
-    </div>
-  )
-}
-
 export function groupParts(parts: { messageID: string; part: PartType }[]) {
   const result: PartGroup[] = []
   let start = -1
@@ -635,10 +603,6 @@ export function AssistantParts(props: {
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
-  visibleRows?: Set<string>
-  rowIndex?: (key: string) => number | undefined
-  onRowMount?: (key: string, el: HTMLElement) => void | (() => void)
-  onRowInteracted?: (key: string) => void
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -668,83 +632,66 @@ export function AssistantParts(props: {
   )
 
   const last = createMemo(() => grouped().at(-1)?.key)
-  const visibleGroups = createMemo(
-    () => {
-      const visible = props.visibleRows
-      if (!visible) return grouped()
-      return grouped().filter((entry) => visible.has(entry.key))
-    },
-    [] as PartGroup[],
-    { equals: sameGroups },
-  )
-  const controls = () => ({
-    visibleRows: props.visibleRows,
-    rowIndex: props.rowIndex,
-    onRowMount: props.onRowMount,
-    onRowInteracted: props.onRowInteracted,
-  })
 
   return (
-    <For each={visibleGroups()}>
+    <For each={grouped()}>
       {(entry) => {
         const entryAccessor = () => entry
         const entryType = createMemo(() => entry.type)
 
         return (
-          <TimelinePartRow rowKey={entry.key} controls={controls()}>
-            <Switch>
-              <Match when={entryType() === "context"}>
-                {(() => {
-                  const parts = createMemo(
-                    () => {
-                      const entry = entryAccessor()
-                      if (entry.type !== "context") return emptyTools
-                      return entry.refs
-                        .map((ref) => part().get(ref.messageID)?.get(ref.partID))
-                        .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                    },
-                    emptyTools,
-                    { equals: same },
-                  )
-                  const busy = createMemo(() => props.working && last() === entryAccessor().key)
-
-                  return (
-                    <Show when={parts().length > 0}>
-                      <ContextToolGroup parts={parts()} busy={busy()} />
-                    </Show>
-                  )
-                })()}
-              </Match>
-              <Match when={entryType() === "part"}>
-                {(() => {
-                  const message = createMemo(() => {
+          <Switch>
+            <Match when={entryType() === "context"}>
+              {(() => {
+                const parts = createMemo(
+                  () => {
                     const entry = entryAccessor()
-                    if (entry.type !== "part") return
-                    return msgs().get(entry.ref.messageID)
-                  })
-                  const item = createMemo(() => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "part") return
-                    return part().get(entry.ref.messageID)?.get(entry.ref.partID)
-                  })
+                    if (entry.type !== "context") return emptyTools
+                    return entry.refs
+                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
+                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                  },
+                  emptyTools,
+                  { equals: same },
+                )
+                const busy = createMemo(() => props.working && last() === entryAccessor().key)
 
-                  return (
-                    <Show when={message()}>
-                      <Show when={item()}>
-                        <Part
-                          part={item()!}
-                          message={message()!}
-                          showAssistantCopyPartID={props.showAssistantCopyPartID}
-                          turnDurationMs={props.turnDurationMs}
-                          defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                        />
-                      </Show>
+                return (
+                  <Show when={parts().length > 0}>
+                    <ContextToolGroup parts={parts()} busy={busy()} />
+                  </Show>
+                )
+              })()}
+            </Match>
+            <Match when={entryType() === "part"}>
+              {(() => {
+                const message = createMemo(() => {
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
+                  return msgs().get(entry.ref.messageID)
+                })
+                const item = createMemo(() => {
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
+                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
+                })
+
+                return (
+                  <Show when={message()}>
+                    <Show when={item()}>
+                      <Part
+                        part={item()!}
+                        message={message()!}
+                        showAssistantCopyPartID={props.showAssistantCopyPartID}
+                        turnDurationMs={props.turnDurationMs}
+                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                      />
                     </Show>
-                  )
-                })()}
-              </Match>
-            </Switch>
-          </TimelinePartRow>
+                  </Show>
+                )
+              })()}
+            </Match>
+          </Switch>
         )
       }}
     </For>

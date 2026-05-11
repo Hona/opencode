@@ -265,7 +265,6 @@ export function MessageTimeline(props: {
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const [viewport, setViewport] = createSignal<HTMLDivElement>()
-  const protectRow = (_key: string) => {}
   const timelineTurns = createMemo(() => {
     const assistantByParent = new Map<string, AssistantMessage[]>()
     for (const message of sessionMessages()) {
@@ -1040,51 +1039,44 @@ export function MessageTimeline(props: {
                       }}
                     >
                       <Show when={commentCount() > 0}>
-                        <TimelineCommentRow
-                          rowKey={`comment-strip:${messageID}`}
-                          rowIndex={timelineWindow.rowIndex}
-                          onRowMount={timelineWindow.observeRow}
-                          onRowInteracted={protectRow}
-                        >
-                          <div class="w-full px-4 md:px-5 pb-2">
-                            <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                              <div class="flex w-max min-w-full justify-end gap-2">
-                                <Index each={comments()}>
-                                  {(commentAccessor: () => MessageComment) => {
-                                    const comment = createMemo(() => commentAccessor())
-                                    return (
-                                      <Show when={comment()}>
-                                        {(c) => (
-                                          <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                            <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                              <FileIcon
-                                                node={{ path: c().path, type: "file" }}
-                                                class="size-3.5 shrink-0"
-                                              />
-                                              <span class="truncate">{getFilename(c().path)}</span>
-                                              <Show when={c().selection}>
-                                                {(selection) => (
-                                                  <span class="shrink-0 text-text-weak">
-                                                    {selection().startLine === selection().endLine
-                                                      ? `:${selection().startLine}`
-                                                      : `:${selection().startLine}-${selection().endLine}`}
-                                                  </span>
-                                                )}
-                                              </Show>
-                                            </div>
-                                            <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                              {c().comment}
-                                            </div>
+                        <div class="w-full px-4 md:px-5 pb-2">
+                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                            <div class="flex w-max min-w-full justify-end gap-2">
+                              <Index each={comments()}>
+                                {(commentAccessor: () => MessageComment) => {
+                                  const comment = createMemo(() => commentAccessor())
+                                  return (
+                                    <Show when={comment()}>
+                                      {(c) => (
+                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                          <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                            <FileIcon
+                                              node={{ path: c().path, type: "file" }}
+                                              class="size-3.5 shrink-0"
+                                            />
+                                            <span class="truncate">{getFilename(c().path)}</span>
+                                            <Show when={c().selection}>
+                                              {(selection) => (
+                                                <span class="shrink-0 text-text-weak">
+                                                  {selection().startLine === selection().endLine
+                                                    ? `:${selection().startLine}`
+                                                    : `:${selection().startLine}-${selection().endLine}`}
+                                                </span>
+                                              )}
+                                            </Show>
                                           </div>
-                                        )}
-                                      </Show>
-                                    )
-                                  }}
-                                </Index>
-                              </div>
+                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                            {c().comment}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Show>
+                                  )
+                                }}
+                              </Index>
                             </div>
                           </div>
-                        </TimelineCommentRow>
+                        </div>
                       </Show>
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
@@ -1096,7 +1088,6 @@ export function MessageTimeline(props: {
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                        onRowInteracted={protectRow}
                         classes={{
                           root: "min-w-0 w-full relative",
                           content: "flex flex-col justify-between !overflow-visible",
@@ -1118,33 +1109,3 @@ export function MessageTimeline(props: {
   )
 }
 
-function TimelineCommentRow(props: {
-  rowKey: string
-  rowIndex: (key: string) => number | undefined
-  onRowMount: (key: string, el: HTMLElement) => void | (() => void)
-  onRowInteracted: (key: string) => void
-  children: JSX.Element
-}) {
-  let el!: HTMLDivElement
-  let cleanup: void | (() => void)
-
-  onMount(() => {
-    cleanup = props.onRowMount(props.rowKey, el)
-  })
-
-  onCleanup(() => {
-    cleanup?.()
-  })
-
-  return (
-    <div
-      ref={el}
-      data-row-key={props.rowKey}
-      data-row-index={props.rowIndex(props.rowKey)}
-      onPointerDown={() => props.onRowInteracted(props.rowKey)}
-      onFocusIn={() => props.onRowInteracted(props.rowKey)}
-    >
-      {props.children}
-    </div>
-  )
-}

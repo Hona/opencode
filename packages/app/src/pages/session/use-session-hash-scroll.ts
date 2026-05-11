@@ -77,10 +77,14 @@ export const useSessionHashScroll = (input: {
     return true
   }
 
-  const seek = (id: string, behavior: ScrollBehavior): boolean => {
+  const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
     input.revealMessage?.(id)
     const el = document.getElementById(input.anchor(id))
     if (el) return scrollToElement(el, behavior)
+    if (left <= 0) return false
+    queue(() => {
+      seek(id, behavior, left - 1)
+    })
     return false
   }
 
@@ -97,11 +101,6 @@ export const useSessionHashScroll = (input: {
         seek(message.id, behavior)
       })
 
-      updateHash(message.id)
-      return
-    }
-
-    if (seek(message.id, behavior)) {
       updateHash(message.id)
       return
     }

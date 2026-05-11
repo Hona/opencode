@@ -73,6 +73,7 @@ function AccordionContent(props: ParentProps<AccordionContentProps>) {
   return (
     <Kobalte.Content
       {...rest}
+      data-skip-size-measure
       data-slot="accordion-content"
       classList={{
         ...split.classList,

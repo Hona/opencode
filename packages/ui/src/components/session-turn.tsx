@@ -13,7 +13,7 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, MessageDivider, PART_MAPPING, type TimelineRowControls, type UserActions } from "./message-part"
+import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -155,10 +155,6 @@ export function SessionTurn(
     active?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
-    visibleRows?: Set<string>
-    rowIndex?: (key: string) => number | undefined
-    onRowMount?: (key: string, el: HTMLElement) => void | (() => void)
-    onRowInteracted?: (key: string) => void
     classes?: {
       root?: string
       content?: string
@@ -326,19 +322,6 @@ export function SessionTurn(
   })
   const working = createMemo(() => status().type !== "idle" && active())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
-  const userRowKey = createMemo(() => `user-message:${props.messageID}`)
-  const dividerRowKey = createMemo(() => `divider:${props.messageID}`)
-  const thinkingRowKey = createMemo(() => `thinking:${props.messageID}`)
-  const retryRowKey = createMemo(() => `retry:${props.messageID}`)
-  const diffsRowKey = createMemo(() => `session-diffs:${props.messageID}`)
-  const errorRowKey = createMemo(() => `error:${props.messageID}`)
-  const visibleRow = (key: string) => !props.visibleRows || props.visibleRows.has(key)
-  const rowControls = (): TimelineRowControls => ({
-    visibleRows: props.visibleRows,
-    rowIndex: props.rowIndex,
-    onRowMount: props.onRowMount,
-    onRowInteracted: props.onRowInteracted,
-  })
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
@@ -407,19 +390,13 @@ export function SessionTurn(
               data-slot="session-turn-message-container"
               class={props.classes?.container}
             >
-              <Show when={visibleRow(userRowKey())}>
-                <TimelineRow rowKey={userRowKey()} messageID={message()!.id} controls={rowControls()}>
-                  <div data-slot="session-turn-message-content" aria-live="off">
-                    <Message message={message()!} parts={parts()} actions={props.actions} />
-                  </div>
-                </TimelineRow>
-              </Show>
-              <Show when={divider() && visibleRow(dividerRowKey())}>
-                <TimelineRow rowKey={dividerRowKey()} controls={rowControls()}>
-                  <div data-slot="session-turn-compaction">
-                    <MessageDivider label={divider()} />
-                  </div>
-                </TimelineRow>
+              <div data-slot="session-turn-message-content" aria-live="off">
+                <Message message={message()!} parts={parts()} actions={props.actions} />
+              </div>
+              <Show when={divider()}>
+                <div data-slot="session-turn-compaction">
+                  <MessageDivider label={divider()} />
+                </div>
               </Show>
               <Show when={assistantMessages().length > 0}>
                 <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
@@ -431,40 +408,29 @@ export function SessionTurn(
                     showReasoningSummaries={showReasoningSummaries()}
                     shellToolDefaultOpen={props.shellToolDefaultOpen}
                     editToolDefaultOpen={props.editToolDefaultOpen}
-                    visibleRows={props.visibleRows}
-                    rowIndex={props.rowIndex}
-                    onRowMount={props.onRowMount}
-                    onRowInteracted={props.onRowInteracted}
                   />
                 </div>
               </Show>
-              <Show when={showThinking() && visibleRow(thinkingRowKey())}>
-                <TimelineRow rowKey={thinkingRowKey()} controls={rowControls()}>
-                  <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries()}>
-                      <TextReveal
-                        text={reasoningHeading()}
-                        class="session-turn-thinking-heading"
-                        travel={25}
-                        duration={700}
-                      />
-                    </Show>
-                  </div>
-                </TimelineRow>
+              <Show when={showThinking()}>
+                <div data-slot="session-turn-thinking">
+                  <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                  <Show when={!showReasoningSummaries()}>
+                    <TextReveal
+                      text={reasoningHeading()}
+                      class="session-turn-thinking-heading"
+                      travel={25}
+                      duration={700}
+                    />
+                  </Show>
+                </div>
               </Show>
-              <Show when={active() && status().type === "retry" && visibleRow(retryRowKey())}>
-                <TimelineRow rowKey={retryRowKey()} controls={rowControls()}>
-                  <SessionRetry status={status()} show={active()} />
-                </TimelineRow>
-              </Show>
-              <Show when={edited() > 0 && !working() && visibleRow(diffsRowKey())}>
-                <TimelineRow rowKey={diffsRowKey()} controls={rowControls()}>
-                  <div
-                    data-slot="session-turn-diffs"
-                    data-component="session-turn-diffs-group"
-                    data-show-all={showAll() || undefined}
-                  >
+              <SessionRetry status={status()} show={active()} />
+              <Show when={edited() > 0 && !working()}>
+                <div
+                  data-slot="session-turn-diffs"
+                  data-component="session-turn-diffs-group"
+                  data-show-all={showAll() || undefined}
+                >
                   <div data-slot="session-turn-diffs-header">
                     <span data-slot="session-turn-diffs-label">
                       {edited()} {i18n.t("ui.sessionTurn.diffs.changed")}{" "}
@@ -550,15 +516,12 @@ export function SessionTurn(
                       </div>
                     </Show>
                   </div>
-                  </div>
-                </TimelineRow>
+                </div>
               </Show>
-              <Show when={error() && visibleRow(errorRowKey())}>
-                <TimelineRow rowKey={errorRowKey()} controls={rowControls()}>
-                  <Card variant="error" class="error-card">
-                    {errorText()}
-                  </Card>
-                </TimelineRow>
+              <Show when={error()}>
+                <Card variant="error" class="error-card">
+                  {errorText()}
+                </Card>
               </Show>
             </div>
           </Show>
@@ -569,34 +532,3 @@ export function SessionTurn(
   )
 }
 
-function TimelineRow(
-  props: ParentProps<{
-    rowKey: string
-    messageID?: string
-    controls?: TimelineRowControls
-  }>,
-) {
-  let el!: HTMLDivElement
-  let cleanup: void | (() => void)
-
-  onMount(() => {
-    cleanup = props.controls?.onRowMount?.(props.rowKey, el)
-  })
-
-  onCleanup(() => {
-    cleanup?.()
-  })
-
-  return (
-    <div
-      ref={el}
-      data-row-key={props.rowKey}
-      data-row-index={props.controls?.rowIndex?.(props.rowKey)}
-      data-message-id={props.messageID}
-      onPointerDown={() => props.controls?.onRowInteracted?.(props.rowKey)}
-      onFocusIn={() => props.controls?.onRowInteracted?.(props.rowKey)}
-    >
-      {props.children}
-    </div>
-  )
-}

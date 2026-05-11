@@ -28,7 +28,7 @@ function CollapsibleTrigger(props: ComponentProps<typeof Kobalte.Trigger>) {
 }
 
 function CollapsibleContent(props: ComponentProps<typeof Kobalte.Content>) {
-  return <Kobalte.Content data-slot="collapsible-content" {...props} />
+  return <Kobalte.Content data-skip-size-measure data-slot="collapsible-content" {...props} />
 }
 
 function CollapsibleArrow(props?: ComponentProps<"div">) {
