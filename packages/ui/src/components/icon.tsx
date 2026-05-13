@@ -107,14 +107,19 @@ const icons = {
 
 const spriteID = "opencode-icon-sprite"
 const symbol = (name: keyof typeof icons) => `opencode-icon-${name}`
+let spriteInserted = false
 
 function viewBox(name: keyof typeof icons) {
   return name === "magnifying-glass" || name === "arrow-undo-down" ? "0 0 16 16" : "0 0 20 20"
 }
 
 function ensureSprite() {
+  if (spriteInserted) return
   if (typeof document === "undefined") return
-  if (document.getElementById(spriteID)) return
+  if (document.getElementById(spriteID)) {
+    spriteInserted = true
+    return
+  }
   const body = document.body as HTMLElement | null
   if (!body) return
 
@@ -132,6 +137,7 @@ function ensureSprite() {
     })
     .join("")
   body.insertBefore(svg, body.firstChild)
+  spriteInserted = true
 }
 
 export interface IconProps extends ComponentProps<"svg"> {
