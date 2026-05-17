@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
@@ -17,6 +17,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { attachWith } from "@/effect/run-service"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
 // when writing to the database. Bus payloads (`Properties`) stay readonly —
@@ -75,6 +76,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sy
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const flags = yield* RuntimeFlags.Service
+    const bus = yield* ProjectBus.Service
 
     const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
       const def = registry.get(event.type)
@@ -112,6 +114,7 @@ export const layer = Layer.effect(Service)(
           }
         : undefined
       process(def, event, {
+        bus,
         publish,
         context,
         ownerID: options?.ownerID,
@@ -172,7 +175,7 @@ export const layer = Layer.effect(Service)(
           const seq = row?.seq != null ? row.seq + 1 : 0
 
           const event = { id, seq, aggregateID: agg, data }
-          process(def, event, { publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
+          process(def, event, { bus, publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
         },
         {
           behavior: "immediate",
@@ -209,12 +212,12 @@ export const layer = Layer.effect(Service)(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(RuntimeFlags.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide([ProjectBus.defaultLayer, RuntimeFlags.defaultLayer]))
 
 export const use = serviceUse(Service)
 
 export const registry = new Map<string, Definition>()
-let projectors: Map<Definition, ProjectorFunc> | undefined
+let projectors: Map<string, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
 let convertEvent: ConvertEvent
@@ -226,10 +229,17 @@ export function reset() {
 }
 
 export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
-  for (const [def] of input.projectors) {
-    register(def)
+  projectors = new Map(input.projectors.map(([def, func]) => [versionedType(def.type, def.version), func]))
+  for (let entry of EventV2.registry.values()) {
+    if (!entry.version || !entry.aggregate) continue
+    register({
+      type: entry.type,
+      version: entry.version,
+      aggregate: entry.aggregate,
+      properties: entry.data,
+      schema: entry.data,
+    })
   }
-  projectors = new Map(input.projectors)
 
   // Install all the latest event defs to the bus. We only ever emit
   // latest versions from code, and keep around old versions for
@@ -237,7 +247,6 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // simplifies the bus to only use unversioned latest events
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
-
     BusEvent.define(def.type, def.properties)
   }
 
@@ -286,7 +295,6 @@ export function project<Def extends Definition>(
   def: Def,
   func: (db: Database.TxOrDb, data: Event<Def>["data"], event: Event<Def>) => void,
 ): [Definition, ProjectorFunc] {
-  register(def)
   return [def, func as ProjectorFunc]
 }
 
@@ -298,15 +306,22 @@ function register(def: Definition) {
 function process<Def extends Definition>(
   def: Def,
   event: Event<Def>,
-  options: { publish: boolean; context?: PublishContext; ownerID?: string; experimentalWorkspaces: boolean },
+  options: {
+    bus: ProjectBus.Interface
+    publish: boolean
+    context?: PublishContext
+    ownerID?: string
+    experimentalWorkspaces: boolean
+  },
 ) {
   if (projectors == null) {
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
   }
 
-  const projector = projectors.get(def)
+  const projector = projectors.get(versionedType(def.type, def.version))
   if (!projector) {
-    throw new Error(`Projector not found for event: ${def.type}`)
+    if (!def.type.includes("next")) throw new Error(`Projector not found for event: ${def.type}`)
+    return
   }
 
   Database.transaction((tx) => {
@@ -342,7 +357,13 @@ function process<Def extends Definition>(
         }
 
         const result = convertEvent(def.type, event.data)
-        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>, { id: event.id })
+        const publish = (data: unknown) =>
+          Effect.runPromise(
+            attachWith(options.bus.publish(def, data as Properties<Def>, { id: event.id }), {
+              instance: options.context?.instance,
+              workspace: options.context?.workspace,
+            }),
+          )
         if (result instanceof Promise) {
           void result.then(publish)
         } else {
@@ -393,7 +414,7 @@ export function effectPayloads() {
           name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
           id: EffectSchema.String,
           seq: EffectSchema.Finite,
-          aggregateID: EffectSchema.String,
+          aggregateID: EffectSchema.Literal(definition.aggregate!),
           data: definition.data,
         }).annotate({ identifier: `SyncEvent.${definition.type}` }),
       )
