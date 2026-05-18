@@ -9,7 +9,9 @@ import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
-type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
+type PartData<T extends MessageV2.Part = MessageV2.Part> = T extends unknown
+  ? Omit<T, "id" | "sessionID" | "messageID">
+  : never
 type InfoData<T extends MessageV2.Info = MessageV2.Info> = T extends unknown ? Omit<T, "id" | "sessionID"> : never
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 
