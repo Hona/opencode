@@ -124,15 +124,30 @@ export namespace Timeline {
     const userParts = getMessageParts(userMessage.id)
     const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
     const compaction = userParts.some((p) => p.type === "compaction")
-    const errorMsg = assistantMessages.find((m) => m.error?.name === "MessageAbortedError")
-    const interrupted = !!errorMsg
+    const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")
+    const interrupted = interruptedMessageIndex !== -1
+    const error = assistantMessages.find((m) => m.error && m.error.name !== "MessageAbortedError")?.error
 
-    const assistantPartRefs = assistantMessages.flatMap((message) =>
+    const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
         .filter((part) => renderable(part, showReasoning))
-        .map((part) => ({ messageID: message.id, part })),
+        .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
-    const assistantGroups = groupParts(assistantPartRefs)
+    const assistantItems =
+      interrupted && !compaction
+        ? [
+            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex <= interruptedMessageIndex)).map((group) => ({
+              type: "part" as const,
+              group,
+            })),
+            { type: "interrupted" as const },
+            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex > interruptedMessageIndex)).map((group) => ({
+              type: "part" as const,
+              group,
+            })),
+          ]
+        : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
+    const assistantGroupCount = assistantItems.filter((item) => item.type === "part").length
 
     if (comments.length > 0)
       rows.push(
@@ -150,27 +165,39 @@ export namespace Timeline {
       }),
     )
 
-    if (compaction || interrupted) {
+    if (compaction) {
       rows.push(
         new TimelineRow.TurnDivider({
           userMessageID: userMessage.id,
-          label: compaction ? "compaction" : "interrupted",
+          label: "compaction",
         }),
       )
     }
 
-    assistantGroups.forEach((group, index) =>
+    let assistantGroupIndex = 0
+    assistantItems.forEach((item) => {
+      if (item.type === "interrupted") {
+        rows.push(
+          new TimelineRow.TurnDivider({
+            userMessageID: userMessage.id,
+            label: "interrupted",
+          }),
+        )
+        return
+      }
+
       rows.push(
         new TimelineRow.AssistantPart({
           userMessageID: userMessage.id,
-          group,
-          previousAssistantPart: index > 0,
-          lastAssistantPart: index === assistantGroups.length - 1,
+          group: item.group,
+          previousAssistantPart: assistantGroupIndex > 0,
+          lastAssistantPart: assistantGroupIndex === assistantGroupCount - 1,
         }),
-      ),
-    )
+      )
+      assistantGroupIndex += 1
+    })
 
-    if (isActive && status === "busy" && !errorMsg?.error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
+    if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
       const heading = assistantMessages
         .flatMap((message) => getMessageParts(message.id))
         .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
@@ -203,8 +230,8 @@ export namespace Timeline {
       )
     }
 
-    if (errorMsg?.error) {
-      const data = errorMsg.error.data?.message
+    if (error) {
+      const data = error.data?.message
       rows.push(
         new TimelineRow.Error({
           userMessageID: userMessage.id,
