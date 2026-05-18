@@ -1560,6 +1560,7 @@ export function MessageTimeline(props: {
               scrollRef={root()}
               shift={props.historyShift}
               keepMounted={keepMounted()}
+              startMargin={64}
               ref={(handle) => {
                 if (!handle) {
                   writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
