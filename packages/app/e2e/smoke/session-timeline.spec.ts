@@ -70,11 +70,12 @@ async function configureSmokePage(page: Page) {
     const partSelector = "[data-timeline-part-id], [data-timeline-part-ids]"
     const idsOf = (el: HTMLElement) =>
       [el.dataset.timelinePartId, ...(el.dataset.timelinePartIds?.split(",") ?? [])].filter((id): id is string => !!id)
-    
+
     smoke.__timelineSmokeState = () => {
-      const root = document.querySelector('[data-slot="session-turn-list"]')
-      const scroller = root?.closest<HTMLElement>(".scroll-view__viewport")
-      if (!scroller || !root) {
+      const scroller = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((el) =>
+        el.querySelector("[data-timeline-row], [data-session-title]"),
+      )
+      if (!scroller) {
         return {
           ids: [],
           visibleIds: [],
@@ -94,7 +95,7 @@ async function configureSmokePage(page: Page) {
       const visibleIds: string[] = []
       const scrollerRect = scroller.getBoundingClientRect()
       let topVisibleId: string | undefined
-      for (const el of root.querySelectorAll<HTMLElement>(partSelector)) {
+      for (const el of scroller.querySelectorAll<HTMLElement>(partSelector)) {
         const next = idsOf(el)
         ids.push(...next)
 
@@ -226,7 +227,7 @@ async function timelineState(page: Page) {
 }
 
 function timelineScroller(page: Page) {
-  return page.locator(".scroll-view__viewport", { has: page.locator('[data-slot="session-turn-list"]') })
+  return page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
 }
 
 async function pointAtTimeline(page: Page) {
@@ -239,8 +240,9 @@ async function scrollTimelineUp(page: Page, before: SmokeState) {
   return page.evaluate(
     (prev) =>
       new Promise<boolean>((resolve) => {
-        const root = document.querySelector('[data-slot="session-turn-list"]')
-        const scroller = root?.closest<HTMLElement>(".scroll-view__viewport")
+        const scroller = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((el) =>
+          el.querySelector("[data-timeline-row], [data-session-title]"),
+        )
         if (!scroller) {
           resolve(false)
           return

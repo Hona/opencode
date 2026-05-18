@@ -27,7 +27,9 @@ const directory = "C:/OpenCode/SmokeProject"
 const projectID = "proj_smoke_timeline"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type Message = { info: Record<string, any>; parts: Record<string, any>[] }
+type MessageInfo = Record<string, unknown> & { id: string; role: "user" | "assistant" }
+type MessagePart = Record<string, unknown> & { id: string; type: string; text?: string; tool?: string }
+type Message = { info: MessageInfo; parts: MessagePart[] }
 
 function lorem(seed: number, length: number) {
   let out = ""
@@ -45,7 +47,7 @@ function id(prefix: string, value: number) {
   return `${prefix}_smoke_${String(value).padStart(4, "0")}`
 }
 
-function userMessage(sessionID: string, index: number, textLength: number, diffs: any[] = []): Message {
+function userMessage(sessionID: string, index: number, textLength: number, diffs: unknown[] = []): Message {
   const messageID = id("msg_user", index)
   return {
     info: {
@@ -69,7 +71,7 @@ function userMessage(sessionID: string, index: number, textLength: number, diffs
   }
 }
 
-function assistantMessage(sessionID: string, index: number, parentID: string, parts: Record<string, any>[]): Message {
+function assistantMessage(sessionID: string, index: number, parentID: string, parts: MessagePart[]): Message {
   const messageID = id("msg_assistant", index)
   return {
     info: {
@@ -88,15 +90,19 @@ function assistantMessage(sessionID: string, index: number, parentID: string, pa
       variant: "max",
       finish: "stop",
     },
-    parts: parts.map((part, partIndex) => ({ ...part, sessionID, messageID, id: part.id ?? id(`prt_${index}_${partIndex}`, index) })),
+    parts: parts.map((part) => ({
+      ...part,
+      sessionID,
+      messageID,
+    })),
   }
 }
 
-function textPart(index: number, partIndex: number, length: number) {
+function textPart(index: number, partIndex: number, length: number): MessagePart {
   return { id: id(`prt_text_${partIndex}`, index), type: "text", text: lorem(index * 13 + partIndex, length) }
 }
 
-function reasoningPart(index: number, partIndex: number, length: number) {
+function reasoningPart(index: number, partIndex: number, length: number): MessagePart {
   return {
     id: id(`prt_reasoning_${partIndex}`, index),
     type: "reasoning",
@@ -105,7 +111,7 @@ function reasoningPart(index: number, partIndex: number, length: number) {
   }
 }
 
-function toolPart(index: number, partIndex: number, tool: string, input: Record<string, unknown>, outputLength = 160) {
+function toolPart(index: number, partIndex: number, tool: string, input: Record<string, unknown>, outputLength = 160): MessagePart {
   const metadata =
     tool === "apply_patch"
       ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
@@ -213,7 +219,7 @@ const sourceMessages = Array.from({ length: 12 }, (_, index) => [
   assistantMessage(sourceID, index + 1000, id("msg_user", index + 1000), [textPart(index + 1000, 0, 240)]),
 ]).flat()
 
-function renderable(part: Record<string, any>) {
+function renderable(part: MessagePart) {
   if (part.type === "tool" && part.tool === "todowrite") return false
   if (part.type === "text") return !!part.text.trim()
   if (part.type === "reasoning") return !!part.text.trim()

@@ -4,15 +4,15 @@ const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/permiss
 const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"])
 
 export interface MockServerConfig {
-  provider: any
+  provider: unknown
   directory: string
-  project: any
-  sessions: any[]
-  pageMessages: (sessionId: string, limit: number, before?: string) => { items: any[]; cursor?: string }
+  project: unknown
+  sessions: ({ id: string } & Record<string, unknown>)[]
+  pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const staticRoutes: Record<string, any> = {
+  const staticRoutes: Record<string, unknown> = {
     "/provider": config.provider,
     "/path": {
       state: config.directory,
@@ -32,12 +32,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const url = new URL(route.request().url())
     const targetPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
     if (url.port !== targetPort) return route.fallback()
-    
+
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route)
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
-    if (staticRoutes[path]) return json(route, staticRoutes[path])
+    if (path in staticRoutes) return json(route, staticRoutes[path])
 
     const sessionMatch = path.match(/^\/session\/([^/]+)$/)
     if (sessionMatch) {
