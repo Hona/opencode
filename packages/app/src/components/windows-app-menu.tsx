@@ -41,7 +41,7 @@ export function WindowsAppMenu(props: { command: ReturnType<typeof useCommand>; 
   }
 
   return (
-    <DropdownMenu gutter={4} placement="bottom-start">
+    <DropdownMenu gutter={4} modal={false} placement="bottom-start">
       <DropdownMenu.Trigger
         as={IconButton}
         icon="menu"
