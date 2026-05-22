@@ -1463,7 +1463,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!search) return branchOptions()
     return branchOptions().filter((option) => option.branch.toLowerCase().includes(search))
   })
-  const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
+  const showAgentControl = createMemo(() => agentNames().length > 0)
   const branchActionLabel = createMemo(() => {
     const search = picker.branchSearch.trim()
     if (search && branchResults().length === 0) return language.t("session.new.branch.add", { branch: search })
@@ -2237,7 +2237,7 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
           options={props.state.options}
           current={props.state.current}
           onSelect={props.state.onSelect}
-          class="max-w-[175px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
+          class="max-w-[175px] justify-start capitalize text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
           valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
           triggerStyle={props.state.style}
           triggerProps={{ "data-action": "prompt-agent" }}
