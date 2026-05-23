@@ -75,9 +75,9 @@ function HomeDesign() {
   })
   const search = createMemo(() => state.search.trim())
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", ...projectDirectories()] as const,
+    queryKey: ["home", "sessions", selectedProject()?.worktree] as const,
     queryFn: async () => {
-      const [root] = projectDirectories()
+      const root = selectedProject()?.worktree
       if (!root) return null
       await sync.project.loadSessions(root)
       return null
@@ -87,16 +87,11 @@ function HomeDesign() {
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const records = createMemo(() => {
-    sync.childVersion()
-    return [
+  const records = createMemo(() =>
+    [
       ...new Map(
         projectDirectories()
-          .flatMap((directory) => {
-            const store = sync.existing(directory)?.[0]
-            if (!store) return []
-            return sortedRootSessions(store, Date.now())
-          })
+          .flatMap((directory) => sortedRootSessions(sync.child(directory, { bootstrap: false })[0], Date.now()))
           .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
       ).values(),
     ]
@@ -115,8 +110,8 @@ function HomeDesign() {
         if (!value) return true
         return `${record.session.title} ${record.projectName}`.toLowerCase().includes(value)
       })
-      .slice(0, HOME_SESSION_LIMIT)
-  })
+      .slice(0, HOME_SESSION_LIMIT),
+  )
   const groups = createMemo(() => groupSessions(records(), language))
 
   function selectProject(directory: string) {
