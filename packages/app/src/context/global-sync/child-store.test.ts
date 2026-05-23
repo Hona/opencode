@@ -73,6 +73,7 @@ describe("createChildStoreManager", () => {
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
+      onCreate() {},
       onDispose() {},
       translate: (key) => key,
       queryOptions: queryOptionsApi,
@@ -103,6 +104,7 @@ describe("createChildStoreManager", () => {
         onBootstrap(directory) {
           bootstraps.push(directory)
         },
+        onCreate() {},
         onDispose() {},
         translate: (key) => key,
         queryOptions: queryOptionsApi,
