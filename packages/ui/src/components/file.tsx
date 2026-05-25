@@ -1,5 +1,7 @@
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import {
+  areFilesEqual,
+  areOptionsEqual,
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
   type FileContents,
@@ -701,7 +703,6 @@ function ViewerShell(props: {
 
 function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
-  let renderMode: Virtualizer | "plain" | undefined
   let viewer!: Viewer
 
   const [local, others] = splitProps(props, textKeys)
@@ -871,29 +872,23 @@ function TextViewer<T>(props: TextFileProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = getWorkerPool("unified")
-    const isVirtual = virtual()
-
     const virtualizer = virtuals.get()
-    const nextRenderMode = isVirtual && virtualizer ? virtualizer : "plain"
 
     renderViewer({
       viewer,
       current: instance,
-      reset: renderMode !== undefined && renderMode !== nextRenderMode,
+      reset: instance !== undefined,
       create: () =>
-        isVirtual && virtualizer
+        virtualizer
           ? new VirtualizedFile<T>(opts, virtualizer, codeMetrics, workerPool)
           : new PierreFile<T>(opts, workerPool),
-      update: (value) => value.setOptions(opts),
       assign: (value) => {
         instance = value
-        renderMode = nextRenderMode
       },
       draw: (value) => {
         const contents = text()
         value.render({
           file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents },
-          forceRender: true,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -913,7 +908,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
-    renderMode = undefined
     virtuals.cleanup()
   })
 
@@ -926,7 +920,12 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
 function DiffViewer<T>(props: DiffFileProps<T>) {
   let instance: FileDiff<T> | undefined
-  let renderMode: Virtualizer | "plain" | undefined
+  let instanceVirtualizer: Virtualizer | undefined
+  let instanceWorkerPool: ReturnType<typeof getWorkerPool>
+  let instanceVirtualHunkSeparators: FileDiffOptions<T>["hunkSeparators"] | undefined
+  let instanceFileDiff: FileDiffMetadata | undefined
+  let instanceBefore: FileContents | undefined
+  let instanceAfter: FileContents | undefined
   let dragSide: DiffSelectionSide | undefined
   let dragEndSide: DiffSelectionSide | undefined
   let viewer!: Viewer
@@ -1079,7 +1078,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = virtuals.get()
-    const nextRenderMode = virtualizer ?? "plain"
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
     const done = preserve(viewer)
@@ -1091,10 +1089,31 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       return sampledChecksum(contents)
     }
 
+    const before = local.before ? { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) } : undefined
+    const after = local.after ? { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) } : undefined
+    const targetChanged =
+      local.fileDiff !== undefined
+        ? instanceFileDiff !== local.fileDiff
+        : instanceFileDiff !== undefined ||
+          before === undefined ||
+          after === undefined ||
+          instanceBefore === undefined ||
+          instanceAfter === undefined ||
+          !areFilesEqual(instanceBefore, before) ||
+          !areFilesEqual(instanceAfter, after)
+    // Pierre beta virtualized instances retain their first diff target and resolve separator metrics at construction.
+    // Plain timeline diffs can retain the instance as content streams; virtualized viewers reset only when that is unsafe.
+    const reset =
+      instance !== undefined &&
+      (instanceVirtualizer !== virtualizer ||
+        instanceWorkerPool !== workerPool ||
+        (virtualizer !== undefined && (instanceVirtualHunkSeparators !== opts.hunkSeparators || targetChanged)))
+    const forceRender = !reset && instance !== undefined && !areOptionsEqual(instance.options, opts)
+
     renderViewer({
       viewer,
       current: instance,
-      reset: renderMode !== undefined && renderMode !== nextRenderMode,
+      reset,
       create: () =>
         virtualizer
           ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
@@ -1102,25 +1121,30 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       update: (value) => value.setOptions(opts),
       assign: (value) => {
         instance = value
-        renderMode = nextRenderMode
+        instanceVirtualizer = virtualizer
+        instanceWorkerPool = workerPool
+        instanceVirtualHunkSeparators = virtualizer ? opts.hunkSeparators : undefined
+        instanceFileDiff = local.fileDiff
+        instanceBefore = before
+        instanceAfter = after
       },
       draw: (value) => {
         if (local.fileDiff) {
           value.render({
             fileDiff: local.fileDiff,
-            forceRender: true,
+            forceRender,
             lineAnnotations: [],
             containerWrapper: viewer.container,
           })
           return
         }
 
-        if (!local.before || !local.after) return
+        if (!before || !after) return
 
         value.render({
-          oldFile: { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) },
-          newFile: { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) },
-          forceRender: true,
+          oldFile: before,
+          newFile: after,
+          forceRender,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -1140,7 +1164,12 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
-    renderMode = undefined
+    instanceVirtualizer = undefined
+    instanceWorkerPool = undefined
+    instanceVirtualHunkSeparators = undefined
+    instanceFileDiff = undefined
+    instanceBefore = undefined
+    instanceAfter = undefined
     virtuals.cleanup()
     dragSide = undefined
     dragEndSide = undefined

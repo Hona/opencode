@@ -13,8 +13,8 @@ describe("session diff", () => {
     }
     const view = normalize(diff)
 
-    expect(view.patch).toBe(diff.patch)
     expect(view.fileDiff.name).toBe("a.ts")
+    expect(view.fileDiff.isPartial).toBe(true)
     expect(text(view, "deletions")).toBe("one\ntwo\n")
     expect(text(view, "additions")).toBe("one\nthree\n")
   })
@@ -46,7 +46,40 @@ describe("session diff", () => {
     expect(fileDiff.hunks[1]?.collapsedBefore).toBeGreaterThan(0)
   })
 
-  test("converts legacy content into a patch", () => {
+  test("renders headerless persisted patches", () => {
+    const view = normalize({
+      file: "a.ts",
+      patch: "@@ -1 +1 @@\n-old\n+new\n",
+      additions: 1,
+      deletions: 1,
+      status: "modified" as const,
+    })
+
+    expect(view.fileDiff.name).toBe("a.ts")
+    expect(view.fileDiff.isPartial).toBe(true)
+    expect(text(view, "deletions")).toBe("old\n")
+    expect(text(view, "additions")).toBe("new\n")
+  })
+
+  test("does not share headerless patch metadata between files", () => {
+    const patch = "@@ -1 +1 @@\n-old\n+new\n"
+
+    expect(resolveFileDiff({ file: "a.ts", patch }).name).toBe("a.ts")
+    expect(resolveFileDiff({ file: "b.ts", patch }).name).toBe("b.ts")
+  })
+
+  test("keeps capped header-only patches partial", () => {
+    const fileDiff = resolveFileDiff({
+      file: "a.ts",
+      patch: "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n",
+    })
+
+    expect(fileDiff.name).toBe("a.ts")
+    expect(fileDiff.isPartial).toBe(true)
+    expect(fileDiff.hunks).toEqual([])
+  })
+
+  test("keeps full legacy content as a complete diff", () => {
     const diff = {
       file: "a.ts",
       before: "one\n",
@@ -57,7 +90,7 @@ describe("session diff", () => {
     }
     const view = normalize(diff)
 
-    expect(view.patch).toContain("@@ -1,1 +1,1 @@")
+    expect(view.fileDiff.isPartial).toBe(false)
     expect(text(view, "deletions")).toBe("one\n")
     expect(text(view, "additions")).toBe("two\n")
   })
@@ -73,7 +106,6 @@ describe("session diff", () => {
     }
     const view = normalize(diff)
 
-    expect(view.patch).toBe(diff.patch)
     expect(text(view, "deletions")).toBe("")
     expect(text(view, "additions")).toBe("")
   })
