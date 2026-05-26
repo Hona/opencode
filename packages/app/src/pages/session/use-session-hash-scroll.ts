@@ -15,11 +15,9 @@ export const useSessionHashScroll = (input: {
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
-  autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage?: (id: string) => void
-  scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
@@ -100,16 +98,10 @@ export const useSessionHashScroll = (input: {
 
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
-    if (!hash) {
-      input.autoScroll.forceScrollToBottom()
-      const el = input.scroller()
-      if (el) input.scheduleScrollState(el)
-      return
-    }
+    if (!hash) return
 
     const messageId = messageIdFromHash(hash)
     if (messageId) {
-      input.autoScroll.pause()
       const msg = messageById().get(messageId)
       if (msg) {
         scrollToMessage(msg, behavior)
@@ -120,14 +112,8 @@ export const useSessionHashScroll = (input: {
 
     const target = document.getElementById(hash)
     if (target) {
-      input.autoScroll.pause()
       scrollToElement(target, behavior)
-      return
     }
-
-    input.autoScroll.forceScrollToBottom()
-    const el = input.scroller()
-    if (el) input.scheduleScrollState(el)
   }
 
   createEffect(() => {
@@ -166,7 +152,6 @@ export const useSessionHashScroll = (input: {
     if (pending) input.setPendingMessage(undefined)
     if (input.currentMessageId() === targetId && !pending) return
 
-    input.autoScroll.pause()
     cancel()
     queue(() => scrollToMessage(msg, "auto"))
   })

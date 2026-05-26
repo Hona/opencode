@@ -74,7 +74,6 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
-    "strip-ansi": "7.1.2",
-    "virtua": "catalog:"
+    "strip-ansi": "7.1.2"
   }
 }

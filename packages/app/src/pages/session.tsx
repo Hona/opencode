@@ -25,12 +25,11 @@ import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -84,35 +83,15 @@ type SessionHistoryWindowInput = {
   historyMore: () => boolean
   historyLoading: () => boolean
   loadMore: (sessionID: string) => Promise<void>
-  userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
 }
 
 function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
   const historyScrollThreshold = 200
-  let shiftFrame: number | undefined
-
-  const [state, setState] = createStore({
-    shift: false,
-  })
 
   const userMessages = createMemo(() => input.visibleUserMessages(), emptyUserMessages, {
     equals: same,
   })
-
-  const cancelShiftReset = () => {
-    if (shiftFrame === undefined) return
-    cancelAnimationFrame(shiftFrame)
-    shiftFrame = undefined
-  }
-
-  const scheduleShiftReset = () => {
-    cancelShiftReset()
-    shiftFrame = requestAnimationFrame(() => {
-      shiftFrame = undefined
-      setState("shift", false)
-    })
-  }
 
   const fetchOlderMessages = async () => {
     const id = input.sessionID()
@@ -123,9 +102,6 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
     const beforeVisible = input.visibleUserMessages().length
     let loaded = input.loaded()
     let growth = 0
-
-    cancelShiftReset()
-    setState("shift", true)
 
     while (true) {
       await input.loadMore(id)
@@ -140,19 +116,11 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
       if (raw <= 0) break
       if (!input.historyMore()) break
     }
-
-    if (growth > 0) {
-      scheduleShiftReset()
-      return
-    }
-
-    setState("shift", false)
   }
 
   const loadAndReveal = () => fetchOlderMessages()
 
   const onScrollerScroll = () => {
-    if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
     if (el.scrollTop >= historyScrollThreshold) return
@@ -160,22 +128,8 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
     void fetchOlderMessages()
   }
 
-  createEffect(
-    on(
-      input.sessionID,
-      () => {
-        cancelShiftReset()
-        setState({ shift: false })
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(cancelShiftReset)
-
   return {
     userMessages,
-    shift: () => state.shift,
     loadAndReveal,
     onScrollerScroll,
   }
@@ -196,7 +150,6 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
-  const location = useLocation()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
   createEffect(() => {
@@ -214,11 +167,6 @@ export default function Page() {
     pendingMessage: undefined as string | undefined,
     reviewSnap: false,
     scrollGesture: 0,
-    scroll: {
-      overflow: false,
-      bottom: true,
-      jump: false,
-    },
   })
 
   const composer = createSessionComposerState()
@@ -555,7 +503,6 @@ export default function Page() {
       return
     }
 
-    autoScroll.pause()
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
@@ -602,8 +549,8 @@ export default function Page() {
   let promptDock: HTMLDivElement | undefined
   let dockHeight = 0
   let scroller: HTMLDivElement | undefined
-  let content: HTMLDivElement | undefined
   let revealMessage = (_id: string) => {}
+  let scrollToEnd = () => {}
   let scrollMark = 0
   let messageMark = 0
 
@@ -1188,87 +1135,25 @@ export default function Page() {
     ),
   )
 
-  const autoScroll = createAutoScroll({
-    working: () => true,
-    overflowAnchor: "dynamic",
-  })
-
-  let scrollStateFrame: number | undefined
-  let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
-
-  const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
-
-  const updateScrollState = (el: HTMLDivElement) => {
-    const max = el.scrollHeight - el.clientHeight
-    const distance = max - el.scrollTop
-    const overflow = max > 1
-    const bottom = !overflow || distance <= 2
-    const jump = overflow && distance > jumpThreshold(el)
-
-    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom && ui.scroll.jump === jump) return
-    setUi("scroll", { overflow, bottom, jump })
-  }
-
-  const scheduleScrollState = (el: HTMLDivElement) => {
-    scrollStateTarget = el
-    if (scrollStateFrame !== undefined) return
-
-    scrollStateFrame = requestAnimationFrame(() => {
-      scrollStateFrame = undefined
-
-      const target = scrollStateTarget
-      scrollStateTarget = undefined
-      if (!target) return
-
-      updateScrollState(target)
-    })
-  }
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.forceScrollToBottom()
     clearMessageHash()
-
-    const el = scroller
-    if (el) scheduleScrollState(el)
+    scrollToEnd()
   }
-
-  // When the user returns to the bottom, treat the active message as "latest".
-  createEffect(
-    on(
-      autoScroll.userScrolled,
-      (scrolled) => {
-        if (scrolled) return
-        setStore("messageId", undefined)
-        clearMessageHash()
-      },
-      { defer: true },
-    ),
-  )
 
   let fill = () => {}
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
-    autoScroll.scrollRef(el)
     if (!el) return
-    scheduleScrollState(el)
     fill()
   }
 
   const markUserScroll = () => {
     scrollMark += 1
   }
-
-  createResizeObserver(
-    () => content,
-    () => {
-      const el = scroller
-      if (el) scheduleScrollState(el)
-      fill()
-    },
-  )
 
   const historyLoader = createSessionHistoryLoader({
     sessionID: () => params.id,
@@ -1277,7 +1162,6 @@ export default function Page() {
     historyMore,
     historyLoading,
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
-    userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
   })
 
@@ -1288,7 +1172,7 @@ export default function Page() {
       fillFrame = undefined
 
       if (!params.id || !messagesReady()) return
-      if (autoScroll.userScrolled() || historyLoading()) return
+      if (historyLoading()) return
 
       const el = scroller
       if (!el) return
@@ -1301,17 +1185,9 @@ export default function Page() {
 
   createEffect(
     on(
-      () =>
-        [
-          params.id,
-          messagesReady(),
-          historyMore(),
-          historyLoading(),
-          autoScroll.userScrolled(),
-          visibleUserMessages().length,
-        ] as const,
-      ([id, ready, more, loading, scrolled]) => {
-        if (!id || !ready || loading || scrolled) return
+      () => [params.id, messagesReady(), historyMore(), historyLoading(), visibleUserMessages().length] as const,
+      ([id, ready, more, loading]) => {
+        if (!id || !ready || loading) return
         if (!more) return
         fill()
       },
@@ -1593,15 +1469,12 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el
-        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
-        : false
+      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta) : false
 
       dockHeight = next
 
-      if (stick) autoScroll.forceScrollToBottom()
+      if (stick) scrollToEnd()
 
-      if (el) scheduleScrollState(el)
       fill()
     },
   )
@@ -1618,11 +1491,9 @@ export default function Page() {
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    autoScroll,
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
-    scheduleScrollState,
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
@@ -1647,7 +1518,6 @@ export default function Page() {
     if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
-    if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
@@ -1767,32 +1637,20 @@ export default function Page() {
                 <Show when={messagesReady()}>
                   <MessageTimeline
                     actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
+                    onLatest={resumeScroll}
                     setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
                     onUserScroll={markUserScroll}
                     onHistoryScroll={historyLoader.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    shouldAnchorBottom={() =>
-                      !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                    }
                     centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
-
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    historyShift={historyLoader.shift()}
                     userMessages={historyLoader.userMessages()}
                     anchor={anchor}
                     setRevealMessage={(fn) => {
                       revealMessage = fn
+                    }}
+                    setScrollToEnd={(fn) => {
+                      scrollToEnd = fn
                     }}
                   />
                 </Show>

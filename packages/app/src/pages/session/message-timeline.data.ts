@@ -28,7 +28,6 @@ export type TimelineRowMap = {
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
   Error: { userMessageID: string; text: string }
-  BottomSpacer: {}
 }
 
 export namespace TimelineRow {
@@ -65,7 +64,6 @@ export namespace TimelineRow {
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
   }> {}
-  export class BottomSpacer extends Data.TaggedClass("BottomSpacer")<{}> {}
 
   export type TimelineRow =
     | CommentStrip
@@ -76,7 +74,6 @@ export namespace TimelineRow {
     | DiffSummary
     | Error
     | Retry
-    | BottomSpacer
 
   export const key = (row: TimelineRow) => {
     switch (row._tag) {
@@ -96,9 +93,8 @@ export namespace TimelineRow {
         return `error:${row.userMessageID}`
       case "Retry":
         return `retry:${row.userMessageID}`
-      case "BottomSpacer":
-        return "bottom-spacer"
     }
+    throw new globalThis.Error("Unknown timeline row")
   }
 
   export function equals(a: TimelineRow, b: TimelineRow) {

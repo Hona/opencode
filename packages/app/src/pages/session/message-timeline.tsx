@@ -6,6 +6,7 @@ import {
   Index,
   on,
   onCleanup,
+  onMount,
   Show,
   mapArray,
   type Accessor,
@@ -15,7 +16,7 @@ import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
-import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
+import { createVirtualizer, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
@@ -76,33 +77,10 @@ const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 
-type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "BottomSpacer" }>
+type FramedTimelineRow = TimelineRow.TimelineRow
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
-function sameKeys(a: readonly string[] | undefined, b: readonly string[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((key, index) => key === b[index])
-}
-
-const timelineCacheLimit = 16
 const timelineFallbackItemSize = 60
-const timelineCache = new Map<string, { keys: readonly string[]; cache: VirtualizerHandle["cache"] }>()
-
-function readTimelineCache(id: string, keys: readonly string[]) {
-  const entry = timelineCache.get(id)
-  if (!entry) return
-  if (sameKeys(entry.keys, keys)) return entry.cache
-  timelineCache.delete(id)
-}
-
-function writeTimelineCache(id: string, keys: readonly string[], handle: VirtualizerHandle | undefined) {
-  if (!handle || keys.length === 0) return
-  timelineCache.delete(id)
-  timelineCache.set(id, { keys: keys.slice(), cache: handle.cache })
-  while (timelineCache.size > timelineCacheLimit) timelineCache.delete(timelineCache.keys().next().value!)
-}
 
 function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
   if (!previous?.length) return rows
@@ -264,23 +242,17 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
 
 export function MessageTimeline(props: {
   actions?: UserActions
-  scroll: { overflow: boolean; bottom: boolean; jump: boolean }
-  onResumeScroll: () => void
+  onLatest: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
-  onScheduleScrollState: (el: HTMLDivElement) => void
-  onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
   onUserScroll: () => void
   onHistoryScroll: () => void
-  onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: () => boolean
   centered: boolean
-  setContentRef: (el: HTMLDivElement) => void
-  historyShift: boolean
   userMessages: UserMessage[]
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
+  setScrollToEnd?: (fn: () => void) => void
 }) {
   let touchGesture: number | undefined
 
@@ -294,7 +266,7 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
 
-  let virtualizer: VirtualizerHandle | undefined
+  let listRoot: HTMLDivElement | undefined
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -424,11 +396,42 @@ export function MessageTimeline(props: {
 
   const timelineRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
     const rows = messageRowMemos().flatMap((memo) => memo())
-    if (rows.length === 0) return rows
-    return reuseTimelineRows(previous, [...rows, new TimelineRow.BottomSpacer()])
+    return reuseTimelineRows(previous, rows)
   })
-  const timelineRowKeys = createMemo(() => timelineRows().map(TimelineRow.key), [] as string[], { equals: sameKeys })
-  const virtualCache = createMemo(() => readTimelineCache(sessionKey(), timelineRowKeys()))
+  const [atEnd, setAtEnd] = createSignal(true)
+  const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+    get count() {
+      return timelineRows().length
+    },
+    getScrollElement: () => listRoot ?? null,
+    estimateSize: () => timelineFallbackItemSize,
+    get getItemKey() {
+      const rows = timelineRows()
+      return (index: number) => {
+        const row = rows[index]
+        // TanStack may measure a mounted node after Solid has already removed its row from the data set.
+        if (!row) return `stale-index:${index}`
+        return TimelineRow.key(row)
+      }
+    },
+    anchorTo: "end",
+    followOnAppend: true,
+    scrollEndThreshold: 80,
+    overscan: 6,
+    paddingEnd: 64,
+    onChange: (instance) => setAtEnd(instance.isAtEnd()),
+    get scrollMargin() {
+      return showHeader() ? 64 : 0
+    },
+  })
+  const timelineRowByKey = createMemo(
+    () => new Map(timelineRows().map((row, index) => [TimelineRow.key(row), { index, row }] as const)),
+  )
+  const keyForVirtualItem = (item: VirtualItem) => {
+    if (typeof item.key !== "string") return
+    if (!timelineRowByKey().has(item.key)) return
+    return item.key
+  }
   const messageRowIndex = createMemo(() => {
     const result = new Map<string, number>()
     timelineRows().forEach((row, index) => {
@@ -446,101 +449,27 @@ export function MessageTimeline(props: {
     })
     return result
   })
-  const keepMounted = createMemo(() => {
-    const id = activeMessageID()
-    if (!id) return
-    const rows = timelineRows()
-    const index = rows.findLastIndex((row) => "userMessageID" in row && row.userMessageID === id)
-    if (index < 0) return
-    return [index]
-  })
-  const activeAssistantMessages = createMemo(() => {
-    const id = activeMessageID() ?? props.userMessages[props.userMessages.length - 1]?.id
-    if (!id) return emptyAssistantMessages
-    return assistantMessagesByParent().get(id) ?? emptyAssistantMessages
-  })
-  const activeAssistantContentVersion = createMemo(() =>
-    activeAssistantMessages()
-      .flatMap((message) => [
-        `${message.id}:${message.time.completed ?? ""}:${message.error?.name ?? ""}`,
-        ...getMsgParts(message.id).map((part) => {
-          if (part.type === "text" || part.type === "reasoning") return `${part.id}:${part.type}:${part.text.length}`
-          if (part.type === "tool") {
-            const metadata = "metadata" in part.state ? part.state.metadata : undefined
-            const output =
-              "output" in part.state && typeof part.state.output === "string" ? part.state.output.length : 0
-            const metadataOutput =
-              metadata && typeof metadata === "object" && "output" in metadata && typeof metadata.output === "string"
-                ? metadata.output.length
-                : 0
-            return `${part.id}:${part.tool}:${part.state.status}:${output}:${metadataOutput}`
-          }
-          return `${part.id}:${part.type}`
-        }),
-      ])
-      .join("|"),
-  )
-
-  createEffect(
-    on(
-      () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus().type] as const,
-      () => {
-        if (!virtualizer) return
-        if (!props.shouldAnchorBottom() && !measuredBottomAnchored) return
-        const keys = timelineRowKeys()
-        if (keys.length === 0) return
-        virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
-        scheduleMeasuredBottomAnchor()
-      },
-      { defer: true },
-    ),
-  )
-
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
       if (index === undefined) return
-      virtualizer?.scrollToIndex(index, { align: "center" })
+      virtualizer.scrollToIndex(index, { align: "center" })
     })
+    props.setScrollToEnd?.(() => virtualizer.scrollToEnd())
   })
 
-  let cacheSessionKey = sessionKey()
-  let cacheRowKeys = timelineRowKeys()
-  let virtualizerSessionKey = cacheSessionKey
-  let virtualizerRowKeys = cacheRowKeys
-  let bottomAnchorSessionKey = ""
-
-  const maybeAnchorBottom = () => {
+  let initialScrollSession = ""
+  createEffect(() => {
     const key = sessionKey()
-    if (bottomAnchorSessionKey === key) return
-    if (!virtualizer) return
-    const keys = timelineRowKeys()
-    if (keys.length === 0) return
-    bottomAnchorSessionKey = key
-    if (!props.shouldAnchorBottom()) return
-    virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
-  }
-
-  createEffect(
-    on(
-      () => [sessionKey(), timelineRowKeys()] as const,
-      (next, prev) => {
-        if (prev && prev[0] !== next[0]) writeTimelineCache(prev[0], prev[1], virtualizer)
-        cacheSessionKey = next[0]
-        cacheRowKeys = next[1]
-        if (virtualizer) {
-          virtualizerSessionKey = cacheSessionKey
-          virtualizerRowKeys = cacheRowKeys
-          maybeAnchorBottom()
-        }
-      },
-      { defer: true },
-    ),
-  )
+    if (initialScrollSession === key) return
+    if (timelineRows().length === 0) return
+    initialScrollSession = key
+    requestAnimationFrame(() => virtualizer.scrollToEnd())
+  })
 
   onCleanup(() => {
-    writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
     props.setRevealMessage?.(() => {})
+    props.setScrollToEnd?.(() => {})
   })
 
   const [title, setTitle] = createStore({
@@ -563,13 +492,6 @@ export function MessageTimeline(props: {
 
   let more: HTMLButtonElement | undefined
   let head: HTMLDivElement | undefined
-  let listRoot: HTMLDivElement | undefined
-  let listFrame: number | undefined
-  let contentFrame: number | undefined
-  let bottomAnchorFrame: number | undefined
-  let bottomAnchorFrames = 0
-  let measuredBottomAnchored = true
-  const [scrollRoot, setScrollRoot] = createSignal<HTMLDivElement>()
 
   const updateTitleMetrics = () => {
     if (!head || head.clientWidth <= 0) return
@@ -578,80 +500,12 @@ export function MessageTimeline(props: {
 
   createResizeObserver(() => head, updateTitleMetrics)
 
-  const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
-
-  const measureTimeline = () => {
-    virtualizer?.measure()
-    anchorMeasuredBottom()
-  }
-
-  function anchorMeasuredBottom() {
-    if (!listRoot) return false
-    if (!measuredBottomAnchored) return false
-    listRoot.scrollTop = listRoot.scrollHeight
-    return true
-  }
-
-  function scheduleMeasuredBottomAnchor() {
-    // Workaround for virtua issue #301: virtua does not expose a synchronous item-resize hook for
-    // "stay at bottom if already at bottom". Tool rows can briefly outgrow the measured virtual
-    // height, so keep the scroll container bottom-locked for a few frames while measurement settles.
-    bottomAnchorFrames = 90
-    if (bottomAnchorFrame !== undefined) return
-
-    const tick = () => {
-      bottomAnchorFrame = undefined
-      if (!anchorMeasuredBottom()) {
-        bottomAnchorFrames = 0
-        return
-      }
-
-      bottomAnchorFrames = working() ? 12 : bottomAnchorFrames - 1
-      if (bottomAnchorFrames <= 0) return
-      bottomAnchorFrame = requestAnimationFrame(tick)
-    }
-
-    bottomAnchorFrame = requestAnimationFrame(tick)
-  }
-
-  const bindContentRoot = (root: HTMLDivElement) => {
-    const child = root.firstElementChild
-    props.setContentRef(child instanceof HTMLDivElement ? child : root)
-  }
-
-  const scheduleContentRoot = (root: HTMLDivElement) => {
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
-    contentFrame = requestAnimationFrame(() => {
-      contentFrame = undefined
-      if (listRoot !== root) return
-      bindContentRoot(root)
-    })
-  }
-
-  const connectListRoot = (root: HTMLDivElement) => {
-    if (listRoot !== root) return
-    if (!root.isConnected || !root.ownerDocument.defaultView) {
-      listFrame = requestAnimationFrame(() => {
-        listFrame = undefined
-        connectListRoot(root)
-      })
-      return
-    }
-
-    props.setScrollRef(root)
-    measuredBottomAnchored = isMeasuredBottom(root)
-    setScrollRoot(root)
-    scheduleContentRoot(root)
-  }
-
   const bindListRoot = (root: HTMLDivElement) => {
     if (root === listRoot) return
-
-    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
     listRoot = root
-    setScrollRoot(undefined)
-    connectListRoot(root)
+    props.setScrollRef(root)
+    virtualizer.measure()
+    setAtEnd(virtualizer.isAtEnd())
   }
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
@@ -696,20 +550,13 @@ export function MessageTimeline(props: {
   }
 
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    measuredBottomAnchored = isMeasuredBottom(event.currentTarget)
-    props.onScheduleScrollState(event.currentTarget)
-    props.onHistoryScroll()
     if (!props.hasScrollGesture()) return
+    props.onHistoryScroll()
     props.onUserScroll()
-    props.onAutoScrollHandleScroll()
     props.onMarkScrollGesture(event.currentTarget)
   }
 
   onCleanup(() => {
-    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
-    setScrollRoot(undefined)
     props.setScrollRef(undefined)
   })
 
@@ -1021,7 +868,6 @@ export function MessageTimeline(props: {
           busy={
             workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }
-          onSizeChange={measureTimeline}
         />
       )
     }
@@ -1239,13 +1085,41 @@ export function MessageTimeline(props: {
           </TimelineRowFrame>
         )
       }
-      case "BottomSpacer":
-        return <div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />
     }
+    throw new Error("Unknown timeline row")
   }
 
   function TimelineRowView(props: { row: TimelineRow.TimelineRow }) {
     return renderTimelineRow(() => props.row)
+  }
+
+  function VirtualTimelineRow(props: { item: VirtualItem; rowKey: string }) {
+    const initial = timelineRowByKey().get(props.rowKey)?.row
+    if (!initial) return
+    let element: HTMLDivElement | undefined
+    const row = () => timelineRowByKey().get(props.rowKey)?.row ?? initial
+    const index = () => timelineRowByKey().get(props.rowKey)?.index ?? -1
+    onMount(() => {
+      if (element) virtualizer.measureElement(element)
+    })
+
+    return (
+      <div
+        data-index={index()}
+        ref={(value) => {
+          element = value
+        }}
+        style={{
+          position: "absolute",
+          top: "0",
+          left: "0",
+          transform: `translateY(${props.item.start - virtualizer.options.scrollMargin}px)`,
+          width: "100%",
+        }}
+      >
+        <TimelineRowView row={row()} />
+      </div>
+    )
   }
 
   return (
@@ -1253,13 +1127,13 @@ export function MessageTimeline(props: {
       <div
         class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
         classList={{
-          "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
-          "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
+          "opacity-100 translate-y-0 scale-100": !atEnd(),
+          "opacity-0 translate-y-2 scale-95 pointer-events-none": atEnd(),
         }}
       >
         <button
           class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
-          onClick={props.onResumeScroll}
+          onClick={props.onLatest}
         >
           <div
             class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
@@ -1281,7 +1155,6 @@ export function MessageTimeline(props: {
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
         onScroll={handleListScroll}
-        onClick={props.onAutoScrollInteraction}
         class="relative min-w-0 w-full h-full"
         style={{
           "--sticky-accordion-top": showHeader() ? "48px" : "0px",
@@ -1574,33 +1447,21 @@ export function MessageTimeline(props: {
             </div>
           </div>
         </Show>
-        <Show when={scrollRoot()}>
-          {(root) => (
-            <Virtualizer
-              data={timelineRows()}
-              cache={virtualCache()}
-              itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
-              scrollRef={root()}
-              shift={props.historyShift}
-              keepMounted={keepMounted()}
-              startMargin={64}
-              ref={(handle) => {
-                if (!handle) {
-                  writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
-                  virtualizer = undefined
-                  return
-                }
-                virtualizer = handle
-                virtualizerSessionKey = cacheSessionKey
-                virtualizerRowKeys = cacheRowKeys
-                maybeAnchorBottom()
-                scheduleContentRoot(root())
-              }}
-            >
-              {(row) => <TimelineRowView row={row} />}
-            </Virtualizer>
-          )}
-        </Show>
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+            width: "100%",
+          }}
+        >
+          <For each={virtualizer.getVirtualItems()}>
+            {(item) => (
+              <Show when={keyForVirtualItem(item)} keyed>
+                {(rowKey) => <VirtualTimelineRow item={item} rowKey={rowKey} />}
+              </Show>
+            )}
+          </For>
+        </div>
       </ScrollView>
     </div>
   )
