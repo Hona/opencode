@@ -10,7 +10,7 @@ import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { WorkspaceTable } from "@/control-plane/workspace.sql"
 import { Log } from "@opencode-ai/core/util/log"
 import nextProjectors from "./projectors-next"
-import { PathIdentity } from "@/util/path-identity"
+import * as PathStorage from "@/util/path-identity/storage"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -71,8 +71,8 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     workspace_id: grab(info, "workspaceID"),
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
-    directory: PathIdentity.toStoragePath(grab(info, "directory")),
-    path: PathIdentity.toStorageRelativePath(grab(info, "path")),
+    directory: PathStorage.absolutePath(grab(info, "directory")),
+    path: PathStorage.relativePath(grab(info, "path")),
     title: grab(info, "title"),
     version: grab(info, "version"),
     share_url: grab(info, "share", (v) => grab(v, "url")),

@@ -8,7 +8,7 @@ import type { SessionID } from "./session/schema"
 import { ProjectTable } from "./project/project.sql"
 import { WorkspaceTable } from "./control-plane/workspace.sql"
 import { EventTable } from "./sync/event.sql"
-import { PathIdentity } from "./util/path-identity"
+import * as PathStorage from "./util/path-identity/storage"
 
 export type Migration<R = never> = {
   name: string
@@ -171,8 +171,8 @@ export * as DataMigration from "./data-migration"
 function normalizePathRows() {
   Database.transaction((db) => {
     for (const row of db.select().from(ProjectTable).all()) {
-      const worktree = PathIdentity.toStoragePath(row.worktree)
-      const sandboxes = row.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox))
+      const worktree = PathStorage.absolutePath(row.worktree)
+      const sandboxes = row.sandboxes.map((sandbox) => PathStorage.absolutePath(sandbox))
       if (worktree === row.worktree && sameList(sandboxes, row.sandboxes)) continue
       db.update(ProjectTable)
         .set({ worktree, sandboxes, time_updated: sql`${ProjectTable.time_updated}` })
@@ -181,8 +181,8 @@ function normalizePathRows() {
     }
 
     for (const row of db.select().from(SessionTable).all()) {
-      const directory = PathIdentity.toStoragePath(row.directory)
-      const path = PathIdentity.toStorageRelativePath(row.path)
+      const directory = PathStorage.absolutePath(row.directory)
+      const path = PathStorage.relativePath(row.path)
       if (directory === row.directory && path === row.path) continue
       db.update(SessionTable)
         .set({ directory, path, time_updated: sql`${SessionTable.time_updated}` })
@@ -195,7 +195,7 @@ function normalizePathRows() {
       .from(WorkspaceTable)
       .where(sql`${WorkspaceTable.directory} is not null`)
       .all()) {
-      const directory = PathIdentity.toStoragePath(row.directory)
+      const directory = PathStorage.absolutePath(row.directory)
       if (directory === row.directory) continue
       db.update(WorkspaceTable).set({ directory }).where(eq(WorkspaceTable.id, row.id)).run()
     }
@@ -218,8 +218,8 @@ function normalizeEventPathData(data: Record<string, unknown>) {
   const info = object(data.info)
   if (!info) return data
 
-  const directory = typeof info.directory === "string" ? PathIdentity.toStoragePath(info.directory) : info.directory
-  const path = typeof info.path === "string" ? PathIdentity.toStorageRelativePath(info.path) : info.path
+  const directory = typeof info.directory === "string" ? PathStorage.absolutePath(info.directory) : info.directory
+  const path = typeof info.path === "string" ? PathStorage.relativePath(info.path) : info.path
   if (directory === info.directory && path === info.path) return data
 
   return { ...data, info: { ...info, directory, path } }

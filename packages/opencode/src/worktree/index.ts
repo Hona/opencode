@@ -18,7 +18,9 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
-import { PathIdentity } from "@/util/path-identity"
+import * as PathNative from "@/util/path-identity/native"
+import * as PathQuery from "@/util/path-identity/query"
+import * as PathStorage from "@/util/path-identity/storage"
 
 const log = Log.create({ service: "worktree" })
 
@@ -306,11 +308,11 @@ export const layer: Layer.Layer<
     const canonical = Effect.fnUntraced(function* (input: string) {
       const abs = pathSvc.resolve(input)
       const real = yield* fs.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
-      return PathIdentity.toNativePath(PathIdentity.toStoragePath(real))
+      return PathNative.absolutePath(PathStorage.absolutePath(real))
     })
 
     const canonicalKey = Effect.fnUntraced(function* (input: string) {
-      return PathIdentity.key(yield* canonical(input))
+      return PathQuery.key(yield* canonical(input))
     })
 
     function parseWorktreeList(text: string) {
@@ -339,7 +341,7 @@ export const layer: Layer.Layer<
       for (const item of entries) {
         if (!item.path) continue
         const key = yield* canonicalKey(item.path)
-        if (key === PathIdentity.key(directory)) return item
+        if (key === PathQuery.key(directory)) return item
       }
       return undefined
     })
@@ -361,7 +363,7 @@ export const layer: Layer.Layer<
         Effect.gen(function* () {
           if (!entry.path) return undefined
           const directory = yield* canonical(entry.path)
-          if (PathIdentity.key(directory) === PathIdentity.key(primary)) return undefined
+          if (PathQuery.key(directory) === PathQuery.key(primary)) return undefined
           const name = pathSvc.basename(directory).toLowerCase()
           return {
             name: name === primaryName ? pathSvc.basename(pathSvc.dirname(directory)) : name,

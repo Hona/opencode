@@ -40,7 +40,9 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { PathIdentity } from "@/util/path-identity"
+import * as PathNative from "@/util/path-identity/native"
+import * as PathQuery from "@/util/path-identity/query"
+import * as PathStorage from "@/util/path-identity/storage"
 
 const log = Log.create({ service: "session" })
 
@@ -76,8 +78,8 @@ export function fromRow(row: SessionRow): Info {
     slug: row.slug,
     projectID: row.project_id,
     workspaceID: row.workspace_id ?? undefined,
-    directory: PathIdentity.toNativePath(row.directory),
-    path: PathIdentity.toStorageRelativePath(row.path ?? undefined),
+    directory: PathNative.absolutePath(row.directory),
+    path: PathStorage.relativePath(row.path ?? undefined),
     parentID: row.parent_id ?? undefined,
     title: row.title,
     agent: row.agent ?? undefined,
@@ -119,8 +121,8 @@ export function toRow(info: Info) {
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
     slug: info.slug,
-    directory: PathIdentity.toStoragePath(info.directory),
-    path: PathIdentity.toStorageRelativePath(info.path),
+    directory: PathStorage.absolutePath(info.directory),
+    path: PathStorage.relativePath(info.path),
     title: info.title,
     agent: info.agent,
     model: info.model,
@@ -148,15 +150,15 @@ export function toRow(info: Info) {
 export function toStorageEventInfo(info: Info): Info {
   return {
     ...info,
-    directory: PathIdentity.toStoragePath(info.directory),
-    path: PathIdentity.toStorageRelativePath(info.path),
+    directory: PathStorage.absolutePath(info.directory),
+    path: PathStorage.relativePath(info.path),
   }
 }
 
 export function toStorageEventPatch(info: Patch): Patch {
   const result = { ...info }
-  if ("directory" in info) result.directory = PathIdentity.toStoragePath(info.directory)
-  if ("path" in info) result.path = PathIdentity.toStorageRelativePath(info.path)
+  if ("directory" in info) result.directory = PathStorage.absolutePath(info.directory)
+  if ("path" in info) result.path = PathStorage.relativePath(info.path)
   return result
 }
 
@@ -171,7 +173,7 @@ function getForkedTitle(title: string): string {
 }
 
 function sessionPath(worktree: string, cwd: string) {
-  return PathIdentity.relativePath(worktree, cwd)
+  return PathStorage.between(worktree, cwd)
 }
 
 const Summary = Schema.Struct({
@@ -918,22 +920,22 @@ function* listByProject(
   if (input.path !== undefined) {
     if (input.path) {
       const conds = [
-        PathIdentity.relativeEquals(SessionTable.path, input.path),
-        PathIdentity.relativeStartsWith(SessionTable.path, input.path),
+        PathQuery.relativeEquals(SessionTable.path, input.path),
+        PathQuery.relativeStartsWith(SessionTable.path, input.path),
       ]
 
       conditions.push(
         input.directory
           ? or(
               ...conds,
-              and(isNull(SessionTable.path), PathIdentity.absoluteEquals(SessionTable.directory, input.directory))!,
+              and(isNull(SessionTable.path), PathQuery.absoluteEquals(SessionTable.directory, input.directory))!,
             )!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(PathIdentity.absoluteEquals(SessionTable.directory, input.directory))
+      conditions.push(PathQuery.absoluteEquals(SessionTable.directory, input.directory))
     }
   }
   if (input.roots) {
@@ -974,7 +976,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(PathIdentity.absoluteEquals(SessionTable.directory, input.directory))
+    conditions.push(PathQuery.absoluteEquals(SessionTable.directory, input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
@@ -1020,7 +1022,7 @@ export function* listGlobal(input?: {
       projects.set(item.id, {
         id: item.id,
         name: item.name ?? undefined,
-        worktree: PathIdentity.toNativePath(item.worktree),
+        worktree: PathNative.absolutePath(item.worktree),
       })
     }
   }

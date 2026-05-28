@@ -32,7 +32,8 @@ import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
-import { PathIdentity } from "@/util/path-identity"
+import * as PathNative from "@/util/path-identity/native"
+import * as PathStorage from "@/util/path-identity/storage"
 
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
@@ -68,7 +69,7 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     type: row.type,
     branch: row.branch,
     name: row.name,
-    directory: row.directory === null ? null : PathIdentity.toNativePath(row.directory),
+    directory: row.directory === null ? null : PathNative.absolutePath(row.directory),
     extra: row.extra,
     projectID: row.project_id,
     timeUsed: row.time_used,
@@ -559,7 +560,7 @@ export const layer = Layer.effect(
             type: info.type,
             branch: info.branch,
             name: info.name,
-            directory: PathIdentity.toStoragePath(info.directory),
+            directory: PathStorage.absolutePath(info.directory),
             extra: info.extra,
             project_id: info.projectID,
             time_used: info.timeUsed,
@@ -882,7 +883,7 @@ export const layer = Layer.effect(
                   type: info.type,
                   branch: info.branch,
                   name: info.name,
-                  directory: PathIdentity.toStoragePath(info.directory),
+                  directory: PathStorage.absolutePath(info.directory),
                   extra: info.extra,
                   project_id: info.projectID,
                   time_used: info.timeUsed,
