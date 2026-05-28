@@ -18,6 +18,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
+import { PathIdentity } from "@/util/path-identity"
 
 const log = Log.create({ service: "worktree" })
 
@@ -305,8 +306,11 @@ export const layer: Layer.Layer<
     const canonical = Effect.fnUntraced(function* (input: string) {
       const abs = pathSvc.resolve(input)
       const real = yield* fs.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
-      const normalized = pathSvc.normalize(real)
-      return process.platform === "win32" ? normalized.toLowerCase() : normalized
+      return PathIdentity.toNativePath(PathIdentity.toStoragePath(real))
+    })
+
+    const canonicalKey = Effect.fnUntraced(function* (input: string) {
+      return PathIdentity.key(yield* canonical(input))
     })
 
     function parseWorktreeList(text: string) {
@@ -334,8 +338,8 @@ export const layer: Layer.Layer<
     ) {
       for (const item of entries) {
         if (!item.path) continue
-        const key = yield* canonical(item.path)
-        if (key === directory) return item
+        const key = yield* canonicalKey(item.path)
+        if (key === PathIdentity.key(directory)) return item
       }
       return undefined
     })
@@ -357,7 +361,7 @@ export const layer: Layer.Layer<
         Effect.gen(function* () {
           if (!entry.path) return undefined
           const directory = yield* canonical(entry.path)
-          if (directory === primary) return undefined
+          if (PathIdentity.key(directory) === PathIdentity.key(primary)) return undefined
           const name = pathSvc.basename(directory).toLowerCase()
           return {
             name: name === primaryName ? pathSvc.basename(pathSvc.dirname(directory)) : name,

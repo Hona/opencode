@@ -14,6 +14,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PathIdentity } from "@/util/path-identity"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -160,7 +161,7 @@ export const layer = Layer.effect(
         workspaceID: row.workspace_id ? WorkspaceID.make(row.workspace_id) : undefined,
         title: row.title,
         parentID: row.parent_id ? SessionID.make(row.parent_id) : undefined,
-        path: row.path ?? "",
+        path: PathIdentity.toStorageRelativePath(row.path ?? "") ?? "",
         agent: row.agent ?? undefined,
         model: row.model
           ? {
@@ -205,9 +206,14 @@ export const layer = Layer.effect(
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
         const conditions: SQL[] = []
-        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        if (input.directory) conditions.push(PathIdentity.absoluteEquals(SessionTable.directory, input.directory))
         if (input.path)
-          conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
+          conditions.push(
+            or(
+              PathIdentity.relativeEquals(SessionTable.path, input.path),
+              PathIdentity.relativeStartsWith(SessionTable.path, input.path),
+            )!,
+          )
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if (input.roots) conditions.push(isNull(SessionTable.parent_id))
         if (input.start) conditions.push(gte(sortColumn, input.start))

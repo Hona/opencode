@@ -40,6 +40,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { PathIdentity } from "@/util/path-identity"
 
 const log = Log.create({ service: "session" })
 
@@ -75,8 +76,8 @@ export function fromRow(row: SessionRow): Info {
     slug: row.slug,
     projectID: row.project_id,
     workspaceID: row.workspace_id ?? undefined,
-    directory: row.directory,
-    path: row.path ?? undefined,
+    directory: PathIdentity.toNativePath(row.directory),
+    path: PathIdentity.toStorageRelativePath(row.path ?? undefined),
     parentID: row.parent_id ?? undefined,
     title: row.title,
     agent: row.agent ?? undefined,
@@ -118,8 +119,8 @@ export function toRow(info: Info) {
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
     slug: info.slug,
-    directory: info.directory,
-    path: info.path,
+    directory: PathIdentity.toStoragePath(info.directory),
+    path: PathIdentity.toStorageRelativePath(info.path),
     title: info.title,
     agent: info.agent,
     model: info.model,
@@ -155,7 +156,7 @@ function getForkedTitle(title: string): string {
 }
 
 function sessionPath(worktree: string, cwd: string) {
-  return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
+  return PathIdentity.relativePath(worktree, cwd)
 }
 
 const Summary = Schema.Struct({
@@ -901,17 +902,23 @@ function* listByProject(
   }
   if (input.path !== undefined) {
     if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
+      const conds = [
+        PathIdentity.relativeEquals(SessionTable.path, input.path),
+        PathIdentity.relativeStartsWith(SessionTable.path, input.path),
+      ]
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(
+              ...conds,
+              and(isNull(SessionTable.path), PathIdentity.absoluteEquals(SessionTable.directory, input.directory))!,
+            )!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(PathIdentity.absoluteEquals(SessionTable.directory, input.directory))
     }
   }
   if (input.roots) {
@@ -952,7 +959,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(PathIdentity.absoluteEquals(SessionTable.directory, input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
@@ -998,7 +1005,7 @@ export function* listGlobal(input?: {
       projects.set(item.id, {
         id: item.id,
         name: item.name ?? undefined,
-        worktree: item.worktree,
+        worktree: PathIdentity.toNativePath(item.worktree),
       })
     }
   }

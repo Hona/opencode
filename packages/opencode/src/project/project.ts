@@ -21,6 +21,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { PathIdentity } from "@/util/path-identity"
 
 const log = Log.create({ service: "project" })
 
@@ -73,7 +74,7 @@ export function fromRow(row: Row): Info {
       : undefined
   return {
     id: row.id,
-    worktree: row.worktree,
+    worktree: PathIdentity.toNativePath(row.worktree),
     vcs: row.vcs ? Schema.decodeUnknownSync(ProjectVcs)(row.vcs) : undefined,
     name: row.name ?? undefined,
     icon,
@@ -82,7 +83,7 @@ export function fromRow(row: Row): Info {
       updated: row.time_updated,
       initialized: row.time_initialized ?? undefined,
     },
-    sandboxes: row.sandboxes,
+    sandboxes: row.sandboxes.map(PathIdentity.toNativePath),
     commands: row.commands ?? undefined,
   }
 }
@@ -262,8 +263,8 @@ export const layer = Layer.effect(
       }
       if (
         projectID !== ProjectID.global &&
-        data.directory !== result.worktree &&
-        !result.sandboxes.includes(data.directory)
+        PathIdentity.key(data.directory) !== PathIdentity.key(result.worktree) &&
+        !result.sandboxes.some((sandbox) => PathIdentity.key(sandbox) === PathIdentity.key(data.directory))
       )
         result.sandboxes.push(data.directory)
       result.sandboxes = yield* Effect.forEach(
@@ -281,7 +282,7 @@ export const layer = Layer.effect(
           .insert(ProjectTable)
           .values({
             id: result.id,
-            worktree: result.worktree,
+            worktree: PathIdentity.toStoragePath(result.worktree),
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
@@ -290,13 +291,13 @@ export const layer = Layer.effect(
             time_created: result.time.created,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes,
+            sandboxes: result.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
             commands: result.commands,
           })
           .onConflictDoUpdate({
             target: ProjectTable.id,
             set: {
-              worktree: result.worktree,
+              worktree: PathIdentity.toStoragePath(result.worktree),
               vcs: result.vcs ?? null,
               name: result.name,
               icon_url: result.icon?.url,
@@ -304,7 +305,7 @@ export const layer = Layer.effect(
               icon_color: result.icon?.color,
               time_updated: result.time.updated,
               time_initialized: result.time.initialized,
-              sandboxes: result.sandboxes,
+              sandboxes: result.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
               commands: result.commands,
             },
           })
@@ -316,7 +317,12 @@ export const layer = Layer.effect(
           d
             .update(SessionTable)
             .set({ project_id: projectID })
-            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.directory)))
+            .where(
+              and(
+                eq(SessionTable.project_id, ProjectID.global),
+                PathIdentity.absoluteEquals(SessionTable.directory, data.directory),
+              ),
+            )
             .run(),
         )
       }
@@ -433,12 +439,12 @@ export const layer = Layer.effect(
     const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectID, directory: string) {
       const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sboxes = [...row.sandboxes]
-      if (!sboxes.includes(directory)) sboxes.push(directory)
+      const sboxes = row.sandboxes.map(PathIdentity.toNativePath)
+      if (!sboxes.some((sandbox) => PathIdentity.key(sandbox) === PathIdentity.key(directory))) sboxes.push(directory)
       const result = yield* db((d) =>
         d
           .update(ProjectTable)
-          .set({ sandboxes: sboxes, time_updated: Date.now() })
+          .set({ sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)), time_updated: Date.now() })
           .where(eq(ProjectTable.id, id))
           .returning()
           .get(),
@@ -450,11 +456,12 @@ export const layer = Layer.effect(
     const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectID, directory: string) {
       const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sboxes = row.sandboxes.filter((s) => s !== directory)
+      const directoryKey = PathIdentity.key(directory)
+      const sboxes = row.sandboxes.filter((s) => PathIdentity.key(s) !== directoryKey)
       const result = yield* db((d) =>
         d
           .update(ProjectTable)
-          .set({ sandboxes: sboxes, time_updated: Date.now() })
+          .set({ sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)), time_updated: Date.now() })
           .where(eq(ProjectTable.id, id))
           .returning()
           .get(),

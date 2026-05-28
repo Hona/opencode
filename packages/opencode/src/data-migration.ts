@@ -5,6 +5,10 @@ import * as Log from "@opencode-ai/core/util/log"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { MessageTable, SessionTable } from "./session/session.sql"
 import type { SessionID } from "./session/schema"
+import { ProjectTable } from "./project/project.sql"
+import { WorkspaceTable } from "./control-plane/workspace.sql"
+import { EventTable } from "./sync/event.sql"
+import { PathIdentity } from "./util/path-identity"
 
 export type Migration<R = never> = {
   name: string
@@ -21,6 +25,10 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const migrations: Migration[] = [
+      {
+        name: "normalize_paths_to_forward_slashes",
+        run: Effect.sync(normalizePathRows),
+      },
       {
         name: "session_usage_from_messages",
         run: Effect.gen(function* () {
@@ -159,3 +167,69 @@ export const layer = Layer.effect(
 export const defaultLayer = layer
 
 export * as DataMigration from "./data-migration"
+
+function normalizePathRows() {
+  Database.transaction((db) => {
+    for (const row of db.select().from(ProjectTable).all()) {
+      const worktree = PathIdentity.toStoragePath(row.worktree)
+      const sandboxes = row.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox))
+      if (worktree === row.worktree && sameList(sandboxes, row.sandboxes)) continue
+      db.update(ProjectTable)
+        .set({ worktree, sandboxes, time_updated: sql`${ProjectTable.time_updated}` })
+        .where(eq(ProjectTable.id, row.id))
+        .run()
+    }
+
+    for (const row of db.select().from(SessionTable).all()) {
+      const directory = PathIdentity.toStoragePath(row.directory)
+      const path = PathIdentity.toStorageRelativePath(row.path)
+      if (directory === row.directory && path === row.path) continue
+      db.update(SessionTable)
+        .set({ directory, path, time_updated: sql`${SessionTable.time_updated}` })
+        .where(eq(SessionTable.id, row.id))
+        .run()
+    }
+
+    for (const row of db
+      .select()
+      .from(WorkspaceTable)
+      .where(sql`${WorkspaceTable.directory} is not null`)
+      .all()) {
+      const directory = PathIdentity.toStoragePath(row.directory)
+      if (directory === row.directory) continue
+      db.update(WorkspaceTable).set({ directory }).where(eq(WorkspaceTable.id, row.id)).run()
+    }
+
+    for (const row of db
+      .select()
+      .from(EventTable)
+      .where(
+        sql`json_type(${EventTable.data}, '$.info.directory') = 'text' or json_type(${EventTable.data}, '$.info.path') = 'text'`,
+      )
+      .all()) {
+      const data = normalizeEventPathData(row.data)
+      if (data === row.data) continue
+      db.update(EventTable).set({ data }).where(eq(EventTable.id, row.id)).run()
+    }
+  })
+}
+
+function normalizeEventPathData(data: Record<string, unknown>) {
+  const info = object(data.info)
+  if (!info) return data
+
+  const directory = typeof info.directory === "string" ? PathIdentity.toStoragePath(info.directory) : info.directory
+  const path = typeof info.path === "string" ? PathIdentity.toStorageRelativePath(info.path) : info.path
+  if (directory === info.directory && path === info.path) return data
+
+  return { ...data, info: { ...info, directory, path } }
+}
+
+function object(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return
+  return input as Record<string, unknown>
+}
+
+function sameList(a: string[], b: string[]) {
+  return a.length === b.length && a.every((item, index) => item === b[index])
+}

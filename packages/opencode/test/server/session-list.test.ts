@@ -95,6 +95,32 @@ describe("session.list", () => {
   )
 
   it.instance(
+    "filters by canonical windows directory spelling",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const created = yield* withSession({ title: "windows-directory" })
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({ directory: "C:/Repos/MY-Cool-THING" })
+              .where(eq(SessionTable.id, created.id))
+              .run(),
+          ),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: "c:\\repos\\my-cool-thing" }),
+        )).map((session) => session.id)
+
+        expect(ids).toContain(created.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "filters by path and ignores directory when path is provided",
     () =>
       Effect.gen(function* () {
@@ -127,6 +153,32 @@ describe("session.list", () => {
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).toContain(deeper.id)
         expect(pathIDs).not.toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "filters by canonical relative path spelling",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const created = yield* withSession({ title: "windows-path" })
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({ directory: "C:/Repos/MY-Cool-THING/packages/api", path: "Packages/API" })
+              .where(eq(SessionTable.id, created.id))
+              .run(),
+          ),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) => session.list({ path: "Packages\\API" }))).map(
+          (session) => session.id,
+        )
+
+        expect(ids).toContain(created.id)
       }),
     { git: true },
   )
