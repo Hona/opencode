@@ -231,6 +231,40 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("keeps a just-failed websocket entry alive across an aggressive prune cycle", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {})
+    })
+    // Aggressive pruner (5ms) relative to a generous idle timeout (200ms): an
+    // entry that just failed was used well under 200ms ago, so it must NOT be
+    // pruned. The bug left lastUsedAt at the request's start, making the entry
+    // look stale and letting the pruner reset its retry budget. The wide gap
+    // between the prune interval and the idle timeout keeps this deterministic
+    // under load: a stale entry is evicted within ~5ms, a fresh one survives the
+    // brief wait below with a ~170ms margin.
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      idleTimeout: 200,
+      pruneInterval: 5,
+      streamRetries: 1,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    expect((await readTextError(first.text())).message).toContain("idle timeout waiting for websocket")
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const second = await fetch(server.url, streamRequest())
+    const third = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(await third.text()).toBe("http")
+    expect(connections).toBe(2)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
   test("invalidates but does not reuse a socket after terminal failure frames", async () => {
     let connections = 0
     await using server = await createWebSocketServer((socket) => {
@@ -378,6 +412,9 @@ describe("plugin.openai.ws-pool", () => {
       url: server.url,
       idleTimeout: 20,
       streamRetries: 1,
+      // Exercises the cross-request retry budget, not idle pruning: keep the
+      // pruner dormant so it can't evict the entry between back-to-back fetches.
+      pruneInterval: 60_000,
     })
 
     const first = await fetch(server.url, streamRequest())
@@ -402,6 +439,9 @@ describe("plugin.openai.ws-pool", () => {
       url: server.url,
       idleTimeout: 20,
       streamRetries: 1,
+      // Exercises the cross-request retry budget, not idle pruning: keep the
+      // pruner dormant so it can't evict the entry between back-to-back fetches.
+      pruneInterval: 60_000,
     })
 
     const first = await fetch(server.url, streamRequest())

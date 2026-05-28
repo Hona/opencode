@@ -15,6 +15,9 @@ export interface CreateWebSocketFetchOptions {
   idleTimeout?: number
   maxConnectionAge?: number
   streamRetries?: number
+  // How often the idle pruner runs. Decoupled from idleTimeout so a small idle
+  // timeout doesn't spawn a hyperactive interval that races in-flight requests.
+  pruneInterval?: number
 }
 
 interface PoolEntry {
@@ -38,7 +41,8 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const idleTimeout = options?.idleTimeout ?? DEFAULT_IDLE_TIMEOUT
   const maxConnectionAge = options?.maxConnectionAge ?? DEFAULT_MAX_CONNECTION_AGE
   const streamRetries = options?.streamRetries ?? 5
-  const pruneTimer = setInterval(() => prune(), Math.min(idleTimeout, 60_000))
+  const pruneInterval = options?.pruneInterval ?? Math.min(idleTimeout, 60_000)
+  const pruneTimer = setInterval(() => prune(), pruneInterval)
   if (typeof pruneTimer === "object" && "unref" in pruneTimer && typeof pruneTimer.unref === "function") {
     pruneTimer.unref()
   }
@@ -121,6 +125,10 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onConnectionInvalid: (error) => {
           log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
+          // Record the failure as recent activity so the idle pruner doesn't
+          // immediately evict this entry (and reset its retry budget) before the
+          // next request reuses it. Mirrors onTerminal/onAbort/catch.
+          entry.lastUsedAt = Date.now()
           if (!entry.fallback) recordStreamFailure(entry)
           invalidate(entry)
           resolveFirstEvent(false)
