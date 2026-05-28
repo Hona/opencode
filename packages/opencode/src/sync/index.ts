@@ -49,6 +49,7 @@ export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & 
 
 type ProjectorFunc = (db: Database.TxOrDb, data: unknown, event: Event) => void
 type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
+type PersistEvent = (type: string, data: Event["data"]) => Event["data"]
 
 export interface Interface {
   readonly run: <Def extends Definition>(
@@ -208,14 +209,20 @@ let projectors: Map<string, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
 let convertEvent: ConvertEvent
+let persistEvent: PersistEvent
 
 export function reset() {
   frozen = false
   projectors = undefined
   convertEvent = (_, data) => data
+  persistEvent = (_, data) => data
 }
 
-export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
+export function init(input: {
+  projectors: Array<[Definition, ProjectorFunc]>
+  convertEvent?: ConvertEvent
+  persistEvent?: PersistEvent
+}) {
   projectors = new Map(input.projectors.map(([def, func]) => [versionedType(def.type, def.version), func]))
   for (let entry of EventV2.registry.values()) {
     if (!entry.version || !entry.aggregate) continue
@@ -241,6 +248,7 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // after `init` which would cause bugs
   frozen = true
   convertEvent = input.convertEvent ?? ((_, data) => data)
+  persistEvent = input.persistEvent ?? ((_, data) => data)
 }
 
 export function versionedType<A extends string>(type: A): A
@@ -332,7 +340,7 @@ function process<Def extends Definition>(
           seq: event.seq,
           aggregate_id: event.aggregateID,
           type: versionedType(def.type, def.version),
-          data: event.data as Record<string, unknown>,
+          data: persistEvent(def.type, event.data) as Record<string, unknown>,
         })
         .run()
     }

@@ -22,5 +22,16 @@ export function initProjectors() {
       }
       return data
     },
+    persistEvent: (type, data) => {
+      if (type === Session.Event.Created.type || type === Session.Event.Deleted.type) {
+        const payload = data as SyncEvent.Event<typeof Session.Event.Created>["data"]
+        return { ...payload, info: Session.toStorageEventInfo(payload.info as Session.Info) }
+      }
+      if (type === Session.Event.Updated.type) {
+        const payload = data as SyncEvent.Event<typeof Session.Event.Updated>["data"]
+        return { ...payload, info: Session.toStorageEventPatch(payload.info as Session.Patch) }
+      }
+      return data
+    },
   })
 }

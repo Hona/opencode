@@ -145,7 +145,7 @@ export function toRow(info: Info) {
   }
 }
 
-function toEventInfo(info: Info): Info {
+export function toStorageEventInfo(info: Info): Info {
   return {
     ...info,
     directory: PathIdentity.toStoragePath(info.directory),
@@ -153,7 +153,7 @@ function toEventInfo(info: Info): Info {
   }
 }
 
-function toEventPatch(info: Patch): Patch {
+export function toStorageEventPatch(info: Patch): Patch {
   const result = { ...info }
   if ("directory" in info) result.directory = PathIdentity.toStoragePath(info.directory)
   if ("path" in info) result.path = PathIdentity.toStorageRelativePath(info.path)
@@ -570,7 +570,7 @@ export const layer: Layer.Layer<
       }
       log.info("created", result)
 
-      yield* sync.run(Event.Created, { sessionID: result.id, info: toEventInfo(result) })
+      yield* sync.run(Event.Created, { sessionID: result.id, info: result })
 
       if (!flags.experimentalWorkspaces) {
         // This only exist for backwards compatibility. We should not be
@@ -624,7 +624,7 @@ export const layer: Layer.Layer<
           yield* remove(child.id)
         }
 
-        yield* sync.run(Event.Deleted, { sessionID, info: toEventInfo(session) }, { publish: hasInstance })
+        yield* sync.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
         yield* sync.remove(sessionID)
       } catch (e) {
         log.error(e)
@@ -734,8 +734,7 @@ export const layer: Layer.Layer<
       return session
     })
 
-    const patch = (sessionID: SessionID, info: Patch) =>
-      sync.run(Event.Updated, { sessionID, info: toEventPatch(info) })
+    const patch = (sessionID: SessionID, info: Patch) => sync.run(Event.Updated, { sessionID, info })
 
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
       yield* patch(sessionID, { time: { updated: Date.now() } })

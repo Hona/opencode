@@ -17,11 +17,13 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
+const syncLayer = (experimentalWorkspaces: boolean) =>
+  SyncEvent.layer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })), Layer.provideMerge(Bus.layer))
+
 const sessionLayer = (experimentalWorkspaces: boolean) =>
   SessionNs.layer.pipe(
-    Layer.provide(Bus.layer),
+    Layer.provideMerge(syncLayer(experimentalWorkspaces)),
     Layer.provide(Storage.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
     Layer.provide(BackgroundJob.defaultLayer),
   )
@@ -144,6 +146,46 @@ describe("session.list", () => {
         expect(info?.directory).not.toContain("\\")
         expect(info?.directory).toContain("/")
         expect(info?.path).toBe("packages/api")
+      }),
+    { git: true },
+  )
+
+  itWorkspace.instance(
+    "persists replayed session event paths in storage form",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const created = yield* withSession({ title: "replay-event-path" })
+        yield* SyncEvent.use.replay({
+          id: "evt_replay_path",
+          aggregateID: created.id,
+          seq: 1,
+          type: SyncEvent.versionedType(SessionNs.Event.Updated.type, SessionNs.Event.Updated.version),
+          data: {
+            sessionID: created.id,
+            info: {
+              directory: "C:\\Repos\\MY-Cool-THING\\packages\\api",
+              path: "packages\\api",
+            },
+          },
+        })
+
+        const row = yield* Effect.sync(() =>
+          Database.use((db) => ({
+            event: db
+              .select({ data: EventTable.data })
+              .from(EventTable)
+              .where(eq(EventTable.id, "evt_replay_path"))
+              .get(),
+            session: db.select().from(SessionTable).where(eq(SessionTable.id, created.id)).get(),
+          })),
+        )
+        const info = (row.event?.data as { info?: { directory?: string; path?: string } } | undefined)?.info
+
+        expect(info).toEqual({ directory: "C:/Repos/MY-Cool-THING/packages/api", path: "packages/api" })
+        expect(row.session?.directory).toBe("C:/Repos/MY-Cool-THING/packages/api")
+        expect(row.session?.path).toBe("packages/api")
       }),
     { git: true },
   )
