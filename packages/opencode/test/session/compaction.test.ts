@@ -1171,7 +1171,14 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  itCompaction.instance(
+  // Runs under TestClock (it.effect) so the retry backoff is virtual time we
+  // control. The previous version measured abort latency against the real wall
+  // clock (`Date.now() - start < 250` plus a `250 millis` await timeout), which
+  // raced the interrupt cleanup path (DB writes + git snapshot.patch) and flaked
+  // under load — on Windows it timed out outright with a dangling git process.
+  // No git instance here: TestClock cannot drive a child process, and snapshots
+  // are irrelevant to backoff interruption (snapshot.track no-ops without git).
+  itCompaction.effect(
     "stops quickly when aborted during retry backoff",
     () => {
       const stub = llm()
@@ -1195,42 +1202,49 @@ describe("session.compaction.process", () => {
         ),
       )
 
-      return Effect.gen(function* () {
-        const ssn = yield* SessionNs.Service
-        const bus = yield* Bus.Service
-        const ready = yield* Deferred.make<void>()
-        const session = yield* ssn.create({})
-        const msg = yield* createUserMessage(session.id, "hello")
-        const msgs = yield* ssn.messages({ sessionID: session.id })
-        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
-          if (evt.properties.sessionID !== session.id) return
-          if (evt.properties.status.type !== "retry") return
-          Deferred.doneUnsafe(ready, Effect.void)
-        })
-        yield* Effect.addFinalizer(() => Effect.sync(off))
+      return provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const ssn = yield* SessionNs.Service
+            const bus = yield* Bus.Service
+            const ready = yield* Deferred.make<void>()
+            const session = yield* ssn.create({})
+            const msg = yield* createUserMessage(session.id, "hello")
+            const msgs = yield* ssn.messages({ sessionID: session.id })
+            const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+              if (evt.properties.sessionID !== session.id) return
+              if (evt.properties.status.type !== "retry") return
+              Deferred.doneUnsafe(ready, Effect.void)
+            })
+            yield* Effect.addFinalizer(() => Effect.sync(off))
 
-        const fiber = yield* SessionCompaction.use
-          .process({
-            parentID: msg.id,
-            messages: msgs,
-            sessionID: session.id,
-            auto: false,
-          })
-          .pipe(Effect.forkChild)
+            const fiber = yield* SessionCompaction.use
+              .process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              })
+              .pipe(Effect.forkChild)
 
-        yield* Deferred.await(ready).pipe(Effect.timeout("1 second"))
-        const start = Date.now()
-        yield* Fiber.interrupt(fiber)
-        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("250 millis"))
+            // The 503 carries `retry-after-ms: 10000`, so the retry schedule
+            // publishes the "retry" status and then sleeps 10s. Waiting on the
+            // status confirms the fiber has parked in that backoff sleep.
+            yield* Deferred.await(ready)
 
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          expect(Cause.hasInterrupts(exit.cause)).toBe(true)
-          expect(Date.now() - start).toBeLessThan(250)
-        }
-      }).pipe(withCompaction({ llm: stub.layer }))
+            // We never advance the TestClock, so the 10s backoff can only end by
+            // the interrupt aborting the sleep. If aborting did not cut through
+            // the backoff this would hang until the test runner timed out.
+            yield* Fiber.interrupt(fiber)
+            const exit = yield* Fiber.await(fiber)
+
+            expect(Exit.isFailure(exit)).toBe(true)
+            if (Exit.isFailure(exit)) {
+              expect(Cause.hasInterrupts(exit.cause)).toBe(true)
+            }
+          }).pipe(withCompaction({ llm: stub.layer })),
+      )
     },
-    { git: true },
   )
 
   itCompaction.instance(
