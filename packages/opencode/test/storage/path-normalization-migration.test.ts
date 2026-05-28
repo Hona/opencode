@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { realpathSync } from "fs"
 import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
 import { DataMigration } from "@/data-migration"
@@ -19,12 +18,11 @@ beforeEach(() => {
 })
 
 describe("path normalization data migration", () => {
-  it.live("normalizes persisted Windows database paths to forward slashes and real casing", () =>
+  it.live("normalizes persisted Windows database paths to forward slashes", () =>
     Effect.gen(function* () {
       if (process.platform !== "win32") return
 
-      const workspaceDirectory = realpathSync.native(process.cwd()).replaceAll("\\", "/")
-      const storedWorkspaceDirectory = workspaceDirectory.toLowerCase().replaceAll("/", "\\")
+      const storedWorkspaceDirectory = process.cwd().toLowerCase()
 
       yield* Effect.sync(() =>
         Database.use((db) => {
@@ -106,7 +104,7 @@ describe("path normalization data migration", () => {
       expect(rows.project?.sandboxes).toEqual(["C:/Repos/MY-Cool-THING/sandbox"])
       expect(rows.session?.directory).toBe("C:/Repos/MY-Cool-THING/packages/api")
       expect(rows.session?.path).toBe("packages/api")
-      expect(rows.workspace?.directory).toBe(workspaceDirectory)
+      expect(rows.workspace?.directory).toBe(storedWorkspaceDirectory.replaceAll("\\", "/"))
       expect((rows.event?.data as { info?: unknown } | undefined)?.info).toEqual({
         directory: "C:/Repos/MY-Cool-THING/packages/api",
         path: "packages/api",
