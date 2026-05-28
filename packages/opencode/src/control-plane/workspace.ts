@@ -68,7 +68,7 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     type: row.type,
     branch: row.branch,
     name: row.name,
-    directory: row.directory ? PathIdentity.toNativePath(row.directory) : row.directory,
+    directory: row.directory === null ? null : PathIdentity.toNativePath(row.directory),
     extra: row.extra,
     projectID: row.project_id,
     timeUsed: row.time_used,
