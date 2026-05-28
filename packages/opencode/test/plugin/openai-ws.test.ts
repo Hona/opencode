@@ -29,13 +29,14 @@ describe("plugin.openai.ws", () => {
   test("enforces websocket connect timeout", async () => {
     await using server = await createHangingTcpServer()
 
-    await expect(
+    await expectRejectsWithMessage(
       OpenAIWebSocket.connectResponsesWebSocket({
         url: server.wsUrl,
         headers: {},
         timeout: 20,
       }),
-    ).rejects.toThrow("WebSocket connect timed out")
+      "WebSocket connect timed out",
+    )
   })
 
   test("enforces websocket send idle timeout", async () => {
@@ -50,7 +51,7 @@ describe("plugin.openai.ws", () => {
       onConnectionInvalid: (error) => invalid.push(error.message),
     })
 
-    await expect(response.text()).rejects.toThrow("idle timeout sending websocket request")
+    await expectRejectsWithMessage(response.text(), "idle timeout sending websocket request")
     expect(invalid).toEqual(["idle timeout sending websocket request"])
   })
 
@@ -99,7 +100,8 @@ describe("plugin.openai.ws", () => {
       onConnectionInvalid: (error) => invalid.push(error.message),
     })
 
-    await expect(response.text()).rejects.toThrow(
+    await expectRejectsWithMessage(
+      response.text(),
       "WebSocket closed before response.completed (code 1009: message too big: payload too large)",
     )
     expect(invalid).toEqual([
@@ -122,7 +124,7 @@ describe("plugin.openai.ws", () => {
       onConnectionInvalid: (error) => invalid.push(error.message),
     })
 
-    await expect(response.text()).rejects.toThrow("Unexpected binary WebSocket frame")
+    await expectRejectsWithMessage(response.text(), "Unexpected binary WebSocket frame")
     expect(invalid).toEqual(["Unexpected binary WebSocket frame"])
   })
 })
@@ -354,7 +356,7 @@ describe("plugin.openai.ws-pool", () => {
     })
 
     const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
-    await expect(first.text()).rejects.toThrow("idle timeout waiting for websocket")
+    await expectRejectsWithMessage(first.text(), "idle timeout waiting for websocket")
     const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
 
     expect(await second.text()).toBe("http")
@@ -413,7 +415,7 @@ describe("plugin.openai.ws-pool", () => {
     expect(httpRequests).toHaveLength(1)
     expect(connections).toBe(1)
     abort.abort(new Error("stop"))
-    await expect(firstText).rejects.toThrow("stop")
+    await expectRejectsWithMessage(firstText, "stop")
     fetch.close()
   })
 
@@ -493,7 +495,7 @@ describe("plugin.openai.ws-pool", () => {
     const firstText = first.text()
     await waitFor(() => connections === 1, "first websocket did not connect")
     abort.abort(new Error("stop"))
-    await expect(firstText).rejects.toThrow("stop")
+    await expectRejectsWithMessage(firstText, "stop")
 
     const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
 
@@ -548,6 +550,17 @@ function streamRequest(headers?: Record<string, string>, signal?: AbortSignal): 
     body: JSON.stringify({ stream: true, input: "hi" }),
     signal,
   }
+}
+
+async function expectRejectsWithMessage(promise: Promise<unknown>, message: string) {
+  try {
+    await promise
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error)
+    expect(error instanceof Error ? error.message : String(error)).toContain(message)
+    return
+  }
+  throw new Error(`Expected promise to reject with ${message}`)
 }
 
 function mockFetch(

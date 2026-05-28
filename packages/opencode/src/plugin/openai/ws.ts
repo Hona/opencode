@@ -158,9 +158,6 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
     if (!options.idleTimeout) return
     if (idleTimer) clearTimeout(idleTimer)
     idleTimer = setTimeout(() => invalidate(new Error(message)), options.idleTimeout)
-    if (typeof idleTimer === "object" && "unref" in idleTimer && typeof idleTimer.unref === "function") {
-      idleTimer.unref()
-    }
   }
 
   async function onMessage(data: WebSocket.RawData, isBinary: boolean) {
