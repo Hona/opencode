@@ -276,13 +276,15 @@ export const layer = Layer.effect(
           ),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
+      const worktreeStorage = PathIdentity.toStoragePath(result.worktree)
+      const sandboxesStorage = result.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox))
 
       yield* db((d) =>
         d
           .insert(ProjectTable)
           .values({
             id: result.id,
-            worktree: PathIdentity.toStoragePath(result.worktree),
+            worktree: worktreeStorage,
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
@@ -291,13 +293,13 @@ export const layer = Layer.effect(
             time_created: result.time.created,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
+            sandboxes: sandboxesStorage,
             commands: result.commands,
           })
           .onConflictDoUpdate({
             target: ProjectTable.id,
             set: {
-              worktree: PathIdentity.toStoragePath(result.worktree),
+              worktree: worktreeStorage,
               vcs: result.vcs ?? null,
               name: result.name,
               icon_url: result.icon?.url,
@@ -305,7 +307,7 @@ export const layer = Layer.effect(
               icon_color: result.icon?.color,
               time_updated: result.time.updated,
               time_initialized: result.time.initialized,
-              sandboxes: result.sandboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
+              sandboxes: sandboxesStorage,
               commands: result.commands,
             },
           })
@@ -444,7 +446,10 @@ export const layer = Layer.effect(
       const result = yield* db((d) =>
         d
           .update(ProjectTable)
-          .set({ sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)), time_updated: Date.now() })
+          .set({
+            sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
+            time_updated: Date.now(),
+          })
           .where(eq(ProjectTable.id, id))
           .returning()
           .get(),
@@ -461,7 +466,10 @@ export const layer = Layer.effect(
       const result = yield* db((d) =>
         d
           .update(ProjectTable)
-          .set({ sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)), time_updated: Date.now() })
+          .set({
+            sandboxes: sboxes.map((sandbox) => PathIdentity.toStoragePath(sandbox)),
+            time_updated: Date.now(),
+          })
           .where(eq(ProjectTable.id, id))
           .returning()
           .get(),

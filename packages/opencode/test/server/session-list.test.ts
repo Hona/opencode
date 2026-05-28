@@ -7,6 +7,7 @@ import { mkdir } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
+import { EventTable } from "@/sync/event.sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"
@@ -16,15 +17,17 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
-const it = testEffect(
+const sessionLayer = (experimentalWorkspaces: boolean) =>
   SessionNs.layer.pipe(
     Layer.provide(Bus.layer),
     Layer.provide(Storage.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
     Layer.provide(BackgroundJob.defaultLayer),
-  ),
-)
+  )
+
+const it = testEffect(sessionLayer(false))
+const itWorkspace = testEffect(sessionLayer(true))
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
   Effect.acquireRelease(SessionNs.use.create(input), (created) =>
@@ -116,6 +119,31 @@ describe("session.list", () => {
         )).map((session) => session.id)
 
         expect(ids).toContain(created.id)
+      }),
+    { git: true },
+  )
+
+  itWorkspace.instance(
+    "persists session event paths in storage form",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const test = yield* TestInstance
+        const directory = path.join(test.directory, "packages", "api")
+        yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+
+        const created = yield* withSession({ title: "event-path" }).pipe(provideInstance(directory))
+        const row = yield* Effect.sync(() =>
+          Database.use((db) =>
+            db.select({ data: EventTable.data }).from(EventTable).where(eq(EventTable.aggregate_id, created.id)).get(),
+          ),
+        )
+        const info = (row?.data as { info?: { directory?: string; path?: string } } | undefined)?.info
+
+        expect(info?.directory).not.toContain("\\")
+        expect(info?.directory).toContain("/")
+        expect(info?.path).toBe("packages/api")
       }),
     { git: true },
   )
