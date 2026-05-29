@@ -58,6 +58,16 @@ async function gone(pid: number, timeout = 5_000) {
   return !alive(pid)
 }
 
+async function readPid(file: string, timeout = 5_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await fs.readFile(file, "utf-8").catch(() => undefined)
+    if (value) return Number(value)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`Process did not write its pid to ${file}`)
+}
+
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     fx.effect(
@@ -273,6 +283,34 @@ describe("cross-spawn spawner", () => {
         expect(Date.now() - started).toBeLessThan(1_000)
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
       }),
+    )
+
+    fx.live(
+      "forceKillAfter escalates when the parent exits before a stubborn descendant",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "stubborn-child.pid")
+        const code = [
+          'const cp = require("node:child_process")',
+          'const child = cp.spawn(process.execPath, ["-e", "const fs = require(\\"node:fs\\"); process.on(\\"SIGTERM\\", () => {}); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", process.argv[1]], { stdio: "inherit" })',
+          "setInterval(() => {}, 1000)",
+        ].join("\n")
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", code, pidFile])
+        const pid = yield* Effect.promise(() => readPid(pidFile))
+
+        yield* handle.kill({ forceKillAfter: 100 }).pipe(Effect.ignore)
+        const terminated = yield* Effect.promise(() => gone(pid, 1_000))
+        if (!terminated) {
+          yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
+        }
+        expect(terminated).toBe(true)
+      }),
+      10_000,
     )
 
     fx.effect(
