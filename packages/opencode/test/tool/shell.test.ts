@@ -1227,4 +1227,31 @@ describe("tool.shell truncation", () => {
       }),
     ),
   )
+
+  it.live("saves all fast output while metadata processing is delayed", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const byteCount = 1_000_000
+        const result = yield* run(
+          {
+            command: fill("bytes", byteCount),
+            description: "Generate fast output with delayed metadata",
+          },
+          {
+            ...ctx,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (!output) return Effect.void
+              return Effect.sleep("50 millis")
+            },
+          },
+        )
+        const filepath = (result.metadata as { outputPath?: string }).outputPath
+        expect(filepath).toBeTruthy()
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
+        expect(saved.length).toBe(byteCount)
+      }),
+    ),
+  )
 })
