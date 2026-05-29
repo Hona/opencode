@@ -1275,6 +1275,7 @@ describe("tool.shell truncation", () => {
       projectRoot,
       Effect.gen(function* () {
         const byteCount = 1_000_000
+        let delayed = false
         const result = yield* run(
           {
             command: fill("bytes", byteCount),
@@ -1284,8 +1285,9 @@ describe("tool.shell truncation", () => {
             ...ctx,
             metadata: (input) => {
               const output = (input.metadata as { output?: string })?.output
-              if (!output) return Effect.void
-              return Effect.sleep("50 millis")
+              if (!output || delayed) return Effect.void
+              delayed = true
+              return Effect.sleep("1200 millis")
             },
           },
         )
