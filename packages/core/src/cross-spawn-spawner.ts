@@ -271,8 +271,28 @@ export const make = Effect.gen(function* () {
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
+      // Complete on whichever of "exit"/"close" fires first; both are required.
+      //
+      // "exit" means the process itself terminated; "close" means it ended AND all of
+      // its stdio streams closed. They differ because multiple processes can share the
+      // same stdio streams. We must handle both because neither alone is sufficient:
+      //
+      //  - A detached child that inherits this process's stdio keeps the pipe's write
+      //    end open, so "close" can be delayed indefinitely even after the main process
+      //    exits. Resolving on "exit" returns promptly instead of hanging (issue #24731).
+      //
+      //  - For a failed spawn (e.g. ENOENT), cross-spawn on Windows emits "spawn" then
+      //    "error" then "close" but NEVER "exit" — so exitCode would hang forever if we
+      //    only listened for "exit". "close" is the backstop that completes that path.
+      //    (Verified: raw child_process never reproduces this; it's specific to
+      //    cross-spawn's ENOENT handling, independent of node vs bun.)
+      //
+      // Deferred.doneUnsafe is a no-op once the Deferred is already completed.
       proc.on("exit", (...args) => {
         exit = args
+        if (end) return
+        end = true
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
       })
       proc.on("close", (...args) => {
         if (end) return
