@@ -438,6 +438,7 @@ export const ShellTool = Tool.define(
       let last = ""
       const list: Chunk[] = []
       let used = 0
+      let drained = 0
       let file = ""
       let sink: ReturnType<typeof createWriteStream> | undefined
       let cut = false
@@ -483,6 +484,7 @@ export const ShellTool = Tool.define(
 
           const output = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+              drained++
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
               used += size
@@ -555,12 +557,22 @@ export const ShellTool = Tool.define(
           }
 
           if (exit.kind === "exit") {
-            // Process exit can arrive before buffered output is handled, while a
-            // detached child can keep the stream open forever. Drain briefly, then stop.
-            yield* Fiber.join(output).pipe(
-              Effect.timeoutOrElse({ duration: "100 millis", orElse: () => Effect.void }),
-              Effect.catch(() => Effect.void),
-            )
+            // The process has exited, but output it already wrote may still be buffered
+            // in the OS pipe / Node streams. Join the reader so it drains to EOF: for a
+            // normal command this returns the instant the streams end (full output, no
+            // fixed delay). A detached child can hold the pipe open forever with no
+            // further output, so also stop once the reader has produced nothing for a
+            // full idle window. The window resets on every chunk (`drained`), so a
+            // command that is still producing output is never cut off — only a process
+            // that has exited and left an idle pipe open hits the bound.
+            const settle = Effect.gen(function* () {
+              let seen = -1
+              while (drained !== seen) {
+                seen = drained
+                yield* Effect.sleep("500 millis")
+              }
+            })
+            yield* Effect.raceAll([Fiber.join(output).pipe(Effect.ignore), settle])
           }
 
           return exit.kind === "exit" ? exit.code : null
