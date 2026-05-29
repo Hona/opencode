@@ -323,27 +323,6 @@ export const make = Effect.gen(function* () {
       return Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command))
     })
 
-  const timeout =
-    (
-      proc: NodeChildProcess.ChildProcess,
-      command: ChildProcess.StandardCommand,
-      opts: ChildProcess.KillOptions | undefined,
-    ) =>
-    <A, E, R>(
-      f: (
-        command: ChildProcess.StandardCommand,
-        proc: NodeChildProcess.ChildProcess,
-        signal: NodeJS.Signals,
-      ) => Effect.Effect<A, E, R>,
-    ) => {
-      const signal = opts?.killSignal ?? "SIGTERM"
-      if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
-      return Effect.timeoutOrElse(f(command, proc, signal), {
-        duration: opts.forceKillAfter,
-        orElse: () => f(command, proc, "SIGKILL"),
-      })
-    }
-
   const source = (handle: ChildProcessHandle, from: ChildProcess.PipeFromOption | undefined) => {
     const opt = from ?? "stdout"
     switch (opt) {
@@ -383,13 +362,6 @@ export const make = Effect.gen(function* () {
             }),
             Effect.fnUntraced(function* ([proc, exited, closed]) {
               const done = yield* Deferred.isDone(exited)
-              const kill = timeout(proc, command, command.options)
-              if (done) {
-                const [code] = yield* Deferred.await(exited)
-                if (process.platform === "win32") return yield* Effect.void
-                if (code !== 0 && Predicate.isNotNull(code)) return yield* Effect.ignore(kill(killGroup))
-                return yield* Effect.void
-              }
               const send = (s: NodeJS.Signals) =>
                 Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
               const sig = command.options.killSignal ?? "SIGTERM"
@@ -400,6 +372,12 @@ export const make = Effect.gen(function* () {
                     orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(closed)), Effect.asVoid),
                   })
                 : attempt
+              if (done) {
+                const [code] = yield* Deferred.await(exited)
+                if (process.platform === "win32") return yield* Effect.void
+                if (code !== 0 && Predicate.isNotNull(code)) return yield* Effect.ignore(escalated)
+                return yield* Effect.void
+              }
               return yield* Effect.ignore(escalated)
             }),
           )
