@@ -7,6 +7,7 @@ import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
+import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
@@ -36,7 +37,7 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual({
           name: "session",
         })
-        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 21 })
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 22 })
       }),
     )
   })
@@ -65,6 +66,57 @@ describe("DatabaseMigration", () => {
           tokens_reasoning: 4,
           tokens_cache_read: 5,
           tokens_cache_write: 6,
+        })
+      }),
+    )
+  })
+
+  test("normalizes Windows storage paths and leaves POSIX paths untouched", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY, worktree text NOT NULL, sandboxes text NOT NULL)`)
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, directory text NOT NULL, path text)`)
+        // Windows-shaped rows (drive + backslash) must be normalized.
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, sandboxes) VALUES (${"win"}, ${"C:\\Repo\\Thing"}, ${JSON.stringify([
+            "C:\\Repo\\Thing\\sandbox",
+          ])})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, directory, path) VALUES (${"win"}, ${"C:\\Repo\\Thing\\packages\\api"}, ${"packages\\api"})`,
+        )
+        // UNC worktrees and their sandboxes must normalize too (not just drive paths).
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, sandboxes) VALUES (${"unc"}, ${"\\\\server\\share"}, ${JSON.stringify([
+            "\\\\server\\share\\sandbox",
+          ])})`,
+        )
+        // The "/" worktree sentinel and POSIX paths (including a pathological
+        // backslash in a POSIX filename) must survive byte-for-byte.
+        yield* db.run(sql`INSERT INTO project (id, worktree, sandboxes) VALUES (${"global"}, ${"/"}, ${"[]"})`)
+        yield* db.run(
+          sql`INSERT INTO session (id, directory, path) VALUES (${"posix"}, ${"/home/me/we\\ird"}, ${"src\\weird"})`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [normalizeStoragePathsMigration])
+
+        expect(yield* db.get(sql`SELECT worktree, sandboxes FROM project WHERE id = 'win'`)).toEqual({
+          worktree: "C:/Repo/Thing",
+          sandboxes: JSON.stringify(["C:/Repo/Thing/sandbox"]),
+        })
+        expect(yield* db.get(sql`SELECT directory, path FROM session WHERE id = 'win'`)).toEqual({
+          directory: "C:/Repo/Thing/packages/api",
+          path: "packages/api",
+        })
+        expect(yield* db.get(sql`SELECT worktree, sandboxes FROM project WHERE id = 'unc'`)).toEqual({
+          worktree: "//server/share",
+          sandboxes: JSON.stringify(["//server/share/sandbox"]),
+        })
+        expect(yield* db.get(sql`SELECT worktree FROM project WHERE id = 'global'`)).toEqual({ worktree: "/" })
+        expect(yield* db.get(sql`SELECT directory, path FROM session WHERE id = 'posix'`)).toEqual({
+          directory: "/home/me/we\\ird",
+          path: "src\\weird",
         })
       }),
     )

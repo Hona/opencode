@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm/sqlite-core"
+import * as PathStorage from "../util/path-storage"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
 import type { Snapshot } from "../snapshot"
@@ -24,8 +25,8 @@ export const SessionTable = sqliteTable(
     workspace_id: text().$type<WorkspaceV2.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
     slug: text().notNull(),
-    directory: text().notNull(),
-    path: text(),
+    directory: text().notNull().$type<PathStorage.AbsolutePath>(),
+    path: text().$type<PathStorage.Path>(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),

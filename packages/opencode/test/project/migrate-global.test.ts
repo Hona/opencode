@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import * as PathStorage from "@opencode-ai/core/util/path-storage"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
@@ -31,7 +32,9 @@ function seed(opts: { id: SessionID; dir: string; project: ProjectV2.ID }) {
         id: opts.id,
         project_id: opts.project,
         slug: opts.id,
-        directory: opts.dir,
+        // Real directories are stored in forward-slash storage form; the empty
+        // edge fixture (legacy sessions without a directory) is passed through.
+        directory: opts.dir ? PathStorage.absolute(opts.dir) : (opts.dir as PathStorage.AbsolutePath),
         title: "test",
         version: "0.0.0-test",
         time_created: now,
@@ -48,7 +51,7 @@ function ensureGlobal() {
       .insert(ProjectTable)
       .values({
         id: ProjectV2.ID.global,
-        worktree: "/",
+        worktree: PathStorage.absolute("/"),
         time_created: Date.now(),
         time_updated: Date.now(),
         sandboxes: [],

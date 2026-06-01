@@ -11,6 +11,7 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
+import * as PathStorage from "../util/path-storage"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -42,8 +43,8 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
     workspace_id: info.workspaceID ?? null,
     parent_id: info.parentID,
     slug: info.slug,
-    directory: info.directory,
-    path: info.path,
+    directory: PathStorage.absolute(info.directory),
+    path: info.path == null ? info.path : PathStorage.path(info.path),
     title: info.title,
     agent: info.agent,
     model: info.model,

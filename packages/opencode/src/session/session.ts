@@ -39,6 +39,7 @@ import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import * as PathStorage from "@opencode-ai/core/util/path-storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -77,7 +78,7 @@ export function fromRow(row: SessionRow): Info {
     slug: row.slug,
     projectID: row.project_id,
     workspaceID: row.workspace_id ?? undefined,
-    directory: row.directory,
+    directory: PathStorage.toPlatform(row.directory),
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
     title: row.title,
@@ -128,8 +129,8 @@ export function toRow(info: Info) {
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
     slug: info.slug,
-    directory: info.directory,
-    path: info.path,
+    directory: PathStorage.absolute(info.directory),
+    path: info.path === undefined ? undefined : PathStorage.path(info.path),
     title: info.title,
     agent: info.agent,
     model: info.model,
@@ -554,7 +555,7 @@ export const layer: Layer.Layer<
         .pipe(Effect.orDie)
       if (!row) return
       return {
-        directory: AbsolutePath.make(row.directory),
+        directory: AbsolutePath.make(PathStorage.toPlatform(row.directory)),
         workspaceID: row.workspaceID ?? undefined,
       }
     })
@@ -621,7 +622,7 @@ export const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+      if (input?.directory) conditions.push(eq(SessionTable.directory, PathStorage.absolute(input.directory)))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
@@ -653,7 +654,7 @@ export const layer: Layer.Layer<
           projects.set(item.id, {
             id: item.id,
             name: item.name ?? undefined,
-            worktree: item.worktree,
+            worktree: PathStorage.toPlatform(item.worktree),
           })
         }
       }
@@ -1047,17 +1048,21 @@ function listByProject(
   }
   if (input.path !== undefined) {
     if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
+      const sessionPathQuery = PathStorage.path(input.path)
+      const conds = [eq(SessionTable.path, sessionPathQuery), like(SessionTable.path, `${sessionPathQuery}/%`)]
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(
+              ...conds,
+              and(isNull(SessionTable.path), eq(SessionTable.directory, PathStorage.absolute(input.directory)))!,
+            )!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, PathStorage.absolute(input.directory)))
     }
   }
   if (input.roots) {
@@ -1097,7 +1102,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(eq(SessionTable.directory, PathStorage.absolute(input.directory)))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
@@ -1144,7 +1149,7 @@ export function* listGlobal(input?: {
       projects.set(item.id, {
         id: item.id,
         name: item.name ?? undefined,
-        worktree: item.worktree,
+        worktree: PathStorage.toPlatform(item.worktree),
       })
     }
   }

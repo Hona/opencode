@@ -1,10 +1,11 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import * as PathStorage from "../util/path-storage"
 import { Timestamps } from "../database/schema.sql"
 import { ProjectV2 } from "../project"
 
 export const ProjectTable = sqliteTable("project", {
   id: text().$type<ProjectV2.ID>().primaryKey(),
-  worktree: text().notNull(),
+  worktree: text().notNull().$type<PathStorage.AbsolutePath>(),
   vcs: text(),
   name: text(),
   icon_url: text(),
@@ -12,6 +13,6 @@ export const ProjectTable = sqliteTable("project", {
   icon_color: text(),
   ...Timestamps,
   time_initialized: integer(),
-  sandboxes: text({ mode: "json" }).notNull().$type<string[]>(),
+  sandboxes: text({ mode: "json" }).notNull().$type<PathStorage.AbsolutePath[]>(),
   commands: text({ mode: "json" }).$type<{ start?: string }>(),
 })

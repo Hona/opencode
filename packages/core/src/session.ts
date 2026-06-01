@@ -16,6 +16,7 @@ import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, RelativePath } from "./schema"
+import * as PathStorage from "./util/path-storage"
 
 // get project -> project.locations
 //
@@ -206,7 +207,7 @@ export const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
+        if ("directory" in input) conditions.push(eq(SessionTable.directory, PathStorage.absolute(input.directory)))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
