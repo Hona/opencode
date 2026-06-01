@@ -331,12 +331,7 @@ export const layer = Layer.effect(
         yield* db
           .update(SessionTable)
           .set({ project_id: projectID })
-          .where(
-            and(
-              eq(SessionTable.project_id, ProjectV2.ID.global),
-              eq(SessionTable.directory, data.directory),
-            ),
-          )
+          .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
           .run()
           .pipe(Effect.orDie)
       }

@@ -2,7 +2,6 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { Database } from "bun:sqlite"
 import { drizzle, SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
-import { eq } from "drizzle-orm"
 import path from "path"
 import fs from "fs/promises"
 import { existsSync, readFileSync, readdirSync } from "fs"
@@ -130,9 +129,9 @@ describe("JSON to SQLite migration", () => {
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
     expect(projects[0].id).toBe(ProjectV2.ID.make("proj_test123abc"))
-    expect(String(projects[0].worktree)).toBe("/test/path")
+    expect(projects[0].worktree).toBe(AbsolutePath.make("/test/path"))
     expect(projects[0].name).toBe("Test Project")
-    expect(projects[0].sandboxes.map(String)).toEqual(["/test/sandbox"])
+    expect(projects[0].sandboxes).toEqual([AbsolutePath.make("/test/sandbox")])
   })
 
   test("stores imported Windows project and session paths in storage form", async () => {
@@ -155,20 +154,14 @@ describe("JSON to SQLite migration", () => {
 
     await JsonMigration.run(db)
 
-    const project = db
-      .select()
-      .from(ProjectTable)
-      .where(eq(ProjectTable.worktree, AbsolutePath.make("C:/Repo/Thing")))
-      .get()
-    const session = db
-      .select()
-      .from(SessionTable)
-      .where(eq(SessionTable.directory, AbsolutePath.make("C:/Repo/Thing/packages/api")))
-      .get()
-    expect(String(project?.worktree)).toBe("C:\\Repo\\Thing")
-    expect(project?.sandboxes.map(String)).toEqual(["C:\\Repo\\Thing\\sandbox"])
-    expect(String(session?.directory)).toBe("C:\\Repo\\Thing\\packages\\api")
-    expect(String(session?.path)).toBe("packages/api")
+    expect(sqlite.query("SELECT worktree, sandboxes FROM project WHERE id = ?").get("proj_test123abc")).toEqual({
+      worktree: "C:/Repo/Thing",
+      sandboxes: JSON.stringify(["C:/Repo/Thing/sandbox"]),
+    })
+    expect(sqlite.query("SELECT directory, path FROM session WHERE id = ?").get("ses_test456def")).toEqual({
+      directory: "C:/Repo/Thing/packages/api",
+      path: "packages/api",
+    })
   })
 
   test("uses filename for project id when JSON has different value", async () => {

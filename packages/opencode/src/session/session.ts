@@ -129,7 +129,7 @@ export function toRow(info: Info) {
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
     slug: info.slug,
-    directory: DatabasePath.directory(info.directory),
+    directory: info.directory,
     path: info.path,
     title: info.title,
     agent: info.agent,
@@ -622,7 +622,7 @@ export const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, DatabasePath.directory(input.directory)))
+      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
@@ -1052,16 +1052,13 @@ function listByProject(
 
       conditions.push(
         input.directory
-          ? or(
-              ...conds,
-              and(isNull(SessionTable.path), eq(SessionTable.directory, DatabasePath.directory(input.directory)))!,
-            )!
+          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, DatabasePath.directory(input.directory)))
+      conditions.push(eq(SessionTable.directory, input.directory))
     }
   }
   if (input.roots) {
@@ -1101,7 +1098,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, DatabasePath.directory(input.directory)))
+    conditions.push(eq(SessionTable.directory, input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))

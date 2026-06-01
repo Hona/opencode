@@ -136,7 +136,7 @@ describe("DatabaseMigration", () => {
         const projectID = ProjectV2.ID.make("codec_project")
         const worktree = AbsolutePath.make("C:\\Repo\\Thing")
         const sandbox = AbsolutePath.make("C:\\Repo\\Thing\\sandbox")
-        const directory = AbsolutePath.make("C:\\Repo\\Thing\\packages\\api")
+        const directory = "C:\\Repo\\Thing\\packages\\api"
         const sessionID = SessionSchema.ID.make("ses_codec")
 
         expect(() =>
