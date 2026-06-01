@@ -1,4 +1,5 @@
 import nodePath from "path"
+import { like, type AnyColumn } from "drizzle-orm"
 import { customType } from "drizzle-orm/sqlite-core"
 import { AbsolutePath } from "../schema"
 
@@ -8,6 +9,7 @@ declare const StorageRelativeBrand: unique symbol
 type StorageAbsolutePath = string & { readonly [StorageAbsoluteBrand]: "DatabasePath.AbsolutePath" }
 type StorageRelativePath = string & { readonly [StorageRelativeBrand]: "DatabasePath.RelativePath" }
 type StoragePath = StorageAbsolutePath | StorageRelativePath
+export type Directory = AbsolutePath | ""
 
 function storagePath(input: string) {
   if (process.platform !== "win32") return input
@@ -57,7 +59,7 @@ export const absoluteColumn = customType<{
 // Legacy sessions may persist an empty directory. Keep that existing value
 // readable while normalizing and validating every real directory.
 export const directoryColumn = customType<{
-  data: string
+  data: Directory
   driverData: string
   driverOutput: string
 }>({
@@ -68,9 +70,13 @@ export const directoryColumn = customType<{
     return input ? absolute(input) : input
   },
   fromDriver(input) {
-    return input ? toPlatform(absolute(input)) : input
+    return directory(input ? toPlatform(absolute(input)) : input)
   },
 })
+
+export function directory(input: string): Directory {
+  return input ? AbsolutePath.make(input) : ""
+}
 
 export const pathColumn = customType<{
   data: string
@@ -105,6 +111,6 @@ export const absoluteArrayColumn = customType<{
 })
 
 // LIKE patterns are not bound through Drizzle column encoders.
-export function pattern(input: string): string {
-  return value(input)
+export function startsWith(column: AnyColumn, input: string) {
+  return like(column, `${value(input)}/%`)
 }

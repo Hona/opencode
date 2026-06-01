@@ -9,6 +9,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import * as DatabasePath from "@opencode-ai/core/database/path"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -210,7 +211,7 @@ describe("Project.fromDirectory", () => {
           id: sessionID,
           project_id: rootProject.id,
           slug: sessionID,
-          directory: tmp,
+          directory: DatabasePath.directory(tmp),
           title: "test",
           version: "0.0.0-test",
           time_created: Date.now(),

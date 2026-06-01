@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import * as DatabasePath from "@opencode-ai/core/database/path"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
@@ -32,7 +33,7 @@ function seed(opts: { id: SessionID; dir: string; project: ProjectV2.ID }) {
         id: opts.id,
         project_id: opts.project,
         slug: opts.id,
-        directory: opts.dir,
+        directory: DatabasePath.directory(opts.dir),
         title: "test",
         version: "0.0.0-test",
         time_created: now,

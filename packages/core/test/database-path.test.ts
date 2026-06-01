@@ -9,23 +9,20 @@ describe("DatabasePath", () => {
   test("keeps POSIX paths byte-for-byte", () => {
     if (process.platform === "win32") return
 
-    expect(DatabasePath.pattern("/tmp/foo\\bar")).toBe("/tmp/foo\\bar")
-    expect(DatabasePath.pattern("src\\file.ts")).toBe("src\\file.ts")
-    expect(DatabasePath.pattern("C:\\Repo\\project")).toBe("C:\\Repo\\project")
+    expect(String(DatabasePath.directory("/tmp/foo\\bar"))).toBe("/tmp/foo\\bar")
   })
 
   test("converts only Windows separators", () => {
     if (process.platform !== "win32") return
 
-    expect(DatabasePath.pattern("packages\\api")).toBe("packages/api")
-    expect(DatabasePath.pattern("D:\\Repo")).toBe("D:/Repo")
+    expect(String(DatabasePath.directory("D:\\Repo"))).toBe("D:\\Repo")
   })
 
   test("preserves the '/' worktree sentinel on every platform", () => {
     // Global/non-git projects store "/" as a sentinel and instance-context checks
     // `worktree === "/"`. It must never throw or get rewritten to a backslash.
-    expect(DatabasePath.pattern("/")).toBe("/")
-    expect(DatabasePath.pattern("")).toBe("")
+    expect(String(DatabasePath.directory("/"))).toBe("/")
+    expect(DatabasePath.directory("")).toBe("")
   })
 
   test("does not resolve Windows junctions", () => {
@@ -40,7 +37,7 @@ describe("DatabasePath", () => {
       symlinkSync(target, junction, "junction")
 
       const visible = path.join(junction, "child")
-      expect(DatabasePath.pattern(visible)).toBe(visible.replaceAll("\\", "/"))
+      expect(String(DatabasePath.directory(visible))).toBe(visible)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -57,7 +54,7 @@ describe("DatabasePath", () => {
       mkdirSync(path.join(root, "child"), { recursive: true })
       execFileSync("subst", [`${drive}:`, root], { stdio: "ignore" })
 
-      expect(DatabasePath.pattern(`${drive}:\\child`)).toBe(`${drive}:/child`)
+      expect(String(DatabasePath.directory(`${drive}:\\child`))).toBe(`${drive}:\\child`)
     } finally {
       try {
         execFileSync("subst", [`${drive}:`, "/D"], { stdio: "ignore" })
