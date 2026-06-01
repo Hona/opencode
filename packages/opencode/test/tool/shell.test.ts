@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -14,6 +14,7 @@ import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
@@ -29,6 +30,40 @@ const shellLayer = Layer.mergeAll(
   RuntimeFlags.defaultLayer,
 )
 const it = testEffect(shellLayer)
+const encoder = new TextEncoder()
+const delayedPipeLayer = Layer.mergeAll(
+  Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(
+      Effect.fnUntraced(function* () {
+        const all = Stream.make(encoder.encode("STARTED")).pipe(
+          Stream.concat(Stream.fromEffect(Effect.sleep("750 millis").pipe(Effect.as(encoder.encode("LATE"))))),
+          Stream.concat(Stream.never),
+        )
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(0),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all,
+          getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        })
+      }),
+    ),
+  ),
+  AppFileSystem.defaultLayer,
+  Plugin.defaultLayer,
+  Truncate.defaultLayer,
+  Config.defaultLayer,
+  Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
+)
+const drainIt = testEffect(delayedPipeLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
   | Scope.Scope
@@ -1173,10 +1208,7 @@ describe("tool.shell abort", () => {
         const command = `${bin} -e ${squote(code)} ${squote(pidFile)}`
 
         const start = Date.now()
-        const result = yield* runIn(
-          projectRoot,
-          run({ command, description: "Detached child", timeout: 30_000 }),
-        )
+        const result = yield* runIn(projectRoot, run({ command, description: "Detached child", timeout: 30_000 }))
         const elapsed = Date.now() - start
 
         // Reap the detached daemon so the pipe closes and it does not leak.
@@ -1192,11 +1224,36 @@ describe("tool.shell abort", () => {
         expect(result.output).toContain("STARTED")
         expect(result.metadata.exit).toBe(0)
         expect(result.output).not.toContain("exceeding timeout")
-        // Returned via the idle drain (~500ms), not by waiting on the daemon's
+        // Returned after a bounded post-exit idle window, not by waiting on the daemon's
         // inherited pipe (60s) or the command timeout (30s).
         expect(elapsed).toBeLessThan(10_000)
       }),
     40_000,
+  )
+
+  drainIt.live("keeps inherited output that arrives after a short post-exit pause", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        let outputAt = 0
+        const result = yield* run(
+          { command: "ignored", description: "Delayed inherited output" },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                const output = (input.metadata as { output?: string }).output
+                if (!outputAt && output?.includes("STARTED")) outputAt = Date.now()
+              }),
+          },
+        )
+        const elapsed = Date.now() - outputAt
+        expect(outputAt).toBeGreaterThan(0)
+        expect(result.output).toContain("STARTED")
+        expect(result.output).toContain("LATE")
+        expect(elapsed).toBeLessThan(2_400)
+      }),
+    ),
   )
 })
 

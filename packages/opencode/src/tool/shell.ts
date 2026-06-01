@@ -26,6 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const POST_EXIT_OUTPUT_IDLE_TIMEOUT = "1 second"
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -530,19 +531,21 @@ export const ShellTool = Tool.define(
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                  description: input.description,
-                },
-              }).pipe(
-                Effect.ensuring(
-                  Effect.sync(() => {
-                    processing = false
-                    drained++
-                  }),
-                ),
-              )
+              return ctx
+                .metadata({
+                  metadata: {
+                    output: last,
+                    description: input.description,
+                  },
+                })
+                .pipe(
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      processing = false
+                      drained++
+                    }),
+                  ),
+                )
             }),
           )
 
@@ -571,20 +574,13 @@ export const ShellTool = Tool.define(
           }
 
           if (exit.kind === "exit") {
-            // The process has exited, but output it already wrote may still be buffered
-            // in the OS pipe / Node streams. Join the reader so it drains to EOF: for a
-            // normal command this returns the instant the streams end (full output, no
-            // fixed delay). A detached child can hold the pipe open forever with no
-            // further output, so also stop once the reader has produced nothing for a
-            // full idle window. The window resets after every completely processed
-            // chunk (`drained`) and cannot settle while a chunk is still being written
-            // or reported (`processing`), so only an exited process with an idle pipe
-            // hits the bound.
+            // `echo` reaches EOF immediately; only outliving children inheriting stdio (for example servers) hit this.
+            // Following MSBuild's tradeoff, agents return after 1s with no fully processed output.
             const settle = Effect.gen(function* () {
               let seen = -1
               while (processing || drained !== seen) {
                 seen = drained
-                yield* Effect.sleep("500 millis")
+                yield* Effect.sleep(POST_EXIT_OUTPUT_IDLE_TIMEOUT)
               }
             })
             yield* Effect.raceAll([Fiber.join(output).pipe(Effect.ignore), settle])
