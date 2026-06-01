@@ -387,6 +387,59 @@ describe("cross-spawn spawner", () => {
       10_000,
     )
 
+    fx.live(
+      "kill escalation does not hang when a stubborn descendant escapes the process group",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "escaped-descendant.pid")
+
+        // The parent stays alive and spawns a detached (own session) child that
+        // inherits stdio. SIGKILL to the parent's group never reaches the escaped
+        // child, so the parent's "close" never fires. kill() must escalate to
+        // SIGKILL and still return instead of waiting on "close" forever.
+        const code = [
+          'const cp = require("node:child_process")',
+          'const fs = require("node:fs")',
+          'const child = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "inherit" })',
+          "child.unref()",
+          "fs.writeFileSync(process.argv[1], String(child.pid))",
+          'process.on("SIGTERM", () => {})',
+          "setInterval(() => {}, 1000)",
+        ].join("\n")
+
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* ChildProcess.make(process.execPath, ["-e", code, pidFile])
+            yield* Effect.promise(() => readPid(pidFile))
+            return yield* handle
+              .kill({ forceKillAfter: 100 })
+              .pipe(
+                Effect.as("returned" as const),
+                Effect.timeoutOrElse({ duration: "4 seconds", orElse: () => Effect.succeed("hung" as const) }),
+              )
+          }),
+        )
+
+        // Reap the escaped descendant so it does not leak across the test run.
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+
+        expect(outcome).toBe("returned")
+      }),
+      15_000,
+    )
+
     fx.effect(
       "isRunning reflects process state",
       Effect.gen(function* () {

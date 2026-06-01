@@ -332,10 +332,23 @@ export const make = Effect.gen(function* () {
     const sig = opts?.killSignal ?? "SIGTERM"
     const send = (s: NodeJS.Signals) => Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
     const attempt = send(sig).pipe(Effect.andThen(Deferred.await(closed)), Effect.asVoid)
-    if (!opts?.forceKillAfter) return attempt
+    const grace = opts?.forceKillAfter
+    if (!grace) return attempt
     return Effect.timeoutOrElse(attempt, {
-      duration: opts.forceKillAfter,
-      orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(closed)), Effect.asVoid),
+      duration: grace,
+      // SIGKILL is the last resort: signal the group, then wait for `closed`
+      // only up to the same grace. A descendant that escaped the group keeps
+      // the inherited stdio open, so `closed` may never fire even now.
+      orElse: () =>
+        send("SIGKILL").pipe(
+          Effect.andThen(
+            Effect.timeoutOrElse(Deferred.await(closed), {
+              duration: grace,
+              orElse: () => Effect.void,
+            }),
+          ),
+          Effect.asVoid,
+        ),
     })
   }
 
