@@ -26,7 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
-const POST_EXIT_OUTPUT_IDLE_TIMEOUT = "1 second"
+const POST_EXIT_OUTPUT_IDLE_TIMEOUT = "500 millis"
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -568,7 +568,7 @@ export const ShellTool = Tool.define(
 
           if (exit.kind === "exit") {
             // Ordinary commands reach EOF immediately; outliving children can keep stdio open.
-            // After exit, stop waiting once processed output stays quiet across a 1s check.
+            // After exit, stop waiting once processed output stays quiet across a 500ms check.
             const settle = Effect.gen(function* () {
               let seen = -1
               while (processing || processed !== seen) {

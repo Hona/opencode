@@ -37,7 +37,7 @@ const delayedPipeLayer = Layer.mergeAll(
     ChildProcessSpawner.make(
       Effect.fnUntraced(function* () {
         const all = Stream.make(encoder.encode("STARTED")).pipe(
-          Stream.concat(Stream.fromEffect(Effect.sleep("750 millis").pipe(Effect.as(encoder.encode("LATE"))))),
+          Stream.concat(Stream.fromEffect(Effect.sleep("250 millis").pipe(Effect.as(encoder.encode("LATE"))))),
           Stream.concat(Stream.never),
         )
         return ChildProcessSpawner.makeHandle({
@@ -1231,7 +1231,7 @@ describe("tool.shell abort", () => {
     40_000,
   )
 
-  drainIt.live("keeps inherited output that arrives after a short post-exit pause", () =>
+  drainIt.live("keeps inherited output arriving within the idle check", () =>
     runIn(
       projectRoot,
       Effect.gen(function* () {
@@ -1251,7 +1251,7 @@ describe("tool.shell abort", () => {
         expect(outputAt).toBeGreaterThan(0)
         expect(result.output).toContain("STARTED")
         expect(result.output).toContain("LATE")
-        expect(elapsed).toBeLessThan(2_400)
+        expect(elapsed).toBeLessThan(1_400)
       }),
     ),
   )
