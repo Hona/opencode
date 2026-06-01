@@ -439,13 +439,18 @@ export const ShellTool = Tool.define(
       let last = ""
       const list: Chunk[] = []
       let used = 0
-      let drained = 0
+      let processed = 0
       let processing = false
       let file = ""
       let sink: ReturnType<typeof createWriteStream> | undefined
       let cut = false
       let expired = false
       let aborted = false
+
+      const markOutputProcessed = Effect.sync(() => {
+        processing = false
+        processed++
+      })
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -521,12 +526,7 @@ export const ShellTool = Tool.define(
                         },
                       }),
                     ),
-                    Effect.ensuring(
-                      Effect.sync(() => {
-                        processing = false
-                        drained++
-                      }),
-                    ),
+                    Effect.ensuring(markOutputProcessed),
                   )
                 }
               }
@@ -538,14 +538,7 @@ export const ShellTool = Tool.define(
                     description: input.description,
                   },
                 })
-                .pipe(
-                  Effect.ensuring(
-                    Effect.sync(() => {
-                      processing = false
-                      drained++
-                    }),
-                  ),
-                )
+                .pipe(Effect.ensuring(markOutputProcessed))
             }),
           )
 
@@ -574,12 +567,12 @@ export const ShellTool = Tool.define(
           }
 
           if (exit.kind === "exit") {
-            // `echo` reaches EOF immediately; only outliving children inheriting stdio (for example servers) hit this.
-            // Following MSBuild's tradeoff, agents return after 1s with no fully processed output.
+            // Ordinary commands reach EOF immediately; outliving children can keep stdio open.
+            // After exit, stop waiting once processed output stays quiet across a 1s check.
             const settle = Effect.gen(function* () {
               let seen = -1
-              while (processing || drained !== seen) {
-                seen = drained
+              while (processing || processed !== seen) {
+                seen = processed
                 yield* Effect.sleep(POST_EXIT_OUTPUT_IDLE_TIMEOUT)
               }
             })
