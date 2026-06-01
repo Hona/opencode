@@ -339,6 +339,31 @@ export const make = Effect.gen(function* () {
     })
   }
 
+  // Best-effort cleanup for a process that has already exited. Signal its group
+  // to sweep any descendants it left behind, but never block on `closed`: a
+  // descendant that escaped the group (or ignores the signal) keeps the
+  // inherited stdio open, which would otherwise hang scope teardown forever.
+  const reap = (
+    command: ChildProcess.StandardCommand,
+    proc: NodeChildProcess.ChildProcess,
+    closed: ExitSignal,
+    opts?: ChildProcess.KillOptions,
+  ) => {
+    const sig = opts?.killSignal ?? "SIGTERM"
+    const send = (s: NodeJS.Signals) => Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+    if (!opts?.forceKillAfter) return send(sig)
+    // Give the group a grace period to drain, then force-kill stragglers.
+    return send(sig).pipe(
+      Effect.andThen(
+        Effect.timeoutOrElse(Deferred.await(closed), {
+          duration: opts.forceKillAfter,
+          orElse: () => send("SIGKILL"),
+        }),
+      ),
+      Effect.asVoid,
+    )
+  }
+
   const source = (handle: ChildProcessHandle, from: ChildProcess.PipeFromOption | undefined) => {
     const opt = from ?? "stdout"
     switch (opt) {
@@ -382,7 +407,7 @@ export const make = Effect.gen(function* () {
                 const [code] = yield* Deferred.await(exited)
                 if (process.platform === "win32") return yield* Effect.void
                 if (code !== 0 && Predicate.isNotNull(code))
-                  return yield* Effect.ignore(terminate(command, proc, closed, command.options))
+                  return yield* Effect.ignore(reap(command, proc, closed, command.options))
                 return yield* Effect.void
               }
               return yield* Effect.ignore(terminate(command, proc, closed, command.options))

@@ -349,6 +349,44 @@ describe("cross-spawn spawner", () => {
       10_000,
     )
 
+    fx.live(
+      "scope cleanup does not hang when a failed parent leaves a descendant holding stdio",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "failed-parent-no-force.pid")
+
+        // No forceKillAfter, matching how the shell tool spawns. The descendant
+        // ignores SIGTERM and keeps the inherited stdio open, so the parent's
+        // "close" never fires. Closing the scope must not block on it; the test
+        // timeout below is the regression guard against an unbounded teardown.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* stubbornDescendant(
+              pidFile,
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(7) } }, 10)",
+            )
+            expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(7))
+          }),
+        )
+
+        // Reap the descendant so it does not leak across the test run.
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+      }),
+      10_000,
+    )
+
     fx.effect(
       "isRunning reflects process state",
       Effect.gen(function* () {
