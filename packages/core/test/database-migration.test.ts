@@ -4,10 +4,15 @@ import { fileURLToPath } from "url"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect } from "effect"
-import { sql } from "drizzle-orm"
+import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
@@ -118,6 +123,100 @@ describe("DatabaseMigration", () => {
           directory: "/home/me/we\\ird",
           path: "src\\weird",
         })
+      }),
+    )
+  })
+
+  test("maps native Windows paths through database columns", async () => {
+    if (process.platform !== "win32") return
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const projectID = ProjectV2.ID.make("codec_project")
+        const worktree = AbsolutePath.make("C:\\Repo\\Thing")
+        const sandbox = AbsolutePath.make("C:\\Repo\\Thing\\sandbox")
+        const directory = AbsolutePath.make("C:\\Repo\\Thing\\packages\\api")
+        const sessionID = SessionSchema.ID.make("ses_codec")
+
+        expect(() =>
+          Effect.runSync(
+            db
+              .insert(ProjectTable)
+              .values({
+                id: ProjectV2.ID.make("invalid_path"),
+                worktree: AbsolutePath.make("not-absolute"),
+                sandboxes: [],
+                time_created: 1,
+                time_updated: 1,
+              })
+              .run(),
+          ),
+        ).toThrow()
+
+        yield* db
+          .insert(ProjectTable)
+          .values({
+            id: projectID,
+            worktree,
+            sandboxes: [sandbox],
+            time_created: 1,
+            time_updated: 1,
+          })
+          .run()
+        yield* db
+          .insert(SessionTable)
+          .values({
+            id: sessionID,
+            project_id: projectID,
+            slug: "codec",
+            directory,
+            path: "packages\\api",
+            title: "Codec",
+            version: "test",
+            time_created: 1,
+            time_updated: 1,
+          })
+          .run()
+
+        expect(yield* db.get<{ worktree: string; sandboxes: string }>(sql`SELECT worktree, sandboxes FROM project WHERE id = ${projectID}`)).toEqual({
+          worktree: "C:/Repo/Thing",
+          sandboxes: JSON.stringify(["C:/Repo/Thing/sandbox"]),
+        })
+        expect(yield* db.get<{ directory: string; path: string }>(sql`SELECT directory, path FROM session WHERE id = ${sessionID}`)).toEqual({
+          directory: "C:/Repo/Thing/packages/api",
+          path: "packages/api",
+        })
+
+        const project = yield* db.select().from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).get()
+        const session = yield* db.select().from(SessionTable).where(eq(SessionTable.directory, directory)).get()
+        expect(project?.worktree).toBe(worktree)
+        expect(project?.sandboxes).toEqual([sandbox])
+        expect(session?.directory).toBe(directory)
+        expect(session?.path).toBe("packages/api")
+
+        expect((yield* db.select().from(SessionTable).where(eq(SessionTable.path, "packages\\api")).get())?.id).toBe(
+          sessionID,
+        )
+
+        const moved = AbsolutePath.make("D:\\Moved\\Thing")
+        const updated = yield* db
+          .update(ProjectTable)
+          .set({ worktree: moved, sandboxes: [moved] })
+          .where(eq(ProjectTable.id, projectID))
+          .returning()
+          .get()
+        expect(updated?.worktree).toBe(moved)
+        expect(updated?.sandboxes).toEqual([moved])
+        expect(
+          yield* db.get<{ worktree: string; sandboxes: string }>(sql`SELECT worktree, sandboxes FROM project WHERE id = ${projectID}`),
+        ).toEqual({ worktree: "D:/Moved/Thing", sandboxes: JSON.stringify(["D:/Moved/Thing"]) })
+        expect((yield* db.select().from(ProjectTable).where(inArray(ProjectTable.worktree, [moved])).get())?.id).toBe(
+          projectID,
+        )
+
+        yield* db.run(sql`UPDATE project SET worktree = ${"not-absolute"} WHERE id = ${projectID}`)
+        expect(() => Effect.runSync(db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())).toThrow()
       }),
     )
   })

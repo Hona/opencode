@@ -16,7 +16,6 @@ import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
-import * as PathStorage from "@opencode-ai/core/util/path-storage"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -73,7 +72,7 @@ export function fromRow(row: Row): Info {
       : undefined
   return {
     id: row.id,
-    worktree: PathStorage.toPlatform(row.worktree),
+    worktree: row.worktree,
     vcs: row.vcs ? Schema.decodeUnknownSync(ProjectVcs)(row.vcs) : undefined,
     name: row.name ?? undefined,
     icon,
@@ -82,7 +81,7 @@ export function fromRow(row: Row): Info {
       updated: row.time_updated,
       initialized: row.time_initialized ?? undefined,
     },
-    sandboxes: row.sandboxes.map(PathStorage.toPlatform),
+    sandboxes: row.sandboxes,
     commands: row.commands ?? undefined,
   }
 }
@@ -298,7 +297,7 @@ export const layer = Layer.effect(
         .insert(ProjectTable)
         .values({
           id: result.id,
-          worktree: PathStorage.absolute(result.worktree),
+          worktree: AbsolutePath.make(result.worktree),
           vcs: result.vcs ?? null,
           name: result.name,
           icon_url: result.icon?.url,
@@ -307,13 +306,13 @@ export const layer = Layer.effect(
           time_created: result.time.created,
           time_updated: result.time.updated,
           time_initialized: result.time.initialized,
-          sandboxes: result.sandboxes.map(PathStorage.absolute),
+          sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
           commands: result.commands,
         })
         .onConflictDoUpdate({
           target: ProjectTable.id,
           set: {
-            worktree: PathStorage.absolute(result.worktree),
+            worktree: AbsolutePath.make(result.worktree),
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
@@ -321,7 +320,7 @@ export const layer = Layer.effect(
             icon_color: result.icon?.color,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes.map(PathStorage.absolute),
+            sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
           },
         })
@@ -335,7 +334,7 @@ export const layer = Layer.effect(
           .where(
             and(
               eq(SessionTable.project_id, ProjectV2.ID.global),
-              eq(SessionTable.directory, PathStorage.absolute(data.directory)),
+              eq(SessionTable.directory, data.directory),
             ),
           )
           .run()
@@ -457,7 +456,7 @@ export const layer = Layer.effect(
     const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sandbox = PathStorage.absolute(directory)
+      const sandbox = AbsolutePath.make(directory)
       const sboxes = [...row.sandboxes]
       if (!sboxes.includes(sandbox)) sboxes.push(sandbox)
       const result = yield* db
@@ -474,7 +473,7 @@ export const layer = Layer.effect(
     const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sandbox = PathStorage.absolute(directory)
+      const sandbox = AbsolutePath.make(directory)
       const sboxes = row.sandboxes.filter((s) => s !== sandbox)
       const result = yield* db
         .update(ProjectTable)

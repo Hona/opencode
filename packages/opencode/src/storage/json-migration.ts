@@ -2,7 +2,6 @@ import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import * as PathStorage from "@opencode-ai/core/util/path-storage"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
@@ -165,8 +164,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
       projectIds.add(id)
       projectValues.push({
         id,
-        // Preserve empty legacy values; normal persisted paths must enter in storage form.
-        worktree: data.worktree ? PathStorage.absolute(data.worktree) : (data.worktree ?? "/"),
+        worktree: data.worktree ?? "/",
         vcs: data.vcs,
         name: data.name ?? undefined,
         icon_url: data.icon?.url,
@@ -175,7 +173,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         time_created: data.time?.created ?? now,
         time_updated: data.time?.updated ?? now,
         time_initialized: data.time?.initialized,
-        sandboxes: (data.sandboxes ?? []).map(PathStorage.absolute),
+        sandboxes: data.sandboxes ?? [],
         commands: data.commands,
       })
     }
@@ -209,9 +207,8 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         project_id: projectID,
         parent_id: data.parentID ?? null,
         slug: data.slug ?? "",
-        // Preserve empty legacy values; normal persisted paths must enter in storage form.
-        directory: data.directory ? PathStorage.absolute(data.directory) : (data.directory ?? ""),
-        path: data.path == null ? null : PathStorage.path(data.path),
+        directory: data.directory ?? "",
+        path: data.path ?? null,
         title: data.title ?? "",
         version: data.version ?? "",
         share_url: data.share?.url ?? null,

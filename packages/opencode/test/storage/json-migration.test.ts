@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { Database } from "bun:sqlite"
 import { drizzle, SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
+import { eq } from "drizzle-orm"
 import path from "path"
 import fs from "fs/promises"
 import { existsSync, readFileSync, readdirSync } from "fs"
@@ -9,6 +10,7 @@ import { JsonMigration } from "@/storage/json-migration"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
@@ -153,12 +155,20 @@ describe("JSON to SQLite migration", () => {
 
     await JsonMigration.run(db)
 
-    const project = db.select().from(ProjectTable).all()[0]
-    const session = db.select().from(SessionTable).all()[0]
-    expect(String(project.worktree)).toBe("C:/Repo/Thing")
-    expect(project.sandboxes.map(String)).toEqual(["C:/Repo/Thing/sandbox"])
-    expect(String(session.directory)).toBe("C:/Repo/Thing/packages/api")
-    expect(String(session.path)).toBe("packages/api")
+    const project = db
+      .select()
+      .from(ProjectTable)
+      .where(eq(ProjectTable.worktree, AbsolutePath.make("C:/Repo/Thing")))
+      .get()
+    const session = db
+      .select()
+      .from(SessionTable)
+      .where(eq(SessionTable.directory, AbsolutePath.make("C:/Repo/Thing/packages/api")))
+      .get()
+    expect(String(project?.worktree)).toBe("C:\\Repo\\Thing")
+    expect(project?.sandboxes.map(String)).toEqual(["C:\\Repo\\Thing\\sandbox"])
+    expect(String(session?.directory)).toBe("C:\\Repo\\Thing\\packages\\api")
+    expect(String(session?.path)).toBe("packages/api")
   })
 
   test("uses filename for project id when JSON has different value", async () => {

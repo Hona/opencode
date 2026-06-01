@@ -110,13 +110,6 @@ describe("session.list", () => {
 
         const created = yield* withSession({ title: "separator" }).pipe(provideInstance(dir))
 
-        // Stored value is the forward-slash storage form regardless of the native
-        // (backslash) directory the session was created in.
-        const row = yield* Database.Service.use(({ db }) =>
-          db.select({ directory: SessionTable.directory }).from(SessionTable).where(eq(SessionTable.id, created.id)).get(),
-        ).pipe(Effect.orDie)
-        expect(String(row?.directory)).toBe(dir.replaceAll("\\", "/"))
-
         // A forward-slash query (e.g. from the SDK/HTTP layer) must still find it —
         // this is the regression: backslash-stored vs forward-slash-queried.
         const forwardIDs = (yield* SessionNs.Service.use((session) =>
@@ -166,6 +159,14 @@ describe("session.list", () => {
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).toContain(deeper.id)
         expect(pathIDs).not.toContain(sibling.id)
+
+        if (process.platform === "win32") {
+          const windowsPathIDs = (yield* SessionNs.Service.use((session) =>
+            session.list({ path: "packages\\opencode\\src" }),
+          )).map((session) => session.id)
+          expect(windowsPathIDs).toContain(current.id)
+          expect(windowsPathIDs).toContain(deeper.id)
+        }
       }),
     { git: true },
   )
