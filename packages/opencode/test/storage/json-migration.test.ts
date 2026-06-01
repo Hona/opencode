@@ -133,6 +133,34 @@ describe("JSON to SQLite migration", () => {
     expect(projects[0].sandboxes.map(String)).toEqual(["/test/sandbox"])
   })
 
+  test("stores imported Windows project and session paths in storage form", async () => {
+    if (process.platform !== "win32") return
+
+    await writeProject(storageDir, {
+      id: "proj_test123abc",
+      worktree: "C:\\Repo\\Thing",
+      vcs: "git",
+      sandboxes: ["C:\\Repo\\Thing\\sandbox"],
+    })
+    await writeSession(storageDir, "proj_test123abc", {
+      id: "ses_test456def",
+      slug: "storage-path",
+      directory: "C:\\Repo\\Thing\\packages\\api",
+      path: "packages\\api",
+      title: "Storage Path",
+      version: "test",
+    })
+
+    await JsonMigration.run(db)
+
+    const project = db.select().from(ProjectTable).all()[0]
+    const session = db.select().from(SessionTable).all()[0]
+    expect(String(project.worktree)).toBe("C:/Repo/Thing")
+    expect(project.sandboxes.map(String)).toEqual(["C:/Repo/Thing/sandbox"])
+    expect(String(session.directory)).toBe("C:/Repo/Thing/packages/api")
+    expect(String(session.path)).toBe("packages/api")
+  })
+
   test("uses filename for project id when JSON has different value", async () => {
     await Bun.write(
       path.join(storageDir, "project", "proj_filename.json"),
