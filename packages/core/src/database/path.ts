@@ -1,5 +1,4 @@
 import nodePath from "path"
-import { like, type AnyColumn } from "drizzle-orm"
 import { customType } from "drizzle-orm/sqlite-core"
 import { AbsolutePath } from "../schema"
 
@@ -90,8 +89,3 @@ export const absoluteArrayColumn = customType<{
     return (JSON.parse(input) as string[]).map((item) => AbsolutePath.make(toPlatform(absolute(item))))
   },
 })
-
-// LIKE patterns are not bound through Drizzle column encoders.
-export function startsWith(column: AnyColumn, input: string) {
-  return like(column, `${storagePath(input)}/%`)
-}

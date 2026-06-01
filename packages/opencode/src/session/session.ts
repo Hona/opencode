@@ -39,7 +39,6 @@ import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
-import * as DatabasePath from "@opencode-ai/core/database/path"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -1048,7 +1047,9 @@ function listByProject(
   }
   if (input.path !== undefined) {
     if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), DatabasePath.startsWith(SessionTable.path, input.path)]
+      // Drizzle does not run LIKE parameters through pathColumn's encoder.
+      const path = process.platform === "win32" ? input.path.replaceAll("\\", "/") : input.path
+      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${path}/%`)]
 
       conditions.push(
         input.directory
