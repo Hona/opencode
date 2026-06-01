@@ -214,7 +214,7 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures stdout via .all when no stderr",
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", 'process.stdout.write("hello from stdout")'])
         const all = yield* decodeByteStream(handle.all)
         expect(all).toBe("hello from stdout")
       }),
@@ -332,7 +332,7 @@ describe("cross-spawn spawner", () => {
           Effect.gen(function* () {
             const handle = yield* stubbornDescendant(
               pidFile,
-              'const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(42) } }, 10)',
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(42) } }, 10)",
               { forceKillAfter: 100 },
             )
             expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(42))
