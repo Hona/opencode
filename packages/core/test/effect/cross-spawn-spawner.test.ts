@@ -58,6 +58,26 @@ async function gone(pid: number, timeout = 5_000) {
   return !alive(pid)
 }
 
+async function readPid(file: string, timeout = 5_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await fs.readFile(file, "utf-8").catch(() => undefined)
+    if (value) return Number(value)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`Process did not write its pid to ${file}`)
+}
+
+function stubbornDescendant(pidFile: string, parent: string, opts?: ChildProcess.CommandOptions) {
+  const code = [
+    'const cp = require("node:child_process")',
+    'const fs = require("node:fs")',
+    'cp.spawn(process.execPath, ["-e", "const fs = require(\\"node:fs\\"); process.on(\\"SIGTERM\\", () => {}); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", process.argv[1]], { stdio: "inherit" })',
+    parent,
+  ].join("\n")
+  return ChildProcess.make(process.execPath, ["-e", code, pidFile], opts)
+}
+
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     fx.effect(
@@ -101,12 +121,15 @@ describe("cross-spawn spawner", () => {
       "returns exit code when a detached child keeps stdio open",
       Effect.gen(function* () {
         const started = Date.now()
-        const handle = yield* js([
-          'const cp = require("node:child_process")',
-          'const child = cp.spawn(process.execPath, ["-e", "setTimeout(() => {}, 3000)"], { detached: true, stdio: "inherit" })',
-          "child.unref()",
-          "process.exit(0)",
-        ].join("\n"))
+        const handle = yield* ChildProcess.make(process.execPath, [
+          "-e",
+          [
+            'const cp = require("node:child_process")',
+            'const child = cp.spawn(process.execPath, ["-e", "setTimeout(() => {}, 3000)"], { detached: true, stdio: "inherit" })',
+            "child.unref()",
+            "process.exit(0)",
+          ].join("\n"),
+        ])
         const code = yield* handle.exitCode
 
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
@@ -211,7 +234,7 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures stdout via .all when no stderr",
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", 'process.stdout.write("hello from stdout")'])
         const all = yield* decodeByteStream(handle.all)
         expect(all).toBe("hello from stdout")
       }),
@@ -290,6 +313,135 @@ describe("cross-spawn spawner", () => {
         expect(Date.now() - started).toBeLessThan(1_000)
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
       }),
+    )
+
+    fx.live(
+      "forceKillAfter escalates when the parent exits before a stubborn descendant",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "stubborn-child.pid")
+        const handle = yield* stubbornDescendant(pidFile, "setInterval(() => {}, 1000)")
+        const pid = yield* Effect.promise(() => readPid(pidFile))
+
+        yield* handle.kill({ forceKillAfter: 100 }).pipe(Effect.ignore)
+        const terminated = yield* Effect.promise(() => gone(pid, 1_000))
+        if (!terminated) {
+          yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
+        }
+        expect(terminated).toBe(true)
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "scope cleanup escalates after a failed parent leaves a stubborn descendant",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "failed-parent-child.pid")
+        const pid = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* stubbornDescendant(
+              pidFile,
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(42) } }, 10)",
+              { forceKillAfter: 100 },
+            )
+            expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(42))
+            return yield* Effect.promise(() => readPid(pidFile))
+          }),
+        )
+
+        const terminated = yield* Effect.promise(() => gone(pid, 1_000))
+        if (!terminated) {
+          yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
+        }
+        expect(terminated).toBe(true)
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "scope cleanup returns when a failed parent leaves a descendant holding stdio",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "failed-parent-no-force.pid")
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* stubbornDescendant(
+              pidFile,
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(7) } }, 10)",
+            )
+            expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(7))
+          }),
+        )
+
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "kill escalation returns when a stubborn descendant escapes the process group",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "escaped-descendant.pid")
+        const code = [
+          'const cp = require("node:child_process")',
+          'const fs = require("node:fs")',
+          'const child = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "inherit" })',
+          "child.unref()",
+          "fs.writeFileSync(process.argv[1], String(child.pid))",
+          'process.on("SIGTERM", () => {})',
+          "setInterval(() => {}, 1000)",
+        ].join("\n")
+
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* ChildProcess.make(process.execPath, ["-e", code, pidFile])
+            yield* Effect.promise(() => readPid(pidFile))
+            return yield* handle.kill({ forceKillAfter: 100 }).pipe(Effect.as("returned" as const))
+          }),
+        )
+
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+
+        expect(outcome).toBe("returned")
+      }),
+      10_000,
     )
 
     fx.effect(

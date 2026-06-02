@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Cause, Effect, Fiber, Queue, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -19,7 +19,7 @@ import { ShellID } from "./shell/id"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
 import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner, type ExitCode } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
 
@@ -80,6 +80,12 @@ type Scan = {
 type Chunk = {
   text: string
   size: number
+}
+
+const ShellCompletion = {
+  exited: (code: ExitCode) => ({ _tag: "Exited" as const, code }),
+  aborted: { _tag: "Aborted" as const },
+  timedOut: { _tag: "TimedOut" as const },
 }
 
 export const log = Log.create({ service: "shell-tool" })
@@ -481,8 +487,25 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
-            Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+          const outputChunks = yield* Queue.bounded<string, Cause.Done>(16)
+          const metadataUpdates = yield* Queue.sliding<string, Cause.Done>(1)
+          const publishMetadata = (output: string) =>
+            Effect.sync(() => {
+              Queue.offerUnsafe(metadataUpdates, output)
+            })
+          const metadataPublication = yield* Stream.fromQueue(metadataUpdates).pipe(
+            Stream.runForEach((output) =>
+              ctx.metadata({
+                metadata: {
+                  output,
+                  description: input.description,
+                },
+              }),
+            ),
+            Effect.forkScoped,
+          )
+          const outputPersistence = yield* Stream.fromQueue(outputChunks).pipe(
+            Stream.runForEach((chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
               used += size
@@ -509,26 +532,27 @@ export const ShellTool = Tool.define(
                         full = ""
                       }),
                     ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                          description: input.description,
-                        },
-                      }),
-                    ),
+                    Effect.andThen(publishMetadata(last)),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                  description: input.description,
-                },
-              })
+              return publishMetadata(last)
             }),
+            Effect.forkScoped,
           )
+          const outputCapture = yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
+            Queue.offer(outputChunks, chunk).pipe(Effect.asVoid),
+          ).pipe(Effect.ensuring(Queue.end(outputChunks)), Effect.forkScoped)
+
+          // Foreground exit is the output boundary. Descendants may retain the inherited
+          // pipe indefinitely, so stop accepting bytes and persist only captured chunks.
+          const finalizeOutput = Effect.fnUntraced(function* () {
+            yield* Fiber.interrupt(outputCapture)
+            yield* Fiber.join(outputPersistence).pipe(Effect.ignore)
+            yield* Queue.end(metadataUpdates)
+            yield* Fiber.join(metadataPublication).pipe(Effect.ignore)
+          })
 
           const abort = Effect.callback<void>((resume) => {
             if (ctx.abort.aborted) return resume(Effect.void)
@@ -539,22 +563,28 @@ export const ShellTool = Tool.define(
 
           const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
-            abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+          const completion = yield* Effect.raceAll([
+            handle.exitCode.pipe(Effect.map(ShellCompletion.exited)),
+            abort.pipe(Effect.as(ShellCompletion.aborted)),
+            timeout.pipe(Effect.as(ShellCompletion.timedOut)),
           ])
 
-          if (exit.kind === "abort") {
-            aborted = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
-            expired = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+          switch (completion._tag) {
+            case "Exited":
+              break
+            case "Aborted":
+              aborted = true
+              yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+              break
+            case "TimedOut":
+              expired = true
+              yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+              break
           }
 
-          return exit.kind === "exit" ? exit.code : null
+          yield* finalizeOutput()
+
+          return completion._tag === "Exited" ? completion.code : null
         }),
       ).pipe(Effect.orDie)
 

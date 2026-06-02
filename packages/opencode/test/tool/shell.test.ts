@@ -1084,6 +1084,66 @@ describe("tool.shell abort", () => {
   )
 
   it.live(
+    "returns when a detached child keeps stdio open",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const pidFile = path.join(dir, "daemon.pid")
+          const code =
+            'const cp=require("node:child_process");const fs=require("node:fs");' +
+            'const child=cp.spawn(process.execPath,["-e","setTimeout(()=>{},60000)"],{detached:true,stdio:"inherit"});' +
+            'child.unref();fs.writeFileSync(Bun.argv[1],String(child.pid));process.stdout.write("STARTED");process.exit(0)'
+          const command = `${bin} -e ${evalarg(code)} ${quote(pidFile)}`
+          const started = Date.now()
+          const result = yield* run({
+            command: PS.has(sh()) ? `& ${command}` : command,
+            description: "Detached child",
+            timeout: 30_000,
+          })
+          const pid = Number(yield* (yield* AppFileSystem.Service).readFileString(pidFile))
+          yield* Effect.sync(() => process.kill(pid))
+
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("STARTED")
+          expect(Date.now() - started).toBeLessThan(5_000)
+        }),
+      ),
+    15_000,
+  )
+
+  it.live(
+    "returns when a detached child keeps writing output",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const pidFile = path.join(dir, "logging-daemon.pid")
+          const code =
+            'const cp=require("node:child_process");const fs=require("node:fs");' +
+            'const child=cp.spawn(process.execPath,["-e","setInterval(()=>process.stdout.write(\\"tick\\"),10)"],{detached:true,stdio:"inherit"});' +
+            'child.unref();fs.writeFileSync(Bun.argv[1],String(child.pid));process.stdout.write("STARTED");process.exit(0)'
+          const command = `${bin} -e ${evalarg(code)} ${quote(pidFile)}`
+          const started = Date.now()
+          const result = yield* run({
+            command: PS.has(sh()) ? `& ${command}` : command,
+            description: "Logging detached child",
+            timeout: 30_000,
+          })
+          const pid = Number(yield* (yield* AppFileSystem.Service).readFileString(pidFile))
+          yield* Effect.sync(() => process.kill(pid))
+
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("STARTED")
+          expect(Date.now() - started).toBeLessThan(5_000)
+        }),
+      ),
+    15_000,
+  )
+
+  it.live(
     "uses RuntimeFlags bashDefaultTimeoutMs when timeout is omitted",
     () =>
       runIn(
@@ -1228,6 +1288,35 @@ describe("tool.shell truncation", () => {
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
+      }),
+    ),
+  )
+
+  it.live("saves all fast output while metadata processing is delayed", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const byteCount = 1_000_000
+        let delayed = false
+        const result = yield* run(
+          {
+            command: fill("bytes", byteCount),
+            description: "Generate fast output with delayed metadata",
+          },
+          {
+            ...ctx,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (!output || delayed) return Effect.void
+              delayed = true
+              return Effect.sleep("1200 millis")
+            },
+          },
+        )
+        const filepath = (result.metadata as { outputPath?: string }).outputPath
+        expect(filepath).toBeTruthy()
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
+        expect(saved.length).toBe(byteCount)
       }),
     ),
   )
