@@ -117,6 +117,12 @@ const fill = (mode: "lines" | "bytes", n: number) => {
   if (PS.has(sh())) return `& ${text}`
   return text
 }
+const reap = (pid: number) =>
+  Effect.sync(() => {
+    try {
+      process.kill(pid)
+    } catch {}
+  })
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
@@ -1103,9 +1109,10 @@ describe("tool.shell abort", () => {
             timeout: 30_000,
           })
           const pid = Number(yield* (yield* AppFileSystem.Service).readFileString(pidFile))
-          yield* Effect.sync(() => process.kill(pid))
+          yield* reap(pid)
 
           expect(result.metadata.exit).toBe(0)
+          expect(result.metadata).toMatchObject({ outputIncomplete: true })
           expect(result.output).toContain("STARTED")
           expect(Date.now() - started).toBeLessThan(5_000)
         }),
@@ -1133,11 +1140,59 @@ describe("tool.shell abort", () => {
             timeout: 30_000,
           })
           const pid = Number(yield* (yield* AppFileSystem.Service).readFileString(pidFile))
-          yield* Effect.sync(() => process.kill(pid))
+          yield* reap(pid)
 
           expect(result.metadata.exit).toBe(0)
+          expect(result.metadata).toMatchObject({ outputIncomplete: true })
           expect(result.output).toContain("STARTED")
           expect(Date.now() - started).toBeLessThan(5_000)
+        }),
+      ),
+    15_000,
+  )
+
+  it.live(
+    "captures inherited output emitted during the post-exit grace period",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const pidFile = path.join(dir, "delayed-daemon.pid")
+          const child = [
+            'const fs=require("node:fs")',
+            "fs.writeFileSync(process.argv[1],String(process.pid))",
+            'setTimeout(()=>process.stdout.write("LATE"),250)',
+            "setTimeout(()=>{},60000)",
+          ].join(";")
+          const code =
+            'const cp=require("node:child_process");const fs=require("node:fs");' +
+            `const child=cp.spawn(process.execPath,["-e",${JSON.stringify(child)},Bun.argv[1]],{detached:true,stdio:"inherit"});` +
+            'child.unref();while(!fs.existsSync(Bun.argv[1])){};process.stdout.write("STARTED");process.exit(0)'
+          const command = `${bin} -e ${evalarg(code)} ${quote(pidFile)}`
+          let outputAt = 0
+          const result = yield* run(
+            {
+              command: PS.has(sh()) ? `& ${command}` : command,
+              description: "Delayed inherited output",
+            },
+            {
+              ...ctx,
+              metadata: (input) =>
+                Effect.sync(() => {
+                  const output = (input.metadata as { output?: string }).output
+                  if (!outputAt && output?.includes("STARTED")) outputAt = Date.now()
+                }),
+            },
+          )
+          const pid = Number(yield* (yield* AppFileSystem.Service).readFileString(pidFile))
+          yield* reap(pid)
+
+          expect(result.metadata).toMatchObject({ outputIncomplete: true })
+          expect(result.output).toContain("STARTED")
+          expect(result.output).toContain("LATE")
+          expect(outputAt).toBeGreaterThan(0)
+          expect(Date.now() - outputAt).toBeLessThan(1_000)
         }),
       ),
     15_000,
@@ -1191,6 +1246,7 @@ describe("tool.shell abort", () => {
           description: "Non-zero exit",
         })
         expect(result.metadata.exit).toBe(42)
+        expect(result.metadata).not.toHaveProperty("outputIncomplete")
       }),
     ),
   )

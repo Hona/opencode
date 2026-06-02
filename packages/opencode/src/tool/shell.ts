@@ -26,6 +26,11 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const OutputDrainPolicy = {
+  afterForegroundExit: {
+    gracePeriod: "500 millis",
+  },
+} as const
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -86,6 +91,11 @@ const ShellCompletion = {
   exited: (code: ExitCode) => ({ _tag: "Exited" as const, code }),
   aborted: { _tag: "Aborted" as const },
   timedOut: { _tag: "TimedOut" as const },
+}
+
+const OutputFinalization = {
+  reachedEndOfStream: { _tag: "ReachedEndOfStream" as const },
+  exceededPostExitGracePeriod: { _tag: "ExceededPostExitGracePeriod" as const },
 }
 
 export const log = Log.create({ service: "shell-tool" })
@@ -482,7 +492,7 @@ export const ShellTool = Tool.define(
         },
       })
 
-      const code: number | null = yield* Effect.scoped(
+      const execution = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
@@ -545,13 +555,25 @@ export const ShellTool = Tool.define(
             Queue.offer(outputChunks, chunk).pipe(Effect.asVoid),
           ).pipe(Effect.ensuring(Queue.end(outputChunks)), Effect.forkScoped)
 
-          // Foreground exit is the output boundary. Descendants may retain the inherited
-          // pipe indefinitely, so stop accepting bytes and persist only captured chunks.
+          // Foreground exit starts a bounded grace period for final stream delivery.
+          // Descendants may retain the inherited pipe indefinitely, so the absolute
+          // deadline never resets when output arrives.
           const finalizeOutput = Effect.fnUntraced(function* () {
-            yield* Fiber.interrupt(outputCapture)
+            const finalization = yield* Fiber.join(outputCapture).pipe(
+              Effect.ignore,
+              Effect.as(OutputFinalization.reachedEndOfStream),
+              Effect.timeoutOrElse({
+                duration: OutputDrainPolicy.afterForegroundExit.gracePeriod,
+                orElse: () => Effect.succeed(OutputFinalization.exceededPostExitGracePeriod),
+              }),
+            )
+            if (finalization._tag === "ExceededPostExitGracePeriod") {
+              yield* Fiber.interrupt(outputCapture)
+            }
             yield* Fiber.join(outputPersistence).pipe(Effect.ignore)
             yield* Queue.end(metadataUpdates)
             yield* Fiber.join(metadataPublication).pipe(Effect.ignore)
+            return finalization
           })
 
           const abort = Effect.callback<void>((resume) => {
@@ -582,9 +604,12 @@ export const ShellTool = Tool.define(
               break
           }
 
-          yield* finalizeOutput()
+          const outputFinalization = yield* finalizeOutput()
 
-          return completion._tag === "Exited" ? completion.code : null
+          return {
+            code: completion._tag === "Exited" ? completion.code : null,
+            outputFinalization,
+          }
         }),
       ).pipe(Effect.orDie)
 
@@ -616,9 +641,10 @@ export const ShellTool = Tool.define(
         title: input.description,
         metadata: {
           output: last || preview(output),
-          exit: code,
+          exit: execution.code === null ? null : Number(execution.code),
           description: input.description,
           truncated: cut,
+          ...(execution.outputFinalization._tag === "ExceededPostExitGracePeriod" ? { outputIncomplete: true } : {}),
           ...(cut && file ? { outputPath: file } : {}),
         },
         output,
