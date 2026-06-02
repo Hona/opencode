@@ -96,6 +96,23 @@ describe("cross-spawn spawner", () => {
         expect(code).toBe(ChildProcessSpawner.ExitCode(42))
       }),
     )
+
+    fx.live(
+      "returns exit code when a detached child keeps stdio open",
+      Effect.gen(function* () {
+        const started = Date.now()
+        const handle = yield* js([
+          'const cp = require("node:child_process")',
+          'const child = cp.spawn(process.execPath, ["-e", "setTimeout(() => {}, 3000)"], { detached: true, stdio: "inherit" })',
+          "child.unref()",
+          "process.exit(0)",
+        ].join("\n"))
+        const code = yield* handle.exitCode
+
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(Date.now() - started).toBeLessThan(2_000)
+      }),
+    )
   })
 
   describe("cwd option", () => {
