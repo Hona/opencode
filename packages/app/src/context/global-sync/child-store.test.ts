@@ -6,8 +6,7 @@ import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
-const queryGroups: Array<() => { queries: Array<{ enabled?: boolean }> }> = []
-const querySingles: Array<() => { enabled?: boolean }> = []
+const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
 
 const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -50,20 +49,17 @@ beforeAll(async () => {
     persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
   }))
   mock.module("@tanstack/solid-query", () => ({
-    useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
-      queryGroups.push(options)
-      return [
-        { isLoading: true, data: undefined },
-        { isLoading: false, data: [] },
-        { isLoading: false, data: provider },
-      ]
-    },
-    useQuery: (options: () => { enabled?: boolean }) => {
+    useQuery: (options: () => { queryKey?: unknown[]; enabled?: boolean }) => {
       querySingles.push(options)
       return {
-        isLoading: false,
+        get isLoading() {
+          return options().queryKey?.[1] === "path"
+        },
         get data() {
-          return options().enabled ? { demo: { status: "disabled" } } : undefined
+          if (options().queryKey?.[1] === "mcp") return options().enabled ? { demo: { status: "disabled" } } : undefined
+          if (options().queryKey?.[1] === "lsp") return []
+          if (options().queryKey?.[1] === "providers") return provider
+          return undefined
         },
       }
     },
@@ -190,7 +186,8 @@ describe("createChildStoreManager", () => {
     try {
       if (!manager) throw new Error("manager required")
       const [store, setStore] = manager.child("/project", { bootstrap: false })
-      const query = querySingles[offset]
+      expect(querySingles.length - offset).toBe(4)
+      const query = querySingles[offset + 1]
       if (!query) throw new Error("query required")
       expect(query().enabled).toBe(false)
 
