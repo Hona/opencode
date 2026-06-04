@@ -467,9 +467,12 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
             const session = getSession(sessionID)
             if (!session) return
             await hydrateSessionLineage(session, getSession, async (ancestorID) => {
-              const response = await retry(() => client.session.get({ sessionID: ancestorID }))
+              const response = await retry(() => client.session.get({ sessionID: ancestorID })).catch((error) => {
+                if (isNotFound(error)) return
+                throw error
+              })
               if (!tracked(directory, sessionID)) return
-              const data = response.data
+              const data = response?.data
               if (!data) return
               setStore(
                 "session",

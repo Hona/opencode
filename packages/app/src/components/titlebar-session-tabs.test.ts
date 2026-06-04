@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { createSessionTabResolver, getRootSession, removeDeletedSessionTabs } from "./titlebar-session-tabs"
+import {
+  createSessionTabResolver,
+  findSessionTab,
+  getRootSession,
+  removeDeletedSessionTabs,
+} from "./titlebar-session-tabs"
 
 describe("titlebar session tabs", () => {
   test("uses the root session for subagent routes", () => {
@@ -42,6 +47,25 @@ describe("titlebar session tabs", () => {
     sessions.set("root", { id: "root", title: "After" })
 
     expect(resolve()?.info.title).toBe("After")
+  })
+
+  test("keeps the last root tab metadata after a remote archive", () => {
+    const sessions = new Map([["root", { id: "root", title: "Root" }]])
+    const resolve = createSessionTabResolver({ sessionId: "root" }, (id) => sessions.get(id))
+
+    expect(resolve()?.info.title).toBe("Root")
+    sessions.delete("root")
+    expect(resolve()?.info.title).toBe("Root")
+  })
+
+  test("finds an existing root tab after its metadata is removed", () => {
+    const tabs = [{ sessionId: "root" }]
+    const sessions = new Map([
+      ["leaf", { parentID: "child" }],
+      ["child", { parentID: "root" }],
+    ])
+
+    expect(findSessionTab(tabs, "leaf", (id) => sessions.get(id))).toBe(tabs[0])
   })
 
   test("navigates after removing the active root tab from a subagent route", () => {

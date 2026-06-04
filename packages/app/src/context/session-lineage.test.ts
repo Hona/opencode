@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hydrateSessionLineage } from "./session-lineage"
+import { hydrateSessionLineage, sessionTreeIDs } from "./session-lineage"
 
 describe("session lineage", () => {
   test("hydrates missing ancestors for a routed subagent", async () => {
@@ -39,5 +39,11 @@ describe("session lineage", () => {
     )
 
     expect(loaded).toEqual([])
+  })
+
+  test("collects a root session tree", () => {
+    expect([
+      ...sessionTreeIDs([{ id: "root" }, { id: "child", parentID: "root" }, { id: "leaf", parentID: "child" }], "root"),
+    ]).toEqual(["root", "child", "leaf"])
   })
 })

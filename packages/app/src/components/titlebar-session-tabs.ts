@@ -17,9 +17,27 @@ export function createSessionTabResolver<T extends { sessionId: string }, U>(
   tab: T,
   get: (id: string) => U | undefined,
 ) {
+  let cached: U | undefined
   return () => {
-    const info = get(tab.sessionId)
-    return info ? { ...tab, info } : undefined
+    cached = get(tab.sessionId) ?? cached
+    return cached ? { ...tab, info: cached } : undefined
+  }
+}
+
+export function findSessionTab<T extends { sessionId: string }>(
+  tabs: T[],
+  id: string,
+  get: (id: string) => { parentID?: string } | undefined,
+) {
+  const seen = new Set<string>()
+  let currentID: string | undefined = id
+
+  while (currentID) {
+    if (seen.has(currentID)) return
+    seen.add(currentID)
+    const tab = tabs.find((tab) => tab.sessionId === currentID)
+    if (tab) return tab
+    currentID = get(currentID)?.parentID
   }
 }
 

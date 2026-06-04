@@ -64,6 +64,7 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
@@ -90,6 +91,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
+import { sessionTreeIDs } from "@/context/session-lineage"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -973,8 +975,10 @@ export default function Layout(props: ParentProps) {
   async function archiveSession(session: Session) {
     const [store, setStore] = serverSync.child(session.directory)
     const sessions = store.session ?? []
-    const index = sessions.findIndex((s) => s.id === session.id)
-    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+    const roots = sessions.filter((item) => !item.parentID)
+    const index = roots.findIndex((item) => item.id === session.id)
+    const nextSession = roots[index + 1] ?? roots[index - 1]
+    const archived = sessionTreeIDs(sessions, session.id)
 
     await serverSDK.client.session.update({
       directory: session.directory,
@@ -987,13 +991,14 @@ export default function Layout(props: ParentProps) {
         if (match.found) draft.session.splice(match.index, 1)
       }),
     )
-    if (session.id === params.id) {
+    if (params.id && archived.has(params.id)) {
       if (nextSession) {
         navigate(`/${params.dir}/session/${nextSession.id}`)
       } else {
         navigate(`/${params.dir}/session`)
       }
     }
+    notifySessionTabsRemoved({ directory: session.directory, sessionIDs: [...archived] })
   }
 
   command.register("layout", () => {

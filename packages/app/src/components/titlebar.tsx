@@ -29,7 +29,12 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
-import { createSessionTabResolver, getRootSession, removeDeletedSessionTabs } from "@/components/titlebar-session-tabs"
+import {
+  createSessionTabResolver,
+  findSessionTab,
+  getRootSession,
+  removeDeletedSessionTabs,
+} from "@/components/titlebar-session-tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -341,8 +346,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentSessionTab = () => {
               if (!params.dir || !params.id) return
               const tab = tabForSession(params.dir, params.id)
-              if (!tab) return
-              return tabsStore.find((item) => item.href === tab.href)
+              if (tab) return tabsStore.find((item) => item.href === tab.href)
+              const dir = decodeDirectory(params.dir)
+              if (!dir) return
+              const [store] = serverSync.child(dir)
+              return findSessionTab(tabsStore, params.id, (id) => store.session.find((session) => session.id === id))
             }
 
             const closeCurrentSessionTab = () => {
