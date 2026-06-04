@@ -24,24 +24,7 @@ export function createSessionTabResolver<T extends { sessionId: string }, U>(
   }
 }
 
-export function findSessionTab<T extends { sessionId: string }>(
-  tabs: T[],
-  id: string,
-  get: (id: string) => { parentID?: string } | undefined,
-) {
-  const seen = new Set<string>()
-  let currentID: string | undefined = id
-
-  while (currentID) {
-    if (seen.has(currentID)) return
-    seen.add(currentID)
-    const tab = tabs.find((tab) => tab.sessionId === currentID)
-    if (tab) return tab
-    currentID = get(currentID)?.parentID
-  }
-}
-
-export function removeDeletedSessionTabs<T extends { dir: string; sessionId: string; href: string }>(
+export function removeUnavailableSessionTabs<T extends { dir: string; sessionId: string; href: string }>(
   tabs: T[],
   input: { directory: string; sessionIDs: string[] },
   current?: { href: string; sessionId: string },
@@ -67,6 +50,6 @@ export function removeDeletedSessionTabs<T extends { dir: string; sessionId: str
     tabs.splice(i, 1)
   }
 
-  if (!removedCurrent) return
-  return tabs[currentIndex]?.href ?? tabs[tabs.length - 1]?.href ?? "/"
+  if (removedCurrent) return tabs[currentIndex]?.href ?? tabs[tabs.length - 1]?.href ?? "/"
+  if (current && sessionIDs.has(current.sessionId)) return tabs[currentIndex]?.href ?? "/"
 }

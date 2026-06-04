@@ -400,7 +400,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
-      onSessionDeleted: (sessionIDs) => notifySessionTabsRemoved({ directory, sessionIDs }),
+      onSessionRemoved: (sessionIDs) => notifySessionTabsRemoved({ directory, sessionIDs }),
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

@@ -100,7 +100,7 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
-  onSessionDeleted?: (sessionIDs: string[]) => void
+  onSessionRemoved?: (sessionIDs: string[]) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -127,7 +127,8 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
-        if (input.store.session[result.index]!.time.archived === info.time.archived) break
+        const removed = [...sessionTreeIDs(input.store.session, info.id)]
+        if (result.found && input.store.session[result.index]?.time.archived === info.time.archived) break
         if (result.found) {
           input.setStore(
             "session",
@@ -137,6 +138,7 @@ export function applyDirectoryEvent(input: {
           )
         }
         cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
+        input.onSessionRemoved?.(removed)
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -165,7 +167,7 @@ export function applyDirectoryEvent(input: {
         )
       }
       cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
-      input.onSessionDeleted?.(deleted)
+      input.onSessionRemoved?.(deleted)
       if (info.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break

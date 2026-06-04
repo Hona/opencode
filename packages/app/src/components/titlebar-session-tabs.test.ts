@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  createSessionTabResolver,
-  findSessionTab,
-  getRootSession,
-  removeDeletedSessionTabs,
-} from "./titlebar-session-tabs"
+import { createSessionTabResolver, getRootSession, removeUnavailableSessionTabs } from "./titlebar-session-tabs"
 
 describe("titlebar session tabs", () => {
   test("uses the root session for subagent routes", () => {
@@ -58,16 +53,6 @@ describe("titlebar session tabs", () => {
     expect(resolve()?.info.title).toBe("Root")
   })
 
-  test("finds an existing root tab after its metadata is removed", () => {
-    const tabs = [{ sessionId: "root" }]
-    const sessions = new Map([
-      ["leaf", { parentID: "child" }],
-      ["child", { parentID: "root" }],
-    ])
-
-    expect(findSessionTab(tabs, "leaf", (id) => sessions.get(id))).toBe(tabs[0])
-  })
-
   test("navigates after removing the active root tab from a subagent route", () => {
     const tabs = [
       { dir: "/workspace", sessionId: "root", href: "/workspace/session/root" },
@@ -75,7 +60,7 @@ describe("titlebar session tabs", () => {
     ]
 
     expect(
-      removeDeletedSessionTabs(
+      removeUnavailableSessionTabs(
         tabs,
         { directory: "/workspace", sessionIDs: ["root", "child"] },
         {
@@ -85,5 +70,33 @@ describe("titlebar session tabs", () => {
       ),
     ).toBe("/workspace/session/next")
     expect(tabs).toEqual([{ dir: "/workspace", sessionId: "next", href: "/workspace/session/next" }])
+  })
+
+  test("navigates after child-first remote deletion events", () => {
+    const tabs = [
+      { dir: "/workspace", sessionId: "root", href: "/workspace/session/root" },
+      { dir: "/workspace", sessionId: "next", href: "/workspace/session/next" },
+    ]
+
+    expect(
+      removeUnavailableSessionTabs(
+        tabs,
+        { directory: "/workspace", sessionIDs: ["leaf"] },
+        {
+          href: "/workspace/session/root",
+          sessionId: "leaf",
+        },
+      ),
+    ).toBe("/workspace/session/root")
+    expect(
+      removeUnavailableSessionTabs(
+        tabs,
+        { directory: "/workspace", sessionIDs: ["root"] },
+        {
+          href: "/workspace/session/root",
+          sessionId: "leaf",
+        },
+      ),
+    ).toBe("/workspace/session/next")
   })
 })

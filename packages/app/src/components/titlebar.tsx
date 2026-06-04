@@ -31,9 +31,8 @@ import {
 } from "@/components/titlebar-session-events"
 import {
   createSessionTabResolver,
-  findSessionTab,
   getRootSession,
-  removeDeletedSessionTabs,
+  removeUnavailableSessionTabs,
 } from "@/components/titlebar-session-tabs"
 
 type TauriDesktopWindow = {
@@ -260,13 +259,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             }
 
             type Tab = { dir: string; sessionId: string; href: string }
+            const routeTabs = new Map<string, string>()
+            const clearRoutesForTab = (href: string) => {
+              for (const [route, tab] of routeTabs) {
+                if (tab === href) routeTabs.delete(route)
+              }
+            }
             const tabForSession = (b64Dir: string, sessionId: string) => {
               const dir = decodeDirectory(b64Dir)
               if (!dir) return
               const [store] = serverSync.child(dir)
               const session = getRootSession(sessionId, (id) => store.session.find((session) => session.id === id))
               if (!session) return
-              return { dir, sessionId: session.id, href: makeSessionHref(b64Dir, session.id) }
+              const href = makeSessionHref(b64Dir, session.id)
+              routeTabs.set(makeSessionHref(b64Dir, sessionId), href)
+              return { dir, sessionId: session.id, href }
             }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
@@ -294,6 +301,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       produce((tabs) => {
                         const index = tabs.findIndex((t) => t.href === href)
                         if (index === -1) return
+                        clearRoutesForTab(href)
                         tabs.splice(index, 1)
                         const nextTab = tabs[index] ?? tabs[tabs.length - 1]
                         if (nextTab) navigate(nextTab.href)
@@ -306,13 +314,23 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   void startTransition(() => {
                     setStore(
                       produce((tabs) => {
-                        const next = removeDeletedSessionTabs(
+                        const hrefs = new Set(tabs.map((tab) => tab.href))
+                        const next = removeUnavailableSessionTabs(
                           tabs,
                           input,
                           params.dir && params.id
-                            ? { href: makeSessionHref(params.dir, params.id), sessionId: params.id }
+                            ? {
+                                href:
+                                  currentSessionTab()?.href ??
+                                  routeTabs.get(makeSessionHref(params.dir, params.id)) ??
+                                  makeSessionHref(params.dir, params.id),
+                                sessionId: params.id,
+                              }
                             : undefined,
                         )
+                        for (const href of hrefs) {
+                          if (!tabs.some((tab) => tab.href === href)) clearRoutesForTab(href)
+                        }
                         if (next) navigate(next)
                       }),
                     )
@@ -346,11 +364,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentSessionTab = () => {
               if (!params.dir || !params.id) return
               const tab = tabForSession(params.dir, params.id)
-              if (tab) return tabsStore.find((item) => item.href === tab.href)
-              const dir = decodeDirectory(params.dir)
-              if (!dir) return
-              const [store] = serverSync.child(dir)
-              return findSessionTab(tabsStore, params.id, (id) => store.session.find((session) => session.id === id))
+              const href = tab?.href ?? routeTabs.get(makeSessionHref(params.dir, params.id))
+              if (!href) return
+              return tabsStore.find((item) => item.href === href)
             }
 
             const closeCurrentSessionTab = () => {
