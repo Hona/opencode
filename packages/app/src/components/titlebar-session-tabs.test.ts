@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createSessionTabResolver, getRootSession } from "./titlebar-session-tabs"
+import { createSessionTabResolver, getRootSession, removeDeletedSessionTabs } from "./titlebar-session-tabs"
 
 describe("titlebar session tabs", () => {
   test("uses the root session for subagent routes", () => {
@@ -33,5 +33,24 @@ describe("titlebar session tabs", () => {
     sessions.set("root", { id: "root", title: "After" })
 
     expect(resolve()?.info.title).toBe("After")
+  })
+
+  test("navigates after removing the active root tab from a subagent route", () => {
+    const tabs = [
+      { dir: "/workspace", sessionId: "root", href: "/workspace/session/root" },
+      { dir: "/workspace", sessionId: "next", href: "/workspace/session/next" },
+    ]
+
+    expect(
+      removeDeletedSessionTabs(
+        tabs,
+        { directory: "/workspace", sessionIDs: ["root", "child"] },
+        {
+          href: "/workspace/session/child",
+          sessionId: "child",
+        },
+      ),
+    ).toBe("/workspace/session/next")
+    expect(tabs).toEqual([{ dir: "/workspace", sessionId: "next", href: "/workspace/session/next" }])
   })
 })

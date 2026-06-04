@@ -29,7 +29,7 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
-import { createSessionTabResolver, getRootSession } from "@/components/titlebar-session-tabs"
+import { createSessionTabResolver, getRootSession, removeDeletedSessionTabs } from "@/components/titlebar-session-tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -301,26 +301,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   void startTransition(() => {
                     setStore(
                       produce((tabs) => {
-                        const sessionIDs = new Set(input.sessionIDs)
-                        const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
-                        const currentIndex = currentHref ? tabs.findIndex((tab) => tab.href === currentHref) : -1
-                        const removedCurrent =
-                          currentIndex !== -1 &&
-                          tabs[currentIndex]?.dir === input.directory &&
-                          sessionIDs.has(tabs[currentIndex]?.sessionId ?? "")
-
-                        for (let i = tabs.length - 1; i >= 0; i--) {
-                          const tab = tabs[i]
-                          if (!tab) continue
-                          if (tab.dir !== input.directory) continue
-                          if (!sessionIDs.has(tab.sessionId)) continue
-                          tabs.splice(i, 1)
-                        }
-
-                        if (!removedCurrent) return
-                        const nextTab = tabs[currentIndex] ?? tabs[tabs.length - 1]
-                        if (nextTab) navigate(nextTab.href)
-                        else navigate("/")
+                        const next = removeDeletedSessionTabs(
+                          tabs,
+                          input,
+                          params.dir && params.id
+                            ? { href: makeSessionHref(params.dir, params.id), sessionId: params.id }
+                            : undefined,
+                        )
+                        if (next) navigate(next)
                       }),
                     )
                   })
