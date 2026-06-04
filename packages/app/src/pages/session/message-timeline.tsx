@@ -65,7 +65,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { createSessionGraph } from "@/session/graph"
+import { cachedSessionTreeIDs } from "@/session/tree"
 import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
@@ -854,7 +854,7 @@ export function MessageTimeline(props: {
     const roots = sessions.filter((item) => !item.parentID)
     const index = roots.findIndex((item) => item.id === sessionID)
     const nextSession = index === -1 ? undefined : (roots[index + 1] ?? roots[index - 1])
-    const sessionIDs = [...createSessionGraph(sessions).cachedSubtreeIDs(sessionID)]
+    const sessionIDs = [...cachedSessionTreeIDs(sessions, sessionID)]
 
     await sdk.client.session
       .update({ sessionID, time: { archived: Date.now() } })
@@ -899,7 +899,7 @@ export function MessageTimeline(props: {
 
     if (!result) return false
 
-    const removed = createSessionGraph(sync.data.session).cachedSubtreeIDs(sessionID)
+    const removed = cachedSessionTreeIDs(sync.data.session, sessionID)
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
 

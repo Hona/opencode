@@ -90,7 +90,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
-import { createSessionGraph } from "@/session/graph"
+import { cachedSessionTreeIDs } from "@/session/tree"
 import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 
 export default function Layout(props: ParentProps) {
@@ -978,7 +978,7 @@ export default function Layout(props: ParentProps) {
     const roots = sessions.filter((item) => !item.parentID)
     const index = roots.findIndex((item) => item.id === session.id)
     const nextSession = roots[index + 1] ?? roots[index - 1]
-    const sessionIDs = [...createSessionGraph(sessions).cachedSubtreeIDs(session.id)]
+    const sessionIDs = [...cachedSessionTreeIDs(sessions, session.id)]
 
     await serverSDK.client.session.update({
       directory: session.directory,

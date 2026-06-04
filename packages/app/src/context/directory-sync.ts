@@ -13,7 +13,7 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
-import { hydrateSessionLineage } from "./global-sync/session/lineage"
+import { loadMissingSessionParents } from "./global-sync/session/parents"
 import { upsertSession } from "./global-sync/session/store"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -464,10 +464,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
           const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
           const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
-          const syncLineage = async () => {
+          const syncParents = async () => {
             const session = getSession(sessionID)
             if (!session) return
-            await hydrateSessionLineage({
+            await loadMissingSessionParents({
               session,
               get: getSession,
               available: (id) => !store.session_unavailable[id],
@@ -491,7 +491,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
               },
             })
           }
-          if (cached && hasSession && !opts?.force) return syncLineage()
+          if (cached && hasSession && !opts?.force) return syncParents()
 
           const limit = meta.limit[key] ?? initialMessagePageSize
           const sessionReq =
@@ -526,7 +526,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                 })
 
           await Promise.all([sessionReq, messagesReq])
-          await syncLineage()
+          await syncParents()
         })
       },
       async diff(sessionID: string, opts?: { force?: boolean }) {

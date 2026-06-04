@@ -209,7 +209,7 @@ describe("applyDirectoryEvent", () => {
       baseState({
         session: [
           rootSession({ id: "child", parentID: "root" }),
-          rootSession({ id: "leaf", parentID: "child" }),
+          rootSession({ id: "other", parentID: "root" }),
           rootSession({ id: "root" }),
         ],
         sessionTotal: 1,
@@ -228,7 +228,7 @@ describe("applyDirectoryEvent", () => {
       },
     })
 
-    expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "leaf"], reason: "archived" }])
+    expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "other"], reason: "archived" }])
   })
 
   test("applies an archived root transition only once", () => {

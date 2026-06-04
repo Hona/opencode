@@ -25,7 +25,7 @@ import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { readSessionsUnavailable, SESSIONS_UNAVAILABLE_EVENT } from "@/session/lifecycle/events"
-import { createSessionGraph } from "@/session/graph"
+import { rootSession } from "@/session/tree"
 import {
   activeSessionTab,
   closeSessionTab,
@@ -272,9 +272,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               if (!directory) return
               const [store] = serverSync.peek(directory, { bootstrap: false })
               if (store.session_unavailable[sessionID]) return
-              const resolution = createSessionGraph(store.session).resolveRoot(sessionID)
-              if (resolution.status !== "resolved") return
-              const root = store.session.find((session) => session.id === resolution.rootID)
+              const root = rootSession(store.session, sessionID)
               if (!root || root.time.archived || store.session_unavailable[root.id]) return
               return {
                 route: { directory, sessionID, href: makeSessionHref(b64Dir, sessionID) },

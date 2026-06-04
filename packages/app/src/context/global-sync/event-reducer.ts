@@ -15,7 +15,7 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session/trim"
 import { dropSessionCaches } from "./session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-import { createSessionGraph } from "@/session/graph"
+import { cachedSessionTreeIDs } from "@/session/tree"
 import type { SessionsUnavailable } from "@/session/lifecycle"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -130,7 +130,7 @@ export function applyDirectoryEvent(input: {
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
         if (input.store.session_unavailable[info.id] === "archived") break
-        const sessionIDs = [...createSessionGraph(input.store.session).cachedSubtreeIDs(info.id)]
+        const sessionIDs = [...cachedSessionTreeIDs(input.store.session, info.id)]
         if (result.found) {
           input.setStore(
             "session",
@@ -160,7 +160,7 @@ export function applyDirectoryEvent(input: {
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
       if (input.store.session_unavailable[info.id] === "deleted") break
-      const sessionIDs = [...createSessionGraph(input.store.session).cachedSubtreeIDs(info.id)]
+      const sessionIDs = [...cachedSessionTreeIDs(input.store.session, info.id)]
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore(

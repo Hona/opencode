@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { createSessionGraph } from "@/session/graph"
+import { sessionAndParentIDs } from "@/session/tree"
 
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID
@@ -27,8 +27,7 @@ export function autoRespondsPermission(
   permission: { sessionID: string },
   directory?: string,
 ) {
-  const value = createSessionGraph(session)
-    .ancestors(permission.sessionID)
+  const value = sessionAndParentIDs(session, permission.sessionID)
     .map((id) => accepted(autoAccept, id, directory))
     .find((item): item is boolean => item !== undefined)
   return value ?? false
