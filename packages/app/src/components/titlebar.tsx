@@ -29,6 +29,7 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
+import { createSessionTabResolver, getRootSession } from "@/components/titlebar-session-tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -254,18 +255,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             }
 
             type Tab = { dir: string; sessionId: string; href: string }
+            const tabForSession = (b64Dir: string, sessionId: string) => {
+              const dir = decodeDirectory(b64Dir)
+              if (!dir) return
+              const [store] = serverSync.child(dir)
+              const session = getRootSession(sessionId, (id) => store.session.find((session) => session.id === id))
+              if (!session) return
+              return { dir, sessionId: session.id, href: makeSessionHref(b64Dir, session.id) }
+            }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
               const [store, setStore] = createStore<Tab[]>(
                 iife(() => {
                   if (!params.dir || !params.id) return []
-                  return [
-                    {
-                      dir: decodeDirectory(params.dir) ?? "",
-                      sessionId: params.id,
-                      href: makeSessionHref(params.dir, params.id),
-                    },
-                  ]
+                  const tab = tabForSession(params.dir, params.id)
+                  return tab ? [tab] : []
                 }),
               )
 
@@ -336,11 +340,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const params = useParams()
               if (!(params.dir && params.id)) return
 
-              tabsStoreActions.addTab({
-                dir: decodeDirectory(params.dir) ?? "",
-                sessionId: params.id,
-                href: makeSessionHref(params.dir, params.id),
-              })
+              const tab = tabForSession(params.dir, params.id)
+              if (!tab) return
+              tabsStoreActions.addTab(tab)
             })
 
             const projects = createMemo(() => layout.projects.list())
@@ -350,8 +352,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             const currentSessionTab = () => {
               if (!params.dir || !params.id) return
-              const href = makeSessionHref(params.dir, params.id)
-              return tabsStore.find((tab) => tab.href === href)
+              const tab = tabForSession(params.dir, params.id)
+              if (!tab) return
+              return tabsStore.find((item) => item.href === tab.href)
             }
 
             const closeCurrentSessionTab = () => {
@@ -451,12 +454,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 () => tabsStore,
                 (tab) => {
                   const sync = serverSync.createDirSyncContext(tab.dir)
-                  const session = sync.session.get(tab.sessionId)
-                  return session ? { ...tab, info: session } : null
+                  return createSessionTabResolver(tab, sync.session.get)
                 },
               )
 
-              return () => base().flatMap((s) => (s ? [s] : []))
+              return () => base().flatMap((resolve) => resolve() ?? [])
             })
 
             return (
@@ -495,6 +497,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             project={projectForSession(tab.info, projects(), projectByID())}
                             directory={tab.dir}
                             sessionId={tab.info.id}
+                            active={tab.href === currentSessionTab()?.href}
                             onClose={() => tabsStoreActions.removeTab(tab.href)}
                           />
                         </>
@@ -750,11 +753,10 @@ function TabNavItem(props: {
   project?: LocalProject
   directory: string
   sessionId: string
+  active: boolean
   hideClose?: boolean
   onClose: () => void
 }) {
-  const match = useMatch(() => props.href)
-  const isActive = () => !!match()
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -762,8 +764,8 @@ function TabNavItem(props: {
   }
   return (
     <div
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
-      data-active={isActive()}
+      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
