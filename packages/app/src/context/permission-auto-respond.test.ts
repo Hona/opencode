@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { autoRespondsPermission, isDirectoryAutoAccepting } from "./permission-auto-respond"
+import { autoRespondsPermission, isDirectoryAutoAccepting, isGlobalAutoAccepting } from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -81,6 +81,22 @@ describe("autoRespondsPermission", () => {
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
   })
+
+  test("falls back to global auto-accept", () => {
+    expect(autoRespondsPermission({ "*": true }, [session({ id: "root" })], permission("root"), "/tmp/project")).toBe(
+      true,
+    )
+  })
+
+  test("session-level override takes precedence over global auto-accept", () => {
+    const directory = "/tmp/project"
+    const autoAccept = {
+      "*": true,
+      [`${base64Encode(directory)}/root`]: false,
+    }
+
+    expect(autoRespondsPermission(autoAccept, [session({ id: "root" })], permission("root"), directory)).toBe(false)
+  })
 })
 
 describe("isDirectoryAutoAccepting", () => {
@@ -98,5 +114,24 @@ describe("isDirectoryAutoAccepting", () => {
     const directory = "/tmp/project"
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
+  })
+
+  test("falls back to global auto-accept", () => {
+    expect(isDirectoryAutoAccepting({ "*": true }, "/tmp/project")).toBe(true)
+  })
+
+  test("prefers a directory override over global auto-accept", () => {
+    const directory = "/tmp/project"
+    expect(isDirectoryAutoAccepting({ "*": true, [`${base64Encode(directory)}/*`]: false }, directory)).toBe(false)
+  })
+})
+
+describe("isGlobalAutoAccepting", () => {
+  test("returns the global wildcard value", () => {
+    expect(isGlobalAutoAccepting({ "*": true })).toBe(true)
+  })
+
+  test("ignores narrower auto-accept entries", () => {
+    expect(isGlobalAutoAccepting({ [`${base64Encode("/tmp/project")}/*`]: true })).toBe(false)
   })
 })

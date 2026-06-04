@@ -2,15 +2,19 @@ import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import { queryOptions, useQueryClient } from "@tanstack/solid-query"
 import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "./server-sync"
+import { useServer } from "./server"
 import { useParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import {
   acceptKey,
   directoryAcceptKey,
+  GLOBAL_ACCEPT_KEY,
   isDirectoryAutoAccepting,
+  isGlobalAutoAccepting,
   autoRespondsPermission,
 } from "./permission-auto-respond"
 
@@ -48,8 +52,10 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
   name: "Permission",
   init: () => {
     const params = useParams()
+    const server = useServer()
     const serverSDK = useServerSDK()
     const serverSync = useServerSync()
+    const queryClient = useQueryClient()
 
     const permissionsEnabled = createMemo(() => {
       const directory = decode64(params.dir)
@@ -147,10 +153,58 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return isDirectoryAutoAccepting(store.autoAccept, directory)
     }
 
+    function isAutoAcceptingGlobal() {
+      return isGlobalAutoAccepting(store.autoAccept)
+    }
+
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
       const session = directory ? serverSync.child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, permission, directory)
     }
+
+    function pendingPermissionsQuery(directory: string) {
+      return queryOptions({
+        queryKey: [directory, "permission"] as const,
+        queryFn: () => serverSDK.client.permission.list({ directory }).then((x) => x.data ?? []),
+      })
+    }
+
+    function autoRespondPending(directory: string, permissions: PermissionRequest[], enabled: () => boolean) {
+      if (!enabled()) return
+      for (const perm of permissions) {
+        if (!perm?.id) continue
+        if (!shouldAutoRespond(perm, directory)) continue
+        respondOnce(perm, directory)
+      }
+    }
+
+    function flushPending(directory: string, enabled: () => boolean) {
+      queryClient
+        .fetchQuery(pendingPermissionsQuery(directory))
+        .then((permissions) => autoRespondPending(directory, permissions, enabled))
+        .catch(() => undefined)
+    }
+
+    const globalDirectories = createMemo(() => {
+      const routeDirectory = decode64(params.dir)
+      const directories = [
+        ...server.projects.list().map((project) => project.worktree),
+        ...serverSync.data.project.flatMap((project) => [project.worktree, ...(project.sandboxes ?? [])]),
+      ]
+      return [...new Set(routeDirectory ? [routeDirectory, ...directories] : directories)]
+    })
+
+    function flushGlobal() {
+      for (const directory of globalDirectories()) {
+        flushPending(directory, isAutoAcceptingGlobal)
+      }
+    }
+
+    createEffect(() => {
+      if (!ready()) return
+      if (!isAutoAcceptingGlobal()) return
+      flushGlobal()
+    })
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
       const key = acceptKey(sessionID, directory)
@@ -178,17 +232,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      serverSDK.client.permission
-        .list({ directory })
-        .then((x) => {
-          if (!isAutoAcceptingDirectory(directory)) return
-          for (const perm of x.data ?? []) {
-            if (!perm?.id) continue
-            if (!shouldAutoRespond(perm, directory)) continue
-            respondOnce(perm, directory)
-          }
-        })
-        .catch(() => undefined)
+      flushPending(directory, () => isAutoAcceptingDirectory(directory))
     }
 
     function disableDirectory(directory: string) {
@@ -196,6 +240,23 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       setStore(
         produce((draft) => {
           draft.autoAccept[key] = false
+        }),
+      )
+    }
+
+    function enableGlobal() {
+      setStore(
+        produce((draft) => {
+          draft.autoAccept[GLOBAL_ACCEPT_KEY] = true
+        }),
+      )
+      flushGlobal()
+    }
+
+    function disableGlobal() {
+      setStore(
+        produce((draft) => {
+          draft.autoAccept[GLOBAL_ACCEPT_KEY] = false
         }),
       )
     }
@@ -210,18 +271,10 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      serverSDK.client.permission
-        .list({ directory })
-        .then((x) => {
-          if (enableVersion.get(key) !== version) return
-          if (!isAutoAccepting(sessionID, directory)) return
-          for (const perm of x.data ?? []) {
-            if (!perm?.id) continue
-            if (!shouldAutoRespond(perm, directory)) continue
-            respondOnce(perm, directory)
-          }
-        })
-        .catch(() => undefined)
+      flushPending(directory, () => {
+        if (enableVersion.get(key) !== version) return false
+        return isAutoAccepting(sessionID, directory)
+      })
     }
 
     function disable(sessionID: string, directory?: string) {
@@ -244,6 +297,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       },
       isAutoAccepting,
       isAutoAcceptingDirectory,
+      isAutoAcceptingGlobal,
       toggleAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) {
           disable(sessionID, directory)
@@ -258,6 +312,14 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
           return
         }
         enableDirectory(directory)
+      },
+      setAutoAcceptGlobal(value: boolean) {
+        if (isAutoAcceptingGlobal() === value) return
+        if (value) {
+          enableGlobal()
+          return
+        }
+        disableGlobal()
       },
       enableAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) return
