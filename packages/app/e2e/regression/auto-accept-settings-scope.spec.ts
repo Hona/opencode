@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { serverAcceptKey } from "../../src/context/permission-auto-respond"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 
-test("v2 desktop settings auto-accept applies globally", async ({ page }) => {
+test("v2 desktop settings auto-accept applies across the active server", async ({ page }) => {
   const permissionLists: string[] = []
   page.on("request", (request) => {
     const url = new URL(request.url())
@@ -32,7 +33,7 @@ test("v2 desktop settings auto-accept applies globally", async ({ page }) => {
   await expect(autoAccept(page)).toBeEnabled()
   await page.locator('[data-action="settings-auto-accept-permissions"] [data-slot="switch-control"]').click()
   await expect(autoAccept(page)).toBeChecked()
-  await expect.poll(() => permissionState(page)).toEqual({ autoAccept: { "*": true } })
+  await expect.poll(() => permissionState(page)).toEqual({ autoAccept: { [serverAcceptKey("http://127.0.0.1:4096")]: true } })
   await expect.poll(() => permissionLists).toContain(fixture.directory)
   await page.keyboard.press("Escape")
 

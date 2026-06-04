@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { autoRespondsPermission, isDirectoryAutoAccepting, isGlobalAutoAccepting } from "./permission-auto-respond"
+import { autoRespondsPermission, isDirectoryAutoAccepting, isServerAutoAccepting, serverAcceptKey } from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -82,20 +82,34 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
   })
 
-  test("falls back to global auto-accept", () => {
-    expect(autoRespondsPermission({ "*": true }, [session({ id: "root" })], permission("root"), "/tmp/project")).toBe(
-      true,
-    )
+  test("falls back to server-level auto-accept", () => {
+    const server = "http://localhost:4096"
+    expect(
+      autoRespondsPermission({ [serverAcceptKey(server)]: true }, [session({ id: "root" })], permission("root"), "/tmp/project", server),
+    ).toBe(true)
   })
 
-  test("session-level override takes precedence over global auto-accept", () => {
+  test("does not apply another server's auto-accept", () => {
+    expect(
+      autoRespondsPermission(
+        { [serverAcceptKey("http://localhost:4096")]: true },
+        [session({ id: "root" })],
+        permission("root"),
+        "/tmp/project",
+        "http://localhost:4097",
+      ),
+    ).toBe(false)
+  })
+
+  test("session-level override takes precedence over server-level auto-accept", () => {
     const directory = "/tmp/project"
+    const server = "http://localhost:4096"
     const autoAccept = {
-      "*": true,
+      [serverAcceptKey(server)]: true,
       [`${base64Encode(directory)}/root`]: false,
     }
 
-    expect(autoRespondsPermission(autoAccept, [session({ id: "root" })], permission("root"), directory)).toBe(false)
+    expect(autoRespondsPermission(autoAccept, [session({ id: "root" })], permission("root"), directory, server)).toBe(false)
   })
 })
 
@@ -116,22 +130,25 @@ describe("isDirectoryAutoAccepting", () => {
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
 
-  test("falls back to global auto-accept", () => {
-    expect(isDirectoryAutoAccepting({ "*": true }, "/tmp/project")).toBe(true)
+  test("falls back to server-level auto-accept", () => {
+    const server = "http://localhost:4096"
+    expect(isDirectoryAutoAccepting({ [serverAcceptKey(server)]: true }, "/tmp/project", server)).toBe(true)
   })
 
-  test("prefers a directory override over global auto-accept", () => {
+  test("prefers a directory override over server-level auto-accept", () => {
     const directory = "/tmp/project"
-    expect(isDirectoryAutoAccepting({ "*": true, [`${base64Encode(directory)}/*`]: false }, directory)).toBe(false)
+    const server = "http://localhost:4096"
+    expect(isDirectoryAutoAccepting({ [serverAcceptKey(server)]: true, [`${base64Encode(directory)}/*`]: false }, directory, server)).toBe(false)
   })
 })
 
-describe("isGlobalAutoAccepting", () => {
-  test("returns the global wildcard value", () => {
-    expect(isGlobalAutoAccepting({ "*": true })).toBe(true)
+describe("isServerAutoAccepting", () => {
+  test("returns the server wildcard value", () => {
+    const server = "http://localhost:4096"
+    expect(isServerAutoAccepting({ [serverAcceptKey(server)]: true }, server)).toBe(true)
   })
 
   test("ignores narrower auto-accept entries", () => {
-    expect(isGlobalAutoAccepting({ [`${base64Encode("/tmp/project")}/*`]: true })).toBe(false)
+    expect(isServerAutoAccepting({ [`${base64Encode("/tmp/project")}/*`]: true }, "http://localhost:4096")).toBe(false)
   })
 })

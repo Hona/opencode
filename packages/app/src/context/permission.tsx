@@ -12,9 +12,9 @@ import { decode64 } from "@/utils/base64"
 import {
   acceptKey,
   directoryAcceptKey,
-  GLOBAL_ACCEPT_KEY,
   isDirectoryAutoAccepting,
-  isGlobalAutoAccepting,
+  isServerAutoAccepting,
+  serverAcceptKey,
   autoRespondsPermission,
 } from "./permission-auto-respond"
 
@@ -146,25 +146,25 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function isAutoAccepting(sessionID: string, directory?: string) {
       const session = directory ? serverSync.child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
+      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory, server.key)
     }
 
     function isAutoAcceptingDirectory(directory: string) {
-      return isDirectoryAutoAccepting(store.autoAccept, directory)
+      return isDirectoryAutoAccepting(store.autoAccept, directory, server.key)
     }
 
-    function isAutoAcceptingGlobal() {
-      return isGlobalAutoAccepting(store.autoAccept)
+    function isAutoAcceptingServer() {
+      return isServerAutoAccepting(store.autoAccept, server.key)
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
       const session = directory ? serverSync.child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, permission, directory)
+      return autoRespondsPermission(store.autoAccept, session, permission, directory, server.key)
     }
 
     function pendingPermissionsQuery(directory: string) {
       return queryOptions({
-        queryKey: [directory, "permission"] as const,
+        queryKey: [server.key, directory, "permission"] as const,
         queryFn: () => serverSDK.client.permission.list({ directory }).then((x) => x.data ?? []),
       })
     }
@@ -185,7 +185,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         .catch(() => undefined)
     }
 
-    const globalDirectories = createMemo(() => {
+    const serverDirectories = createMemo(() => {
       const routeDirectory = decode64(params.dir)
       const directories = [
         ...server.projects.list().map((project) => project.worktree),
@@ -194,16 +194,16 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return [...new Set(routeDirectory ? [routeDirectory, ...directories] : directories)]
     })
 
-    function flushGlobal() {
-      for (const directory of globalDirectories()) {
-        flushPending(directory, isAutoAcceptingGlobal)
+    function flushServer() {
+      for (const directory of serverDirectories()) {
+        flushPending(directory, isAutoAcceptingServer)
       }
     }
 
     createEffect(() => {
       if (!ready()) return
-      if (!isAutoAcceptingGlobal()) return
-      flushGlobal()
+      if (!isAutoAcceptingServer()) return
+      flushServer()
     })
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
@@ -244,19 +244,19 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       )
     }
 
-    function enableGlobal() {
+    function enableServer() {
       setStore(
         produce((draft) => {
-          draft.autoAccept[GLOBAL_ACCEPT_KEY] = true
+          draft.autoAccept[serverAcceptKey(server.key)] = true
         }),
       )
-      flushGlobal()
+      flushServer()
     }
 
-    function disableGlobal() {
+    function disableServer() {
       setStore(
         produce((draft) => {
-          draft.autoAccept[GLOBAL_ACCEPT_KEY] = false
+          draft.autoAccept[serverAcceptKey(server.key)] = false
         }),
       )
     }
@@ -297,7 +297,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       },
       isAutoAccepting,
       isAutoAcceptingDirectory,
-      isAutoAcceptingGlobal,
+      isAutoAcceptingServer,
       toggleAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) {
           disable(sessionID, directory)
@@ -313,13 +313,13 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }
         enableDirectory(directory)
       },
-      setAutoAcceptGlobal(value: boolean) {
-        if (isAutoAcceptingGlobal() === value) return
+      setAutoAcceptServer(value: boolean) {
+        if (isAutoAcceptingServer() === value) return
         if (value) {
-          enableGlobal()
+          enableServer()
           return
         }
-        disableGlobal()
+        disableServer()
       },
       enableAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) return

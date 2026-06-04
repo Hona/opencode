@@ -299,7 +299,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("toast.permissions.autoaccept.on.description")}
         >
           <div data-action="settings-auto-accept-permissions">
-            <Switch checked={permission.isAutoAcceptingGlobal()} onChange={permission.setAutoAcceptGlobal} />
+            <Switch checked={permission.isAutoAcceptingServer()} onChange={permission.setAutoAcceptServer} />
           </div>
         </SettingsRowV2>
 

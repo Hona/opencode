@@ -1,7 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 
-export const GLOBAL_ACCEPT_KEY = "*"
-
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID
   return `${base64Encode(directory)}/${sessionID}`
@@ -11,19 +9,23 @@ export function directoryAcceptKey(directory: string) {
   return `${base64Encode(directory)}/*`
 }
 
+export function serverAcceptKey(server: string) {
+  return `server:${base64Encode(server)}/*`
+}
+
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
   const key = acceptKey(sessionID, directory)
   const directoryKey = directory ? directoryAcceptKey(directory) : undefined
   return autoAccept[key] ?? autoAccept[sessionID] ?? (directoryKey ? autoAccept[directoryKey] : undefined)
 }
 
-export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {
+export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string, server?: string) {
   const key = directoryAcceptKey(directory)
-  return autoAccept[key] ?? isGlobalAutoAccepting(autoAccept)
+  return autoAccept[key] ?? (server ? isServerAutoAccepting(autoAccept, server) : false)
 }
 
-export function isGlobalAutoAccepting(autoAccept: Record<string, boolean>) {
-  return autoAccept[GLOBAL_ACCEPT_KEY] ?? false
+export function isServerAutoAccepting(autoAccept: Record<string, boolean>, server: string) {
+  return autoAccept[serverAcceptKey(server)] ?? false
 }
 
 function sessionLineage(session: { id: string; parentID?: string }[], sessionID: string) {
@@ -49,9 +51,10 @@ export function autoRespondsPermission(
   session: { id: string; parentID?: string }[],
   permission: { sessionID: string },
   directory?: string,
+  server?: string,
 ) {
   const value = sessionLineage(session, permission.sessionID)
     .map((id) => accepted(autoAccept, id, directory))
     .find((item): item is boolean => item !== undefined)
-  return value ?? isGlobalAutoAccepting(autoAccept)
+  return value ?? (server ? isServerAutoAccepting(autoAccept, server) : false)
 }
