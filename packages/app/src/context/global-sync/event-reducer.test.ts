@@ -205,6 +205,7 @@ describe("applyDirectoryEvent", () => {
 
   test("reports loaded routes but only marks the archived session unavailable", () => {
     const unavailable: unknown[] = []
+    const message = userMessage("msg_1", "child")
     const [store, setStore] = createStore(
       baseState({
         session: [
@@ -213,6 +214,7 @@ describe("applyDirectoryEvent", () => {
           rootSession({ id: "root" }),
         ],
         sessionTotal: 1,
+        message: { child: [message] },
       }),
     )
 
@@ -229,7 +231,9 @@ describe("applyDirectoryEvent", () => {
     })
 
     expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "other"] }])
-    expect(store.session_unavailable).toEqual({ root: true })
+    expect(store.session).toEqual([])
+    expect(store.message.child).toBeUndefined()
+    expect(store.session_unavailable).toEqual({ root: true, child: true, other: true })
   })
 
   test("applies an archived root transition only once", () => {

@@ -991,6 +991,7 @@ export default function Layout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
+    serverSync.session.removeLoaded(session.directory, session, sessionIDs)
     publishSessionTabsInvalidated({ directory: session.directory, sessionIDs })
   }
 

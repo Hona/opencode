@@ -1,4 +1,4 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Session, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import {
@@ -27,8 +27,8 @@ import {
   loadProvidersQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
-import { clearSessionPrefetchDirectory } from "./global-sync/session/prefetch"
+import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches, removeLoadedSessions } from "./global-sync/event-reducer"
+import { clearSessionPrefetch, clearSessionPrefetchDirectory } from "./global-sync/session/prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session/load"
 import { trimSessions } from "./global-sync/session/trim"
 import type { ProjectMeta } from "./global-sync/types"
@@ -97,6 +97,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
+  const sessionRev = new Map<string, number>()
 
   const sdkFor = (directory: string) => {
     const key = directoryKey(directory)
@@ -248,6 +249,18 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     },
   })
 
+  const removeSessions = (directory: string, session: Session, sessionIDs: string[]) => {
+    if (sessionIDs.length === 0) return
+    const key = directoryKey(directory)
+    const pending = sessionLoads.get(key)
+    const [store, setStore] = children.peek(directory, { bootstrap: false })
+    clearSessionPrefetch(directory, sessionIDs)
+    removeLoadedSessions({ store, setStore, session, sessionIDs, setSessionTodo })
+    sessionMeta.delete(key)
+    sessionRev.set(key, (sessionRev.get(key) ?? 0) + 1)
+    if (pending) void pending.finally(() => loadSessions(directory))
+  }
+
   async function loadSessions(directory: string) {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
@@ -270,6 +283,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
+    const rev = sessionRev.get(key) ?? 0
     const promise = queryClient
       .fetchQuery({
         ...queryOptionsApi.sessions(key),
@@ -278,14 +292,15 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
             directory,
             limit,
             list: (query) => serverSDK.client.session.list(query),
-          })
+            })
             .then((x) => {
+              if ((sessionRev.get(key) ?? 0) !== rev) return
               const nonArchived = (x.data ?? [])
                 .filter((s) => !!s?.id)
-                .filter((s) => !s.time?.archived)
+                .filter((s) => s.time?.archived === undefined && !store.session_unavailable[s.id])
                 .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
               const limit = store.limit
-              const childSessions = store.session.filter((s) => !!s.parentID)
+              const childSessions = store.session.filter((s) => !!s.parentID && !store.session_unavailable[s.id])
               const sessions = trimSessions([...nonArchived, ...childSessions], {
                 limit,
                 permission: store.permission,
@@ -400,6 +415,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
+      onSessionsRemoved: (sessionIDs) => clearSessionPrefetch(directory, sessionIDs),
       onSessionTabsInvalidated: publishSessionTabsInvalidated,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
@@ -474,6 +490,9 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     project: projectApi,
     todo: {
       set: setSessionTodo,
+    },
+    session: {
+      removeLoaded: removeSessions,
     },
   }
 }

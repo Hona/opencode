@@ -9,7 +9,7 @@ import {
   setSessionPrefetch,
 } from "./global-sync/session/prefetch"
 import { createServerSyncContext } from "./server-sync"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
@@ -312,7 +312,9 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
     }
   }
 
-  const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
+  const tracked = (directory: string, sessionID: string) =>
+    !serverSync.peek(directory, { bootstrap: false })[0].session_unavailable[sessionID] &&
+    (seen.get(directory)?.has(sessionID) ?? false)
 
   const loadMessages = async (input: {
     directory: string
@@ -601,23 +603,13 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           })
         },
       },
-      evict(sessionID: string, _directory = directory) {
-        const [, setStore] = serverSync.child(_directory)
-        seenFor(_directory).delete(sessionID)
-        evict(_directory, setStore, [sessionID])
+      removeLoaded(session: Session, sessionIDs: string[]) {
+        for (const sessionID of sessionIDs) {
+          seenFor(directory).delete(sessionID)
+        }
+        serverSync.session.removeLoaded(directory, session, sessionIDs)
+        clearMeta(directory, sessionIDs)
       },
-      fetch: async (count = 10) => {
-        const [store, setStore] = serverSync.child(directory)
-        setStore("limit", (x) => x + count)
-        await client.session.list().then((x) => {
-          const sessions = (x.data ?? [])
-            .filter((s) => !!s?.id)
-            .sort((a, b) => cmp(a.id, b.id))
-            .slice(0, store.limit)
-          setStore("session", reconcile(sessions, { key: "id" }))
-        })
-      },
-      more: createMemo(() => current()[0].session.length >= current()[0].limit),
     },
     absolute,
     get directory() {

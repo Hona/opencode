@@ -860,6 +860,7 @@ export function MessageTimeline(props: {
       .update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+        sync.session.removeLoaded(session, sessionIDs)
         publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
       })
       .catch((err) => {
@@ -893,6 +894,7 @@ export function MessageTimeline(props: {
     if (!result) return false
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    sync.session.removeLoaded(session, sessionIDs)
     publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
     return true
   }
