@@ -185,6 +185,10 @@ beforeAll(async () => {
     }),
   }))
 
+  mock.module("@/context/server-sdk", () => ({
+    useServerSDK: () => ({ scope: "local" }),
+  }))
+
   mock.module("@/context/platform", () => ({
     usePlatform: () => ({
       fetch: fetch,

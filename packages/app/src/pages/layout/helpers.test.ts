@@ -9,13 +9,19 @@ import {
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   childSessionOnPath,
+  closeHomeProject,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
+  homeProjectNavigation,
   latestRootSession,
+  toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
+import { ServerConnection } from "@/context/server"
+
+const serverKey = ServerConnection.Key.make
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -215,6 +221,60 @@ describe("layout workspace helpers", () => {
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+    expect(displayName({ worktree: "/" })).toBe("/")
+  })
+
+  test("scopes home project selection by server", () => {
+    expect(toggleHomeProjectSelection(undefined, serverKey("https://debian.example"), "/home/luke/repos/amazon")).toEqual({
+      server: serverKey("https://debian.example"),
+      directory: "/home/luke/repos/amazon",
+    })
+    expect(
+      toggleHomeProjectSelection(
+        { server: serverKey("https://windows.example"), directory: "/home/luke/repos/amazon" },
+        serverKey("https://debian.example"),
+        "/home/luke/repos/amazon",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example"), directory: "/home/luke/repos/amazon" })
+    expect(
+      toggleHomeProjectSelection(
+        { server: serverKey("https://debian.example"), directory: "/home/luke/repos/amazon" },
+        serverKey("https://debian.example"),
+        "/home/luke/repos/amazon",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example") })
+  })
+
+  test("closes a home project through its server context", () => {
+    const closed: string[] = []
+
+    expect(
+      closeHomeProject(
+        { server: serverKey("https://windows.example"), directory: "/shared" },
+        serverKey("https://debian.example"),
+        { close: (directory) => closed.push(directory) },
+        "/shared",
+      ),
+    ).toEqual({ server: serverKey("https://windows.example"), directory: "/shared" })
+    expect(closed).toEqual(["/shared"])
+    expect(
+      closeHomeProject(
+        { server: serverKey("https://debian.example"), directory: "/shared" },
+        serverKey("https://debian.example"),
+        { close: (directory) => closed.push(directory) },
+        "/shared",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example") })
+  })
+
+  test("defers home project navigation until its server is active", () => {
+    expect(homeProjectNavigation(serverKey("sidecar"), serverKey("https://debian.example"), "/YW1hem9u/session")).toEqual({
+      server: serverKey("https://debian.example"),
+      href: "/YW1hem9u/session",
+    })
+    expect(homeProjectNavigation(serverKey("https://debian.example"), serverKey("https://debian.example"), "/YW1hem9u/session")).toEqual({
+      href: "/YW1hem9u/session",
+    })
   })
 
   test("extracts api error message and fallback", () => {

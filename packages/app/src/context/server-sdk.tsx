@@ -9,6 +9,7 @@ import { usePlatform } from "./platform"
 import { ServerConnection, useServer } from "./server"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
+import { ServerScope } from "@/utils/server-scope"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
@@ -228,6 +229,7 @@ export function createServerSdkContext(server: ServerConnection.Any) {
   })
 
   return {
+    scope: ServerScope.fromServerKey(ServerConnection.key(server)),
     url: server.http.url,
     client: sdk,
     event: {

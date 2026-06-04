@@ -2,6 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
+import { ServerScope } from "@/utils/server-scope"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -18,13 +19,6 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   if (!conn) return ""
   if (conn.displayName && !ignoreDisplayName) return conn.displayName
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
-}
-
-function projectsKey(key: ServerConnection.Key) {
-  if (!key) return ""
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
-  return key
 }
 
 function isLocalHost(url: string) {
@@ -180,7 +174,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const origin = createMemo(() => projectsKey(state.active))
+    const origin = createMemo(() => ServerScope.fromServerKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],

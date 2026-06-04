@@ -3,11 +3,12 @@ import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerConnection, useServer } from "./server"
 import { useServerHealth } from "@/utils/server-health"
-import { QueryClient } from "@tanstack/solid-query"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
 import { Persist, persisted } from "@/utils/persist"
+import { ServerScope } from "@/utils/server-scope"
+import { QueryClient } from "@tanstack/solid-query"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -123,12 +124,11 @@ function createServerCtx(
       },
     },
   })
-
   const sdk = createServerSdkContext(conn)
   const sync = createServerSyncContext(sdk)
 
   const key = ServerConnection.key(conn)
-  const storeKey = projectsKey(key)
+  const storeKey = ServerScope.fromServerKey(key)
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
@@ -206,12 +206,6 @@ export type ServerCtx = ReturnType<typeof createServerCtx>
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-}
-
-function projectsKey(key: ServerConnection.Key) {
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
-  return key
 }
 
 export function resolveServerList(input: {
