@@ -257,6 +257,36 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_unavailable.root).toBe(true)
   })
 
+  test("ignores delayed data events for an unavailable session", () => {
+    const todos: unknown[] = []
+    const [store, setStore] = createStore(baseState({ session_unavailable: { root: true } }))
+    const input = { store, setStore, push() {}, directory: "/tmp", loadLsp() {}, setSessionTodo: (...args: unknown[]) => todos.push(args) }
+
+    for (const event of [
+      { type: "session.created", properties: { info: rootSession({ id: "root" }) } },
+      { type: "session.updated", properties: { info: rootSession({ id: "root" }) } },
+      { type: "session.diff", properties: { sessionID: "root", diff: [] } },
+      { type: "todo.updated", properties: { sessionID: "root", todos: [{ id: "todo" }] } },
+      { type: "session.status", properties: { sessionID: "root", status: { type: "busy" } } },
+      { type: "message.updated", properties: { info: userMessage("msg", "root") } },
+      { type: "message.part.updated", properties: { part: textPart("part", "root", "msg") } },
+      { type: "permission.asked", properties: permissionRequest("permission", "root") },
+      { type: "question.asked", properties: questionRequest("question", "root") },
+    ]) {
+      applyDirectoryEvent({ ...input, event })
+    }
+
+    expect(store.session).toEqual([])
+    expect(store.session_diff.root).toBeUndefined()
+    expect(store.todo.root).toBeUndefined()
+    expect(store.session_status.root).toBeUndefined()
+    expect(store.message.root).toBeUndefined()
+    expect(store.part.msg).toBeUndefined()
+    expect(store.permission.root).toBeUndefined()
+    expect(store.question.root).toBeUndefined()
+    expect(todos).toEqual([])
+  })
+
   test("applies an archived root transition only once", () => {
     const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
     const event = { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } }

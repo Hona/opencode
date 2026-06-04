@@ -738,6 +738,7 @@ export default function Layout(props: ParentProps) {
 
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
     const [store, setStore] = serverSync.child(directory, { bootstrap: false })
+    if (store.session_unavailable[sessionID]) return
 
     return runSessionPrefetch({
       directory,
@@ -747,6 +748,7 @@ export default function Layout(props: ParentProps) {
           .then((messages) => {
             if (prefetchToken.value !== token) return
             if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
+            if (store.session_unavailable[sessionID]) return
 
             const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
             const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
@@ -812,6 +814,10 @@ export default function Layout(props: ParentProps) {
     if (!sessionID) return
 
     q.pendingSet.delete(sessionID)
+    if (serverSync.child(directory, { bootstrap: false })[0].session_unavailable[sessionID]) {
+      pumpPrefetch(directory)
+      return
+    }
     q.inflight.add(sessionID)
     q.running += 1
 
@@ -829,6 +835,7 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = serverSync.child(directory, { bootstrap: false })
+    if (store.session_unavailable[session.id]) return
     const cached = untrack(() => {
       const info = getSessionPrefetch(directory, session.id)
       return shouldSkipSessionPrefetch({

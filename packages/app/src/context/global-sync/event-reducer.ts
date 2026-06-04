@@ -119,6 +119,8 @@ export function applyDirectoryEvent(input: {
   onSessionsRemoved?: (input: SessionTabsInvalidated) => void
 }) {
   const event = input.event
+  const sessionID = sessionEventID(event)
+  if (sessionID && input.store.session_unavailable[sessionID] && event.type !== "session.deleted") return
   switch (event.type) {
     case "server.instance.disposed": {
       input.push(input.directory)
@@ -380,5 +382,17 @@ export function applyDirectoryEvent(input: {
       input.loadLsp()
       break
     }
+  }
+}
+
+function sessionEventID(event: { type: string; properties?: unknown }) {
+  if (!event.properties || typeof event.properties !== "object") return
+  if ("sessionID" in event.properties && typeof event.properties.sessionID === "string") return event.properties.sessionID
+  if ("info" in event.properties && event.properties.info && typeof event.properties.info === "object") {
+    if ("sessionID" in event.properties.info && typeof event.properties.info.sessionID === "string") return event.properties.info.sessionID
+    if (event.type.startsWith("session.") && "id" in event.properties.info && typeof event.properties.info.id === "string") return event.properties.info.id
+  }
+  if ("part" in event.properties && event.properties.part && typeof event.properties.part === "object") {
+    if ("sessionID" in event.properties.part && typeof event.properties.part.sessionID === "string") return event.properties.part.sessionID
   }
 }
