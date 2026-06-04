@@ -249,6 +249,33 @@ describe("applyDirectoryEvent", () => {
     }
   })
 
+  test("reports a deleted root session tree before removing metadata", () => {
+    const deleted: string[][] = []
+    const [store, setStore] = createStore(
+      baseState({
+        session: [
+          rootSession({ id: "root" }),
+          rootSession({ id: "child", parentID: "root" }),
+          rootSession({ id: "leaf", parentID: "child" }),
+        ],
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.deleted", properties: { info: rootSession({ id: "root" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      onSessionDeleted(sessionIDs) {
+        deleted.push(sessionIDs)
+      },
+    })
+
+    expect(deleted).toEqual([["root", "child", "leaf"]])
+  })
+
   test("cleans caches for trimmed sessions on session.created", () => {
     const dropped = rootSession({ id: "ses_b" })
     const kept = rootSession({ id: "ses_a" })
