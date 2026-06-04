@@ -1101,6 +1101,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  // Check provider variants directly: `variants` also includes the UI-only default option.
+  const showVariantControl = createMemo(() => local.model.variant.list().length > 0)
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
@@ -1571,6 +1573,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <ComposerPickerTrigger state={newProjectTriggerState()} />
                   </Show>
                   <ComposerModelControl state={modelControlState()} />
+                  <Show when={store.mode !== "shell" && showVariantControl()}>
+                    <div
+                      data-component="prompt-variant-control"
+                      classList={{
+                        "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
+                          !local.model.variant.current(),
+                      }}
+                    >
+                      <TooltipKeybind
+                        placement="top"
+                        gutter={4}
+                        title={language.t("command.model.variant.cycle")}
+                        keybind={command.keybind("model.variant.cycle")}
+                      >
+                        <Select
+                          size="normal"
+                          options={variants()}
+                          current={local.model.variant.current() ?? "default"}
+                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          onSelect={(value) => {
+                            local.model.variant.set(value === "default" ? undefined : value)
+                            restoreFocus()
+                          }}
+                          class="capitalize max-w-[160px] justify-start text-v2-text-text-faint"
+                          valueClass="truncate text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+                          triggerStyle={control()}
+                          triggerProps={{ "data-action": "prompt-model-variant" }}
+                          variant="ghost"
+                        />
+                      </TooltipKeybind>
+                    </div>
+                  </Show>
                 </div>
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -1890,7 +1924,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </TooltipKeybind>
                           </Show>
                         </div>
-                        <Show when={variants().length > 2}>
+                        <Show when={showVariantControl()}>
                           <div
                             data-component="prompt-variant-control"
                             style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
