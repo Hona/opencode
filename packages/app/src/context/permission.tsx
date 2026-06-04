@@ -196,6 +196,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function flushServer() {
       for (const directory of serverDirectories()) {
+        const [childStore] = serverSync.child(directory)
+        if (childStore.status !== "complete") continue
         flushPending(directory, isAutoAcceptingServer)
       }
     }

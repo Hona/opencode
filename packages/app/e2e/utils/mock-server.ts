@@ -19,6 +19,8 @@ export interface MockServerConfig {
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
   events?: () => unknown[]
+  permissions?: unknown[]
+  onPermissionRespond?: (input: { sessionID: string; permissionID: string; response: unknown }) => void
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -47,6 +49,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.())
     if (path === "/global/health") return json(route, { healthy: true })
     if (emptyObject.has(path)) return json(route, {})
+    if (path === "/permission") return json(route, config.permissions ?? [])
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
 
@@ -57,6 +60,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
 
     if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(path)) return json(route, [])
+
+    const permissionMatch = path.match(/^\/session\/([^/]+)\/permissions\/([^/]+)$/)
+    if (permissionMatch) {
+      config.onPermissionRespond?.({
+        sessionID: permissionMatch[1],
+        permissionID: permissionMatch[2],
+        response: route.request().postDataJSON(),
+      })
+      return json(route, {})
+    }
 
     const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
     if (messagesMatch) {
