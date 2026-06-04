@@ -64,12 +64,18 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
   await composer.hover()
   await expect(control).toBeVisible()
 
+  await control.locator('[data-action="prompt-model-variant"]').click()
+  const high = page.getByRole("option", { name: "high" })
+  await expect(high).toBeVisible()
+  await page.mouse.move(0, 0)
+  await expect(control).toBeVisible()
+  await expect(high).toBeVisible()
+  await high.click()
+
   await idleComposer(page)
   await input.focus()
   await expect(control).toBeVisible()
 
-  await control.locator('[data-action="prompt-model-variant"]').click()
-  await page.getByRole("option", { name: "high" }).click()
   await idleComposer(page)
   await expect(control).toBeVisible()
 })

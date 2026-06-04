@@ -277,6 +277,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    variantOpen: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -285,6 +286,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    variantOpen: false,
   })
   const [picker, setPicker] = createStore({
     projectOpen: false,
@@ -1578,7 +1580,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       data-component="prompt-variant-control"
                       classList={{
                         "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
-                          !local.model.variant.current(),
+                          !local.model.variant.current() && !store.variantOpen,
                       }}
                     >
                       <TooltipKeybind
@@ -1592,6 +1594,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           options={variants()}
                           current={local.model.variant.current() ?? "default"}
                           label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          onOpenChange={(open) => setStore("variantOpen", open)}
                           onSelect={(value) => {
                             local.model.variant.set(value === "default" ? undefined : value)
                             restoreFocus()
