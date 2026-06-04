@@ -65,6 +65,8 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { publishSessionTabsInvalidated } from "@/session/tabs/events"
+import { loadedSessionTreeIDs } from "@/session/tree"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
@@ -852,11 +854,13 @@ export function MessageTimeline(props: {
     const roots = sessions.filter((item) => !item.parentID)
     const index = roots.findIndex((item) => item.id === sessionID)
     const nextSession = index === -1 ? undefined : (roots[index + 1] ?? roots[index - 1])
+    const sessionIDs = [...loadedSessionTreeIDs(sessions, sessionID)]
 
     await sdk.client.session
       .update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+        publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
       })
       .catch((err) => {
         showToast({
@@ -873,6 +877,7 @@ export function MessageTimeline(props: {
     const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+    const sessionIDs = [...loadedSessionTreeIDs(sync.data.session, sessionID)]
 
     const result = await sdk.client.session
       .delete({ sessionID })
@@ -888,6 +893,7 @@ export function MessageTimeline(props: {
     if (!result) return false
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
     return true
   }
 
