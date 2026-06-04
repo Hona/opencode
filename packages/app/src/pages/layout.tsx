@@ -89,7 +89,6 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
-import { publishSessionTabsInvalidated } from "@/session/tabs/events"
 import { loadedSessionTreeIDs } from "@/session/tree"
 
 export default function Layout(props: ParentProps) {
@@ -992,7 +991,6 @@ export default function Layout(props: ParentProps) {
       }
     }
     serverSync.session.removeLoaded(session.directory, session, sessionIDs)
-    publishSessionTabsInvalidated({ directory: session.directory, sessionIDs })
   }
 
   command.register("layout", () => {

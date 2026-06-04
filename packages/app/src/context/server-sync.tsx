@@ -238,6 +238,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       const key = directoryKey(directory)
       queue.clear(key)
       sessionMeta.delete(key)
+      sessionRev.delete(key)
       sdkCache.delete(key)
       clearProviderRev(key)
       clearSessionPrefetchDirectory(key)
@@ -255,7 +256,9 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     const pending = sessionLoads.get(key)
     const [store, setStore] = children.peek(directory, { bootstrap: false })
     clearSessionPrefetch(directory, sessionIDs)
-    removeLoadedSessions({ store, setStore, session, sessionIDs, setSessionTodo })
+    const removed = removeLoadedSessions({ store, setStore, session, sessionIDs, setSessionTodo })
+    publishSessionTabsInvalidated({ directory, sessionIDs })
+    if (!removed) return
     sessionMeta.delete(key)
     sessionRev.set(key, (sessionRev.get(key) ?? 0) + 1)
     if (pending) void pending.finally(() => loadSessions(directory))
@@ -415,8 +418,10 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
-      onSessionsRemoved: (sessionIDs) => clearSessionPrefetch(directory, sessionIDs),
-      onSessionTabsInvalidated: publishSessionTabsInvalidated,
+      onSessionsRemoved: (input) => {
+        clearSessionPrefetch(input.directory, input.sessionIDs)
+        publishSessionTabsInvalidated(input)
+      },
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

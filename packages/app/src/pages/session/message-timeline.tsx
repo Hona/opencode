@@ -65,7 +65,6 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { publishSessionTabsInvalidated } from "@/session/tabs/events"
 import { loadedSessionTreeIDs } from "@/session/tree"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
@@ -861,7 +860,6 @@ export function MessageTimeline(props: {
       .then(() => {
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
         sync.session.removeLoaded(session, sessionIDs)
-        publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
       })
       .catch((err) => {
         showToast({
@@ -895,7 +893,6 @@ export function MessageTimeline(props: {
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
     sync.session.removeLoaded(session, sessionIDs)
-    publishSessionTabsInvalidated({ directory: sdk.directory, sessionIDs })
     return true
   }
 

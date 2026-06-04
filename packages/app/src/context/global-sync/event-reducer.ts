@@ -95,7 +95,8 @@ export function removeLoadedSessions(input: {
       }
     }),
   )
-  cleanupDroppedSessionCaches(input.store, input.setStore, input.store.session, input.setSessionTodo)
+  for (const sessionID of ids) input.setSessionTodo?.(sessionID, undefined)
+  cleanupDroppedSessionCaches(input.store, input.setStore, input.store.session)
   input.setStore(
     "session_unavailable",
     produce((draft) => {
@@ -115,8 +116,7 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
-  onSessionsRemoved?: (sessionIDs: string[]) => void
-  onSessionTabsInvalidated?: (input: SessionTabsInvalidated) => void
+  onSessionsRemoved?: (input: SessionTabsInvalidated) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -145,12 +145,11 @@ export function applyDirectoryEvent(input: {
       if (info.time.archived !== undefined) {
         const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
         if (!removeLoadedSessions({ ...input, session: info, sessionIDs })) break
-        input.onSessionsRemoved?.(sessionIDs)
-        input.onSessionTabsInvalidated?.({ directory: input.directory, sessionIDs })
+        input.onSessionsRemoved?.({ directory: input.directory, sessionIDs })
         break
       }
+      if (input.store.session_unavailable[info.id]) break
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
-      input.setStore("session_unavailable", info.id, undefined)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
         break
@@ -166,8 +165,7 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
       if (!removeLoadedSessions({ ...input, session: info, sessionIDs })) break
-      input.onSessionsRemoved?.(sessionIDs)
-      input.onSessionTabsInvalidated?.({ directory: input.directory, sessionIDs })
+      input.onSessionsRemoved?.({ directory: input.directory, sessionIDs })
       break
     }
     case "session.diff": {

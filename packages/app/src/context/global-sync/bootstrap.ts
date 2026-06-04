@@ -166,7 +166,7 @@ function warmSessions(input: {
     ids.map((sessionID) =>
       retry(() => input.sdk.session.get({ sessionID })).then((x) => {
         const session = x.data
-        if (!session?.id) return
+        if (!session?.id || session.time.archived !== undefined || input.store.session_unavailable[session.id]) return
         mergeSession(input.setStore, session)
       }),
     ),

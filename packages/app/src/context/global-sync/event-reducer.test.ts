@@ -205,6 +205,7 @@ describe("applyDirectoryEvent", () => {
 
   test("removes a loaded tree when a root is archived", () => {
     const unavailable: unknown[] = []
+    const todos: string[] = []
     const message = userMessage("msg_1", "child")
     const [store, setStore] = createStore(
       baseState({
@@ -225,8 +226,11 @@ describe("applyDirectoryEvent", () => {
       push() {},
       directory: "/tmp",
       loadLsp() {},
-      onSessionTabsInvalidated(change) {
+      onSessionsRemoved(change) {
         unavailable.push(change)
+      },
+      setSessionTodo(sessionID, value) {
+        if (value === undefined) todos.push(sessionID)
       },
     })
 
@@ -234,6 +238,23 @@ describe("applyDirectoryEvent", () => {
     expect(store.session).toEqual([])
     expect(store.message.child).toBeUndefined()
     expect(store.session_unavailable).toEqual({ root: true, child: true, other: true })
+    expect(todos).toEqual(["root", "child", "other"])
+  })
+
+  test("ignores a delayed update for an unavailable session", () => {
+    const [store, setStore] = createStore(baseState({ session_unavailable: { root: true } }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "root" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.session_unavailable.root).toBe(true)
   })
 
   test("applies an archived root transition only once", () => {
