@@ -377,7 +377,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const server = useServer()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
-    const scope = ServerScope.fromServerKey(server.key)
+    const scope = server.scope()
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))

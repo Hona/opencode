@@ -14,7 +14,9 @@ import { ServerScope } from "@/utils/server-scope"
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
-export function createServerSdkContext(server: ServerConnection.Any) {
+const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
+
+export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope) {
   const platform = usePlatform()
   const abort = new AbortController()
 
@@ -97,8 +99,6 @@ export function createServerSdkContext(server: ServerConnection.Any) {
 
   let streamErrorLogged = false
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-  const aborted = isAbortError
-
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
@@ -134,7 +134,7 @@ export function createServerSdkContext(server: ServerConnection.Any) {
           const events = await eventSdk.global.event({
             signal: attempt.signal,
             onSseError: (error) => {
-              if (aborted(error)) return
+              if (isStreamClosed(error, attempt?.signal)) return
               if (streamErrorLogged) return
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
@@ -177,7 +177,7 @@ export function createServerSdkContext(server: ServerConnection.Any) {
             await wait(0)
           }
         } catch (error) {
-          if (!aborted(error) && !streamErrorLogged) {
+          if (!isStreamClosed(error, attempt?.signal) && !streamErrorLogged) {
             streamErrorLogged = true
             console.error("[global-sdk] event stream failed", {
               url: server.http.url,
@@ -208,6 +208,7 @@ export function createServerSdkContext(server: ServerConnection.Any) {
   }
 
   onMount(() => {
+    makeEventListener(window, "pagehide", stop)
     makeEventListener(document, "visibilitychange", () => {
       if (document.visibilityState !== "visible") return
       if (!started) return
@@ -229,7 +230,7 @@ export function createServerSdkContext(server: ServerConnection.Any) {
   })
 
   return {
-    scope: ServerScope.fromServerKey(ServerConnection.key(server)),
+    scope,
     url: server.http.url,
     client: sdk,
     event: {

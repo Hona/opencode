@@ -55,7 +55,6 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { ServerScope } from "@/utils/server-scope"
 import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -243,7 +242,7 @@ export default function Page() {
           layout.handoff.clearTabs()
           return
         }
-        if (pending.scope !== ServerScope.fromServerKey(server.key)) return
+        if (pending.scope !== server.scope()) return
 
         if (pending.id !== id) return
         layout.handoff.clearTabs()

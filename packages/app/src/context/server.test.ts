@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { resolveServerList, ServerConnection } from "./server"
+import { createRoot, createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
+import { createServerProjects, resolveServerList, ServerConnection } from "./server"
+import { ServerScope } from "@/utils/server-scope"
 
 describe("resolveServerList", () => {
   test("lets startup auth_token credentials override a persisted same-url server", () => {
@@ -49,5 +52,27 @@ describe("resolveServerList", () => {
       password: "saved",
     })
     expect(list[0]?.type === "http" ? list[0].authToken : true).toBeUndefined()
+  })
+})
+
+describe("createServerProjects", () => {
+  test("keeps active and explicit server buckets in one reactive store", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {} })
+      const active = createServerProjects({ scope, store, setStore })
+      const remote = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
+
+      remote.open("/repo")
+      expect(remote.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      expect(active.list()).toEqual([])
+
+      const adopted = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
+      expect(adopted.list()).toEqual([{ worktree: "/repo", expanded: true }])
+
+      adopted.close("/repo")
+      expect(remote.list()).toEqual([])
+      dispose()
+    })
   })
 })

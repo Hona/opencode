@@ -30,6 +30,7 @@ import {
   closeHomeProject,
   displayName,
   getProjectAvatarSource,
+  homeProjectDirectories,
   homeProjectNavigation,
   type HomeProjectSelection,
   projectForSession,
@@ -268,9 +269,11 @@ function HomeDesign() {
     setSelection(toggleHomeProjectSelection(state.selection, key, directory))
   }
 
-  function addProject(conn: ServerConnection.Any, directory: string) {
+  function addProjects(conn: ServerConnection.Any, directories: string[]) {
+    const directory = directories[0]
+    if (!directory) return
     const ctx = global.createServerCtx(conn)
-    ctx.projects.open(directory)
+    directories.forEach(ctx.projects.open)
     ctx.projects.touch(directory)
     setSelection({ server: ServerConnection.key(conn), directory })
   }
@@ -334,11 +337,7 @@ function HomeDesign() {
 
   async function chooseProject(conn: ServerConnection.Any) {
     function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        result.forEach((r) => addProject(conn, r))
-        return
-      }
-      if (result) addProject(conn, result)
+      addProjects(conn, homeProjectDirectories(result))
     }
 
     const server = global.createServerCtx(conn)

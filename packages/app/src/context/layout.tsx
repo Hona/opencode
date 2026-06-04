@@ -570,7 +570,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: ServerScope.fromServerKey(server.key), dir, id, at: Date.now() })
+          setStore("handoff", "tabs", { scope: server.scope(), dir, id, at: Date.now() })
         },
         clearTabs() {
           if (!store.handoff?.tabs) return

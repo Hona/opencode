@@ -11,6 +11,11 @@ describe("ServerScope", () => {
       "http://localhost:4096",
     )
   })
+
+  test("uses a stable local scope for an explicit canonical web server", () => {
+    const key = "http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0]
+    expect(String(ServerScope.fromServerKey(key, key))).toBe("local")
+  })
 })
 
 describe("SessionStateKey", () => {

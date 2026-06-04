@@ -15,6 +15,7 @@ import {
   errorMessage,
   hasProjectPermissions,
   homeProjectNavigation,
+  homeProjectDirectories,
   latestRootSession,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -275,6 +276,12 @@ describe("layout workspace helpers", () => {
     expect(homeProjectNavigation(serverKey("https://debian.example"), serverKey("https://debian.example"), "/YW1hem9u/session")).toEqual({
       href: "/YW1hem9u/session",
     })
+  })
+
+  test("preserves picker order when adding multiple projects", () => {
+    expect(homeProjectDirectories(["/first", "/second"])).toEqual(["/first", "/second"])
+    expect(homeProjectDirectories("/only")).toEqual(["/only"])
+    expect(homeProjectDirectories(null)).toEqual([])
   })
 
   test("extracts api error message and fallback", () => {

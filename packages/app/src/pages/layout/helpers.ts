@@ -83,6 +83,11 @@ export function homeProjectNavigation(active: ServerConnection.Key, server: Serv
   return { server, href }
 }
 
+export function homeProjectDirectories(result: string | string[] | null) {
+  if (!result) return []
+  return Array.isArray(result) ? result : [result]
+}
+
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {

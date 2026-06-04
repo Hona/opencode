@@ -18,8 +18,8 @@ function compose(scope: ServerScope, parts: string[]) {
 
 export const ServerScope = {
   local: "local" as ServerScope,
-  fromServerKey(key: ServerConnection.Key) {
-    return fragment("Server scope", key === "sidecar" ? ServerScope.local : key) as ServerScope
+  fromServerKey(key: ServerConnection.Key, canonicalLocalServer?: ServerConnection.Key) {
+    return fragment("Server scope", key === "sidecar" || key === canonicalLocalServer ? ServerScope.local : key) as ServerScope
   },
 }
 
