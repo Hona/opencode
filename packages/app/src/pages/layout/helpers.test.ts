@@ -16,6 +16,7 @@ import {
   hasProjectPermissions,
   homeProjectNavigation,
   homeProjectDirectories,
+  homeSessionServerStatus,
   latestRootSession,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -282,6 +283,24 @@ describe("layout workspace helpers", () => {
     expect(homeProjectDirectories(["/first", "/second"])).toEqual(["/first", "/second"])
     expect(homeProjectDirectories("/only")).toEqual(["/only"])
     expect(homeProjectDirectories(null)).toEqual([])
+  })
+
+  test("hides status derived from an inactive server", () => {
+    let reads = 0
+    const status = () => {
+      reads++
+      return { working: true, tint: "red" }
+    }
+    expect(homeSessionServerStatus(false, status)).toEqual({
+      working: false,
+      tint: undefined,
+    })
+    expect(reads).toBe(0)
+    expect(homeSessionServerStatus(true, status)).toEqual({
+      working: true,
+      tint: "red",
+    })
+    expect(reads).toBe(1)
   })
 
   test("extracts api error message and fallback", () => {

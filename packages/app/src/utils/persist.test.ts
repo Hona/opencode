@@ -183,7 +183,11 @@ describe("persist localStorage resilience", () => {
     expect(Persist.serverGlobal(ServerScope.local, "notification")).toEqual(Persist.global("notification"))
     expect(Persist.serverGlobal("https://debian.example" as ServerScope, "notification")).toEqual({
       storage: "opencode.global.dat",
-      key: "server:https://debian.example:notification",
+      key: "https://debian.example\0notification",
     })
+  })
+
+  test("server global target cannot collide when scope and key contain colons", () => {
+    expect(Persist.serverGlobal("a:b" as ServerScope, "c")).not.toEqual(Persist.serverGlobal("a" as ServerScope, "b:c"))
   })
 })

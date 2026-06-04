@@ -88,6 +88,11 @@ export function homeProjectDirectories(result: string | string[] | null) {
   return Array.isArray(result) ? result : [result]
 }
 
+export function homeSessionServerStatus(active: boolean, status: () => { working: boolean; tint?: string }) {
+  if (!active) return { working: false, tint: undefined }
+  return status()
+}
+
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {

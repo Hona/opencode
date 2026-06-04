@@ -32,6 +32,7 @@ import {
   getProjectAvatarSource,
   homeProjectDirectories,
   homeProjectNavigation,
+  homeSessionServerStatus,
   type HomeProjectSelection,
   projectForSession,
   sortedRootSessions,
@@ -126,11 +127,17 @@ function createHomeSessionStatus(input: {
         return !permission.autoResponds(item, input.record().session.directory)
       }),
   )
+  const serverStatus = createMemo(() =>
+    homeSessionServerStatus(input.activeServer(), () => ({
+      working: sessionStore().session_working(input.record().session.id),
+      tint: messageAgentColor(sessionStore().message[input.record().session.id], sessionStore().agent),
+    })),
+  )
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    return sessionStore().session_working(input.record().session.id)
+    return serverStatus().working
   })
-  const tint = createMemo(() => messageAgentColor(sessionStore().message[input.record().session.id], sessionStore().agent))
+  const tint = createMemo(() => serverStatus().tint)
   return {
     unseenCount,
     hasError,
