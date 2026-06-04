@@ -13,6 +13,7 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
+import { hydrateSessionLineage } from "./session-lineage"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -462,7 +463,29 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
           const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
           const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
-          if (cached && hasSession && !opts?.force) return
+          const syncLineage = async () => {
+            const session = getSession(sessionID)
+            if (!session) return
+            await hydrateSessionLineage(session, getSession, async (ancestorID) => {
+              const response = await retry(() => client.session.get({ sessionID: ancestorID }))
+              if (!tracked(directory, sessionID)) return
+              const data = response.data
+              if (!data) return
+              setStore(
+                "session",
+                produce((draft) => {
+                  const match = Binary.search(draft, ancestorID, (session) => session.id)
+                  if (match.found) {
+                    draft[match.index] = data
+                    return
+                  }
+                  draft.splice(match.index, 0, data)
+                }),
+              )
+              return data
+            })
+          }
+          if (cached && hasSession && !opts?.force) return syncLineage()
 
           const limit = meta.limit[key] ?? initialMessagePageSize
           const sessionReq =
@@ -502,6 +525,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                 })
 
           await Promise.all([sessionReq, messagesReq])
+          await syncLineage()
         })
       },
       async diff(sessionID: string, opts?: { force?: boolean }) {

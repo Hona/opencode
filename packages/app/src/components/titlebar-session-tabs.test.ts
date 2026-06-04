@@ -14,6 +14,15 @@ describe("titlebar session tabs", () => {
     expect(getRootSession("root", (id) => (id === root.id ? root : undefined))).toBe(root)
   })
 
+  test("waits for delayed lineage rather than opening a subagent tab", () => {
+    const sessions: { id: string; parentID?: string }[] = [{ id: "child", parentID: "root" }]
+    const get = (id: string) => sessions.find((session) => session.id === id)
+
+    expect(getRootSession("child", get)).toBeUndefined()
+    sessions.push({ id: "root" })
+    expect(getRootSession("child", get)?.id).toBe("root")
+  })
+
   test("ignores incomplete and cyclic subagent paths", () => {
     const sessions = [
       { id: "missing-parent", parentID: "missing" },
