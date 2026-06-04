@@ -38,7 +38,7 @@ export function trimSessions(
   const cutoff = (options.now ?? Date.now()) - SESSION_RECENT_WINDOW
   const all = input
     .filter((s) => !!s?.id)
-    .filter((s) => !s.time?.archived)
+    .filter((s) => s.time?.archived === undefined)
     .sort((a, b) => cmp(a.id, b.id))
   const roots = all.filter((s) => !s.parentID)
   roots.sort(compareSessionRecent)

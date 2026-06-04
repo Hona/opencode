@@ -35,12 +35,19 @@ export function sessionAndParentIDs(sessions: SessionNode[], sessionID: string) 
 export function loadedSessionTreeIDs(sessions: SessionNode[], rootID: string) {
   const ids = new Set([rootID])
   const queue = [rootID]
+  const children = sessions.reduce((acc, session) => {
+    if (!session.parentID) return acc
+    const list = acc.get(session.parentID)
+    if (list) list.push(session.id)
+    if (!list) acc.set(session.parentID, [session.id])
+    return acc
+  }, new Map<string, string[]>())
 
   for (const id of queue) {
-    for (const session of sessions) {
-      if (session.parentID !== id || ids.has(session.id)) continue
-      ids.add(session.id)
-      queue.push(session.id)
+    for (const child of children.get(id) ?? []) {
+      if (ids.has(child)) continue
+      ids.add(child)
+      queue.push(child)
     }
   }
 

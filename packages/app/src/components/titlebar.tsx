@@ -406,7 +406,12 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               () => tabsStore.tabs,
               (tab) => {
                 const [store] = serverSync.child(tab.directory, { bootstrap: false })
-                return () => ({ ...tab, info: store.session.find((session) => session.id === tab.rootID) ?? tab.snapshot })
+                return {
+                  ...tab,
+                  get info() {
+                    return store.session.find((session) => session.id === tab.rootID) ?? tab.snapshot
+                  },
+                }
               },
             )
 
@@ -434,7 +439,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsEnriched().map((resolve) => resolve())}>
+                    <For each={tabsEnriched()}>
                       {(tab, i) => (
                         <>
                           {i() !== 0 && (

@@ -203,7 +203,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
-  test("reports loaded routes but only marks the archived session unavailable", () => {
+  test("removes a loaded tree when a root is archived", () => {
     const unavailable: unknown[] = []
     const message = userMessage("msg_1", "child")
     const [store, setStore] = createStore(

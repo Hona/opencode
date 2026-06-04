@@ -875,7 +875,7 @@ export function MessageTimeline(props: {
     const session = sync.session.get(sessionID)
     if (!session) return false
 
-    const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && s.time?.archived === undefined)
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
     const sessionIDs = [...loadedSessionTreeIDs(sync.data.session, sessionID)]

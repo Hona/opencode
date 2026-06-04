@@ -481,7 +481,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                 if (!tracked(directory, sessionID)) return
                 const data = response?.data
                 if (!data || store.session_unavailable[ancestorID]) return
-                if (data.time.archived !== undefined) return data
+                if (data.time.archived !== undefined) {
+                  setStore("session_unavailable", ancestorID, true)
+                  return data
+                }
                 setStore(
                   "session",
                   produce((draft) => {

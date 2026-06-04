@@ -31,7 +31,7 @@ function SettingsServerDataProviders(props: ParentProps<{ server: ServerConnecti
   return (
     <QueryClientProvider client={serverCtx().queryClient}>
       <ServerSDKProvider server={props.server}>
-        <ServerSyncProvider>
+        <ServerSyncProvider server={props.server}>
           <ModelsProvider>{props.children}</ModelsProvider>
         </ServerSyncProvider>
       </ServerSDKProvider>
