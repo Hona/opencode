@@ -15,7 +15,8 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
+import { getProjectAvatarSource, hasProjectPermissions } from "./helpers"
+import { sessionChildOnPath } from "@/session/tree"
 
 export const ProjectIcon = (props: {
   project: LocalProject
@@ -164,7 +165,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
   const currentChild = createMemo(() => {
     if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
+    return sessionChildOnPath(sessionStore.session, props.session.id, params.id)
   })
 
   const warm = (span: number, priority: "high" | "low") => {

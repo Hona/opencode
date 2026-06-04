@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { cachedSessionTreeIDs, rootSession, sessionAndParentIDs, sessionChildOnPath } from "."
+import { loadedSessionTreeIDs, rootSession, sessionAndParentIDs, sessionChildOnPath } from "."
 
 describe("session tree", () => {
   const sessions = [{ id: "root" }, { id: "child", parentID: "root" }, { id: "leaf", parentID: "child" }]
@@ -22,7 +22,7 @@ describe("session tree", () => {
   })
 
   test("collects a cached session tree", () => {
-    expect([...cachedSessionTreeIDs(sessions, "root")]).toEqual(["root", "child", "leaf"])
+    expect([...loadedSessionTreeIDs(sessions, "root")]).toEqual(["root", "child", "leaf"])
   })
 
   test("finds the direct child on an active path", () => {

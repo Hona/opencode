@@ -21,7 +21,7 @@ export async function loadMissingSessionParents<T extends SessionNode>(input: {
     if (!input.available(session.parentID)) return
 
     const parent = input.get(session.parentID) ?? (await input.load(session.parentID))
-    if (!parent || parent.time?.archived) return
+    if (!parent || parent.time?.archived !== undefined) return
     session = parent
   }
 }

@@ -44,7 +44,7 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
-import { publishSessionsUnavailable } from "@/session/lifecycle/events"
+import { publishSessionTabsInvalidated } from "@/session/tabs/events"
 
 type GlobalStore = {
   ready: boolean
@@ -400,7 +400,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
-      onSessionsUnavailable: publishSessionsUnavailable,
+      onSessionTabsInvalidated: publishSessionTabsInvalidated,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

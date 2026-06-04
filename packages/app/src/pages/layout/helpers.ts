@@ -1,7 +1,6 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
-import { sessionChildOnPath } from "@/session/tree"
 
 type SessionStore = {
   session?: Session[]
@@ -38,11 +37,6 @@ export function hasProjectPermissions<T>(
   include: (item: T) => boolean = () => true,
 ) {
   return Object.values(request ?? {}).some((list) => list?.some(include))
-}
-
-export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {
-  if (!activeID || activeID === rootID) return
-  return sessionChildOnPath(sessions ?? [], rootID, activeID)
 }
 
 export const displayName = (project: { name?: string; worktree: string }) =>

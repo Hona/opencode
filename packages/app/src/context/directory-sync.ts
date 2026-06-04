@@ -472,15 +472,14 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
               get: getSession,
               available: (id) => !store.session_unavailable[id],
               load: async (ancestorID) => {
-                if (store.session_unavailable[ancestorID]) return
                 const response = await retry(() => client.session.get({ sessionID: ancestorID })).catch((error) => {
                   if (isNotFound(error)) return
                   throw error
                 })
                 if (!tracked(directory, sessionID)) return
                 const data = response?.data
-                if (!data) return
-                if (data.time.archived || store.session_unavailable[ancestorID]) return data
+                if (!data || store.session_unavailable[ancestorID]) return
+                if (data.time.archived !== undefined) return data
                 setStore(
                   "session",
                   produce((draft) => {
@@ -501,7 +500,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                   .then((session) => {
                     if (!tracked(directory, sessionID)) return
                     const data = session.data
-                    if (!data || data.time.archived || store.session_unavailable[sessionID]) return
+                    if (!data || data.time.archived !== undefined || store.session_unavailable[sessionID]) return
                     setStore(
                       "session",
                       produce((draft) => {
@@ -619,16 +618,6 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         })
       },
       more: createMemo(() => current()[0].session.length >= current()[0].limit),
-      archive: async (sessionID: string) => {
-        const [, setStore] = serverSync.child(directory)
-        await client.session.update({ sessionID, time: { archived: Date.now() } })
-        setStore(
-          produce((draft) => {
-            const match = Binary.search(draft.session, sessionID, (s) => s.id)
-            if (match.found) draft.session.splice(match.index, 1)
-          }),
-        )
-      },
     },
     absolute,
     get directory() {

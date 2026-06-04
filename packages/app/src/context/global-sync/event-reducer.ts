@@ -15,8 +15,8 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session/trim"
 import { dropSessionCaches } from "./session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-import { cachedSessionTreeIDs } from "@/session/tree"
-import type { SessionsUnavailable } from "@/session/lifecycle"
+import { loadedSessionTreeIDs } from "@/session/tree"
+import type { SessionTabsInvalidated } from "@/session/tabs/events"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -101,7 +101,7 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
-  onSessionsUnavailable?: (change: SessionsUnavailable) => void
+  onSessionTabsInvalidated?: (input: SessionTabsInvalidated) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -128,9 +128,10 @@ export function applyDirectoryEvent(input: {
     case "session.updated": {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
-      if (info.time.archived) {
-        if (input.store.session_unavailable[info.id] === "archived") break
-        const sessionIDs = [...cachedSessionTreeIDs(input.store.session, info.id)]
+      if (info.time.archived !== undefined) {
+        const previous = input.store.session_unavailable[info.id]
+        if (previous) break
+        const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
         if (result.found) {
           input.setStore(
             "session",
@@ -140,7 +141,8 @@ export function applyDirectoryEvent(input: {
           )
         }
         cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
-        markSessionsUnavailable(input, { directory: input.directory, sessionIDs, reason: "archived" })
+        input.setStore("session_unavailable", info.id, true)
+        input.onSessionTabsInvalidated?.({ directory: input.directory, sessionIDs })
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -159,8 +161,9 @@ export function applyDirectoryEvent(input: {
     }
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
-      if (input.store.session_unavailable[info.id] === "deleted") break
-      const sessionIDs = [...cachedSessionTreeIDs(input.store.session, info.id)]
+      const previous = input.store.session_unavailable[info.id]
+      if (previous) break
+      const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore(
@@ -171,7 +174,8 @@ export function applyDirectoryEvent(input: {
         )
       }
       cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
-      markSessionsUnavailable(input, { directory: input.directory, sessionIDs, reason: "deleted" })
+      input.setStore("session_unavailable", info.id, true)
+      input.onSessionTabsInvalidated?.({ directory: input.directory, sessionIDs })
       if (info.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
@@ -389,17 +393,4 @@ export function applyDirectoryEvent(input: {
       break
     }
   }
-}
-
-function markSessionsUnavailable(
-  input: Pick<Parameters<typeof applyDirectoryEvent>[0], "setStore" | "onSessionsUnavailable">,
-  change: SessionsUnavailable,
-) {
-  input.setStore(
-    "session_unavailable",
-    produce((draft) => {
-      for (const sessionID of change.sessionIDs) draft[sessionID] = change.reason
-    }),
-  )
-  input.onSessionsUnavailable?.(change)
 }

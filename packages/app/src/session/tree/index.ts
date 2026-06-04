@@ -32,7 +32,7 @@ export function sessionAndParentIDs(sessions: SessionNode[], sessionID: string) 
   return ids
 }
 
-export function cachedSessionTreeIDs(sessions: SessionNode[], rootID: string) {
+export function loadedSessionTreeIDs(sessions: SessionNode[], rootID: string) {
   const ids = new Set([rootID])
   const queue = [rootID]
 
@@ -47,11 +47,10 @@ export function cachedSessionTreeIDs(sessions: SessionNode[], rootID: string) {
   return ids
 }
 
-export function sessionChildOnPath<T extends SessionNode>(sessions: T[], rootID: string, activeID: string) {
-  if (rootID === activeID) return
+export function sessionChildOnPath<T extends SessionNode>(sessions: T[], rootID: string, activeID?: string) {
+  if (!activeID || rootID === activeID) return
   const byID = new Map(sessions.map((session) => [session.id, session]))
   const ids = sessionAndParentIDs(sessions, activeID)
   const index = ids.indexOf(rootID)
-  if (index <= 0) return
-  return byID.get(ids[index - 1]!)
+  if (index > 0) return byID.get(ids[index - 1]!)
 }

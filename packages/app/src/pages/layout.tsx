@@ -50,7 +50,6 @@ import {
 } from "@/context/global-sync/session/prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
@@ -90,8 +89,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
-import { cachedSessionTreeIDs } from "@/session/tree"
-import { publishSessionsUnavailable } from "@/session/lifecycle/events"
+import { loadedSessionTreeIDs } from "@/session/tree"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -973,25 +971,18 @@ export default function Layout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
-    const [store, setStore] = serverSync.child(session.directory)
+    const [store] = serverSync.child(session.directory)
     const sessions = store.session ?? []
     const roots = sessions.filter((item) => !item.parentID)
     const index = roots.findIndex((item) => item.id === session.id)
     const nextSession = roots[index + 1] ?? roots[index - 1]
-    const sessionIDs = [...cachedSessionTreeIDs(sessions, session.id)]
+    const sessionIDs = [...loadedSessionTreeIDs(sessions, session.id)]
 
     await serverSDK.client.session.update({
       directory: session.directory,
       sessionID: session.id,
       time: { archived: Date.now() },
     })
-    setStore(
-      produce((draft) => {
-        const match = Binary.search(draft.session, session.id, (s) => s.id)
-        if (match.found) draft.session.splice(match.index, 1)
-        for (const sessionID of sessionIDs) draft.session_unavailable[sessionID] = "archived"
-      }),
-    )
     if (params.id && sessionIDs.includes(params.id)) {
       if (nextSession) {
         navigate(`/${params.dir}/session/${nextSession.id}`)
@@ -999,7 +990,6 @@ export default function Layout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
-    publishSessionsUnavailable({ directory: session.directory, sessionIDs, reason: "archived" })
   }
 
   command.register("layout", () => {

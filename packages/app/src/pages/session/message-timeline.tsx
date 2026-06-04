@@ -65,8 +65,6 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { cachedSessionTreeIDs } from "@/session/tree"
-import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
@@ -854,21 +852,11 @@ export function MessageTimeline(props: {
     const roots = sessions.filter((item) => !item.parentID)
     const index = roots.findIndex((item) => item.id === sessionID)
     const nextSession = index === -1 ? undefined : (roots[index + 1] ?? roots[index - 1])
-    const sessionIDs = [...cachedSessionTreeIDs(sessions, sessionID)]
 
     await sdk.client.session
       .update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
-        sync.set(
-          produce((draft) => {
-            const index = draft.session.findIndex((s) => s.id === sessionID)
-            if (index !== -1) draft.session.splice(index, 1)
-            for (const id of sessionIDs) draft.session_unavailable[id] = "archived"
-          }),
-        )
-        for (const id of sessionIDs) sync.session.evict(id)
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        publishSessionsUnavailable({ directory: sdk.directory, sessionIDs, reason: "archived" })
       })
       .catch((err) => {
         showToast({
@@ -899,21 +887,7 @@ export function MessageTimeline(props: {
 
     if (!result) return false
 
-    const removed = cachedSessionTreeIDs(sync.data.session, sessionID)
-
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-
-    sync.set(
-      produce((draft) => {
-        draft.session = draft.session.filter((s) => !removed.has(s.id))
-        for (const id of removed) draft.session_unavailable[id] = "deleted"
-      }),
-    )
-
-    for (const id of removed) {
-      sync.session.evict(id)
-    }
-    publishSessionsUnavailable({ directory: sdk.directory, sessionIDs: [...removed], reason: "deleted" })
     return true
   }
 

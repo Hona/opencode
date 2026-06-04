@@ -1,5 +1,5 @@
 import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { cachedSessionTreeIDs } from "@/session/tree"
+import { loadedSessionTreeIDs } from "@/session/tree"
 
 function sessionTreeRequest<T>(
   session: Session[],
@@ -9,7 +9,7 @@ function sessionTreeRequest<T>(
 ) {
   if (!sessionID) return
 
-  const id = [...cachedSessionTreeIDs(session, sessionID)].find((id) => request[id]?.some(include))
+  const id = [...loadedSessionTreeIDs(session, sessionID)].find((id) => request[id]?.some(include))
   if (!id) return
   return request[id]?.find(include)
 }

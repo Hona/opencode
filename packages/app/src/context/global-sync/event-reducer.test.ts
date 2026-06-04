@@ -203,7 +203,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
-  test("reports the cached subtree when a session becomes unavailable", () => {
+  test("reports loaded routes but only marks the archived session unavailable", () => {
     const unavailable: unknown[] = []
     const [store, setStore] = createStore(
       baseState({
@@ -223,12 +223,13 @@ describe("applyDirectoryEvent", () => {
       push() {},
       directory: "/tmp",
       loadLsp() {},
-      onSessionsUnavailable(change) {
+      onSessionTabsInvalidated(change) {
         unavailable.push(change)
       },
     })
 
-    expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "other"], reason: "archived" }])
+    expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "other"] }])
+    expect(store.session_unavailable).toEqual({ root: true })
   })
 
   test("applies an archived root transition only once", () => {
@@ -240,7 +241,45 @@ describe("applyDirectoryEvent", () => {
     applyDirectoryEvent(input)
 
     expect(store.sessionTotal).toBe(0)
-    expect(store.session_unavailable.root).toBe("archived")
+    expect(store.session_unavailable.root).toBe(true)
+  })
+
+  test("does not decrement a root twice when deletion follows archive", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
+    const input = { store, setStore, push() {}, directory: "/tmp", loadLsp() {} }
+
+    applyDirectoryEvent({ ...input, event: { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } } })
+    applyDirectoryEvent({ ...input, event: { type: "session.deleted", properties: { info: rootSession({ id: "root" }) } } })
+
+    expect(store.sessionTotal).toBe(0)
+    expect(store.session_unavailable.root).toBe(true)
+  })
+
+  test("does not downgrade a deleted root when an archived event arrives late", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
+    const input = { store, setStore, push() {}, directory: "/tmp", loadLsp() {} }
+
+    applyDirectoryEvent({ ...input, event: { type: "session.deleted", properties: { info: rootSession({ id: "root" }) } } })
+    applyDirectoryEvent({ ...input, event: { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } } })
+
+    expect(store.sessionTotal).toBe(0)
+    expect(store.session_unavailable.root).toBe(true)
+  })
+
+  test("treats archive timestamp zero as archived", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 0 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.sessionTotal).toBe(0)
   })
 
   test("cleans session caches when deleted and decrements only root totals", () => {

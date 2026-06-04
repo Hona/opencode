@@ -20,6 +20,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { upsertSession } from "./session/store"
 
 type GlobalStore = {
   ready: boolean
@@ -147,13 +148,7 @@ function projectID(directory: string, projects: Project[]) {
 function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
   setStore("session", (list) => {
     const next = list.slice()
-    const idx = next.findIndex((item) => item.id >= session.id)
-    if (idx === -1) return [...next, session]
-    if (next[idx]?.id === session.id) {
-      next[idx] = session
-      return next
-    }
-    next.splice(idx, 0, session)
+    upsertSession(next, session)
     return next
   })
 }

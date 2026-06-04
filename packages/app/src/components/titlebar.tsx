@@ -18,18 +18,16 @@ import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
-import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { readSessionsUnavailable, SESSIONS_UNAVAILABLE_EVENT } from "@/session/lifecycle/events"
+import { readSessionTabsInvalidated, SESSION_TABS_INVALIDATED_EVENT } from "@/session/tabs/events"
 import { rootSession } from "@/session/tree"
 import {
   activeSessionTab,
   closeSessionTab,
-  createDesktopTabs,
   openSessionRoute,
   removeUnavailableSessions,
   type DesktopTabs,
@@ -260,7 +258,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            const [tabsStore, setTabsStore] = createStore<DesktopTabs<Session>>(createDesktopTabs())
+            const [tabsStore, setTabsStore] = createStore<DesktopTabs<Session>>({ tabs: [] })
             const currentRoute = (): SessionRoute | undefined => {
               if (!(params.dir && params.id)) return
               const directory = decodeDirectory(params.dir)
@@ -273,11 +271,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const [store] = serverSync.peek(directory, { bootstrap: false })
               if (store.session_unavailable[sessionID]) return
               const root = rootSession(store.session, sessionID)
-              if (!root || root.time.archived || store.session_unavailable[root.id]) return
+              if (!root || root.time.archived !== undefined || store.session_unavailable[root.id]) return
               return {
                 route: { directory, sessionID, href: makeSessionHref(b64Dir, sessionID) },
                 root,
-                href: makeSessionHref(b64Dir, root.id),
+                rootHref: makeSessionHref(b64Dir, root.id),
               }
             }
             const applyTabs = (result: { state: DesktopTabs<Session>; navigate?: string }) => {
@@ -287,8 +285,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               })
             }
 
-            makeEventListener(window, SESSIONS_UNAVAILABLE_EVENT, (event) => {
-              const change = readSessionsUnavailable(event)
+            makeEventListener(window, SESSION_TABS_INVALIDATED_EVENT, (event) => {
+              const change = readSessionTabsInvalidated(event)
               if (!change) return
               applyTabs(removeUnavailableSessions(tabsStore, { ...change, current: currentRoute() }))
             })
@@ -315,7 +313,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const closeCurrentSessionTab = () => {
               const tab = currentSessionTab()
               if (!tab) return false
-              applyTabs(closeSessionTab(tabsStore, tab.href))
+              applyTabs(closeSessionTab(tabsStore, tab.href, currentRoute()?.href))
               return true
             }
 
@@ -391,7 +389,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     category: "tab",
                     title: "",
                     keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
+                    disabled: tabsStore.tabs.length <= index,
                     hidden: true,
                     onSelect: () => {
                       const tab = tabsStore.tabs[index]
@@ -404,17 +402,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return commands
             })
 
-            const tabsEnriched = iife(() => {
-              const base = mapArray(
-                () => tabsStore.tabs,
-                (tab) => {
-                  const sync = serverSync.createDirSyncContext(tab.directory)
-                  return () => ({ ...tab, info: sync.session.get(tab.rootID) ?? tab.snapshot })
-                },
-              )
-
-              return () => base().map((resolve) => resolve())
-            })
+            const tabsEnriched = mapArray(
+              () => tabsStore.tabs,
+              (tab) => {
+                const [store] = serverSync.child(tab.directory, { bootstrap: false })
+                return () => ({ ...tab, info: store.session.find((session) => session.id === tab.rootID) ?? tab.snapshot })
+              },
+            )
 
             return (
               <div
@@ -440,7 +434,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsEnriched()}>
+                    <For each={tabsEnriched().map((resolve) => resolve())}>
                       {(tab, i) => (
                         <>
                           {i() !== 0 && (
@@ -453,7 +447,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             directory={tab.directory}
                             sessionId={tab.info.id}
                             active={tab.href === currentSessionTab()?.href}
-                            onClose={() => applyTabs(closeSessionTab(tabsStore, tab.href))}
+                            onClose={() => applyTabs(closeSessionTab(tabsStore, tab.href, currentRoute()?.href))}
                           />
                         </>
                       )}
@@ -477,7 +471,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     <NewSessionTabItem
                       href={`/${params.dir}/session`}
                       title={language.t("command.session.new")}
-                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                      onClose={() => navigate(tabsStore.tabs.at(-1)?.href ?? "/")}
                     />
                   </Show>
                   <div class="min-w-0 flex-1" />
@@ -709,7 +703,6 @@ function TabNavItem(props: {
   directory: string
   sessionId: string
   active: boolean
-  hideClose?: boolean
   onClose: () => void
 }) {
   const closeTab = (event: MouseEvent) => {
