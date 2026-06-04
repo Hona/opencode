@@ -4,8 +4,6 @@ import { useLayout } from "@/context/layout"
 import { useServer } from "@/context/server"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 
-export { ServerScope, SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
-
 export const useSessionKey = () => {
   const params = useParams()
   const server = useServer()

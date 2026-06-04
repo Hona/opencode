@@ -113,7 +113,7 @@ const trimTerminal = (pty: LocalPTY) => {
 }
 
 function terminalPersistTarget(scope: ServerScopeValue, dir: string, legacy?: string[]) {
-  return Persist.workspace(dir, scope === ServerScope.local ? "terminal" : `terminal:${scope}`, legacy)
+  return Persist.serverWorkspace(scope, dir, "terminal", legacy)
 }
 
 export function clearWorkspaceTerminals(

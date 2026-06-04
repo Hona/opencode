@@ -229,8 +229,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
-        migratedSessionTabs === value.sessionTabs
-        && sessionView === value.sessionView
+        migratedSessionTabs === value.sessionTabs &&
+        sessionView === value.sessionView
       ) {
         return value
       }
