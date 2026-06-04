@@ -38,7 +38,7 @@ import { toaster } from "@opencode-ai/ui/toast"
 import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { clearWorkspaceTerminals, getTerminalServerScope } from "@/context/terminal"
-import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
+import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session/cache"
 import {
   clearSessionPrefetchInflight,
   clearSessionPrefetch,
@@ -47,7 +47,7 @@ import {
   runSessionPrefetch,
   setSessionPrefetch,
   shouldSkipSessionPrefetch,
-} from "@/context/global-sync/session-prefetch"
+} from "@/context/global-sync/session/prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -90,6 +90,8 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
+import { createSessionGraph } from "@/session/graph"
+import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -973,8 +975,10 @@ export default function Layout(props: ParentProps) {
   async function archiveSession(session: Session) {
     const [store, setStore] = serverSync.child(session.directory)
     const sessions = store.session ?? []
-    const index = sessions.findIndex((s) => s.id === session.id)
-    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+    const roots = sessions.filter((item) => !item.parentID)
+    const index = roots.findIndex((item) => item.id === session.id)
+    const nextSession = roots[index + 1] ?? roots[index - 1]
+    const sessionIDs = [...createSessionGraph(sessions).cachedSubtreeIDs(session.id)]
 
     await serverSDK.client.session.update({
       directory: session.directory,
@@ -985,15 +989,17 @@ export default function Layout(props: ParentProps) {
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
         if (match.found) draft.session.splice(match.index, 1)
+        for (const sessionID of sessionIDs) draft.session_unavailable[sessionID] = "archived"
       }),
     )
-    if (session.id === params.id) {
+    if (params.id && sessionIDs.includes(params.id)) {
       if (nextSession) {
         navigate(`/${params.dir}/session/${nextSession.id}`)
       } else {
         navigate(`/${params.dir}/session`)
       }
     }
+    publishSessionsUnavailable({ directory: session.directory, sessionIDs, reason: "archived" })
   }
 
   command.register("layout", () => {

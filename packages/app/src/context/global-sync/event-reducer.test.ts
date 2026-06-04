@@ -70,6 +70,7 @@ const baseState = (input: Partial<State> = {}) =>
     path: { directory: "/tmp" } as State["path"],
     session: [],
     sessionTotal: 0,
+    session_unavailable: {},
     session_status: {},
     session_diff: {},
     todo: {},
@@ -200,6 +201,46 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
+  })
+
+  test("reports the cached subtree when a session becomes unavailable", () => {
+    const unavailable: unknown[] = []
+    const [store, setStore] = createStore(
+      baseState({
+        session: [
+          rootSession({ id: "child", parentID: "root" }),
+          rootSession({ id: "leaf", parentID: "child" }),
+          rootSession({ id: "root" }),
+        ],
+        sessionTotal: 1,
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      onSessionsUnavailable(change) {
+        unavailable.push(change)
+      },
+    })
+
+    expect(unavailable).toEqual([{ directory: "/tmp", sessionIDs: ["root", "child", "leaf"], reason: "archived" }])
+  })
+
+  test("applies an archived root transition only once", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
+    const event = { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } }
+    const input = { event, store, setStore, push() {}, directory: "/tmp", loadLsp() {} }
+
+    applyDirectoryEvent(input)
+    applyDirectoryEvent(input)
+
+    expect(store.sessionTotal).toBe(0)
+    expect(store.session_unavailable.root).toBe("archived")
   })
 
   test("cleans session caches when deleted and decrements only root totals", () => {

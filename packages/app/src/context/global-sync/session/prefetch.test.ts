@@ -6,7 +6,7 @@ import {
   runSessionPrefetch,
   setSessionPrefetch,
   shouldSkipSessionPrefetch,
-} from "./session-prefetch"
+} from "./prefetch"
 
 describe("session prefetch", () => {
   test("stores and clears message metadata by directory", () => {

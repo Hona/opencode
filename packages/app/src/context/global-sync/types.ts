@@ -43,6 +43,9 @@ export type State = {
   path: Path
   session: Session[]
   sessionTotal: number
+  session_unavailable: {
+    [sessionID: string]: "archived" | "deleted" | undefined
+  }
   session_status: {
     [sessionID: string]: SessionStatus
   }

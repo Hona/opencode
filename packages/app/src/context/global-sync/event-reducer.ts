@@ -12,9 +12,11 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
-import { trimSessions } from "./session-trim"
-import { dropSessionCaches } from "./session-cache"
+import { trimSessions } from "./session/trim"
+import { dropSessionCaches } from "./session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
+import { createSessionGraph } from "@/session/graph"
+import type { SessionsUnavailable } from "@/session/lifecycle"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -99,6 +101,7 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
+  onSessionsUnavailable?: (change: SessionsUnavailable) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -108,6 +111,7 @@ export function applyDirectoryEvent(input: {
     }
     case "session.created": {
       const info = (event.properties as { info: Session }).info
+      input.setStore("session_unavailable", info.id, undefined)
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
@@ -125,7 +129,8 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
-        if (input.store.session[result.index]!.time.archived === info.time.archived) break
+        if (input.store.session_unavailable[info.id] === "archived") break
+        const sessionIDs = [...createSessionGraph(input.store.session).cachedSubtreeIDs(info.id)]
         if (result.found) {
           input.setStore(
             "session",
@@ -135,10 +140,12 @@ export function applyDirectoryEvent(input: {
           )
         }
         cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
+        markSessionsUnavailable(input, { directory: input.directory, sessionIDs, reason: "archived" })
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
       }
+      input.setStore("session_unavailable", info.id, undefined)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
         break
@@ -152,6 +159,8 @@ export function applyDirectoryEvent(input: {
     }
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
+      if (input.store.session_unavailable[info.id] === "deleted") break
+      const sessionIDs = [...createSessionGraph(input.store.session).cachedSubtreeIDs(info.id)]
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore(
@@ -162,6 +171,7 @@ export function applyDirectoryEvent(input: {
         )
       }
       cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
+      markSessionsUnavailable(input, { directory: input.directory, sessionIDs, reason: "deleted" })
       if (info.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
@@ -379,4 +389,17 @@ export function applyDirectoryEvent(input: {
       break
     }
   }
+}
+
+function markSessionsUnavailable(
+  input: Pick<Parameters<typeof applyDirectoryEvent>[0], "setStore" | "onSessionsUnavailable">,
+  change: SessionsUnavailable,
+) {
+  input.setStore(
+    "session_unavailable",
+    produce((draft) => {
+      for (const sessionID of change.sessionIDs) draft[sessionID] = change.reason
+    }),
+  )
+  input.onSessionsUnavailable?.(change)
 }

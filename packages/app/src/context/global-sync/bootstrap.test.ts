@@ -24,6 +24,7 @@ describe("bootstrapDirectory", () => {
       path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
       session: [],
       sessionTotal: 0,
+      session_unavailable: {},
       session_status: {},
       session_working(id: string) {
         return this.session_status[id]?.type !== "idle"

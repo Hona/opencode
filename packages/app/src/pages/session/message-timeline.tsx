@@ -65,7 +65,8 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
+import { createSessionGraph } from "@/session/graph"
+import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
@@ -850,8 +851,10 @@ export function MessageTimeline(props: {
     if (!session) return
 
     const sessions = sync.data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+    const roots = sessions.filter((item) => !item.parentID)
+    const index = roots.findIndex((item) => item.id === sessionID)
+    const nextSession = index === -1 ? undefined : (roots[index + 1] ?? roots[index - 1])
+    const sessionIDs = [...createSessionGraph(sessions).cachedSubtreeIDs(sessionID)]
 
     await sdk.client.session
       .update({ sessionID, time: { archived: Date.now() } })
@@ -860,11 +863,12 @@ export function MessageTimeline(props: {
           produce((draft) => {
             const index = draft.session.findIndex((s) => s.id === sessionID)
             if (index !== -1) draft.session.splice(index, 1)
+            for (const id of sessionIDs) draft.session_unavailable[id] = "archived"
           }),
         )
-        sync.session.evict(sessionID)
+        for (const id of sessionIDs) sync.session.evict(id)
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [sessionID] })
+        publishSessionsUnavailable({ directory: sdk.directory, sessionIDs, reason: "archived" })
       })
       .catch((err) => {
         showToast({
@@ -895,46 +899,21 @@ export function MessageTimeline(props: {
 
     if (!result) return false
 
-    const removed = new Set<string>([sessionID])
-    const byParent = new Map<string, string[]>()
-    for (const item of sync.data.session) {
-      const parentID = item.parentID
-      if (!parentID) continue
-      const existing = byParent.get(parentID)
-      if (existing) {
-        existing.push(item.id)
-        continue
-      }
-      byParent.set(parentID, [item.id])
-    }
-
-    const stack = [sessionID]
-    while (stack.length) {
-      const parentID = stack.pop()
-      if (!parentID) continue
-
-      const children = byParent.get(parentID)
-      if (!children) continue
-
-      for (const child of children) {
-        if (removed.has(child)) continue
-        removed.add(child)
-        stack.push(child)
-      }
-    }
+    const removed = createSessionGraph(sync.data.session).cachedSubtreeIDs(sessionID)
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
 
     sync.set(
       produce((draft) => {
         draft.session = draft.session.filter((s) => !removed.has(s.id))
+        for (const id of removed) draft.session_unavailable[id] = "deleted"
       }),
     )
 
     for (const id of removed) {
       sync.session.evict(id)
     }
-    notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [...removed] })
+    publishSessionsUnavailable({ directory: sdk.directory, sessionIDs: [...removed], reason: "deleted" })
     return true
   }
 

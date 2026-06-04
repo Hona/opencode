@@ -7,12 +7,14 @@ import {
   getSessionPrefetch,
   getSessionPrefetchPromise,
   setSessionPrefetch,
-} from "./global-sync/session-prefetch"
+} from "./global-sync/session/prefetch"
 import { createServerSyncContext } from "./server-sync"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
+import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
+import { hydrateSessionLineage } from "./global-sync/session/lineage"
+import { upsertSession } from "./global-sync/session/store"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -462,7 +464,34 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
           const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
           const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
-          if (cached && hasSession && !opts?.force) return
+          const syncLineage = async () => {
+            const session = getSession(sessionID)
+            if (!session) return
+            await hydrateSessionLineage({
+              session,
+              get: getSession,
+              available: (id) => !store.session_unavailable[id],
+              load: async (ancestorID) => {
+                if (store.session_unavailable[ancestorID]) return
+                const response = await retry(() => client.session.get({ sessionID: ancestorID })).catch((error) => {
+                  if (isNotFound(error)) return
+                  throw error
+                })
+                if (!tracked(directory, sessionID)) return
+                const data = response?.data
+                if (!data) return
+                if (data.time.archived || store.session_unavailable[ancestorID]) return data
+                setStore(
+                  "session",
+                  produce((draft) => {
+                    upsertSession(draft, data)
+                  }),
+                )
+                return data
+              },
+            })
+          }
+          if (cached && hasSession && !opts?.force) return syncLineage()
 
           const limit = meta.limit[key] ?? initialMessagePageSize
           const sessionReq =
@@ -472,16 +501,11 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                   .then((session) => {
                     if (!tracked(directory, sessionID)) return
                     const data = session.data
-                    if (!data) return
+                    if (!data || data.time.archived || store.session_unavailable[sessionID]) return
                     setStore(
                       "session",
                       produce((draft) => {
-                        const match = Binary.search(draft, sessionID, (s) => s.id)
-                        if (match.found) {
-                          draft[match.index] = data
-                          return
-                        }
-                        draft.splice(match.index, 0, data)
+                        upsertSession(draft, data)
                       }),
                     )
                   })
@@ -502,6 +526,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                 })
 
           await Promise.all([sessionReq, messagesReq])
+          await syncLineage()
         })
       },
       async diff(sessionID: string, opts?: { force?: boolean }) {

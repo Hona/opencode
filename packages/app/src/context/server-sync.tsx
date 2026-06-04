@@ -28,9 +28,9 @@ import {
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
-import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
-import { trimSessions } from "./global-sync/session-trim"
+import { clearSessionPrefetchDirectory } from "./global-sync/session/prefetch"
+import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session/load"
+import { trimSessions } from "./global-sync/session/trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { formatServerError } from "@/utils/server-errors"
@@ -44,6 +44,7 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
+import { publishSessionsUnavailable } from "@/session/lifecycle/events"
 
 type GlobalStore = {
   ready: boolean
@@ -399,6 +400,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
+      onSessionsUnavailable: publishSessionsUnavailable,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

@@ -8,7 +8,7 @@ import type {
   SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
-import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
+import { dropSessionCaches, pickSessionCacheEvictions } from "./cache"
 
 const msg = (id: string, sessionID: string) =>
   ({

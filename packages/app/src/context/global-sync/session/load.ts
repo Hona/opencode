@@ -1,4 +1,4 @@
-import type { RootLoadArgs } from "./types"
+import type { RootLoadArgs } from "../types"
 
 export async function loadRootSessionsWithFallback(input: RootLoadArgs) {
   try {
