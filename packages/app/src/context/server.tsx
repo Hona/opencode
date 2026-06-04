@@ -27,6 +27,44 @@ function isLocalHost(url: string) {
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
+  if (!canonicalLocalServer || canonicalLocalServer === "local") return value
+  if (!isRecord(value)) return value
+  const projects = isRecord(value.projects) ? value.projects : undefined
+  const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const previousProjects = projects?.[canonicalLocalServer]
+  const previousLastProject = lastProject?.[canonicalLocalServer]
+  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+
+  const next = { ...value }
+  if (projects && Array.isArray(previousProjects)) {
+    const local = Array.isArray(projects.local) ? projects.local : []
+    const worktrees = new Set(
+      local.flatMap((project) => (isRecord(project) && typeof project.worktree === "string" ? [project.worktree] : [])),
+    )
+    const migrated = previousProjects.filter((project) => {
+      if (!isRecord(project) || typeof project.worktree !== "string") return true
+      if (worktrees.has(project.worktree)) return false
+      worktrees.add(project.worktree)
+      return true
+    })
+    const nextProjects: Record<string, unknown> = { ...projects, local: [...local, ...migrated] }
+    delete nextProjects[canonicalLocalServer]
+    next.projects = nextProjects
+  }
+  if (lastProject && typeof previousLastProject === "string") {
+    const nextLastProject = { ...lastProject }
+    if (typeof nextLastProject.local !== "string") nextLastProject.local = previousLastProject
+    delete nextLastProject[canonicalLocalServer]
+    next.lastProject = nextLastProject
+  }
+  return next
+}
+
 export function createServerProjects<T extends ServerProjectState>(input: {
   scope: Accessor<ServerScope>
   store: Store<T>
@@ -170,7 +208,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     servers?: Array<ServerConnection.Any>
   }) => {
     const [store, setStore, _, ready] = persisted(
-      Persist.global("server", ["server.v3"]),
+      {
+        ...Persist.global("server", ["server.v3"]),
+        migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
+      },
       createStore({
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,

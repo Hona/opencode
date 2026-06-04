@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, resolveServerList, ServerConnection } from "./server"
+import { createServerProjects, migrateCanonicalLocalServerState, resolveServerList, ServerConnection } from "./server"
 import { ServerScope } from "@/utils/server-scope"
 
 describe("resolveServerList", () => {
@@ -73,6 +73,51 @@ describe("createServerProjects", () => {
       adopted.close("/repo")
       expect(remote.list()).toEqual([])
       dispose()
+    })
+  })
+})
+
+describe("migrateCanonicalLocalServerState", () => {
+  test("moves an existing canonical web bucket into local scope", () => {
+    expect(
+      migrateCanonicalLocalServerState(
+        {
+          list: [],
+          projects: { "https://opencode.example.com": [{ worktree: "/remote", expanded: true }] },
+          lastProject: { "https://opencode.example.com": "/remote" },
+        },
+        ServerConnection.Key.make("https://opencode.example.com"),
+      ),
+    ).toEqual({
+      list: [],
+      projects: { local: [{ worktree: "/remote", expanded: true }] },
+      lastProject: { local: "/remote" },
+    })
+  })
+
+  test("preserves existing local state while merging a canonical web bucket", () => {
+    expect(
+      migrateCanonicalLocalServerState(
+        {
+          projects: {
+            local: [{ worktree: "/local", expanded: false }],
+            "https://opencode.example.com": [
+              { worktree: "/local", expanded: true },
+              { worktree: "/remote", expanded: true },
+            ],
+          },
+          lastProject: { local: "/local", "https://opencode.example.com": "/remote" },
+        },
+        ServerConnection.Key.make("https://opencode.example.com"),
+      ),
+    ).toEqual({
+      projects: {
+        local: [
+          { worktree: "/local", expanded: false },
+          { worktree: "/remote", expanded: true },
+        ],
+      },
+      lastProject: { local: "/local" },
     })
   })
 })
