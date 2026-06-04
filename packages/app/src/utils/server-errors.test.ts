@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
-import { formatServerError, parseReadableConfigInvalidError } from "./server-errors"
+import { formatServerError, isServerNotFound, parseReadableConfigInvalidError } from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -140,5 +140,10 @@ describe("formatServerError", () => {
     const wrapped = new Error("ConfigInvalidError", { cause: { body, status: 400 } })
 
     expect(formatServerError(wrapped, language.t)).toBe("Arquivo de config em config invalido: Missing host")
+  })
+
+  test("recognizes SDK-wrapped not found errors", () => {
+    expect(isServerNotFound(new Error("missing", { cause: { status: 404 } }))).toBe(true)
+    expect(isServerNotFound(new Error("broken", { cause: { status: 500 } }))).toBe(false)
   })
 })

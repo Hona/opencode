@@ -9,12 +9,14 @@ import {
   setSessionPrefetch,
 } from "./global-sync/session/prefetch"
 import { createServerSyncContext } from "./server-sync"
-import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
 import { loadMissingSessionParents } from "./global-sync/session/parents"
 import { upsertSession } from "./global-sync/session/store"
+import { loadedSessionTreeIDs } from "@/session/tree"
+import { isServerNotFound } from "@/utils/server-errors"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -35,12 +37,6 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-
-const isNotFound = (error: unknown) =>
-  error instanceof Error &&
-  typeof error.cause === "object" &&
-  error.cause !== null &&
-  (error.cause as { status?: unknown }).status === 404
 
 function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   const map = new Map(a.map((item) => [item.id, item] as const))
@@ -296,6 +292,14 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
     evict(directory, setStore, stale)
   }
 
+  const removeLoaded = (sessionID: string, sessionIDs: string[]) => {
+    for (const sessionID of sessionIDs) {
+      seenFor(directory).delete(sessionID)
+    }
+    serverSync.session.removeLoaded(directory, sessionID, sessionIDs)
+    clearMeta(directory, sessionIDs)
+  }
+
   const fetchMessages = async (input: { client: typeof client; sessionID: string; limit: number; before?: string }) => {
     const messages = await retry(() =>
       input.client.session.messages({ sessionID: input.sessionID, limit: input.limit, before: input.before }),
@@ -358,7 +362,11 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         })
       })
       .catch((error) => {
-        if (isNotFound(error) && !tracked(input.directory, input.sessionID)) return
+        if (isServerNotFound(error)) {
+          const [store] = serverSync.peek(input.directory, { bootstrap: false })
+          removeLoaded(input.sessionID, [...loadedSessionTreeIDs(store.session, input.sessionID)])
+          return
+        }
         throw error
       })
       .finally(() => {
@@ -475,15 +483,22 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
               available: (id) => !store.session_unavailable[id],
               load: async (ancestorID) => {
                 const response = await retry(() => client.session.get({ sessionID: ancestorID })).catch((error) => {
-                  if (isNotFound(error)) return
+                  if (isServerNotFound(error)) {
+                    removeLoaded(ancestorID, [...loadedSessionTreeIDs(store.session, ancestorID)])
+                    return
+                  }
                   throw error
                 })
                 if (!tracked(directory, sessionID)) return
                 const data = response?.data
                 if (!data || store.session_unavailable[ancestorID]) return
                 if (data.time.archived !== undefined) {
-                  setStore("session_unavailable", ancestorID, true)
-                  return data
+                  removeLoaded(ancestorID, [...loadedSessionTreeIDs(store.session, ancestorID)])
+                  return
+                }
+                if (data.parentID && store.session_unavailable[data.parentID]) {
+                  removeLoaded(ancestorID, [...loadedSessionTreeIDs(store.session, ancestorID)])
+                  return
                 }
                 setStore(
                   "session",
@@ -505,7 +520,15 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                   .then((session) => {
                     if (!tracked(directory, sessionID)) return
                     const data = session.data
-                    if (!data || data.time.archived !== undefined || store.session_unavailable[sessionID]) return
+                    if (!data || store.session_unavailable[sessionID]) return
+                    if (data.time.archived !== undefined) {
+                      removeLoaded(sessionID, [...loadedSessionTreeIDs(store.session, sessionID)])
+                      return
+                    }
+                    if (data.parentID && store.session_unavailable[data.parentID]) {
+                      removeLoaded(sessionID, [...loadedSessionTreeIDs(store.session, sessionID)])
+                      return
+                    }
                     setStore(
                       "session",
                       produce((draft) => {
@@ -514,7 +537,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                     )
                   })
                   .catch((error) => {
-                    if (isNotFound(error) && !tracked(directory, sessionID)) return
+                    if (isServerNotFound(error)) {
+                      removeLoaded(sessionID, [...loadedSessionTreeIDs(store.session, sessionID)])
+                      return
+                    }
                     throw error
                   })
 
@@ -606,12 +632,8 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           })
         },
       },
-      removeLoaded(session: Session, sessionIDs: string[]) {
-        for (const sessionID of sessionIDs) {
-          seenFor(directory).delete(sessionID)
-        }
-        serverSync.session.removeLoaded(directory, session, sessionIDs)
-        clearMeta(directory, sessionIDs)
+      removeLoaded(sessionID: string, sessionIDs: string[]) {
+        removeLoaded(sessionID, sessionIDs)
       },
     },
     absolute,

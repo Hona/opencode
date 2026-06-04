@@ -859,7 +859,7 @@ export function MessageTimeline(props: {
       .update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        sync.session.removeLoaded(session, sessionIDs)
+        sync.session.removeLoaded(session.id, sessionIDs)
       })
       .catch((err) => {
         showToast({
@@ -892,7 +892,7 @@ export function MessageTimeline(props: {
     if (!result) return false
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-    sync.session.removeLoaded(session, sessionIDs)
+    sync.session.removeLoaded(session.id, sessionIDs)
     return true
   }
 

@@ -13,14 +13,16 @@ import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
-import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
+import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
-import { formatServerError } from "@/utils/server-errors"
+import { formatServerError, isServerNotFound } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import { upsertSession } from "./session/store"
+import { loadedSessionTreeIDs } from "@/session/tree"
+import { dropSessionCaches } from "./session/cache"
 
 type GlobalStore = {
   ready: boolean
@@ -158,19 +160,59 @@ function warmSessions(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   sdk: OpencodeClient
+  onSessionsRemoved?: (sessionIDs: string[]) => void
 }) {
   const known = new Set(input.store.session.map((item) => item.id))
-  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
-  if (ids.length === 0) return Promise.resolve()
+  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id) && !input.store.session_unavailable[id])
+  const rejected = new Set<string>()
+  if (ids.length === 0) return Promise.resolve(dropUnavailableSessions(input.store, input.setStore, rejected, input.onSessionsRemoved))
   return Promise.all(
     ids.map((sessionID) =>
-      retry(() => input.sdk.session.get({ sessionID })).then((x) => {
-        const session = x.data
-        if (!session?.id || session.time.archived !== undefined || input.store.session_unavailable[session.id]) return
-        mergeSession(input.setStore, session)
-      }),
+      retry(() => input.sdk.session.get({ sessionID }))
+        .then((x) => {
+          const session = x.data
+          if (!session?.id) return
+          if (session.time.archived !== undefined || input.store.session_unavailable[session.id]) {
+            input.setStore("session_unavailable", session.id, true)
+            rejected.add(session.id)
+            return
+          }
+          if (session.parentID && input.store.session_unavailable[session.parentID]) {
+            input.setStore("session_unavailable", session.id, true)
+            rejected.add(session.id)
+            return
+          }
+          mergeSession(input.setStore, session)
+        })
+        .catch((error) => {
+          if (!isServerNotFound(error)) throw error
+          input.setStore("session_unavailable", sessionID, true)
+          rejected.add(sessionID)
+        }),
     ),
-  ).then(() => undefined)
+  ).then(() => dropUnavailableSessions(input.store, input.setStore, rejected, input.onSessionsRemoved))
+}
+
+function dropUnavailableSessions(
+  store: Store<State>,
+  setStore: SetStoreFunction<State>,
+  rejected: Set<string>,
+  onSessionsRemoved?: (sessionIDs: string[]) => void,
+) {
+  const ids = new Set(Object.keys(store.session_unavailable).filter((sessionID) => store.session_unavailable[sessionID]))
+  for (const sessionID of [...ids]) {
+    for (const id of loadedSessionTreeIDs(store.session, sessionID)) ids.add(id)
+  }
+  if (ids.size === 0) return
+  const changed = rejected.size > 0 || store.session.some((session) => ids.has(session.id))
+  setStore(
+    produce((draft) => {
+      draft.session = draft.session.filter((session) => !ids.has(session.id))
+      for (const sessionID of ids) draft.session_unavailable[sessionID] = true
+      dropSessionCaches(draft, ids)
+    }),
+  )
+  if (changed) onSessionsRemoved?.([...ids])
 }
 
 export const loadProvidersQuery = (directory: string | null, sdk: OpencodeClient) =>
@@ -199,6 +241,7 @@ export async function bootstrapDirectory(input: {
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
+  onSessionsRemoved?: (sessionIDs: string[]) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
@@ -254,13 +297,17 @@ export async function bootstrapDirectory(input: {
             const grouped = groupBySession(
               (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
             )
-            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk, onSessionsRemoved: input.onSessionsRemoved }).then(() =>
               batch(() => {
                 for (const sessionID of Object.keys(input.store.permission)) {
                   if (grouped[sessionID]) continue
                   input.setStore("permission", sessionID, [])
                 }
                 for (const [sessionID, permissions] of Object.entries(grouped)) {
+                  if (input.store.session_unavailable[sessionID]) {
+                    input.setStore("permission", sessionID, [])
+                    continue
+                  }
                   input.setStore(
                     "permission",
                     sessionID,
@@ -279,13 +326,17 @@ export async function bootstrapDirectory(input: {
           input.sdk.question.list().then((x) => {
             const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
             const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
-            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk, onSessionsRemoved: input.onSessionsRemoved }).then(() =>
               batch(() => {
                 for (const sessionID of Object.keys(input.store.question)) {
                   if (grouped[sessionID]) continue
                   input.setStore("question", sessionID, [])
                 }
                 for (const [sessionID, questions] of Object.entries(grouped)) {
+                  if (input.store.session_unavailable[sessionID]) {
+                    input.setStore("question", sessionID, [])
+                    continue
+                  }
                   input.setStore(
                     "question",
                     sessionID,

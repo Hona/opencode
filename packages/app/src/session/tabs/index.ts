@@ -13,8 +13,10 @@ export type SessionTab<T extends { id: string }> = {
 
 export type DesktopTabs<T extends { id: string }> = {
   tabs: SessionTab<T>[]
-  routeHref?: string
-  tabHref?: string
+  active?: {
+    route: SessionRoute
+    tabHref: string
+  }
 }
 
 export function openSessionRoute<T extends { id: string }>(
@@ -25,13 +27,12 @@ export function openSessionRoute<T extends { id: string }>(
   const index = state.tabs.findIndex((item) => item.href === tab.href)
   return {
     tabs: index === -1 ? [...state.tabs, tab] : state.tabs.map((item, i) => (i === index ? tab : item)),
-    routeHref: input.route.href,
-    tabHref: tab.href,
+    active: { route: input.route, tabHref: tab.href },
   }
 }
 
 export function activeSessionTab<T extends { id: string }>(state: DesktopTabs<T>, routeHref: string) {
-  const href = state.routeHref === routeHref ? state.tabHref : routeHref
+  const href = state.active?.route.href === routeHref ? state.active.tabHref : routeHref
   return state.tabs.find((tab) => tab.href === href)
 }
 
@@ -40,11 +41,11 @@ export function closeSessionTab<T extends { id: string }>(state: DesktopTabs<T>,
   if (index === -1) return { state }
 
   const tabs = state.tabs.filter((tab) => tab.href !== href)
-  if (state.routeHref !== routeHref || state.tabHref !== href) return { state: { ...state, tabs } }
+  if (state.active?.route.href !== routeHref || state.active?.tabHref !== href) return { state: { ...state, tabs } }
 
   const next = tabs[index] ?? tabs[tabs.length - 1]
   return {
-    state: { tabs, routeHref: next?.href, tabHref: next?.href },
+    state: { tabs, active: next ? { route: { directory: next.directory, sessionID: next.rootID, href: next.href }, tabHref: next.href } : undefined },
     navigate: next?.href ?? "/",
   }
 }
@@ -66,15 +67,18 @@ export function removeUnavailableSessions<T extends { id: string }>(
   if (removedCurrent) {
     const next = tabs[currentIndex] ?? tabs[tabs.length - 1]
     return {
-      state: { tabs, routeHref: next?.href, tabHref: next?.href },
+      state: { tabs, active: next ? { route: { directory: next.directory, sessionID: next.rootID, href: next.href }, tabHref: next.href } : undefined },
       navigate: next?.href ?? "/",
     }
   }
   if (input.current?.directory === input.directory && ids.has(input.current.sessionID)) {
     return {
-      state: { tabs, routeHref: current?.href, tabHref: current?.href },
+      state: { tabs, active: current ? { route: { directory: current.directory, sessionID: current.rootID, href: current.href }, tabHref: current.href } : undefined },
       navigate: current?.href ?? "/",
     }
+  }
+  if (state.active?.route.directory === input.directory && ids.has(state.active.route.sessionID)) {
+    return { state: { tabs } }
   }
   return { state: { ...state, tabs } }
 }

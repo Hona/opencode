@@ -105,4 +105,11 @@ describe("desktop session tabs", () => {
 
     expect(result.state.tabs.map((tab) => tab.directory)).toEqual(["/other"])
   })
+
+  test("clears an invalidated child binding while another page is active", () => {
+    const state = openSessionRoute(empty(), { route: childRoute, root, rootHref: rootRoute.href })
+    const result = removeUnavailableSessions(state, { directory: "/workspace", sessionIDs: ["child"] })
+
+    expect(activeSessionTab(result.state, childRoute.href)).toBeUndefined()
+  })
 })

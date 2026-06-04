@@ -35,6 +35,12 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
+export const isServerNotFound = (error: unknown) =>
+  error instanceof Error &&
+  typeof error.cause === "object" &&
+  error.cause !== null &&
+  (error.cause as { status?: unknown }).status === 404
+
 function unwrapNamedError(error: unknown): unknown {
   if (error instanceof Error && error.cause && typeof error.cause === "object" && "body" in error.cause) {
     return (error.cause as Record<string, unknown>).body

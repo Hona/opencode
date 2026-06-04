@@ -21,7 +21,7 @@ describe("session tree", () => {
     expect(sessionAndParentIDs(sessions, "leaf")).toEqual(["leaf", "child", "root"])
   })
 
-  test("collects a cached session tree", () => {
+  test("collects a loaded session tree", () => {
     expect([...loadedSessionTreeIDs(sessions, "root")]).toEqual(["root", "child", "leaf"])
   })
 

@@ -16,7 +16,6 @@ import { trimSessions } from "./session/trim"
 import { dropSessionCaches } from "./session/cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { loadedSessionTreeIDs } from "@/session/tree"
-import type { SessionTabsInvalidated } from "@/session/tabs/events"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -81,12 +80,16 @@ export function cleanupDroppedSessionCaches(
 export function removeLoadedSessions(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
-  session: Session
+  sessionID: string
   sessionIDs: string[]
+  decrementTotal?: boolean
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
 }) {
-  if (input.store.session_unavailable[input.session.id]) return false
   const ids = new Set(input.sessionIDs)
+  const unavailable = input.store.session_unavailable[input.sessionID]
+  const changed = [...ids].some((sessionID) => !input.store.session_unavailable[sessionID]) ||
+    input.store.session.some((session) => ids.has(session.id))
+  const counted = input.store.session.some((session) => session.id === input.sessionID && !session.parentID)
   input.setStore(
     "session",
     produce((draft) => {
@@ -103,8 +106,10 @@ export function removeLoadedSessions(input: {
       for (const sessionID of ids) draft[sessionID] = true
     }),
   )
-  if (!input.session.parentID) input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
-  return true
+  if (!unavailable && (input.decrementTotal ?? counted)) {
+    input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
+  }
+  return changed
 }
 
 export function applyDirectoryEvent(input: {
@@ -116,11 +121,11 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
-  onSessionsRemoved?: (input: SessionTabsInvalidated) => void
+  onSessionsRemoved?: (sessionIDs: string[]) => void
 }) {
   const event = input.event
   const sessionID = sessionEventID(event)
-  if (sessionID && input.store.session_unavailable[sessionID] && event.type !== "session.deleted") return
+  if (sessionID && input.store.session_unavailable[sessionID]) return
   switch (event.type) {
     case "server.instance.disposed": {
       input.push(input.directory)
@@ -128,7 +133,13 @@ export function applyDirectoryEvent(input: {
     }
     case "session.created": {
       const info = (event.properties as { info: Session }).info
-      input.setStore("session_unavailable", info.id, undefined)
+      if (info.parentID && input.store.session_unavailable[info.parentID]) {
+        const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
+        if (removeLoadedSessions({ ...input, sessionID: info.id, sessionIDs })) {
+          input.onSessionsRemoved?.(sessionIDs)
+        }
+        break
+      }
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
@@ -146,11 +157,17 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       if (info.time.archived !== undefined) {
         const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
-        if (!removeLoadedSessions({ ...input, session: info, sessionIDs })) break
-        input.onSessionsRemoved?.({ directory: input.directory, sessionIDs })
+        if (!removeLoadedSessions({ ...input, sessionID: info.id, sessionIDs, decrementTotal: !info.parentID })) break
+        input.onSessionsRemoved?.(sessionIDs)
         break
       }
-      if (input.store.session_unavailable[info.id]) break
+      if (info.parentID && input.store.session_unavailable[info.parentID]) {
+        const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
+        if (removeLoadedSessions({ ...input, sessionID: info.id, sessionIDs })) {
+          input.onSessionsRemoved?.(sessionIDs)
+        }
+        break
+      }
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
@@ -166,8 +183,8 @@ export function applyDirectoryEvent(input: {
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
       const sessionIDs = [...loadedSessionTreeIDs(input.store.session, info.id)]
-      if (!removeLoadedSessions({ ...input, session: info, sessionIDs })) break
-      input.onSessionsRemoved?.({ directory: input.directory, sessionIDs })
+      if (!removeLoadedSessions({ ...input, sessionID: info.id, sessionIDs, decrementTotal: !info.parentID })) break
+      input.onSessionsRemoved?.(sessionIDs)
       break
     }
     case "session.diff": {

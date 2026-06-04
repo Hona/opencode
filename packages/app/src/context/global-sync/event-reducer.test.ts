@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
+import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches, removeLoadedSessions } from "./event-reducer"
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -226,8 +226,8 @@ describe("applyDirectoryEvent", () => {
       push() {},
       directory: "/tmp",
       loadLsp() {},
-      onSessionsRemoved(change) {
-        unavailable.push(change)
+      onSessionsRemoved(sessionIDs) {
+        unavailable.push({ directory: "/tmp", sessionIDs })
       },
       setSessionTodo(sessionID, value) {
         if (value === undefined) todos.push(sessionID)
@@ -287,6 +287,22 @@ describe("applyDirectoryEvent", () => {
     expect(todos).toEqual([])
   })
 
+  test("ignores a delayed child update when its parent is unavailable", () => {
+    const [store, setStore] = createStore(baseState({ session_unavailable: { root: true } }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "child", parentID: "root" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.session_unavailable.child).toBe(true)
+  })
+
   test("applies an archived root transition only once", () => {
     const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "root" })], sessionTotal: 1 }))
     const event = { type: "session.updated", properties: { info: rootSession({ id: "root", archived: 10 }) } }
@@ -308,6 +324,30 @@ describe("applyDirectoryEvent", () => {
 
     expect(store.sessionTotal).toBe(0)
     expect(store.session_unavailable.root).toBe(true)
+  })
+
+  test("does not decrement totals for an archived root discovered outside the loaded list", () => {
+    const [store, setStore] = createStore(baseState({ session: [rootSession({ id: "other" })], sessionTotal: 1 }))
+
+    removeLoadedSessions({ store, setStore, sessionID: "archived", sessionIDs: ["archived"] })
+
+    expect(store.sessionTotal).toBe(1)
+    expect(store.session_unavailable.archived).toBe(true)
+  })
+
+  test("decrements totals for a remote root removal outside the loaded list", () => {
+    const [store, setStore] = createStore(baseState({ sessionTotal: 1 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.deleted", properties: { info: rootSession({ id: "root" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.sessionTotal).toBe(0)
   })
 
   test("does not downgrade a deleted root when an archived event arrives late", () => {

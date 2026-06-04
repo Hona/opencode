@@ -1,4 +1,4 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Session, Todo } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import {
@@ -250,18 +250,22 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     },
   })
 
-  const removeSessions = (directory: string, session: Session, sessionIDs: string[]) => {
+  const removedSessions = (directory: string, sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
-    const [store, setStore] = children.peek(directory, { bootstrap: false })
+    for (const sessionID of sessionIDs) setSessionTodo(sessionID, undefined)
     clearSessionPrefetch(directory, sessionIDs)
-    const removed = removeLoadedSessions({ store, setStore, session, sessionIDs, setSessionTodo })
     publishSessionTabsInvalidated({ directory, sessionIDs })
-    if (!removed) return
     sessionMeta.delete(key)
     sessionRev.set(key, (sessionRev.get(key) ?? 0) + 1)
-    if (pending) void pending.finally(() => loadSessions(directory))
+    void (pending ?? Promise.resolve()).finally(() => loadSessions(directory))
+  }
+
+  const removeSessions = (directory: string, sessionID: string, sessionIDs: string[]) => {
+    const [store, setStore] = children.peek(directory, { bootstrap: false })
+    if (!removeLoadedSessions({ store, setStore, sessionID, sessionIDs, setSessionTodo })) return
+    removedSessions(directory, sessionIDs)
   }
 
   async function loadSessions(directory: string) {
@@ -369,6 +373,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
         setStore: child[1],
         vcsCache: cache,
         loadSessions,
+        onSessionsRemoved: (sessionIDs) => removedSessions(directory, sessionIDs),
         translate: language.t,
         queryClient,
       })
@@ -418,10 +423,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
-      onSessionsRemoved: (input) => {
-        clearSessionPrefetch(input.directory, input.sessionIDs)
-        publishSessionTabsInvalidated(input)
-      },
+      onSessionsRemoved: (sessionIDs) => removedSessions(directory, sessionIDs),
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

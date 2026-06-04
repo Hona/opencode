@@ -90,6 +90,7 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
 import { loadedSessionTreeIDs } from "@/session/tree"
+import { isServerNotFound } from "@/utils/server-errors"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -802,7 +803,12 @@ export default function Layout(props: ParentProps) {
 
             return meta
           })
-          .catch(() => undefined),
+          .catch((error) => {
+            if (isServerNotFound(error)) {
+              serverSync.session.removeLoaded(directory, sessionID, [...loadedSessionTreeIDs(store.session, sessionID)])
+            }
+            return undefined
+          }),
     })
   }
 
@@ -859,6 +865,9 @@ export default function Layout(props: ParentProps) {
     }
 
     const lru = lruFor(directory)
+    for (const id of lru) {
+      if (store.session_unavailable[id]) lru.delete(id)
+    }
     const known = lru.has(session.id)
     if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
 
@@ -997,7 +1006,7 @@ export default function Layout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
-    serverSync.session.removeLoaded(session.directory, session, sessionIDs)
+    serverSync.session.removeLoaded(session.directory, session.id, sessionIDs)
   }
 
   command.register("layout", () => {
