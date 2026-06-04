@@ -268,7 +268,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const tabForSession = (b64Dir: string, sessionId: string) => {
               const dir = decodeDirectory(b64Dir)
               if (!dir) return
-              const [store] = serverSync.child(dir)
+              const [store] = serverSync.peek(dir, { bootstrap: false })
               const session = getRootSession(sessionId, (id) => store.session.find((session) => session.id === id))
               if (!session) return
               const href = makeSessionHref(b64Dir, session.id)
