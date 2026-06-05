@@ -8,7 +8,6 @@ import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 
 export type LocalPTY = {
   id: string
@@ -119,11 +118,12 @@ function terminalPersistTarget(scope: ServerScopeValue, dir: string, legacy?: st
 
 export function clearWorkspaceTerminals(
   dir: string,
-  sessionIDs?: string[],
-  platform?: Platform,
-  scope: ServerScopeValue = ServerScope.local,
+  sessionIDs: string[] | undefined,
+  platform: Platform | undefined,
+  scope: ServerScopeValue,
+  instance: string,
 ) {
-  const key = getWorkspaceTerminalCacheKey(dir, scope)
+  const key = ScopedKey.from(scope, instance, dir, WORKSPACE_KEY)
   for (const cache of caches) {
     const entry = cache.peek(key)
     entry?.value.clear()
@@ -412,7 +412,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     }
 
     const workspace = createMemo(() =>
-      loadWorkspace(base64Encode(directory().directory), directory().sessionID, scope(), server().instance),
+      loadWorkspace(directory().directory, directory().sessionID, scope(), server().instance),
     )
 
     return {

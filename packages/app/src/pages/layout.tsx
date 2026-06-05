@@ -1573,7 +1573,8 @@ export default function Layout(props: ParentProps) {
 
   const resetWorkspace = async (root: string, directory: string) => {
     if (directory === root) return
-    const sdk = serverSDK()
+    const currentServer = server()
+    const sdk = currentServer.sdk
     setBusy(directory, true)
 
     const progress = showToast({
@@ -1593,6 +1594,7 @@ export default function Layout(props: ParentProps) {
       sessions.map((s) => s.id),
       platform,
       sdk.scope,
+      currentServer.instance,
     )
     await sdk.client.instance.dispose({ directory }).catch(() => undefined)
 
