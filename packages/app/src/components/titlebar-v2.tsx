@@ -132,7 +132,7 @@ export function TitlebarV2() {
           state={route().type === "home" ? "pressed" : undefined}
         />
 
-        <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
+        <div class="relative z-30 flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden [app-region:no-drag]">
           <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
             <For each={tabs.tabs}>
               {(tab, index) => (
