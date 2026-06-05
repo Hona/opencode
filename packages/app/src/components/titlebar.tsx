@@ -22,15 +22,11 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import {
-  readSessionTabsRemovedDetail,
-  SESSION_TABS_REMOVED_EVENT,
-  type SessionTabsRemovedDetail,
-} from "@/components/titlebar-session-events"
+import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
-import { tabHref, tabKey, useTabs, type SessionTab, type Tab } from "@/context/tabs"
+import { tabHref, tabKey, useTabs, type Tab } from "@/context/tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -57,8 +53,6 @@ const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
-
-const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
 
 export type TitlebarUpdate = {
   version: () => string | undefined
@@ -259,6 +253,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             const tabs = useTabs()
             const tabsStore = tabs.store
+            const tabsStoreActions = tabs
             const closing = new Set<string>()
             const navigateTab = (tab: Tab) => {
               const href = tabHref(tab)
@@ -272,78 +267,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               })
             }
 
-            const tabsStoreActions = {
-              addSessionTab: (tab: Omit<SessionTab, "type">) => {
-                tabs.setStore(
-                  produce((tabs) => {
-                    if (tabs.some((item) => tabKey(item) === tabKey({ type: "session", ...tab }))) return
-
-                    tabs.push({ type: "session", ...tab })
-                  }),
-                )
-              },
-              removeTab: (index: number) => {
-                const tab = tabsStore[index]
-                if (!tab) return
-                const key = tabKey(tab)
-                const nextTab = tabsStore[index + 1] ?? tabsStore[index - 1]
-                closing.add(key)
-                void startTransition(() => {
-                  tabs.setStore(
-                    produce((tabs) => {
-                      tabs.splice(index, 1)
-                    }),
-                  )
-                  if (nextTab) navigateTab(nextTab)
-                  else navigate("/")
-                }).finally(() => closing.delete(key))
-              },
-              removeSessions: (input: SessionTabsRemovedDetail) => {
-                void startTransition(() => {
-                  tabs.setStore(
-                    produce((tabs) => {
-                      const sessionIDs = new Set(input.sessionIDs)
-                      const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
-                      const currentIndex = currentHref
-                        ? tabs.findIndex(
-                            (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
-                          )
-                        : -1
-                      const currentTab = tabs[currentIndex]
-                      const removedCurrent =
-                        currentTab?.type === "session" &&
-                        currentTab.server === server.key &&
-                        atob(currentTab.dirBase64) === input.directory &&
-                        sessionIDs.has(currentTab.sessionId)
-
-                      for (let i = tabs.length - 1; i >= 0; i--) {
-                        const tab = tabs[i]
-                        if (!tab || tab.type !== "session") continue
-                        if (tab.server !== server.key) continue
-                        if (atob(tab.dirBase64) !== input.directory) continue
-                        if (!sessionIDs.has(tab.sessionId)) continue
-                        tabs.splice(i, 1)
-                      }
-
-                      if (!removedCurrent) return
-                      const nextTab =
-                        tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
-                        tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
-                      if (nextTab) navigateTab(nextTab)
-                      else navigate("/")
-                    }),
-                  )
-                })
-              },
-            }
-
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
               if (route.type === "dir-new-sesssion") {
               }
               if (route.type === "session") {
                 const main = tabsStore.find(
-                  (item) => item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                  (item) =>
+                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
                 if (main) return main
                 const sync = serverSync.createDirSyncContext(route.dir)
@@ -847,7 +778,12 @@ function TabNavItem(props: {
   )
 }
 
-function ProjectTabAvatar(props: { project?: LocalProject; directory: string; sessionId: string; activeServer: boolean }) {
+function ProjectTabAvatar(props: {
+  project?: LocalProject
+  directory: string
+  sessionId: string
+  activeServer: boolean
+}) {
   const directory = () => props.directory
   const sessionId = () => props.sessionId
   const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
