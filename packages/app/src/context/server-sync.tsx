@@ -1,17 +1,7 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import {
-  batch,
-  createContext,
-  createEffect,
-  getOwner,
-  onCleanup,
-  onMount,
-  type ParentProps,
-  untrack,
-  useContext,
-} from "solid-js"
+import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -88,7 +78,7 @@ function makeQueryOptionsApi(scope: ServerScope, serverSDK: () => OpencodeClient
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext(_serverSDK?: ServerSDK) {
+export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
@@ -481,6 +471,17 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   }
 }
 
+export function createServerSyncContext(_serverSDK?: ServerSDK) {
+  const inner = createServerSyncContextInner(_serverSDK)
+  return Object.assign(inner, {
+    createDirSyncContext: createRefCountMap(
+      (dir) => createDirSyncContext(dir, inner, _serverSDK),
+      (dir) => inner.disableMcp(dir),
+      directoryKey,
+    ),
+  })
+}
+
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
   init: (props: { server?: ServerConnection.Any }) => {
@@ -492,13 +493,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
     const ctx = global.createServerCtx(conn)
 
-    return Object.assign(ctx.sync, {
-      createDirSyncContext: createRefCountMap(
-        (dir) => createDirSyncContext(dir, ctx.sync),
-        (dir) => ctx.sync.disableMcp(dir),
-        directoryKey,
-      ),
-    })
+    return ctx.sync
   },
 })
 

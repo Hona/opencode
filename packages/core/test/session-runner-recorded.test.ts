@@ -16,9 +16,10 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -46,7 +47,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -55,6 +56,7 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const systemContext = SystemContextRegistry.layer
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -62,6 +64,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
+  Layer.provide(systemContext),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -88,6 +91,7 @@ const it = testEffect(
     permission,
     registry,
     models,
+    systemContext,
     runner,
     coordinator,
     execution,
