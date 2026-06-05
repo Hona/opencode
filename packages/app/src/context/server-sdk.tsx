@@ -298,6 +298,7 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDK) {
   onCleanup(unsub)
 
   return {
+    scope: serverSDK.scope,
     directory,
     client,
     event: emitter,

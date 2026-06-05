@@ -107,6 +107,7 @@ function buildNotificationIndex(list: Notification[]) {
 
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
+  gate: false,
   init: () => {
     const params = useParams()
     const serverSDK = useServerSDK()

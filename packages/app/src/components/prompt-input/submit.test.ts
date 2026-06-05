@@ -127,6 +127,7 @@ beforeAll(async () => {
   mock.module("@/context/sdk", () => ({
     useSDK: () => {
       const sdk = {
+        scope: "local",
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
@@ -183,10 +184,6 @@ beforeAll(async () => {
         ]
       },
     }),
-  }))
-
-  mock.module("@/context/server-sdk", () => ({
-    useServerSDK: () => ({ scope: "local" }),
   }))
 
   mock.module("@/context/platform", () => ({

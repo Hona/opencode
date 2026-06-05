@@ -137,6 +137,7 @@ const currentRoute = (pathname: string): LayoutRoute => {
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
+  gate: false,
   init: () => {
     const globalSdk = useServerSDK()
     const serverSync = useServerSync()

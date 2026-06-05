@@ -18,7 +18,6 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
-import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
 
 type PendingPrompt = {
@@ -208,14 +207,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
-  const serverSDK = useServerSDK()
   const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
   const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
-  const pendingKey = (sessionID: string) => ScopedKey.from(serverSDK.scope, sessionID)
+  const pendingKey = (sessionID: string) => ScopedKey.from(sdk.scope, sessionID)
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -346,7 +344,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           return
         }
-        WorktreeState.pending(serverSDK.scope, createdWorktree.directory)
+        WorktreeState.pending(sdk.scope, createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
 
@@ -505,7 +503,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     clearInput()
 
     const waitForWorktree = async () => {
-      const worktree = WorktreeState.get(serverSDK.scope, sessionDirectory)
+      const worktree = WorktreeState.get(sdk.scope, sessionDirectory)
       if (!worktree || worktree.status !== "pending") return true
 
       if (sessionDirectory === projectDirectory) {
@@ -549,7 +547,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(serverSDK.scope, sessionDirectory), abortWait, timeout]).finally(() => {
+      const result = await Promise.race([WorktreeState.wait(sdk.scope, sessionDirectory), abortWait, timeout]).finally(() => {
         if (timer.id === undefined) return
         clearTimeout(timer.id)
       })

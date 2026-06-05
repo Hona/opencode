@@ -202,6 +202,7 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
+  gate: true,
   init: (props: {
     defaultServer: ServerConnection.Key
     canonicalLocalServer?: ServerConnection.Key

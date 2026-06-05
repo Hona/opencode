@@ -35,6 +35,7 @@ import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { ServerScope } from "@/utils/server-scope"
+import { persisted } from "@/utils/persist"
 
 type GlobalStore = {
   ready: boolean
@@ -208,6 +209,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   const children = createChildStoreManager({
     owner,
     scope: serverSDK.scope,
+    persist: persisted,
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
@@ -484,6 +486,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
 
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
+  gate: false,
   init: (props: { server?: ServerConnection.Any }) => {
     const global = useGlobal()
     const language = useLanguage()

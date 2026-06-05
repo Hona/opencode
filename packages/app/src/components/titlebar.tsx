@@ -17,7 +17,6 @@ import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useServerSync } from "@/context/server-sync"
-import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
@@ -28,10 +27,10 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
-import { Persist, persisted } from "@/utils/persist"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
+import { tabHref, tabKey, useTabs, type SessionTab, type Tab } from "@/context/tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -258,105 +257,85 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            type SessionTab = { type: "session"; server: ServerConnection.Key; dirBase64: string; sessionId: string }
-            type Tab = SessionTab
-
-            const tabHref = (tab: Tab) => {
-              if (tab.type === "session") {
-                return makeSessionHref(tab.dirBase64, tab.sessionId)
-              }
-              return "/"
-            }
-
-            const tabKey = (tab: Tab) => `${tab.server}\n${tabHref(tab)}`
+            const tabs = useTabs()
+            const tabsStore = tabs.store
+            const closing = new Set<string>()
             const navigateTab = (tab: Tab) => {
               const href = tabHref(tab)
               if (tab.server === server.key) {
                 navigate(href)
                 return
               }
-              server.setActive(tab.server)
-              navigate(href)
+              void startTransition(() => {
+                server.setActive(tab.server)
+                navigate(href)
+              })
             }
 
-            const [tabsStore, tabsStoreActions] = iife(() => {
-              const target = {
-                ...Persist.global("tabs"),
-                migrate: (value: unknown) => {
-                  if (!Array.isArray(value)) return value
-                  return value.map((tab) => {
-                    if (!tab || typeof tab !== "object" || "server" in tab) return tab
-                    return { ...tab, server: server.key }
-                  })
-                },
-              }
-              const [store, setStore] = persisted(target, createStore<Tab[]>([]))
+            const tabsStoreActions = {
+              addSessionTab: (tab: Omit<SessionTab, "type">) => {
+                tabs.setStore(
+                  produce((tabs) => {
+                    if (tabs.some((item) => tabKey(item) === tabKey({ type: "session", ...tab }))) return
 
-              const actions = {
-                addSessionTab: (tab: Omit<SessionTab, "type">) => {
-                  setStore(
+                    tabs.push({ type: "session", ...tab })
+                  }),
+                )
+              },
+              removeTab: (index: number) => {
+                const tab = tabsStore[index]
+                if (!tab) return
+                const key = tabKey(tab)
+                const nextTab = tabsStore[index + 1] ?? tabsStore[index - 1]
+                closing.add(key)
+                void startTransition(() => {
+                  tabs.setStore(
                     produce((tabs) => {
-                      if (tabs.some((item) => tabKey(item) === tabKey({ type: "session", ...tab })))
-                        return
-
-                      tabs.push({ type: "session", ...tab })
+                      tabs.splice(index, 1)
                     }),
                   )
-                },
-                removeTab: (index: number) => {
-                  if (index < 0) return
-                  void startTransition(() => {
-                    setStore(
-                      produce((tabs) => {
-                        const nextTab = tabs[index + 1] ?? tabs[index - 1]
-                        tabs.splice(index, 1)
-                        if (nextTab) navigateTab(nextTab)
-                        else navigate("/")
-                      }),
-                    )
-                  })
-                },
-                removeSessions: (input: SessionTabsRemovedDetail) => {
-                  void startTransition(() => {
-                    setStore(
-                      produce((tabs) => {
-                        const sessionIDs = new Set(input.sessionIDs)
-                        const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
-                        const currentIndex = currentHref
-                          ? tabs.findIndex(
-                              (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
-                            )
-                          : -1
-                        const currentTab = tabs[currentIndex]
-                        const removedCurrent =
-                          currentTab?.type === "session" &&
-                          currentTab.server === server.key &&
-                          atob(currentTab.dirBase64) === input.directory &&
-                          sessionIDs.has(currentTab.sessionId)
+                  if (nextTab) navigateTab(nextTab)
+                  else navigate("/")
+                }).finally(() => closing.delete(key))
+              },
+              removeSessions: (input: SessionTabsRemovedDetail) => {
+                void startTransition(() => {
+                  tabs.setStore(
+                    produce((tabs) => {
+                      const sessionIDs = new Set(input.sessionIDs)
+                      const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
+                      const currentIndex = currentHref
+                        ? tabs.findIndex(
+                            (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
+                          )
+                        : -1
+                      const currentTab = tabs[currentIndex]
+                      const removedCurrent =
+                        currentTab?.type === "session" &&
+                        currentTab.server === server.key &&
+                        atob(currentTab.dirBase64) === input.directory &&
+                        sessionIDs.has(currentTab.sessionId)
 
-                        for (let i = tabs.length - 1; i >= 0; i--) {
-                          const tab = tabs[i]
-                          if (!tab || tab.type !== "session") continue
-                          if (tab.server !== server.key) continue
-                          if (atob(tab.dirBase64) !== input.directory) continue
-                          if (!sessionIDs.has(tab.sessionId)) continue
-                          tabs.splice(i, 1)
-                        }
+                      for (let i = tabs.length - 1; i >= 0; i--) {
+                        const tab = tabs[i]
+                        if (!tab || tab.type !== "session") continue
+                        if (tab.server !== server.key) continue
+                        if (atob(tab.dirBase64) !== input.directory) continue
+                        if (!sessionIDs.has(tab.sessionId)) continue
+                        tabs.splice(i, 1)
+                      }
 
-                        if (!removedCurrent) return
-                        const nextTab =
-                          tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
-                          tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
-                        if (nextTab) navigateTab(nextTab)
-                        else navigate("/")
-                      }),
-                    )
-                  })
-                },
-              }
-
-              return [store, actions]
-            })
+                      if (!removedCurrent) return
+                      const nextTab =
+                        tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
+                        tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
+                      if (nextTab) navigateTab(nextTab)
+                      else navigate("/")
+                    }),
+                  )
+                })
+              },
+            }
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
@@ -383,6 +362,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             createEffect(() => {
               const route = layout.route()
+              if (!tabs.ready()) return
               const tab = currentTab()
               if (tab) return
 
@@ -391,11 +371,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 const session = sync.session.get(route.sessionId)
                 if (!session) return
                 const sessionId = session.parentID ?? session.id
-                tabsStoreActions.addSessionTab({
+                const next = {
                   server: route.server ?? server.key,
                   dirBase64: route.dirBase64,
                   sessionId,
-                })
+                }
+                if (closing.has(tabKey({ type: "session", ...next }))) return
+                tabsStoreActions.addSessionTab(next)
               }
             })
 
@@ -794,17 +776,19 @@ function TabNavItem(props: {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
     if (conn) return global.createServerCtx(conn)
   })
+  const dirSyncCtx = createMemo(() => serverCtx()?.sync.createDirSyncContext(props.directory))
 
   const [session] = createResource(
     () => {
-      const ctx = serverCtx()
+      const ctx = dirSyncCtx()
       if (!ctx || !props.sessionId) return
-      return [props.sessionId, ctx.sync.createDirSyncContext(props.directory)] as const
+      return [props.sessionId, ctx] as const
     },
     async ([sessionId, dirSyncCtx]) => {
       await dirSyncCtx.session.sync(sessionId).catch(() => {})
       return dirSyncCtx.session.get(sessionId)
     },
+    { initialValue: props.sessionId ? dirSyncCtx()?.session.get(props.sessionId) : undefined },
   )
 
   return (
@@ -816,7 +800,7 @@ function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <Show when={session()}>
+      <Show when={session.latest}>
         {(session) => {
           const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
 

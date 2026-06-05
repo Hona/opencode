@@ -46,6 +46,7 @@ function hasPermissionPromptRules(permission: unknown) {
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
+  gate: false,
   init: () => {
     const params = useParams()
     const serverSDK = useServerSDK()
