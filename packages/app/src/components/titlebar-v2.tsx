@@ -145,6 +145,7 @@ export function TitlebarV2() {
                       href={tabs.href(tab)}
                       server={tab.server}
                       sessionId={tab.sessionId}
+                      onSelect={() => tabs.select(index())}
                       onClose={() => tabs.close(tab, activeTab() === tab)}
                       active={activeTab() === tab}
                     />
@@ -152,6 +153,7 @@ export function TitlebarV2() {
                     <NewSessionTabItem
                       href={tabs.href(tab)}
                       title={titlebar.language.t("command.session.new")}
+                      onSelect={() => tabs.select(index())}
                       onClose={() => tabs.close(tab, activeTab() === tab)}
                       active={activeTab() === tab}
                     />
@@ -185,6 +187,7 @@ function TabNavItem(props: {
   href: string
   server: ServerConnection.Key
   sessionId: string
+  onSelect: () => void
   onClose: () => void
   active?: boolean
 }) {
@@ -212,6 +215,10 @@ function TabNavItem(props: {
           return (
             <a
               href={props.href}
+              onClick={(event) => {
+                event.preventDefault()
+                props.onSelect()
+              }}
               class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
             >
               <span data-slot="project-avatar-slot">
@@ -270,7 +277,13 @@ function ProjectTabAvatar(props: {
   )
 }
 
-function NewSessionTabItem(props: { href: string; title: string; onClose: () => void; active: boolean }) {
+function NewSessionTabItem(props: {
+  href: string
+  title: string
+  onSelect: () => void
+  onClose: () => void
+  active: boolean
+}) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -287,6 +300,10 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
     >
       <a
         href={props.href}
+        onClick={(event) => {
+          event.preventDefault()
+          props.onSelect()
+        }}
         aria-current={props.active ? "page" : undefined}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
       >

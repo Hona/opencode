@@ -106,7 +106,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           .then((root) => addSession({ server, sessionId: root.id }))
           .catch(() => undefined)
       },
-      newDraft(draft: NewSessionDraft) {
+      newDraft(draft: NewSessionDraft, prompt?: string) {
         const draftID = uuid()
         setStore(
           produce((state) => {
@@ -114,7 +114,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             state.tabs.push({ type: "draft", draftID })
           }),
         )
-        navigate(draftHref(draftID))
+        navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
       },
       updateDraft(draftID: string, draft: Partial<NewSessionDraft>) {
         setStore("drafts", draftID, (current) => ({ ...current, ...draft }))

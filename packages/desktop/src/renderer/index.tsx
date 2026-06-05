@@ -31,6 +31,10 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(t("error.dev.rootNotFound"))
 }
 
+window.addEventListener("error", (event) => {
+  if (event.message === "ResizeObserver loop completed with undelivered notifications.") event.preventDefault()
+})
+
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,

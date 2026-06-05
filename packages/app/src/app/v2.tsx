@@ -17,6 +17,13 @@ import { type BaseRouterProps, Route, Router, useParams, useSearchParams } from 
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { type Accessor, type Component, createMemo, lazy, Match, onMount, type ParentProps, Show, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import {
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  deepLinkEvent,
+  drainPendingDeepLinks,
+} from "@/pages/layout/deep-links"
 
 const Home = lazy(() => import("@/pages/home").then((module) => ({ default: module.V2Home })))
 const Session = lazy(() => import("@/pages/session"))
@@ -242,9 +249,37 @@ function V2DirectoryRoute(props: {
   )
 }
 
+function V2DeepLinks() {
+  const global = useGlobal()
+  const tabs = useTabs()
+
+  const open = (urls: string[]) => {
+    const server = global.servers.first()
+    if (!server.isLocal) return
+    collectOpenProjectDeepLinks(urls).forEach((directory) => tabs.newDraft({ server: server.key, directory }))
+    collectNewSessionDeepLinks(urls).forEach((link) =>
+      tabs.newDraft({ server: server.key, directory: link.directory }, link.prompt),
+    )
+  }
+
+  onMount(() => {
+    open(drainPendingDeepLinks(window))
+    makeEventListener(window, deepLinkEvent, (event) => open((event as CustomEvent<{ urls: string[] }>).detail.urls))
+  })
+  return null
+}
+
 export function V2Root(props: { router?: Component<BaseRouterProps> }) {
   return (
-    <Dynamic component={props.router ?? Router} root={(routerProps) => <TabsProvider>{routerProps.children}</TabsProvider>}>
+    <Dynamic
+      component={props.router ?? Router}
+      root={(routerProps) => (
+        <TabsProvider>
+          <V2DeepLinks />
+          {routerProps.children}
+        </TabsProvider>
+      )}
+    >
       <Route path="/" component={HomeRoute} />
       <Route path="/new-session" component={DraftRoute} />
       <Route path="/server/:serverKey/session/:id" component={SessionRouteResolver} />
