@@ -6,8 +6,6 @@ import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -18,15 +16,13 @@ import { useGlobal } from "@/context/global"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
-export function DialogEditProject(props: { project: LocalProject; server?: ServerConnection.Any }) {
+export function DialogEditProject(props: { project: LocalProject; server: ServerConnection.Any }) {
   const dialog = useDialog()
-  const activeServerSDK = useServerSDK()
-  const activeServerSync = useServerSync()
   const global = useGlobal()
   const language = useLanguage()
-  const serverCtx = createMemo(() => (props.server ? global.createServerCtx(props.server) : undefined))
-  const serverSDK = () => serverCtx()?.sdk ?? activeServerSDK
-  const serverSync = () => serverCtx()?.sync ?? activeServerSync
+  const serverCtx = createMemo(() => global.createServerCtx(props.server))
+  const serverSDK = () => serverCtx().sdk
+  const serverSync = () => serverCtx().sync
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
