@@ -64,10 +64,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
+        const next = { type: "session" as const, ...tab }
+        if (closing.has(tabKey(next))) return
         setStore(
           produce((tabs) => {
-            if (tabs.some((item) => tabKey(item) === tabKey({ type: "session", ...tab }))) return
-            tabs.push({ type: "session", ...tab })
+            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+            tabs.push(next)
           }),
         )
       },

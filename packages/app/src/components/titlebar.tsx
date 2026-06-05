@@ -26,7 +26,7 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
-import { tabHref, tabKey, useTabs, type Tab } from "@/context/tabs"
+import { tabHref, useTabs, type Tab } from "@/context/tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -254,7 +254,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const closing = new Set<string>()
             const navigateTab = (tab: Tab) => {
               const href = tabHref(tab)
               if (tab.server === server.key) {
@@ -307,7 +306,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   dirBase64: route.dirBase64,
                   sessionId,
                 }
-                if (closing.has(tabKey({ type: "session", ...next }))) return
                 tabsStoreActions.addSessionTab(next)
               }
             })
