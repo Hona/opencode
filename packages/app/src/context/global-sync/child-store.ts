@@ -234,7 +234,7 @@ export function createChildStoreManager(input: {
               return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
             },
             vcs: vcsStore.value,
-            limit: 5,
+            limit: 64,
             message: {},
             part: {},
             part_text_accum_delta: {},
