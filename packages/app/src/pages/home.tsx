@@ -190,6 +190,12 @@ function HomeDesign() {
   const focusedSync = () => focusedServerCtx()?.sync ?? sync
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.selection.directory))
+  const newSessionProject = createMemo(
+    () =>
+      selectedProject() ??
+      projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
+      projects()[0],
+  )
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
@@ -286,14 +292,10 @@ function HomeDesign() {
   }
 
   function openNewSession() {
-    const project = selectedProject()
-    if (!project) {
-      const conn = focusedServer()
-      if (conn) void chooseProject(conn)
-      return
-    }
     const conn = focusedServer()
-    if (conn) openProjectNewSession(conn, project.worktree)
+    const project = newSessionProject()
+    if (!conn || !project) return
+    openProjectNewSession(conn, project.worktree)
   }
 
   function navigateOnServer(conn: ServerConnection.Any, href: string) {
@@ -425,7 +427,10 @@ function HomeDesign() {
                   when={groups().length > 0}
                   fallback={
                     <div class="flex min-w-0 flex-col gap-4">
-                      <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
+                      <HomeSessionGroupHeader
+                        title={language.t("home.sessions.empty")}
+                        onNewSession={newSessionProject() ? openNewSession : undefined}
+                      />
                     </div>
                   }
                 >
@@ -434,7 +439,7 @@ function HomeDesign() {
                       <div class="flex min-w-0 flex-col gap-4">
                         <HomeSessionGroupHeader
                           title={group.title}
-                          onNewSession={index() === 0 ? openNewSession : undefined}
+                          onNewSession={index() === 0 && newSessionProject() ? openNewSession : undefined}
                         />
                         <div class="flex min-w-0 flex-col gap-px">
                           <For each={group.sessions}>
