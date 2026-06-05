@@ -139,7 +139,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   name: "Layout",
   gate: false,
   init: () => {
-    const globalSdk = useServerSDK()
+    const serverSdk = useServerSDK()
     const serverSync = useServerSync()
     const server = useServer()
     const platform = usePlatform()
@@ -239,7 +239,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const target = Persist.serverGlobal(globalSdk.scope, "layout", ["layout.v6"])
+    const target = Persist.serverGlobal(serverSdk.scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
@@ -529,7 +529,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           continue
         }
 
-        void globalSdk.client.project
+        void serverSdk.client.project
           .update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
