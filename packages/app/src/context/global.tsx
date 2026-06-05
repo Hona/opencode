@@ -57,7 +57,9 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       for (const conn of server.list) {
         ensureServerCtx(conn)
       }
+    })
 
+    createEffect(() => {
       for (const [key] of serverCtxs) {
         if (!server.list.find((conn) => ServerConnection.key(conn) === key)) {
           const { dispose } = serverCtxs.get(key)!
@@ -90,7 +92,11 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   },
 })
 
-function createServerCtx(conn: ServerConnection.Any, scope: ServerScope, projects: ReturnType<typeof createServerProjects>) {
+function createServerCtx(
+  conn: ServerConnection.Any,
+  scope: ServerScope,
+  projects: ReturnType<typeof createServerProjects>,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
