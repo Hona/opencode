@@ -316,11 +316,11 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <GlobalProvider>
-        <TabsProvider>
-          <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-            <Dynamic
-              component={props.router ?? Router}
-              root={(routerProps) => (
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <Dynamic
+            component={props.router ?? Router}
+            root={(routerProps) => (
+              <TabsProvider>
                 <ServerKey>
                   <QueryProvider>
                     <ServerSDKProvider>
@@ -330,16 +330,16 @@ export function AppInterface(props: {
                     </ServerSDKProvider>
                   </QueryProvider>
                 </ServerKey>
-              )}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={() => <Navigate href="session" />} />
-                <Route path="/session/:id?" component={SessionRoute} />
-              </Route>
-            </Dynamic>
-          </ConnectionGate>
-        </TabsProvider>
+              </TabsProvider>
+            )}
+          >
+            <Route path="/" component={HomeRoute} />
+            <Route path="/:dir" component={DirectoryLayout}>
+              <Route path="/" component={() => <Navigate href="session" />} />
+              <Route path="/session/:id?" component={SessionRoute} />
+            </Route>
+          </Dynamic>
+        </ConnectionGate>
       </GlobalProvider>
     </ServerProvider>
   )

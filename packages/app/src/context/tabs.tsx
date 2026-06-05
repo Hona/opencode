@@ -2,7 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
-import { startTransition } from "solid-js"
+import { createEffect, startTransition } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 
@@ -18,19 +18,37 @@ export type Tab = SessionTab
 export const tabHref = (tab: Tab) => `/${tab.dirBase64}/session/${tab.sessionId}`
 export const tabKey = (tab: Tab) => `${tab.server}\n${tabHref(tab)}`
 
-const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
-
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   name: "Tabs",
   gate: false,
   init: () => {
-    const [store, setStore, _, ready] = persisted(Persist.global("tabs"), createStore<Tab[]>([]))
+    const server = useServer()
+    const fallback = server.key
+    const [store, setStore, _, ready] = persisted(
+      {
+        ...Persist.global("tabs"),
+        migrate: (value: unknown) => {
+          if (!Array.isArray(value)) return value
+          return value.map((tab) => {
+            if (!tab || typeof tab !== "object" || "server" in tab) return tab
+            return { ...tab, server: fallback }
+          })
+        },
+      },
+      createStore<Tab[]>([]),
+    )
 
     const params = useParams()
-    const server = useServer()
     const navigate = useNavigate()
 
     const closing = new Set<string>()
+
+    createEffect(() => {
+      if (!ready()) return
+      const servers = new Set(server.list.map(ServerConnection.key))
+      if (store.every((tab) => servers.has(tab.server))) return
+      setStore((tabs) => tabs.filter((tab) => servers.has(tab.server)))
+    })
 
     const navigateTab = (tab: Tab) => {
       const href = tabHref(tab)
@@ -49,7 +67,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         setStore(
           produce((tabs) => {
             if (tabs.some((item) => tabKey(item) === tabKey({ type: "session", ...tab }))) return
-
             tabs.push({ type: "session", ...tab })
           }),
         )
@@ -70,12 +87,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           else navigate("/")
         }).finally(() => closing.delete(key))
       },
+      removeServer(key: ServerConnection.Key) {
+        setStore((tabs) => tabs.filter((tab) => tab.server !== key))
+        if (server.key === key) navigate("/")
+      },
       removeSessions: (input: SessionTabsRemovedDetail) => {
         void startTransition(() => {
           setStore(
             produce((tabs) => {
               const sessionIDs = new Set(input.sessionIDs)
-              const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
+              const currentHref =
+                params.dir && params.id
+                  ? tabHref({ type: "session", server: server.key, dirBase64: params.dir, sessionId: params.id })
+                  : undefined
               const currentIndex = currentHref
                 ? tabs.findIndex(
                     (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
