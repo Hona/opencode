@@ -9,7 +9,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { batch, createEffect, createMemo, createResource, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useGlobal } from "@/context/global"
@@ -19,6 +19,7 @@ import { normalizeServerUrl, ServerConnection, useServer } from "@/context/serve
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
+import { useServerContext } from "@/context/server-context"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -193,6 +194,7 @@ export function useServerManagementController(options: { onSelect?: () => void }
   const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
+  const currentServer = useServerContext()
   const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
@@ -303,7 +305,7 @@ export function useServerManagementController(options: { onSelect?: () => void }
         return
       }
       if (normalized === input.original.http.url) {
-        server.add(conn)
+        global.servers.replace(ServerConnection.key(input.original), conn)
       } else {
         replaceServer(input.original, conn)
       }
@@ -314,13 +316,11 @@ export function useServerManagementController(options: { onSelect?: () => void }
 
   const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
     const originalKey = ServerConnection.key(original)
-    const active = server.key
-    tabs.removeServer(originalKey)
-    const newConn = server.add(next)
-    if (!newConn) return
-    const nextActive = active === originalKey ? ServerConnection.key(newConn) : active
-    if (nextActive) server.setActive(nextActive)
-    server.remove(originalKey)
+    batch(() => {
+      if (currentServer().key === originalKey) navigate("/")
+      tabs.removeServer(originalKey)
+      global.servers.replace(originalKey, next)
+    })
   }
 
   const items = createMemo(() => {
@@ -505,8 +505,11 @@ export function useServerManagementController(options: { onSelect?: () => void }
   })
 
   async function handleRemove(url: ServerConnection.Key) {
-    tabs.removeServer(url)
-    server.remove(url)
+    batch(() => {
+      if (currentServer().key === url) navigate("/")
+      tabs.removeServer(url)
+      global.servers.remove(url)
+    })
     if ((await platform.getDefaultServer?.()) === url) {
       void platform.setDefaultServer?.(null)
     }

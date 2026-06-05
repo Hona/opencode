@@ -7,14 +7,11 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { showToast } from "@/utils/toast"
-import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
-import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerSDK, useServerSync } from "@/context/server-context"
 import {
   monoDefault,
   monoFontFamily,
@@ -27,18 +24,12 @@ import {
   terminalInput,
   useSettings,
 } from "@/context/settings"
-import { decode64 } from "@/utils/base64"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "../link"
+import { playDemoSound, stopDemoSound } from "../settings-sound"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
-
-let demoSoundState = {
-  cleanup: undefined as (() => void) | undefined,
-  timeout: undefined as NodeJS.Timeout | undefined,
-  run: 0,
-}
 
 type ThemeOption = {
   id: string
@@ -57,40 +48,11 @@ type ShellSelectOption = {
   label: string
 }
 
-// To prevent audio from overlapping/playing very quickly when navigating the settings menus,
-// delay the playback by 100ms during quick selection changes and pause existing sounds.
-const stopDemoSound = () => {
-  demoSoundState.run += 1
-  if (demoSoundState.cleanup) {
-    demoSoundState.cleanup()
-  }
-  clearTimeout(demoSoundState.timeout)
-  demoSoundState.cleanup = undefined
-}
-
-const playDemoSound = (id: string | undefined) => {
-  stopDemoSound()
-  if (!id) return
-
-  const run = ++demoSoundState.run
-  demoSoundState.timeout = setTimeout(() => {
-    void playSoundById(id).then((cleanup) => {
-      if (demoSoundState.run !== run) {
-        cleanup?.()
-        return
-      }
-      demoSoundState.cleanup = cleanup
-    })
-  }, 100)
-}
-
-export const SettingsGeneralV2: Component = () => {
+export const SettingsGeneralV2: Component<{ directory?: string; sessionID?: string }> = (props) => {
   const theme = useTheme()
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
-  const dialog = useDialog()
-  const params = useParams()
   const settings = useSettings()
 
   const [store, setStore] = createStore({
@@ -98,30 +60,29 @@ export const SettingsGeneralV2: Component = () => {
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const dir = createMemo(() => decode64(params.dir))
   const accepting = createMemo(() => {
-    const value = dir()
+    const value = props.directory
     if (!value) return false
-    if (!params.id) return permission.isAutoAcceptingDirectory(value)
-    return permission.isAutoAccepting(params.id, value)
+    if (!props.sessionID) return permission.isAutoAcceptingDirectory(value)
+    return permission.isAutoAccepting(props.sessionID, value)
   })
 
   const toggleAccept = (checked: boolean) => {
-    const value = dir()
+    const value = props.directory
     if (!value) return
 
-    if (!params.id) {
+    if (!props.sessionID) {
       if (permission.isAutoAcceptingDirectory(value) === checked) return
       permission.toggleAutoAcceptDirectory(value)
       return
     }
 
     if (checked) {
-      permission.enableAutoAccept(params.id, value)
+      permission.enableAutoAccept(props.sessionID, value)
       return
     }
 
-    permission.disableAutoAccept(params.id, value)
+    permission.disableAutoAccept(props.sessionID, value)
   }
   const desktop = createMemo(() => platform.platform === "desktop")
 
@@ -184,7 +145,7 @@ export const SettingsGeneralV2: Component = () => {
 
   const [shells] = createResource(
     () =>
-      serverSdk.client.pty
+      serverSdk().client.pty
         .shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
@@ -208,11 +169,11 @@ export const SettingsGeneralV2: Component = () => {
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => serverSync.data.config.shell ?? "")
+  const currentShell = createMemo(() => serverSync().data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
-    const current = serverSync.data.config.shell
+    const current = serverSync().data.config.shell
 
     const nameCounts = new Map<string, number>()
     for (const s of list) {
@@ -327,7 +288,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("toast.permissions.autoaccept.on.description")}
         >
           <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+            <Switch checked={accepting()} disabled={!props.directory} onChange={toggleAccept} />
           </div>
         </SettingsRowV2>
 
@@ -347,7 +308,7 @@ export const SettingsGeneralV2: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              serverSync.updateConfig({ shell: option.value })
+              serverSync().updateConfig({ shell: option.value })
             }}
           />
         </SettingsRowV2>
@@ -407,13 +368,7 @@ export const SettingsGeneralV2: Component = () => {
           <div data-action="settings-new-layout-designs">
             <Switch
               checked={settings.general.newLayoutDesigns()}
-              onChange={(checked) => {
-                settings.general.setNewLayoutDesigns(checked)
-                if (checked) return
-                void import("@/components/dialog-settings").then((module) => {
-                  dialog.show(() => <module.DialogSettings />)
-                })
-              }}
+              onChange={settings.general.setNewLayoutDesigns}
             />
           </div>
         </SettingsRowV2>

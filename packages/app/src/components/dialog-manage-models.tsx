@@ -9,14 +9,16 @@ import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { useDirectory } from "@/context/directory"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
+  const directory = useDirectory()
   const language = useLanguage()
   const dialog = useDialog()
 
   const handleConnectProvider = () => {
-    dialog.show(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider directory={directory().directory} />)
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)

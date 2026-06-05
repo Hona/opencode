@@ -14,6 +14,8 @@ import {
   onMount,
   untrack,
   createResource,
+  createRoot,
+  getOwner,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -29,19 +31,17 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
-import { useServerSync } from "@/context/server-sync"
+import { useServerContext, useServerSDK, useServerSync } from "@/context/server-context"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
+import { useSDK, useSync } from "@/context/directory"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
@@ -55,7 +55,6 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -69,14 +68,46 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
+import { createScopedCache } from "@/utils/scoped-cache"
+import { ScopedKey } from "@/utils/server-scope"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+type FollowupState = {
+  items: Record<string, FollowupItem[] | undefined>
+  failed: Record<string, string | undefined>
+  paused: Record<string, boolean | undefined>
+  edit: Record<string, FollowupEdit | undefined>
+}
 const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
+const MAX_PAGE_SESSION_STATES = 20
+
+function createPageSessionState() {
+  const [ui, setUi] = createStore({
+    pendingMessage: undefined as string | undefined,
+    reviewSnap: false,
+    scrollGesture: 0,
+    scroll: {
+      overflow: false,
+      bottom: true,
+      jump: false,
+      top: 0,
+    },
+  })
+  const [store, setStore] = createStore({
+    messageId: undefined as string | undefined,
+    mobileTab: "session" as "session" | "changes",
+    changes: "git" as ChangeMode,
+    newSessionWorktree: "main",
+    pendingDiff: undefined as string | undefined,
+    activeDiff: undefined as string | undefined,
+  })
+  return { ui, setUi, store, setStore }
+}
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -197,16 +228,20 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
-  const server = useServer()
+  const server = useServerContext()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
-  const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const { directory, sessionID: currentSessionID, sessionKey, tabs, view } = useSessionLayout()
+  const routeDir = () => base64Encode(directory())
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const sessionStateCache = createScopedCache(() => createPageSessionState(), { maxEntries: MAX_PAGE_SESSION_STATES })
+  onCleanup(() => sessionStateCache.clear())
+  const sessionState = createMemo(() => sessionStateCache.get(sessionKey()))
 
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {
-      if (params.id) return
+      if (currentSessionID()) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -214,62 +249,12 @@ export default function Page() {
     })
   })
 
-  const [ui, setUi] = createStore({
-    pendingMessage: undefined as string | undefined,
-    reviewSnap: false,
-    scrollGesture: 0,
-    scroll: {
-      overflow: false,
-      bottom: true,
-      jump: false,
-    },
-  })
-
   const composer = createSessionComposerState()
-
-  const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
-
-  createEffect(
-    on(
-      () => params.id,
-      (id, prev) => {
-        if (!id) return
-        if (prev) return
-
-        const pending = layout.handoff.tabs()
-        if (!pending) return
-        if (Date.now() - pending.at > 60_000) {
-          layout.handoff.clearTabs()
-          return
-        }
-        if (pending.scope !== server.scope()) return
-
-        if (pending.id !== id) return
-        layout.handoff.clearTabs()
-        if (pending.dir !== (params.dir ?? "")) return
-
-        const from = workspaceTabs().tabs()
-        if (from.all.length === 0 && !from.active) return
-
-        const current = tabs().tabs()
-        if (current.all.length > 0 || current.active) return
-
-        const all = normalizeTabs(from.all)
-        const active = from.active ? normalizeTab(from.active) : undefined
-        tabs().setAll(all)
-        tabs().setActive(active && all.includes(active) ? active : all[0])
-
-        workspaceTabs().setAll([])
-        workspaceTabs().setActive(undefined)
-      },
-      { defer: true },
-    ),
-  )
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
   const isV2NewSessionPage = () =>
-    shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: params.id })
+    shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: currentSessionID() })
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -285,26 +270,14 @@ export default function Page() {
     return file.tab(tab)
   }
 
-  function normalizeTabs(list: string[]) {
-    const seen = new Set<string>()
-    const next: string[] = []
-    for (const item of list) {
-      const value = normalizeTab(item)
-      if (seen.has(value)) continue
-      seen.add(value)
-      next.push(value)
-    }
-    return next
-  }
-
   const openReviewPanel = () => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const info = createMemo(() => (currentSessionID() ? sync().session.get(currentSessionID()!) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
-  const canReview = createMemo(() => !!sync.project)
+  const diffs = createMemo(() => (currentSessionID() ? list(sync().data.session_diff[currentSessionID()!]) : []))
+  const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
@@ -316,21 +289,21 @@ export default function Page() {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const messages = createMemo(() => (currentSessionID() ? (sync().data.message[currentSessionID()!] ?? []) : []))
   const messagesReady = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return true
-    return sync.data.message[id] !== undefined
+    return sync().data.message[id] !== undefined
   })
   const historyMore = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return false
-    return sync.session.history.more(id)
+    return sync().session.history.more(id)
   })
   const historyLoading = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return false
-    return sync.session.history.loading(id)
+    return sync().session.history.loading(id)
   })
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
@@ -369,51 +342,46 @@ export default function Page() {
     ),
   )
 
-  createEffect(
-    on(
-      () => ({ dir: params.dir, id: params.id }),
-      (next, prev) => {
-        if (!prev) return
-        if (next.dir === prev.dir && next.id === prev.id) return
-        if (prev.id && !next.id) local.session.reset()
-      },
-      { defer: true },
-    ),
+  const owner = getOwner()
+  const followupCache = createScopedCache(
+    (_key: ScopedKey, scope: { server: ReturnType<typeof serverSDK>["scope"]; directory: string }) =>
+      createRoot((dispose) => ({
+        value: persisted(
+          Persist.serverWorkspace(scope.server, scope.directory, "followup", ["followup.v1"]),
+          createStore<FollowupState>({ items: {}, failed: {}, paused: {}, edit: {} }),
+        ),
+        dispose,
+      }), owner),
+    { dispose: (entry) => entry.dispose() },
   )
-
-  const [store, setStore] = createStore({
-    messageId: undefined as string | undefined,
-    mobileTab: "session" as "session" | "changes",
-    changes: "git" as ChangeMode,
-    newSessionWorktree: "main",
-    deferRender: false,
+  onCleanup(() => followupCache.clear())
+  const followupState = createMemo(() => {
+    const scope = { server: serverSDK().scope, directory: sdk().directory }
+    return followupCache.get(ScopedKey.from(scope.server, scope.directory, "followup"), scope).value
   })
-
-  const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK.scope, sdk.directory, "followup", ["followup.v1"]),
-    createStore<{
-      items: Record<string, FollowupItem[] | undefined>
-      failed: Record<string, string | undefined>
-      paused: Record<string, boolean | undefined>
-      edit: Record<string, FollowupEdit | undefined>
-    }>({
-      items: {},
-      failed: {},
-      paused: {},
-      edit: {},
-    }),
-  )
-
-  createComputed((prev) => {
-    const key = sessionKey()
-    if (key !== prev) {
-      setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
-      })
-    }
-    return key
-  }, sessionKey())
+  const followup = () => followupState()[0]
+  const followupActions = {
+    pause(sessionID: string, value?: boolean) {
+      followupState()[1]("paused", sessionID, value)
+    },
+    fail(sessionID: string, value?: string | ((current: string | undefined) => string | undefined)) {
+      followupState()[1]("failed", sessionID, value)
+    },
+    edit(sessionID: string, value?: FollowupEdit) {
+      followupState()[1]("edit", sessionID, value)
+    },
+    remove(sessionID: string, id: string) {
+      followupState()[1]("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+    },
+    queue(draft: FollowupDraft) {
+      followupState()[1]("items", draft.sessionID, (items) => [
+        ...(items ?? []),
+        { id: Identifier.ascending("message"), ...draft },
+      ])
+      this.fail(draft.sessionID)
+      this.pause(draft.sessionID)
+    },
+  }
 
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
@@ -428,52 +396,58 @@ export default function Page() {
     if (prev === undefined || prev === open) return open
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
-    setUi("reviewSnap", true)
+    const state = sessionState()
+    state.setUi("reviewSnap", true)
     reviewFrame = requestAnimationFrame(() => {
       reviewFrame = undefined
-      setUi("reviewSnap", false)
+      state.setUi("reviewSnap", false)
     })
     return open
   }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
-  const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
+  const nogit = createMemo(() => {
+    const project = sync().project
+    return !!project && project.vcs !== "git"
+  })
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
-    if (sync.project?.vcs === "git") list.push("git")
+    const current = sync()
+    if (current.project?.vcs === "git") list.push("git")
     if (
-      sync.project?.vcs === "git" &&
-      sync.data.vcs?.branch &&
-      sync.data.vcs?.default_branch &&
-      sync.data.vcs.branch !== sync.data.vcs.default_branch
+      current.project?.vcs === "git" &&
+      current.data.vcs?.branch &&
+      current.data.vcs?.default_branch &&
+      current.data.vcs.branch !== current.data.vcs.default_branch
     ) {
       list.push("branch")
     }
     list.push("turn")
     return list
   })
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() => !isDesktop() && sessionState().store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes",
+      : sessionState().store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
-    if (store.changes === "git" || store.changes === "branch") return store.changes
+    const changes = sessionState().store.changes
+    if (changes === "git" || changes === "branch") return changes
   })
   const vcsKey = createMemo(
-    () => ["session-vcs", sdk.directory, sync.data.vcs?.branch ?? "", sync.data.vcs?.default_branch ?? ""] as const,
+    () => ["session-vcs", serverSDK().scope, sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = wantsReview() && sync.project?.vcs === "git"
+    const enabled = wantsReview() && sync().project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
       queryFn: mode
         ? () =>
-            sdk.client.vcs
+            sdk().client.vcs
               .diff({ mode })
               .then((result) => list(result.data))
               .catch((error) => {
@@ -485,7 +459,7 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
-    if (store.changes === "git" || store.changes === "branch")
+    if (sessionState().store.changes === "git" || sessionState().store.changes === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
     return turnDiffs()
@@ -493,27 +467,27 @@ export default function Page() {
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
-    if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
+    if (sessionState().store.changes === "git" || sessionState().store.changes === "branch") return !vcsQuery.isPending
     return true
   }
 
   const newSessionWorktree = createMemo(() => {
-    if (store.newSessionWorktree === "create") return "create"
-    const project = sync.project
-    if (project && sdk.directory !== project.worktree) return sdk.directory
+    if (sessionState().store.newSessionWorktree === "create") return "create"
+    const project = sync().project
+    if (project && sdk().directory !== project.worktree) return sdk().directory
     return "main"
   })
 
   const setActiveMessage = (message: UserMessage | undefined) => {
     messageMark = scrollMark
-    setStore("messageId", message?.id)
+    sessionState().setStore("messageId", message?.id)
   }
 
   const anchor = (id: string) => `message-${id}`
 
   const cursor = () => {
     const root = scroller
-    if (!root) return store.messageId
+    if (!root) return sessionState().store.messageId
 
     const box = root.getBoundingClientRect()
     const line = box.top + 100
@@ -539,14 +513,15 @@ export default function Page() {
     })[0]
     if (near) return near.id
 
-    return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? store.messageId
+    return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? sessionState().store.messageId
   }
 
   function navigateMessageByOffset(offset: number) {
     const msgs = visibleUserMessages()
     if (msgs.length === 0) return
 
-    const current = store.messageId && messageMark === scrollMark ? store.messageId : cursor()
+    const messageId = sessionState().store.messageId
+    const current = messageId && messageMark === scrollMark ? messageId : cursor()
     const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
     const currentIndex = base === -1 ? msgs.length : base
     const targetIndex = currentIndex + offset
@@ -561,12 +536,12 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  function upsert(next: Project) {
-    const list = serverSync.data.project
-    sync.set("project", next.id)
+  function upsert(next: Project, current: ReturnType<typeof serverSync>, directorySync: ReturnType<typeof sync>) {
+    const list = current.data.project
+    directorySync.set("project", next.id)
     const idx = list.findIndex((item) => item.id === next.id)
     if (idx >= 0) {
-      serverSync.set(
+      current.set(
         "project",
         list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
       )
@@ -574,17 +549,19 @@ export default function Page() {
     }
     const at = list.findIndex((item) => item.id > next.id)
     if (at >= 0) {
-      serverSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
+      current.set("project", [...list.slice(0, at), next, ...list.slice(at)])
       return
     }
-    serverSync.set("project", [...list, next])
+    current.set("project", [...list, next])
   }
 
   const gitMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.project.initGit(),
-    onSuccess: (x) => {
+    mutationFn: async () => {
+      const currentServerSync = serverSync()
+      const currentSync = sync()
+      const x = await sdk().client.project.initGit()
       if (!x.data) return
-      upsert(x.data)
+      upsert(x.data, currentServerSync, currentSync)
     },
     onError: (err) => {
       showToast({
@@ -619,25 +596,25 @@ export default function Page() {
     const nested = el?.closest("[data-scrollable]")
     if (nested && nested !== root) return
 
-    setUi("scrollGesture", Date.now())
+    sessionState().setUi("scrollGesture", Date.now())
   }
 
-  const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
+  const hasScrollGesture = () => Date.now() - sessionState().ui.scrollGesture < scrollGestureWindowMs
 
   const [sessionSync] = createResource(
-    () => [sdk.directory, params.id] as const,
-    ([directory, id]) => {
+    () => [serverSDK().scope, sdk().directory, currentSessionID(), sync()] as const,
+    ([scope, directory, id, current]) => {
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
       refreshTimer = undefined
       if (!id) return
 
-      const cached = untrack(() => sync.data.message[id] !== undefined)
+      const cached = untrack(() => current.data.message[id] !== undefined)
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(serverSDK.scope, directory, id)
+            const info = getSessionPrefetch(scope, directory, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
@@ -646,44 +623,46 @@ export default function Page() {
         refreshFrame = undefined
         refreshTimer = window.setTimeout(() => {
           refreshTimer = undefined
-          if (params.id !== id) return
+          if (serverSDK().scope !== scope || sdk().directory !== directory || currentSessionID() !== id) return
           untrack(() => {
-            if (stale) void sync.session.sync(id, { force: true })
+            if (stale) void current.session.sync(id, { force: true })
           })
         }, 0)
       })
 
-      return sync.session.sync(id)
+      return current.session.sync(id)
     },
   )
 
   createEffect(
     on(
       () => {
-        const id = params.id
+        const id = currentSessionID()
         return [
-          sdk.directory,
+          serverSDK().scope,
+          sdk().directory,
           id,
-          id ? (sync.data.session_status[id]?.type ?? "idle") : "idle",
+          id ? (sync().data.session_status[id]?.type ?? "idle") : "idle",
           id ? composer.blocked() : false,
         ] as const
       },
-      ([dir, id, status, blocked]) => {
+      ([scope, dir, id, status, blocked]) => {
+        const current = sync()
         if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
         if (todoTimer !== undefined) window.clearTimeout(todoTimer)
         todoFrame = undefined
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(() => sync.data.todo[id] !== undefined || serverSync.data.session_todo[id] !== undefined)
+        const cached = untrack(() => current.data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined)
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined
           todoTimer = window.setTimeout(() => {
             todoTimer = undefined
-            if (sdk.directory !== dir || params.id !== id) return
+            if (serverSDK().scope !== scope || sdk().directory !== dir || currentSessionID() !== id) return
             untrack(() => {
-              void sync.session.todo(id, cached ? { force: true } : undefined)
+              void current.session.todo(id, cached ? { force: true } : undefined)
             })
           }, 0)
         })
@@ -697,47 +676,26 @@ export default function Page() {
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
         if (lastId && prevLastId && lastId > prevLastId) {
-          setStore("messageId", undefined)
+          sessionState().setStore("messageId", undefined)
         }
       },
       { defer: true },
     ),
   )
 
-  createEffect(
-    on(
-      sessionKey,
-      () => {
-        setStore("messageId", undefined)
-        setStore("changes", "git")
-        setUi("pendingMessage", undefined)
-      },
-      { defer: true },
-    ),
-  )
-
-  const stopVcs = sdk.event.listen((evt) => {
-    if (evt.details.type !== "file.watcher.updated") return
-    const props =
-      typeof evt.details.properties === "object" && evt.details.properties
-        ? (evt.details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
+  createEffect(() => {
+    const stop = sdk().event.listen((evt) => {
+      if (evt.details.type !== "file.watcher.updated") return
+      const props =
+        typeof evt.details.properties === "object" && evt.details.properties
+          ? (evt.details.properties as Record<string, unknown>)
+          : undefined
+      const file = typeof props?.file === "string" ? props.file : undefined
+      if (!file || file.startsWith(".git/")) return
+      refreshVcs()
+    })
+    onCleanup(stop)
   })
-  onCleanup(stopVcs)
-
-  createEffect(
-    on(
-      () => params.dir,
-      (dir) => {
-        if (!dir) return
-        setStore("newSessionWorktree", "main")
-      },
-      { defer: true },
-    ),
-  )
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -851,15 +809,15 @@ export default function Page() {
 
   createEffect(() => {
     const list = changesOptions()
-    if (list.includes(store.changes)) return
+    if (list.includes(sessionState().store.changes)) return
     const next = list[0]
     if (!next) return
-    setStore("changes", next)
+    sessionState().setStore("changes", next)
   })
 
   createEffect(
     on(
-      () => sync.data.session_status[params.id ?? ""]?.type,
+      () => sync().data.session_status[currentSessionID() ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -871,25 +829,7 @@ export default function Page() {
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
 
-  const [tree, setTree] = createStore({
-    reviewScroll: undefined as HTMLDivElement | undefined,
-    pendingDiff: undefined as string | undefined,
-    activeDiff: undefined as string | undefined,
-  })
-
-  createEffect(
-    on(
-      sessionKey,
-      () => {
-        setTree({
-          reviewScroll: undefined,
-          pendingDiff: undefined,
-          activeDiff: undefined,
-        })
-      },
-      { defer: true },
-    ),
-  )
+  let reviewScroll: HTMLDivElement | undefined
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
@@ -930,9 +870,9 @@ export default function Page() {
     return (
       <Select
         options={changesOptions()}
-        current={store.changes}
+        current={sessionState().store.changes}
         label={label}
-        onSelect={(option) => option && setStore("changes", option)}
+        onSelect={(option) => option && sessionState().setStore("changes", option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
@@ -963,18 +903,18 @@ export default function Page() {
   )
 
   const reviewEmptyText = createMemo(() => {
-    if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
-    if (store.changes === "branch") return language.t("session.review.noBranchChanges")
+    if (sessionState().store.changes === "git") return language.t("session.review.noUncommittedChanges")
+    if (sessionState().store.changes === "branch") return language.t("session.review.noBranchChanges")
     return language.t("session.review.noChanges")
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
-    if (store.changes === "git" || store.changes === "branch") {
+    if (sessionState().store.changes === "git" || sessionState().store.changes === "branch") {
       if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
       return empty(reviewEmptyText())
     }
 
-    if (store.changes === "turn") {
+    if (sessionState().store.changes === "turn") {
       if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
     }
@@ -993,30 +933,30 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show when={!store.deferRender}>
-      <SessionReviewTab
-        title={changesTitle()}
-        empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={view}
-        diffStyle={input.diffStyle}
-        onDiffStyleChange={input.onDiffStyleChange}
-        onScrollRef={(el) => setTree("reviewScroll", el)}
-        focusedFile={tree.activeDiff}
-        onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-        onLineCommentUpdate={updateCommentInContext}
-        onLineCommentDelete={removeCommentFromContext}
-        lineCommentActions={reviewCommentActions()}
-        commentMentions={{
-          items: file.searchFilesAndDirectories,
-        }}
-        comments={comments.all()}
-        focusedComment={comments.focus()}
-        onFocusedCommentChange={comments.setFocus}
-        onViewFile={openReviewFile}
-        classes={input.classes}
-      />
-    </Show>
+    <SessionReviewTab
+      title={changesTitle()}
+      empty={reviewEmpty(input)}
+      diffs={reviewDiffs}
+      view={view}
+      diffStyle={input.diffStyle}
+      onDiffStyleChange={input.onDiffStyleChange}
+      onScrollRef={(el) => {
+        reviewScroll = el
+      }}
+      focusedFile={sessionState().store.activeDiff}
+      onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+      onLineCommentUpdate={updateCommentInContext}
+      onLineCommentDelete={removeCommentFromContext}
+      lineCommentActions={reviewCommentActions()}
+      commentMentions={{
+        items: file.searchFilesAndDirectories,
+      }}
+      comments={comments.all()}
+      focusedComment={comments.focus()}
+      onFocusedCommentChange={comments.setFocus}
+      onViewFile={openReviewFile}
+      classes={input.classes}
+    />
   )
 
   const reviewPanel = () => (
@@ -1051,7 +991,7 @@ export default function Page() {
   }
 
   const reviewDiffTop = (path: string) => {
-    const root = tree.reviewScroll
+    const root = reviewScroll
     if (!root) return
 
     const id = reviewDiffId(path)
@@ -1067,7 +1007,7 @@ export default function Page() {
   }
 
   const scrollToReviewDiff = (path: string) => {
-    const root = tree.reviewScroll
+    const root = reviewScroll
     if (!root) return false
 
     const top = reviewDiffTop(path)
@@ -1081,23 +1021,25 @@ export default function Page() {
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
     view().review.openPath(path)
-    setTree({ activeDiff: path, pendingDiff: path })
+    sessionState().setStore({ activeDiff: path, pendingDiff: path })
   }
 
   createEffect(() => {
-    const pending = tree.pendingDiff
+    const state = sessionState()
+    const pending = state.store.pendingDiff
     if (!pending) return
-    if (!tree.reviewScroll) return
+    if (!reviewScroll) return
     if (!reviewReady()) return
 
     const attempt = (count: number) => {
-      if (tree.pendingDiff !== pending) return
+      if (sessionState() !== state) return
+      if (state.store.pendingDiff !== pending) return
       if (count > 60) {
-        setTree("pendingDiff", undefined)
+        state.setStore("pendingDiff", undefined)
         return
       }
 
-      const root = tree.reviewScroll
+      const root = reviewScroll
       if (!root) {
         requestAnimationFrame(() => attempt(count + 1))
         return
@@ -1115,7 +1057,7 @@ export default function Page() {
       }
 
       if (Math.abs(root.scrollTop - top) <= 1) {
-        setTree("pendingDiff", undefined)
+        state.setStore("pendingDiff", undefined)
         return
       }
 
@@ -1126,14 +1068,14 @@ export default function Page() {
   })
 
   createEffect(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return
 
     if (!wantsReview()) return
-    if (sync.data.session_diff[id] !== undefined) return
-    if (sync.status === "loading") return
+    if (sync().data.session_diff[id] !== undefined) return
+    if (sync().status === "loading") return
 
-    void sync.session.diff(id)
+    void sync().session.diff(id)
   })
 
   createEffect(
@@ -1146,16 +1088,16 @@ export default function Page() {
         diffTimer = undefined
         if (!wants) return
 
-        const id = params.id
+        const id = currentSessionID()
         if (!id) return
-        if (!untrack(() => sync.data.session_diff[id] !== undefined)) return
+        if (!untrack(() => sync().data.session_diff[id] !== undefined)) return
 
         diffFrame = requestAnimationFrame(() => {
           diffFrame = undefined
           diffTimer = window.setTimeout(() => {
             diffTimer = undefined
             if (sessionKey() !== key) return
-            void sync.session.diff(id, { force: true })
+            void sync().session.diff(id, { force: true })
           }, 0)
         })
       },
@@ -1165,10 +1107,10 @@ export default function Page() {
 
   let treeDir: string | undefined
   createEffect(() => {
-    const dir = sdk.directory
+    const dir = sdk().directory
     if (!isDesktop()) return
     if (!layout.fileTree.opened()) return
-    if (sync.status === "loading") return
+    if (sync().status === "loading") return
 
     fileTreeTab()
     const refresh = treeDir !== dir
@@ -1178,7 +1120,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => sdk.directory,
+      () => sdk().directory,
       () => {
         const tab = activeFileTab()
         if (!tab) return
@@ -1197,38 +1139,48 @@ export default function Page() {
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
+  let scrollStateSession: ReturnType<typeof createPageSessionState> | undefined
   let fillFrame: number | undefined
 
   const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
 
-  const updateScrollState = (el: HTMLDivElement) => {
+  const updateScrollState = (el: HTMLDivElement, state: ReturnType<typeof createPageSessionState>) => {
     const max = el.scrollHeight - el.clientHeight
     const distance = max - el.scrollTop
     const overflow = max > 1
     const bottom = !overflow || distance <= 2
     const jump = overflow && distance > jumpThreshold(el)
 
-    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom && ui.scroll.jump === jump) return
-    setUi("scroll", { overflow, bottom, jump })
+    if (
+      state.ui.scroll.overflow === overflow &&
+      state.ui.scroll.bottom === bottom &&
+      state.ui.scroll.jump === jump &&
+      state.ui.scroll.top === el.scrollTop
+    )
+      return
+    state.setUi("scroll", { overflow, bottom, jump, top: el.scrollTop })
   }
 
   const scheduleScrollState = (el: HTMLDivElement) => {
     scrollStateTarget = el
+    scrollStateSession = sessionState()
     if (scrollStateFrame !== undefined) return
 
     scrollStateFrame = requestAnimationFrame(() => {
       scrollStateFrame = undefined
 
       const target = scrollStateTarget
+      const state = scrollStateSession
       scrollStateTarget = undefined
-      if (!target) return
+      scrollStateSession = undefined
+      if (!target || !state) return
 
-      updateScrollState(target)
+      updateScrollState(target, state)
     })
   }
 
   const resumeScroll = () => {
-    setStore("messageId", undefined)
+    sessionState().setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
     clearMessageHash()
 
@@ -1242,7 +1194,7 @@ export default function Page() {
       autoScroll.userScrolled,
       (scrolled) => {
         if (scrolled) return
-        setStore("messageId", undefined)
+        sessionState().setStore("messageId", undefined)
         clearMessageHash()
       },
       { defer: true },
@@ -1259,6 +1211,33 @@ export default function Page() {
     fill()
   }
 
+  let restoreScrollFrame: number | undefined
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        if (restoreScrollFrame !== undefined) cancelAnimationFrame(restoreScrollFrame)
+        restoreScrollFrame = requestAnimationFrame(() => {
+          restoreScrollFrame = undefined
+          const el = scroller
+          if (!el) return
+          const scroll = sessionState().ui.scroll
+          if (scroll.bottom) {
+            autoScroll.forceScrollToBottom()
+          } else {
+            el.scrollTop = scroll.top
+            autoScroll.handleScroll()
+          }
+          scheduleScrollState(el)
+        })
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => {
+    if (restoreScrollFrame !== undefined) cancelAnimationFrame(restoreScrollFrame)
+  })
+
   const markUserScroll = () => {
     scrollMark += 1
   }
@@ -1273,12 +1252,12 @@ export default function Page() {
   )
 
   const historyLoader = createSessionHistoryLoader({
-    sessionID: () => params.id,
+    sessionID: currentSessionID,
     loaded: () => messages().length,
     visibleUserMessages,
     historyMore,
     historyLoading,
-    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
+    loadMore: (sessionID) => sync().session.history.loadMore(sessionID),
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
   })
@@ -1289,7 +1268,7 @@ export default function Page() {
     fillFrame = requestAnimationFrame(() => {
       fillFrame = undefined
 
-      if (!params.id || !messagesReady()) return
+      if (!currentSessionID() || !messagesReady()) return
       if (autoScroll.userScrolled() || historyLoading()) return
 
       const el = scroller
@@ -1305,7 +1284,7 @@ export default function Page() {
     on(
       () =>
         [
-          params.id,
+          currentSessionID(),
           messagesReady(),
           historyMore(),
           historyLoading(),
@@ -1322,8 +1301,8 @@ export default function Page() {
   )
 
   const draft = (id: string) =>
-    extractPromptFromParts(sync.data.part[id] ?? [], {
-      directory: sdk.directory,
+    extractPromptFromParts(sync().data.part[id] ?? [], {
+      directory: sdk().directory,
       attachmentName: language.t("common.attachment"),
     })
 
@@ -1345,61 +1324,48 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>) =>
-    sync.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === next.id)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = next
-      return out
-    })
-
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"]) =>
-    sync.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === sessionID)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = { ...out[idx], revert: next }
-      return out
-    })
-
-  const busy = (sessionID: string) => sync.data.session_working(sessionID)
+  const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
   const queuedFollowups = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return emptyFollowups
-    return followup.items[id] ?? emptyFollowups
+    return followup().items[id] ?? emptyFollowups
   })
 
   const editingFollowup = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return
-    return followup.edit[id]
+    return followup().edit[id]
   })
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
+      const current = sdk()
+      const currentSync = sync()
+      const currentServerSync = serverSync()
+      const [currentFollowup, setCurrentFollowup] = followupState()
+      const currentSessionKey = sessionKey()
+      const item = (currentFollowup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
 
-      if (input.manual) setFollowup("paused", input.sessionID, undefined)
-      setFollowup("failed", input.sessionID, undefined)
+      if (input.manual) setCurrentFollowup("paused", input.sessionID, undefined)
+      setCurrentFollowup("failed", input.sessionID, undefined)
 
       const ok = await sendFollowupDraft({
-        client: sdk.client,
-        sync,
-        serverSync,
+        client: current.client,
+        sync: currentSync,
+        serverSync: currentServerSync,
         draft: item,
-        optimisticBusy: item.sessionDirectory === sdk.directory,
+        optimisticBusy: item.sessionDirectory === current.directory,
       }).catch((err) => {
-        setFollowup("failed", input.sessionID, input.id)
+        setCurrentFollowup("failed", input.sessionID, input.id)
         fail(err)
         return false
       })
       if (!ok) return
 
-      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) resumeScroll()
+      setCurrentFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
+      if (input.manual && sessionKey() === currentSessionKey) resumeScroll()
     },
   }))
 
@@ -1407,14 +1373,14 @@ export default function Page() {
     followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
 
   const sendingFollowup = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return
     if (!followupBusy(id)) return
     return followupMutation.variables?.id
   })
 
   const queueEnabled = createMemo(() => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return false
     return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
   })
@@ -1437,19 +1403,14 @@ export default function Page() {
   }
 
   const queueFollowup = (draft: FollowupDraft) => {
-    setFollowup("items", draft.sessionID, (items) => [
-      ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
-    ])
-    setFollowup("failed", draft.sessionID, undefined)
-    setFollowup("paused", draft.sessionID, undefined)
+    followupActions.queue(draft)
   }
 
   const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
-    if (sync.session.get(sessionID)?.parentID) return Promise.resolve()
-    const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
+    if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
+    const item = (followup().items[sessionID] ?? []).find((entry) => entry.id === id)
     if (!item) return Promise.resolve()
     if (followupBusy(sessionID)) return Promise.resolve()
 
@@ -1457,16 +1418,16 @@ export default function Page() {
   }
 
   const editFollowup = (id: string) => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
     if (followupBusy(sessionID)) return
 
     const item = queuedFollowups().find((entry) => entry.id === id)
     if (!item) return
 
-    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
-    setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
-    setFollowup("edit", sessionID, {
+    followupActions.remove(sessionID, id)
+    followupActions.fail(sessionID, (value) => (value === id ? undefined : value))
+    followupActions.edit(sessionID, {
       id: item.id,
       prompt: item.prompt,
       context: item.context,
@@ -1474,32 +1435,47 @@ export default function Page() {
   }
 
   const clearFollowupEdit = () => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return
-    setFollowup("edit", id, undefined)
+    followupActions.edit(id)
   }
 
-  const halt = (sessionID: string) =>
-    busy(sessionID) ? sdk.client.session.abort({ sessionID }).catch(() => {}) : Promise.resolve()
+  const halt = (current: ReturnType<typeof sdk>, currentSync: ReturnType<typeof sync>, sessionID: string) =>
+    currentSync.data.session_working(sessionID)
+      ? current.client.session.abort({ sessionID }).catch(() => {})
+      : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const prev = prompt.current().slice()
-      const last = info()?.revert
-      const value = draft(input.messageID)
-      batch(() => {
-        roll(input.sessionID, { messageID: input.messageID })
-        prompt.set(value)
+      const current = sdk()
+      const currentSync = sync()
+      const currentPrompt = prompt.bind()
+      const currentInfo = currentSync.session.get(input.sessionID)
+      const prev = currentPrompt.current().slice()
+      const last = currentInfo?.revert
+      const value = extractPromptFromParts(currentSync.data.part[input.messageID] ?? [], {
+        directory: current.directory,
+        attachmentName: language.t("common.attachment"),
       })
-      await halt(input.sessionID)
-        .then(() => sdk.client.session.revert(input))
+      const rollCurrent = (next: NonNullable<ReturnType<typeof info>>["revert"]) =>
+        currentSync.set("session", (list) =>
+          list.map((item) => (item.id === input.sessionID ? { ...item, revert: next } : item)),
+        )
+      batch(() => {
+        rollCurrent({ messageID: input.messageID })
+        currentPrompt.set(value)
+      })
+      await halt(current, currentSync, input.sessionID)
+        .then(() => current.client.session.revert(input))
         .then((result) => {
-          if (result.data) merge(result.data)
+          if (result.data) {
+            currentSync.set("session", (list) => list.map((item) => (item.id === result.data!.id ? result.data! : item)))
+          }
         })
         .catch((err) => {
           batch(() => {
-            roll(input.sessionID, last)
-            prompt.set(prev)
+            rollCurrent(last)
+            currentPrompt.set(prev)
           })
           fail(err)
         })
@@ -1508,26 +1484,38 @@ export default function Page() {
 
   const restoreMutation = useMutation(() => ({
     mutationFn: async (id: string) => {
-      const sessionID = params.id
+      const sessionID = currentSessionID()
       if (!sessionID) return
 
-      const next = userMessages().find((item) => item.id > id)
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+      const current = sdk()
+      const currentSync = sync()
+      const currentPrompt = prompt.bind()
+      const next = currentSync.data.message[sessionID]?.filter((item) => item.role === "user").find((item) => item.id > id)
+      const prev = currentPrompt.current().slice()
+      const last = currentSync.session.get(sessionID)?.revert
+      const rollCurrent = (revert: NonNullable<ReturnType<typeof info>>["revert"]) =>
+        currentSync.set("session", (list) =>
+          list.map((item) => (item.id === sessionID ? { ...item, revert } : item)),
+        )
 
       batch(() => {
-        roll(sessionID, next ? { messageID: next.id } : undefined)
+        rollCurrent(next ? { messageID: next.id } : undefined)
         if (next) {
-          prompt.set(draft(next.id))
+          currentPrompt.set(
+            extractPromptFromParts(currentSync.data.part[next.id] ?? [], {
+              directory: current.directory,
+              attachmentName: language.t("common.attachment"),
+            }),
+          )
           return
         }
-        prompt.reset()
+        currentPrompt.reset()
       })
 
       const task = !next
-        ? halt(sessionID).then(() => sdk.client.session.unrevert({ sessionID }))
-        : halt(sessionID).then(() =>
-            sdk.client.session.revert({
+        ? halt(current, currentSync, sessionID).then(() => current.client.session.unrevert({ sessionID }))
+        : halt(current, currentSync, sessionID).then(() =>
+            current.client.session.revert({
               sessionID,
               messageID: next.id,
             }),
@@ -1535,12 +1523,14 @@ export default function Page() {
 
       await task
         .then((result) => {
-          if (result.data) merge(result.data)
+          if (result.data) {
+            currentSync.set("session", (list) => list.map((item) => (item.id === result.data!.id ? result.data! : item)))
+          }
         })
         .catch((err) => {
           batch(() => {
-            roll(sessionID, last)
-            prompt.set(prev)
+            rollCurrent(last)
+            currentPrompt.set(prev)
           })
           fail(err)
         })
@@ -1556,7 +1546,7 @@ export default function Page() {
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
+    if (!currentSessionID() || reverting()) return
     return restoreMutation.mutateAsync(id)
   }
 
@@ -1571,14 +1561,14 @@ export default function Page() {
   const actions = { revert }
 
   createEffect(() => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
 
     const item = queuedFollowups()[0]
     if (!item) return
     if (followupBusy(sessionID)) return
-    if (followup.failed[sessionID] === item.id) return
-    if (followup.paused[sessionID]) return
+    if (followup().failed[sessionID] === item.id) return
+    if (followup().paused[sessionID]) return
     if (isChildSession()) return
     if (composer.blocked()) return
     if (busy(sessionID)) return
@@ -1610,15 +1600,15 @@ export default function Page() {
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
     sessionKey,
-    sessionID: () => params.id,
+    sessionID: currentSessionID,
     messagesReady,
     visibleUserMessages,
     historyMore,
     historyLoading,
-    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
-    currentMessageId: () => store.messageId,
-    pendingMessage: () => ui.pendingMessage,
-    setPendingMessage: (value) => setUi("pendingMessage", value),
+    loadMore: (sessionID) => sync().session.history.loadMore(sessionID),
+    currentMessageId: () => sessionState().store.messageId,
+    pendingMessage: () => sessionState().ui.pendingMessage,
+    setPendingMessage: (value) => sessionState().setUi("pendingMessage", value),
     setActiveMessage,
     autoScroll,
     scroller: () => scroller,
@@ -1630,7 +1620,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      currentSessionID,
       (id) => {
         if (!id) requestAnimationFrame(() => inputRef?.focus())
       },
@@ -1658,21 +1648,21 @@ export default function Page() {
   const composerRegion = (placement: "dock" | "inline") => (
     <SessionComposerRegion
       state={composer}
-      ready={!store.deferRender && messagesReady()}
+      ready={messagesReady()}
       centered={placement === "dock" && centered()}
       placement={placement}
       inputRef={(el) => {
         inputRef = el
       }}
       newSessionWorktree={newSessionWorktree()}
-      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+      onNewSessionWorktreeReset={() => sessionState().setStore("newSessionWorktree", "main")}
       onSubmit={() => {
         comments.clear()
         resumeScroll()
       }}
       onResponseSubmit={resumeScroll}
       followup={
-        params.id && !isChildSession()
+        currentSessionID() && !isChildSession()
           ? {
               queue: queueEnabled,
               items: followupDock(),
@@ -1680,12 +1670,12 @@ export default function Page() {
               edit: editingFollowup(),
               onQueue: queueFollowup,
               onAbort: () => {
-                const id = params.id
+                const id = currentSessionID()
                 if (!id) return
-                setFollowup("paused", id, true)
+                followupActions.pause(id, true)
               },
               onSend: (id) => {
-                void sendFollowup(params.id!, id, { manual: true })
+                void sendFollowup(currentSessionID()!, id, { manual: true })
               },
               onEdit: editFollowup,
               onEditLoaded: clearFollowupEdit,
@@ -1718,14 +1708,14 @@ export default function Page() {
           "gap-2 p-2": settings.general.newLayoutDesigns(),
         }}
       >
-        <Show when={!isDesktop() && !!params.id}>
-          <Tabs value={store.mobileTab} class="h-auto">
+        <Show when={!isDesktop() && !!currentSessionID()}>
+          <Tabs value={sessionState().store.mobileTab} class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
                 value="session"
                 class="!w-1/2 !max-w-none"
                 classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
+                onClick={() => sessionState().setStore("mobileTab", "session")}
               >
                 {language.t("session.tab.session")}
               </Tabs.Trigger>
@@ -1733,7 +1723,7 @@ export default function Page() {
                 value="changes"
                 class="!w-1/2 !max-w-none !border-r-0"
                 classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
+                onClick={() => sessionState().setStore("mobileTab", "changes")}
               >
                 {hasReview()
                   ? language.t("session.review.filesChanged", { count: reviewCount() })
@@ -1747,9 +1737,9 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !size.active() && !ui.reviewSnap,
+              !size.active() && !sessionState().ui.reviewSnap,
             "transition-[width]": !isV2NewSessionPage(),
-            "rounded-[10px] shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
+            "rounded-[10px] shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!currentSessionID(),
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1762,7 +1752,7 @@ export default function Page() {
             }}
           >
             <Switch>
-              <Match when={params.id && mobileChanges()}>
+              <Match when={currentSessionID() && mobileChanges()}>
                 <div class="relative h-full overflow-hidden">
                   {reviewContent({
                     diffStyle: "unified",
@@ -1776,39 +1766,40 @@ export default function Page() {
                   })}
                 </div>
               </Match>
-              <Match when={params.id}>
-                <Show when={messagesReady()}>
-                  <MessageTimeline
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onHistoryScroll={historyLoader.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    shouldAnchorBottom={() =>
-                      !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                    }
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+              <Match when={currentSessionID()}>
+                <MessageTimeline
+                  actions={actions}
+                  scroll={sessionState().ui.scroll}
+                  onResumeScroll={resumeScroll}
+                  setScrollRef={setScrollRef}
+                  onScheduleScrollState={scheduleScrollState}
+                  onAutoScrollHandleScroll={autoScroll.handleScroll}
+                  onMarkScrollGesture={markScrollGesture}
+                  hasScrollGesture={hasScrollGesture}
+                  onUserScroll={markUserScroll}
+                  onHistoryScroll={historyLoader.onScrollerScroll}
+                  onAutoScrollInteraction={autoScroll.handleInteraction}
+                  shouldAnchorBottom={() =>
+                    !location.hash &&
+                    !sessionState().store.messageId &&
+                    !sessionState().ui.pendingMessage &&
+                    !autoScroll.userScrolled()
+                  }
+                  centered={centered()}
+                  setContentRef={(el) => {
+                    content = el
+                    autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    historyShift={historyLoader.shift()}
-                    userMessages={historyLoader.userMessages()}
-                    anchor={anchor}
-                    setRevealMessage={(fn) => {
-                      revealMessage = fn
-                    }}
-                  />
-                </Show>
+                    const root = scroller
+                    if (root) scheduleScrollState(root)
+                  }}
+                  historyShift={historyLoader.shift()}
+                  userMessages={historyLoader.userMessages()}
+                  anchor={anchor}
+                  setRevealMessage={(fn) => {
+                    revealMessage = fn
+                  }}
+                />
               </Match>
               <Match when={true}>
                 <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
@@ -1818,7 +1809,7 @@ export default function Page() {
             </Switch>
           </div>
 
-          <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
+          <Show when={currentSessionID() || !newSessionDesign()}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
@@ -1847,9 +1838,9 @@ export default function Page() {
           hasReview={hasReview}
           reviewCount={reviewCount}
           reviewPanel={reviewPanel}
-          activeDiff={tree.activeDiff}
+          activeDiff={sessionState().store.activeDiff}
           focusReviewDiff={focusReviewDiff}
-          reviewSnap={ui.reviewSnap}
+          reviewSnap={sessionState().ui.reviewSnap}
           size={size}
         />
       </div>

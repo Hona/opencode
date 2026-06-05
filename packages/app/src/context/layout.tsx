@@ -1,11 +1,9 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
-import { useLocation } from "@solidjs/router"
+import { batch, createEffect, createMemo, createRoot, getOwner, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useServerSync } from "./server-sync"
-import { useServerSDK } from "./server-sdk"
-import { ServerConnection, useServer } from "./server"
+import { useServerContext, useServerSDK, useServerSync } from "./server-context"
+import { ServerConnection } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
@@ -15,7 +13,9 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
+import { createScopedCache } from "@/utils/scoped-cache"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { DirectoryState, type DirectoryStateScope } from "./directory"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -64,21 +64,9 @@ type SessionView = {
   todoCollapsed?: boolean
 }
 
-type TabHandoff = {
-  scope: ServerScope
-  dir: string
-  id: string
-  at: number
-}
-
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
-
-export type LayoutRoute =
-  | { type: "home" }
-  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -89,6 +77,7 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
 }
 
 const sessionPath = (key: string) => {
+  if (DirectoryState.draftID(key)) return
   const dir = SessionStateKey.route(key).split("/")[0]
   if (!dir) return
   const root = decode64(dir)
@@ -120,35 +109,14 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
-const currentRoute = (pathname: string): LayoutRoute => {
-  const parts = pathname.split("/").filter(Boolean)
-  if (parts.length === 0) return { type: "home" }
-
-  const dirBase64 = parts[0]
-  const dir = decode64(dirBase64)
-  if (!dir) return { type: "home" }
-
-  if (parts[1] !== "session") return { type: "home" }
-
-  const id = parts[2]
-  if (id) return { type: "session", dir, dirBase64, sessionId: id }
-  return { type: "dir-new-sesssion", dir, dirBase64 }
-}
-
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   gate: false,
   init: () => {
     const serverSdk = useServerSDK()
     const serverSync = useServerSync()
-    const server = useServer()
+    const server = useServerContext()
     const platform = usePlatform()
-    const location = useLocation()
-    const route = createMemo(() => {
-      const value = currentRoute(location.pathname)
-      if (value.type === "home") return value
-      return { ...value, server: server.key }
-    })
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -239,161 +207,143 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const target = Persist.serverGlobal(serverSdk.scope, "layout", ["layout.v6"])
-    const [store, setStore, _, ready] = persisted(
-      { ...target, migrate },
-      createStore({
-        sidebar: {
-          opened: false,
-          width: DEFAULT_SIDEBAR_WIDTH,
-          workspaces: {} as Record<string, boolean>,
-          workspacesDefault: false,
-        },
-        terminal: {
-          height: DEFAULT_TERMINAL_HEIGHT,
-          opened: false,
-        },
-        review: {
-          diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
-        },
-        fileTree: {
-          opened: false,
-          width: DEFAULT_FILE_TREE_WIDTH,
-          tab: "changes" as "changes" | "all",
-        },
-        session: {
-          width: DEFAULT_SESSION_WIDTH,
-        },
-        mobileSidebar: {
-          opened: false,
-        },
-        sessionTabs: {} as Record<string, SessionTabs>,
-        sessionView: {} as Record<string, SessionView>,
-        handoff: {
-          tabs: undefined as TabHandoff | undefined,
-        },
-      }),
-    )
-
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
-    const usage = {
-      active: undefined as string | undefined,
-      pruned: false,
-      used: new Map<string, number>(),
-    }
-
     const SESSION_STATE_KEYS = [
       { key: "prompt", legacy: "prompt", version: "v2" },
       { key: "terminal", legacy: "terminal", version: "v1" },
       { key: "file-view", legacy: "file", version: "v1" },
     ] as const
-
-    const dropSessionState = (keys: string[]) => {
-      for (const key of keys) {
-        const scope = SessionStateKey.scope(key)
-        const parts = SessionStateKey.route(key).split("/")
-        const dir = parts[0]
-        const session = parts[1]
-        if (!dir) continue
-
-        for (const entry of SESSION_STATE_KEYS) {
-          const target = session
-            ? Persist.serverSession(scope, dir, session, entry.key)
-            : Persist.serverWorkspace(scope, dir, entry.key)
-          void removePersisted(target, platform)
-
-          if (scope !== ServerScope.local) continue
-          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
-          void removePersisted({ key: legacyKey }, platform)
-        }
-      }
-    }
-
-    function prune(keep?: string) {
-      const drop = pruneSessionKeys({
-        keep,
-        max: MAX_SESSION_KEYS,
-        used: usage.used,
-        view: Object.keys(store.sessionView),
-        tabs: Object.keys(store.sessionTabs),
-      })
-      if (drop.length === 0) return
-
-      setStore(
-        produce((draft) => {
-          for (const key of drop) {
-            delete draft.sessionView[key]
-            delete draft.sessionTabs[key]
-          }
+    const createState = (scope: ServerScope, target = Persist.serverGlobal(scope, "layout", ["layout.v6"])) => {
+      const [store, setStore, _, ready] = persisted(
+        { ...target, migrate },
+        createStore({
+          sidebar: {
+            opened: false,
+            width: DEFAULT_SIDEBAR_WIDTH,
+            workspaces: {} as Record<string, boolean>,
+            workspacesDefault: false,
+          },
+          terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
+          review: { diffStyle: "split" as ReviewDiffStyle, panelOpened: true },
+          fileTree: { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" as "changes" | "all" },
+          session: { width: DEFAULT_SESSION_WIDTH },
+          mobileSidebar: { opened: false },
+          sessionTabs: {} as Record<string, SessionTabs>,
+          sessionView: {} as Record<string, SessionView>,
         }),
       )
+      const usage = { active: undefined as string | undefined, pruned: false, used: new Map<string, number>() }
 
-      scroll.drop(drop)
-      dropSessionState(drop)
-
-      for (const key of drop) {
-        usage.used.delete(key)
-      }
-    }
-
-    function touch(sessionKey: string) {
-      usage.active = sessionKey
-      usage.used.set(sessionKey, Date.now())
-
-      if (!ready()) return
-      if (usage.pruned) return
-
-      usage.pruned = true
-      prune(sessionKey)
-    }
-
-    const scroll = createScrollPersistence({
-      debounceMs: 250,
-      getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
-      onFlush: (sessionKey, next) => {
-        const current = store.sessionView[sessionKey]
-        const keep = usage.active ?? sessionKey
-        if (!current) {
-          setStore("sessionView", sessionKey, { scroll: next })
-          prune(keep)
-          return
+      const dropSessionState = (keys: string[]) => {
+        for (const key of keys) {
+          const scope = SessionStateKey.scope(key)
+          const parts = SessionStateKey.route(key).split("/")
+          const dir = parts[0]
+          const session = parts[1]
+          if (!dir) continue
+          for (const entry of SESSION_STATE_KEYS) {
+            const target = session
+              ? Persist.serverSession(scope, dir, session, entry.key)
+              : Persist.serverWorkspace(scope, dir, entry.key)
+            void removePersisted(target, platform)
+            if (scope !== ServerScope.local) continue
+            void removePersisted({ key: `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}` }, platform)
+          }
         }
-
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
-        prune(keep)
-      },
-    })
-
-    const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
-
-    createEffect(() => {
-      if (!ready()) return
-      if (usage.pruned) return
-      const active = usage.active
-      if (!active) return
-      usage.pruned = true
-      prune(active)
-    })
-
-    onMount(() => {
-      const flush = () => batch(() => scroll.flushAll())
-      const handleVisibility = () => {
-        if (document.visibilityState !== "hidden") return
-        flush()
       }
 
-      makeEventListener(window, "pagehide", flush)
-      makeEventListener(document, "visibilitychange", handleVisibility)
-
-      onCleanup(() => {
-        scroll.dispose()
+      const scroll = createScrollPersistence({
+        debounceMs: 250,
+        getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
+        onFlush: (sessionKey, next) => {
+          const current = store.sessionView[sessionKey]
+          const keep = usage.active ?? sessionKey
+          if (!current) setStore("sessionView", sessionKey, { scroll: next })
+          if (current) setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
+          prune(keep)
+        },
       })
-    })
 
-    const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
-    const colorRequested = new Map<string, AvatarColorKey>()
+      function prune(keep?: string) {
+        const drop = pruneSessionKeys({
+          keep,
+          max: MAX_SESSION_KEYS,
+          used: usage.used,
+          view: Object.keys(store.sessionView),
+          tabs: Object.keys(store.sessionTabs),
+        })
+        if (drop.length === 0) return
+        setStore(
+          produce((draft) => {
+            for (const key of drop) {
+              delete draft.sessionView[key]
+              delete draft.sessionTabs[key]
+            }
+          }),
+        )
+        scroll.drop(drop)
+        dropSessionState(drop)
+        for (const key of drop) usage.used.delete(key)
+      }
+
+      function touch(sessionKey: string) {
+        usage.active = sessionKey
+        usage.used.set(sessionKey, Date.now())
+        if (!ready() || usage.pruned) return
+        usage.pruned = true
+        prune(sessionKey)
+      }
+
+      void Promise.resolve(ready.promise).then(() => {
+        if (usage.pruned || !usage.active) return
+        usage.pruned = true
+        prune(usage.active)
+      })
+
+      onMount(() => {
+        const flush = () => batch(() => scroll.flushAll())
+        makeEventListener(window, "pagehide", flush)
+        makeEventListener(document, "visibilitychange", () => {
+          if (document.visibilityState === "hidden") flush()
+        })
+        onCleanup(() => scroll.dispose())
+      })
+
+      const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
+      return {
+        store,
+        setStore,
+        ready,
+        usage,
+        scroll,
+        prune,
+        touch,
+        ensureKey: (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey)),
+        colors,
+        setColors,
+        colorRequested: new Map<string, AvatarColorKey>(),
+      }
+    }
+
+    const owner = getOwner()
+    const cache = createScopedCache(
+      (scope: ServerScope) => createRoot((dispose) => ({ value: createState(scope), dispose }), owner),
+      { dispose: (entry) => entry.dispose() },
+    )
+    const draftCache = createScopedCache(
+      (draftID: string) =>
+        createRoot((dispose) => ({ value: createState(ServerScope.local, Persist.draft(draftID, "layout")), dispose }), owner),
+      { dispose: (entry) => entry.dispose() },
+    )
+    onCleanup(() => cache.clear())
+    onCleanup(() => draftCache.clear())
+    const state = createMemo(() => cache.get(server().scope).value)
+    const stateForKey = (key: string) => {
+      const draftID = DirectoryState.draftID(key)
+      if (draftID) return draftCache.get(draftID).value
+      return cache.get(SessionStateKey.scope(key)).value
+    }
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -402,11 +352,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
+      const sync = serverSync()
+      const [childStore] = sync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? serverSync.data.project.find((x) => x.id === projectID)
-        : serverSync.data.project.find((x) => x.worktree === project.worktree)
+        ? sync.data.project.find((x) => x.id === projectID)
+        : sync.data.project.find((x) => x.worktree === project.worktree)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -420,7 +371,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      for (const project of serverSync.data.project) {
+      for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           map.set(sandbox, project.worktree)
@@ -452,7 +403,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const projects = server.projects.list()
+      const projects = server().projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
@@ -460,23 +411,23 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          server.projects.close(project.worktree)
+          server().projects.close(project.worktree)
 
           if (!seen.has(root)) {
-            server.projects.open(root)
+            server().projects.open(root)
             seen.add(root)
           }
 
-          if (project.expanded) server.projects.expand(root)
+          if (project.expanded) server().projects.expand(root)
         }
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
+    const enriched = createMemo(() => server().projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
-        const color = project.icon?.color ?? colors[project.worktree]
+        const color = project.icon?.color ?? state().colors[project.worktree]
         if (!color) return project
         const icon = project.icon ? { ...project.icon, color } : { color }
         return { ...project, icon }
@@ -486,53 +437,57 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
-      if (!serverSync.ready) return
+      const sync = serverSync()
+      if (!sync.ready) return
 
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        serverSync.project.icon(project.worktree, project.icon?.override)
+        sync.project.icon(project.worktree, project.icon?.override)
       }
     })
 
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
+      const sync = serverSync()
+      const sdk = serverSdk()
+      const layout = state()
 
       for (const project of projects) {
-        if (project.icon?.color) colorRequested.delete(project.worktree)
+        if (project.icon?.color) layout.colorRequested.delete(project.worktree)
       }
 
       const used = new Set<string>()
       for (const project of projects) {
-        const color = project.icon?.color ?? colors[project.worktree]
+        const color = project.icon?.color ?? layout.colors[project.worktree]
         if (color) used.add(color)
       }
 
       for (const project of projects) {
         if (project.icon?.color || project.icon?.override || project.icon?.url) continue
         const worktree = project.worktree
-        const existing = colors[worktree]
+        const existing = layout.colors[worktree]
         const color = existing ?? pickAvailableColor(used)
         if (!existing) {
           used.add(color)
-          setColors(worktree, color)
+          layout.setColors(worktree, color)
         }
         if (!project.id) continue
 
-        const requested = colorRequested.get(worktree)
+        const requested = layout.colorRequested.get(worktree)
         if (requested === color) continue
-        colorRequested.set(worktree, color)
+        layout.colorRequested.set(worktree, color)
 
         if (project.id === "global") {
-          serverSync.project.meta(worktree, { icon: { color } })
+          sync.project.meta(worktree, { icon: { color } })
           continue
         }
 
-        void serverSdk.client.project
+        void sdk.client.project
           .update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
-            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+            if (layout.colorRequested.get(worktree) === color) layout.colorRequested.delete(worktree)
           })
       }
     })
@@ -545,9 +500,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sessionFrame = undefined
         sessionTimer = window.setTimeout(() => {
           sessionTimer = undefined
+          const current = server()
           void Promise.all(
-            server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
+            current.projects.list().map((project) => {
+              return current.sync.project.loadSessions(project.worktree)
             }),
           )
         }, 0)
@@ -560,159 +516,174 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     return {
-      route,
-      ready,
-      handoff: {
-        tabs: createMemo(() => store.handoff?.tabs),
-        setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: server.scope(), dir, id, at: Date.now() })
-        },
-        clearTabs() {
-          if (!store.handoff?.tabs) return
-          setStore("handoff", "tabs", undefined)
-        },
+      ready: () => state().ready(),
+      readyPromise: () => state().ready.promise,
+      promoteTabs(from: DirectoryStateScope, to: DirectoryStateScope) {
+        const fromKey = DirectoryState.layoutKey(from)
+        const toKey = DirectoryState.layoutKey(to)
+        const source = stateForKey(fromKey)
+        const destination = stateForKey(toKey)
+        const tabs = source.store.sessionTabs[fromKey]
+        if (tabs) destination.setStore("sessionTabs", toKey, tabs)
+        source.setStore(
+          "sessionTabs",
+          produce((draft) => {
+            delete draft[fromKey]
+          }),
+        )
+        if (from.state.type !== "draft") return
+        draftCache.delete(from.state.id)
       },
       projects: {
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
-          void serverSync.project.loadSessions(root)
-          server.projects.open(root)
+          if (server().projects.list().find((x) => x.worktree === root)) return
+          void serverSync().project.loadSessions(root)
+          server().projects.open(root)
         },
         close(directory: string) {
-          server.projects.close(directory)
+          server().projects.close(directory)
         },
         expand(directory: string) {
-          server.projects.expand(directory)
+          server().projects.expand(directory)
         },
         collapse(directory: string) {
-          server.projects.collapse(directory)
+          server().projects.collapse(directory)
         },
         move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
+          server().projects.move(directory, toIndex)
         },
       },
       sidebar: {
-        opened: createMemo(() => store.sidebar.opened),
+        opened: createMemo(() => state().store.sidebar.opened),
         open() {
-          setStore("sidebar", "opened", true)
+          state().setStore("sidebar", "opened", true)
         },
         close() {
-          setStore("sidebar", "opened", false)
+          state().setStore("sidebar", "opened", false)
         },
         toggle() {
-          setStore("sidebar", "opened", (x) => !x)
+          state().setStore("sidebar", "opened", (x) => !x)
         },
-        width: createMemo(() => store.sidebar.width),
+        width: createMemo(() => state().store.sidebar.width),
         resize(width: number) {
-          setStore("sidebar", "width", width)
+          state().setStore("sidebar", "width", width)
         },
         workspaces(directory: string) {
-          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+          return () => state().store.sidebar.workspaces[directory] ?? state().store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: string, value: boolean) {
-          setStore("sidebar", "workspaces", directory, value)
+          state().setStore("sidebar", "workspaces", directory, value)
         },
         toggleWorkspaces(directory: string) {
-          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-          setStore("sidebar", "workspaces", directory, !current)
+          const layout = state()
+          const current = layout.store.sidebar.workspaces[directory] ?? layout.store.sidebar.workspacesDefault ?? false
+          layout.setStore("sidebar", "workspaces", directory, !current)
         },
       },
       terminal: {
-        height: createMemo(() => store.terminal.height),
+        height: createMemo(() => state().store.terminal.height),
         resize(height: number) {
-          setStore("terminal", "height", height)
+          state().setStore("terminal", "height", height)
         },
       },
       review: {
-        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        diffStyle: createMemo(() => state().store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
-          if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: true })
+          const layout = state()
+          if (!layout.store.review) {
+            layout.setStore("review", { diffStyle, panelOpened: true })
             return
           }
-          setStore("review", "diffStyle", diffStyle)
+          layout.setStore("review", "diffStyle", diffStyle)
         },
       },
       fileTree: {
-        opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
-        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        opened: createMemo(() => state().store.fileTree?.opened ?? true),
+        width: createMemo(() => state().store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
+        tab: createMemo(() => state().store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
+          const layout = state()
+          if (!layout.store.fileTree) {
+            layout.setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
             return
           }
-          setStore("fileTree", "tab", tab)
+          layout.setStore("fileTree", "tab", tab)
         },
         open() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          const layout = state()
+          if (!layout.store.fileTree) {
+            layout.setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
-          setStore("fileTree", "opened", true)
+          layout.setStore("fileTree", "opened", true)
         },
         close() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          const layout = state()
+          if (!layout.store.fileTree) {
+            layout.setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
-          setStore("fileTree", "opened", false)
+          layout.setStore("fileTree", "opened", false)
         },
         toggle() {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+          const layout = state()
+          if (!layout.store.fileTree) {
+            layout.setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
-          setStore("fileTree", "opened", (x) => !x)
+          layout.setStore("fileTree", "opened", (x) => !x)
         },
         resize(width: number) {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width, tab: "changes" })
+          const layout = state()
+          if (!layout.store.fileTree) {
+            layout.setStore("fileTree", { opened: true, width, tab: "changes" })
             return
           }
-          setStore("fileTree", "width", width)
+          layout.setStore("fileTree", "width", width)
         },
       },
       session: {
-        width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
+        width: createMemo(() => state().store.session?.width ?? DEFAULT_SESSION_WIDTH),
         resize(width: number) {
-          if (!store.session) {
-            setStore("session", { width })
+          const layout = state()
+          if (!layout.store.session) {
+            layout.setStore("session", { width })
             return
           }
-          setStore("session", "width", width)
+          layout.setStore("session", "width", width)
         },
       },
       mobileSidebar: {
-        opened: createMemo(() => store.mobileSidebar?.opened ?? false),
+        opened: createMemo(() => state().store.mobileSidebar?.opened ?? false),
         show() {
-          setStore("mobileSidebar", "opened", true)
+          state().setStore("mobileSidebar", "opened", true)
         },
         hide() {
-          setStore("mobileSidebar", "opened", false)
+          state().setStore("mobileSidebar", "opened", false)
         },
         toggle() {
-          setStore("mobileSidebar", "opened", (x) => !x)
+          state().setStore("mobileSidebar", "opened", (x) => !x)
         },
       },
       pendingMessage: {
         set(sessionKey: string, messageID: string) {
+          const layout = stateForKey(sessionKey)
           const at = Date.now()
-          touch(sessionKey)
-          const current = store.sessionView[sessionKey]
+          layout.touch(sessionKey)
+          const current = layout.store.sessionView[sessionKey]
           if (!current) {
-            setStore("sessionView", sessionKey, {
+            layout.setStore("sessionView", sessionKey, {
               scroll: {},
               pendingMessage: messageID,
               pendingMessageAt: at,
             })
-            prune(usage.active ?? sessionKey)
+            layout.prune(layout.usage.active ?? sessionKey)
             return
           }
 
-          setStore(
+          layout.setStore(
             "sessionView",
             sessionKey,
             produce((draft) => {
@@ -722,12 +693,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           )
         },
         consume(sessionKey: string) {
-          const current = store.sessionView[sessionKey]
+          const layout = stateForKey(sessionKey)
+          const current = layout.store.sessionView[sessionKey]
           const message = current?.pendingMessage
           const at = current?.pendingMessageAt
           if (!message || !at) return
 
-          setStore(
+          layout.setStore(
             "sessionView",
             sessionKey,
             produce((draft) => {
@@ -741,51 +713,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       view(sessionKey: string | Accessor<string>) {
-        const key = createSessionKeyReader(sessionKey, ensureKey)
-        const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const key = createSessionKeyReader(sessionKey, (value) => stateForKey(value).ensureKey(value))
+        const s = createMemo(() => stateForKey(key()).store.sessionView[key()] ?? { scroll: {} })
+        const terminalOpened = createMemo(() => stateForKey(key()).store.terminal?.opened ?? false)
+        const reviewPanelOpened = createMemo(() => stateForKey(key()).store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
-          const current = store.terminal
+          const layout = stateForKey(key())
+          const current = layout.store.terminal
           if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
+            layout.setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
             return
           }
 
           const value = current.opened ?? false
           if (value === next) return
-          setStore("terminal", "opened", next)
+          layout.setStore("terminal", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean) {
-          const current = store.review
+          const layout = stateForKey(key())
+          const current = layout.store.review
           if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            layout.setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
             return
           }
 
           const value = current.panelOpened ?? true
           if (value === next) return
-          setStore("review", "panelOpened", next)
+          layout.setStore("review", "panelOpened", next)
         }
 
         return {
           scroll(tab: string) {
-            return scroll.scroll(key(), tab)
+            return stateForKey(key()).scroll.scroll(key(), tab)
           },
           setScroll(tab: string, pos: SessionScroll) {
-            scroll.setScroll(key(), tab, pos)
+            stateForKey(key()).scroll.setScroll(key(), tab, pos)
           },
           todoCollapsed: {
             get: () => s().todoCollapsed ?? false,
             set(collapsed: boolean) {
               const session = key()
-              const current = store.sessionView[session]
+              const layout = stateForKey(session)
+              const current = layout.store.sessionView[session]
               if (!current) {
-                setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
+                layout.setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
               } else {
-                setStore("sessionView", session, "todoCollapsed", collapsed)
+                layout.setStore("sessionView", session, "todoCollapsed", collapsed)
               }
             },
           },
@@ -818,9 +793,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             setOpen(open: string[]) {
               const session = key()
               const next = Array.from(new Set(open))
-              const current = store.sessionView[session]
+              const layout = stateForKey(session)
+              const current = layout.store.sessionView[session]
               if (!current) {
-                setStore("sessionView", session, {
+                layout.setStore("sessionView", session, {
                   scroll: {},
                   reviewOpen: next,
                 })
@@ -828,13 +804,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               }
 
               if (same(current.reviewOpen, next)) return
-              setStore("sessionView", session, "reviewOpen", next)
+              layout.setStore("sessionView", session, "reviewOpen", next)
             },
             openPath(path: string) {
               const session = key()
-              const current = store.sessionView[session]
+              const layout = stateForKey(session)
+              const current = layout.store.sessionView[session]
               if (!current) {
-                setStore("sessionView", session, {
+                layout.setStore("sessionView", session, {
                   scroll: {},
                   reviewOpen: [path],
                 })
@@ -842,21 +819,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               }
 
               if (!current.reviewOpen) {
-                setStore("sessionView", session, "reviewOpen", [path])
+                layout.setStore("sessionView", session, "reviewOpen", [path])
                 return
               }
 
               if (current.reviewOpen.includes(path)) return
-              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
+              layout.setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
             },
             closePath(path: string) {
               const session = key()
-              const current = store.sessionView[session]?.reviewOpen
+              const layout = stateForKey(session)
+              const current = layout.store.sessionView[session]?.reviewOpen
               if (!current) return
 
               const index = current.indexOf(path)
               if (index === -1) return
-              setStore(
+              layout.setStore(
                 "sessionView",
                 session,
                 "reviewOpen",
@@ -868,7 +846,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             togglePath(path: string) {
               const session = key()
-              const current = store.sessionView[session]?.reviewOpen
+              const current = stateForKey(session).store.sessionView[session]?.reviewOpen
               if (!current || !current.includes(path)) {
                 this.openPath(path)
                 return
@@ -880,9 +858,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       },
       tabs(sessionKey: string | Accessor<string>) {
-        const key = createSessionKeyReader(sessionKey, ensureKey)
+        const key = createSessionKeyReader(sessionKey, (value) => stateForKey(value).ensureKey(value))
         const path = createMemo(() => sessionPath(key()))
-        const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
+        const tabs = createMemo(() => stateForKey(key()).store.sessionTabs[key()] ?? { all: [] })
         const normalize = (tab: string) => normalizeSessionTab(path(), tab)
         const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
         return {
@@ -892,57 +870,62 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setActive(tab: string | undefined) {
             const session = key()
             const next = tab ? normalize(tab) : tab
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: next })
+            const layout = stateForKey(session)
+            if (!layout.store.sessionTabs[session]) {
+              layout.setStore("sessionTabs", session, { all: [], active: next })
             } else {
-              setStore("sessionTabs", session, "active", next)
+              layout.setStore("sessionTabs", session, "active", next)
             }
           },
           setAll(all: string[]) {
             const session = key()
             const next = normalizeAll(all).filter((tab) => tab !== "review")
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: next, active: undefined })
+            const layout = stateForKey(session)
+            if (!layout.store.sessionTabs[session]) {
+              layout.setStore("sessionTabs", session, { all: next, active: undefined })
             } else {
-              setStore("sessionTabs", session, "all", next)
+              layout.setStore("sessionTabs", session, "all", next)
             }
           },
           async open(tab: string) {
             const session = key()
-            const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
-            setStore("sessionTabs", session, next)
+            const layout = stateForKey(session)
+            const next = nextSessionTabsForOpen(layout.store.sessionTabs[session], normalize(tab))
+            layout.setStore("sessionTabs", session, next)
           },
           close(tab: string) {
             const session = key()
-            const current = store.sessionTabs[session]
+            const layout = stateForKey(session)
+            const current = layout.store.sessionTabs[session]
             if (!current) return
 
             if (tab === "review") {
               if (current.active !== tab) return
-              setStore("sessionTabs", session, "active", current.all[0])
+              layout.setStore("sessionTabs", session, "active", current.all[0])
               return
             }
 
             const all = current.all.filter((x) => x !== tab)
             if (current.active !== tab) {
-              setStore("sessionTabs", session, "all", all)
+              layout.setStore("sessionTabs", session, "all", all)
               return
             }
 
             const index = current.all.findIndex((f) => f === tab)
             const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
             batch(() => {
-              setStore("sessionTabs", session, "all", all)
-              setStore("sessionTabs", session, "active", next)
+              layout.setStore("sessionTabs", session, "all", all)
+              layout.setStore("sessionTabs", session, "active", next)
             })
           },
           move(tab: string, to: number) {
             const session = key()
-            const current = store.sessionTabs[session]
+            const layout = stateForKey(session)
+            const current = layout.store.sessionTabs[session]
             if (!current) return
             const index = current.all.findIndex((f) => f === tab)
             if (index === -1) return
-            setStore(
+            layout.setStore(
               "sessionTabs",
               session,
               "all",

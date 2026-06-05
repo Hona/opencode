@@ -25,8 +25,8 @@ function modelKey(model: ModelKey) {
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
-  init: () => {
-    const providers = useProviders()
+  init: (props: { directory: () => string | undefined }) => {
+    const providers = useProviders(props.directory)
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("model", ["model.v1"]),

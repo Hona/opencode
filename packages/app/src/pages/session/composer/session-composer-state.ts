@@ -1,13 +1,11 @@
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
-import { useParams } from "@solidjs/router"
 import { showToast } from "@/utils/toast"
-import { useServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-context"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useDirectory, useSDK, useSync } from "@/context/directory"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
 export const todoState = (input: {
@@ -24,7 +22,7 @@ export const todoState = (input: {
 const idle = { type: "idle" as const }
 
 export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
-  const params = useParams()
+  const directory = useDirectory()
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
@@ -32,32 +30,32 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const permission = usePermission()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+    return sessionQuestionRequest(sync().data.session, sync().data.question, directory().sessionID)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk.directory)
+    return sessionPermissionRequest(sync().data.session, sync().data.permission, directory().sessionID, (item) => {
+      return !permission.autoResponds(item, sdk().directory)
     })
   })
 
   const blocked = createMemo(() => {
-    const id = params.id
+    const id = directory().sessionID
     if (!id) return false
     return !!permissionRequest() || !!questionRequest()
   })
 
   const todos = createMemo((): Todo[] => {
-    const id = params.id
+    const id = directory().sessionID
     if (!id) return []
-    return serverSync.data.session_todo[id] ?? []
+    return serverSync().data.session_todo[id] ?? []
   })
 
   const done = createMemo(
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const live = createMemo(() => sync.data.session_working(params.id ?? "") || blocked())
+  const live = createMemo(() => sync().data.session_working(directory().sessionID ?? "") || blocked())
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
@@ -78,7 +76,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)
-    sdk.client.permission
+    sdk().client.permission
       .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
@@ -109,10 +107,10 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
   // Keep stale turn todos from reopening if the model never clears them.
   const clear = () => {
-    const id = params.id
+    const id = directory().sessionID
     if (!id) return
-    serverSync.todo.set(id, [])
-    sync.set("todo", id, [])
+    serverSync().todo.set(id, [])
+    sync().set("todo", id, [])
   }
 
   createEffect(

@@ -1,13 +1,13 @@
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useParams } from "@solidjs/router"
-import { Persist, persisted } from "@/utils/persist"
-import { useServerSDK } from "./server-sdk"
-import type { ServerScope } from "@/utils/server-scope"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { persisted } from "@/utils/persist"
+import { ScopedKey } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
+import { DirectoryState, type DirectoryStateScope, useDirectory } from "./directory"
 
 export type LineComment = {
   id: string
@@ -19,21 +19,9 @@ export type LineComment = {
 
 type CommentFocus = { file: string; id: string }
 
-const WORKSPACE_KEY = "__workspace__"
 const MAX_COMMENT_SESSIONS = 20
 
-function sessionKey(dir: string, id: string | undefined) {
-  return `${dir}\n${id ?? WORKSPACE_KEY}`
-}
-
-function decodeSessionKey(key: string) {
-  const split = key.lastIndexOf("\n")
-  if (split < 0) return { dir: key, id: WORKSPACE_KEY }
-  return {
-    dir: key.slice(0, split),
-    id: key.slice(split + 1),
-  }
-}
+type Scope = DirectoryStateScope
 
 type CommentStore = {
   comments: Record<string, LineComment[]>
@@ -168,11 +156,13 @@ export function createCommentSessionForTest(comments: Record<string, LineComment
   return createCommentSessionState(store, setStore)
 }
 
-function createCommentSession(scope: ServerScope, dir: string, id: string | undefined) {
+function createCommentSession(scope: Scope) {
+  const id = DirectoryState.sessionID(scope.state)
+  const dir = base64Encode(scope.directory)
   const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.serverScoped(scope, dir, id, "comments", [legacy]),
+    DirectoryState.persist({ ...scope, directory: dir }, "comments", [legacy]),
     createStore<CommentStore>({
       comments: {},
     }),
@@ -201,17 +191,11 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   name: "Comments",
   gate: false,
   init: () => {
-    const params = useParams()
-    const serverSDK = useServerSDK()
+    const directory = useDirectory()
     const cache = createScopedCache(
-      (key) => {
-        const decoded = decodeSessionKey(key)
+      (_key: ScopedKey, scope: Scope) => {
         return createRoot((dispose) => ({
-          value: createCommentSession(
-            serverSDK.scope,
-            decoded.dir,
-            decoded.id === WORKSPACE_KEY ? undefined : decoded.id,
-          ),
+          value: createCommentSession(scope),
           dispose,
         }))
       },
@@ -223,12 +207,12 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
 
     onCleanup(() => cache.clear())
 
-    const load = (dir: string, id: string | undefined) => {
-      const key = sessionKey(dir, id)
-      return cache.get(key).value
-    }
+    const load = (scope: Scope) => cache.get(DirectoryState.key(scope), scope).value
 
-    const session = createMemo(() => load(params.dir!, params.id))
+    const session = createMemo(() => {
+      const current = directory()
+      return load({ serverScope: current.server.scope, directory: current.directory, state: current.state })
+    })
 
     return {
       ready: () => session().ready(),

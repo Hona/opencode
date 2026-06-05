@@ -7,10 +7,10 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
+import { useSDK } from "@/context/directory"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerSDK } from "@/context/server-context"
 import { ScopedKey } from "@/utils/server-scope"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
@@ -64,7 +64,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
-  const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
+  const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
   const questions = createMemo(() => props.request.questions)
   const total = createMemo(() => questions().length)
@@ -209,7 +209,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: QuestionAnswer[]) => sdk().client.question.reply({ requestID: props.request.id, answers }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -221,7 +221,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
+    mutationFn: () => sdk().client.question.reject({ requestID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },

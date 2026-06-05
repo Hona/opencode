@@ -10,7 +10,7 @@ import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
 import { SettingsServers } from "./settings-servers"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ directory?: string; sessionID?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -61,7 +61,7 @@ export const DialogSettings: Component = () => {
           </div>
         </Tabs.List>
         <Tabs.Content value="general" class="no-scrollbar">
-          <SettingsGeneral />
+          <SettingsGeneral directory={props.directory} sessionID={props.sessionID} />
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />
@@ -70,10 +70,10 @@ export const DialogSettings: Component = () => {
           <SettingsServers />
         </Tabs.Content>
         <Tabs.Content value="providers" class="no-scrollbar">
-          <SettingsProviders />
+          <SettingsProviders directory={props.directory} />
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
-          <SettingsModels />
+          <SettingsModels directory={props.directory} />
         </Tabs.Content>
       </Tabs>
     </Dialog>

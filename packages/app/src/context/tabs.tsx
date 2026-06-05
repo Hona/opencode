@@ -1,140 +1,175 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
+import { batch } from "solid-js"
 import { Persist, persisted } from "@/utils/persist"
-import { ServerConnection, useServer } from "./server"
-import { createEffect, startTransition } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
-import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
+import { useLocation, useNavigate } from "@solidjs/router"
+import { draftHref, rootSession, sessionHref, sessionQuery } from "@/utils/v2-route"
+import { uuid } from "@/utils/uuid"
+import { useGlobal } from "./global"
+import { ServerConnection } from "./server"
+import { useQueryClient } from "@tanstack/solid-query"
+import { DirectoryState } from "./directory"
+import { usePlatform } from "./platform"
 
 export type SessionTab = {
   type: "session"
   server: ServerConnection.Key
-  dirBase64: string
   sessionId: string
 }
 
-export type Tab = SessionTab
+export type DraftTab = {
+  type: "draft"
+  draftID: string
+}
 
-export const tabHref = (tab: Tab) => `/${tab.dirBase64}/session/${tab.sessionId}`
-export const tabKey = (tab: Tab) => `${tab.server}\n${tabHref(tab)}`
+export type NewSessionDraft = {
+  server: ServerConnection.Key
+  directory: string
+  worktree?: string
+}
+
+export type Tab = SessionTab | DraftTab
+
+type State = {
+  tabs: Tab[]
+  drafts: Record<string, NewSessionDraft>
+}
+
+export const tabHref = (tab: Tab) =>
+  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
+
+export const tabKey = (tab: Tab) =>
+  tab.type === "draft" ? `draft:${tab.draftID}` : `session:${tab.server}:${tab.sessionId}`
 
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   name: "Tabs",
   gate: false,
   init: () => {
-    const server = useServer()
-    const fallback = server.key
+    const global = useGlobal()
+    const navigate = useNavigate()
+    const location = useLocation()
+    const queryClient = useQueryClient()
+    const platform = usePlatform()
     const [store, setStore, _, ready] = persisted(
-      {
-        ...Persist.global("tabs"),
-        migrate: (value: unknown) => {
-          if (!Array.isArray(value)) return value
-          return value.map((tab) => {
-            if (!tab || typeof tab !== "object" || "server" in tab) return tab
-            return { ...tab, server: fallback }
-          })
-        },
-      },
-      createStore<Tab[]>([]),
+      Persist.global("tabs.v2"),
+      createStore<State>({ tabs: [], drafts: {} }),
     )
 
-    const params = useParams()
-    const navigate = useNavigate()
-
-    const closing = new Set<string>()
-
-    createEffect(() => {
-      if (!ready()) return
-      const servers = new Set(server.list.map(ServerConnection.key))
-      if (store.every((tab) => servers.has(tab.server))) return
-      setStore((tabs) => tabs.filter((tab) => servers.has(tab.server)))
-    })
-
-    const navigateTab = (tab: Tab) => {
-      const href = tabHref(tab)
-      if (tab.server === server.key) {
-        navigate(href)
-        return
-      }
-      void startTransition(() => {
-        server.setActive(tab.server)
-        navigate(href)
-      })
+    const addSession = (tab: Omit<SessionTab, "type">) => {
+      const next = { type: "session" as const, ...tab }
+      setStore(
+        "tabs",
+        produce((tabs) => {
+          if (!tabs.some((item) => tabKey(item) === tabKey(next))) tabs.push(next)
+        }),
+      )
     }
 
-    const actions = {
-      addSessionTab: (tab: Omit<SessionTab, "type">) => {
-        const next = { type: "session" as const, ...tab }
-        if (closing.has(tabKey(next))) return
+    const navigateTab = (tab: Tab) => navigate(tabHref(tab))
+    const adjacent = (tab: Tab, offset: number) => {
+      const index = store.tabs.findIndex((item) => tabKey(item) === tabKey(tab))
+      const next = store.tabs[(index + offset + store.tabs.length) % store.tabs.length]
+      if (next) navigateTab(next)
+    }
+
+    return {
+      tabs: store.tabs,
+      drafts: store.drafts,
+      ready,
+      draft(draftID: string) {
+        const draft = store.drafts[draftID]
+        if (!draft) throw new Error(`Draft not found: ${draftID}`)
+        return draft
+      },
+      href: tabHref,
+      admitSession: addSession,
+      select(index: number) {
+        const tab = store.tabs[index]
+        if (tab) navigateTab(tab)
+      },
+      previous(tab: Tab) {
+        adjacent(tab, -1)
+      },
+      next(tab: Tab) {
+        adjacent(tab, 1)
+      },
+      openSession(server: ServerConnection.Key, sessionId: string) {
+        navigate(sessionHref(server, sessionId))
+        const context = global.servers.get(server)
+        void queryClient
+          .ensureQueryData(sessionQuery(server, context.instance, context.sdk, sessionId))
+          .then((locator) =>
+            rootSession(locator.session, (id) =>
+              queryClient.ensureQueryData(sessionQuery(server, context.instance, context.sdk, id)).then((result) => result.session),
+            ),
+          )
+          .then((root) => addSession({ server, sessionId: root.id }))
+          .catch(() => undefined)
+      },
+      newDraft(draft: NewSessionDraft) {
+        const draftID = uuid()
         setStore(
-          produce((tabs) => {
-            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
-            tabs.push(next)
+          produce((state) => {
+            state.drafts[draftID] = draft
+            state.tabs.push({ type: "draft", draftID })
           }),
         )
+        navigate(draftHref(draftID))
       },
-      removeTab: (index: number) => {
-        const tab = store[index]
-        if (!tab) return
-        const key = tabKey(tab)
-        const nextTab = store[index + 1] ?? store[index - 1]
-        closing.add(key)
-        void startTransition(() => {
+      updateDraft(draftID: string, draft: Partial<NewSessionDraft>) {
+        setStore("drafts", draftID, (current) => ({ ...current, ...draft }))
+      },
+      promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
+        const active = `${location.pathname}${location.search}` === draftHref(draftID)
+        batch(() => {
           setStore(
-            produce((tabs) => {
-              tabs.splice(index, 1)
+            produce((state) => {
+              const index = state.tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
+              if (index !== -1) state.tabs[index] = { type: "session", ...session }
+              delete state.drafts[draftID]
             }),
           )
-          if (nextTab) navigateTab(nextTab)
-          else navigate("/")
-        }).finally(() => closing.delete(key))
+          if (active) navigate(sessionHref(session.server, session.sessionId))
+        })
+        DirectoryState.removeDraft(draftID, platform)
+      },
+      close(tab: Tab, active: boolean) {
+        const index = store.tabs.findIndex((item) => tabKey(item) === tabKey(tab))
+        if (index === -1) return
+        const next = store.tabs[index + 1] ?? store.tabs[index - 1]
+        const draftID = tab.type === "draft" ? tab.draftID : undefined
+        batch(() => {
+          setStore(
+            produce((state) => {
+              const [tab] = state.tabs.splice(index, 1)
+              if (tab?.type === "draft") delete state.drafts[tab.draftID]
+            }),
+          )
+          if (!active) return
+          if (next) navigateTab(next)
+          if (!next) navigate("/")
+        })
+        if (draftID) DirectoryState.removeDraft(draftID, platform)
       },
       removeServer(key: ServerConnection.Key) {
-        setStore((tabs) => tabs.filter((tab) => tab.server !== key))
-        if (server.key === key) navigate("/")
+        const drafts = Object.entries(store.drafts).flatMap(([draftID, draft]) => (draft.server === key ? [draftID] : []))
+        setStore(
+          produce((state) => {
+            for (const [draftID, draft] of Object.entries(state.drafts)) {
+              if (draft.server === key) delete state.drafts[draftID]
+            }
+            state.tabs = state.tabs.filter((tab) =>
+              tab.type === "session" ? tab.server !== key : !!state.drafts[tab.draftID],
+            )
+          }),
+        )
+        for (const draftID of drafts) DirectoryState.removeDraft(draftID, platform)
       },
-      removeSessions: (input: SessionTabsRemovedDetail) => {
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              const sessionIDs = new Set(input.sessionIDs)
-              const currentHref =
-                params.dir && params.id
-                  ? tabHref({ type: "session", server: server.key, dirBase64: params.dir, sessionId: params.id })
-                  : undefined
-              const currentIndex = currentHref
-                ? tabs.findIndex(
-                    (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
-                  )
-                : -1
-              const currentTab = tabs[currentIndex]
-              const removedCurrent =
-                currentTab?.type === "session" &&
-                currentTab.server === server.key &&
-                atob(currentTab.dirBase64) === input.directory &&
-                sessionIDs.has(currentTab.sessionId)
-
-              for (let i = tabs.length - 1; i >= 0; i--) {
-                const tab = tabs[i]
-                if (!tab || tab.type !== "session") continue
-                if (tab.server !== server.key) continue
-                if (atob(tab.dirBase64) !== input.directory) continue
-                if (!sessionIDs.has(tab.sessionId)) continue
-                tabs.splice(i, 1)
-              }
-
-              if (!removedCurrent) return
-              const nextTab =
-                tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
-                tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
-              if (nextTab) navigateTab(nextTab)
-              else navigate("/")
-            }),
-          )
-        })
+      removeSessions(server: ServerConnection.Key, sessionIDs: Set<string>) {
+        setStore("tabs", (tabs) =>
+          tabs.filter((tab) => tab.type !== "session" || tab.server !== server || !sessionIDs.has(tab.sessionId)),
+        )
       },
     }
-
-    return { ...actions, store, ready }
   },
 })

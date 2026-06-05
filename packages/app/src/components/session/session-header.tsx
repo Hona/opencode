@@ -15,18 +15,18 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
+import { useServerContext } from "@/context/server-context"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
+import { useSync } from "@/context/directory"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
-import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { TITLEBAR_PORTAL_ID } from "../titlebar-shared"
 
 const OPEN_APPS = [
   "vscode",
@@ -134,15 +134,15 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
-  const server = useServer()
+  const server = useServerContext()
   const platform = usePlatform()
   const language = useLanguage()
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
-  const { params, view } = useSessionLayout()
+  const { directory, sessionID, view } = useSessionLayout()
 
-  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
+  const projectDirectory = createMemo(directory)
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
@@ -222,7 +222,7 @@ export function SessionHeader() {
     app: undefined as OpenApp | undefined,
   })
 
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
+  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server().isLocal)
   const current = createMemo(
     () =>
       options().find((o) => o.id === prefs.app) ??
@@ -231,7 +231,7 @@ export function SessionHeader() {
   )
   const opening = createMemo(() => openRequest.app !== undefined)
   const tint = createMemo(() =>
-    messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
+    messageAgentColor(sessionID() ? sync().data.message[sessionID()!] : undefined, sync().data.agent),
   )
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
@@ -282,8 +282,8 @@ export function SessionHeader() {
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
   const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {
-    setCenterMount(document.getElementById("opencode-titlebar-center"))
-    setRightMount(document.getElementById("opencode-titlebar-right"))
+    setCenterMount(document.getElementById(TITLEBAR_PORTAL_ID.center))
+    setRightMount(document.getElementById(TITLEBAR_PORTAL_ID.right))
   })
 
   return (

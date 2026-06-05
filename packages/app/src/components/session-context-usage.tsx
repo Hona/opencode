@@ -5,7 +5,7 @@ import { Button } from "@opencode-ai/ui/button"
 
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
-import { useSync } from "@/context/sync"
+import { useDirectory, useSync } from "@/context/directory"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
@@ -33,8 +33,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
-  const providers = useProviders()
-  const { params, tabs, view } = useSessionLayout()
+  const directory = useDirectory()
+  const providers = useProviders(() => directory().directory)
+  const { sessionID, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
   const tabState = createSessionTabs({
@@ -42,7 +43,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     pathFromTab: file.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   })
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const messages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
 
   const usd = createMemo(
     () =>
@@ -59,7 +60,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   })
 
   const openContext = () => {
-    if (!params.id) return
+    if (!sessionID()) return
 
     if (tabState.activeTab() === "context") {
       tabs().close("context")
@@ -102,7 +103,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   return (
-    <Show when={params.id}>
+    <Show when={sessionID()}>
       <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>

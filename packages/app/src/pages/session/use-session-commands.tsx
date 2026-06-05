@@ -9,9 +9,8 @@ import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
+import { useSDK, useSync } from "@/context/directory"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
@@ -19,6 +18,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useNavigation } from "@/context/navigation"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -49,14 +49,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
-  const { params, tabs, view } = useSessionLayout()
+  const navigation = useNavigation()
+  const { sessionID: currentSessionID, tabs, view } = useSessionLayout()
 
   const info = () => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   }
-  const hasReview = () => !!params.id
+  const hasReview = () => !!currentSessionID()
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -74,9 +75,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const shown = () => (desktopV2() ? settings.general.showFileTree() : true)
 
   const messages = () => {
-    const id = params.id
+    const id = currentSessionID()
     if (!id) return []
-    return sync.data.message[id] ?? []
+    return sync().data.message[id] ?? []
   }
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
   const visibleUserMessages = () => {
@@ -124,9 +125,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const isAutoAcceptActive = () => {
-    const sessionID = params.id
-    if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
-    return permission.isAutoAcceptingDirectory(sdk.directory)
+    const sessionID = currentSessionID()
+    if (sessionID) return permission.isAutoAccepting(sessionID, sdk().directory)
+    return permission.isAutoAcceptingDirectory(sdk().directory)
   }
   const write = async (value: string) => {
     const body = typeof document === "undefined" ? undefined : document.body
@@ -169,8 +170,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const share = async () => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
+    const current = sdk()
 
     const existing = info()?.share?.url
     if (existing) {
@@ -178,7 +180,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    const url = await sdk.client.session
+    const url = await current.client.session
       .share({ sessionID })
       .then((res) => res.data?.share?.url)
       .catch(() => undefined)
@@ -195,10 +197,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const unshare = async () => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
+    const current = sdk()
 
-    await sdk.client.session
+    await current.client.session
       .unshare({ sessionID })
       .then(() =>
         showToast({
@@ -265,13 +268,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const toggleAutoAccept = () => {
-    const sessionID = params.id
-    if (sessionID) permission.toggleAutoAccept(sessionID, sdk.directory)
-    else permission.toggleAutoAcceptDirectory(sdk.directory)
+    const sessionID = currentSessionID()
+    if (sessionID) permission.toggleAutoAccept(sessionID, sdk().directory)
+    else permission.toggleAutoAcceptDirectory(sdk().directory)
 
     const active = sessionID
-      ? permission.isAutoAccepting(sessionID, sdk.directory)
-      : permission.isAutoAcceptingDirectory(sdk.directory)
+      ? permission.isAutoAccepting(sessionID, sdk().directory)
+      : permission.isAutoAcceptingDirectory(sdk().directory)
     showToast({
       title: active
         ? language.t("toast.permissions.autoaccept.on.title")
@@ -283,21 +286,23 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const undo = async () => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
+    const current = sdk()
+    const currentSync = sync()
 
-    if (sync.data.session_working(params.id ?? "")) {
-      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    if (currentSync.data.session_working(currentSessionID() ?? "")) {
+      await current.client.session.abort({ sessionID }).catch(() => {})
     }
 
     const revert = info()?.revert?.messageID
     const message = findLast(userMessages(), (x) => !revert || x.id < revert)
     if (!message) return
 
-    await sdk.client.session.revert({ sessionID, messageID: message.id })
-    const parts = sync.data.part[message.id]
+    await current.client.session.revert({ sessionID, messageID: message.id })
+    const parts = currentSync.data.part[message.id]
     if (parts) {
-      const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+      const restored = extractPromptFromParts(parts, { directory: current.directory })
       prompt.set(restored)
     }
 
@@ -306,29 +311,31 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const redo = async () => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
+    const current = sdk()
 
     const revertMessageID = info()?.revert?.messageID
     if (!revertMessageID) return
 
     const next = userMessages().find((x) => x.id > revertMessageID)
     if (!next) {
-      await sdk.client.session.unrevert({ sessionID })
+      await current.client.session.unrevert({ sessionID })
       prompt.reset()
       const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
       setActiveMessage(last)
       return
     }
 
-    await sdk.client.session.revert({ sessionID, messageID: next.id })
+    await current.client.session.revert({ sessionID, messageID: next.id })
     const prev = findLast(userMessages(), (x) => x.id < next.id)
     setActiveMessage(prev)
   }
 
   const compact = async () => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return
+    const current = sdk()
 
     const model = local.model.current()
     if (!model) {
@@ -339,7 +346,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await sdk.client.session.summarize({
+    await current.client.session.summarize({
       sessionID,
       modelID: model.id,
       providerID: model.provider.id,
@@ -353,7 +360,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync.data.config.share === "disabled") return []
+    if (sync().data.config.share === "disabled") return []
     return [
       sessionCommand({
         id: "session.share",
@@ -362,7 +369,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           ? language.t("toast.session.share.success.description")
           : language.t("command.session.share.description"),
         slash: "share",
-        disabled: !params.id,
+        disabled: !currentSessionID(),
         onSelect: share,
       }),
       sessionCommand({
@@ -370,7 +377,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: language.t("command.session.unshare"),
         description: language.t("command.session.unshare.description"),
         slash: "unshare",
-        disabled: !params.id || !info()?.share?.url,
+        disabled: !currentSessionID() || !info()?.share?.url,
         onSelect: unshare,
       }),
     ]
@@ -382,14 +389,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
       slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
+      onSelect: () => navigation().newSession(),
     }),
     sessionCommand({
       id: "session.undo",
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !currentSessionID() || visibleUserMessages().length === 0,
       onSelect: undo,
     }),
     sessionCommand({
@@ -397,7 +404,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
+      disabled: !currentSessionID() || !info()?.revert?.messageID,
       onSelect: redo,
     }),
     sessionCommand({
@@ -405,7 +412,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.compact"),
       description: language.t("command.session.compact.description"),
       slash: "compact",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !currentSessionID() || visibleUserMessages().length === 0,
       onSelect: compact,
     }),
     sessionCommand({
@@ -413,7 +420,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
       slash: "fork",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !currentSessionID() || visibleUserMessages().length === 0,
       onSelect: fork,
     }),
   ]
@@ -498,7 +505,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.message.previous"),
       description: language.t("command.message.previous.description"),
       keybind: "mod+alt+[",
-      disabled: !params.id,
+      disabled: !currentSessionID(),
       onSelect: () => navigateMessageByOffset(-1),
     }),
     sessionCommand({
@@ -506,7 +513,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.message.next"),
       description: language.t("command.message.next.description"),
       keybind: "mod+alt+]",
-      disabled: !params.id,
+      disabled: !currentSessionID(),
       onSelect: () => navigateMessageByOffset(1),
     }),
   ]

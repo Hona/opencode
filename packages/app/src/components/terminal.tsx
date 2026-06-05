@@ -9,8 +9,8 @@ import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
+import { useSDK } from "@/context/directory"
+import { useServerContext } from "@/context/server-context"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
@@ -160,11 +160,13 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  const server = useServer()
-  const directory = sdk.directory
-  const client = sdk.client
-  const url = sdk.url
-  const auth = server.current?.http
+  const server = useServerContext()
+  const current = sdk()
+  const directory = current.directory
+  const client = current.client
+  const url = current.url
+  const connection = server().connection
+  const auth = connection.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
   const sameOrigin = new URL(url, location.href).origin === location.origin
@@ -540,7 +542,7 @@ export const Terminal = (props: TerminalProps) => {
             sameOrigin,
             username,
             password,
-            authToken: server.current?.type === "http" ? server.current.authToken : false,
+            authToken: connection.type === "http" ? connection.authToken : false,
           }),
         )
         socket.binaryType = "arraybuffer"

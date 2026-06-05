@@ -1,8 +1,6 @@
-import { useServerSync } from "@/context/server-sync"
-import { decode64 } from "@/utils/base64"
-import { useParams } from "@solidjs/router"
+import { useServerSync } from "@/context/server-context"
 import { Iterable, pipe } from "effect"
-import { createMemo } from "solid-js"
+import type { Accessor } from "solid-js"
 
 export const popularProviders = [
   "opencode",
@@ -16,16 +14,16 @@ export const popularProviders = [
 ]
 const popularProviderSet = new Set(popularProviders)
 
-export function useProviders() {
+export function useProviders(directory?: Accessor<string | undefined>) {
   const serverSync = useServerSync()
-  const params = useParams()
-  const dir = createMemo(() => decode64(params.dir) ?? "")
   const providers = () => {
-    if (dir()) {
-      const [projectStore] = serverSync.child(dir())
+    const sync = serverSync()
+    const current = directory?.()
+    if (current) {
+      const [projectStore] = sync.child(current)
       if (projectStore.provider_ready) return projectStore.provider
     }
-    return serverSync.data.provider
+    return sync.data.provider
   }
   return {
     all: () => providers().all,

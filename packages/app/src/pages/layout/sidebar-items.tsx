@@ -5,9 +5,9 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { A, useParams } from "@solidjs/router"
+import { A } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
-import { useServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-context"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
@@ -33,7 +33,7 @@ export const ProjectIcon = (props: {
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = serverSync.child(directory, { bootstrap: false })
+      const [store] = serverSync().child(directory, { bootstrap: false })
       return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
     }),
   )
@@ -80,6 +80,7 @@ export type SessionItemProps = {
   showTooltip?: boolean
   showChild?: boolean
   level?: number
+  currentSessionID: Accessor<string | undefined>
   sidebarExpanded: Accessor<boolean>
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
@@ -141,7 +142,6 @@ const SessionRow = (props: {
 }
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
-  const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
   const notification = useNotification()
@@ -149,22 +149,22 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = serverSync.child(props.session.directory)
+  const sessionStore = createMemo(() => serverSync().child(props.session.directory)[0])
   const hasPermissions = createMemo(() => {
-    return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
+    return !!sessionPermissionRequest(sessionStore().session, sessionStore().permission, props.session.id, (item) => {
       return !permission.autoResponds(item, props.session.directory)
     })
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    return sessionStore.session_working(props.session.id)
+    return sessionStore().session_working(props.session.id)
   })
 
-  const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
+  const tint = createMemo(() => messageAgentColor(sessionStore().message[props.session.id], sessionStore().agent))
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
   const currentChild = createMemo(() => {
     if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
+    return childSessionOnPath(sessionStore().session, props.session.id, props.currentSessionID())
   })
 
   const warm = (span: number, priority: "high" | "low") => {

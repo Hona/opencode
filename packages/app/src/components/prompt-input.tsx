@@ -31,10 +31,8 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
-import { useNavigate } from "@solidjs/router"
-import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
-import { useSync } from "@/context/sync"
+import { useSDK, useSync } from "@/context/directory"
+import { useServerContext } from "@/context/server-context"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
@@ -74,10 +72,9 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
-import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
+import { useNavigation } from "@/context/navigation"
 
 interface PromptInputProps {
   class?: string
@@ -123,24 +120,24 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
-  const navigate = useNavigate()
-  const queryOptions = useQueryOptions()
+  const server = useServerContext()
+  const queryOptions = () => server().sync.queryOptions
 
   const sync = useSync()
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
-  const server = useServer()
+  const navigation = useNavigation()
   const comments = useComments()
   const dialog = useDialog()
-  const providers = useProviders()
+  const providers = useProviders(() => sdk().directory)
   const command = useCommand()
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-  const { params, tabs, view } = useSessionLayout()
+  const { sessionID: currentSessionID, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -198,10 +195,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }).activeFileTab
 
   const commentInReview = (path: string) => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return false
 
-    const diffs = sync.data.session_diff[sessionID]
+    const diffs = sync().data.session_diff[sessionID]
     if (!diffs) return false
     return diffs.some((diff) => diff.file === path)
   }
@@ -263,8 +260,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     return paths
   })
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const working = createMemo(() => sync.data.session_working(params.id ?? ""))
+  const info = createMemo(() => (currentSessionID() ? sync().session.get(currentSessionID()!) : undefined))
+  const working = createMemo(() => sync().data.session_working(currentSessionID() ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -341,9 +338,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const hasUserPrompt = createMemo(() => {
-    const sessionID = params.id
+    const sessionID = currentSessionID()
     if (!sessionID) return false
-    const messages = sync.data.message[sessionID]
+    const messages = sync().data.message[sessionID]
     if (!messages) return false
     return messages.some((m) => m.role === "user")
   })
@@ -554,8 +551,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   createEffect(() => {
-    params.id
-    if (params.id) return
+    currentSessionID()
+    if (currentSessionID()) return
     if (!suggest()) return
     const interval = setInterval(() => {
       setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
@@ -584,7 +581,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const agentList = createMemo(() =>
-    sync.data.agent
+    sync().data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
@@ -653,7 +650,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
+    const custom = sync().data.command.map((cmd) => ({
       id: `custom.${cmd.name}`,
       trigger: cmd.name,
       title: cmd.name,
@@ -1106,9 +1103,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   // Check provider variants directly: `variants` also includes the UI-only default option.
   const showVariantControl = createMemo(() => local.model.variant.list().length > 0)
   const accepting = createMemo(() => {
-    const id = params.id
-    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
-    return permission.isAutoAccepting(id, sdk.directory)
+    const id = currentSessionID()
+    if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
+    return permission.isAutoAccepting(id, sdk().directory)
   })
 
   const { abort, handleSubmit } = createPromptSubmit({
@@ -1299,9 +1296,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
     queries: [
-      queryOptions.agents(pathKey(sdk.directory)),
-      queryOptions.providers(null),
-      queryOptions.providers(pathKey(sdk.directory)),
+      queryOptions().agents(pathKey(sdk().directory)),
+      queryOptions().providers(null),
+      queryOptions().providers(pathKey(sdk().directory)),
     ],
   }))
 
@@ -1346,7 +1343,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (project) => pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
     )
   }
-  const selectedProject = createMemo(() => projectForDirectory(sdk.directory))
+  const selectedProject = createMemo(() => projectForDirectory(sdk().directory))
   const projectResults = createMemo(() => {
     const search = picker.projectSearch.trim().toLowerCase()
     if (!search) return projects()
@@ -1363,18 +1360,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
     layout.projects.open(worktree)
-    server.projects.touch(worktree)
-    navigate(`/${base64Encode(worktree)}/session`)
+    server().projects.touch(worktree)
+    navigation().selectDirectory(worktree)
   }
   const addProject = async () => {
-    const conn = server.current
-    if (!conn) return
+    const conn = server().connection
     const select = (result: string | string[] | null) => {
       const directory = Array.isArray(result) ? result[0] : result
       if (!directory) return
       selectProject(directory)
     }
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    if (platform.openDirectoryPickerDialog && server().isLocal) {
       select(await platform.openDirectoryPickerDialog({ title: language.t("command.project.open") }))
       return
     }

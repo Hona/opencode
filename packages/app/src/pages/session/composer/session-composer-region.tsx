@@ -1,13 +1,12 @@
 import { Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useNavigate } from "@solidjs/router"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { useLayout } from "@/context/layout"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { useSync } from "@/context/sync"
-import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
+import { useSync } from "@/context/directory"
+import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
@@ -18,6 +17,7 @@ import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
+import { useNavigation } from "@/context/navigation"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -48,7 +48,7 @@ export function SessionComposerRegion(props: {
   }
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
-  const navigate = useNavigate()
+  const navigation = useNavigation()
   const layout = useLayout()
   const prompt = usePrompt()
   const language = useLanguage()
@@ -56,8 +56,7 @@ export function SessionComposerRegion(props: {
   const sync = useSync()
   const view = layout.view(route.sessionKey)
 
-  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
-  const info = createMemo(() => (route.params.id ? sync.session.get(route.params.id) : undefined))
+  const info = createMemo(() => (route.sessionID() ? sync().session.get(route.sessionID()!) : undefined))
   const parentID = createMemo(() => info()?.parentID)
   const child = createMemo(() => !!parentID())
   const showComposer = createMemo(() => !props.state.blocked() || child())
@@ -129,7 +128,7 @@ export function SessionComposerRegion(props: {
   const openParent = () => {
     const id = parentID()
     if (!id) return
-    navigate(`/${route.params.dir}/session/${id}`)
+    navigation().openSession(id)
   }
 
   createEffect(() => {
@@ -181,28 +180,7 @@ export function SessionComposerRegion(props: {
         </Show>
 
         <Show when={showComposer()}>
-          <Show
-            when={prompt.ready()}
-            fallback={
-              <>
-                <Show when={rolled()} keyed>
-                  {(revert) => (
-                    <div class="pb-2">
-                      <SessionRevertDock
-                        items={revert.items}
-                        restoring={revert.restoring}
-                        disabled={revert.disabled}
-                        onRestore={revert.onRestore}
-                      />
-                    </div>
-                  )}
-                </Show>
-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                  {handoffPrompt() || language.t("prompt.loading")}
-                </div>
-              </>
-            }
-          >
+          <div class="contents" inert={!prompt.ready()}>
             <Show when={dock()}>
               <div
                 classList={{
@@ -215,7 +193,7 @@ export function SessionComposerRegion(props: {
               >
                 <div ref={(el) => setStore("body", el)}>
                   <SessionTodoDock
-                    sessionID={route.params.id}
+                    sessionID={route.sessionID()}
                     todos={props.state.todos()}
                     collapsed={view.todoCollapsed.get()}
                     onToggle={() => view.todoCollapsed.set(!view.todoCollapsed.get())}
@@ -294,7 +272,7 @@ export function SessionComposerRegion(props: {
                 </div>
               </Show>
             </div>
-          </Show>
+          </div>
         </Show>
       </div>
     </div>

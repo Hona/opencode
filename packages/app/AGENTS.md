@@ -13,6 +13,17 @@
 ## SolidJS
 
 - Always prefer `createStore` over multiple `createSignal` calls
+- Use effects only to synchronize with external systems; prefer derived state and explicit actions for app state.
+
+## Architecture
+
+- Strong ownership should make consumers simple and reduce branching.
+- Prefer strict contexts with explicit domain values; do not add implicit or theoretical fallbacks.
+- Keep route, server, directory, session, draft, and tab identities explicit.
+- Prefer explicit transactions over synchronization between independent state stores.
+- Avoid duplicate or near-duplicate logic; consolidate only when the shared concept is real.
+- Capture concrete context once at the start of async work.
+- Treat reduced code, branching, and compatibility machinery as refactor deliverables.
 
 ## Tool Calling
 

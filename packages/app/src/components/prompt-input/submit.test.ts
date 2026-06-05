@@ -61,6 +61,7 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
+    useSearchParams: () => [{}],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -124,7 +125,8 @@ beforeAll(async () => {
     }),
   }))
 
-  mock.module("@/context/sdk", () => ({
+  mock.module("@/context/directory", () => ({
+    useDirectory: () => () => ({ sessionID: params.id }),
     useSDK: () => {
       const sdk = {
         scope: "local",
@@ -135,11 +137,8 @@ beforeAll(async () => {
           return clientFor(opts.directory)
         },
       }
-      return sdk
+      return () => sdk
     },
-  }))
-
-  mock.module("@/context/sync", () => ({
     useSync: () => ({
       data: { command: [] },
       session: {
@@ -163,7 +162,7 @@ beforeAll(async () => {
     }),
   }))
 
-  mock.module("@/context/server-sync", () => ({
+  mock.module("@/context/server-context", () => ({
     useServerSync: () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)

@@ -76,23 +76,25 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
 
   const saveMutation = useMutation(() => ({
     mutationFn: async () => {
+      const sdk = serverSDK()
+      const sync = serverSync()
       const name = store.name.trim() === folderName() ? "" : store.name.trim()
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        await serverSDK().client.project.update({
+        await sdk.client.project.update({
           projectID: props.project.id,
           directory: props.project.worktree,
           name,
           icon: { color: store.color || "", override: store.iconOverride || "" },
           commands: { start },
         })
-        serverSync().project.icon(props.project.worktree, store.iconOverride || undefined)
+        sync.project.icon(props.project.worktree, store.iconOverride || undefined)
         dialog.close()
         return
       }
 
-      serverSync().project.meta(props.project.worktree, {
+      sync.project.meta(props.project.worktree, {
         name,
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
         commands: { start: start || undefined },

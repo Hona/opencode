@@ -6,8 +6,7 @@ import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useServerSDK, useServerSync } from "@/context/server-context"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -28,20 +27,20 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
 
-export const SettingsProviders: Component = () => {
+export const SettingsProviders: Component<{ directory?: string }> = (props) => {
   return (
-    <SettingsServerScope>
-      <SettingsProvidersContent />
+    <SettingsServerScope directory={() => props.directory}>
+      <SettingsProvidersContent directory={props.directory} />
     </SettingsServerScope>
   )
 }
 
-const SettingsProvidersContent: Component = () => {
+const SettingsProvidersContent: Component<{ directory?: string }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const serverSync = useServerSync()
-  const providers = useProviders()
+  const providers = useProviders(() => props.directory)
 
   const connected = createMemo(() => {
     return providers
@@ -83,7 +82,7 @@ const SettingsProvidersContent: Component = () => {
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = serverSync.data.config.provider?.[providerID]
+    const provider = serverSync().data.config.provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -91,11 +90,12 @@ const SettingsProvidersContent: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    const before = serverSync.data.config.disabled_providers ?? []
+    const sync = serverSync()
+    const before = sync.data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
-    serverSync.set("config", "disabled_providers", next)
+    sync.set("config", "disabled_providers", next)
 
-    await serverSync
+    await sync
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -106,22 +106,23 @@ const SettingsProvidersContent: Component = () => {
         })
       })
       .catch((err: unknown) => {
-        serverSync.set("config", "disabled_providers", before)
+        sync.set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
   }
 
   const disconnect = async (providerID: string, name: string) => {
+    const sdk = serverSDK()
     if (isConfigCustom(providerID)) {
-      await serverSDK.client.auth.remove({ providerID }).catch(() => undefined)
+      await sdk.client.auth.remove({ providerID }).catch(() => undefined)
       await disableProvider(providerID, name)
       return
     }
-    await serverSDK.client.auth
+    await sdk.client.auth
       .remove({ providerID })
       .then(async () => {
-        await serverSDK.client.global.dispose()
+        await sdk.client.global.dispose()
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -209,7 +210,7 @@ const SettingsProvidersContent: Component = () => {
                     variant="secondary"
                     icon="plus-small"
                     onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                      dialog.show(() => <DialogConnectProvider provider={item.id} directory={props.directory} />)
                     }}
                   >
                     {language.t("common.connect")}
@@ -237,7 +238,7 @@ const SettingsProvidersContent: Component = () => {
                 variant="secondary"
                 icon="plus-small"
                 onClick={() => {
-                  dialog.show(() => <DialogCustomProvider back="close" />)
+                  dialog.show(() => <DialogCustomProvider back="close" directory={props.directory} />)
                 }}
               >
                 {language.t("common.connect")}
@@ -249,7 +250,7 @@ const SettingsProvidersContent: Component = () => {
             variant="ghost"
             class="px-0 py-0 mt-5 text-14-medium text-text-interactive-base text-left justify-start hover:bg-transparent active:bg-transparent"
             onClick={() => {
-              dialog.show(() => <DialogSelectProvider />)
+              dialog.show(() => <DialogSelectProvider directory={props.directory} />)
             }}
           >
             {language.t("dialog.provider.viewAll")}

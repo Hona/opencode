@@ -14,9 +14,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
-  homeProjectNavigation,
   homeProjectDirectories,
-  homeSessionServerStatus,
   latestRootSession,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -271,46 +269,10 @@ describe("layout workspace helpers", () => {
     ).toEqual({ server: serverKey("https://debian.example") })
   })
 
-  test("defers home project navigation until its server is active", () => {
-    expect(
-      homeProjectNavigation(serverKey("sidecar"), serverKey("https://debian.example"), "/YW1hem9u/session"),
-    ).toEqual({
-      server: serverKey("https://debian.example"),
-      href: "/YW1hem9u/session",
-    })
-    expect(
-      homeProjectNavigation(
-        serverKey("https://debian.example"),
-        serverKey("https://debian.example"),
-        "/YW1hem9u/session",
-      ),
-    ).toEqual({
-      href: "/YW1hem9u/session",
-    })
-  })
-
   test("preserves picker order when adding multiple projects", () => {
     expect(homeProjectDirectories(["/first", "/second"])).toEqual(["/first", "/second"])
     expect(homeProjectDirectories("/only")).toEqual(["/only"])
     expect(homeProjectDirectories(null)).toEqual([])
-  })
-
-  test("hides status derived from an inactive server", () => {
-    let reads = 0
-    const status = () => {
-      reads++
-      return { working: true, tint: "red" }
-    }
-    expect(homeSessionServerStatus(false, status)).toEqual({
-      working: false,
-      tint: undefined,
-    })
-    expect(reads).toBe(0)
-    expect(homeSessionServerStatus(true, status)).toEqual({
-      working: true,
-      tint: "red",
-    })
-    expect(reads).toBe(1)
   })
 
   test("extracts api error message and fallback", () => {

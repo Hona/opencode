@@ -14,7 +14,7 @@ type PersistedWithReady<T> = [
   Accessor<boolean> & { promise: undefined | Promise<any> },
 ]
 
-type PersistTarget = {
+export type PersistTarget = {
   storage?: string
   legacyStorageNames?: string[]
   key: string
@@ -341,6 +341,12 @@ function workspaceStorage(dir: string) {
   return `opencode.workspace.${head}.${sum}.dat`
 }
 
+function draftStorage(draftID: string) {
+  const head = (draftID.slice(0, 12) || "draft").replace(/[^a-zA-Z0-9._-]/g, "-")
+  const sum = checksum(draftID) ?? "0"
+  return `opencode.draft.${head}.${sum}.dat`
+}
+
 function legacyWorkspaceStorage(dir: string) {
   const storage = workspaceStorage(pathKey(dir))
   const result = new Set<string>()
@@ -465,6 +471,9 @@ export const Persist = {
   serverGlobal(scope: ServerScopeValue, key: string, legacy?: string[]): PersistTarget {
     if (scope === ServerScope.local) return Persist.global(key, legacy)
     return { storage: GLOBAL_STORAGE, key: ScopedKey.from(scope, key) }
+  },
+  draft(draftID: string, key: string, legacy?: string[]): PersistTarget {
+    return { storage: draftStorage(draftID), key: `draft:${key}`, legacy }
   },
   workspace(dir: string, key: string, legacy?: string[]): PersistTarget {
     return serverWorkspaceTarget(ServerScope.local, dir, `workspace:${key}`, legacy)

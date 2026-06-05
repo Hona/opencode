@@ -5,7 +5,7 @@ import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
-import { ServerSDK, useServerSDK } from "./server-sdk"
+import { ServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -29,10 +29,8 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
-import { useGlobal } from "./global"
-import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
@@ -83,8 +81,7 @@ function makeQueryOptionsApi(
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
-  const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
+export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
@@ -479,33 +476,15 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   }
 }
 
-export function createServerSyncContext(_serverSDK?: ServerSDK) {
-  const inner = createServerSyncContextInner(_serverSDK)
+export function createServerSyncContext(serverSDK: ServerSDK) {
+  const inner = createServerSyncContextInner(serverSDK)
   return Object.assign(inner, {
     createDirSyncContext: createRefCountMap(
-      (dir) => createDirSyncContext(dir, inner, _serverSDK),
+      (dir) => createDirSyncContext(dir, inner, serverSDK),
       (dir) => inner.disableMcp(dir),
       directoryKey,
     ),
   })
 }
 
-export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
-  name: "ServerSync",
-  gate: false,
-  init: (props: { server?: ServerConnection.Any }) => {
-    const global = useGlobal()
-    const language = useLanguage()
-    const server = useServer()
-
-    const conn = props.server ?? server.current
-    if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-    const ctx = global.createServerCtx(conn)
-
-    return ctx.sync
-  },
-})
-
-export function useQueryOptions() {
-  return useServerSync().queryOptions
-}
+export type ServerSync = ReturnType<typeof createServerSyncContext>

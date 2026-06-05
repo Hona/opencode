@@ -1,16 +1,14 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
-import { useSDK } from "./sdk"
-import { useSync } from "./sync"
-import { useServerSDK } from "./server-sdk"
+import { DirectoryState, type DirectoryStateScope, useDirectory, useSync } from "@/context/directory"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { createScopedCache } from "@/utils/scoped-cache"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
@@ -24,11 +22,6 @@ type Saved = {
   session: Record<string, State | undefined>
 }
 
-const WORKSPACE_KEY = "__workspace__"
-const handoff = new Map<string, State>()
-
-const handoffKey = (scope: ServerScope, dir: string, id: string) => ScopedKey.from(scope, dir, id)
-
 const migrate = (value: unknown) => {
   if (!value || typeof value !== "object") return { session: {} }
 
@@ -41,7 +34,7 @@ const migrate = (value: unknown) => {
   if (!item.pick || typeof item.pick !== "object") return { session: {} }
 
   return {
-    session: Object.fromEntries(Object.entries(item.pick).filter(([key]) => key !== WORKSPACE_KEY)),
+    session: item.pick,
   }
 }
 
@@ -53,43 +46,80 @@ const clone = (value: State | undefined) => {
   } satisfies State
 }
 
+type Scope = DirectoryStateScope
+
+function createLocalWorkspace(scope: ServerScope, directory: string) {
+  const [saved, setSaved] = persisted(
+    {
+      ...Persist.serverWorkspace(scope, directory, "model-selection", ["model-selection.v1"]),
+      migrate,
+    },
+    createStore<Saved>({
+      session: {},
+    }),
+  )
+
+  return { saved, setSaved }
+}
+
+function createLocalState(scope: Scope, workspace: ReturnType<typeof createLocalWorkspace>) {
+  if (scope.state.type === "session") {
+    const id = scope.state.id
+    return {
+      scope,
+      current: () => workspace.saved.session[id],
+      write: (next: State) => workspace.setSaved("session", id, next),
+      clear: () => workspace.setSaved("session", id, undefined),
+      restore(next: State) {
+        if (workspace.saved.session[id] !== undefined) return
+        workspace.setSaved("session", id, next)
+      },
+    }
+  }
+
+  const [store, setStore] =
+    scope.state.type === "draft"
+      ? persisted(DirectoryState.persist(scope, "model-selection"), createStore<{ value?: State }>({ value: undefined }))
+      : createStore<{ value?: State }>({ value: undefined })
+
+  return {
+    scope,
+    current: () => store.value,
+    write: (next: State) => setStore({ value: next }),
+    clear: () => setStore({ value: undefined }),
+    restore() {},
+  }
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const params = useParams()
-    const sdk = useSDK()
+    const directory = useDirectory()
     const sync = useSync()
-    const serverSDK = useServerSDK()
-    const providers = useProviders()
+    const providers = useProviders(() => directory().directory)
     const models = useModels()
-
-    const id = createMemo(() => params.id || undefined)
-    const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
+    const list = createMemo(() => sync().data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
-
-    const [saved, setSaved] = persisted(
-      {
-        ...Persist.serverWorkspace(serverSDK.scope, sdk.directory, "model-selection", ["model-selection.v1"]),
-        migrate,
-      },
-      createStore<Saved>({
-        session: {},
-      }),
+    const owner = getOwner()
+    const workspaceCache = createScopedCache(
+      (_key: ScopedKey, scope: Scope) =>
+        createRoot((dispose) => ({ value: createLocalWorkspace(scope.serverScope, scope.directory), dispose }), owner),
+      { dispose: (entry) => entry.dispose() },
     )
+    const stateCache = createScopedCache((_key: ScopedKey, scope: Scope) => {
+      const workspace = workspaceCache.get(
+        ScopedKey.from(scope.serverScope, scope.directory),
+        scope,
+      ).value
+      return createLocalState(scope, workspace)
+    })
+    onCleanup(() => stateCache.clear())
+    onCleanup(() => workspaceCache.clear())
 
-    const [store, setStore] = createStore<{
-      current?: string
-      draft?: State
-      last?: {
-        type: "agent" | "model" | "variant"
-        agent?: string
-        model?: ModelKey | null
-        variant?: string | null
-      }
-    }>({
-      current: list()[0]?.name,
-      draft: undefined,
-      last: undefined,
+    const select = (scope: Scope) => stateCache.get(DirectoryState.key(scope), scope)
+    const state = createMemo(() => {
+      const current = directory()
+      return select({ serverScope: current.server.scope, directory: current.directory, state: current.state })
     })
 
     const validModel = (model: ModelKey) => {
@@ -111,41 +141,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return items.find((item) => item.name === name) ?? items[0]
     }
 
-    createEffect(() => {
-      const items = list()
-      if (items.length === 0) {
-        if (store.current !== undefined) setStore("current", undefined)
-        return
-      }
-      if (items.some((item) => item.name === store.current)) return
-      setStore("current", items[0]?.name)
-    })
-
-    const scope = createMemo<State | undefined>(() => {
-      const session = id()
-      if (!session) return store.draft
-      return saved.session[session] ?? handoff.get(handoffKey(serverSDK.scope, sdk.directory, session))
-    })
-
-    createEffect(() => {
-      const session = id()
-      if (!session) return
-
-      const key = handoffKey(serverSDK.scope, sdk.directory, session)
-      const next = handoff.get(key)
-      if (!next) return
-      if (saved.session[session] !== undefined) {
-        handoff.delete(key)
-        return
-      }
-
-      setSaved("session", session, clone(next))
-      handoff.delete(key)
-    })
+    const scope = () => state().current()
 
     const configuredModel = () => {
-      if (!sync.data.config.model) return
-      const [providerID, modelID] = sync.data.config.model.split("/")
+      const modelConfig = sync().data.config.model
+      if (!modelConfig) return
+      const [providerID, modelID] = modelConfig.split("/")
       const model = { providerID, modelID }
       if (validModel(model)) return model
     }
@@ -177,43 +178,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = {
       list,
       current() {
-        return pickAgent(scope()?.agent ?? store.current)
+        return pickAgent(scope()?.agent)
       },
       set(name: string | undefined) {
         const item = pickAgent(name)
-        if (!item) {
-          setStore("current", undefined)
-          return
-        }
+        if (!item) return
 
         batch(() => {
-          setStore("current", item.name)
-          setStore("last", {
-            type: "agent",
-            agent: item.name,
-            model: item.model,
-            variant: item.variant ?? null,
-          })
           const prev = scope()
-          const next = {
+          state().write({
             agent: item.name,
             model: item.model ?? prev?.model,
             variant: item.variant ?? prev?.variant,
-          } satisfies State
-          const session = id()
-          if (session) {
-            setSaved("session", session, next)
-            return
-          }
-          setStore("draft", next)
+          })
         })
       },
       move(direction: 1 | -1) {
         const items = list()
-        if (items.length === 0) {
-          setStore("current", undefined)
-          return
-        }
+        if (items.length === 0) return
 
         let next = items.findIndex((item) => item.name === agent.current()?.name) + direction
         if (next < 0) next = items.length - 1
@@ -256,17 +238,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const write = (next: Partial<State>) => {
-      const state = {
+      const nextState = {
         ...(scope() ?? { agent: agent.current()?.name }),
         ...next,
       } satisfies State
-
-      const session = id()
-      if (session) {
-        setSaved("session", session, state)
-        return
-      }
-      setStore("draft", state)
+      state().write(nextState)
     }
 
     const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
@@ -294,12 +270,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       set(item: ModelKey | undefined, options?: { recent?: boolean }) {
         batch(() => {
-          setStore("last", {
-            type: "model",
-            agent: agent.current()?.name,
-            model: item ?? null,
-            variant: selected(),
-          })
           write({ model: item })
           if (!item) return
           models.setVisibility(item, true)
@@ -336,12 +306,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(value: string | undefined) {
           batch(() => {
             const model = current()
-            setStore("last", {
-              type: "variant",
-              agent: agent.current()?.name,
-              model: model ? { providerID: model.provider.id, modelID: model.id } : null,
-              variant: value ?? null,
-            })
             write({ variant: value ?? null })
             if (model) {
               models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
@@ -363,34 +327,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const result = {
-      slug: createMemo(() => base64Encode(sdk.directory)),
+      slug: createMemo(() => base64Encode(directory().directory)),
       model,
       agent,
       session: {
+        bind() {
+          const source = state()
+          const serverScope = directory().server.scope
+          const selected = clone(snapshot())
+          return {
+            promote(dir: string, session: string) {
+              const destination = select({ serverScope, directory: dir, state: { type: "session", id: session } })
+              if (selected) destination.write(selected)
+              if (source !== destination) source.clear()
+            },
+          }
+        },
         reset() {
-          setStore("draft", undefined)
+          const current = state().scope
+          select({ ...current, state: { type: "workspace" } }).clear()
         },
         promote(dir: string, session: string) {
-          const next = clone(snapshot())
-          if (!next) return
-
-          if (dir === sdk.directory) {
-            setSaved("session", session, next)
-            setStore("draft", undefined)
-            return
-          }
-
-          handoff.set(handoffKey(serverSDK.scope, dir, session), next)
-          setStore("draft", undefined)
+          this.bind().promote(dir, session)
         },
         restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
-          const session = id()
-          if (!session) return
-          if (msg.sessionID !== session) return
-          if (saved.session[session] !== undefined) return
-          if (handoff.has(handoffKey(serverSDK.scope, sdk.directory, session))) return
-
-          setSaved("session", session, {
+          const current = state()
+          if (msg.sessionID !== DirectoryState.sessionID(current.scope.state)) return
+          current.restore({
             agent: msg.agent,
             model: msg.model,
             variant: msg.model?.variant ?? null,

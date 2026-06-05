@@ -1,13 +1,14 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
-import { useParams } from "@solidjs/router"
-import { useSDK } from "./sdk"
+import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { useDirectory, useSDK, type DirectorySDK } from "@/context/directory"
 import type { Platform } from "./platform"
-import { useServer } from "./server"
+import { useServerContext } from "./server-context"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
+import { createScopedCache } from "@/utils/scoped-cache"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 export type LocalPTY = {
   id: string
@@ -100,7 +101,7 @@ type TerminalCacheEntry = {
   dispose: VoidFunction
 }
 
-const caches = new Set<Map<string, TerminalCacheEntry>>()
+const caches = new Set<{ peek(key: ScopedKey): TerminalCacheEntry | undefined }>()
 
 const trimTerminal = (pty: LocalPTY) => {
   if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
@@ -124,7 +125,7 @@ export function clearWorkspaceTerminals(
 ) {
   const key = getWorkspaceTerminalCacheKey(dir, scope)
   for (const cache of caches) {
-    const entry = cache.get(key)
+    const entry = cache.peek(key)
     entry?.value.clear()
   }
 
@@ -143,7 +144,7 @@ export function clearWorkspaceTerminals(
 }
 
 function createWorkspaceTerminalSession(
-  sdk: ReturnType<typeof useSDK>,
+  sdk: DirectorySDK,
   dir: string,
   scope: ServerScopeValue,
   legacySessionID?: string,
@@ -202,7 +203,7 @@ function createWorkspaceTerminalSession(
   })
   onCleanup(unsub)
 
-  const update = (client: ReturnType<typeof useSDK>["client"], pty: Partial<LocalPTY> & { id: string }) => {
+  const update = (client: DirectorySDK["client"], pty: Partial<LocalPTY> & { id: string }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
     if (index >= 0) {
@@ -223,7 +224,7 @@ function createWorkspaceTerminalSession(
       })
   }
 
-  const clone = async (client: ReturnType<typeof useSDK>["client"], id: string) => {
+  const clone = async (client: DirectorySDK["client"], id: string) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
@@ -374,66 +375,44 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   gate: false,
   init: () => {
     const sdk = useSDK()
-    const server = useServer()
-    const params = useParams()
-    const cache = new Map<string, TerminalCacheEntry>()
-    const scope = server.scope()
+    const directory = useDirectory()
+    const server = useServerContext()
+    const scope = () => server().scope
+    const cache = createScopedCache(
+      (
+        _key: ScopedKey,
+        input: { dir: string; legacySessionID: string | undefined; serverScope: ServerScopeValue; instance: string },
+      ) =>
+        createRoot((dispose) => ({
+          value: createWorkspaceTerminalSession(sdk(), input.dir, input.serverScope, input.legacySessionID),
+          dispose,
+        })),
+      {
+        maxEntries: MAX_TERMINAL_SESSIONS,
+        dispose: (entry) => entry.dispose(),
+      },
+    )
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
+    onCleanup(() => cache.clear())
 
-    const disposeAll = () => {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-      cache.clear()
-    }
-
-    onCleanup(disposeAll)
-
-    const prune = () => {
-      while (cache.size > MAX_TERMINAL_SESSIONS) {
-        const first = cache.keys().next().value
-        if (!first) return
-        const entry = cache.get(first)
-        entry?.dispose()
-        cache.delete(first)
-      }
-    }
-
-    const loadWorkspace = (dir: string, legacySessionID: string | undefined, serverScope: ServerScopeValue) => {
+    let activeKey: ScopedKey | undefined
+    const loadWorkspace = (
+      dir: string,
+      legacySessionID: string | undefined,
+      serverScope: ServerScopeValue,
+      instance: string,
+    ) => {
       // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
-      const key = getWorkspaceTerminalCacheKey(dir, serverScope)
-      const existing = cache.get(key)
-      if (existing) {
-        cache.delete(key)
-        cache.set(key, existing)
-        return existing.value
-      }
-
-      const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, serverScope, legacySessionID),
-        dispose,
-      }))
-
-      cache.set(key, entry)
-      prune()
-      return entry.value
+      const key = ScopedKey.from(serverScope, instance, dir, WORKSPACE_KEY)
+      if (activeKey && activeKey !== key) cache.peek(activeKey)?.value.trimAll()
+      activeKey = key
+      return cache.get(key, { dir, legacySessionID, serverScope, instance }).value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope))
-
-    createEffect(
-      on(
-        () => ({ dir: params.dir, id: params.id, scope }),
-        (next, prev) => {
-          if (!prev?.dir) return
-          if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return
-          if (next.dir === prev.dir && next.id && next.scope === prev.scope) return
-          loadWorkspace(prev.dir, prev.id, prev.scope).trimAll()
-        },
-        { defer: true },
-      ),
+    const workspace = createMemo(() =>
+      loadWorkspace(base64Encode(directory().directory), directory().sessionID, scope(), server().instance),
     )
 
     return {

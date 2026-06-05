@@ -1,41 +1,41 @@
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { QueryClientProvider } from "@tanstack/solid-query"
-import { createMemo, For, type ParentProps, Show } from "solid-js"
+import { createMemo, For, type Accessor, type ParentProps, Show } from "solid-js"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { ModelsProvider } from "@/context/models"
 import { ServerConnection } from "@/context/server"
-import { ServerSDKProvider } from "@/context/server-sdk"
-import { ServerSyncProvider } from "@/context/server-sync"
+import { ServerContextProvider } from "@/context/server-context"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
 
-export function SettingsServerScope(props: ParentProps) {
+export function SettingsServerScope(props: ParentProps<{ directory: Accessor<string | undefined> }>) {
   const global = useGlobal()
   const settings = useSettings()
 
   return (
     <Show when={settings.general.newLayoutDesigns()} fallback={props.children}>
       <Show when={global.settings.server.selected()}>
-        {(server) => <SettingsServerDataProviders server={server()}>{props.children}</SettingsServerDataProviders>}
+        {(server) => (
+          <SettingsServerDataProviders server={server()} directory={props.directory}>
+            {props.children}
+          </SettingsServerDataProviders>
+        )}
       </Show>
     </Show>
   )
 }
 
-function SettingsServerDataProviders(props: ParentProps<{ server: ServerConnection.Any }>) {
+function SettingsServerDataProviders(
+  props: ParentProps<{ server: ServerConnection.Any; directory: Accessor<string | undefined> }>,
+) {
   const global = useGlobal()
   const serverCtx = () => global.createServerCtx(props.server)
 
   return (
-    <QueryClientProvider client={serverCtx().queryClient}>
-      <ServerSDKProvider server={props.server}>
-        <ServerSyncProvider>
-          <ModelsProvider>{props.children}</ModelsProvider>
-        </ServerSyncProvider>
-      </ServerSDKProvider>
-    </QueryClientProvider>
+    <ServerContextProvider value={serverCtx}>
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
+    </ServerContextProvider>
   )
 }
 

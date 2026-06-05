@@ -11,6 +11,7 @@ import { popularProviders } from "@/hooks/use-providers"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
+import { SettingsServerPicker } from "../settings-server-picker"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
@@ -45,7 +46,10 @@ export const SettingsModelsV2: Component = () => {
   return (
     <>
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
-        <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+          <SettingsServerPicker />
+        </div>
         <div class="settings-v2-tab-search">
           <TextInputV2
             type="search"

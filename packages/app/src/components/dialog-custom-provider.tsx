@@ -9,14 +9,14 @@ import { showToast } from "@/utils/toast"
 import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useServerSDK, useServerSync } from "@/context/server-context"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  directory?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -40,7 +40,7 @@ export function DialogCustomProvider(props: Props) {
       dialog.close()
       return
     }
-    dialog.show(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider directory={props.directory} />)
   }
 
   const addModel = () => {
@@ -105,8 +105,8 @@ export function DialogCustomProvider(props: Props) {
     const output = validateCustomProvider({
       form,
       t: language.t,
-      disabledProviders: serverSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(serverSync.data.provider.all.keys()),
+      disabledProviders: serverSync().data.config.disabled_providers ?? [],
+      existingProviderIDs: new Set(serverSync().data.provider.all.keys()),
     })
     batch(() => {
       setForm("err", output.err)
@@ -118,11 +118,13 @@ export function DialogCustomProvider(props: Props) {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
-      const disabledProviders = serverSync.data.config.disabled_providers ?? []
+      const sync = serverSync()
+      const sdk = serverSDK()
+      const disabledProviders = sync.data.config.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
       if (result.key) {
-        await serverSDK.client.auth.set({
+        await sdk.client.auth.set({
           providerID: result.providerID,
           auth: {
             type: "api",
@@ -131,7 +133,7 @@ export function DialogCustomProvider(props: Props) {
         })
       }
 
-      await serverSync.updateConfig({
+      await sync.updateConfig({
         provider: { [result.providerID]: result.config },
         disabled_providers: nextDisabled,
       })

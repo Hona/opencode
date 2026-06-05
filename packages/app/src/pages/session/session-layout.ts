@@ -1,23 +1,32 @@
-import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { useLayout } from "@/context/layout"
-import { useServer } from "@/context/server"
-import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { DirectoryState, useDirectory } from "@/context/directory"
 
 export const useSessionKey = () => {
-  const params = useParams()
-  const server = useServer()
-  const scope = createMemo(() => server.scope())
-  const workspaceKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(params.dir)))
-  const sessionKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(params.dir, params.id)))
-  return { params, sessionKey, workspaceKey }
+  const directory = useDirectory()
+  const scope = () => ({
+    serverScope: directory().server.scope,
+    directory: directory().directory,
+    state: directory().state,
+  })
+  const workspaceKey = createMemo(() =>
+    DirectoryState.layoutKey({ ...scope(), state: { type: "workspace" } }),
+  )
+  const sessionKey = createMemo(() => DirectoryState.layoutKey(scope()))
+  return {
+    directory: () => directory().directory,
+    sessionID: () => directory().sessionID,
+    sessionKey,
+    workspaceKey,
+  }
 }
 
 export const useSessionLayout = () => {
   const layout = useLayout()
-  const { params, sessionKey, workspaceKey } = useSessionKey()
+  const { directory, sessionID, sessionKey, workspaceKey } = useSessionKey()
   return {
-    params,
+    directory,
+    sessionID,
     sessionKey,
     workspaceKey,
     tabs: createMemo(() => layout.tabs(sessionKey)),

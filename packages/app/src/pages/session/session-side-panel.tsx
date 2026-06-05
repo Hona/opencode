@@ -21,7 +21,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -50,12 +49,11 @@ export function SessionSidePanel(props: {
   const layout = useLayout()
   const platform = usePlatform()
   const settings = useSettings()
-  const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
-  const { sessionKey, tabs, view, params } = useSessionLayout()
+  const { sessionID, sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopV2 = () => platform.platform === "desktop" && settings.general.newLayoutDesigns()
@@ -203,7 +201,7 @@ export function SessionSidePanel(props: {
   })
 
   return (
-    <Show when={isDesktop() && !(settings.general.newLayoutDesigns() && !params.id)}>
+    <Show when={isDesktop() && !(settings.general.newLayoutDesigns() && !sessionID())}>
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}

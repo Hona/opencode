@@ -158,18 +158,26 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted(
+      {
+        key: "settings.v3",
+        migrate(value) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return value
+          const settings = value as Record<string, unknown>
+          if (!settings.general || typeof settings.general !== "object" || Array.isArray(settings.general)) return value
+          const general = settings.general as Record<string, unknown>
+          if (general.followup !== "queue") return value
+          return { ...settings, general: { ...general, followup: "steer" } }
+        },
+      },
+      createStore<Settings>(defaultSettings),
+    )
 
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
-    })
-
-    createEffect(() => {
-      if (store.general?.followup !== "queue") return
-      setStore("general", "followup", "steer")
     })
 
     return {
@@ -248,6 +256,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
+          location.reload()
         },
       },
       updates: {

@@ -1,12 +1,12 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { useParams } from "@solidjs/router"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
-import { Persist, persisted } from "@/utils/persist"
-import { useServerSDK } from "./server-sdk"
-import type { ServerScope } from "@/utils/server-scope"
+import { DirectoryState, type DirectoryStateScope, useDirectory } from "./directory"
+import { persisted } from "@/utils/persist"
+import { createScopedCache } from "@/utils/scoped-cache"
+import { ScopedKey } from "@/utils/server-scope"
 
 interface PartBase {
   content: string
@@ -148,26 +148,17 @@ function createPromptActions(
   }
 }
 
-const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
-type PromptSession = ReturnType<typeof createPromptSession>
+type Scope = DirectoryStateScope
 
-type Scope = {
-  dir: string
-  id?: string
-}
-
-type PromptCacheEntry = {
-  value: PromptSession
-  dispose: VoidFunction
-}
-
-function createPromptSession(scope: ServerScope, dir: string, id: string | undefined) {
+function createPromptSession(scope: Scope) {
+  const id = DirectoryState.sessionID(scope.state)
+  const dir = base64Encode(scope.directory)
   const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.serverScoped(scope, dir, id, "prompt", [legacy]),
+    DirectoryState.persist({ ...scope, directory: dir }, "prompt", [legacy]),
     createStore<{
       prompt: Prompt
       cursor?: number
@@ -230,56 +221,34 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
   name: "Prompt",
   gate: false,
   init: () => {
-    const params = useParams()
-    const serverSDK = useServerSDK()
-    const cache = new Map<string, PromptCacheEntry>()
-
-    const disposeAll = () => {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-      cache.clear()
-    }
-
-    onCleanup(disposeAll)
-
-    const prune = () => {
-      while (cache.size > MAX_PROMPT_SESSIONS) {
-        const first = cache.keys().next().value
-        if (!first) return
-        const entry = cache.get(first)
-        entry?.dispose()
-        cache.delete(first)
-      }
-    }
-
+    const directory = useDirectory()
     const owner = getOwner()
-    const load = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
-      const existing = cache.get(key)
-      if (existing) {
-        cache.delete(key)
-        cache.set(key, existing)
-        return existing.value
-      }
+    const cache = createScopedCache(
+      (_key: ScopedKey, scope: Scope) =>
+        createRoot(
+          (dispose) => ({
+            value: createPromptSession(scope),
+            dispose,
+          }),
+          owner,
+        ),
+      {
+        maxEntries: MAX_PROMPT_SESSIONS,
+        dispose: (entry) => entry.dispose(),
+      },
+    )
+    onCleanup(() => cache.clear())
 
-      const entry = createRoot(
-        (dispose) => ({
-          value: createPromptSession(serverSDK.scope, dir, id),
-          dispose,
-        }),
-        owner,
-      )
+    const pick = (scope: Scope) => cache.get(DirectoryState.key(scope), scope).value
 
-      cache.set(key, entry)
-      prune()
-      return entry.value
-    }
-
-    const session = createMemo(() => load(params.dir!, params.id))
-    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
+    const session = createMemo(() => {
+      const current = directory()
+      return pick({ serverScope: current.server.scope, directory: current.directory, state: current.state })
+    })
+    const select = (scope?: Scope) => (scope ? pick(scope) : session())
 
     return {
+      bind: select,
       ready: () => session().ready,
       current: () => session().current(),
       cursor: () => session().cursor(),
@@ -293,8 +262,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
-      reset: (scope?: Scope) => pick(scope).reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => select(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => select(scope).reset(),
     }
   },
 })

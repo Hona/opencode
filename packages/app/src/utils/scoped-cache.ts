@@ -1,7 +1,7 @@
-type ScopedCacheOptions<T> = {
+type ScopedCacheOptions<T, K> = {
   maxEntries?: number
   ttlMs?: number
-  dispose?: (value: T, key: string) => void
+  dispose?: (value: T, key: K) => void
   now?: () => number
 }
 
@@ -10,11 +10,14 @@ type Entry<T> = {
   touchedAt: number
 }
 
-export function createScopedCache<T>(createValue: (key: string) => T, options: ScopedCacheOptions<T> = {}) {
-  const store = new Map<string, Entry<T>>()
+export function createScopedCache<T, K = string, Args extends readonly unknown[] = []>(
+  createValue: (key: K, ...args: Args) => T,
+  options: ScopedCacheOptions<T, K> = {},
+) {
+  const store = new Map<K, Entry<T>>()
   const now = options.now ?? Date.now
 
-  const dispose = (key: string, entry: Entry<T>) => {
+  const dispose = (key: K, entry: Entry<T>) => {
     options.dispose?.(entry.value, key)
   }
 
@@ -32,7 +35,7 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
     }
   }
 
-  const touch = (key: string, entry: Entry<T>) => {
+  const touch = (key: K, entry: Entry<T>) => {
     entry.touchedAt = now()
     store.delete(key)
     store.set(key, entry)
@@ -41,8 +44,9 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
   const prune = () => {
     if (options.maxEntries === undefined) return
     while (store.size > options.maxEntries) {
-      const key = store.keys().next().value
-      if (!key) return
+      const first = store.keys().next()
+      if (first.done) return
+      const key = first.value
       const entry = store.get(key)
       store.delete(key)
       if (!entry) continue
@@ -50,7 +54,7 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
     }
   }
 
-  const remove = (key: string) => {
+  const remove = (key: K) => {
     const entry = store.get(key)
     if (!entry) return
     store.delete(key)
@@ -58,7 +62,7 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
     return entry.value
   }
 
-  const peek = (key: string) => {
+  const peek = (key: K) => {
     sweep()
     const entry = store.get(key)
     if (!entry) return
@@ -67,7 +71,7 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
     dispose(key, entry)
   }
 
-  const get = (key: string) => {
+  const get = (key: K, ...args: Args) => {
     sweep()
     const entry = store.get(key)
     if (entry && !expired(entry)) {
@@ -80,7 +84,7 @@ export function createScopedCache<T>(createValue: (key: string) => T, options: S
     }
 
     const created = {
-      value: createValue(key),
+      value: createValue(key, ...args),
       touchedAt: now(),
     }
     store.set(key, created)

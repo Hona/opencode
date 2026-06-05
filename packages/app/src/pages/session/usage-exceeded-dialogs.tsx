@@ -1,7 +1,7 @@
-import { useSDK } from "@/context/sdk"
+import { useSDK } from "@/context/directory"
 import { Persist, persisted } from "@/utils/persist"
 import { SessionStatus } from "@opencode-ai/sdk/v2"
-import { onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSessionLayout } from "./session-layout"
 import { useDialog } from "@opencode-ai/ui/context"
@@ -36,7 +36,7 @@ function goUpsellKeys(status: SessionStatus) {
 export function useUsageExceededDialogs() {
   const sdk = useSDK()
   const dialog = useDialog()
-  const { params } = useSessionLayout()
+  const { sessionID } = useSessionLayout()
   const { t, locale } = useI18n()
   const isEnglish = () => locale() === "en"
 
@@ -50,9 +50,9 @@ export function useUsageExceededDialogs() {
     }),
   )
 
-  onCleanup(
-    sdk.event.on("session.status", (evt) => {
-      if (evt.properties.sessionID !== params.id) return
+  createEffect(() => {
+    const stop = sdk().event.on("session.status", (evt) => {
+      if (evt.properties.sessionID !== sessionID()) return
       if (evt.properties.status.type !== "retry") return
       const { action } = evt.properties.status
       if (!action) return
@@ -77,7 +77,7 @@ export function useUsageExceededDialogs() {
               if (dontShowAgain) setGoUpsellState(keys.dontShow, Date.now())
               else {
                 void import("../../components/dialog-connect-provider").then((x) =>
-                  dialog.show(() => <x.DialogConnectProvider provider="opencode-go" />),
+                  dialog.show(() => <x.DialogConnectProvider provider="opencode-go" directory={sdk().directory} />),
                 )
               }
             }}
@@ -97,6 +97,7 @@ export function useUsageExceededDialogs() {
           />
         ))
       }
-    }),
-  )
+    })
+    onCleanup(stop)
+  })
 }

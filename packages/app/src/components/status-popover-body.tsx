@@ -6,16 +6,15 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
+import { useSDK, useSync } from "@/context/directory"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
-import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
-import { useQueryOptions } from "@/context/server-sync"
+import { useServerContext } from "@/context/server-context"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
@@ -108,22 +107,24 @@ const useMcpToggleMutation = () => {
   const sdk = useSDK()
   const language = useLanguage()
   const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
+  const server = useServerContext()
+  const queryOptions = () => server().sync.queryOptions
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
+      const current = sdk()
+      const status = sync().data.mcp[name]
       if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
+        await current.client.mcp.disconnect({ name })
         return
       }
       if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
+        await current.client.mcp.auth.authenticate({ name })
         return
       }
-      await sdk.client.mcp.connect({ name })
+      await current.client.mcp.connect({ name })
     },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
+    onSuccess: () => queryClient.refetchQueries(queryOptions().mcp(pathKey(sync().directory))),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -287,7 +288,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
   )
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody() {
   const sync = useSync()
   const global = useGlobal()
   const server = useServer()
@@ -305,10 +306,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     })
   }
 
-  createEffect(() => {
-    if (!props.shown()) return
-  })
-
   let dialogRun = 0
   let dialogDead = false
   onCleanup(() => {
@@ -318,13 +315,13 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
-  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
-  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => sync().data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
-  const lspItems = createMemo(() => sync.data.lsp ?? [])
+  const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() =>
-    (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+    (sync().data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))

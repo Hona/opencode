@@ -1,13 +1,13 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { createEffect, createMemo, createRoot } from "solid-js"
+import { createMemo, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createServerProjects, ServerConnection, useServer } from "./server"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
-import { getOwner } from "solid-js/web"
-import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
+import type { ServerContext } from "./server-context"
+import { uuid } from "@/utils/uuid"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -28,51 +28,73 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       return list.find((conn) => ServerConnection.key(conn) === store.settings.serverKey) ?? list[0]
     })
 
-    createEffect(() => {
-      const conn = settingsServer()
-      const key = conn ? ServerConnection.key(conn) : undefined
-      if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
-    })
-
     const serverCtxs = new Map<
       ServerConnection.Key,
       { dispose: () => void; serverCtx: ReturnType<typeof createServerCtx> }
     >()
 
     const owner = getOwner()
+    const [revision, setRevision] = createSignal(0)
 
     const ensureServerCtx = (conn: ServerConnection.Any) => {
+      revision()
       const key = ServerConnection.key(conn)
       const existing = serverCtxs.get(key)
       if (existing) return existing.serverCtx
       const root = createRoot((dispose) => {
         const serverCtx = createServerCtx(conn, server.scope(key), server.projects.forServer(key))
         return { dispose, serverCtx }
-      }, owner as any)
+      }, owner)
       serverCtxs.set(key, root)
       return root.serverCtx
     }
 
-    createMemo(() => {
-      for (const conn of server.list) {
-        ensureServerCtx(conn)
-      }
-    })
+    const removeServerCtx = (key: ServerConnection.Key) => {
+      serverCtxs.get(key)?.dispose()
+      serverCtxs.delete(key)
+      setRevision((value) => value + 1)
+    }
 
-    createEffect(() => {
-      for (const [key] of serverCtxs) {
-        if (!server.list.find((conn) => ServerConnection.key(conn) === key)) {
-          const { dispose } = serverCtxs.get(key)!
-          dispose()
-          serverCtxs.delete(key)
-        }
-      }
-    })
+    const replaceServerCtx = (conn: ServerConnection.Any) => {
+      const key = ServerConnection.key(conn)
+      serverCtxs.get(key)?.dispose()
+      serverCtxs.delete(key)
+      const context = ensureServerCtx(conn)
+      setRevision((value) => value + 1)
+      return context
+    }
+
+    onCleanup(() => serverCtxs.forEach((entry) => entry.dispose()))
 
     return {
       servers: {
         list: () => server.list,
         health: serverHealth,
+        get(key: ServerConnection.Key) {
+          const conn = server.list.find((item) => ServerConnection.key(item) === key)
+          if (!conn) throw new Error(`Server not found: ${key}`)
+          return ensureServerCtx(conn)
+        },
+        first() {
+          const conn = server.list[0]
+          if (!conn) throw new Error("No server available")
+          return ensureServerCtx(conn)
+        },
+        remove(key: ServerConnection.Key) {
+          server.remove(key)
+          removeServerCtx(key)
+        },
+        replace(original: ServerConnection.Key, conn: ServerConnection.Http) {
+          const next = server.add(conn)
+          if (!next) return
+          const key = ServerConnection.key(next)
+          replaceServerCtx(next)
+          if (original !== key) {
+            server.remove(original)
+            removeServerCtx(original)
+          }
+          return next
+        },
       },
       settings: {
         server: {
@@ -96,15 +118,11 @@ function createServerCtx(
   conn: ServerConnection.Any,
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
-) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        refetchOnReconnect: false,
-        refetchOnMount: false,
-        refetchOnWindowFocus: false,
-      },
-    },
+): ServerContext {
+  const dispose = new Set<() => void>()
+  onCleanup(() => {
+    for (const callback of dispose) callback()
+    dispose.clear()
   })
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
@@ -128,11 +146,13 @@ function createServerCtx(
 
   const projectsList = createMemo(() => projects.list().map(enrich))
 
-  const isLocal =
-    (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
+  const isLocal = (conn.type === "sidecar" && conn.variant === "base") || (conn.type === "http" && !!isLocalHost(conn.http.url))
 
   return {
-    queryClient,
+    instance: uuid(),
+    key: ServerConnection.key(conn),
+    connection: conn,
+    scope,
     sdk,
     sync,
     isLocal,
@@ -140,10 +160,12 @@ function createServerCtx(
       ...projects,
       list: projectsList,
     },
+    onDispose(callback) {
+      dispose.add(callback)
+      return () => dispose.delete(callback)
+    },
   }
 }
-
-export type ServerCtx = ReturnType<typeof createServerCtx>
 
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]

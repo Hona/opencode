@@ -10,8 +10,9 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 import { SettingsServers } from "../settings-servers"
+import { SettingsServerScope } from "../settings-server-picker"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ directory?: string; sessionID?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -62,7 +63,7 @@ export const DialogSettings: Component = () => {
           </div>
         </TabsV2.List>
         <TabsV2.Content value="general" class="settings-v2-panel">
-          <SettingsGeneralV2 />
+          <SettingsGeneralV2 directory={props.directory} sessionID={props.sessionID} />
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
@@ -71,10 +72,14 @@ export const DialogSettings: Component = () => {
           <SettingsServers />
         </TabsV2.Content>
         <TabsV2.Content value="providers" class="settings-v2-panel">
-          <SettingsProvidersV2 />
+          <SettingsServerScope directory={() => props.directory}>
+            <SettingsProvidersV2 directory={props.directory} />
+          </SettingsServerScope>
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
-          <SettingsModelsV2 />
+          <SettingsServerScope directory={() => props.directory}>
+            <SettingsModelsV2 />
+          </SettingsServerScope>
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

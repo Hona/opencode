@@ -32,9 +32,9 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
   )
 }
 
-export const SettingsModels: Component = () => {
+export const SettingsModels: Component<{ directory?: string }> = (props) => {
   return (
-    <SettingsServerScope>
+    <SettingsServerScope directory={() => props.directory}>
       <SettingsModelsContent />
     </SettingsServerScope>
   )
