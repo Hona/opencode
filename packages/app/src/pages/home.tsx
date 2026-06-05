@@ -417,7 +417,10 @@ function HomeDesign() {
           language={language}
         />
 
-        <section class="min-w-0 flex-1 flex flex-col pt-12" aria-label={language.t("sidebar.project.recentSessions")}>
+        <section
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
+          aria-label={language.t("sidebar.project.recentSessions")}
+        >
           <HomeSessionSearch
             value={state.search}
             placeholder={language.t("home.sessions.search.placeholder")}
