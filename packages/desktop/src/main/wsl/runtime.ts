@@ -261,7 +261,14 @@ export async function installWslDistro(name: string, opts?: RunWslOptions) {
 export async function installWslOpencode(version: string, distro: string, opts?: RunWslOptions) {
   return runInteractiveCommand(
     resolveSystem32Command("wsl.exe"),
-    wslArgs(["bash", "-lc", `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)}`], distro),
+    wslArgs(
+      [
+        "bash",
+        "-lc",
+        `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)} --no-modify-path`,
+      ],
+      distro,
+    ),
     withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
     DEFAULT_WSL_INSTALL_TIMEOUT_MS,
   )
@@ -307,21 +314,10 @@ export async function resolveWslHome(distro?: string | null, opts?: RunWslOption
 }
 
 export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
-  for (const candidate of [
-    'if [ -x "${XDG_BIN_DIR:-$HOME/.local/bin}/opencode" ]; then printf "%s\\n" "${XDG_BIN_DIR:-$HOME/.local/bin}/opencode"; fi',
-    'if [ -x "$HOME/bin/opencode" ]; then printf "%s\\n" "$HOME/bin/opencode"; fi',
-    'if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi',
-  ]) {
-    const resolved = firstLine((await runWslSh(candidate, distro, opts)).stdout)
-    if (resolved) return resolved
-  }
-
-  const command = firstLine(
-    (await runWslSh("command -v opencode 2>/dev/null | grep -v '^/mnt/' | head -n 1 || true", distro, opts)).stdout,
+  return firstLine(
+    (await runWslSh('if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi', distro, opts))
+      .stdout,
   )
-  if (command) return command
-
-  return null
 }
 
 export async function readWslCommandVersion(command: string, distro: string, opts?: RunWslOptions) {
