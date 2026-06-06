@@ -1,11 +1,7 @@
 import type { WslOpencodeCheck, WslServerRuntime } from "./types"
 
-export function wslRuntimePresentation(runtime: WslServerRuntime) {
-  if (runtime.kind === "ready") return { label: "Running", retryable: false }
-  if (runtime.kind === "starting") return { label: "Starting", retryable: false }
-  if (runtime.kind === "failed") return { label: "Failed", retryable: true }
-  return { label: "Stopped", retryable: true }
-}
+export const wslRuntimeRetryable = (runtime: WslServerRuntime) =>
+  runtime.kind === "failed" || runtime.kind === "stopped"
 
 export function wslOpencodeAction(check?: WslOpencodeCheck) {
   if (!check) return

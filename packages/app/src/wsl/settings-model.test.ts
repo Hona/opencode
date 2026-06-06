@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { wslOpencodeAction, wslRuntimePresentation } from "./settings-model"
+import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
 
 describe("WSL server settings presentation", () => {
-  test("maps each runtime state to one presentation", () => {
-    expect(wslRuntimePresentation({ kind: "starting" })).toEqual({ label: "Starting", retryable: false })
-    expect(wslRuntimePresentation({ kind: "ready", url: "http://127.0.0.1:4096", username: null, password: null })).toEqual({
-      label: "Running",
-      retryable: false,
-    })
-    expect(wslRuntimePresentation({ kind: "failed", message: "boom" })).toEqual({ label: "Failed", retryable: true })
-    expect(wslRuntimePresentation({ kind: "stopped" })).toEqual({ label: "Stopped", retryable: true })
+  test("retries only settled unsuccessful runtimes", () => {
+    expect(wslRuntimeRetryable({ kind: "starting" })).toBe(false)
+    expect(wslRuntimeRetryable({ kind: "ready", url: "http://127.0.0.1:4096", username: null, password: null })).toBe(
+      false,
+    )
+    expect(wslRuntimeRetryable({ kind: "failed", message: "boom" })).toBe(true)
+    expect(wslRuntimeRetryable({ kind: "stopped" })).toBe(true)
   })
 
   test("offers install and update only when OpenCode needs attention", () => {

@@ -38,23 +38,35 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     disposed = true
   })
   const busy = createMemo(() => !!current()?.job || store.adding)
-  const selectedProbe = createMemo(() => {
-    const distro = store.selectedDistro
-    if (!distro) return null
-    return current()?.distroProbes[distro] ?? null
-  })
-  const selectedInstalled = createMemo(() => {
-    const distro = store.selectedDistro
-    if (!distro) return null
-    return (current()?.installed ?? []).find((item) => item.name === distro) ?? null
-  })
   const visibleInstalledDistros = createMemo(() =>
     (current()?.installed ?? []).filter((item) => !isHiddenDistro(item.name)),
   )
   const visibleOnlineDistros = createMemo(() => (current()?.online ?? []).filter((item) => !isHiddenDistro(item.name)))
   const defaultInstalledDistro = createMemo(() => visibleInstalledDistros().find((item) => item.isDefault) ?? null)
+  const existingServerDistros = createMemo(() => new Set((current()?.servers ?? []).map((item) => item.config.distro)))
+  const addableInstalledDistros = createMemo(() => {
+    return visibleInstalledDistros().filter((item) => !existingServerDistros().has(item.name))
+  })
+  const selectedDistro = createMemo(() => {
+    if (store.selectedDistro && addableInstalledDistros().some((item) => item.name === store.selectedDistro)) {
+      return store.selectedDistro
+    }
+    const distro = defaultInstalledDistro()
+    if (distro && !existingServerDistros().has(distro.name)) return distro.name
+    return null
+  })
+  const selectedProbe = createMemo(() => {
+    const distro = selectedDistro()
+    if (!distro) return null
+    return current()?.distroProbes[distro] ?? null
+  })
+  const selectedInstalled = createMemo(() => {
+    const distro = selectedDistro()
+    if (!distro) return null
+    return (current()?.installed ?? []).find((item) => item.name === distro) ?? null
+  })
   const opencodeCheck = createMemo(() => {
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (!distro) return null
     return current()?.opencodeChecks[distro] ?? null
   })
@@ -66,7 +78,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   })
   const distroUnavailableMessage = createMemo(() => {
     const probe = distroWarningProbe()
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (!probe || probe.canExecute || !distro) return null
     if (!selectedInstalled()) return language.t("wsl.onboarding.distroNotInstalled", { distro })
     return language.t("wsl.onboarding.openDistroOnce", { distro })
@@ -77,10 +89,6 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     if (probe.hasBash && probe.hasCurl) return null
     return probe
   })
-  const existingServerDistros = createMemo(() => new Set((current()?.servers ?? []).map((item) => item.config.distro)))
-  const addableInstalledDistros = createMemo(() => {
-    return visibleInstalledDistros().filter((item) => !existingServerDistros().has(item.name))
-  })
   const installableDistros = createMemo(() => {
     const online = visibleOnlineDistros()
     const installed = new Set(visibleInstalledDistros().map((item) => item.name))
@@ -89,16 +97,18 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
       .filter((item) => !installed.has(item.name))
       .filter((item) => !(item.name === "Ubuntu" && hasVersionedUbuntu))
   })
-  const installTarget = createMemo(() => installableDistros().find((item) => item.name === store.installTarget) ?? null)
+  const installTarget = createMemo(
+    () => installableDistros().find((item) => item.name === store.installTarget) ?? installableDistros()[0] ?? null,
+  )
   const installingDistro = createMemo(() => current()?.job?.kind === "install-distro")
   const installingOpencode = createMemo(() => {
     const job = current()?.job
-    return job?.kind === "install-opencode" && job.distro === store.selectedDistro
+    return job?.kind === "install-opencode" && job.distro === selectedDistro()
   })
   const wslReady = createMemo(() => !!current()?.runtime?.available && !current()?.pendingRestart)
   const distroReady = createMemo(() => {
     const probe = selectedProbe()
-    if (!probe || !store.selectedDistro) return false
+    if (!probe || !selectedDistro()) return false
     if (selectedInstalled()?.version === 1) return false
     return probe.canExecute && probe.hasBash && probe.hasCurl
   })
@@ -131,7 +141,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     if (!state.installed.length && !state.online.length) {
       return { key: "distros", run: () => api.refreshDistros() }
     }
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (distro && !state.distroProbes[distro]) {
       return { key: `probe-distro:${distro}`, run: () => api.probeDistro(distro) }
     }
@@ -162,25 +172,6 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     })()
   })
 
-  createEffect(() => {
-    const state = current()
-    const distro = defaultInstalledDistro()
-    if (!state || !distro || busy()) return
-    if (store.selectedDistro) return
-    if (existingServerDistros().has(distro.name)) return
-    setStore("selectedDistro", distro.name)
-  })
-
-  createEffect(() => {
-    const distros = installableDistros()
-    if (!distros.length) {
-      if (store.installTarget) setStore("installTarget", undefined)
-      return
-    }
-    if (store.installTarget && distros.some((item) => item.name === store.installTarget)) return
-    setStore("installTarget", distros[0]!.name)
-  })
-
   const wslMessage = createMemo(() => {
     const state = current()
     if (!state || state.job?.kind === "runtime") return language.t("wsl.onboarding.checkingRuntime")
@@ -192,7 +183,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const distroMessage = createMemo(() => {
     const state = current()
     if (!state) return language.t("wsl.onboarding.checkingDistros")
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (state.job?.kind === "install-distro")
       return language.t("wsl.onboarding.installingDistro", { distro: state.job.distro })
     if (state.job?.kind === "probe-distro")
@@ -208,7 +199,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const opencodeMessage = createMemo(() => {
     const state = current()
     if (!state) return language.t("wsl.onboarding.checkingOpencode")
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (state.job?.kind === "install-opencode") {
       return distro
         ? language.t("wsl.onboarding.updatingOpencodeIn", { distro })
@@ -244,7 +235,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   }
 
   const runSelectedDistro = (action: (distro: string) => Promise<unknown>) => {
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (!distro) return
     void run(() => action(distro))
   }
@@ -255,7 +246,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   }
 
   const finish = async () => {
-    const distro = store.selectedDistro
+    const distro = selectedDistro()
     if (!distro) return
     setStore("adding", true)
     try {
@@ -364,13 +355,13 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   </Show>
                 </div>
                 <div class="text-12-regular text-text-weak whitespace-pre-wrap break-words">{wslMessage()}</div>
-              <Show when={current()?.pendingRestart}>
-                <div class="rounded-md border border-border-weak-base px-3 py-3">
-                  <div class="text-12-regular text-text-warning-base">
-                    {language.t("wsl.onboarding.windowsRestartRequired")}
+                <Show when={current()?.pendingRestart}>
+                  <div class="rounded-md border border-border-weak-base px-3 py-3">
+                    <div class="text-12-regular text-text-warning-base">
+                      {language.t("wsl.onboarding.windowsRestartRequired")}
+                    </div>
                   </div>
-                </div>
-              </Show>
+                </Show>
                 <div class="flex items-center justify-end">
                   <Button
                     variant="secondary"
@@ -388,7 +379,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
               <div class="rounded-md bg-surface-base p-4 flex flex-col gap-3">
                 <div class="flex items-center justify-between gap-3">
                   <div class="text-14-medium text-text-strong">{language.t("wsl.onboarding.step.distro")}</div>
-                  <Show when={store.selectedDistro}>
+                  <Show when={selectedDistro()}>
                     <Button
                       variant="ghost"
                       size="small"
@@ -419,7 +410,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                         <button
                           type="button"
                           class="rounded-md border border-border-weak-base px-3 py-2 text-left transition-colors"
-                          classList={{ "bg-surface-raised-base": store.selectedDistro === item.name }}
+                          classList={{ "bg-surface-raised-base": selectedDistro() === item.name }}
                           onClick={() => selectDistro(item.name)}
                         >
                           <div class="text-13-medium text-text-strong">{item.name}</div>
@@ -459,7 +450,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                     >
                       <For each={installableDistros()}>
                         {(item) => {
-                          const selected = () => store.installTarget === item.name
+                          const selected = () => installTarget()?.name === item.name
                           return (
                             <button
                               type="button"
@@ -518,7 +509,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   <Button
                     variant="ghost"
                     size="large"
-                    disabled={busy() || !store.selectedDistro}
+                    disabled={busy() || !selectedDistro()}
                     onClick={() => runSelectedDistro((distro) => api.probeDistro(distro))}
                   >
                     {language.t("wsl.onboarding.refresh")}
@@ -529,7 +520,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   <Button
                     variant="secondary"
                     size="large"
-                    disabled={busy() || !store.selectedDistro || !distroReady()}
+                    disabled={busy() || !selectedDistro() || !distroReady()}
                     onClick={() => setStore("step", "opencode")}
                   >
                     {language.t("wsl.onboarding.next")}
@@ -543,7 +534,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                 <div class="flex items-center justify-between gap-3">
                   <div class="text-14-medium text-text-strong">{language.t("wsl.onboarding.step.opencode")}</div>
                   <div class="flex items-center gap-2">
-                    <Show when={store.selectedDistro}>
+                    <Show when={selectedDistro()}>
                       <Button
                         variant="ghost"
                         size="large"
@@ -599,7 +590,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
             </Match>
           </Switch>
 
-          <Show when={activeStep() === "opencode" && allReady() && store.selectedDistro}>
+          <Show when={activeStep() === "opencode" && allReady() && selectedDistro()}>
             <div class="flex items-center justify-end gap-2">
               <Button variant="ghost" size="large" disabled={store.adding} onClick={() => dialog.close()}>
                 {language.t("common.cancel")}

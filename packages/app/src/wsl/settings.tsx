@@ -16,7 +16,7 @@ import { ServerConnection } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
-import { wslOpencodeAction, wslRuntimePresentation } from "./settings-model"
+import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
 
 type Controller = ReturnType<typeof useServerManagementController>
 
@@ -88,7 +88,6 @@ export function WslServerSettings(props: {
       <For each={props.servers()}>
         {(item) => {
           const key = ServerConnection.Key.make(item.config.id)
-          const runtime = () => wslRuntimePresentation(item.runtime)
           const check = () => wsl.data?.opencodeChecks[item.config.distro]
           const opencodeAction = () => wslOpencodeAction(check())
           const busy = () => wsl.data?.job?.kind === "install-opencode" && wsl.data.job.distro === item.config.distro
@@ -135,7 +134,7 @@ export function WslServerSettings(props: {
                     <MenuV2.Content>
                       <MenuV2.Group>
                         <MenuV2.GroupLabel>{language.t("wsl.server.menu.label")}</MenuV2.GroupLabel>
-                        <Show when={runtime().retryable}>
+                        <Show when={wslRuntimeRetryable(item.runtime)}>
                           <MenuV2.Item onSelect={() => api && request.mutate(() => api.startServer(key))}>
                             {language.t("wsl.server.retryStart")}
                           </MenuV2.Item>
