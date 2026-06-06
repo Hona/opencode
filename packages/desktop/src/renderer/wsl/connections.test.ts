@@ -29,7 +29,9 @@ describe("WSL desktop connections", () => {
     expect(readyWslConnections(state("starting"))).toEqual([])
     expect(readyWslConnections(state("failed"))).toEqual([])
     expect(readyWslConnections(state("stopped"))).toEqual([])
-    expect(readyWslConnections(state("ready"))).toHaveLength(1)
+    expect(readyWslConnections(state("ready"))).toEqual([
+      expect.objectContaining({ displayName: "Debian", label: "WSL" }),
+    ])
   })
 
   test("does not block desktop startup on a configured WSL default", () => {

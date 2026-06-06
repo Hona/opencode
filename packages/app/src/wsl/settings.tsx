@@ -94,10 +94,14 @@ export function WslServerSettings(props: {
               <div class="settings-v2-servers-lead">
                 <ServerHealthIndicator health={props.controller.status()[key]} />
                 <div class="settings-v2-servers-copy">
-                  <span class="settings-v2-servers-name">{item.config.distro}</span>
+                  <span class="flex min-w-0 items-center gap-1">
+                    <span class="settings-v2-servers-name">{item.config.distro}</span>
+                    <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
+                      WSL
+                    </span>
+                  </span>
                   <span class="settings-v2-servers-meta">
-                    WSL • {runtime().label}
-                    <Show when={check()?.version}>{(version) => ` • v${version()}`}</Show>
+                    <Show when={check()?.version}>{(version) => `v${version()}`}</Show>
                   </span>
                 </div>
               </div>

@@ -6,6 +6,7 @@ export function readyWslConnections(state?: WslServersState) {
     return [
       {
         displayName: item.config.distro,
+        label: "WSL",
         type: "sidecar" as const,
         variant: "wsl" as const,
         distro: item.config.distro,

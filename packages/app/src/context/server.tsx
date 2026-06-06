@@ -145,7 +145,7 @@ export function resolveServerList(input: {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string }
+  type Base = { displayName?: string; label?: string }
 
   export type HttpBase = {
     url: string
