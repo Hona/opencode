@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { wslServerIdsToStartOnInitialize } from "./wsl-server-startup"
+import { wslServerIdsToStartOnInitialize } from "./startup"
 
 test("starts every configured WSL server on initialization", () => {
   expect(

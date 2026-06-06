@@ -17,7 +17,6 @@ import type { ServerHealth } from "@/utils/server-health"
 interface ServerRowProps extends ParentProps {
   conn: ServerConnection.Any
   status?: ServerHealth
-  version?: string
   class?: string
   nameClass?: string
   versionClass?: string
@@ -32,8 +31,6 @@ export function ServerRow(props: ServerRowProps) {
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
   const name = createMemo(() => serverName(props.conn))
-  const isWsl = createMemo(() => props.conn.type === "sidecar" && props.conn.variant === "wsl")
-  const version = createMemo(() => props.version ?? props.status?.version)
 
   const check = () => {
     const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
@@ -44,7 +41,7 @@ export function ServerRow(props: ServerRowProps) {
   createEffect(() => {
     name()
     props.conn.http.url
-    version()
+    props.status?.version
     queueMicrotask(check)
   })
 
@@ -57,11 +54,8 @@ export function ServerRow(props: ServerRowProps) {
   const tooltipValue = () => (
     <span class="flex items-center gap-2">
       <span>{serverName(props.conn, true)}</span>
-      <Show when={isWsl()}>
-        <span class="text-text-invert-weak">WSL</span>
-      </Show>
-      <Show when={version()}>
-        <span class="text-text-invert-weak">v{version()}</span>
+      <Show when={props.status?.version}>
+        <span class="text-text-invert-weak">v{props.status?.version}</span>
       </Show>
     </span>
   )
@@ -82,20 +76,15 @@ export function ServerRow(props: ServerRowProps) {
             <span ref={nameRef} class={`${props.nameClass ?? "truncate"} min-w-0`}>
               {name()}
             </span>
-            <Show when={isWsl()}>
-              <span class="text-11-regular text-text-weak border border-border-weak-base bg-surface-base px-1.5 py-0.5 rounded-md shrink-0">
-                WSL
-              </span>
-            </Show>
             <Show
               when={badge()}
               fallback={
-                <Show when={version()}>
+                <Show when={props.status?.version}>
                   <span
                     ref={versionRef}
                     class={`${props.versionClass ?? "text-text-weak text-14-regular truncate"} min-w-0`}
                   >
-                    v{version()}
+                    v{props.status?.version}
                   </span>
                 </Show>
               }

@@ -6,7 +6,7 @@ import { createEffect, createMemo, For, Match, onCleanup, Show, Switch } from "s
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useWslServers } from "@/context/wsl-servers"
+import { useWslServers } from "./context"
 
 type WslServerStep = "wsl" | "distro" | "opencode"
 
@@ -20,7 +20,7 @@ interface DialogWslServerProps {
   onAdded?: (distro: string) => void | Promise<void>
 }
 
-export function DialogWslServer(props: DialogWslServerProps = {}) {
+export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()

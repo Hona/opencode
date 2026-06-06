@@ -12,7 +12,7 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
@@ -77,7 +77,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setState("key", next ? defaultServerKey(next) : undefined)
+        setState("key", next ?? undefined)
       })
       onCleanup(() => {
         dead = true
@@ -85,7 +85,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setState("key", defaultServerKey(result))
+    setState("key", ServerConnection.Key.make(result))
     onCleanup(() => {
       dead = true
     })
@@ -97,13 +97,6 @@ const useDefaultServerKey = (
     },
     refresh: () => setState("tick", (value) => value + 1),
   }
-}
-
-function defaultServerKey(value: string) {
-  if (value.startsWith("wsl:")) return ServerConnection.Key.make(value)
-  const url = normalizeServerUrl(value)
-  if (!url) return
-  return ServerConnection.key({ type: "http", http: { url } })
 }
 
 const useMcpToggleMutation = () => {

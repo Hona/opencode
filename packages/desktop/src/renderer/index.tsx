@@ -24,6 +24,7 @@ import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
+import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
@@ -379,30 +380,12 @@ render(() => {
           },
         })
       }
-      for (const item of wslServers.data?.servers ?? []) {
-        const runtime = item.runtime
-        if (runtime.kind !== "ready") continue
-        list.push({
-          displayName: item.config.distro,
-          type: "sidecar",
-          variant: "wsl",
-          distro: item.config.distro,
-          http: {
-            url: runtime.url,
-            username: runtime.username ?? undefined,
-            password: runtime.password ?? undefined,
-          },
-        })
-      }
+      list.push(...readyWslConnections(wslServers.data))
       return list
     })
-    const effectiveDefaultServer = createMemo(() => {
-      const key = defaultServer.latest ?? ServerConnection.Key.make("sidecar")
-      if (!key.startsWith("wsl:")) return key
-      const item = wslServers.data?.servers.find((item) => item.config.id === key)
-      if (item?.runtime.kind === "ready") return key
-      return ServerConnection.Key.make("sidecar")
-    })
+    const effectiveDefaultServer = createMemo(() =>
+      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
+    )
     if (!ready()) return splash
 
     return (

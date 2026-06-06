@@ -1,8 +1,8 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, onCleanup } from "solid-js"
-import type { WslServersPlatform, WslServersState } from "./platform"
-import { usePlatform } from "./platform"
+import type { WslServersState } from "./types"
+import { usePlatform } from "../context/platform"
 
 const wslServersQueryKey = ["platform", "wslServers"] as const
 
@@ -15,7 +15,8 @@ export const { use: useWslServers, provider: WslServersProvider } = createSimple
       const api = platform.wslServers
       return queryOptions<WslServersState>({
         queryKey: wslServersQueryKey,
-        queryFn: api ? () => api.getState() : skipToken,
+        queryFn: () => api!.getState(),
+        enabled: !!api,
         staleTime: Number.POSITIVE_INFINITY,
         gcTime: Number.POSITIVE_INFINITY,
       })
@@ -30,6 +31,6 @@ export const { use: useWslServers, provider: WslServersProvider } = createSimple
       onCleanup(off)
     })
 
-    return query
+    return query as typeof query & { readonly data: WslServersState | undefined }
   },
 })

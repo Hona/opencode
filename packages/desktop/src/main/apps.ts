@@ -2,7 +2,7 @@ import { execFile } from "node:child_process"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
 import util from "node:util"
-import { resolveWslHome, runWslInDistro } from "./wsl"
+import { resolveWslHome, runWslInDistro } from "./wsl/runtime"
 
 const execFilePromise = util.promisify(execFile)
 

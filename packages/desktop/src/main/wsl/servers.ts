@@ -10,10 +10,10 @@ import type {
   WslServerRuntime,
   WslServersEvent,
   WslServersState,
-} from "../preload/types"
-import { WSL_SERVERS_KEY } from "./constants"
-import { getStore } from "./store"
-import { wslServerIdsToStartOnInitialize } from "./wsl-server-startup"
+} from "../../preload/types"
+import { WSL_SERVERS_KEY } from "../constants"
+import { getStore } from "../store"
+import { wslServerIdsToStartOnInitialize } from "./startup"
 import {
   installWslDistro,
   installWslOpencode,
@@ -28,7 +28,7 @@ import {
   summarize,
   upgradeWslOpencode,
   wslNeedsRestart,
-} from "./wsl"
+} from "./runtime"
 
 type RunningSidecar = {
   listener: { stop: () => void; onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void }

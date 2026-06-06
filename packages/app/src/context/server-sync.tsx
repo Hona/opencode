@@ -416,7 +416,11 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   onCleanup(() => {
     queue.dispose()
   })
-  onCleanup(children.disposeAll)
+  onCleanup(() => {
+    for (const directory of Object.keys(children.children)) {
+      children.disposeDirectory(directoryKey(directory))
+    }
+  })
 
   onMount(() => {
     if (typeof requestAnimationFrame === "function") {

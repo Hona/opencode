@@ -24,7 +24,6 @@ import {
   preferAppEnv,
   setDefaultServerUrl,
   spawnLocalServer,
-  spawnWslSidecar,
   type SidecarListener,
 } from "./server"
 import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
@@ -35,7 +34,8 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
-import { createWslServersController } from "./wsl-servers"
+import { createWslServersController } from "./wsl/servers"
+import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 
 const APP_NAMES: Record<string, string> = {

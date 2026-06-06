@@ -1,6 +1,6 @@
 import { useDragDropContext } from "@thisbeyond/solid-dnd"
 import type { Transformer } from "@thisbeyond/solid-dnd"
-import type { JSXElement } from "solid-js"
+import { createRoot, onCleanup, type JSXElement } from "solid-js"
 
 type DragEvent = { draggable?: { id?: unknown } }
 
@@ -27,16 +27,20 @@ const createAxisConstraint = (axis: "x" | "y", transformerId: string) => (): JSX
   if (!context) return null
   const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
   const transformer = createTransformer(transformerId, axis)
-  onDragStart((event) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    addTransformer("draggables", id, transformer)
+  const dispose = createRoot((dispose) => {
+    onDragStart((event) => {
+      const id = getDraggableId(event)
+      if (!id) return
+      addTransformer("draggables", id, transformer)
+    })
+    onDragEnd((event) => {
+      const id = getDraggableId(event)
+      if (!id) return
+      removeTransformer("draggables", id, transformer.id)
+    })
+    return dispose
   })
-  onDragEnd((event) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    removeTransformer("draggables", id, transformer.id)
-  })
+  onCleanup(dispose)
   return null
 }
 
