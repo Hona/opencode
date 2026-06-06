@@ -306,10 +306,6 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
   }
 }
 
-export async function resolveWslHome(distro?: string | null, opts?: RunWslOptions) {
-  return firstLine((await runWslSh('printf "%s\\n" "$HOME"', distro, opts)).stdout) ?? "/"
-}
-
 export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
   return firstLine(
     (

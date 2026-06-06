@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createEffect, createMemo } from "solid-js"
+import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { ServerScope } from "@/utils/server-scope"
@@ -251,12 +251,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function setActive(input: ServerConnection.Key) {
       if (state.active !== input) setState("active", input)
     }
-
-    createEffect(() => {
-      if (typeof window === "undefined") return
-      window.__OPENCODE__ ??= {}
-      window.__OPENCODE__.activeServer = state.active
-    })
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)

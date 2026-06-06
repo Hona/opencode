@@ -12,7 +12,7 @@ import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
-import { checkAppExists, resolveAppPath, wslPath } from "./apps"
+import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
@@ -264,7 +264,6 @@ const main = Effect.gen(function* () {
     setDisplayBackend: async () => undefined,
     parseMarkdown: async (markdown) => parseMarkdown(markdown),
     checkAppExists: (appName) => checkAppExists(appName),
-    wslPath: async (path, mode, distro) => wslPath(path, mode, distro),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, stopSidecars),
     checkUpdate: async () => checkUpdate(),
@@ -338,9 +337,7 @@ const main = Effect.gen(function* () {
       password,
     })
 
-    void wslServers
-      .initialize()
-      .catch((error) => logger.error("wsl server initialization failed", error))
+    void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),

@@ -5,7 +5,6 @@ declare global {
     api: ElectronAPI
     __OPENCODE__?: {
       deepLinks?: string[]
-      activeServer?: string
     }
   }
 }

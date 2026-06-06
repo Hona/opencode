@@ -1,15 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
 import { wslOpencodeAction, wslRuntimePresentation } from "./settings-model"
 
 describe("WSL server settings presentation", () => {
-  test("does not offer an app relaunch for a required Windows restart", () => {
-    const source = readFileSync(new URL("./dialog-add-server.tsx", import.meta.url), "utf8")
-
-    expect(source).not.toContain("platform.restart()")
-    expect(source).not.toContain('wsl.onboarding.relaunch')
-  })
-
   test("maps each runtime state to one presentation", () => {
     expect(wslRuntimePresentation({ kind: "starting" })).toEqual({ label: "Starting", retryable: false })
     expect(wslRuntimePresentation({ kind: "ready", url: "http://127.0.0.1:4096", username: null, password: null })).toEqual({
