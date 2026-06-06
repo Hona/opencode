@@ -467,7 +467,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => {
-    if (server.current?.type !== "sidecar" || server.current.variant !== "wsl") {
+    if (server.isLocal()) {
       fileInputRef?.click()
       return
     }

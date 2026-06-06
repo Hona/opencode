@@ -209,7 +209,12 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
     const state = current()
     if (!state) return language.t("wsl.onboarding.checkingOpencode")
     const distro = store.selectedDistro
-    if (state.job?.kind === "probe-opencode" || state.job?.kind === "install-opencode") {
+    if (state.job?.kind === "install-opencode") {
+      return distro
+        ? language.t("wsl.onboarding.updatingOpencodeIn", { distro })
+        : language.t("wsl.onboarding.updatingOpencode")
+    }
+    if (state.job?.kind === "probe-opencode") {
       return distro
         ? language.t("wsl.onboarding.checkingOpencodeIn", { distro })
         : language.t("wsl.onboarding.checkingOpencode")

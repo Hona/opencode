@@ -372,6 +372,8 @@ export const dict = {
   "wsl.onboarding.pickDistro": "Pick a distro or install one below.",
   "wsl.onboarding.checkingOpencode": "Checking OpenCode...",
   "wsl.onboarding.checkingOpencodeIn": "Checking OpenCode in {{distro}}...",
+  "wsl.onboarding.updatingOpencode": "Updating OpenCode...",
+  "wsl.onboarding.updatingOpencodeIn": "Updating OpenCode in {{distro}}...",
   "wsl.onboarding.updateOpencodeIn": "Update OpenCode in {{distro}}.",
   "wsl.onboarding.updateOpencode": "Update OpenCode",
   "wsl.onboarding.opencodeReadyIn": "OpenCode is ready in {{distro}}.",

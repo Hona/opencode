@@ -204,6 +204,8 @@ export namespace ServerConnection {
   export const Key = { make: (v: string) => v as Key }
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
+  export const local = (conn?: Any) =>
+    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
 }
 
 export function nextServerAfterRemoval(
@@ -296,10 +298,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
-    const isLocal = createMemo(() => {
-      const c = current()
-      return c?.type === "sidecar" || (c?.type === "http" && isLocalHost(c.http.url))
-    })
+    const isLocal = createMemo(() => ServerConnection.local(current()))
 
     return {
       ready: isReady,
