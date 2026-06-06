@@ -364,16 +364,13 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   </Show>
                 </div>
                 <div class="text-12-regular text-text-weak whitespace-pre-wrap break-words">{wslMessage()}</div>
-                <Show when={current()?.pendingRestart}>
-                  <div class="rounded-md border border-border-weak-base px-3 py-3 flex items-center justify-between gap-3">
-                    <div class="text-12-regular text-text-warning-base">
-                      {language.t("wsl.onboarding.windowsRestartRequired")}
-                    </div>
-                    <Button variant="secondary" size="large" onClick={() => void platform.restart()}>
-                      {language.t("wsl.onboarding.relaunch")}
-                    </Button>
+              <Show when={current()?.pendingRestart}>
+                <div class="rounded-md border border-border-weak-base px-3 py-3">
+                  <div class="text-12-regular text-text-warning-base">
+                    {language.t("wsl.onboarding.windowsRestartRequired")}
                   </div>
-                </Show>
+                </div>
+              </Show>
                 <div class="flex items-center justify-end">
                   <Button
                     variant="secondary"
