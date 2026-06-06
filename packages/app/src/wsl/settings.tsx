@@ -116,7 +116,7 @@ export function WslServerSettings(props: {
                       disabled={busy() || request.isPending}
                       onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
                     >
-                      {label()}
+                      {busy() ? "Updating..." : label()}
                     </ButtonV2>
                   )}
                 </Show>

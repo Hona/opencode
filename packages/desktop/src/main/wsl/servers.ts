@@ -13,7 +13,7 @@ import type {
 } from "../../preload/types"
 import { WSL_SERVERS_KEY } from "../constants"
 import { getStore } from "../store"
-import { wslServerIdsToStartOnInitialize } from "./startup"
+import { expectOpencodeVersion, wslServerIdsToStartOnInitialize } from "./startup"
 import {
   installWslDistro,
   installWslOpencode,
@@ -26,7 +26,6 @@ import {
   readWslCommandVersion,
   resolveWslOpencode,
   summarize,
-  upgradeWslOpencode,
   wslNeedsRestart,
 } from "./runtime"
 
@@ -295,18 +294,12 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
 
     async installOpencode(name: string) {
       await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
-        const resolved = await resolveWslOpencode(name, { signal: abort.signal })
-        const existingVersion = resolved
-          ? await readWslCommandVersion(resolved, name, { signal: abort.signal })
-          : null
-        const result =
-          resolved && existingVersion
-            ? await upgradeWslOpencode(appVersion, resolved, name, { signal: abort.signal })
-            : await installWslOpencode(appVersion, name, { signal: abort.signal })
+        const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
         if (result.code !== 0) {
           throw new Error(summarize(result.stderr || result.stdout) || "OpenCode installation failed")
         }
         await refreshOpencodeCheck(name, { signal: abort.signal })
+        expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
       })
     },
 
