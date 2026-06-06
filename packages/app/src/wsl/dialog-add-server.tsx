@@ -7,6 +7,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useWslServers } from "./context"
+import { enterWslOpencodeStep } from "./settings-model"
 
 type WslServerStep = "wsl" | "distro" | "opencode"
 
@@ -243,6 +244,12 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const selectDistro = (name: string) => {
     setStore("selectedDistro", name)
     setStore("step", undefined)
+  }
+
+  const openOpencodeStep = () => {
+    const distro = selectedDistro()
+    if (!distro) return
+    void run(() => enterWslOpencodeStep(distro, api.probeOpencode, (step) => setStore("step", step)))
   }
 
   const finish = async () => {
@@ -521,7 +528,7 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                     variant="secondary"
                     size="large"
                     disabled={busy() || !selectedDistro() || !distroReady()}
-                    onClick={() => setStore("step", "opencode")}
+                    onClick={openOpencodeStep}
                   >
                     {language.t("wsl.onboarding.next")}
                   </Button>

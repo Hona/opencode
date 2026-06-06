@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test"
 import { clearWslDistroState, requireWslIpcString, wslServerIdToRestart, wslTerminalArgs } from "./policy"
-import { expectOpencodeVersion, pollWslHealth, wslServerIdsToStartOnInitialize } from "./startup"
+import {
+  expectOpencodeVersion,
+  pendingRestartAfterWslInstall,
+  pollWslHealth,
+  wslServerIdsToStartOnInitialize,
+} from "./startup"
 
 test("starts every configured WSL server on initialization", () => {
   expect(
@@ -80,4 +85,9 @@ test("validates WSL IPC identifiers at the module boundary", () => {
   expect(requireWslIpcString("distro", "Debian")).toBe("Debian")
   expect(() => requireWslIpcString("distro", "")).toThrow("Invalid distro")
   expect(() => requireWslIpcString("server id", undefined)).toThrow("Invalid server id")
+})
+
+test("derives a required Windows restart from the post-install runtime probe", () => {
+  expect(pendingRestartAfterWslInstall({ available: false, version: null, error: "WSL unavailable" })).toBe(true)
+  expect(pendingRestartAfterWslInstall({ available: true, version: "WSL version: 2.6.1", error: null })).toBe(false)
 })

@@ -271,10 +271,6 @@ export async function installWslOpencode(version: string, distro: string, opts?:
   )
 }
 
-export function wslNeedsRestart(result: WslCommandResult) {
-  return /restart|reboot/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
   const executable = await runWslInDistro(["/bin/true"], name, opts).catch((error) => ({
     code: 1,

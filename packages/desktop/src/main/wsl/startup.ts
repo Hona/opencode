@@ -9,6 +9,8 @@ export function expectOpencodeVersion(installed: string | null, expected: string
   )
 }
 
+export const pendingRestartAfterWslInstall = (runtime: { available: boolean }) => !runtime.available
+
 export async function pollWslHealth(check: () => Promise<boolean>, signal: AbortSignal, interval = 100) {
   while (!signal.aborted) {
     if (await check()) return

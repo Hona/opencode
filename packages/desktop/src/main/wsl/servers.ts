@@ -13,7 +13,7 @@ import type {
 } from "../../preload/types"
 import { WSL_SERVERS_KEY } from "../constants"
 import { getStore } from "../store"
-import { expectOpencodeVersion, wslServerIdsToStartOnInitialize } from "./startup"
+import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
 import {
   installWslDistro,
@@ -27,7 +27,6 @@ import {
   readWslCommandVersion,
   resolveWslOpencode,
   summarize,
-  wslNeedsRestart,
 } from "./runtime"
 
 type RunningSidecar = {
@@ -252,12 +251,8 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
           const message = summarize(result.stderr || result.stdout) || "WSL installation failed"
           throw new Error(message)
         }
-        const pendingRestart = wslNeedsRestart(result)
-        setState({ pendingRestart })
-        if (!pendingRestart) {
-          const runtime = await probeWslRuntime({ signal: abort.signal })
-          setState({ runtime })
-        }
+        const runtime = await probeWslRuntime({ signal: abort.signal })
+        setState({ runtime, pendingRestart: pendingRestartAfterWslInstall(runtime) })
       })
     },
 
