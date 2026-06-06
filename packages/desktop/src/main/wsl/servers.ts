@@ -14,6 +14,7 @@ import type {
 import { WSL_SERVERS_KEY } from "../constants"
 import { getStore } from "../store"
 import { expectOpencodeVersion, wslServerIdsToStartOnInitialize } from "./startup"
+import { clearWslDistroState, wslServerIdToRestart } from "./policy"
 import {
   installWslDistro,
   installWslOpencode,
@@ -120,10 +121,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
   }
 
   const refreshDistroLists = async (opts: { signal?: AbortSignal }) => {
-    const [installed, online] = await Promise.all([
-      listInstalledWslDistros(opts),
-      listOnlineWslDistros(opts),
-    ])
+    const [installed, online] = await Promise.all([listInstalledWslDistros(opts), listOnlineWslDistros(opts)])
     return { installed, online }
   }
 
@@ -300,6 +298,8 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
         }
         await refreshOpencodeCheck(name, { signal: abort.signal })
         expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
+        const id = wslServerIdToRestart(state.servers, name)
+        if (id) await startServer(id)
       })
     },
 
@@ -325,11 +325,15 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
     },
 
     async removeServer(id: string) {
+      const distro = state.servers.find((item) => item.config.id === id)?.config.distro
       invalidateStartAttempt(id)
       await stopServerInternal(id)
       const remaining = readPersistedServers().filter((item) => item.id !== id)
       persistServers(remaining)
-      setState({ servers: state.servers.filter((item) => item.config.id !== id) })
+      setState({
+        servers: state.servers.filter((item) => item.config.id !== id),
+        ...(distro ? clearWslDistroState(state.distroProbes, state.opencodeChecks, distro) : {}),
+      })
     },
 
     startServer,

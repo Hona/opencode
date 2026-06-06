@@ -206,6 +206,16 @@ export namespace ServerConnection {
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
 }
 
+export function nextServerAfterRemoval(
+  servers: ServerConnection.Any[],
+  removed: ServerConnection.Key,
+  fallback: ServerConnection.Key,
+) {
+  const remaining = servers.filter((server) => ServerConnection.key(server) !== removed)
+  const next = remaining.find((server) => ServerConnection.key(server) === fallback) ?? remaining[0]
+  return next ? ServerConnection.key(next) : fallback
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   gate: true,
@@ -263,13 +273,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
+      const next = nextServerAfterRemoval(allServers(), key, props.defaultServer)
       const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
-        if (state.active === key) {
-          const next = list[0]
-          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
-        }
+        if (state.active === key) setState("active", next)
       })
     }
 

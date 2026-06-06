@@ -3,6 +3,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
+import { wslTerminalArgs } from "./policy"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"
@@ -261,7 +262,10 @@ export async function installWslDistro(name: string, opts?: RunWslOptions) {
 export async function installWslOpencode(version: string, distro: string, opts?: RunWslOptions) {
   return runInteractiveCommand(
     resolveSystem32Command("wsl.exe"),
-    wslArgs(["bash", "-lc", `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)}`], distro),
+    wslArgs(
+      ["bash", "-lc", `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)}`],
+      distro,
+    ),
     withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
     DEFAULT_WSL_INSTALL_TIMEOUT_MS,
   )
@@ -308,8 +312,13 @@ export async function resolveWslHome(distro?: string | null, opts?: RunWslOption
 
 export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
   return firstLine(
-    (await runWslSh('if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi', distro, opts))
-      .stdout,
+    (
+      await runWslSh(
+        'if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi',
+        distro,
+        opts,
+      )
+    ).stdout,
   )
 }
 
@@ -319,11 +328,8 @@ export async function readWslCommandVersion(command: string, distro: string, opt
 }
 
 export function openWslTerminal(distro?: string | null) {
-  if (distro && !/^[a-zA-Z0-9_.-]+$/.test(distro)) {
-    return Promise.reject(new Error("Invalid distro name"))
-  }
   return new Promise<void>((resolve, reject) => {
-    const child = spawn("cmd.exe", ["/c", "start", "", "wsl", ...(distro ? ["-d", distro] : [])], {
+    const child = spawn("cmd.exe", wslTerminalArgs(distro), {
       detached: true,
       stdio: "ignore",
       windowsHide: true,

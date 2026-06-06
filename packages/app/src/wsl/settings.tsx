@@ -27,9 +27,10 @@ export function isWslServer(server: ServerConnection.Any) {
 export function WslAddServerButton() {
   const platform = usePlatform()
   const dialog = useDialog()
+  const language = useLanguage()
   const openAdd = () => {
     dialog.push(() => (
-      <Dialog title="Add WSL server" size="large" fit class="settings-v2-wsl-dialog">
+      <Dialog title={language.t("wsl.server.add")} size="large" fit class="settings-v2-wsl-dialog">
         <DialogAddWslServer />
       </Dialog>
     ))
@@ -37,7 +38,7 @@ export function WslAddServerButton() {
   return (
     <Show when={platform.wslServers}>
       <ButtonV2 variant="ghost-muted" icon="plus" onClick={openAdd}>
-        Add WSL
+        {language.t("wsl.server.addShort")}
       </ButtonV2>
     </Show>
   )
@@ -49,7 +50,9 @@ export function useFilteredWslServers(filter: Accessor<string>) {
     const servers = wsl.data?.servers ?? []
     const query = filter().trim()
     if (!query) return servers
-    return fuzzysort.go(query, servers, { keys: [(item) => item.config.distro, (item) => item.config.id] }).map((x) => x.obj)
+    return fuzzysort
+      .go(query, servers, { keys: [(item) => item.config.distro, (item) => item.config.id] })
+      .map((x) => x.obj)
   })
 }
 
@@ -97,7 +100,7 @@ export function WslServerSettings(props: {
                   <span class="flex min-w-0 items-center gap-1">
                     <span class="settings-v2-servers-name">{item.config.distro}</span>
                     <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
-                      WSL
+                      {language.t("wsl.server.label")}
                     </span>
                   </span>
                   <span class="settings-v2-servers-meta">
@@ -116,7 +119,7 @@ export function WslServerSettings(props: {
                       disabled={busy() || request.isPending}
                       onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
                     >
-                      {busy() ? "Updating..." : label()}
+                      {busy() ? language.t("wsl.server.updating") : label()}
                     </ButtonV2>
                   )}
                 </Show>
@@ -131,10 +134,10 @@ export function WslServerSettings(props: {
                   <MenuV2.Portal>
                     <MenuV2.Content>
                       <MenuV2.Group>
-                        <MenuV2.GroupLabel>WSL server</MenuV2.GroupLabel>
+                        <MenuV2.GroupLabel>{language.t("wsl.server.menu.label")}</MenuV2.GroupLabel>
                         <Show when={runtime().retryable}>
                           <MenuV2.Item onSelect={() => api && request.mutate(() => api.startServer(key))}>
-                            Retry start
+                            {language.t("wsl.server.retryStart")}
                           </MenuV2.Item>
                         </Show>
                         <Show when={props.controller.canDefault() && props.controller.defaultKey() !== key}>
@@ -148,7 +151,9 @@ export function WslServerSettings(props: {
                           </MenuV2.Item>
                         </Show>
                         <MenuV2.Separator />
-                        <MenuV2.Item onSelect={() => remove(key)}>{language.t("dialog.server.menu.delete")}</MenuV2.Item>
+                        <MenuV2.Item onSelect={() => remove(key)}>
+                          {language.t("dialog.server.menu.delete")}
+                        </MenuV2.Item>
                       </MenuV2.Group>
                     </MenuV2.Content>
                   </MenuV2.Portal>

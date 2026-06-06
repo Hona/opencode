@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, migrateCanonicalLocalServerState, resolveServerList, ServerConnection } from "./server"
+import {
+  createServerProjects,
+  migrateCanonicalLocalServerState,
+  nextServerAfterRemoval,
+  resolveServerList,
+  ServerConnection,
+} from "./server"
 import { ServerScope } from "@/utils/server-scope"
 
 describe("resolveServerList", () => {
@@ -53,6 +59,24 @@ describe("resolveServerList", () => {
     })
     expect(list[0]?.type === "http" ? list[0].authToken : true).toBeUndefined()
   })
+})
+
+test("active server removal falls back across built-in and persisted servers", () => {
+  const local = { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } } as const
+  const debian = {
+    type: "sidecar",
+    variant: "wsl",
+    distro: "Debian",
+    http: { url: "http://127.0.0.1:4097" },
+  } as const
+
+  expect(
+    nextServerAfterRemoval(
+      [local, debian],
+      ServerConnection.Key.make("wsl:Debian"),
+      ServerConnection.Key.make("sidecar"),
+    ),
+  ).toBe(ServerConnection.Key.make("sidecar"))
 })
 
 describe("createServerProjects", () => {
