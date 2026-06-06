@@ -366,7 +366,7 @@ render(() => {
         !locale.loading,
     )
     const servers = createMemo(() => {
-      const data = sidecar()
+      const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
       if (data) {
         list.push({
@@ -386,15 +386,16 @@ render(() => {
     const effectiveDefaultServer = createMemo(() =>
       ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
     )
-    if (!ready()) return splash
 
     return (
-      <Show when={effectiveDefaultServer()} keyed>
-        {(key) => (
-          <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
-            <Inner />
-          </AppInterface>
-        )}
+      <Show when={ready()} fallback={splash}>
+        <Show when={effectiveDefaultServer()} keyed>
+          {(key) => (
+            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+              <Inner />
+            </AppInterface>
+          )}
+        </Show>
       </Show>
     )
   }
