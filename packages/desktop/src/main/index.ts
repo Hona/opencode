@@ -35,6 +35,7 @@ import {
   setDockIcon,
 } from "./windows"
 import { createWslServersController } from "./wsl/servers"
+import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 
@@ -243,19 +244,6 @@ const main = Effect.gen(function* () {
       },
       (e) => Effect.runPromise(e),
     ),
-    getWslServersState: () => wslServers.getState(),
-    onWslServersEvent: (listener) => wslServers.subscribe(listener),
-    wslServersProbeRuntime: () => wslServers.probeRuntime(),
-    wslServersRefreshDistros: () => wslServers.refreshDistros(),
-    wslServersInstallWsl: () => wslServers.installWsl(),
-    wslServersInstallDistro: (name) => wslServers.installDistro(name),
-    wslServersProbeDistro: (name) => wslServers.probeDistro(name),
-    wslServersProbeOpencode: (name) => wslServers.probeOpencode(name),
-    wslServersInstallOpencode: (name) => wslServers.installOpencode(name),
-    wslServersOpenTerminal: (name) => wslServers.openTerminal(name),
-    wslServersAddServer: (distro) => wslServers.addServer(distro),
-    wslServersRemoveServer: (id) => wslServers.removeServer(id),
-    wslServersStartServer: (id) => wslServers.startServer(id),
     getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
@@ -272,6 +260,7 @@ const main = Effect.gen(function* () {
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
+  registerWslIpcHandlers(wslServers)
 
   yield* Effect.promise(() => app.whenReady())
 

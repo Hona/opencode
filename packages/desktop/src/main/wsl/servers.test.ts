@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { clearWslDistroState, wslServerIdToRestart, wslTerminalArgs } from "./policy"
+import { clearWslDistroState, requireWslIpcString, wslServerIdToRestart, wslTerminalArgs } from "./policy"
 import { expectOpencodeVersion, pollWslHealth, wslServerIdsToStartOnInitialize } from "./startup"
 
 test("starts every configured WSL server on initialization", () => {
@@ -74,4 +74,10 @@ test("stops health polling when sidecar startup settles", async () => {
   const settled = checks
   await new Promise((resolve) => setTimeout(resolve, 5))
   expect(checks).toBe(settled)
+})
+
+test("validates WSL IPC identifiers at the module boundary", () => {
+  expect(requireWslIpcString("distro", "Debian")).toBe("Debian")
+  expect(() => requireWslIpcString("distro", "")).toThrow("Invalid distro")
+  expect(() => requireWslIpcString("server id", undefined)).toThrow("Invalid server id")
 })
