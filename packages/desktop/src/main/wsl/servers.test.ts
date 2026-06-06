@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { clearWslDistroState, wslServerIdToRestart, wslTerminalArgs } from "./policy"
-import { expectOpencodeVersion, wslServerIdsToStartOnInitialize } from "./startup"
+import { expectOpencodeVersion, pollWslHealth, wslServerIdsToStartOnInitialize } from "./startup"
 
 test("starts every configured WSL server on initialization", () => {
   expect(
@@ -54,4 +54,24 @@ test("clears cached distro probes when removing a WSL server", () => {
 
 test("opens terminals for distro names containing spaces", () => {
   expect(wslTerminalArgs("Ubuntu Preview")).toEqual(["/c", "start", "", "wsl", "-d", "Ubuntu Preview"])
+})
+
+test("stops health polling when sidecar startup settles", async () => {
+  const abort = new AbortController()
+  let checks = 0
+  const polling = pollWslHealth(
+    async () => {
+      checks++
+      return false
+    },
+    abort.signal,
+    1,
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  abort.abort()
+  await polling
+  const settled = checks
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  expect(checks).toBe(settled)
 })

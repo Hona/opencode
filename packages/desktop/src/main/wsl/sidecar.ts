@@ -4,6 +4,7 @@ import { createServer } from "node:net"
 import { app } from "electron"
 import { checkHealth } from "../server"
 import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./runtime"
+import { pollWslHealth } from "./startup"
 
 export type WslSidecar = {
   listener: { stop: () => void; onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void }
@@ -56,18 +57,27 @@ export async function spawnWslSidecar(
     child.once("exit", (code, signal) => reject(new Error(startupFailure(code, signal, recentOutput))))
   })
   const url = `http://127.0.0.1:${port}`
-  const health = (async () => {
-    while (!(await checkHealth(url, password))) await new Promise((resolve) => setTimeout(resolve, 100))
-  })()
+  const startup = new AbortController()
+  const health = pollWslHealth(() => checkHealth(url, password), startup.signal)
   const timeoutMs = opts.healthTimeoutMs ?? 30_000
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Sidecar for ${distro} health check timed out after ${timeoutMs}ms`)), timeoutMs),
+  let timeout: ReturnType<typeof setTimeout>
+  const timedOut = new Promise<never>(
+    (_, reject) =>
+      (timeout = setTimeout(
+        () => reject(new Error(`Sidecar for ${distro} health check timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      )),
   )
 
-  await Promise.race([health, exit, timeout]).catch((error) => {
-    child.kill()
-    throw error
-  })
+  await Promise.race([health, exit, timedOut])
+    .catch((error) => {
+      child.kill()
+      throw error
+    })
+    .finally(() => {
+      clearTimeout(timeout)
+      startup.abort()
+    })
   return {
     listener: {
       stop: () => child.kill(),
