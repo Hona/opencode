@@ -7,8 +7,13 @@ import type { WslServersPlatform } from "../wsl/types"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
-type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
-type OpenAttachmentPickerOptions = OpenFilePickerOptions & { defaultPath?: string }
+type OpenAttachmentPickerOptions = {
+  title?: string
+  multiple?: boolean
+  accept?: string[]
+  extensions?: string[]
+  defaultPath?: string
+}
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
 type PlatformName = "web" | "desktop"
@@ -26,7 +31,7 @@ export type Platform = {
   /** Platform discriminator */
   platform: PlatformName
 
-  /** Desktop OS (Tauri only) */
+  /** Desktop OS (desktop only) */
   os?: DesktopOS
 
   /** App version */
@@ -50,16 +55,13 @@ export type Platform = {
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
 
-  /** Open directory picker dialog (native on Tauri, server-backed on web) */
+  /** Open a native directory picker dialog (desktop only) */
   openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
-
-  /** Open native file picker dialog (Tauri only) */
-  openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
 
   /** Open a native attachment picker and read the selected files (desktop only) */
   openAttachmentPickerDialog?(opts?: OpenAttachmentPickerOptions): Promise<File[] | null>
 
-  /** Save file picker dialog (Tauri only) */
+  /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
   /** Storage mechanism, defaults to localStorage */

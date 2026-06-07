@@ -2,7 +2,6 @@
 
 import {
   ACCEPTED_FILE_EXTENSIONS,
-  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -140,17 +139,8 @@ const createPlatform = (): Platform => {
       })
     },
 
-    async openFilePickerDialog(opts) {
-      return window.api.openFilePicker({
-        multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFile"),
-        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
-        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
-      })
-    },
-
     async openAttachmentPickerDialog(opts) {
-      const result = await window.api.openAttachmentPicker({
+      const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
         defaultPath: opts?.defaultPath,
