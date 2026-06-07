@@ -1,13 +1,11 @@
 import type { McpStatus } from "@opencode-ai/sdk/v2/client"
 
-type Action = () => Promise<unknown>
-
 export async function toggleMcp(input: {
   status: McpStatus["status"]
-  connect: Action
-  disconnect: Action
-  authenticate: Action
-  refresh: Action
+  connect: () => Promise<unknown>
+  disconnect: () => Promise<unknown>
+  authenticate: () => Promise<unknown>
+  refresh: () => Promise<unknown>
 }) {
   await {
     connected: input.disconnect,
