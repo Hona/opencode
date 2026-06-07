@@ -140,15 +140,19 @@ const createPlatform = (): Platform => {
     },
 
     async openAttachmentPickerDialog(opts, onFile) {
-      const files = await window.api.openFilePicker({
+      const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
         defaultPath: opts?.defaultPath,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
-      if (!files) return
-      for (const file of files) {
-        await onFile(new File([await window.api.readPickedFile(file.path)], file.name))
+      if (!result) return
+      try {
+        for (const file of result.files) {
+          await onFile(new File([await window.api.readPickedFile(result.token, file.path)], file.name))
+        }
+      } finally {
+        await window.api.releasePickedFiles(result.token)
       }
     },
 

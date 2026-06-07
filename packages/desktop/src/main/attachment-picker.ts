@@ -2,6 +2,32 @@ import { open } from "node:fs/promises"
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
+export function createPickedFileAuthorizations() {
+  const senders = new Map<number, Map<string, Set<string>>>()
+
+  return {
+    add(sender: number, token: string, paths: string[]) {
+      const tokens = senders.get(sender) ?? new Map<string, Set<string>>()
+      tokens.set(token, new Set(paths))
+      senders.set(sender, tokens)
+    },
+    take(sender: number, token: string, path: string) {
+      const tokens = senders.get(sender)
+      const paths = tokens?.get(token)
+      if (!paths?.delete(path)) return false
+      if (paths.size > 0) return true
+      tokens?.delete(token)
+      if (tokens?.size === 0) senders.delete(sender)
+      return true
+    },
+    release(sender: number, token: string) {
+      const tokens = senders.get(sender)
+      tokens?.delete(token)
+      if (tokens?.size === 0) senders.delete(sender)
+    },
+  }
+}
+
 export function assertAttachmentBudget(files: { size: number }[]) {
   const total = files.reduce((sum, file) => sum + file.size, 0)
   if (total <= MAX_ATTACHMENT_BYTES) return

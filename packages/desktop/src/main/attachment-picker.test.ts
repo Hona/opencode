@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { assertAttachmentBudget, MAX_ATTACHMENT_BYTES, readAttachment } from "./attachment-picker"
+import {
+  assertAttachmentBudget,
+  createPickedFileAuthorizations,
+  MAX_ATTACHMENT_BYTES,
+  readAttachment,
+} from "./attachment-picker"
 
 describe("assertAttachmentBudget", () => {
   test("accepts selections within the media ingest limit", () => {
@@ -34,5 +39,27 @@ describe("assertAttachmentBudget", () => {
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
+  })
+})
+
+describe("picked file authorizations", () => {
+  test("keeps concurrent picker selections isolated", () => {
+    const authorizations = createPickedFileAuthorizations()
+    authorizations.add(1, "first", ["a.txt", "b.txt"])
+    authorizations.add(1, "second", ["c.txt"])
+
+    expect(authorizations.take(1, "first", "a.txt")).toBe(true)
+    expect(authorizations.take(1, "second", "c.txt")).toBe(true)
+    expect(authorizations.take(1, "first", "b.txt")).toBe(true)
+  })
+
+  test("releases unread files for one picker without affecting another", () => {
+    const authorizations = createPickedFileAuthorizations()
+    authorizations.add(1, "first", ["a.txt"])
+    authorizations.add(1, "second", ["b.txt"])
+    authorizations.release(1, "first")
+
+    expect(authorizations.take(1, "first", "a.txt")).toBe(false)
+    expect(authorizations.take(1, "second", "b.txt")).toBe(true)
   })
 })
