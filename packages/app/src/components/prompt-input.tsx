@@ -74,6 +74,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { useDirectoryPicker } from "./directory-picker"
+import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
@@ -468,14 +469,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
-  const pick = async () => {
+  const pick = () => {
     if (server.isLocal()) {
-      const files = await pickAttachmentFiles({
+      pickAttachmentFiles({
         picker: platform.openAttachmentPickerDialog,
         directory: () => sdk.directory,
         fallback: () => fileInputRef?.click(),
+        onFiles: addAttachments,
+        onError: (error) =>
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: error instanceof Error ? error.message : String(error),
+          }),
       })
-      if (files) await addAttachments(files)
       return
     }
     void import("@/components/dialog-select-file").then((module) =>

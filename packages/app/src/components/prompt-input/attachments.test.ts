@@ -27,6 +27,7 @@ describe("attachmentMime", () => {
 describe("pickAttachmentFiles", () => {
   test("reads the current project directory for every native picker invocation", async () => {
     const paths: string[] = []
+    const files: File[][] = []
     const file = new File(["hello"], "hello.txt", { type: "text/plain" })
     let directory = "C:\\Projects\\LoremIpsum"
     const picker = async (options?: { defaultPath?: string }) => {
@@ -34,23 +35,52 @@ describe("pickAttachmentFiles", () => {
       return [file]
     }
 
-    expect(await pickAttachmentFiles({ picker, directory: () => directory, fallback: () => undefined })).toEqual([file])
+    pickAttachmentFiles({
+      picker,
+      directory: () => directory,
+      fallback: () => undefined,
+      onFiles: async (selected) => files.push(selected),
+      onError: () => undefined,
+    })
+    await Promise.resolve()
     directory = "C:\\Projects\\DolorSit"
-    expect(await pickAttachmentFiles({ picker, directory: () => directory, fallback: () => undefined })).toEqual([file])
+    pickAttachmentFiles({
+      picker,
+      directory: () => directory,
+      fallback: () => undefined,
+      onFiles: async (selected) => files.push(selected),
+      onError: () => undefined,
+    })
+    await Promise.resolve()
+    expect(files).toEqual([[file], [file]])
     expect(paths).toEqual(["C:\\Projects\\LoremIpsum", "C:\\Projects\\DolorSit"])
   })
 
   test("uses the browser file input when no native picker exists", async () => {
     let fallback = 0
-    expect(
-      await pickAttachmentFiles({
-        directory: () => "/projects/consectetur-adipiscing",
-        fallback: () => {
-          fallback += 1
-        },
-      }),
-    ).toBeNull()
+    pickAttachmentFiles({
+      directory: () => "/projects/consectetur-adipiscing",
+      fallback: () => {
+        fallback += 1
+      },
+      onFiles: async () => undefined,
+      onError: () => undefined,
+    })
     expect(fallback).toBe(1)
+  })
+
+  test("reports native picker failures without rejecting", async () => {
+    const error = new Error("picker unavailable")
+    const errors: unknown[] = []
+    pickAttachmentFiles({
+      picker: async () => Promise.reject(error),
+      directory: () => "C:\\Projects\\LoremIpsum",
+      fallback: () => undefined,
+      onFiles: async () => undefined,
+      onError: (cause) => errors.push(cause),
+    })
+    await Bun.sleep(0)
+    expect(errors).toEqual([error])
   })
 })
 

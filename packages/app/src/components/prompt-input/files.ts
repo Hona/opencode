@@ -8,20 +8,25 @@ type AttachmentPicker = (options?: {
   accept?: string[]
 }) => Promise<File[] | null>
 
-export async function pickAttachmentFiles(input: {
+export function pickAttachmentFiles(input: {
   picker?: AttachmentPicker
   directory: () => string
   fallback: () => void
+  onFiles: (files: File[]) => Promise<unknown>
+  onError: (error: unknown) => void
 }) {
   if (!input.picker) {
     input.fallback()
-    return null
+    return
   }
-  return input.picker({
-    defaultPath: input.directory(),
-    multiple: true,
-    accept: ACCEPTED_FILE_TYPES,
-  })
+  void input
+    .picker({
+      defaultPath: input.directory(),
+      multiple: true,
+      accept: ACCEPTED_FILE_TYPES,
+    })
+    .then((files) => files && input.onFiles(files))
+    .catch(input.onError)
 }
 
 const IMAGE_MIMES = new Set(ACCEPTED_IMAGE_TYPES)
