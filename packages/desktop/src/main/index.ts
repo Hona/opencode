@@ -38,6 +38,7 @@ import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
+import { isUnexpectedCurrentSidecar } from "./sidecar-lifecycle"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -321,6 +322,11 @@ const main = Effect.gen(function* () {
       }),
     )
     server = listener
+    void listener.exit.then((settlement) => {
+      if (!isUnexpectedCurrentSidecar(server, listener, settlement)) return
+      server = null
+      writeLog("utility", "sidecar terminated unexpectedly", { code: settlement.code }, "error")
+    })
     yield* Deferred.succeed(serverReady, {
       url,
       username: "opencode",

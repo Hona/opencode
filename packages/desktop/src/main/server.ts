@@ -5,6 +5,7 @@ import type { Details } from "electron"
 import { DEFAULT_SERVER_URL_KEY } from "./constants"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
+import { createSidecarLifecycle, type SidecarSettlement } from "./sidecar-lifecycle"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -13,7 +14,10 @@ type SidecarMessage =
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
 
-export type SidecarListener = { stop: () => Promise<void> }
+export type SidecarListener = {
+  stop: () => Promise<void>
+  readonly exit: Promise<SidecarSettlement>
+}
 
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
@@ -66,6 +70,7 @@ export async function spawnLocalServer(
   })
   let exited = false
   const exit = defer<number>()
+  const lifecycle = createSidecarLifecycle()
 
   const onProcessGone = (_event: unknown, details: Details) => {
     if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
@@ -78,6 +83,7 @@ export async function spawnLocalServer(
     app.off("child-process-gone", onProcessGone)
     options.onExit?.(code)
     exit.resolve(code)
+    lifecycle.exited(code)
   })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
 
@@ -159,21 +165,23 @@ export async function spawnLocalServer(
     await Promise.race([ready(), gone])
   })()
 
-  let stopping: Promise<void> | undefined
+  let stop: Promise<void> | undefined
 
   return {
     listener: {
+      exit: lifecycle.exit,
       stop: () => {
-        if (stopping) return stopping
+        if (stop) return stop
         if (exited) return Promise.resolve()
+        lifecycle.stopping()
         child.postMessage({ type: "stop" })
-        stopping = Promise.race([
+        stop = Promise.race([
           exit.promise.then(() => undefined),
           delay(SIDECAR_STOP_TIMEOUT).then(() => {
             if (!exited) child.kill()
           }),
         ])
-        return stopping
+        return stop
       },
     },
     health: { wait },

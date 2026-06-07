@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Exit, Stream } from "effect"
+import { Deferred, Effect, Exit, Option, Stream } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -223,6 +223,21 @@ describe("cross-spawn spawner", () => {
         const out = yield* decodeByteStream(handle.stdout)
         yield* handle.exitCode
         expect(out).toBe("a b c")
+      }),
+    )
+
+    fx.effect(
+      "settles configured stdin before exposing process exit",
+      Effect.gen(function* () {
+        const settled = yield* Deferred.make<void>()
+        const stdin = Stream.concat(Stream.make(Buffer.from("input", "utf-8")), Stream.never).pipe(
+          Stream.ensuring(Deferred.succeed(settled, undefined)),
+        )
+        const handle = yield* js('process.stdin.once("data", () => process.exit(0)); process.stdin.resume()', { stdin })
+
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(Option.isSome(yield* Deferred.poll(settled))).toBe(true)
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
       }),
     )
   })

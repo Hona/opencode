@@ -5,6 +5,7 @@ import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as FileSystem from "effect/FileSystem"
+import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Path from "effect/Path"
 import * as PlatformError from "effect/PlatformError"
@@ -26,6 +27,16 @@ import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
+
+const settleFiber = <A, E>(fiber: Fiber.Fiber<A, E>) =>
+  Effect.suspend(() => {
+    const exit = fiber.pollUnsafe()
+    if (!exit) return Fiber.interrupt(fiber)
+    return Exit.match(exit, {
+      onFailure: Effect.failCause,
+      onSuccess: () => Effect.void,
+    })
+  })
 
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
   switch (err.code) {
@@ -233,8 +244,11 @@ export const make = Effect.gen(function* () {
           encoding: cfg.encoding,
         })
       }
-      if (Stream.isStream(cfg.stream)) return Effect.as(Effect.forkScoped(Stream.run(cfg.stream, sink)), sink)
-      return Effect.succeed(sink)
+      if (!Stream.isStream(cfg.stream)) return Effect.succeed({ sink, settle: Effect.void })
+      return Effect.map(Effect.forkScoped(Stream.run(cfg.stream, sink)), (fiber) => ({
+        sink,
+        settle: settleFiber(fiber),
+      }))
     })
 
   const setupOutput = (
@@ -402,26 +416,36 @@ export const make = Effect.gen(function* () {
 
           const fd = yield* setupFds(command, proc, extra)
           const out = setupOutput(command, proc, sout, serr)
+          const input = yield* setupStdin(command, proc, sin)
+          const exitCode = yield* Effect.cached(
+            Effect.gen(function* () {
+              const [code, exitSignal] = yield* Deferred.await(signal)
+              if (Predicate.isNotNull(code) && code !== 0) {
+                yield* Effect.ignore(input.settle)
+                return ExitCode(code)
+              }
+              yield* input.settle
+              if (Predicate.isNotNull(code)) return ExitCode(code)
+              return yield* Effect.fail(
+                toPlatformError(
+                  "exitCode",
+                  new Error(`Process interrupted due to receipt of signal: '${exitSignal}'`),
+                  command,
+                ),
+              )
+            }),
+          )
           let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
-            stdin: yield* setupStdin(command, proc, sin),
+            stdin: input.sink,
             stdout: out.stdout,
             stderr: out.stderr,
             all: out.all,
             getInputFd: fd.getInputFd,
             getOutputFd: fd.getOutputFd,
             isRunning: Effect.map(Deferred.isDone(signal), (done) => !done),
-            exitCode: Effect.flatMap(Deferred.await(signal), ([code, signal]) => {
-              if (Predicate.isNotNull(code)) return Effect.succeed(ExitCode(code))
-              return Effect.fail(
-                toPlatformError(
-                  "exitCode",
-                  new Error(`Process interrupted due to receipt of signal: '${signal}'`),
-                  command,
-                ),
-              )
-            }),
+            exitCode,
             kill: (opts?: ChildProcess.KillOptions) => {
               const sig = opts?.killSignal ?? "SIGTERM"
               const send = (s: NodeJS.Signals) =>

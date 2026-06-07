@@ -2,6 +2,8 @@ import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -675,6 +677,38 @@ it.instance(
     Effect.gen(function* () {
       expect(yield* snapshot.track()).toBe(before)
       expect(yield* snapshot.track()).toBe(before)
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "stale shared index lock cannot block snapshot capture",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      const projects = yield* Effect.promise(() => fs.readdir(path.join(Global.Path.data, "snapshot")))
+      const gitdir = yield* Effect.promise(async () => {
+        for (const project of projects) {
+          const candidate = path.join(Global.Path.data, "snapshot", project, Hash.fast(tmp.path))
+          if (
+            await fs.stat(candidate).then(
+              () => true,
+              () => false,
+            )
+          )
+            return candidate
+        }
+        throw new Error("snapshot git directory not found")
+      })
+      yield* write(path.join(gitdir, "index.lock"), "")
+      yield* write(`${tmp.path}/new.txt`, "new content")
+
+      const after = yield* snapshot.track()
+
+      expect(after).toBeTruthy()
+      expect(after).not.toBe(before)
+      expect(yield* snapshot.diff(before)).toContain("new.txt")
+      expect(yield* Effect.promise(() => fs.readdir(path.join(gitdir, "tmp")))).toEqual([])
     }),
   ),
   { git: true },

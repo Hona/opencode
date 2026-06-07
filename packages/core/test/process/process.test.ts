@@ -196,6 +196,43 @@ describe("AppProcess", () => {
         expect(Array.from(out)).toEqual(["a", "b"])
       }),
     )
+
+    it.effect(
+      "preserves a child failure when it closes stdin early",
+      Effect.acquireUseRelease(
+        Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-locked-git-"))),
+        (dir) =>
+          Effect.gen(function* () {
+            const svc = yield* AppProcess.Service
+            const gitdir = path.join(dir, "snapshot.git")
+            const worktree = path.join(dir, "worktree")
+            yield* Effect.promise(() => fs.mkdir(worktree))
+            yield* svc
+              .run(ChildProcess.make("git", ["init", "--bare", gitdir]))
+              .pipe(Effect.flatMap(AppProcess.requireSuccess))
+            yield* Effect.promise(() => fs.writeFile(path.join(gitdir, "index.lock"), ""))
+            const input = Array.from({ length: 30_000 }, (_, index) => `path-${index}`).join("\0") + "\0"
+
+            const result = yield* svc.run(
+              ChildProcess.make("git", [
+                "--git-dir",
+                gitdir,
+                "--work-tree",
+                worktree,
+                "add",
+                "--all",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+              ]),
+              { stdin: input },
+            )
+
+            expect(result.exitCode).toBe(128)
+            expect(result.stderr.toString("utf8")).toContain("index.lock")
+          }),
+        (dir) => Effect.promise(() => fs.rm(dir, { recursive: true, force: true })),
+      ),
+    )
   })
 
   describe("run with stdin option", () => {

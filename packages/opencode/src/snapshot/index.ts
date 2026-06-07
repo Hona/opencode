@@ -129,34 +129,35 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           return new Set(check.text.split("\0").filter(Boolean))
         })
 
-        const drop = Effect.fnUntraced(function* (files: string[]) {
+        const drop = Effect.fnUntraced(function* (files: string[], env?: Record<string, string>) {
           if (!files.length) return
-          yield* git(
+          const result = yield* git(
             [
               ...cfg,
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
               cwd: state.directory,
+              env,
               stdin: feed(files),
             },
           )
+          if (result.code === 0) return
+          return yield* Effect.die(new Error(result.stderr))
         })
 
-        const stage = Effect.fnUntraced(function* (files: string[]) {
+        const stage = Effect.fnUntraced(function* (files: string[], env?: Record<string, string>) {
           if (!files.length) return
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
               cwd: state.directory,
+              env,
               stdin: feed(files),
             },
           )
           if (result.code === 0) return
-          log.warn("failed to add snapshot files", {
-            exitCode: result.code,
-            stderr: result.stderr,
-          })
+          return yield* Effect.die(new Error(result.stderr))
         })
 
         const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
@@ -192,7 +193,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
         })
 
-        const add = Effect.fnUntraced(function* () {
+        const add = Effect.fnUntraced(function* (env?: Record<string, string>) {
           yield* sync()
           const [diff, other] = yield* Effect.all(
             [
@@ -228,7 +229,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           if (ignored.size > 0) {
             const ignoredFiles = Array.from(ignored)
             log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
-            yield* drop(ignoredFiles)
+            yield* drop(ignoredFiles, env)
           }
 
           const allow = all.filter((item) => !ignored.has(item))
@@ -254,8 +255,31 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const block = new Set(untracked.filter((item) => large.has(item)))
           yield* sync(Array.from(block))
           // Stage only the allowed candidate paths so snapshot updates stay scoped.
-          yield* stage(allow.filter((item) => !block.has(item)))
+          yield* stage(
+            allow.filter((item) => !block.has(item)),
+            env,
+          )
         })
+
+        const capture = Effect.fnUntraced(function* () {
+          const root = path.join(state.gitdir, "tmp")
+          yield* fs.ensureDir(root).pipe(Effect.orDie)
+          const dir = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: "index-" }).pipe(Effect.orDie)
+          const env = { GIT_INDEX_FILE: path.join(dir, "index") }
+          const index = path.join(state.gitdir, "index")
+          const seed = yield* Effect.gen(function* () {
+            if (!(yield* exists(index))) return ["read-tree", "--empty"]
+            const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+            if (result.code !== 0) return yield* Effect.die(new Error(result.stderr))
+            return ["read-tree", result.text.trim()]
+          })
+          const initialized = yield* git([...cfg, ...args(seed)], { cwd: state.directory, env })
+          if (initialized.code !== 0) return yield* Effect.die(new Error(initialized.stderr))
+          yield* add(env)
+          const result = yield* git(args(["write-tree"]), { cwd: state.directory, env })
+          if (result.code !== 0) return yield* Effect.die(new Error(result.stderr))
+          return result.text.trim()
+        }, Effect.scoped)
 
         const cleanup = Effect.fnUntraced(function* () {
           return yield* locked(
@@ -291,9 +315,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
                 log.info("initialized")
               }
-              yield* add()
-              const result = yield* git(args(["write-tree"]), { cwd: state.directory })
-              const hash = result.text.trim()
+              const hash = yield* capture()
               log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
             }),
@@ -303,9 +325,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
         const patch = Effect.fnUntraced(function* (hash: string) {
           return yield* locked(
             Effect.gen(function* () {
-              yield* add()
+              const current = yield* capture()
               const result = yield* git(
-                [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
+                [...quote, ...args(["diff", "--no-ext-diff", "--name-only", hash, current, "--", "."])],
                 {
                   cwd: state.directory,
                 },
@@ -477,8 +499,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
         const diff = Effect.fnUntraced(function* (hash: string) {
           return yield* locked(
             Effect.gen(function* () {
-              yield* add()
-              const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
+              const current = yield* capture()
+              const result = yield* git([...quote, ...args(["diff", "--no-ext-diff", hash, current, "--", "."])], {
                 cwd: state.worktree,
               })
               if (result.code !== 0) {
