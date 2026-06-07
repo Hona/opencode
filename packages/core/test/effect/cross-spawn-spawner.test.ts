@@ -240,6 +240,16 @@ describe("cross-spawn spawner", () => {
         expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
       }),
     )
+
+    fx.effect(
+      "preserves a successful exit when the child stops reading stdin",
+      Effect.gen(function* () {
+        const stdin = Stream.make(Buffer.alloc(4 * 1024 * 1024))
+        const handle = yield* js('process.stdin.once("data", () => process.exit(0)); process.stdin.resume()', { stdin })
+
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
   })
 
   describe("process control", () => {

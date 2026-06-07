@@ -420,12 +420,11 @@ export const make = Effect.gen(function* () {
           const exitCode = yield* Effect.cached(
             Effect.gen(function* () {
               const [code, exitSignal] = yield* Deferred.await(signal)
-              if (Predicate.isNotNull(code) && code !== 0) {
+              if (Predicate.isNotNull(code)) {
                 yield* Effect.ignore(input.settle)
                 return ExitCode(code)
               }
               yield* input.settle
-              if (Predicate.isNotNull(code)) return ExitCode(code)
               return yield* Effect.fail(
                 toPlatformError(
                   "exitCode",
