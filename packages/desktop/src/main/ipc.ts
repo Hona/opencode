@@ -7,7 +7,7 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
-import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
+import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 
@@ -127,8 +127,7 @@ export function registerIpcHandlers(deps: Deps) {
   )
 
   ipcMain.handle("read-picked-file", async (event: IpcMainInvokeEvent, token: string, filePath: string) => {
-    if (!pickedFiles.take(event.sender.id, token, filePath)) throw new Error("File was not selected by the picker")
-    return readAttachment(filePath)
+    return pickedFiles.read(event.sender.id, token, filePath)
   })
 
   ipcMain.handle("release-picked-files", (event: IpcMainInvokeEvent, token: string) => {

@@ -43,31 +43,43 @@ describe("assertAttachmentBudget", () => {
 })
 
 describe("picked file authorizations", () => {
-  test("keeps concurrent picker selections isolated", () => {
-    const authorizations = createPickedFileAuthorizations()
+  const read = async (path: string) => new TextEncoder().encode(path).buffer
+
+  test("keeps concurrent picker selections isolated", async () => {
+    const authorizations = createPickedFileAuthorizations(read)
     const first = authorizations.add(1, ["a.txt", "b.txt"])
     const second = authorizations.add(1, ["c.txt"])
 
-    expect(authorizations.take(1, first, "a.txt")).toBe(true)
-    expect(authorizations.take(1, second, "c.txt")).toBe(true)
-    expect(authorizations.take(1, first, "b.txt")).toBe(true)
+    expect(new TextDecoder().decode(await authorizations.read(1, first, "a.txt"))).toBe("a.txt")
+    expect(new TextDecoder().decode(await authorizations.read(1, second, "c.txt"))).toBe("c.txt")
+    expect(new TextDecoder().decode(await authorizations.read(1, first, "b.txt"))).toBe("b.txt")
   })
 
-  test("releases unread files for one picker without affecting another", () => {
-    const authorizations = createPickedFileAuthorizations()
+  test("releases unread files for one picker without affecting another", async () => {
+    const authorizations = createPickedFileAuthorizations(read)
     const first = authorizations.add(1, ["a.txt"])
     const second = authorizations.add(1, ["b.txt"])
     authorizations.release(1, first)
 
-    expect(authorizations.take(1, first, "a.txt")).toBe(false)
-    expect(authorizations.take(1, second, "b.txt")).toBe(true)
+    await expect(authorizations.read(1, first, "a.txt")).rejects.toThrow("not selected")
+    expect(new TextDecoder().decode(await authorizations.read(1, second, "b.txt"))).toBe("b.txt")
   })
 
-  test("keeps picker tokens scoped to their renderer", () => {
-    const authorizations = createPickedFileAuthorizations()
+  test("keeps picker tokens scoped to their renderer", async () => {
+    const authorizations = createPickedFileAuthorizations(read)
     const token = authorizations.add(1, ["a.txt"])
 
-    expect(authorizations.take(2, token, "a.txt")).toBe(false)
-    expect(authorizations.take(1, token, "a.txt")).toBe(true)
+    await expect(authorizations.read(2, token, "a.txt")).rejects.toThrow("not selected")
+  })
+
+  test("charges actual reads against the selection budget", async () => {
+    const authorizations = createPickedFileAuthorizations(async (_path, maxBytes) => {
+      if (6 > maxBytes) throw new Error("budget exceeded")
+      return new ArrayBuffer(6)
+    }, 10)
+    const token = authorizations.add(1, ["a.txt", "b.txt"])
+
+    await authorizations.read(1, token, "a.txt")
+    await expect(authorizations.read(1, token, "b.txt")).rejects.toThrow("budget exceeded")
   })
 })
