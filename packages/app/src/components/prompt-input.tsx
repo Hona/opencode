@@ -57,7 +57,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
-import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
+import { ACCEPTED_FILE_TYPES, pickAttachmentFiles } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
@@ -466,9 +466,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
-  const pick = () => {
+  const pick = async () => {
     if (server.isLocal()) {
-      fileInputRef?.click()
+      const files = await pickAttachmentFiles({
+        picker: platform.openAttachmentPickerDialog,
+        directory: () => sdk.directory,
+        fallback: () => fileInputRef?.click(),
+      })
+      if (files) await addAttachments(files)
       return
     }
     void import("@/components/dialog-select-file").then((module) =>

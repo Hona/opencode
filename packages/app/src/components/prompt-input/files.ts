@@ -2,6 +2,28 @@ import { ACCEPTED_FILE_TYPES, ACCEPTED_IMAGE_TYPES } from "@/constants/file-pick
 
 export { ACCEPTED_FILE_TYPES }
 
+type AttachmentPicker = (options?: {
+  defaultPath?: string
+  multiple?: boolean
+  accept?: string[]
+}) => Promise<File[] | null>
+
+export async function pickAttachmentFiles(input: {
+  picker?: AttachmentPicker
+  directory: () => string
+  fallback: () => void
+}) {
+  if (!input.picker) {
+    input.fallback()
+    return null
+  }
+  return input.picker({
+    defaultPath: input.directory(),
+    multiple: true,
+    accept: ACCEPTED_FILE_TYPES,
+  })
+}
+
 const IMAGE_MIMES = new Set(ACCEPTED_IMAGE_TYPES)
 const IMAGE_EXTS = new Map([
   ["gif", "image/gif"],

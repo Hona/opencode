@@ -149,6 +149,16 @@ const createPlatform = (): Platform => {
       })
     },
 
+    async openAttachmentPickerDialog(opts) {
+      const result = await window.api.openAttachmentPicker({
+        multiple: opts?.multiple ?? false,
+        title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        defaultPath: opts?.defaultPath,
+        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
+      })
+      return result?.map((file) => new File([file.buffer], file.name)) ?? null
+    },
+
     async saveFilePickerDialog(opts) {
       return window.api.saveFilePicker({
         title: opts?.title ?? t("desktop.dialog.saveFile"),

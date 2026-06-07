@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process"
+import { readFile } from "node:fs/promises"
+import { basename } from "node:path"
 import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -113,6 +115,31 @@ export function registerIpcHandlers(deps: Deps) {
       })
       if (result.canceled) return null
       return opts?.multiple ? result.filePaths : result.filePaths[0]
+    },
+  )
+
+  ipcMain.handle(
+    "open-attachment-picker",
+    async (
+      _event: IpcMainInvokeEvent,
+      opts?: { multiple?: boolean; title?: string; defaultPath?: string; extensions?: string[] },
+    ) => {
+      const result = await dialog.showOpenDialog({
+        properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
+        title: opts?.title ?? "Choose a file",
+        defaultPath: opts?.defaultPath,
+        filters: pickerFilters(opts?.extensions),
+      })
+      if (result.canceled) return null
+      return Promise.all(
+        result.filePaths.map(async (filePath) => {
+          const bytes = await readFile(filePath)
+          return {
+            name: basename(filePath),
+            buffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+          }
+        }),
+      )
     },
   )
 
