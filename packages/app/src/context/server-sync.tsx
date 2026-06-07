@@ -489,10 +489,18 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
         const status = children.child(key, { bootstrap: false })[0].mcp[name].status
         await toggleMcp({
           status,
-          connect: () => sdk.mcp.connect({ name }),
-          disconnect: () => sdk.mcp.disconnect({ name }),
-          authenticate: () => sdk.mcp.auth.authenticate({ name }),
-          refresh: () => queryClient.refetchQueries(queryOptionsApi.mcp(key)),
+          connect: async () => {
+            await sdk.mcp.connect({ name })
+          },
+          disconnect: async () => {
+            await sdk.mcp.disconnect({ name })
+          },
+          authenticate: async () => {
+            await sdk.mcp.auth.authenticate({ name })
+          },
+          refresh: async () => {
+            await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+          },
         })
       },
     },

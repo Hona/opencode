@@ -6,10 +6,18 @@ describe("toggleMcp", () => {
     const calls: string[] = []
     const input = (status: "connected" | "needs_auth" | "disabled") => ({
       status,
-      connect: async () => calls.push("connect"),
-      disconnect: async () => calls.push("disconnect"),
-      authenticate: async () => calls.push("authenticate"),
-      refresh: async () => calls.push("refresh"),
+      connect: async () => {
+        calls.push("connect")
+      },
+      disconnect: async () => {
+        calls.push("disconnect")
+      },
+      authenticate: async () => {
+        calls.push("authenticate")
+      },
+      refresh: async () => {
+        calls.push("refresh")
+      },
     })
 
     await toggleMcp(input("connected"))
