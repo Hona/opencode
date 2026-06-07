@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process"
-import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
+import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
-import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig } from "../preload/types"
+import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import type { UpdaterController } from "./updater-controller"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -17,7 +18,6 @@ type Deps = {
   killSidecar: () => Promise<void> | void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
-  getWindowConfig: () => Promise<WindowConfig> | WindowConfig
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
@@ -26,18 +26,26 @@ type Deps = {
   parseMarkdown: (markdown: string) => Promise<string> | string
   checkAppExists: (appName: string) => Promise<boolean> | boolean
   resolveAppPath: (appName: string) => Promise<string | null>
-  runUpdater: (alertOnFail: boolean) => Promise<void> | void
-  checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
-  installUpdate: () => Promise<void> | void
+  updater: UpdaterController
+  showUpdater: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  const updaterSubscriptions = new Map<number, () => void>()
+  const unsubscribeUpdater = (id: number) => {
+    updaterSubscriptions.get(id)?.()
+    updaterSubscriptions.delete(id)
+  }
+  app.once("will-quit", () => {
+    updaterSubscriptions.forEach((unsubscribe) => unsubscribe())
+    updaterSubscriptions.clear()
+  })
+
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
-  ipcMain.handle("get-window-config", () => deps.getWindowConfig())
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
@@ -50,9 +58,21 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("parse-markdown", (_event: IpcMainInvokeEvent, markdown: string) => deps.parseMarkdown(markdown))
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.handle("run-updater", (_event: IpcMainInvokeEvent, alertOnFail: boolean) => deps.runUpdater(alertOnFail))
-  ipcMain.handle("check-update", () => deps.checkUpdate())
-  ipcMain.handle("install-update", () => deps.installUpdate())
+  ipcMain.handle("updater-subscribe", (event) => {
+    const id = event.sender.id
+    if (updaterSubscriptions.has(id)) return
+    updaterSubscriptions.set(
+      id,
+      deps.updater.subscribe((state) => {
+        if (event.sender.isDestroyed()) return unsubscribeUpdater(id)
+        event.sender.send("updater-state", state)
+      }),
+    )
+    event.sender.once("destroyed", () => unsubscribeUpdater(id))
+  })
+  ipcMain.handle("updater-unsubscribe", (event) => unsubscribeUpdater(event.sender.id))
+  ipcMain.handle("updater-check", () => deps.updater.check())
+  ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
@@ -191,7 +211,10 @@ export function registerIpcHandlers(deps: Deps) {
     setTitlebar(win, theme)
   })
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
-    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
+    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
+      checkForUpdates: () => void deps.showUpdater(),
+      relaunch: deps.relaunch,
+    })
   })
 }
 

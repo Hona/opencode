@@ -70,12 +70,7 @@ function UiI18nBridge(props: ParentProps) {
 declare global {
   interface Window {
     __OPENCODE__?: {
-      updaterEnabled?: boolean
       deepLinks?: string[]
-    }
-    api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
-      exportDebugLogs?: () => Promise<string>
     }
   }
 }
@@ -159,7 +154,8 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
       <Font />
       <ThemeProvider
         onThemeApplied={(_, mode) => {
-          void window.api?.setTitlebar?.({ mode })
+          void (window as Window & { api?: { setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void> } }).api
+            ?.setTitlebar?.({ mode })
         }}
       >
         <LanguageProvider locale={props.locale}>
