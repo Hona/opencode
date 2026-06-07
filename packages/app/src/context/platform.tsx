@@ -27,13 +27,7 @@ export type FatalRendererErrorLog = {
   os?: DesktopOS
 }
 
-export type Platform = {
-  /** Platform discriminator */
-  platform: PlatformName
-
-  /** Desktop OS (desktop only) */
-  os?: DesktopOS
-
+type PlatformBase = {
   /** App version */
   version?: string
 
@@ -54,9 +48,6 @@ export type Platform = {
 
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
-
-  /** Open a native directory picker dialog (desktop only) */
-  openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
 
   /** Open a native attachment picker and read the selected files (desktop only) */
   openAttachmentPickerDialog?(opts?: OpenAttachmentPickerOptions): Promise<File[] | null>
@@ -118,6 +109,16 @@ export type Platform = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 }
+
+export type Platform = PlatformBase &
+  (
+    | { platform: "web"; os?: never }
+    | {
+        platform: "desktop"
+        os?: DesktopOS
+        openDirectoryPickerDialog(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
+      }
+  )
 
 export type DisplayBackend = "auto" | "wayland"
 
