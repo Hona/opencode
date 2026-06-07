@@ -72,14 +72,18 @@ describe("pickAttachmentFiles", () => {
   test("reports native picker failures without rejecting", async () => {
     const error = new Error("picker unavailable")
     const errors: unknown[] = []
+    const handled = Promise.withResolvers<void>()
     pickAttachmentFiles({
       picker: async () => Promise.reject(error),
       directory: () => "C:\\Projects\\LoremIpsum",
       fallback: () => undefined,
       onFiles: async () => undefined,
-      onError: (cause) => errors.push(cause),
+      onError: (cause) => {
+        errors.push(cause)
+        handled.resolve()
+      },
     })
-    await Bun.sleep(0)
+    await handled.promise
     expect(errors).toEqual([error])
   })
 })
