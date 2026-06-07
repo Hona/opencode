@@ -19,7 +19,6 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { agentCycleDisabled } from "./agent-cycle"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -548,7 +547,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
-      disabled: agentCycleDisabled(desktopV2(), settings.general.showCustomAgents()),
+      disabled: desktopV2() && !settings.general.showCustomAgents(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -556,7 +555,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
-      disabled: agentCycleDisabled(desktopV2(), settings.general.showCustomAgents()),
+      disabled: desktopV2() && !settings.general.showCustomAgents(),
       onSelect: () => local.agent.move(-1),
     }),
   ]
