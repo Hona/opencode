@@ -8,6 +8,7 @@ import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import type { UpdaterController } from "./updater-controller"
+import { createUpdaterSubscriptions } from "./updater-subscriptions"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -34,15 +35,8 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
-  const updaterSubscriptions = new Map<number, () => void>()
-  const unsubscribeUpdater = (id: number) => {
-    updaterSubscriptions.get(id)?.()
-    updaterSubscriptions.delete(id)
-  }
-  app.once("will-quit", () => {
-    updaterSubscriptions.forEach((unsubscribe) => unsubscribe())
-    updaterSubscriptions.clear()
-  })
+  const updaterSubscriptions = createUpdaterSubscriptions()
+  app.once("will-quit", updaterSubscriptions.clear)
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
@@ -60,17 +54,16 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
   ipcMain.handle("updater-subscribe", (event) => {
     const id = event.sender.id
-    if (updaterSubscriptions.has(id)) return
     updaterSubscriptions.set(
       id,
       deps.updater.subscribe((state) => {
-        if (event.sender.isDestroyed()) return unsubscribeUpdater(id)
+        if (event.sender.isDestroyed()) return updaterSubscriptions.delete(id)
         event.sender.send("updater-state", state)
       }),
     )
-    event.sender.once("destroyed", () => unsubscribeUpdater(id))
+    event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
   })
-  ipcMain.handle("updater-unsubscribe", (event) => unsubscribeUpdater(event.sender.id))
+  ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
   ipcMain.handle("updater-check", () => deps.updater.check())
   ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
