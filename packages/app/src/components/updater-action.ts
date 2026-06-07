@@ -5,7 +5,8 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 
 export function updaterAction(state: UpdaterState | undefined) {
-  switch (state?.status) {
+  if (!state) return { label: "settings.updates.action.checkNow" as const }
+  switch (state.status) {
     case "checking":
       return { label: "settings.updates.action.checking" as const }
     case "downloading":

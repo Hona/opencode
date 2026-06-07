@@ -3,13 +3,7 @@ import { createUpdaterController, type UpdaterBackend, type UpdaterReadyRecord }
 
 function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord }) {
   const calls: string[] = []
-  const listeners = new Map<string, Set<(value: unknown) => void>>()
   const backend: UpdaterBackend = {
-    on(event, listener) {
-      const set = listeners.get(event) ?? new Set()
-      set.add(listener)
-      listeners.set(event, set)
-    },
     async checkForUpdates() {
       calls.push("check")
       return { isUpdateAvailable: true, updateInfo: { version: "2.0.0" } }
