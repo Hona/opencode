@@ -1,29 +1,25 @@
+import { randomUUID } from "node:crypto"
 import { open } from "node:fs/promises"
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 export function createPickedFileAuthorizations() {
-  const senders = new Map<number, Map<string, Set<string>>>()
+  const selections = new Map<string, { sender: number; paths: Set<string> }>()
 
   return {
-    add(sender: number, token: string, paths: string[]) {
-      const tokens = senders.get(sender) ?? new Map<string, Set<string>>()
-      tokens.set(token, new Set(paths))
-      senders.set(sender, tokens)
+    add(sender: number, paths: string[]) {
+      const token = randomUUID()
+      selections.set(token, { sender, paths: new Set(paths) })
+      return token
     },
     take(sender: number, token: string, path: string) {
-      const tokens = senders.get(sender)
-      const paths = tokens?.get(token)
-      if (!paths?.delete(path)) return false
-      if (paths.size > 0) return true
-      tokens?.delete(token)
-      if (tokens?.size === 0) senders.delete(sender)
+      const selection = selections.get(token)
+      if (selection?.sender !== sender || !selection.paths.delete(path)) return false
+      if (selection.paths.size === 0) selections.delete(token)
       return true
     },
     release(sender: number, token: string) {
-      const tokens = senders.get(sender)
-      tokens?.delete(token)
-      if (tokens?.size === 0) senders.delete(sender)
+      if (selections.get(token)?.sender === sender) selections.delete(token)
     },
   }
 }

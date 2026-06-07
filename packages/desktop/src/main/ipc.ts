@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process"
-import { randomUUID } from "node:crypto"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
@@ -122,8 +121,7 @@ export function registerIpcHandlers(deps: Deps) {
         result.filePaths.map(async (filePath) => ({ path: filePath, name: basename(filePath), size: (await stat(filePath)).size })),
       )
       assertAttachmentBudget(files)
-      const token = randomUUID()
-      pickedFiles.add(event.sender.id, token, result.filePaths)
+      const token = pickedFiles.add(event.sender.id, result.filePaths)
       return { token, files }
     },
   )

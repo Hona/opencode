@@ -45,21 +45,29 @@ describe("assertAttachmentBudget", () => {
 describe("picked file authorizations", () => {
   test("keeps concurrent picker selections isolated", () => {
     const authorizations = createPickedFileAuthorizations()
-    authorizations.add(1, "first", ["a.txt", "b.txt"])
-    authorizations.add(1, "second", ["c.txt"])
+    const first = authorizations.add(1, ["a.txt", "b.txt"])
+    const second = authorizations.add(1, ["c.txt"])
 
-    expect(authorizations.take(1, "first", "a.txt")).toBe(true)
-    expect(authorizations.take(1, "second", "c.txt")).toBe(true)
-    expect(authorizations.take(1, "first", "b.txt")).toBe(true)
+    expect(authorizations.take(1, first, "a.txt")).toBe(true)
+    expect(authorizations.take(1, second, "c.txt")).toBe(true)
+    expect(authorizations.take(1, first, "b.txt")).toBe(true)
   })
 
   test("releases unread files for one picker without affecting another", () => {
     const authorizations = createPickedFileAuthorizations()
-    authorizations.add(1, "first", ["a.txt"])
-    authorizations.add(1, "second", ["b.txt"])
-    authorizations.release(1, "first")
+    const first = authorizations.add(1, ["a.txt"])
+    const second = authorizations.add(1, ["b.txt"])
+    authorizations.release(1, first)
 
-    expect(authorizations.take(1, "first", "a.txt")).toBe(false)
-    expect(authorizations.take(1, "second", "b.txt")).toBe(true)
+    expect(authorizations.take(1, first, "a.txt")).toBe(false)
+    expect(authorizations.take(1, second, "b.txt")).toBe(true)
+  })
+
+  test("keeps picker tokens scoped to their renderer", () => {
+    const authorizations = createPickedFileAuthorizations()
+    const token = authorizations.add(1, ["a.txt"])
+
+    expect(authorizations.take(2, token, "a.txt")).toBe(false)
+    expect(authorizations.take(1, token, "a.txt")).toBe(true)
   })
 })
