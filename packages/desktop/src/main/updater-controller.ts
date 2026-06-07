@@ -84,7 +84,10 @@ export function createUpdaterController(input: {
       transition({ status: "installing", version })
       await input
         .stop()
-        .then(() => input.backend.quitAndInstall())
+        .then(() => {
+          input.backend.quitAndInstall()
+          transition({ status: "ready", version })
+        })
         .catch((error) => {
           transition({ status: "ready", version })
           throw error
