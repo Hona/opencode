@@ -27,19 +27,19 @@ describe("attachmentMime", () => {
 describe("pickAttachmentFiles", () => {
   test("reads the current project directory for every native picker invocation", async () => {
     const paths: string[] = []
-    const files: File[][] = []
+    const files: File[] = []
     const file = new File(["hello"], "hello.txt", { type: "text/plain" })
     let directory = "C:\\Projects\\LoremIpsum"
-    const picker = async (options?: { defaultPath?: string }) => {
+    const picker = async (options?: { defaultPath?: string }, onFile?: (file: File) => Promise<unknown>) => {
       paths.push(options?.defaultPath ?? "")
-      return [file]
+      await onFile?.(file)
     }
 
     pickAttachmentFiles({
       picker,
       directory: () => directory,
       fallback: () => undefined,
-      onFiles: async (selected) => files.push(selected),
+      onFile: async (selected) => files.push(selected),
       onError: () => undefined,
     })
     await Promise.resolve()
@@ -48,11 +48,11 @@ describe("pickAttachmentFiles", () => {
       picker,
       directory: () => directory,
       fallback: () => undefined,
-      onFiles: async (selected) => files.push(selected),
+      onFile: async (selected) => files.push(selected),
       onError: () => undefined,
     })
     await Promise.resolve()
-    expect(files).toEqual([[file], [file]])
+    expect(files).toEqual([file, file])
     expect(paths).toEqual(["C:\\Projects\\LoremIpsum", "C:\\Projects\\DolorSit"])
   })
 
@@ -63,7 +63,7 @@ describe("pickAttachmentFiles", () => {
       fallback: () => {
         fallback += 1
       },
-      onFiles: async () => undefined,
+      onFile: async () => undefined,
       onError: () => undefined,
     })
     expect(fallback).toBe(1)
@@ -77,7 +77,7 @@ describe("pickAttachmentFiles", () => {
       picker: async () => Promise.reject(error),
       directory: () => "C:\\Projects\\LoremIpsum",
       fallback: () => undefined,
-      onFiles: async () => undefined,
+      onFile: async () => undefined,
       onError: (cause) => {
         errors.push(cause)
         handled.resolve()

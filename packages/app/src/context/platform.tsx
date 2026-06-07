@@ -49,8 +49,8 @@ type PlatformBase = {
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
 
-  /** Open a native attachment picker and read the selected files (desktop only) */
-  openAttachmentPickerDialog?(opts?: OpenAttachmentPickerOptions): Promise<File[] | null>
+  /** Open a native attachment picker and read selected files sequentially (desktop only) */
+  openAttachmentPickerDialog?(opts: OpenAttachmentPickerOptions, onFile: (file: File) => Promise<unknown>): Promise<void>
 
   /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>

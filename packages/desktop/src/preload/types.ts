@@ -73,7 +73,8 @@ export type ElectronAPI = {
     title?: string
     defaultPath?: string
     extensions?: string[]
-  }) => Promise<{ name: string; buffer: ArrayBuffer }[] | null>
+  }) => Promise<{ path: string; name: string; size: number }[] | null>
+  readPickedFile: (path: string) => Promise<ArrayBuffer>
   saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
   openLink: (url: string) => void
   openPath: (path: string, app?: string) => Promise<void>

@@ -2,17 +2,17 @@ import { ACCEPTED_FILE_TYPES, ACCEPTED_IMAGE_TYPES } from "@/constants/file-pick
 
 export { ACCEPTED_FILE_TYPES }
 
-type AttachmentPicker = (options?: {
+type AttachmentPicker = (options: {
   defaultPath?: string
   multiple?: boolean
   accept?: string[]
-}) => Promise<File[] | null>
+}, onFile: (file: File) => Promise<unknown>) => Promise<void>
 
 export function pickAttachmentFiles(input: {
   picker?: AttachmentPicker
   directory: () => string
   fallback: () => void
-  onFiles: (files: File[]) => Promise<unknown>
+  onFile: (file: File) => Promise<unknown>
   onError: (error: unknown) => void
 }) {
   if (!input.picker) {
@@ -20,12 +20,14 @@ export function pickAttachmentFiles(input: {
     return
   }
   void input
-    .picker({
-      defaultPath: input.directory(),
-      multiple: true,
-      accept: ACCEPTED_FILE_TYPES,
-    })
-    .then((files) => files && input.onFiles(files))
+    .picker(
+      {
+        defaultPath: input.directory(),
+        multiple: true,
+        accept: ACCEPTED_FILE_TYPES,
+      },
+      input.onFile,
+    )
     .catch(input.onError)
 }
 

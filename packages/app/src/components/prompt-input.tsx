@@ -475,7 +475,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         picker: platform.openAttachmentPickerDialog,
         directory: () => sdk.directory,
         fallback: () => fileInputRef?.click(),
-        onFiles: addAttachments,
+        onFile: addAttachment,
         onError: (error) =>
           showToast({
             variant: "error",
@@ -1108,7 +1108,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+  const { addAttachment, addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),

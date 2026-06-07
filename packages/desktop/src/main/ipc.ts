@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
@@ -7,6 +7,7 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { assertAttachmentBudget, readAttachment } from "./attachment-picker"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 
@@ -14,6 +15,8 @@ const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
   return [{ name: "Files", extensions: ext }]
 }
+
+const pickedFiles = new Map<number, Set<string>>()
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -104,7 +107,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle(
     "open-file-picker",
     async (
-      _event: IpcMainInvokeEvent,
+      event: IpcMainInvokeEvent,
       opts?: { multiple?: boolean; title?: string; defaultPath?: string; extensions?: string[] },
     ) => {
       const result = await dialog.showOpenDialog({
@@ -114,17 +117,21 @@ export function registerIpcHandlers(deps: Deps) {
         filters: pickerFilters(opts?.extensions),
       })
       if (result.canceled) return null
-      return Promise.all(
-        result.filePaths.map(async (filePath) => {
-          const bytes = await readFile(filePath)
-          return {
-            name: basename(filePath),
-            buffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-          }
-        }),
+      const files = await Promise.all(
+        result.filePaths.map(async (filePath) => ({ path: filePath, name: basename(filePath), size: (await stat(filePath)).size })),
       )
+      assertAttachmentBudget(files)
+      pickedFiles.set(event.sender.id, new Set(result.filePaths))
+      return files
     },
   )
+
+  ipcMain.handle("read-picked-file", async (event: IpcMainInvokeEvent, filePath: string) => {
+    const allowed = pickedFiles.get(event.sender.id)
+    if (!allowed?.delete(filePath)) throw new Error("File was not selected by the picker")
+    if (allowed.size === 0) pickedFiles.delete(event.sender.id)
+    return readAttachment(filePath)
+  })
 
   ipcMain.handle(
     "save-file-picker",
