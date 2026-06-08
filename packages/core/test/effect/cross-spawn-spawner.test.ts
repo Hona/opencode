@@ -250,6 +250,23 @@ describe("cross-spawn spawner", () => {
         expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
       }),
     )
+
+    fx.effect(
+      "preserves signal termination when stdin stops accepting input",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const stdin = Stream.make(Buffer.alloc(4 * 1024 * 1024))
+        const handle = yield* js('process.stdin.once("data", () => process.kill(process.pid, "SIGTERM")); process.stdin.resume()', {
+          stdin,
+        })
+
+        const exit = yield* Effect.exit(handle.exitCode)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isSuccess(exit)) return
+        expect(String(exit.cause)).toContain("SIGTERM")
+      }),
+    )
   })
 
   describe("process control", () => {

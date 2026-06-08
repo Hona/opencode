@@ -424,7 +424,7 @@ export const make = Effect.gen(function* () {
                 yield* Effect.ignore(input.settle)
                 return ExitCode(code)
               }
-              yield* input.settle
+              yield* Effect.ignore(input.settle)
               return yield* Effect.fail(
                 toPlatformError(
                   "exitCode",
