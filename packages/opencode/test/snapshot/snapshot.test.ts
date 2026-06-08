@@ -220,6 +220,25 @@ it.instance(
 )
 
 it.instance(
+  "files captured while small remain tracked after growing past the size limit",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/growing.txt`, "small")
+      const tracked = yield* snapshot.track()
+      expect(tracked).toBeTruthy()
+      yield* write(`${tmp.path}/growing.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
+
+      const after = yield* snapshot.track()
+      const diff = yield* snapshot.diffFull(tracked!, after!)
+
+      expect(after).not.toBe(before)
+      expect(diff.find((item) => item.file === "growing.txt")?.status).toBe("modified")
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
   "nested directory revert",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {
@@ -700,14 +719,19 @@ it.instance(
         }
         throw new Error("snapshot git directory not found")
       })
+      yield* exec(tmp.path, ["git", "--git-dir", gitdir, "update-ref", "-d", "refs/opencode/snapshot-index"])
+      yield* exec(tmp.path, ["git", "--git-dir", gitdir, "--work-tree", tmp.path, "read-tree", before])
       yield* write(path.join(gitdir, "index.lock"), "")
+      yield* write(`${tmp.path}/a.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
       yield* write(`${tmp.path}/new.txt`, "new content")
 
       const after = yield* snapshot.track()
+      const diff = yield* snapshot.diffFull(before, after!)
 
       expect(after).toBeTruthy()
       expect(after).not.toBe(before)
       expect(yield* snapshot.diff(before)).toContain("new.txt")
+      expect(diff.find((item) => item.file === "a.txt")?.status).toBe("modified")
       expect(yield* Effect.promise(() => fs.readdir(path.join(gitdir, "tmp")))).toEqual([])
     }),
   ),

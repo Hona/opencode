@@ -31,6 +31,7 @@ export type FileDiff = typeof FileDiff.Type
 const log = Log.create({ service: "snapshot" })
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const baseline = "refs/opencode/snapshot-index"
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -131,7 +132,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const drop = Effect.fnUntraced(function* (files: string[], env?: Record<string, string>) {
           if (!files.length) return
-          const result = yield* git(
+          yield* git(
             [
               ...cfg,
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -142,8 +143,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               stdin: feed(files),
             },
           )
-          if (result.code === 0) return
-          return yield* Effect.die(new Error(result.stderr))
         })
 
         const stage = Effect.fnUntraced(function* (files: string[], env?: Record<string, string>) {
@@ -157,7 +156,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             },
           )
           if (result.code === 0) return
-          return yield* Effect.die(new Error(result.stderr))
+          log.warn("failed to add snapshot files", {
+            exitCode: result.code,
+            stderr: result.stderr,
+          })
         })
 
         const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
@@ -199,9 +201,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             [
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
                 cwd: state.directory,
+                env,
               }),
               git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
                 cwd: state.directory,
+                env,
               }),
             ],
             { concurrency: 2 },
@@ -261,24 +265,37 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           )
         })
 
+        const seed = Effect.fnUntraced(function* (previous: GitResult, env: Record<string, string>) {
+          if (previous.code === 0) {
+            return yield* git([...cfg, ...args(["read-tree", previous.text.trim()])], { cwd: state.directory, env })
+          }
+          const initialized = yield* git([...cfg, ...args(["read-tree", "--empty"])], { cwd: state.directory, env })
+          if (initialized.code !== 0) return initialized
+          if (!(yield* exists(path.join(state.gitdir, "index")))) return initialized
+          const legacy = yield* git([...quote, ...args(["ls-files", "--stage", "-z"])], { cwd: state.directory })
+          if (legacy.code !== 0) return legacy
+          return yield* git([...cfg, ...args(["update-index", "-z", "--index-info"])], {
+            cwd: state.directory,
+            env,
+            stdin: legacy.text,
+          })
+        })
+
         const capture = Effect.fnUntraced(function* () {
           const root = path.join(state.gitdir, "tmp")
           yield* fs.ensureDir(root).pipe(Effect.orDie)
           const dir = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: "index-" }).pipe(Effect.orDie)
           const env = { GIT_INDEX_FILE: path.join(dir, "index") }
-          const index = path.join(state.gitdir, "index")
-          const seed = yield* Effect.gen(function* () {
-            if (!(yield* exists(index))) return ["read-tree", "--empty"]
-            const result = yield* git(args(["write-tree"]), { cwd: state.directory })
-            if (result.code !== 0) return yield* Effect.die(new Error(result.stderr))
-            return ["read-tree", result.text.trim()]
-          })
-          const initialized = yield* git([...cfg, ...args(seed)], { cwd: state.directory, env })
+          const previous = yield* git(args(["rev-parse", "--verify", `${baseline}^{tree}`]), { cwd: state.directory })
+          const initialized = yield* seed(previous, env)
           if (initialized.code !== 0) return yield* Effect.die(new Error(initialized.stderr))
           yield* add(env)
           const result = yield* git(args(["write-tree"]), { cwd: state.directory, env })
           if (result.code !== 0) return yield* Effect.die(new Error(result.stderr))
-          return result.text.trim()
+          const hash = result.text.trim()
+          const published = yield* git(args(["update-ref", baseline, hash]), { cwd: state.directory })
+          if (published.code !== 0) return yield* Effect.die(new Error(published.stderr))
+          return hash
         }, Effect.scoped)
 
         const cleanup = Effect.fnUntraced(function* () {
