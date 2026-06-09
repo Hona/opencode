@@ -24,10 +24,15 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
-import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
+import {
+  createOpenSessionFileTab,
+  createSessionTabs,
+  getTabReorderIndex,
+  shouldShowFileTree,
+  type Sizing,
+} from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { shouldShowFileTree } from "@/pages/session/side-panel-visibility"
 
 type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
 
