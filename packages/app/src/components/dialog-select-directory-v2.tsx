@@ -70,6 +70,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const loadedChildCount = new Map<string, number>()
   const loadingPaths = new Set<string>()
   const erroredPaths = new Set<string>()
+  const expandedPaths = new Set<string>()
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
@@ -268,6 +269,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     loadedChildCount.clear()
     loadingPaths.clear()
     erroredPaths.clear()
+    expandedPaths.clear()
     tree?.resetPaths([])
     const valid = await load("", token)
     if (!activeTreeNavigation(token, navigation)) return
@@ -275,12 +277,66 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     setLoading(false)
   }
 
+  async function refreshIgnoredVisibility(nextShowIgnored: boolean) {
+    const token = ++navigation
+    const scrollTop = treeScroller()?.scrollTop
+    const loadedListings = await Promise.all(
+      Array.from(loaded).map(async (path) => ({
+        path,
+        nodes: await listings.get(path),
+      })),
+    )
+    if (!activeTreeNavigation(token, navigation)) return
+
+    const entries = loadedListings.flatMap((listing) => {
+      if (!listing.nodes) return []
+      if (!nextShowIgnored && pickerPathHasIgnoredPart(listing.path)) return []
+      return policy.entries(listing.path, filterPickerNodes(listing.nodes, nextShowIgnored))
+    })
+
+    loadedListings.forEach((listing) => {
+      if (!listing.nodes) {
+        loadedChildCount.delete(listing.path)
+        return
+      }
+      loadedChildCount.set(
+        listing.path,
+        policy.entries(listing.path, filterPickerNodes(listing.nodes, nextShowIgnored)).length,
+      )
+    })
+
+    setIgnoredCount(
+      nextShowIgnored
+        ? 0
+        : countPickerIgnoredNodes(loadedListings.find((listing) => listing.path === "")?.nodes ?? [], nextShowIgnored),
+    )
+    if (!nextShowIgnored && selected() && pickerPathHasIgnoredPart(selected())) setSelected("")
+
+    tree?.resetPaths(entries, {
+      initialExpandedPaths: Array.from(expandedPaths).filter(
+        (path) => nextShowIgnored || !pickerPathHasIgnoredPart(path),
+      ),
+    })
+    requestAnimationFrame(() => {
+      const scroller = treeScroller()
+      if (scroller && scrollTop !== undefined) scroller.scrollTop = scrollTop
+      syncLoadingPaths()
+    })
+    void Promise.all(
+      Array.from(expandedPaths)
+        .filter((path) => nextShowIgnored || !pickerPathHasIgnoredPart(path))
+        .filter((path) => !loaded.has(treePathKey(path)))
+        .map((path) => load(path, token, true, true)),
+    )
+  }
+
   function toggleIgnored() {
-    const path = root() || start() || home()
-    setShowIgnored(!showIgnored())
+    const nextShowIgnored = !showIgnored()
+    setShowIgnored(nextShowIgnored)
     setSuggestionsOpen(false)
     setActiveSuggestion(-1)
-    if (path) void navigate(path)
+    if (loading() || loaded.size === 0) return
+    void refreshIgnoredVisibility(nextShowIgnored)
   }
 
   function complete() {
@@ -412,7 +468,12 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
         }
       `,
       onExpansionChange(change) {
-        if (change.expanded) void load(change.path, navigation, true, true)
+        if (change.expanded) {
+          expandedPaths.add(change.path)
+          void load(change.path, navigation, true, true)
+          return
+        }
+        expandedPaths.delete(change.path)
       },
       onSelectionChange(paths) {
         const path = paths.at(-1)
