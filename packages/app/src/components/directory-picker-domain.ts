@@ -1,4 +1,77 @@
-export function treeEntries(parent: string, nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>) {
+import { getFilename } from "@opencode-ai/core/util/path"
+import fuzzysort from "fuzzysort"
+import { ServerSDK } from "@/context/server-sdk"
+
+export type PickerNode = {
+  name: string
+  type: "file" | "directory"
+  absolute?: string
+}
+
+const PICKER_IGNORED_DIRECTORY_NAMES = new Set([
+  ".git",
+  ".hg",
+  ".svn",
+  ".cache",
+  ".coverage",
+  ".gradle",
+  ".idea",
+  ".mypy_cache",
+  ".next",
+  ".nuxt",
+  ".parcel-cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".svelte-kit",
+  ".tox",
+  ".turbo",
+  ".venv",
+  ".vite",
+  "__pycache__",
+  "_build",
+  "bower_components",
+  "build",
+  "coverage",
+  "cvs",
+  "deps",
+  "dist",
+  "env",
+  "jspm_packages",
+  "node_modules",
+  "out",
+  "pods",
+  "target",
+  "venv",
+  "vendor",
+])
+
+export function isPickerIgnoredName(name: string) {
+  const value = name.trim().toLowerCase()
+  if (!value) return false
+  return PICKER_IGNORED_DIRECTORY_NAMES.has(value) || value.endsWith(".egg-info")
+}
+
+export function isPickerIgnoredNode(node: Pick<PickerNode, "name" | "type">) {
+  return node.type === "directory" && isPickerIgnoredName(node.name)
+}
+
+export function filterPickerNodes<T extends PickerNode>(nodes: readonly T[], showIgnored = false) {
+  return showIgnored ? [...nodes] : nodes.filter((node) => !isPickerIgnoredNode(node))
+}
+
+export function countPickerIgnoredNodes(nodes: ReadonlyArray<Pick<PickerNode, "name" | "type">>, showIgnored = false) {
+  if (showIgnored) return 0
+  return nodes.reduce((count, node) => count + (isPickerIgnoredNode(node) ? 1 : 0), 0)
+}
+
+export function pickerPathHasIgnoredPart(path: string) {
+  return normalizePickerDrive(path)
+    .split("/")
+    .filter(Boolean)
+    .some((part) => isPickerIgnoredName(part))
+}
+
+export function treeEntries(parent: string, nodes: ReadonlyArray<PickerNode>) {
   const prefix = parent.replace(/^\/+|\/+$/g, "")
   return nodes.map((node) => {
     const path = prefix ? `${prefix}/${node.name}` : node.name
@@ -6,18 +79,11 @@ export function treeEntries(parent: string, nodes: ReadonlyArray<{ name: string;
   })
 }
 
-export function pickerTreeEntries(
-  parent: string,
-  nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>,
-  mode: "directory" | "file",
-) {
+export function pickerTreeEntries(parent: string, nodes: ReadonlyArray<PickerNode>, mode: "directory" | "file") {
   return treeEntries(parent, mode === "directory" ? nodes.filter((node) => node.type === "directory") : nodes)
 }
 
-export function pickerSearchEntries<T extends { type: "file" | "directory" }>(
-  nodes: readonly T[],
-  mode: "directory" | "file",
-) {
+export function pickerSearchEntries<T extends { type: "file" | "directory" }>(nodes: readonly T[], mode: "directory" | "file") {
   return mode === "directory" ? nodes.filter((node) => node.type === "directory") : [...nodes]
 }
 
@@ -26,7 +92,7 @@ export function pickerMode(mode: "directory" | "file", base?: string) {
     return {
       includeFiles: true,
       action: "file" as const,
-      entries(parent: string, nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>) {
+      entries(parent: string, nodes: ReadonlyArray<PickerNode>) {
         return treeEntries(parent, nodes)
       },
       navigation(path: string) {
@@ -44,7 +110,7 @@ export function pickerMode(mode: "directory" | "file", base?: string) {
   return {
     includeFiles: false,
     action: "directory" as const,
-    entries(parent: string, nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>) {
+    entries(parent: string, nodes: ReadonlyArray<PickerNode>) {
       return treeEntries(
         parent,
         nodes.filter((node) => node.type === "directory"),
@@ -110,6 +176,29 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
+export function pickerBreadcrumbs(path: string, home: string) {
+  const target = trimPickerPath(path)
+  if (!target) return [] as Array<{ label: string; path: string }>
+
+  const normalizedHome = trimPickerPath(home)
+  const homeRelative = normalizedHome ? pickerRelativePath(normalizedHome, target) : undefined
+  const canUseHome = homeRelative !== undefined && !/^[A-Za-z]:\//.test(normalizedHome)
+  const base = canUseHome ? normalizedHome : pickerRoot(target)
+
+  if (!base) return [{ label: nativePickerPath(target), path: target }]
+
+  const relative = pickerRelativePath(base, target) ?? ""
+  const crumbs = [{ label: canUseHome ? "~" : nativePickerPath(base), path: base }]
+  let current = base
+
+  for (const part of relative.split("/").filter(Boolean)) {
+    current = joinPickerPath(current, part)
+    crumbs.push({ label: part, path: current })
+  }
+
+  return crumbs
+}
+
 export function currentPickerSuggestions<T>(
   result: { query: string; items: readonly T[] } | undefined,
   query: string,
@@ -118,10 +207,7 @@ export function currentPickerSuggestions<T>(
   return result.items
 }
 
-export function preloadTreeDirectories(
-  parent: string,
-  nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>,
-) {
+export function preloadTreeDirectories(parent: string, nodes: ReadonlyArray<PickerNode>) {
   return treeEntries(
     parent,
     nodes.filter((node) => node.type === "directory"),
@@ -171,9 +257,6 @@ export function nativePickerPath(path: string) {
   if (/^[A-Za-z]:\//.test(value) || value.startsWith("//")) return value.replaceAll("/", "\\")
   return value
 }
-import { getFilename } from "@opencode-ai/core/util/path"
-import fuzzysort from "fuzzysort"
-import { ServerSDK } from "@/context/server-sdk"
 
 export function cleanPickerInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
@@ -247,9 +330,16 @@ export function displayPickerPath(path: string, input: string, home: string) {
   return pickerTilde(value, home) || value
 }
 
-export function createDirectorySearch(args: { sdk: ServerSDK; start: () => string | undefined; home: () => string }) {
-  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+export function createDirectorySearch(args: {
+  sdk: ServerSDK
+  start: () => string | undefined
+  home: () => string
+  showIgnored?: () => boolean
+}) {
+  const cache = new Map<string, Promise<PickerNode[]>>()
   let current = 0
+
+  const showIgnored = () => args.showIgnored?.() ?? false
 
   const scoped = (value: string) => {
     const start = args.start()
@@ -264,27 +354,33 @@ export function createDirectorySearch(args: { sdk: ServerSDK; start: () => strin
     return { directory: trimPickerPath(start), path: raw }
   }
 
-  const directories = async (directory: string) => {
+  const loadNodes = async (directory: string) => {
     const key = trimPickerPath(directory)
     const existing = cache.get(key)
     if (existing) return existing
     const request = args.sdk.client.file
       .list({ directory: key, path: "" })
-      .then((result) => result.data ?? [])
-      .catch(() => [])
-      .then((nodes) =>
-        nodes
-          .filter((node) => node.type === "directory")
-          .map((node) => ({ name: node.name, absolute: trimPickerPath(normalizePickerDrive(node.absolute)) })),
-      )
+      .then((result) => (result.data ?? []) as PickerNode[])
+      .catch(() => [] as PickerNode[])
     cache.set(key, request)
     return request
   }
 
-  const match = async (directory: string, query: string, limit: number) => {
+  const directories = async (directory: string) => {
+    const key = trimPickerPath(directory)
+    const nodes = await loadNodes(key)
+    return filterPickerNodes(nodes, showIgnored())
+      .filter((node) => node.type === "directory")
+      .map((node) => ({
+        name: node.name,
+        absolute: trimPickerPath(normalizePickerDrive(node.absolute ?? joinPickerPath(key, node.name))),
+      }))
+  }
+
+  const match = async (directory: string, query: string, limit: number): Promise<string[]> => {
     const items = await directories(directory)
     if (!query) return items.slice(0, limit).map((item) => item.absolute)
-    return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
+    return fuzzysort.go(query, items, { key: "name", limit }).map((item: { obj: { absolute: string } }) => item.obj.absolute)
   }
 
   return async (filter: string) => {
@@ -299,10 +395,12 @@ export function createDirectorySearch(args: { sdk: ServerSDK; start: () => strin
     if (!pathInput) {
       const results = await args.sdk.client.find
         .files({ directory: input.directory, query, type: "directory", limit: 50 })
-        .then((result) => result.data ?? [])
-        .catch(() => [])
+        .then((result) => (result.data ?? []) as string[])
+        .catch(() => [] as string[])
       if (!active()) return []
-      return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      return (showIgnored() ? results : results.filter((path) => !pickerPathHasIgnoredPart(path)))
+        .map((path) => joinPickerPath(input.directory, path))
+        .slice(0, 50)
     }
     const segments = query.replace(/^\/+/, "").split("/")
     const head = segments.slice(0, -1).filter((part) => part && part !== ".")

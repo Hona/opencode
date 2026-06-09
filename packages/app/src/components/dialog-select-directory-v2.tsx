@@ -12,19 +12,24 @@ import {
   absoluteTreePath,
   activeTreeNavigation,
   advanceTreePreload,
-  nextSuggestionIndex,
-  nextTreeScrollTop,
-  pickerFileSearchQuery,
-  pickerAbsoluteInput,
-  pickerMode,
-  preloadTreeDirectories,
   cleanPickerInput,
+  countPickerIgnoredNodes,
   createDirectorySearch,
   currentPickerSuggestions,
   displayPickerPath,
+  filterPickerNodes,
+  nextSuggestionIndex,
+  nextTreeScrollTop,
+  pickerAbsoluteInput,
+  pickerBreadcrumbs,
+  pickerFileSearchQuery,
+  pickerMode,
   pickerParent,
+  pickerPathHasIgnoredPart,
   pickerRoot,
+  preloadTreeDirectories,
 } from "./directory-picker-domain"
+import type { PickerNode } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
 
 interface DialogSelectDirectoryV2Props {
@@ -35,6 +40,9 @@ interface DialogSelectDirectoryV2Props {
   mode?: "directory" | "file"
   start?: string
 }
+
+const TREE_PRELOAD_LIMIT = 24
+const EXPANDED_CHILDREN_TO_REVEAL = 5
 
 export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const global = useGlobal()
@@ -54,12 +62,91 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(false)
   const [rootValid, setRootValid] = createSignal(false)
-  const listings = new Map<string, Promise<Array<{ name: string; type: "file" | "directory" }> | undefined>>()
+  const [showIgnored, setShowIgnored] = createSignal(false)
+  const [ignoredCount, setIgnoredCount] = createSignal(0)
+  const listings = new Map<string, Promise<PickerNode[] | undefined>>()
   const advanced = new Set<string>()
+  const loaded = new Set<string>()
+  const loadedChildCount = new Map<string, number>()
+  const loadingPaths = new Set<string>()
+  const erroredPaths = new Set<string>()
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
   let navigation = 0
+  let loadingSyncFrame: number | undefined
+
+  const treePathKey = (path: string) => path.replace(/\/+$/, "")
+  const treeShadowRoot = () => tree?.getFileTreeContainer()?.shadowRoot
+  const treeScroller = () => treeShadowRoot()?.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]")
+
+  const syncLoadingPaths = () => {
+    const rows = treeShadowRoot()?.querySelectorAll<HTMLElement>('button[data-type="item"]')
+    if (!rows) return
+    rows.forEach((row) => {
+      const key = treePathKey(row.dataset.itemPath ?? "")
+      if (loadingPaths.has(key)) row.dataset.directoryPickerLoading = "true"
+      else delete row.dataset.directoryPickerLoading
+      if (erroredPaths.has(key)) row.dataset.directoryPickerError = "true"
+      else delete row.dataset.directoryPickerError
+    })
+  }
+
+  const scheduleLoadingSync = () => {
+    if (loadingSyncFrame !== undefined) return
+    loadingSyncFrame = requestAnimationFrame(() => {
+      loadingSyncFrame = undefined
+      syncLoadingPaths()
+      if (loadingPaths.size > 0) scheduleLoadingSync()
+    })
+  }
+
+  const setPathLoading = (path: string, loading: boolean) => {
+    const key = treePathKey(path)
+    if (loading) {
+      loadingPaths.add(key)
+      erroredPaths.delete(key)
+    }
+    if (!loading) loadingPaths.delete(key)
+    syncLoadingPaths()
+    scheduleLoadingSync()
+  }
+
+  const revealExpandedPath = (path: string, childCount: number) => {
+    if (childCount <= 0) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const shadow = treeShadowRoot()
+        const scroller = treeScroller()
+        if (!shadow || !scroller) return
+        const key = treePathKey(path)
+        const row = Array.from(
+          shadow.querySelectorAll('button[data-type="item"]') as NodeListOf<HTMLElement>,
+        ).find((candidate) => treePathKey(candidate.dataset.itemPath ?? "") === key)
+        if (!row) return
+
+        const scrollerRect = scroller.getBoundingClientRect()
+        const rowRect = row.getBoundingClientRect()
+        const itemHeight = row.offsetHeight || 24
+        const padding = 8
+        const desiredChildren = Math.min(childCount, EXPANDED_CHILDREN_TO_REVEAL)
+        let delta = 0
+
+        if (rowRect.top < scrollerRect.top + padding) {
+          delta = rowRect.top - scrollerRect.top - padding
+        } else {
+          const desiredBottom = rowRect.bottom + itemHeight * desiredChildren
+          const maxBottom = scrollerRect.bottom - padding
+          if (desiredBottom > maxBottom) delta = desiredBottom - maxBottom
+        }
+
+        const next = nextTreeScrollTop(scroller.scrollTop, delta, scroller.scrollHeight, scroller.clientHeight)
+        if (next === scroller.scrollTop) return
+        scroller.scrollTop = next
+        scroller.dispatchEvent(new Event("scroll"))
+      })
+    })
+  }
 
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
@@ -71,7 +158,9 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const start = createMemo(
     () => props.start || sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
   )
-  const search = createDirectorySearch({ sdk, home, start })
+  const selectionPath = createMemo(() => policy.result(root(), selected(), rootValid()) ?? "")
+  const breadcrumbs = createMemo(() => pickerBreadcrumbs(root(), home()))
+  const search = createDirectorySearch({ sdk, home, start, showIgnored })
   const [suggestions] = createResource(input, async (value) => {
     const typed = cleanPickerInput(value).replace(/\/+$/, "")
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")
@@ -82,9 +171,10 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       .files({ directory: root(), query: pickerFileSearchQuery(root(), value, home()), type: "file", limit: 20 })
       .then((result) => result.data ?? [])
       .catch(() => [])
+    const visibleFiles = showIgnored() ? files : files.filter((path) => !pickerPathHasIgnoredPart(path))
     const results = [
       ...directories,
-      ...files.map((path) => ({ absolute: absoluteTreePath(root(), path), type: "file" as const })),
+      ...visibleFiles.map((path) => ({ absolute: absoluteTreePath(root(), path), type: "file" as const })),
     ]
     return {
       query: value,
@@ -93,29 +183,70 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   })
   const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions(), input()))
 
-  async function load(path: string, generation: number, preload = true) {
-    const key = path.replace(/\/+$/, "")
+  async function load(path: string, generation: number, preload = true, visible = false) {
+    const key = treePathKey(path)
+    const cachedChildCount = loadedChildCount.get(key) ?? 0
+    if (loaded.has(key)) {
+      if (visible) revealExpandedPath(path, cachedChildCount)
+      return true
+    }
     setError(false)
+    if (visible) setPathLoading(path, true)
+    const visibleStartedAt = Date.now()
+    const clearVisibleLoading = async () => {
+      if (!visible) return
+      const remaining = 220 - (Date.now() - visibleStartedAt)
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
+      setPathLoading(key, false)
+    }
     const absolute = absoluteTreePath(root(), key)
     const request =
       listings.get(key) ??
       sdk.client.file
         .list({ directory: absolute, path: "" })
-        .then((result) => result.data ?? [])
+        .then((result) => (result.data ?? []) as PickerNode[])
         .catch(() => undefined)
     listings.set(key, request)
     const nodes = await request
-    if (!activeTreeNavigation(generation, navigation)) return false
-    if (!nodes) {
-      listings.delete(key)
-      if (!key) setError(true)
+    if (!activeTreeNavigation(generation, navigation)) {
+      setPathLoading(key, false)
       return false
     }
-    tree?.batch(
-      policy.entries(key, nodes).map((item) => ({ type: "add", path: item })),
-    )
+    if (!nodes) {
+      listings.delete(key)
+      loaded.delete(key)
+      loadedChildCount.delete(key)
+      await clearVisibleLoading()
+      if (!key) {
+        setIgnoredCount(0)
+        setError(true)
+      } else if (visible) {
+        erroredPaths.add(key)
+        syncLoadingPaths()
+      }
+      return false
+    }
+
+    if (!key) setIgnoredCount(countPickerIgnoredNodes(nodes, showIgnored()))
+    const visibleNodes = filterPickerNodes(nodes, showIgnored())
+
+    if (!visible && !preload) return true
+    if (loaded.has(key)) {
+      const childCount = loadedChildCount.get(key) ?? 0
+      if (visible) revealExpandedPath(path, childCount)
+      await clearVisibleLoading()
+      return true
+    }
+    const entries = policy.entries(key, visibleNodes)
+    loaded.add(key)
+    erroredPaths.delete(key)
+    loadedChildCount.set(key, entries.length)
+    await clearVisibleLoading()
+    tree?.batch(entries.map((item) => ({ type: "add", path: item })))
+    if (visible) revealExpandedPath(path, entries.length)
     if (preload && advanceTreePreload(advanced, key)) {
-      void Promise.all(preloadTreeDirectories(key, nodes).map((directory) => load(directory, generation, false)))
+      const preloadTargets = preloadTreeDirectories(key, visibleNodes).slice(0, TREE_PRELOAD_LIMIT)
+      void Promise.all(preloadTargets.map((directory) => load(directory, generation, false)))
     }
     return true
   }
@@ -127,17 +258,30 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     setLoading(true)
     setRootValid(false)
     setSelected("")
+    setIgnoredCount(0)
     setSuggestionsOpen(false)
     setActiveSuggestion(-1)
     setRoot(value)
     setInput(displayPickerPath(value, value, home()))
     listings.clear()
     advanced.clear()
+    loaded.clear()
+    loadedChildCount.clear()
+    loadingPaths.clear()
+    erroredPaths.clear()
     tree?.resetPaths([])
     const valid = await load("", token)
     if (!activeTreeNavigation(token, navigation)) return
     setRootValid(valid)
     setLoading(false)
+  }
+
+  function toggleIgnored() {
+    const path = root() || start() || home()
+    setShowIgnored(!showIgnored())
+    setSuggestionsOpen(false)
+    setActiveSuggestion(-1)
+    if (path) void navigate(path)
   }
 
   function complete() {
@@ -198,7 +342,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   }
 
   function resolve() {
-    const path = policy.result(root(), selected(), rootValid())
+    const path = selectionPath()
     if (!path) return
     props.onSelect(props.multiple ? [path] : path)
     dialog.close()
@@ -216,7 +360,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       paths: [],
       flattenEmptyDirectories: false,
       initialExpansion: "closed",
-      stickyFolders: true,
+      stickyFolders: false,
       unsafeCSS: `
         button[data-type="item"] {
           background: transparent !important;
@@ -229,13 +373,47 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
           outline: none !important;
           box-shadow: none !important;
         }
+        @keyframes directory-picker-v2-spinner {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        button[data-type="item"][data-directory-picker-loading="true"] > [data-item-section="icon"] {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        button[data-type="item"][data-directory-picker-loading="true"] > [data-item-section="icon"] > [data-icon-name="file-tree-icon-chevron"] {
+          opacity: 0;
+        }
+        button[data-type="item"][data-directory-picker-loading="true"] > [data-item-section="icon"]::after {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 10px;
+          height: 10px;
+          margin-top: -5px;
+          margin-left: -5px;
+          box-sizing: border-box;
+          border: 1.5px solid currentColor;
+          border-right-color: transparent;
+          border-radius: 999px;
+          animation: directory-picker-v2-spinner 650ms linear infinite;
+          opacity: 0.78;
+        }
+        button[data-type="item"][data-directory-picker-error="true"] > [data-item-section="label"]::after {
+          content: " · failed";
+          color: var(--v2-text-text-muted);
+        }
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
           scrollbar-width: thin;
         }
       `,
       onExpansionChange(change) {
-        if (change.expanded) void load(change.path, navigation)
+        if (change.expanded) void load(change.path, navigation, true, true)
       },
       onSelectionChange(paths) {
         const path = paths.at(-1)
@@ -253,17 +431,61 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     void navigate(path)
   })
 
-  onCleanup(() => tree?.cleanUp())
+  onCleanup(() => {
+    if (loadingSyncFrame !== undefined) cancelAnimationFrame(loadingSyncFrame)
+    tree?.cleanUp()
+  })
 
   return (
     <Dialog title={props.title ?? language.t("command.project.open")} size="large" class="directory-picker-v2">
       <div class="directory-picker-v2-body">
+        <div class="directory-picker-v2-location">
+          <div class="directory-picker-v2-breadcrumbs" aria-label="Current folder">
+            <Show when={breadcrumbs().length > 0} fallback={<span class="directory-picker-v2-location-empty">—</span>}>
+              <For each={breadcrumbs()}>
+                {(crumb, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <span class="directory-picker-v2-crumb-separator">›</span>
+                    </Show>
+                    <button
+                      type="button"
+                      class="directory-picker-v2-crumb"
+                      data-current={index() === breadcrumbs().length - 1 ? "" : undefined}
+                      title={crumb.path}
+                      onClick={() => {
+                        if (index() !== breadcrumbs().length - 1) void navigate(crumb.path)
+                      }}
+                    >
+                      {crumb.label}
+                    </button>
+                  </>
+                )}
+              </For>
+            </Show>
+          </div>
+          <div class="directory-picker-v2-location-actions">
+            <Show when={!showIgnored() && ignoredCount() > 0}>
+              <span class="directory-picker-v2-ignored-note">{ignoredCount()} hidden</span>
+            </Show>
+            <button
+              type="button"
+              class="directory-picker-v2-ignored-toggle"
+              aria-pressed={showIgnored()}
+              onClick={toggleIgnored}
+            >
+              {showIgnored() ? "Hide ignored" : ignoredCount() > 0 ? `Show ${ignoredCount()} ignored` : "Show ignored"}
+            </button>
+          </div>
+        </div>
         <div class="directory-picker-v2-path" ref={pathArea}>
           <TextInputV2
             value={input()}
             autofocus
             autocomplete="off"
             spellcheck={false}
+            placeholder="Type a path or search folders…"
+            aria-label="Path or folder search"
             class="!w-full"
             onInput={(event) => {
               setInput(cleanPickerInput(event.currentTarget.value))
@@ -287,8 +509,18 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
               {language.t("dialog.directory.parent")}
             </ButtonV2>
           </div>
-          <Show when={suggestionsOpen() && currentSuggestions().length > 0}>
-            <div id="directory-picker-v2-suggestions" role="listbox" class="directory-picker-v2-suggestions">
+          <Show when={suggestionsOpen() && (suggestions.loading || currentSuggestions().length > 0)}>
+            <div
+              id="directory-picker-v2-suggestions"
+              role="listbox"
+              class="directory-picker-v2-suggestions"
+              aria-busy={suggestions.loading}
+            >
+              <Show when={suggestions.loading && currentSuggestions().length === 0}>
+                <div role="status" class="directory-picker-v2-suggestions-state">
+                  {language.t("common.loading")}
+                </div>
+              </Show>
               <For each={currentSuggestions()}>
                 {(suggestion, index) => (
                   <button
@@ -310,10 +542,9 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
         <div
           class="directory-picker-v2-browser"
           ref={container}
+          aria-busy={loading()}
           onWheel={(event) => {
-            const scroller = tree
-              ?.getFileTreeContainer()
-              ?.shadowRoot?.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]")
+            const scroller = treeScroller()
             if (!scroller) return
             const next = nextTreeScrollTop(scroller.scrollTop, event.deltaY, scroller.scrollHeight, scroller.clientHeight)
             if (next === scroller.scrollTop) return
@@ -327,11 +558,14 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
             <div class="directory-picker-v2-state">{language.t("dialog.directory.readError")}</div>
           </Show>
         </div>
-        <div class="directory-picker-v2-selection">{policy.result(root(), selected(), rootValid())}</div>
+        <div class="directory-picker-v2-selection" title={selectionPath()}>
+          <span class="directory-picker-v2-selection-label">Selected:</span>
+          <span class="directory-picker-v2-selection-value">{selectionPath()}</span>
+        </div>
       </div>
       <DialogFooter>
         <ButtonV2 variant="neutral" onClick={() => dialog.close()}>{language.t("common.cancel")}</ButtonV2>
-        <ButtonV2 variant="contrast" disabled={!policy.result(root(), selected(), rootValid())} onClick={resolve}>
+        <ButtonV2 variant="contrast" disabled={!selectionPath()} onClick={resolve}>
           {action[policy.action]}
         </ButtonV2>
       </DialogFooter>

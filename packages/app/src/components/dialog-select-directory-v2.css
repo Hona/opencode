@@ -3,14 +3,90 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 2px 16px 0;
+}
+
+.directory-picker-v2-location {
+  display: flex;
+  min-height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.directory-picker-v2-breadcrumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.directory-picker-v2-crumb,
+.directory-picker-v2-location-empty {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-picker-v2-crumb:hover {
+  color: var(--v2-text-text-base);
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.directory-picker-v2-crumb[data-current] {
+  color: var(--v2-text-text-base);
+  cursor: default;
+  background: transparent;
+}
+
+.directory-picker-v2-crumb-separator {
+  flex: 0 0 auto;
+  color: var(--v2-text-text-muted);
+  opacity: 0.7;
+}
+
+.directory-picker-v2-location-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.directory-picker-v2-ignored-note {
+  color: var(--v2-text-text-muted);
+}
+
+.directory-picker-v2-ignored-toggle {
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.directory-picker-v2-ignored-toggle:hover,
+.directory-picker-v2-ignored-toggle[aria-pressed="true"] {
+  color: var(--v2-text-text-base);
+  background: var(--v2-overlay-simple-overlay-hover);
 }
 
 .directory-picker-v2-path {
   position: relative;
   z-index: 10;
   display: flex;
+  flex-shrink: 0;
   gap: 8px;
 }
 
@@ -35,7 +111,8 @@
   box-shadow: var(--v2-elevation-overlay);
 }
 
-.directory-picker-v2-suggestions button {
+.directory-picker-v2-suggestions button,
+.directory-picker-v2-suggestions-state {
   overflow: hidden;
   padding: 6px 8px;
   border-radius: 4px;
@@ -97,11 +174,23 @@
 }
 
 .directory-picker-v2-selection {
-  overflow: hidden;
+  display: flex;
+  min-width: 0;
   flex-shrink: 0;
+  gap: 6px;
   color: var(--v2-text-text-muted);
   font-size: 12px;
   line-height: 16px;
+}
+
+.directory-picker-v2-selection-label {
+  flex: 0 0 auto;
+}
+
+.directory-picker-v2-selection-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-text-text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
