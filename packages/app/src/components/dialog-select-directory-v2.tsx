@@ -199,11 +199,10 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
       setPathLoading(key, false)
     }
-    const absolute = absoluteTreePath(root(), key)
     const request =
       listings.get(key) ??
       sdk.client.file
-        .list({ directory: absolute, path: "" })
+        .list({ directory: root(), path: key })
         .then((result) => (result.data ?? []) as PickerNode[])
         .catch(() => undefined)
     listings.set(key, request)
