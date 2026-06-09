@@ -1756,12 +1756,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div
-            class="flex-1 min-h-0 overflow-hidden"
-            classList={{
-              "rounded-[10px]": settings.general.newLayoutDesigns(),
-            }}
-          >
+          <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id && mobileChanges()}>
                 <div class="relative h-full overflow-hidden">
