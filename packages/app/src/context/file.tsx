@@ -25,6 +25,7 @@ import { useServerSDK } from "./server-sdk"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
+import { searchFiles } from "./file/search"
 import {
   selectionFromLines,
   type FileState,
@@ -199,11 +200,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
-    const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
-        (x) => (x.data ?? []).map(path.normalize),
-        () => [],
-      )
+    const search = (query: string, type?: "file") => searchFiles(sdk.client, path.normalize, query, type)
 
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
@@ -278,8 +275,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setScrollLeft,
       selectedLines,
       setSelectedLines,
-      searchFiles: (query: string) => search(query, "false"),
-      searchFilesAndDirectories: (query: string) => search(query, "true"),
+      searchFiles: (query: string) => search(query, "file"),
+      searchFilesAndDirectories: (query: string) => search(query),
     }
   },
 })
