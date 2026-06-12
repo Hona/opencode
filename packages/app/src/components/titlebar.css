@@ -28,22 +28,34 @@
   }
 }
 
-/* Scroll position drives the edge fades: the left fade is on at full width past
-   1px of scroll, the right fade turns off within 1px of the end. When the strip
-   does not overflow the timeline is inactive, the animations apply nothing, and
-   the initial 0px values make the mask a no-op. */
-[data-slot="titlebar-tabs-scroll"] {
-  mask: linear-gradient(
-    to right,
-    #0000,
-    #ffff var(--titlebar-tab-fade-left),
-    #ffff calc(100% - var(--titlebar-tab-fade-right)),
-    #0000
-  );
-  animation:
-    titlebar-tab-fade-left linear both,
-    titlebar-tab-fade-right linear both;
-  animation-timeline: --titlebar-tabs-scroll, --titlebar-tabs-scroll;
-  animation-range: 0 1px, calc(100% - 1px) 100%;
-  scroll-timeline: --titlebar-tabs-scroll x;
+/* Scroll position drives the edge fades: the left fade is on at full width for
+   any scroll position past the start, the right fade turns off within 1px of
+   the end. The 0.1px animation ranges make the on/off thresholds effectively
+   binary: they are wider than a layout unit (1/64px) so they cannot collapse
+   into a degenerate range, yet narrower than any real scroll quantum (1/dpr px)
+   so no resting scroll position lands inside them. When the strip does not
+   overflow the timeline is inactive, the animations apply nothing, and the
+   initial 0px values make the mask a no-op.
+
+   The @supports guard matters: without timeline support the animations would
+   resolve as 0s time-based animations and `fill: both` would pin their end
+   state permanently. Guarded, unsupporting browsers simply show no fades. */
+@supports (animation-timeline: --titlebar-tabs-scroll) {
+  [data-slot="titlebar-tabs-scroll"] {
+    mask: linear-gradient(
+      to right,
+      #0000,
+      #ffff var(--titlebar-tab-fade-left),
+      #ffff calc(100% - var(--titlebar-tab-fade-right)),
+      #0000
+    );
+    animation:
+      titlebar-tab-fade-left linear both,
+      titlebar-tab-fade-right linear both;
+    animation-timeline: --titlebar-tabs-scroll, --titlebar-tabs-scroll;
+    animation-range:
+      0 0.1px,
+      calc(100% - 1.1px) calc(100% - 1px);
+    scroll-timeline: --titlebar-tabs-scroll x;
+  }
 }
