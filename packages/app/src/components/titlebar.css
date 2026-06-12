@@ -1,61 +1,46 @@
-@property --titlebar-tab-fade-left {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --titlebar-tab-fade-right {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
 @keyframes titlebar-tab-fade-left {
   from {
-    --titlebar-tab-fade-left: 0px;
+    visibility: hidden;
   }
   to {
-    --titlebar-tab-fade-left: 24px;
+    visibility: visible;
   }
 }
 
 @keyframes titlebar-tab-fade-right {
   from {
-    --titlebar-tab-fade-right: 24px;
+    visibility: visible;
   }
   to {
-    --titlebar-tab-fade-right: 0px;
+    visibility: hidden;
   }
 }
 
-/* Scroll position drives the edge fades: the left fade is on at full width for
-   any scroll position past the start, the right fade turns off within 1px of
-   the end. The 0.1px animation ranges make the on/off thresholds effectively
-   binary: they are wider than a layout unit (1/64px) so they cannot collapse
-   into a degenerate range, yet narrower than any real scroll quantum (1/dpr px)
-   so no resting scroll position lands inside them. When the strip does not
-   overflow the timeline is inactive, the animations apply nothing, and the
-   initial 0px values make the mask a no-op.
+/* The narrow ranges preserve the binary thresholds of scrollLeft > 0 and
+   remaining scroll distance > 1px. Hidden defaults make an inactive timeline
+   (no overflow) a no-op. Unsupported browsers also degrade to no fades. */
+[data-slot="titlebar-tabs"] {
+  timeline-scope: --titlebar-tabs-scroll;
 
-   The @supports guard matters: without timeline support the animations would
-   resolve as 0s time-based animations and `fill: both` would pin their end
-   state permanently. Guarded, unsupporting browsers simply show no fades. */
-@supports (animation-timeline: --titlebar-tabs-scroll) {
+  [data-slot^="titlebar-tabs-fade-"] {
+    visibility: hidden;
+  }
+}
+
+@supports (animation-timeline: --titlebar-tabs-scroll) and (timeline-scope: --titlebar-tabs-scroll) {
   [data-slot="titlebar-tabs-scroll"] {
-    mask: linear-gradient(
-      to right,
-      #0000,
-      #ffff var(--titlebar-tab-fade-left),
-      #ffff calc(100% - var(--titlebar-tab-fade-right)),
-      #0000
-    );
-    animation:
-      titlebar-tab-fade-left linear both,
-      titlebar-tab-fade-right linear both;
-    animation-timeline: --titlebar-tabs-scroll, --titlebar-tabs-scroll;
-    animation-range:
-      0 0.1px,
-      calc(100% - 1.1px) calc(100% - 1px);
     scroll-timeline: --titlebar-tabs-scroll x;
+  }
+
+  [data-slot="titlebar-tabs-fade-left"] {
+    animation: titlebar-tab-fade-left linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: 0 0.1px;
+  }
+
+  [data-slot="titlebar-tabs-fade-right"] {
+    animation: titlebar-tab-fade-right linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: calc(100% - 1.1px) calc(100% - 1px);
   }
 }
