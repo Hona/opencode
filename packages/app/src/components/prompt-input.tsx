@@ -37,6 +37,7 @@ import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -222,8 +223,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
-  let projectSearchRef: HTMLInputElement | undefined
-
   const mirror = { input: false }
   const inset = 56
   const space = `${inset}px`
@@ -367,7 +366,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const [picker, setPicker] = createStore({
     projectOpen: false,
-    projectSearch: "",
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1415,17 +1413,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
   }
   const selectedProject = createMemo(() => projectForDirectory(props.controls.projects.directory))
-  const projectResults = createMemo(() => {
-    const search = picker.projectSearch.trim().toLowerCase()
-    if (!search) return projects()
-    return projects().filter((project) => displayName(project).toLowerCase().includes(search))
-  })
   const showAgentControl = createMemo(() => props.controls.agents.visible && props.controls.agents.options.length > 0)
   const selectProject = (worktree: string) => {
-    setPicker({
-      projectOpen: false,
-      projectSearch: "",
-    })
+    setPicker("projectOpen", false)
     if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "")) {
       restoreFocus()
       return
@@ -1445,17 +1435,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       label: selectedProject() ? displayName(selectedProject()!) : language.t("session.new.project.new"),
       class: "max-w-[203px]",
       style: control(),
-      onPress: () => setPicker("projectOpen", true),
     },
-    search: picker.projectSearch,
+    projects: projects(),
+    selectedWorktree: selectedProject()?.worktree,
+    projectLabel: displayName,
     searchPlaceholder: language.t("session.new.project.search"),
     clearLabel: language.t("common.clear"),
-    items: projectResults().map((project) => ({
-      icon: "folder",
-      label: displayName(project),
-      selected: selectedProject()?.worktree === project.worktree,
-      onSelect: () => selectProject(project.worktree),
-    })),
     action: {
       icon: "plus",
       label: language.t("session.new.project.add"),
@@ -1464,13 +1449,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         void addProject()
       },
     },
-    onOpenChange: (open) => {
-      setPicker("projectOpen", open)
-      if (open) requestAnimationFrame(() => projectSearchRef?.focus())
-    },
-    onSearchInput: (value) => setPicker("projectSearch", value),
-    onSearchClear: () => setPicker("projectSearch", ""),
-    searchRef: (el) => (projectSearchRef = el),
+    onOpenChange: (open) => setPicker("projectOpen", open),
+    onSelect: selectProject,
   }))
   const agentControlState = createMemo<ComposerAgentControlState>(() => ({
     title: language.t("command.agent.cycle"),
@@ -2028,6 +2008,10 @@ type ComposerPickerItemState = {
   icon: IconProps["name"]
   label: string
   selected?: boolean
+  active?: boolean
+  optionId?: string
+  optionKey?: string
+  onHighlight?: () => void
   onSelect: () => void
 }
 
@@ -2037,22 +2021,24 @@ type ComposerPickerTriggerState = {
   label: string
   class?: string
   style: JSX.CSSProperties | undefined
-  onPress: () => void
+  open?: boolean
+  onPress?: () => void
 }
+
+type ComposerPickerProject = PromptInputControls["projects"]["available"][number]
 
 type ComposerPickerState = {
   open: boolean
   trigger: ComposerPickerTriggerState
-  search: string
+  projects: ComposerPickerProject[]
+  selectedWorktree?: string
+  projectLabel: (project: ComposerPickerProject) => string
   searchPlaceholder: string
   clearLabel: string
-  items: ComposerPickerItemState[]
   action: ComposerPickerItemState
   listClass?: string
-  searchRef: (el: HTMLInputElement) => void
   onOpenChange: (open: boolean) => void
-  onSearchInput: (value: string) => void
-  onSearchClear: () => void
+  onSelect: (worktree: string) => void
 }
 
 type ComposerAgentControlState = {
@@ -2078,15 +2064,20 @@ type ComposerModelControlState = {
 }
 
 function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: ComposerPickerTriggerState }) {
-  const [local, rest] = splitProps(props, ["state", "class", "style", "onClick"])
+  const [local, rest] = splitProps(props, ["state", "class", "classList", "style", "onClick"])
   return (
     <button
       {...rest}
       data-action={local.state.action}
       type="button"
-      class={`flex h-7 min-w-0 items-center gap-1.5 rounded px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
+      class={`flex h-7 min-w-0 items-center gap-1.5 rounded-[4px] px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
+      classList={{
+        ...local.classList,
+        "hover:bg-v2-overlay-simple-overlay-hover": !local.state.open,
+        "bg-v2-overlay-simple-overlay-pressed": !!local.state.open,
+      }}
       style={local.state.style}
-      onClick={() => local.state.onPress()}
+      onClick={local.onClick ?? (() => local.state.onPress?.())}
     >
       <Show when={local.state.icon}>
         {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
@@ -2101,59 +2092,201 @@ function ComposerPickerMenuItem(props: { state: ComposerPickerItemState }) {
   return (
     <button
       type="button"
-      class="flex h-7 w-full items-center gap-2 rounded px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      id={props.state.optionId}
+      data-option-key={props.state.optionKey}
+      role={props.state.optionId ? "option" : undefined}
+      aria-selected={props.state.optionId ? props.state.active : undefined}
+      class="flex h-7 w-full items-center gap-2 rounded-[4px] px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      classList={{
+        "bg-v2-overlay-simple-overlay-hover": !!props.state.active,
+      }}
+      onMouseEnter={() => props.state.onHighlight?.()}
       onClick={props.state.onSelect}
     >
       <Icon name={props.state.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
       <span class="min-w-0 flex-1 truncate leading-5">{props.state.label}</span>
       <Show when={props.state.selected}>
-        <Icon name="check-small" size="small" class="shrink-0 text-v2-icon-icon-base" />
+        <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
       </Show>
     </button>
   )
 }
 
+const COMPOSER_PICKER_LISTBOX_ID = "composer-picker-listbox"
+const COMPOSER_PICKER_ACTION_KEY = "action"
+
+function composerPickerOptionId(key: string) {
+  if (key === COMPOSER_PICKER_ACTION_KEY) return "composer-picker-option-action"
+  return `composer-picker-option-${encodeURIComponent(key)}`
+}
+
 function ComposerPicker(props: { state: ComposerPickerState }) {
+  let searchRef: HTMLInputElement | undefined
+  let listRef: HTMLDivElement | undefined
+  const [search, setSearch] = createSignal("")
+  const [active, setActive] = createSignal("")
+
+  const items = createMemo(() => {
+    const query = search().trim().toLowerCase()
+    if (!query) return props.state.projects
+    return props.state.projects.filter((project) => props.state.projectLabel(project).toLowerCase().includes(query))
+  })
+
+  const navigableKeys = createMemo(() => [...items().map((project) => project.worktree), COMPOSER_PICKER_ACTION_KEY])
+
+  const syncActive = (keys: string[]) => {
+    if (keys.length === 0) {
+      setActive("")
+      return
+    }
+    if (!keys.includes(active())) setActive(keys[0])
+  }
+
+  createEffect(() => syncActive(navigableKeys()))
+
+  createEffect(
+    on(
+      () => props.state.open,
+      (open) => {
+        if (open) {
+          requestAnimationFrame(() => searchRef?.focus())
+          return
+        }
+        setSearch("")
+        setActive("")
+      },
+    ),
+  )
+
+  const scrollActiveIntoView = () => {
+    const key = active()
+    if (!key || !listRef) return
+    const element = listRef.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(key)}"]`)
+    element?.scrollIntoView({ block: "nearest" })
+  }
+
+  const moveActive = (delta: number) => {
+    const keys = navigableKeys()
+    if (keys.length === 0) return
+    const index = keys.indexOf(active())
+    const start = index === -1 ? 0 : index
+    const next = (start + delta + keys.length) % keys.length
+    setActive(keys[next])
+    scrollActiveIntoView()
+  }
+
+  const selectActive = () => {
+    const key = active()
+    if (!key) return
+    if (key === COMPOSER_PICKER_ACTION_KEY) {
+      props.state.action.onSelect()
+      return
+    }
+    props.state.onSelect(key)
+  }
+
   return (
     <KobaltePopover
       open={props.state.open}
       placement="bottom-start"
       gutter={4}
+      shift={-6}
       modal={false}
       onOpenChange={props.state.onOpenChange}
     >
-      <KobaltePopover.Trigger as={ComposerPickerTrigger} state={props.state.trigger} />
+      <KobaltePopover.Trigger
+        as={ComposerPickerTrigger}
+        state={{ ...props.state.trigger, open: props.state.open }}
+      />
       <KobaltePopover.Portal>
         <KobaltePopover.Content
           class="w-[243px] overflow-hidden rounded-md bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div class={`flex flex-col p-0.5 ${props.state.listClass ?? ""}`}>
-            <div class="flex h-7 items-center gap-2 rounded px-3 text-v2-icon-icon-muted">
+            <div class="flex h-7 items-center gap-2 rounded-[4px] pl-3 pr-2.5 text-v2-icon-icon-muted">
               <Icon name="magnifying-glass" size="small" class="shrink-0" />
               <input
-                ref={props.state.searchRef}
-                value={props.state.search}
+                ref={searchRef}
+                value={search()}
                 placeholder={props.state.searchPlaceholder}
+                aria-autocomplete="list"
+                aria-controls={COMPOSER_PICKER_LISTBOX_ID}
+                aria-activedescendant={active() ? composerPickerOptionId(active()) : undefined}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => props.state.onSearchInput(event.currentTarget.value)}
+                onInput={(event) => setSearch(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault()
+                    props.state.onOpenChange(false)
+                    return
+                  }
+                  if (navigableKeys().length === 0) return
+                  if (event.altKey || event.metaKey) return
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault()
+                    moveActive(1)
+                    return
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault()
+                    moveActive(-1)
+                    return
+                  }
+                  if (event.key === "Enter" && !event.isComposing) {
+                    event.preventDefault()
+                    selectActive()
+                  }
+                }}
               />
-              <Show when={props.state.search.trim()}>
+              <Show when={search().trim()}>
                 <button
                   type="button"
-                  class="flex size-5 items-center justify-center rounded text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
-                  onClick={props.state.onSearchClear}
+                  class="flex size-5 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  onClick={() => {
+                    setSearch("")
+                    queueMicrotask(() => searchRef?.focus())
+                  }}
                   aria-label={props.state.clearLabel}
                 >
                   <Icon name="close-small" size="small" />
                 </button>
               </Show>
             </div>
-            <For each={props.state.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col p-0.5">
-            <ComposerPickerMenuItem state={props.state.action} />
+          <div ref={listRef} id={COMPOSER_PICKER_LISTBOX_ID} role="listbox" class="flex flex-col">
+            <div class="flex flex-col p-0.5">
+              <For each={items()}>
+                {(project) => (
+                  <ComposerPickerMenuItem
+                    state={{
+                      icon: "folder",
+                      label: props.state.projectLabel(project),
+                      selected: props.state.selectedWorktree === project.worktree,
+                      active: active() === project.worktree,
+                      optionId: composerPickerOptionId(project.worktree),
+                      optionKey: project.worktree,
+                      onHighlight: () => setActive(project.worktree),
+                      onSelect: () => props.state.onSelect(project.worktree),
+                    }}
+                  />
+                )}
+              </For>
+            </div>
+            <div class="h-px bg-v2-border-border-muted" />
+            <div class="flex flex-col p-0.5">
+              <ComposerPickerMenuItem
+                state={{
+                  icon: props.state.action.icon,
+                  label: props.state.action.label,
+                  onSelect: props.state.action.onSelect,
+                  active: active() === COMPOSER_PICKER_ACTION_KEY,
+                  optionId: composerPickerOptionId(COMPOSER_PICKER_ACTION_KEY),
+                  optionKey: COMPOSER_PICKER_ACTION_KEY,
+                  onHighlight: () => setActive(COMPOSER_PICKER_ACTION_KEY),
+                }}
+              />
+            </div>
           </div>
         </KobaltePopover.Content>
       </KobaltePopover.Portal>
