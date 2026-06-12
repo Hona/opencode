@@ -34,11 +34,13 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs, type Tab } from "@/context/tabs"
+import "./titlebar.css"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -436,17 +438,20 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 />
 
                 <div
+                  data-slot="titlebar-tabs-scroll"
                   class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                  ref={tabScrollRef}
+                  ref={(el) => {
+                    tabScrollRef = el
+                    createResizeObserver(el, refreshTabsAreOverflowing)
+                  }}
                 >
-                  <div class="flex min-w-0 flex-row items-center gap-1.5">
+                  <div
+                    class="flex min-w-0 flex-row items-center gap-1.5"
+                    ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                  >
                     <For each={tabsStore}>
                       {(tab, i) => {
                         let ref!: HTMLDivElement
-
-                        onMount(() => {
-                          refreshTabsAreOverflowing()
-                        })
 
                         const divider = () =>
                           i() !== 0 && (

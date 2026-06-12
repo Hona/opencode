@@ -1,0 +1,49 @@
+@property --titlebar-tab-fade-left {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --titlebar-tab-fade-right {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes titlebar-tab-fade-left {
+  from {
+    --titlebar-tab-fade-left: 0px;
+  }
+  to {
+    --titlebar-tab-fade-left: 24px;
+  }
+}
+
+@keyframes titlebar-tab-fade-right {
+  from {
+    --titlebar-tab-fade-right: 24px;
+  }
+  to {
+    --titlebar-tab-fade-right: 0px;
+  }
+}
+
+/* Scroll position drives the edge fades: the left fade is on at full width past
+   1px of scroll, the right fade turns off within 1px of the end. When the strip
+   does not overflow the timeline is inactive, the animations apply nothing, and
+   the initial 0px values make the mask a no-op. */
+[data-slot="titlebar-tabs-scroll"] {
+  mask: linear-gradient(
+    to right,
+    #0000,
+    #ffff var(--titlebar-tab-fade-left),
+    #ffff calc(100% - var(--titlebar-tab-fade-right)),
+    #0000
+  );
+  animation:
+    titlebar-tab-fade-left linear both,
+    titlebar-tab-fade-right linear both;
+  animation-timeline: --titlebar-tabs-scroll, --titlebar-tabs-scroll;
+  animation-range: 0 1px, calc(100% - 1px) 100%;
+  scroll-timeline: --titlebar-tabs-scroll x;
+}
