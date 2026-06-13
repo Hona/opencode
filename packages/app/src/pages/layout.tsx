@@ -997,13 +997,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.sidebar.toggle"),
         category: language.t("command.category.view"),
         keybind: newDesign() ? undefined : "mod+b",
-        onSelect: () => {
-          if (newDesign()) {
-            command.trigger("home.toggle")
-            return
-          }
-          layout.sidebar.toggle()
-        },
+        onSelect: () => layout.sidebar.toggle(),
       },
       {
         id: "project.open",

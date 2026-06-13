@@ -74,9 +74,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const closing = new Set<string>()
     let recentWrite = 0
+    let recentValue: string | undefined
+
+    const recentKey = () => (recentWrite ? recentValue : recent.key)
 
     const setRecentKey = (key: string | undefined) => {
       const write = ++recentWrite
+      recentValue = key
       if (recentReady()) {
         setRecent("key", key)
         return
@@ -244,9 +248,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
       },
       select: navigateTab,
+      remember(tab: Tab) {
+        const key = tabKey(tab)
+        if (recentKey() !== key) setRecentKey(key)
+      },
       toggleHome(input: { home: boolean; current?: Tab }) {
         if (input.home) {
-          const tab = store.find((tab) => tabKey(tab) === recent.key)
+          const tab = store.find((tab) => tabKey(tab) === recentKey())
           if (tab) navigateTab(tab)
           return
         }

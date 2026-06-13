@@ -298,7 +298,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
-              if (tab) return
+              if (tab) {
+                tabs.remember(tab)
+                return
+              }
 
               if (route.type === "session") {
                 const sync = serverSync.createDirSyncContext(route.dir)
@@ -330,7 +333,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 category: language.t("command.category.view"),
                 keybind: "mod+b",
                 hidden: true,
-                disabled: !tabs.recentReady(),
                 onSelect: toggleHome,
               },
             ])
@@ -447,7 +449,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     icon={<IconV2 name="grid-plus" />}
                     state={layout.route().type === "home" ? "pressed" : undefined}
                     onClick={toggleHome}
-                    disabled={!tabs.recentReady()}
                     aria-label={language.t("home.title")}
                     aria-pressed={layout.route().type === "home"}
                   />
