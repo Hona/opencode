@@ -153,6 +153,17 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
+    const showNavigation = withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation)
+    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
+    const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
+    const showTerminal = withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal)
+    const showCustomAgents = withFallback(
+      () => store.general?.showCustomAgents,
+      defaultSettings.general.showCustomAgents,
+    )
+    const newLayoutDesigns = withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault)
+    const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
 
     createEffect(() => {
       if (typeof document === "undefined") return
@@ -187,23 +198,23 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFollowup(value: "queue" | "steer") {
           setStore("general", "followup", value === "queue" ? "steer" : value)
         },
-        showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
+        showFileTree,
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
         },
-        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
+        showNavigation,
         setShowNavigation(value: boolean) {
           setStore("general", "showNavigation", value)
         },
-        showSearch: withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch),
+        showSearch,
         setShowSearch(value: boolean) {
           setStore("general", "showSearch", value)
         },
-        showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
+        showStatus,
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
-        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
+        showTerminal,
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
@@ -235,14 +246,22 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowSessionProgressBar(value: boolean) {
           setStore("general", "showSessionProgressBar", value)
         },
-        showCustomAgents: withFallback(() => store.general?.showCustomAgents, defaultSettings.general.showCustomAgents),
+        showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
-        newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
+        newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
         },
+      },
+      visibility: {
+        fileTree: visible(showFileTree),
+        navigation: visible(showNavigation),
+        search: visible(showSearch),
+        status: visible(showStatus),
+        terminal: visible(showTerminal),
+        customAgents: visible(showCustomAgents),
       },
       appearance: {
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
