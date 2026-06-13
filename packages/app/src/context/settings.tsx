@@ -154,10 +154,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
-    const showNavigation = withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
-    const showTerminal = withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal)
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
@@ -202,7 +200,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
         },
-        showNavigation,
+        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
         setShowNavigation(value: boolean) {
           setStore("general", "showNavigation", value)
         },
@@ -214,7 +212,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
-        showTerminal,
+        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
@@ -257,10 +255,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       },
       visibility: {
         fileTree: visible(showFileTree),
-        navigation: visible(showNavigation),
         search: visible(showSearch),
         status: visible(showStatus),
-        terminal: visible(showTerminal),
         customAgents: visible(showCustomAgents),
       },
       appearance: {

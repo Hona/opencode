@@ -130,7 +130,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = settings.visibility.navigation
+  const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
     const installing = props.update?.installing() ?? false
     const version = props.update?.version()
