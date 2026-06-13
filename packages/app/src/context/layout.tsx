@@ -77,9 +77,15 @@ export type ReviewDiffStyle = "unified" | "split"
 
 export type LayoutRoute =
   | { type: "home" }
-  | { type: "draft"; draftID: string; server?: ServerConnection.Key }
-  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
+  | { type: "draft"; draftID: string; server: ServerConnection.Key }
+  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server: ServerConnection.Key }
+  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server: ServerConnection.Key }
+
+type ParsedLayoutRoute =
+  | { type: "home" }
+  | { type: "draft"; draftID: string }
+  | { type: "dir-new-sesssion"; dir: string; dirBase64: string }
+  | { type: "session"; dir: string; dirBase64: string; sessionId: string }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -121,7 +127,7 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
-const currentRoute = (pathname: string, search: string): LayoutRoute => {
+const currentRoute = (pathname: string, search: string): ParsedLayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
 
@@ -151,7 +157,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const server = useServer()
     const platform = usePlatform()
     const location = useLocation()
-    const route = createMemo(() => {
+    const route = createMemo<LayoutRoute>(() => {
       const value = currentRoute(location.pathname, location.search)
       if (value.type === "home") return value
       return { ...value, server: server.key }
