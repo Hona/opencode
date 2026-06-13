@@ -4,12 +4,11 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
-import { batch, createEffect, startTransition } from "solid-js"
+import { createEffect, startTransition } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
 import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
-import type { LayoutRoute } from "./layout"
 
 export type SessionTab = {
   type: "session"
@@ -28,15 +27,8 @@ export type DraftTab = {
 
 export type Tab = SessionTab | DraftTab
 
-export type SessionTabTarget = {
-  server: ServerConnection.Key
-  dirBase64: string
-  sessionID: string
-  rootSessionID: string
-}
-
-type ActiveState = {
-  active?: string
+type RecentTab = {
+  key?: string
 }
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
@@ -45,9 +37,6 @@ export const tabHref = (tab: Tab) =>
   tab.type === "draft" ? draftHref(tab.draftID) : `/${tab.dirBase64}/session/${tab.sessionId}`
 
 export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
-
-const sessionRouteKey = (server: ServerConnection.Key, dirBase64: string, sessionID: string) =>
-  `${server}\n${dirBase64}\n${sessionID}`
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
   const dirBase64 = base64Encode(session.directory)
@@ -63,140 +52,92 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   init: () => {
     const server = useServer()
     const platform = usePlatform()
-    const defaultServer = server.key
-    const [tabs, setTabs, , tabsReady] = persisted(
+    const fallback = server.key
+    const [store, setStore, _, ready] = persisted(
       {
         ...Persist.global("tabs"),
         migrate: (value: unknown) => {
           if (!Array.isArray(value)) return value
           return value.map((tab) => {
             if (!tab || typeof tab !== "object" || "server" in tab) return tab
-            return { ...tab, server: defaultServer }
+            return { ...tab, server: fallback }
           })
         },
       },
       createStore<Tab[]>([]),
     )
-    const [active, setActive, , activeReady] = persisted(Persist.global("tabs.active"), createStore<ActiveState>({}))
-    const [sessionRoutes, setSessionRoutes] = createStore<Record<string, string>>({})
-    const ready = () => tabsReady() && activeReady()
+    const [recent, setRecent, , recentReady] = persisted(Persist.global("tabs.recent"), createStore<RecentTab>({}))
 
     const params = useParams()
     const navigate = useNavigate()
     const location = useLocation()
 
     const closing = new Set<string>()
+    let recentWrite = 0
+
+    const setRecentKey = (key: string | undefined) => {
+      const write = ++recentWrite
+      if (recentReady()) {
+        setRecent("key", key)
+        return
+      }
+      void recentReady.promise?.then(() => {
+        if (write === recentWrite) setRecent("key", key)
+      })
+    }
 
     const removeDraftPersisted = (draftID: string) => {
       for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
     }
 
-    const removeSessionRoutes = (tab: string) => {
-      setSessionRoutes(
-        produce((routes) => {
-          for (const [route, target] of Object.entries(routes)) {
-            if (target === tab) delete routes[route]
-          }
-        }),
-      )
-    }
-
-    const pruneSessionRoutes = (tabs: Set<string>) => {
-      setSessionRoutes(
-        produce((routes) => {
-          for (const [route, tab] of Object.entries(routes)) {
-            if (!tabs.has(tab)) delete routes[route]
-          }
-        }),
-      )
-    }
-
-    const removeSessionRouteIDs = (input: SessionTabsRemovedDetail) => {
-      setSessionRoutes(
-        produce((routes) => {
-          for (const sessionID of input.sessionIDs) {
-            delete routes[sessionRouteKey(server.key, base64Encode(input.directory), sessionID)]
-          }
-        }),
-      )
-    }
-
     createEffect(() => {
-      if (!ready()) return
+      if (!ready() || !recentReady()) return
       const servers = new Set(server.list.map(ServerConnection.key))
-      if (tabs.every((tab) => servers.has(tab.server))) return
-      const next = tabs.filter((tab) => servers.has(tab.server))
-      setTabs(() => next)
-      if (active.active && !next.some((tab) => tabKey(tab) === active.active)) setActive("active", undefined)
-      pruneSessionRoutes(new Set(next.map(tabKey)))
+      const next = store.filter((tab) => servers.has(tab.server))
+      if (next.length !== store.length) setStore(() => next)
+      if (recent.key && !next.some((tab) => tabKey(tab) === recent.key)) setRecentKey(undefined)
     })
 
-    const navigateTab = (tab: Tab, href = tabHref(tab)) => {
+    const navigateTab = (tab: Tab) => {
+      const href = tabHref(tab)
+      setRecentKey(tabKey(tab))
       if (tab.server === server.key) {
-        batch(() => {
-          setActive("active", tabKey(tab))
-          navigate(href)
-        })
+        navigate(href)
         return
       }
       void startTransition(() => {
-        setActive("active", tabKey(tab))
         server.setActive(tab.server)
         navigate(href)
       })
     }
 
-    const current = (route: LayoutRoute) => {
-      if (route.type === "home" || route.type === "dir-new-sesssion") return
-      if (route.type === "draft") {
-        return tabs.find((tab) => tab.type === "draft" && tab.draftID === route.draftID)
-      }
-      const key = sessionRoutes[sessionRouteKey(route.server, route.dirBase64, route.sessionId)]
-      if (key) return tabs.find((tab) => tabKey(tab) === key)
-      return tabs.find(
-        (tab) =>
-          tab.type === "session" &&
-          tab.server === route.server &&
-          tab.dirBase64 === route.dirBase64 &&
-          tab.sessionId === route.sessionId,
-      )
-    }
-
-    const canToggleHome = (route: LayoutRoute) => {
-      if (!ready()) return false
-      if (route.type === "home") return true
-      return current(route) !== undefined
-    }
-
     const actions = {
-      enterSession(input: SessionTabTarget) {
-        const tab = {
-          type: "session" as const,
-          server: input.server,
-          dirBase64: input.dirBase64,
-          sessionId: input.rootSessionID,
-        }
-        const key = tabKey(tab)
-        if (closing.has(key)) return
-        batch(() => {
-          if (!tabs.some((item) => tabKey(item) === key)) setTabs(tabs.length, tab)
-          setActive("active", key)
-          setSessionRoutes(sessionRouteKey(input.server, input.dirBase64, input.sessionID), key)
-        })
+      addSessionTab: (tab: Omit<SessionTab, "type">) => {
+        const next = { type: "session" as const, ...tab }
+        if (closing.has(tabKey(next))) return
+        setStore(
+          produce((tabs) => {
+            if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+            tabs.push(next)
+          }),
+        )
       },
       draft(draftID: string) {
-        const tab = tabs.find((item) => item.type === "draft" && item.draftID === draftID)
+        const tab = store.find((item) => item.type === "draft" && item.draftID === draftID)
         if (!tab || tab.type !== "draft") throw new Error(`Draft not found: ${draftID}`)
         return tab
       },
       newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string) {
         const draftID = uuid()
-        const tab = { type: "draft" as const, draftID, ...draft }
-        setTabs(tabs.length, tab)
-        navigateTab(tab, prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
+        setStore(
+          produce((tabs) => {
+            tabs.push({ type: "draft", draftID, ...draft })
+          }),
+        )
+        navigate(prompt ? `${draftHref(draftID)}&prompt=${encodeURIComponent(prompt)}` : draftHref(draftID))
       },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
-        setTabs(
+        setStore(
           (tab) => tab.type === "draft" && tab.draftID === draftID,
           produce((tab) => Object.assign(tab, draft)),
         )
@@ -206,108 +147,118 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         // replaces the draft tab with a session tab, so the draft route would stop resolving
         // and fall back home. Navigate to the new session first so we leave /new-session
         // before the draft is removed from the store.
-        const viewing = location.pathname === "/new-session" && location.query.draftId === draftID
+        const active = location.pathname === "/new-session" && location.query.draftId === draftID
+        const next = { type: "session" as const, ...session }
         startTransition(() => {
-          batch(() => {
-            setTabs(
-              produce((tabs) => {
-                const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
-                if (index === -1) return
-                tabs[index] = { type: "session", ...session }
-              }),
-            )
-            const previous = `draft:${draftID}`
-            const next = tabKey({ type: "session", ...session })
-            if (active.active === previous) setActive("active", next)
-          })
-          if (viewing) navigateTab({ type: "session", ...session })
+          setStore(
+            produce((tabs) => {
+              const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
+              if (index !== -1) tabs[index] = next
+            }),
+          )
+          if (recent.key === `draft:${draftID}`) setRecentKey(tabKey(next))
+          if (active) navigateTab(next)
         })
         removeDraftPersisted(draftID)
       },
       removeTab: (index: number) => {
-        const tab = tabs[index]
+        const tab = store[index]
         if (!tab) return
         const key = tabKey(tab)
         const draftID = tab.type === "draft" ? tab.draftID : undefined
-        const nextTab = tabs[index + 1] ?? tabs[index - 1]
+        const nextTab = store[index + 1] ?? store[index - 1]
         closing.add(key)
         void startTransition(() => {
-          setTabs(produce((tabs) => void tabs.splice(index, 1)))
-          if (active.active === key) setActive("active", nextTab && tabKey(nextTab))
-          removeSessionRoutes(key)
+          setStore(
+            produce((tabs) => {
+              tabs.splice(index, 1)
+            }),
+          )
+          if (recent.key === key) setRecentKey(nextTab && tabKey(nextTab))
           if (nextTab) navigateTab(nextTab)
           else navigate("/")
         }).finally(() => closing.delete(key))
         if (draftID) removeDraftPersisted(draftID)
       },
       removeServer(key: ServerConnection.Key) {
-        const drafts = tabs.flatMap((tab) => (tab.type === "draft" && tab.server === key ? [tab.draftID] : []))
-        const next = tabs.filter((tab) => tab.server !== key)
-        setTabs(() => next)
-        if (active.active && !next.some((tab) => tabKey(tab) === active.active)) setActive("active", undefined)
-        pruneSessionRoutes(new Set(next.map(tabKey)))
+        const drafts = store.flatMap((tab) => (tab.type === "draft" && tab.server === key ? [tab.draftID] : []))
+        const removed = store.filter((tab) => tab.server === key).map(tabKey)
+        setStore((tabs) => tabs.filter((tab) => tab.server !== key))
+        if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
         for (const draftID of drafts) removeDraftPersisted(draftID)
         if (server.key === key) navigate("/")
       },
       removeSessions: (input: SessionTabsRemovedDetail) => {
-        const sessionIDs = new Set(input.sessionIDs)
-        const currentKey =
-          params.dir && params.id
-            ? (sessionRoutes[sessionRouteKey(server.key, params.dir, params.id)] ??
-              tabKey({ type: "session", server: server.key, dirBase64: params.dir, sessionId: params.id }))
-            : undefined
-        removeSessionRouteIDs(input)
-        const currentIndex = currentKey ? tabs.findIndex((tab) => tabKey(tab) === currentKey) : -1
-        const removed = tabs.filter(
-          (tab) =>
-            tab.type === "session" &&
-            tab.server === server.key &&
-            atob(tab.dirBase64) === input.directory &&
-            sessionIDs.has(tab.sessionId),
-        )
-        if (removed.length === 0) return
-
-        const removedKeys = new Set(removed.map(tabKey))
-        const next = tabs.filter((tab) => !removedKeys.has(tabKey(tab)))
-        const removedCurrent = !!currentKey && removedKeys.has(currentKey)
-        const nextTab = removedCurrent
-          ? (tabs.slice(currentIndex + 1).find((tab) => !removedKeys.has(tabKey(tab))) ??
-            tabs.slice(0, currentIndex).findLast((tab) => !removedKeys.has(tabKey(tab))))
-          : undefined
-
+        const removed = store
+          .filter(
+            (tab) =>
+              tab.type === "session" &&
+              tab.server === server.key &&
+              atob(tab.dirBase64) === input.directory &&
+              input.sessionIDs.includes(tab.sessionId),
+          )
+          .map(tabKey)
         void startTransition(() => {
-          batch(() => {
-            setTabs(() => next)
-            if (active.active && removedKeys.has(active.active))
-              setActive("active", nextTab ? tabKey(nextTab) : undefined)
-            pruneSessionRoutes(new Set(next.map(tabKey)))
-          })
-          if (nextTab) navigateTab(nextTab)
-          if (removedCurrent && !nextTab) navigate("/")
+          setStore(
+            produce((tabs) => {
+              const sessionIDs = new Set(input.sessionIDs)
+              const currentHref =
+                params.dir && params.id
+                  ? tabHref({
+                      type: "session",
+                      server: server.key,
+                      dirBase64: params.dir,
+                      sessionId: params.id,
+                    })
+                  : undefined
+              const currentIndex = currentHref
+                ? tabs.findIndex(
+                    (tab) => tab.type === "session" && tab.server === server.key && tabHref(tab) === currentHref,
+                  )
+                : -1
+              const currentTab = tabs[currentIndex]
+              const removedCurrent =
+                currentTab?.type === "session" &&
+                currentTab.server === server.key &&
+                atob(currentTab.dirBase64) === input.directory &&
+                sessionIDs.has(currentTab.sessionId)
+
+              for (let i = tabs.length - 1; i >= 0; i--) {
+                const tab = tabs[i]
+                if (!tab || tab.type !== "session") continue
+                if (tab.server !== server.key) continue
+                if (atob(tab.dirBase64) !== input.directory) continue
+                if (!sessionIDs.has(tab.sessionId)) continue
+                tabs.splice(i, 1)
+              }
+
+              if (!removedCurrent) return
+              const nextTab =
+                tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
+                tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
+              if (nextTab) navigateTab(nextTab)
+              else navigate("/")
+            }),
+          )
+          if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
         })
       },
-      canToggleHome,
-      current,
       select: navigateTab,
-      toggleHome(route: LayoutRoute) {
-        if (!canToggleHome(route)) return
-        if (route.type === "home") {
-          const tab = tabs.find((tab) => tabKey(tab) === active.active)
+      toggleHome(input: { home: boolean; current?: Tab }) {
+        if (input.home) {
+          const tab = store.find((tab) => tabKey(tab) === recent.key)
           if (tab) navigateTab(tab)
           return
         }
-        const tab = current(route)
-        if (tab) setActive("active", tabKey(tab))
+        if (input.current) {
+          setRecentKey(tabKey(input.current))
+          navigate("/")
+          return
+        }
         navigate("/")
       },
     }
 
-    return {
-      ...actions,
-      get store() {
-        return tabs
-      },
-      ready,
-    }
+    return { ...actions, store, ready, recentReady }
   },
 })

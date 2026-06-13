@@ -29,7 +29,7 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
-import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -44,7 +44,6 @@ import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { useTabs, type SessionTabTarget } from "@/context/tabs"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
@@ -58,7 +57,7 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { ServerConnection, useServer } from "@/context/server"
+import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -70,7 +69,6 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
-import { retry } from "@opencode-ai/core/util/retry"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 
 const emptyUserMessages: UserMessage[] = []
@@ -80,21 +78,6 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
-
-function SessionTabEntry(props: { session: SessionTabTarget }) {
-  const tabs = useTabs()
-  return (
-    <Show when={tabs.ready()}>
-      <SessionTabCommit session={props.session} />
-    </Show>
-  )
-}
-
-function SessionTabCommit(props: { session: SessionTabTarget }) {
-  const tabs = useTabs()
-  onMount(() => tabs.enterSession(props.session))
-  return null
-}
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -649,8 +632,8 @@ export default function Page() {
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   const [sessionSync] = createResource(
-    () => [sdk.directory, params.id, server.key, settings.general.newLayoutDesigns()] as const,
-    async ([directory, id, server, v2]) => {
+    () => [sdk.directory, params.id] as const,
+    ([directory, id]) => {
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
@@ -677,32 +660,7 @@ export default function Page() {
         }, 0)
       })
 
-      await sync.session.sync(id)
-      if (!v2) return
-      const session = sync.session.get(id)
-      if (!session) return
-
-      const seen = new Set([session.id])
-      let root = session
-      while (root.parentID) {
-        const parentID = root.parentID
-        if (seen.has(parentID)) return
-        seen.add(parentID)
-        const parent =
-          sync.session.get(parentID) ??
-          (await retry(() => sdk.client.session.get({ sessionID: parentID }))
-            .then((result) => result.data)
-            .catch(() => undefined))
-        if (!parent) return
-        root = parent
-      }
-
-      return {
-        server,
-        dirBase64: base64Encode(root.directory),
-        sessionID: id,
-        rootSessionID: root.id,
-      }
+      return sync.session.sync(id)
     },
   )
 
@@ -1759,9 +1717,7 @@ export default function Page() {
 
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
-      <Show when={sessionSync()} keyed>
-        {(session) => <SessionTabEntry session={session} />}
-      </Show>
+      {sessionSync() ?? ""}
       <SessionHeader />
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row "

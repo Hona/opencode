@@ -22,13 +22,14 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
-import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, LayoutRoute, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
+import { useServerSync } from "@/context/server-sync"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
@@ -39,7 +40,7 @@ import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/comp
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
-import { tabHref, useTabs } from "@/context/tabs"
+import { tabHref, useTabs, type Tab } from "@/context/tabs"
 import "./titlebar.css"
 
 type TauriDesktopWindow = {
@@ -251,6 +252,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
+            const serverSync = useServerSync()
             const navigate = useNavigate()
             const layout = useLayout()
 
@@ -264,17 +266,62 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             }
 
             const tabs = useTabs()
-            const currentTab = () => tabs.current(layout.route())
+            const tabsStore = tabs.store
+            const tabsStoreActions = tabs
+
+            const matchRoute = (route: LayoutRoute) => {
+              if (route.type === "home") return
+              if (route.type === "draft") {
+                return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
+              }
+              if (route.type === "session") {
+                const main = tabsStore.find(
+                  (item) =>
+                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                )
+                if (main) return main
+                const sync = serverSync.createDirSyncContext(route.dir)
+                const session = sync.session.get(route.sessionId)
+                if (session?.parentID) {
+                  const parentID = session.parentID
+                  const parent = tabsStore.find(
+                    (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
+                  )
+                  if (parent) return parent
+                }
+              }
+            }
+
+            const currentTab = () => matchRoute(layout.route())
+
+            createEffect(() => {
+              const route = layout.route()
+              if (!tabs.ready()) return
+              const tab = currentTab()
+              if (tab) return
+
+              if (route.type === "session") {
+                const sync = serverSync.createDirSyncContext(route.dir)
+                const session = sync.session.get(route.sessionId)
+                if (!session) return
+                const sessionId = session.parentID ?? session.id
+                const next = {
+                  server: route.server ?? server.key,
+                  dirBase64: route.dirBase64,
+                  sessionId,
+                }
+                tabsStoreActions.addSessionTab(next)
+              }
+            })
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
               if (!detail) return
-              tabs.removeSessions(detail)
+              tabsStoreActions.removeSessions(detail)
             })
 
             const openNewTab = () => navigate(newSessionHref())
-            const toggleHome = () => tabs.toggleHome(layout.route())
-            const canToggleHome = () => tabs.canToggleHome(layout.route())
+            const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
             command.register("titlebar-home", () => [
               {
@@ -283,7 +330,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 category: language.t("command.category.view"),
                 keybind: "mod+b",
                 hidden: true,
-                disabled: !canToggleHome(),
+                disabled: !tabs.recentReady(),
                 onSelect: toggleHome,
               },
             ])
@@ -307,7 +354,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: "mod+w",
                   hidden: true,
                   onSelect: () => {
-                    tabs.removeTab(tabs.store.findIndex((tab) => current === tab))
+                    tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
                   },
                 },
                 {
@@ -317,13 +364,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowLeft`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabs.store.findIndex((tab) => tab === currentTab())
+                    let index = tabsStore.findIndex((tab) => tab === currentTab())
                     if (index === -1) return
 
                     index -= 1
-                    if (index === -1) index = tabs.store.length - 1
+                    if (index === -1) index = tabsStore.length - 1
 
-                    const next = tabs.store[index]
+                    const next = tabsStore[index]
                     if (next) tabs.select(next)
                   },
                 },
@@ -334,13 +381,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowRight`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabs.store.findIndex((tab) => tab === currentTab())
+                    let index = tabsStore.findIndex((tab) => tab === currentTab())
                     if (index === -1) return
 
                     index += 1
-                    if (index === tabs.store.length) index = 0
+                    if (index === tabsStore.length) index = 0
 
-                    const next = tabs.store[index]
+                    const next = tabsStore[index]
                     if (next) tabs.select(next)
                   },
                 },
@@ -355,7 +402,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     disabled: layout.projects.list().length <= index,
                     hidden: true,
                     onSelect: () => {
-                      const tab = tabs.store[index]
+                      const tab = tabsStore[index]
                       if (tab) tabs.select(tab)
                     },
                   }
@@ -400,7 +447,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     icon={<IconV2 name="grid-plus" />}
                     state={layout.route().type === "home" ? "pressed" : undefined}
                     onClick={toggleHome}
-                    disabled={!canToggleHome()}
+                    disabled={!tabs.recentReady()}
                     aria-label={language.t("home.title")}
                     aria-pressed={layout.route().type === "home"}
                   />
@@ -419,7 +466,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       class="flex min-w-0 flex-row items-center gap-1.5"
                       ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
                     >
-                      <For each={tabs.store}>
+                      <For each={tabsStore}>
                         {(tab, i) => {
                           let ref!: HTMLDivElement
 
@@ -441,7 +488,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                                     tabs.select(tab)
                                     ref.scrollIntoView({ behavior: "instant" })
                                   }}
-                                  onClose={() => tabs.removeTab(i())}
+                                  onClose={() => tabsStoreActions.removeTab(i())}
                                 />
                               </>
                             )
@@ -461,7 +508,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                                   ref.scrollIntoView({ behavior: "instant" })
                                 }}
-                                onClose={() => tabs.removeTab(i())}
+                                onClose={() => tabsStoreActions.removeTab(i())}
                                 active={currentTab() === tab}
                                 activeServer={tab.server === server.key}
                                 forceTruncate={tabsAreOverflowing()}
@@ -486,7 +533,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                                 href={`/${params.dir}/session`}
                                 title={language.t("command.session.new")}
                                 onClose={() => {
-                                  const tab = tabs.store.at(-1)
+                                  const tab = tabsStore.at(-1)
                                   if (tab) tabs.select(tab)
                                   else navigate("/")
                                 }}

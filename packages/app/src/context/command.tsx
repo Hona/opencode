@@ -217,11 +217,8 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
 export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string): string[] {
   if (!config || config === "none") return []
-
-  const keybinds = parseKeybind(config)
-  if (keybinds.length === 0) return []
-
-  return displayKeybindParts(keybinds[0], t)
+  const keybind = parseKeybind(config)[0]
+  return keybind ? displayKeybindParts(keybind, t) : []
 }
 
 export function formatKeybind(config: string, t?: (key: KeyLabel) => string): string {
@@ -413,12 +410,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const keybindConfig = (id: string) => {
       if (id === PALETTE_ID) return settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
-
       const base = actionId(id)
-      const option = options().find((x) => actionId(x.id) === base)
-      if (option?.keybind) return option.keybind
-
-      return bind(base, catalog[base]?.keybind)
+      return options().find((x) => actionId(x.id) === base)?.keybind ?? bind(base, catalog[base]?.keybind)
     }
 
     return {
@@ -433,8 +426,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       keybindParts(id: string) {
         const config = keybindConfig(id)
-        if (!config) return []
-        return formatKeybindParts(config, language.t)
+        return config ? formatKeybindParts(config, language.t) : []
       },
       show: showPalette,
       keybinds(enabled: boolean) {
