@@ -14,6 +14,7 @@ import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
@@ -26,6 +27,7 @@ export function TerminalPanel() {
   const terminal = useTerminal()
   const language = useLanguage()
   const command = useCommand()
+  const settings = useSettings()
   const { params, workspaceKey, view } = useSessionLayout()
 
   const opened = createMemo(() => view().terminal.opened())
@@ -207,7 +209,9 @@ export function TerminalPanel() {
     >
       <div class="hidden md:block" onPointerDown={() => size.start()}>
         <ResizeHandle
-          class="-top-1"
+          classList={{
+            "-top-1": settings.general.newLayoutDesigns(),
+          }}
           direction="vertical"
           size={pane()}
           min={100}
