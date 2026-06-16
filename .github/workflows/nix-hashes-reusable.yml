@@ -1,0 +1,150 @@
+name: reusable-nix-hashes
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "Branch to update"
+        required: true
+        type: string
+      bundle-artifact:
+        description: "Optional artifact containing an unpushed branch bundle"
+        required: false
+        type: string
+        default: ""
+      bundle-base:
+        description: "Base branch required by the branch bundle"
+        required: false
+        type: string
+        default: ""
+      artifact-prefix:
+        description: "Unique prefix for matrix artifacts"
+        required: false
+        type: string
+        default: "hash"
+      force:
+        description: "Force push the updated branch"
+        required: false
+        type: boolean
+        default: false
+      opencode-app-id:
+        description: "OpenCode GitHub App ID"
+        required: true
+        type: string
+    secrets:
+      opencode-app-secret:
+        description: "OpenCode GitHub App private key"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  compute:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - system: aarch64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+          - system: x86_64-darwin
+            runner: macos-15-intel
+          - system: aarch64-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Download branch bundle
+        if: inputs.bundle-artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.bundle-artifact }}
+
+      - name: Checkout bundled branch
+        if: inputs.bundle-artifact != ''
+        env:
+          BASE: ${{ inputs.bundle-base }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ -n "$BASE" ]; then
+            git fetch origin "$BASE"
+          fi
+          git fetch "${BRANCH}.bundle" "${BRANCH}:refs/heads/${BRANCH}"
+          git checkout "$BRANCH"
+
+      - name: Compute Nix hash
+        uses: ./.github/actions/nix-hashes
+        with:
+          operation: compute
+          system: ${{ matrix.system }}
+          artifact-prefix: ${{ inputs.artifact-prefix }}
+
+  update:
+    needs: compute
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git Committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ inputs.opencode-app-id }}
+          opencode-app-secret: ${{ secrets.opencode-app-secret }}
+
+      - name: Download branch bundle
+        if: inputs.bundle-artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.bundle-artifact }}
+
+      - name: Checkout branch
+        env:
+          BASE: ${{ inputs.bundle-base }}
+          BRANCH: ${{ inputs.branch }}
+          BUNDLE_ARTIFACT: ${{ inputs.bundle-artifact }}
+        run: |
+          if [ -n "$BUNDLE_ARTIFACT" ]; then
+            if [ -n "$BASE" ]; then
+              git fetch origin "$BASE"
+            fi
+            git fetch "${BRANCH}.bundle" "${BRANCH}:refs/heads/${BRANCH}"
+            git checkout "$BRANCH"
+            exit 0
+          fi
+
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+      - name: Update Nix hashes
+        uses: ./.github/actions/nix-hashes
+        with:
+          operation: update
+          artifact-prefix: ${{ inputs.artifact-prefix }}
+
+      - name: Commit and push hashes
+        env:
+          BRANCH: ${{ inputs.branch }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          HASH_FILE="nix/hashes.json"
+          if [ -n "$(git status --short -- "$HASH_FILE")" ]; then
+            git add "$HASH_FILE"
+            git commit -m "chore: update nix node_modules hashes"
+          fi
+
+          if [ "$FORCE" = "true" ]; then
+            git push origin "$BRANCH" --force --no-verify
+            exit 0
+          fi
+
+          git pull --rebase --autostash origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"

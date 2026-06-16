@@ -18,6 +18,11 @@ interface FailedPR {
   reason: string
 }
 
+async function setChanged(value: boolean) {
+  if (!process.env.GITHUB_OUTPUT) return
+  await fs.appendFile(process.env.GITHUB_OUTPUT, `changed=${value}\n`)
+}
+
 async function commentOnPR(prNumber: number, reason: string) {
   const body = `⚠️ **Blocking Beta Release**
 
@@ -217,6 +222,7 @@ async function smoke(prs: PR[], applied: number[]) {
 }
 
 async function main() {
+  await setChanged(false)
   console.log("Fetching open PRs with beta label...")
 
   const stdout =
@@ -345,6 +351,13 @@ async function main() {
     } else {
       console.log("Validated beta branch now matches remote contents, no push needed")
     }
+    return
+  }
+
+  await setChanged(true)
+
+  if (process.env.BETA_PUSH === "false") {
+    console.log("Validated beta branch is ready to push")
     return
   }
 

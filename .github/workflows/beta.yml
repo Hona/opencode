@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: "0 * * * *"
 
+concurrency:
+  group: beta
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -31,7 +35,40 @@ jobs:
         run: bun i -g opencode-ai
 
       - name: Sync beta branch
+        id: sync
         env:
+          BETA_PUSH: "false"
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: bun script/beta.ts
+
+      - name: Bundle beta branch
+        if: steps.sync.outputs.changed == 'true'
+        run: git bundle create beta.bundle beta ^origin/dev
+
+      - name: Upload beta branch
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: beta-branch
+          path: beta.bundle
+          retention-days: 1
+
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+
+  update-hashes:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/nix-hashes-reusable.yml
+    with:
+      branch: beta
+      bundle-artifact: beta-branch
+      bundle-base: dev
+      artifact-prefix: beta-hash
+      force: true
+      opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+    secrets:
+      opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}

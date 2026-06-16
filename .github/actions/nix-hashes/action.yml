@@ -1,0 +1,87 @@
+name: "Nix Hashes"
+description: "Compute or collect native node_modules hashes"
+inputs:
+  operation:
+    description: "Operation to perform: compute or update"
+    required: true
+  system:
+    description: "Nix system to compute a hash for"
+    required: false
+  artifact-prefix:
+    description: "Prefix used for hash artifacts"
+    required: false
+    default: "hash"
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Nix
+      if: inputs.operation == 'compute'
+      uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
+
+    - name: Compute node_modules hash
+      if: inputs.operation == 'compute'
+      shell: bash
+      env:
+        SYSTEM: ${{ inputs.system }}
+      run: |
+        set -euo pipefail
+
+        BUILD_LOG=$(mktemp)
+        trap 'rm -f "$BUILD_LOG"' EXIT
+
+        HASH=""
+        MAX_ATTEMPTS=3
+        for ((ATTEMPT = 1; ATTEMPT <= MAX_ATTEMPTS; ATTEMPT++)); do
+          nix build ".#packages.${SYSTEM}.node_modules_updater" --no-link 2>&1 | tee "$BUILD_LOG" || true
+          HASH="$(nix run --inputs-from . nixpkgs#gnugrep -- -oP 'got:\s*\Ksha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | tail -n1 || true)"
+          [ -n "$HASH" ] && break
+
+          if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+            echo "::warning::Attempt ${ATTEMPT}/${MAX_ATTEMPTS} produced no hash for ${SYSTEM}; retrying in $((ATTEMPT * 10))s"
+            sleep $((ATTEMPT * 10))
+          fi
+        done
+
+        if [ -z "$HASH" ]; then
+          echo "::error::Failed to compute hash for ${SYSTEM} after ${MAX_ATTEMPTS} attempts"
+          cat "$BUILD_LOG"
+          exit 1
+        fi
+
+        echo "$HASH" > hash.txt
+        echo "Computed hash for ${SYSTEM}: $HASH"
+
+    - name: Upload hash
+      if: inputs.operation == 'compute'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.artifact-prefix }}-${{ inputs.system }}
+        path: hash.txt
+        retention-days: 1
+
+    - name: Download hashes
+      if: inputs.operation == 'update'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        path: hashes
+        pattern: ${{ inputs.artifact-prefix }}-*
+
+    - name: Update hashes.json
+      if: inputs.operation == 'update'
+      shell: bash
+      env:
+        ARTIFACT_PREFIX: ${{ inputs.artifact-prefix }}
+      run: |
+        set -euo pipefail
+
+        HASH_FILE="nix/hashes.json"
+        [ -f "$HASH_FILE" ] || echo '{"nodeModules":{}}' > "$HASH_FILE"
+
+        for SYSTEM in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
+          HASH="$(tr -d '[:space:]' < "hashes/${ARTIFACT_PREFIX}-${SYSTEM}/hash.txt")"
+          echo "${SYSTEM}: ${HASH}"
+          jq --arg sys "$SYSTEM" --arg h "$HASH" '.nodeModules[$sys] = $h' "$HASH_FILE" > tmp.json
+          mv tmp.json "$HASH_FILE"
+        done
+
+        cat "$HASH_FILE"
