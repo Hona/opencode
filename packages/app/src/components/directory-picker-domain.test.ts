@@ -3,6 +3,7 @@ import {
   absoluteTreePath,
   activeTreeNavigation,
   advanceTreePreload,
+  createDirectorySearch,
   nextSuggestionIndex,
   nextTreeScrollTop,
   pickerTreeEntries,
@@ -31,6 +32,8 @@ test("maps server directory entries into Pierre paths", () => {
 
 test("maps Pierre paths back to the selected server root", () => {
   expect(absoluteTreePath("C:/Users/luke", "src/components/")).toBe("C:/Users/luke/src/components")
+  expect(absoluteTreePath("C:/", "")).toBe("C:/")
+  expect(absoluteTreePath("C:/", "README.md")).toBe("C:/README.md")
   expect(absoluteTreePath("/home/luke", "README.md")).toBe("/home/luke/README.md")
 })
 
@@ -89,6 +92,7 @@ test("preserves POSIX case while matching Windows drives case-insensitively", ()
   expect(treePathWithin("/repo", "/repo/../tmp")).toBeFalse()
   expect(treePathWithin("/", "/src")).toBeTrue()
   expect(pickerMode("file", "C:/Repo").selection("c:/repo/src", "file.ts")).toBe("src/file.ts")
+  expect(pickerMode("file", "C:/").selection("C:/", "file.ts")).toBe("file.ts")
 })
 
 test("displays paths using the selected server path format", () => {
@@ -125,6 +129,28 @@ test("exposes autocomplete results only for their source query", () => {
 test("scopes file autocomplete to the current browser root", () => {
   expect(pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/in", "/home/luke")).toBe("src/in")
   expect(pickerFileSearchQuery("/home/luke", "~/repos/op", "/home/luke")).toBe("repos/op")
+})
+
+test("resolves directory autocomplete from the current browser root", async () => {
+  const directories: string[] = []
+  const sdk = {
+    client: {
+      find: {
+        files: (input: { directory: string }) => {
+          directories.push(input.directory)
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  let base = "/repo"
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => base })
+
+  await search("components")
+  base = "/repo/src"
+  await search("components")
+
+  expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
 test("identifies the next directory level to preload", () => {

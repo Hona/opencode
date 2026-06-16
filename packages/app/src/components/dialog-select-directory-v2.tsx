@@ -161,7 +161,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   )
   const selectionPath = createMemo(() => policy.result(root(), selected(), rootValid()) ?? "")
   const breadcrumbs = createMemo(() => pickerBreadcrumbs(root(), home()))
-  const search = createDirectorySearch({ sdk, home, start, showIgnored })
+  const search = createDirectorySearch({ sdk, home, base: () => root() || start(), showIgnored })
   const [suggestions] = createResource(input, async (value) => {
     const typed = cleanPickerInput(value).replace(/\/+$/, "")
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")
@@ -203,7 +203,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     const request =
       listings.get(key) ??
       sdk.client.file
-        .list({ directory: root(), path: key })
+        .list({ directory: absoluteTreePath(root(), key), path: "" })
         .then((result) => (result.data ?? []) as PickerNode[])
         .catch(() => undefined)
     listings.set(key, request)

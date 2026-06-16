@@ -171,7 +171,7 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   const root = insensitive ? rootPath.toLowerCase() : rootPath
   const target = insensitive ? targetPath.toLowerCase() : targetPath
   if (target === root) return ""
-  const prefix = root === "/" ? root : root + "/"
+  const prefix = root.endsWith("/") ? root : root + "/"
   if (!target.startsWith(prefix)) return
   return targetPath.slice(prefix.length)
 }
@@ -234,10 +234,11 @@ export function nextSuggestionIndex(current: number, delta: -1 | 1, count: numbe
 }
 
 export function absoluteTreePath(root: string, path: string) {
-  const base = root.replace(/\\/g, "/").replace(/\/+$/, "")
+  const base = trimPickerPath(root)
   const relative = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
   if (!relative) return base || "/"
   if (!base || base === "/") return "/" + relative
+  if (base.endsWith("/")) return base + relative
   return `${base}/${relative}`
 }
 
@@ -332,7 +333,7 @@ export function displayPickerPath(path: string, input: string, home: string) {
 
 export function createDirectorySearch(args: {
   sdk: ServerSDK
-  start: () => string | undefined
+  base: () => string | undefined
   home: () => string
   showIgnored?: () => boolean
 }) {
@@ -342,16 +343,16 @@ export function createDirectorySearch(args: {
   const showIgnored = () => args.showIgnored?.() ?? false
 
   const scoped = (value: string) => {
-    const start = args.start()
-    if (!start) return
+    const base = args.base()
+    if (!base) return
     const raw = normalizePickerDrive(value)
-    if (!raw) return { directory: trimPickerPath(start), path: "" }
+    if (!raw) return { directory: trimPickerPath(base), path: "" }
     const home = args.home()
-    if (raw === "~") return { directory: trimPickerPath(home || start), path: "" }
-    if (raw.startsWith("~/")) return { directory: trimPickerPath(home || start), path: raw.slice(2) }
+    if (raw === "~") return { directory: trimPickerPath(home || base), path: "" }
+    if (raw.startsWith("~/")) return { directory: trimPickerPath(home || base), path: raw.slice(2) }
     const root = pickerRoot(raw)
     if (root) return { directory: trimPickerPath(root), path: raw.slice(root.length) }
-    return { directory: trimPickerPath(start), path: raw }
+    return { directory: trimPickerPath(base), path: raw }
   }
 
   const loadNodes = async (directory: string) => {
