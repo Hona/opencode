@@ -32,6 +32,8 @@ test("maps server directory entries into Pierre paths", () => {
 
 test("maps Pierre paths back to the selected server root", () => {
   expect(absoluteTreePath("C:/Users/luke", "src/components/")).toBe("C:/Users/luke/src/components")
+  expect(absoluteTreePath("C:/", "")).toBe("C:/")
+  expect(absoluteTreePath("C:/", "README.md")).toBe("C:/README.md")
   expect(absoluteTreePath("/home/luke", "README.md")).toBe("/home/luke/README.md")
 })
 

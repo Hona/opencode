@@ -148,10 +148,11 @@ export function nextSuggestionIndex(current: number, delta: -1 | 1, count: numbe
 }
 
 export function absoluteTreePath(root: string, path: string) {
-  const base = root.replace(/\\/g, "/").replace(/\/+$/, "")
+  const base = trimPickerPath(root)
   const relative = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
   if (!relative) return base || "/"
   if (!base || base === "/") return "/" + relative
+  if (base.endsWith("/")) return base + relative
   return `${base}/${relative}`
 }
 
