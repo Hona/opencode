@@ -1,30 +1,26 @@
-import type { Browser, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
-import { benchmark, expect, observePerformancePage } from "../benchmark"
+import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
-import {
-  collectSessionSwitchResult,
-  installSessionSwitchProbe,
-  waitForCachedDestination,
-  waitForStableSessionSwitch,
-} from "./session-tab-switch-probe"
+import { measureSessionSwitch, waitForCachedDestination } from "./session-tab-switch-probe"
 
-type Result = Awaited<ReturnType<typeof collectSessionSwitchResult>>
+type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
 
 benchmark("benchmarks cold and hot session tab switching", async ({ browser, report }) => {
   benchmark.setTimeout(180_000)
   const results = { cold: [] as Result[], hot: [] as Result[] }
   for (const mode of ["cold", "hot"] as const) {
-    for (let run = 0; run < 5; run++) results[mode].push(await trial(browser, mode, run))
+    for (let run = 0; run < 5; run++) {
+      results[mode].push(
+        await withBenchmarkPage(browser, `session-tab-switch-${mode}-${run}`, (page) => trial(page, mode)),
+      )
+    }
   }
   report({ results, summary: summarize(results) })
 })
 
-async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
-  const context = await browser.newContext()
-  const page = await context.newPage()
-  const diagnostics = await observePerformancePage(page, `session-tab-switch-${mode}-${run}`)
+async function trial(page: Page, mode: "cold" | "hot") {
   await mockStressTimeline(page)
   await installStressSessionTabs(page)
   if (mode === "hot") {
@@ -41,14 +37,13 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
   const sourceIDs = fixture.messages[fixture.sourceID].map((message) => message.info.id)
   const lastID = fixture.expected.targetMessageIDs.at(-1)!
   const href = stressSessionHref(fixture.targetID)
-  await installSessionSwitchProbe(page, { destinationIDs, sourceIDs, lastID, href })
-
-  await switchSession(page, fixture.targetID, fixture.expected.targetTitle)
-  await waitForStableSessionSwitch(page)
-  const result = await collectSessionSwitchResult(page)
-  const trace = await diagnostics.stop()
-  if (trace) console.log(`TRACE ${trace}`)
-  await context.close()
+  const result = await measureSessionSwitch(page, {
+    destinationIDs,
+    sourceIDs,
+    lastID,
+    href,
+    switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
+  })
   return result
 }
 

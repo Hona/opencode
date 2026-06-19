@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { mockOpenCodeServer } from "../../utils/mock-server"
-import { installProjectStorage, sessionHref } from "../performance-page"
 import { fixture } from "./session-timeline-stress.fixture"
 
 export async function installTimelineSettings(page: Page) {
@@ -31,9 +30,15 @@ export function mockStressTimeline(page: Page) {
 }
 
 export async function installStressSessionTabs(page: Page) {
-  await installProjectStorage(page, fixture.directory)
   await page.addInitScript(
-    ({ sourceID, targetID, dirBase64 }) => {
+    ({ directory, sourceID, targetID, dirBase64 }) => {
+      localStorage.setItem(
+        "opencode.global.dat:server",
+        JSON.stringify({
+          projects: { local: [{ worktree: directory, expanded: true }] },
+          lastProject: { local: directory },
+        }),
+      )
       localStorage.setItem(
         "opencode.global.dat:tabs",
         JSON.stringify(
@@ -46,10 +51,15 @@ export async function installStressSessionTabs(page: Page) {
         ),
       )
     },
-    { sourceID: fixture.sourceID, targetID: fixture.targetID, dirBase64: base64Encode(fixture.directory) },
+    {
+      directory: fixture.directory,
+      sourceID: fixture.sourceID,
+      targetID: fixture.targetID,
+      dirBase64: base64Encode(fixture.directory),
+    },
   )
 }
 
 export function stressSessionHref(sessionID: string) {
-  return sessionHref(fixture.directory, sessionID)
+  return `/${base64Encode(fixture.directory)}/session/${sessionID}`
 }

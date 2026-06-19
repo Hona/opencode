@@ -21,7 +21,7 @@ The suite contains:
 - cached session repaint and mutation tracing
 - streaming timeline FPS, frame-gap, long-task, geometry, and remount diagnostics
 
-All benchmarks import the shared `benchmark` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that create additional browser contexts use the same `observePerformancePage` helper.
+All benchmarks import the shared `benchmark` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that need isolated browser contexts use `withBenchmarkPage`, which owns the context and the same diagnostics lifecycle.
 
 New benchmarks should look like normal Playwright tests:
 
@@ -34,7 +34,7 @@ benchmark("measures one interaction", async ({ page, report }) => {
 })
 ```
 
-The fixture automatically names and closes traces, captures navigation history, attaches that history when a test fails, and emits metrics as a consistent `BENCHMARK` JSON line.
+The fixture requires every benchmark to call `report()`, automatically names and closes traces, captures navigation history, attaches that history when a test fails, and emits metrics as a consistent `BENCHMARK` JSON line.
 
 ```text
 BENCHMARK {"name":"...","context":{"project":"chromium","platform":"darwin"},"metrics":{...}}

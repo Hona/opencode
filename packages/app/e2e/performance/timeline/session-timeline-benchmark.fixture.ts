@@ -127,8 +127,10 @@ export async function setupTimelineBenchmark(page: Page, options: { historyTurns
   await page.setViewportSize({ width: 1366, height: 768 })
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
   const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, title)
+  await expectAppVisible(scroller)
   return {
-    navigationURL: `/${base64Encode(directory)}/session/${sessionID}`,
     scroller,
     text,
     transport: {
@@ -141,10 +143,6 @@ export async function setupTimelineBenchmark(page: Page, options: { historyTurns
       releaseAll() {
         eventBatch = events.length
       },
-    },
-    async expectReady() {
-      await expectSessionTitle(page, title)
-      await expectAppVisible(scroller)
     },
     async scrollToBottom() {
       await scroller.evaluate((element) => {

@@ -6,7 +6,7 @@ type SessionSwitchProbe = {
   stop: () => void
 }
 
-export async function installSessionSwitchProbe(
+async function installSessionSwitchProbe(
   page: Page,
   input: { destinationIDs: string[]; sourceIDs: string[]; lastID: string; href: string },
 ) {
@@ -64,7 +64,7 @@ export async function installSessionSwitchProbe(
   }, input)
 }
 
-export async function waitForStableSessionSwitch(page: Page) {
+async function waitForStableSessionSwitch(page: Page) {
   await page.waitForFunction(() => {
     const samples = (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe?.samples
     if (!samples) return false
@@ -77,13 +77,24 @@ export async function waitForStableSessionSwitch(page: Page) {
   })
 }
 
-export async function collectSessionSwitchResult(page: Page) {
+async function collectSessionSwitchResult(page: Page) {
   const samples = await page.evaluate(() => {
     const probe = (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe!
     probe.stop()
     return probe.samples
   })
   return classifySessionSwitch(samples)
+}
+
+export async function measureSessionSwitch(
+  page: Page,
+  input: { destinationIDs: string[]; sourceIDs: string[]; lastID: string; href: string; switch: () => Promise<void> },
+) {
+  const { switch: run, ...probe } = input
+  await installSessionSwitchProbe(page, probe)
+  await run()
+  await waitForStableSessionSwitch(page)
+  return collectSessionSwitchResult(page)
 }
 
 export async function waitForCachedDestination(page: Page, lastID: string) {

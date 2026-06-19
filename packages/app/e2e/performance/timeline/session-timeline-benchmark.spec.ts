@@ -5,7 +5,7 @@ import {
   setupTimelineBenchmark,
   textPartID,
 } from "./session-timeline-benchmark.fixture"
-import { resetTimelineProfile, startTimelineProfile, stopTimelineProfile } from "./session-timeline-profile"
+import { startTimelineProfile } from "./session-timeline-profile"
 import { collectTimelineStreamMetrics, installTimelineStreamProbe } from "./session-timeline-stream-probe"
 
 benchmark.describe("performance: session timeline streaming", () => {
@@ -22,8 +22,6 @@ benchmark.describe("performance: session timeline streaming", () => {
       eventBatch: Number(process.env.TIMELINE_EVENT_BATCH ?? 1),
     })
 
-    await page.goto(fixture.navigationURL)
-    await fixture.expectReady()
     fixture.transport.enqueue(buildInitialStreamEvent(deltaCount))
     const contentStart = performance.now()
     await expect(fixture.text).toBeVisible()
@@ -43,7 +41,7 @@ benchmark.describe("performance: session timeline streaming", () => {
       navigations: benchmarkDiagnostics(page).navigations,
     })
     const delivered = deltas.length - fixture.transport.pendingCount()
-    await stopTimelineProfile(profile)
+    await profile.stop()
 
     report(
       {
@@ -62,7 +60,7 @@ benchmark.describe("performance: session timeline streaming", () => {
       },
     )
 
-    await resetTimelineProfile(profile)
+    await profile.reset()
     fixture.transport.releaseAll()
     await expect(fixture.text).toContainText("benchmark-complete", { timeout: 60_000 })
     await expect(fixture.text).toContainText("Streaming")
