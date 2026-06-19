@@ -1,6 +1,6 @@
-import { expect, test, type Browser, type Page } from "@playwright/test"
+import type { Browser, Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
-import { startChromeTrace } from "../chrome-trace"
+import { expect, observePerformancePage, test } from "../performance-test"
 import { fixture } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
 import { classifySessionSwitch, isStableDestination } from "./session-tab-switch-metrics"
@@ -24,8 +24,7 @@ test("benchmarks cold and hot session tab switching", async ({ browser }) => {
 async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
   const context = await browser.newContext()
   const page = await context.newPage()
-  const profile = process.env.SESSION_TAB_CPU_PROFILE === "1" && mode === "cold" && run === 0
-  const stopTrace = profile ? await startChromeTrace(page, "session-tab-switch-cold") : undefined
+  const diagnostics = await observePerformancePage(page, `session-tab-switch-${mode}-${run}`)
   await mockStressTimeline(page)
   await installStressSessionTabs(page)
   if (mode === "hot") {
@@ -134,7 +133,7 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
     return probe.samples
   })
   const result = classifySessionSwitch(samples)
-  const trace = await stopTrace?.()
+  const trace = await diagnostics.stop()
   if (trace) console.log(`TRACE ${trace}`)
   await context.close()
   return result

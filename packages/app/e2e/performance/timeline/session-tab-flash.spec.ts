@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "../performance-test"
 import { expectSessionTitle } from "../../utils/waits"
 import { fixture } from "./session-timeline-stress.fixture"
 import {

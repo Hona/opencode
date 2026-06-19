@@ -6,10 +6,6 @@ export type SessionSwitchSample = {
   bottomError?: number
 }
 
-export function blankSessionSwitchSample(at: number): SessionSwitchSample {
-  return { at, destination: [], source: [], last: false }
-}
-
 export function classifySessionSwitch(samples: SessionSwitchSample[]) {
   const firstDestination = samples.findIndex((sample) => sample.destination.length > 0)
   const firstCorrect = samples.findIndex((sample) => sample.last && Math.abs(sample.bottomError ?? Infinity) <= 1)

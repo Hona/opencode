@@ -5,15 +5,14 @@ The app's high-volume performance diagnostics live under `packages/app/e2e/perfo
 Run the suite explicitly from `packages/app`:
 
 ```sh
-OPENCODE_PERFORMANCE=1 PLAYWRIGHT_WORKERS=1 bun test:e2e:local -- e2e/performance
+bun run test:bench
 ```
 
 PowerShell:
 
 ```powershell
-$env:OPENCODE_PERFORMANCE = "1"
 $env:PLAYWRIGHT_WORKERS = "1"
-bun test:e2e:local -- e2e/performance
+bun run test:bench
 ```
 
 The suite contains:
@@ -22,22 +21,35 @@ The suite contains:
 - cached session repaint and mutation tracing
 - streaming timeline FPS, frame-gap, long-task, geometry, and remount diagnostics
 
+All benchmarks import the shared `performance-test` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that create additional browser contexts use the same `observePerformancePage` helper.
+
+New benchmarks should look like normal Playwright tests:
+
+```ts
+import { expect, test } from "../performance-test"
+
+test("measures one interaction", async ({ page }) => {
+  // Only scenario-specific setup, interaction, and assertions belong here.
+})
+```
+
+The fixture automatically names and closes traces, captures navigation history, and attaches that history when a test fails.
+
 CPU and high-volume visual profiling are disabled by default. Set `TIMELINE_CPU_PROFILE=1` to enable both, or additionally set `TIMELINE_VISUAL_PROFILE=0` for CPU-only profiling.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
 
 ## Chrome traces
 
-Set `OPENCODE_PERFORMANCE_TRACE_DIR` to emit standard Chrome DevTools traces where supported:
+Set `OPENCODE_PERFORMANCE_TRACE_DIR` to emit a standard Chrome DevTools trace for every benchmark page automatically:
 
 ```sh
 OPENCODE_PERFORMANCE=1 \
 OPENCODE_PERFORMANCE_TRACE_DIR=/tmp/opencode-performance-traces \
-SESSION_TAB_CPU_PROFILE=1 \
 bun test:e2e:local -- e2e/performance/timeline/session-tab-switch-benchmark.spec.ts
 ```
 
-The repository pins `devtools-tracing`, which uses Chrome DevTools' Trace Engine:
+The app package pins `devtools-tracing`, which uses Chrome DevTools' Trace Engine:
 
 ```sh
 bun trace:stats /tmp/opencode-performance-traces/session-tab-switch-cold.json
