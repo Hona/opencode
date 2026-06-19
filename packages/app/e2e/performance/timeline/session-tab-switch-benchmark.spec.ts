@@ -80,6 +80,8 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
               last: visible.includes(lastID),
               bottomError: spacer ? spacer.bottom - view.bottom : undefined,
             })
+          } else {
+            samples.push({ at: performance.now() - started, destination: [], source: [], last: false })
           }
           requestAnimationFrame(sample)
         }, 0)

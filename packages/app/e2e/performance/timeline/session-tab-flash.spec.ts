@@ -104,6 +104,18 @@ test("traces cached session repaint after the correct first frame", async ({ pag
                 .elementFromPoint(view.left + view.width / 2, view.top + view.height / 2)
                 ?.textContent?.slice(0, 80),
             })
+          } else {
+            state.frames.push({
+              at: performance.now() - state.started,
+              root: undefined,
+              scrollTop: 0,
+              scrollHeight: 0,
+              bottomError: undefined,
+              last: false,
+              rows: [],
+              mounted: 0,
+              center: document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.textContent?.slice(0, 80),
+            })
           }
           requestAnimationFrame(sample)
         }, 0)

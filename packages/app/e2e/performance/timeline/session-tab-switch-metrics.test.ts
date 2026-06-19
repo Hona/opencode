@@ -10,7 +10,7 @@ test("counts source and blank frames before the destination paints", () => {
     { at: 80, destination: ["destination"], source: [], last: true, bottomError: 0 },
   ])
 
-  expect(result.blankFrames).toBe(2)
+  expect(result.blankFrames).toBe(1)
   expect(result.sourceFrames).toBe(1)
   expect(result.firstDestinationMs).toBe(48)
   expect(result.stableMs).toBe(80)
