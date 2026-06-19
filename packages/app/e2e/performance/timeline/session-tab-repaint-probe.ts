@@ -42,10 +42,13 @@ export async function installCachedRepaintProbe(
     new PerformanceObserver((entries) => {
       if (!state.running) return
       state.shifts.push(
-        ...entries.getEntries().map((entry) => ({
-          at: performance.now() - state.started,
-          value: (entry as PerformanceEntry & { value: number }).value,
-        })),
+        ...entries
+          .getEntries()
+          .map((entry) => {
+            if (entry.startTime < state.started) return
+            return { at: entry.startTime - state.started, value: (entry as PerformanceEntry & { value: number }).value }
+          })
+          .filter((entry): entry is { at: number; value: number } => entry !== undefined),
       )
     }).observe({ type: "layout-shift" })
     new MutationObserver((entries) => {
@@ -128,6 +131,11 @@ export async function installCachedRepaintProbe(
     )
     ;(window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash = state
   }, input)
+}
+
+export function layoutShiftSample(entry: Pick<PerformanceEntry, "startTime"> & { value: number }, started: number) {
+  if (entry.startTime < started) return
+  return { at: entry.startTime - started, value: entry.value }
 }
 
 export async function collectCachedRepaintTrace(page: Page) {

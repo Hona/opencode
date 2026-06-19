@@ -5,6 +5,7 @@
 - Keep custom probes only for product-specific measurements.
 - Do not duplicate measurements across the harness, probes, and traces.
 - Run benchmarks serially to avoid cross-test contention.
+- Run benchmarks against production builds.
 - Keep detailed profiling opt-in when it changes workload behavior.
 - Preserve raw diagnostic data or use lossless representations.
 - Do not enforce machine-dependent performance thresholds.

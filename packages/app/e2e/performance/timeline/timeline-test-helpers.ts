@@ -30,8 +30,9 @@ export function mockStressTimeline(page: Page) {
 }
 
 export async function installStressSessionTabs(page: Page) {
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
-    ({ directory, sourceID, targetID, dirBase64 }) => {
+    ({ directory, sourceID, targetID, dirBase64, server }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -44,7 +45,7 @@ export async function installStressSessionTabs(page: Page) {
         JSON.stringify(
           [sourceID, targetID].map((sessionId) => ({
             type: "session",
-            server: "http://127.0.0.1:4096",
+            server,
             dirBase64,
             sessionId,
           })),
@@ -56,6 +57,7 @@ export async function installStressSessionTabs(page: Page) {
       sourceID: fixture.sourceID,
       targetID: fixture.targetID,
       dirBase64: base64Encode(fixture.directory),
+      server,
     },
   )
 }

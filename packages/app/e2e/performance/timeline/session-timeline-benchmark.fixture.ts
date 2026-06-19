@@ -421,7 +421,7 @@ function realisticPatch(index: number) {
 *** End Patch`
 }
 
-function streamChunk(index: number, count: number) {
+export function streamChunk(index: number, count: number) {
   if (index === 0) return `\n\n## Implementation plan\n\nStreaming **bold analysis`
   if (index === count - 1)
     return `\n\`\`\`\n\n## Verification\n\n- **Typecheck:** passed\n- **Timeline geometry:** stable\n- **Streaming output:** benchmark-complete <!-- stream-${index} -->`
@@ -445,7 +445,7 @@ function streamChunk(index: number, count: number) {
     `const selected = createMemo(()`,
     ` => row.id ===`,
     ` activeID()) // stream-${index}\n`,
-    `\`\`\`\n\n### Iteration ${section}\n\nStreaming **bold analysis`,
+    `// stream-${index}\n\`\`\`\n\n### Iteration ${section}\n\nStreaming **bold analysis`,
   ]
   return fragments[(index - 1) % fragments.length]!
 }

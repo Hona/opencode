@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { compressCachedRepaintTrace } from "../timeline/session-tab-repaint-probe"
+import { compressCachedRepaintTrace, layoutShiftSample } from "../timeline/session-tab-repaint-probe"
 
 test("compresses repeated repaint states without losing frame samples", () => {
   const state = {
@@ -29,4 +29,9 @@ test("compresses repeated repaint states without losing frame samples", () => {
   expect(frames).toEqual(trace.frames)
   expect(compressed.mutations).toEqual(trace.mutations)
   expect(compressed.shifts).toEqual(trace.shifts)
+})
+
+test("records layout shifts at occurrence time within the probe window", () => {
+  expect(layoutShiftSample({ startTime: 99, value: 0.1 }, 100)).toBeUndefined()
+  expect(layoutShiftSample({ startTime: 124, value: 0.2 }, 100)).toEqual({ at: 24, value: 0.2 })
 })

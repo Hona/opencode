@@ -1,6 +1,6 @@
 # Manual app performance suite
 
-The app's high-volume performance diagnostics live under `packages/app/e2e/performance` and are excluded from normal local and CI Playwright discovery.
+The app's high-volume performance diagnostics live under `packages/app/e2e/performance` and are excluded from normal local and CI Playwright discovery. The benchmark config builds the app and serves the production bundle before running scenarios serially.
 
 Run the suite explicitly from `packages/app`:
 

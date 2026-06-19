@@ -1,9 +1,9 @@
-import config from "../../playwright.config"
+import config from "./playwright.config"
 
 export default {
   ...config,
-  testDir: "..",
-  outputDir: "../test-results-uncapped",
+  outputDir: "../test-results/performance-uncapped",
+  reporter: [["html", { outputFolder: "../playwright-report/performance-uncapped", open: "never" }], ["line"]],
   use: {
     ...config.use,
     launchOptions: {
