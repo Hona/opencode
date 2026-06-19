@@ -40,7 +40,7 @@ The fixture requires every benchmark to call `report()`, automatically names and
 BENCHMARK {"name":"...","context":{"project":"chromium","platform":"darwin"},"metrics":{...}}
 ```
 
-Every observed page also emits `BENCHMARK_PAGE` automatically with navigation history and the optional trace path. Frame, long-task, layout-shift, interaction, script, style, layout, paint, heap, and call-stack analysis stays in scenario probes or the linked Chrome trace. The generic harness does not duplicate Chrome's profiler with custom browser-wide counters or observers.
+Every observed page also emits `BENCHMARK_PAGE` with the same run ID, navigation history, and optional trace path before the final status-bearing `BENCHMARK` record. Chrome traces are browser-wide page-lifetime diagnostics; scenario metrics use narrower explicitly named observation windows.
 
 This follows the stack's own guidance: [Electron recommends repeated Chrome DevTools and Chrome Tracing measurement](https://www.electronjs.org/docs/latest/tutorial/performance), [Chrome DevTools recommends Performance recordings for runtime work](https://developer.chrome.com/docs/devtools/performance), and [Playwright uses traces for test debugging rather than renderer profiling](https://playwright.dev/docs/trace-viewer).
 
@@ -50,7 +50,7 @@ CPU and high-volume visual profiling are disabled by default. Set `TIMELINE_CPU_
 
 The streaming scenario's 30x CPU throttle is a deterministic stress profile, not a simulated end-user device.
 
-Benchmarks do not assert machine-dependent performance budgets. FPS, frame percentiles, long tasks, dropped-frame equivalents, blank/source frames, remounts, overlap, gaps, and scroll drift are always emitted as structured JSON for manual comparison. Assertions only verify that the scenario and metric collection completed. Repeated repaint states are run-length grouped, but every original frame timestamp is retained alongside raw mutation batches and layout shifts.
+Benchmarks do not assert machine-dependent performance budgets. Streaming processes a fixed 160-delta workload and reports renderer-observed completion time, throughput, RAF callback-gap distributions, frame-budget equivalents, and long tasks. These are main-thread callback diagnostics, not compositor presentation or dropped-frame measurements. Visual-only and geometry metrics are `null` when their probes are disabled. Tab metrics describe sampled DOM observations. Assertions verify scenario and metric collection completion. Repeated repaint states are run-length grouped, but every original observation timestamp is retained alongside raw mutation batches and layout shifts.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
 
@@ -69,7 +69,7 @@ The emitted JSON is a standard Chrome trace and can be loaded directly into the 
 Trace capture mirrors [Puppeteer's official tracing defaults and lifecycle](https://pptr.dev/api/puppeteer.tracing), using Chrome's `ReturnAsStream` transfer mode and failing when Chromium reports trace data loss.
 
 ```sh
-bunx devtools-tracing stats /tmp/opencode-performance-traces/session-tab-switch-cold-0.json
+bunx devtools-tracing stats <trace-path-from-BENCHMARK_PAGE>
 ```
 
 INP analysis requires a trace with a supported navigation/interaction insight. Selector statistics require a trace captured with `OPENCODE_PERFORMANCE_SELECTOR_TRACE=1`.

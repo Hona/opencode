@@ -305,6 +305,9 @@ export const fixture = {
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
+    sourceMessageIDs: sourceMessages
+      .filter((message) => message.info.role === "user")
+      .map((message) => message.info.id),
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),

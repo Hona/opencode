@@ -1,29 +1,33 @@
 import type { Page } from "@playwright/test"
 
 type CachedRepaintTrace = {
-  started: number
-  frames: {
-    at: number
+  timeOriginEpochMs: number
+  startedAtPerformanceMs: number
+  samples: {
+    observedAtMs: number
     root: number | undefined
     scrollTop: number
     scrollHeight: number
-    bottomError: number | undefined
+    bottomErrorPx: number | undefined
     last: boolean
     rows: { key: string | undefined; node: number; top: number; bottom: number }[]
     mounted: number
     center: string | undefined
+    destination: string[]
+    source: string[]
   }[]
-  mutations: { at: number; changed: { type: string; node: number }[] }[]
-  shifts: { at: number; value: number }[]
+  mutations: { observedAtMs: number; changed: { type: string; node: number }[] }[]
+  shifts: { occurredAtMs: number; value: number }[]
   running: boolean
 }
 
 export async function installCachedRepaintProbe(
   page: Page,
-  input: { targetHref: string; destination: string[]; last: string },
+  input: { targetHref: string; destination: string[]; source: string[]; last: string },
 ) {
-  await page.evaluate(({ targetHref, destination, last }) => {
-    const ids = new Set(destination)
+  await page.evaluate(({ targetHref, destination, source, last }) => {
+    const destinationIDs = new Set(destination)
+    const sourceIDs = new Set(source)
     const nodeIDs = new WeakMap<Node, number>()
     let nextNodeID = 1
     const id = (node: Node) => {
@@ -33,8 +37,9 @@ export async function installCachedRepaintProbe(
       return nextNodeID++
     }
     const state: CachedRepaintTrace = {
-      started: 0,
-      frames: [],
+      timeOriginEpochMs: performance.timeOrigin,
+      startedAtPerformanceMs: 0,
+      samples: [],
       mutations: [],
       shifts: [],
       running: false,
@@ -45,10 +50,13 @@ export async function installCachedRepaintProbe(
         ...entries
           .getEntries()
           .map((entry) => {
-            if (entry.startTime < state.started) return
-            return { at: entry.startTime - state.started, value: (entry as PerformanceEntry & { value: number }).value }
+            if (entry.startTime < state.startedAtPerformanceMs) return
+            return {
+              occurredAtMs: entry.startTime - state.startedAtPerformanceMs,
+              value: (entry as PerformanceEntry & { value: number }).value,
+            }
           })
-          .filter((entry): entry is { at: number; value: number } => entry !== undefined),
+          .filter((entry): entry is { occurredAtMs: number; value: number } => entry !== undefined),
       )
     }).observe({ type: "layout-shift" })
     new MutationObserver((entries) => {
@@ -57,12 +65,14 @@ export async function installCachedRepaintProbe(
         ...[...entry.addedNodes].map((node) => ({ type: "add", node: id(node) })),
         ...[...entry.removedNodes].map((node) => ({ type: "remove", node: id(node) })),
       ])
-      if (changed.length) state.mutations.push({ at: performance.now() - state.started, changed })
+      if (changed.length)
+        state.mutations.push({ observedAtMs: performance.now() - state.startedAtPerformanceMs, changed })
     }).observe(document.documentElement, { childList: true, subtree: true })
     const sample = () => {
       if (!state.running) return
       setTimeout(() => {
         if (!state.running) return
+        const observedAtMs = performance.now() - state.startedAtPerformanceMs
         const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
           element.querySelector("[data-timeline-row]"),
         )
@@ -87,32 +97,35 @@ export async function installCachedRepaintProbe(
               return rect.bottom > view.top && rect.top < view.bottom
             })
             .map((element) => element.dataset.messageId!)
-            .filter((messageID) => ids.has(messageID))
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
-          state.frames.push({
-            at: performance.now() - state.started,
+          state.samples.push({
+            observedAtMs,
             root: id(root),
             scrollTop: root.scrollTop,
             scrollHeight: root.scrollHeight,
-            bottomError: spacer ? spacer.bottom - view.bottom : undefined,
+            bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
             last: messages.includes(last),
             rows,
             mounted: root.querySelectorAll("[data-timeline-key]").length,
             center: document
               .elementFromPoint(view.left + view.width / 2, view.top + view.height / 2)
               ?.textContent?.slice(0, 80),
+            destination: messages.filter((messageID) => destinationIDs.has(messageID)),
+            source: messages.filter((messageID) => sourceIDs.has(messageID)),
           })
         } else {
-          state.frames.push({
-            at: performance.now() - state.started,
+          state.samples.push({
+            observedAtMs,
             root: undefined,
             scrollTop: 0,
             scrollHeight: 0,
-            bottomError: undefined,
+            bottomErrorPx: undefined,
             last: false,
             rows: [],
             mounted: 0,
             center: document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.textContent?.slice(0, 80),
+            destination: [],
+            source: [],
           })
         }
         requestAnimationFrame(sample)
@@ -123,7 +136,7 @@ export async function installCachedRepaintProbe(
       (event) => {
         const link = event.target instanceof Element ? event.target.closest("a") : undefined
         if (link?.getAttribute("href") !== targetHref) return
-        state.started = performance.now()
+        state.startedAtPerformanceMs = performance.now()
         state.running = true
         requestAnimationFrame(sample)
       },
@@ -135,7 +148,14 @@ export async function installCachedRepaintProbe(
 
 export function layoutShiftSample(entry: Pick<PerformanceEntry, "startTime"> & { value: number }, started: number) {
   if (entry.startTime < started) return
-  return { at: entry.startTime - started, value: entry.value }
+  return { occurredAtMs: entry.startTime - started, value: entry.value }
+}
+
+export async function waitForCachedRepaintWindow(page: Page, durationMs: number) {
+  await page.waitForFunction((durationMs) => {
+    const state = (window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash
+    return !!state?.running && performance.now() - state.startedAtPerformanceMs >= durationMs
+  }, durationMs)
 }
 
 export async function collectCachedRepaintTrace(page: Page) {
@@ -147,21 +167,30 @@ export async function collectCachedRepaintTrace(page: Page) {
 }
 
 export function summarizeCachedRepaintTrace(trace: CachedRepaintTrace) {
-  const roots = trace.frames.map((frame) => frame.root)
-  const bottomErrors = trace.frames.flatMap((frame) =>
-    frame.bottomError === undefined ? [] : [Math.abs(frame.bottomError)],
+  const roots = trace.samples.map((sample) => sample.root)
+  const bottomErrors = trace.samples.flatMap((sample) =>
+    sample.bottomErrorPx === undefined ? [] : [Math.abs(sample.bottomErrorPx)],
   )
+  const category = (sample: CachedRepaintTrace["samples"][number]) => {
+    if (sample.source.length) return "source"
+    if (sample.root === undefined || sample.rows.length === 0) return "blank"
+    if (!sample.destination.length) return "unknown"
+    if (sample.last && Math.abs(sample.bottomErrorPx ?? Infinity) <= 1) return "correct"
+    return "wrongDestination"
+  }
   return {
-    frames: trace.frames.length,
-    durationMs: trace.frames.at(-1)?.at ?? 0,
-    firstFrameMs: trace.frames[0]?.at,
-    firstFrameCorrect: trace.frames[0]?.last === true && Math.abs(trace.frames[0].bottomError ?? Infinity) <= 1,
-    blankFrames: trace.frames.filter((frame) => frame.root === undefined || frame.rows.length === 0).length,
-    wrongDestinationFrames: trace.frames.filter((frame) => frame.root !== undefined && !frame.last).length,
+    samples: trace.samples.length,
+    durationMs: trace.samples.at(-1)?.observedAtMs ?? 0,
+    firstSampleObservedMs: trace.samples[0]?.observedAtMs,
+    firstSampleCorrect: trace.samples[0] ? category(trace.samples[0]) === "correct" : false,
+    blankSamples: trace.samples.filter((sample) => category(sample) === "blank").length,
+    sourceSamples: trace.samples.filter((sample) => category(sample) === "source").length,
+    wrongDestinationSamples: trace.samples.filter((sample) => category(sample) === "wrongDestination").length,
+    unknownSamples: trace.samples.filter((sample) => category(sample) === "unknown").length,
     rootChanges: roots.slice(1).filter((root, index) => root !== roots[index]).length,
-    mountedMin: trace.frames.length ? Math.min(...trace.frames.map((frame) => frame.mounted)) : 0,
-    mountedMax: Math.max(...trace.frames.map((frame) => frame.mounted)),
-    maxBottomError: Math.max(0, ...bottomErrors),
+    mountedMin: trace.samples.length ? Math.min(...trace.samples.map((sample) => sample.mounted)) : 0,
+    mountedMax: Math.max(...trace.samples.map((sample) => sample.mounted)),
+    maxBottomErrorPx: Math.max(0, ...bottomErrors),
     mutationBatches: trace.mutations.length,
     addedNodes: trace.mutations.reduce(
       (sum, batch) => sum + batch.changed.filter((change) => change.type === "add").length,
@@ -171,26 +200,30 @@ export function summarizeCachedRepaintTrace(trace: CachedRepaintTrace) {
       (sum, batch) => sum + batch.changed.filter((change) => change.type === "remove").length,
       0,
     ),
-    layoutShift: trace.shifts.reduce((sum, shift) => sum + shift.value, 0),
-    maxLayoutShift: Math.max(0, ...trace.shifts.map((shift) => shift.value)),
+    layoutShiftValueSum: trace.shifts.reduce((sum, shift) => sum + shift.value, 0),
+    maxLayoutShiftValue: Math.max(0, ...trace.shifts.map((shift) => shift.value)),
   }
 }
 
 export function compressCachedRepaintTrace(trace: CachedRepaintTrace) {
-  const frames: { at: number[]; state: Omit<CachedRepaintTrace["frames"][number], "at"> }[] = []
-  for (const frame of trace.frames) {
-    const { at, ...state } = frame
-    const previous = frames.at(-1)
+  const samples: {
+    observedAtMs: number[]
+    state: Omit<CachedRepaintTrace["samples"][number], "observedAtMs">
+  }[] = []
+  for (const sample of trace.samples) {
+    const { observedAtMs, ...state } = sample
+    const previous = samples.at(-1)
     if (previous && JSON.stringify(previous.state) === JSON.stringify(state)) {
-      previous.at.push(at)
+      previous.observedAtMs.push(observedAtMs)
       continue
     }
-    frames.push({ at: [at], state })
+    samples.push({ observedAtMs: [observedAtMs], state })
   }
   return {
-    started: trace.started,
+    timeOriginEpochMs: trace.timeOriginEpochMs,
+    startedAtPerformanceMs: trace.startedAtPerformanceMs,
     summary: summarizeCachedRepaintTrace(trace),
-    frames,
+    samples,
     mutations: trace.mutations,
     shifts: trace.shifts,
   }

@@ -3,6 +3,8 @@ import { startChromeTrace } from "./chrome-trace"
 
 type BenchmarkFixtures = {
   report: (metrics: Record<string, unknown>, context?: Record<string, unknown>) => void
+  reportState: { payload?: { metrics: Record<string, unknown>; context: Record<string, unknown> } }
+  benchmarkResult: void
 }
 
 export type PerformancePageDiagnostics = {
@@ -13,24 +15,34 @@ export type PerformancePageDiagnostics = {
 const pages = new WeakMap<Page, PerformancePageDiagnostics>()
 
 export const benchmark = base.extend<BenchmarkFixtures>({
-  report: async ({}, use, testInfo) => {
-    let reported = false
+  reportState: async ({}, use) => use({}),
+  report: async ({ reportState }, use) => {
     await use((metrics, context = {}) => {
-      reported = true
+      if (reportState.payload) throw new Error("Benchmark reported metrics more than once")
+      reportState.payload = { metrics, context }
+    })
+  },
+  benchmarkResult: [
+    async ({ reportState }, use, testInfo) => {
+      await use()
+      if (!reportState.payload) throw new Error(`Benchmark did not report metrics: ${benchmarkName(testInfo)}`)
       console.log(
         `BENCHMARK ${JSON.stringify({
+          runID: process.env.OPENCODE_PERFORMANCE_RUN_ID,
           name: benchmarkName(testInfo),
+          status: testInfo.status,
+          expectedStatus: testInfo.expectedStatus,
           context: {
             project: testInfo.project.name,
             platform: process.platform,
-            ...context,
+            ...reportState.payload.context,
           },
-          metrics,
+          metrics: reportState.payload.metrics,
         })}`,
       )
-    })
-    if (!reported) throw new Error(`Benchmark did not report metrics: ${benchmarkName(testInfo)}`)
-  },
+    },
+    { auto: true },
+  ],
   page: async ({ page }, use, testInfo) => {
     const name = benchmarkName(testInfo)
     const diagnostics = await observePerformancePage(page, name)
@@ -98,6 +110,7 @@ async function reportPerformancePage(name: string, diagnostics: PerformancePageD
   const trace = await diagnostics.stop()
   console.log(
     `BENCHMARK_PAGE ${JSON.stringify({
+      runID: process.env.OPENCODE_PERFORMANCE_RUN_ID,
       name,
       context: {
         platform: process.platform,

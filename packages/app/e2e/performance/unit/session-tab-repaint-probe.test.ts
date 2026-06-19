@@ -6,32 +6,35 @@ test("compresses repeated repaint states without losing frame samples", () => {
     root: 1,
     scrollTop: 10,
     scrollHeight: 20,
-    bottomError: 0,
+    bottomErrorPx: 0,
     last: true,
     rows: [{ key: "row", node: 2, top: 0, bottom: 10 }],
     mounted: 1,
     center: "content",
   }
   const trace = {
-    started: 100,
-    frames: [
-      { at: 16, ...state },
-      { at: 32, ...state },
-      { at: 48, ...state, scrollTop: 11 },
+    timeOriginEpochMs: 1_000,
+    startedAtPerformanceMs: 100,
+    samples: [
+      { observedAtMs: 16, ...state, destination: ["target"], source: [] },
+      { observedAtMs: 32, ...state, destination: ["target"], source: [] },
+      { observedAtMs: 48, ...state, scrollTop: 11, destination: ["target"], source: [] },
     ],
-    mutations: [{ at: 20, changed: [{ type: "add", node: 2 }] }],
-    shifts: [{ at: 24, value: 0.1 }],
+    mutations: [{ observedAtMs: 20, changed: [{ type: "add", node: 2 }] }],
+    shifts: [{ occurredAtMs: 24, value: 0.1 }],
     running: false,
   }
   const compressed = compressCachedRepaintTrace(trace)
-  const frames = compressed.frames.flatMap((group) => group.at.map((at) => ({ at, ...group.state })))
+  const samples = compressed.samples.flatMap((group) =>
+    group.observedAtMs.map((observedAtMs) => ({ observedAtMs, ...group.state })),
+  )
 
-  expect(frames).toEqual(trace.frames)
+  expect(samples).toEqual(trace.samples)
   expect(compressed.mutations).toEqual(trace.mutations)
   expect(compressed.shifts).toEqual(trace.shifts)
 })
 
 test("records layout shifts at occurrence time within the probe window", () => {
   expect(layoutShiftSample({ startTime: 99, value: 0.1 }, 100)).toBeUndefined()
-  expect(layoutShiftSample({ startTime: 124, value: 0.2 }, 100)).toEqual({ at: 24, value: 0.2 })
+  expect(layoutShiftSample({ startTime: 124, value: 0.2 }, 100)).toEqual({ occurredAtMs: 24, value: 0.2 })
 })

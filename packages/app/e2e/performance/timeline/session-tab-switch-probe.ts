@@ -20,6 +20,7 @@ async function installSessionSwitchProbe(
       if (!running || started === undefined) return
       setTimeout(() => {
         if (!running || started === undefined) return
+        const observedAtMs = performance.now() - started
         const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
           element.querySelector("[data-timeline-row]"),
         )
@@ -33,14 +34,14 @@ async function installSessionSwitchProbe(
             .map((element) => element.dataset.messageId!)
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           samples.push({
-            at: performance.now() - started,
+            observedAtMs,
             destination: visible.filter((id) => destination.has(id)),
             source: visible.filter((id) => source.has(id)),
             last: visible.includes(lastID),
-            bottomError: spacer ? spacer.bottom - view.bottom : undefined,
+            bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
           })
         } else {
-          samples.push({ at: performance.now() - started, destination: [], source: [], last: false })
+          samples.push({ observedAtMs, destination: [], source: [], last: false })
         }
         requestAnimationFrame(sample)
       }, 0)
@@ -71,7 +72,7 @@ async function waitForStableSessionSwitch(page: Page) {
     return samples.some((_, index) => {
       const stable = samples.slice(index, index + 3)
       return (
-        stable.length === 3 && stable.every((sample) => sample.last && Math.abs(sample.bottomError ?? Infinity) <= 1)
+        stable.length === 3 && stable.every((sample) => sample.last && Math.abs(sample.bottomErrorPx ?? Infinity) <= 1)
       )
     })
   })
@@ -97,15 +98,15 @@ export async function measureSessionSwitch(
   return collectSessionSwitchResult(page)
 }
 
-export async function waitForCachedDestination(page: Page, lastID: string) {
-  const samples: Pick<SessionSwitchSample, "last" | "bottomError">[] = []
+export async function waitForStableTimeline(page: Page, lastID: string) {
+  const samples: Pick<SessionSwitchSample, "last" | "bottomErrorPx">[] = []
   await expect
     .poll(
       async () => {
         samples.push(
           await page.evaluate(
             (lastID) =>
-              new Promise<Pick<SessionSwitchSample, "last" | "bottomError">>((resolve) => {
+              new Promise<Pick<SessionSwitchSample, "last" | "bottomErrorPx">>((resolve) => {
                 requestAnimationFrame(() =>
                   setTimeout(() => {
                     const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
@@ -124,7 +125,7 @@ export async function waitForCachedDestination(page: Page, lastID: string) {
                     const spacer = root
                       .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
                       ?.getBoundingClientRect()
-                    resolve({ last, bottomError: spacer ? spacer.bottom - view.bottom : undefined })
+                    resolve({ last, bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined })
                   }, 0),
                 )
               }),

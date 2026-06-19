@@ -3,7 +3,7 @@ import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
-import { measureSessionSwitch, waitForCachedDestination } from "./session-tab-switch-probe"
+import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
 
@@ -26,12 +26,13 @@ async function trial(page: Page, mode: "cold" | "hot") {
   if (mode === "hot") {
     await page.goto(stressSessionHref(fixture.targetID))
     await expectSessionTitle(page, fixture.expected.targetTitle)
-    await waitForCachedDestination(page, fixture.expected.targetMessageIDs.at(-1)!)
+    await waitForStableTimeline(page, fixture.expected.targetMessageIDs.at(-1)!)
     await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
   } else {
     await page.goto(stressSessionHref(fixture.sourceID))
     await expectSessionTitle(page, fixture.expected.sourceTitle)
   }
+  await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
 
   const destinationIDs = fixture.messages[fixture.targetID].map((message) => message.info.id)
   const sourceIDs = fixture.messages[fixture.sourceID].map((message) => message.info.id)
@@ -56,9 +57,9 @@ function summarize(results: Record<"cold" | "hot", Result[]>) {
     Object.entries(results).map(([mode, values]) => [
       mode,
       {
-        firstDestinationMs: stats(values.map((value) => value.firstDestinationMs)),
-        firstCorrectMs: stats(values.map((value) => value.firstCorrectMs)),
-        stableMs: stats(values.map((value) => value.stableMs)),
+        firstDestinationObservedMs: stats(values.map((value) => value.firstDestinationObservedMs)),
+        firstCorrectObservedMs: stats(values.map((value) => value.firstCorrectObservedMs)),
+        stableObservedMs: stats(values.map((value) => value.stableObservedMs)),
       },
     ]),
   )

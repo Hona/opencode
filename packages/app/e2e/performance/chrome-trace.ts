@@ -1,7 +1,8 @@
 import type { CDPSession, Page } from "@playwright/test"
 import path from "node:path"
-import { mkdir, open } from "node:fs/promises"
+import { mkdir, open, rename } from "node:fs/promises"
 import { Buffer } from "node:buffer"
+import { createHash, randomUUID } from "node:crypto"
 
 const categories = [
   "-*",
@@ -53,9 +54,11 @@ export async function startChromeTrace(page: Page, name: string) {
         )
         await session.send("Tracing.end")
         const result = await complete
-        if (result.dataLossOccurred) throw new Error(`Chrome trace lost data: ${file}`)
         if (!result.stream) throw new Error(`Chrome trace stream missing: ${file}`)
-        await writeProtocolStream(session, result.stream, file)
+        const partial = `${file}.partial`
+        await writeProtocolStream(session, result.stream, partial)
+        if (result.dataLossOccurred) throw new Error(`Chrome trace lost data; partial capture retained: ${partial}`)
+        await rename(partial, file)
         return file
       } finally {
         await Promise.allSettled([session.detach()])
@@ -63,13 +66,23 @@ export async function startChromeTrace(page: Page, name: string) {
     })())
 }
 
-export async function prepareChromeTrace(directory: string, name: string, selectors: boolean) {
+export async function prepareChromeTrace(
+  directory: string,
+  name: string,
+  selectors: boolean,
+  nonce = randomUUID().slice(0, 8),
+) {
   await mkdir(directory, { recursive: true })
-  return path.join(directory, `${name.replace(/[^a-zA-Z0-9_-]/g, "-")}${selectors ? "-selectors" : ""}.json`)
+  const run = process.env.OPENCODE_PERFORMANCE_RUN_ID ?? "manual"
+  const hash = createHash("sha256").update(name).digest("hex").slice(0, 8)
+  return path.join(
+    directory,
+    `${run}-${name.replace(/[^a-zA-Z0-9_-]/g, "-")}-${hash}-${nonce}${selectors ? "-selectors" : ""}.json`,
+  )
 }
 
 async function writeProtocolStream(session: CDPSession, handle: string, file: string) {
-  const output = await open(file, "w")
+  const output = await open(file, "wx")
   try {
     while (true) {
       const chunk = await session.send("IO.read", { handle })

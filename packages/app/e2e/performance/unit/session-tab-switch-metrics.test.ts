@@ -1,17 +1,17 @@
 import { expect, test } from "bun:test"
 import { classifySessionSwitch } from "../timeline/session-tab-switch-metrics"
 
-test("counts source and blank frames before the destination paints", () => {
+test("counts source and blank samples before the destination is observed", () => {
   const result = classifySessionSwitch([
-    { at: 16, destination: [], source: ["source"], last: false },
-    { at: 32, destination: [], source: [], last: false },
-    { at: 48, destination: ["destination"], source: [], last: true, bottomError: 0 },
-    { at: 64, destination: ["destination"], source: [], last: true, bottomError: 0 },
-    { at: 80, destination: ["destination"], source: [], last: true, bottomError: 0 },
+    { observedAtMs: 16, destination: [], source: ["source"], last: false },
+    { observedAtMs: 32, destination: [], source: [], last: false },
+    { observedAtMs: 48, destination: ["destination"], source: [], last: true, bottomErrorPx: 0 },
+    { observedAtMs: 64, destination: ["destination"], source: [], last: true, bottomErrorPx: 0 },
+    { observedAtMs: 80, destination: ["destination"], source: [], last: true, bottomErrorPx: 0 },
   ])
 
-  expect(result.blankFrames).toBe(1)
-  expect(result.sourceFrames).toBe(1)
-  expect(result.firstDestinationMs).toBe(48)
-  expect(result.stableMs).toBe(80)
+  expect(result.blankSamples).toBe(1)
+  expect(result.sourceSamples).toBe(1)
+  expect(result.firstDestinationObservedMs).toBe(48)
+  expect(result.stableObservedMs).toBe(80)
 })
