@@ -29,6 +29,7 @@ type TimelineProbeState = {
   visibleSubtreeReplacements: number
   visibleSubtreeDropouts: string[]
   visibleSubtrees: Map<string, Element>
+  subtreeKeys: WeakMap<Element, string>
   maxOverlap: number
   maxGap: number
   maxPartTopMovement: number
@@ -96,6 +97,7 @@ export async function installTimelineStreamProbe(
         visibleSubtreeReplacements: 0,
         visibleSubtreeDropouts: [],
         visibleSubtrees: new Map<string, Element>(),
+        subtreeKeys: new WeakMap<Element, string>(),
         maxOverlap: 0,
         maxGap: 0,
         maxPartTopMovement: 0,
@@ -180,13 +182,17 @@ export async function installTimelineStreamProbe(
         "[data-markdown-block]",
       ].join(",")
       const describe = (element: Element) => {
+        const cached = state.subtreeKeys.get(element)
+        if (!element.isConnected && cached) return cached
         const part = element.closest<HTMLElement>("[data-timeline-part-id]")?.dataset.timelinePartId ?? "unknown"
         const block = element
           .closest<HTMLElement>("[data-markdown-key]")
           ?.dataset.markdownKey?.replace(/:(?:code|full|live)$/, "")
         const component =
           element.getAttribute("data-component") ?? element.getAttribute("data-markdown-block") ?? element.tagName
-        return `${part}:${block ?? "root"}:${component}`
+        const key = `${part}:${block ?? "root"}:${component}`
+        state.subtreeKeys.set(element, key)
+        return key
       }
       const recordMutations = (records: MutationRecord[]) => {
         if (!state.running) return
@@ -329,11 +335,14 @@ export async function installTimelineStreamProbe(
           }
           if (profileVisual && duration > 33.34) {
             const content = part.textContent ?? ""
-            const index = Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
+            const complete = content.includes("benchmark-complete")
+            const index = complete
+              ? finalIndex
+              : Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
             state.slowFrames.push({
               duration,
               index,
-              phase: content.includes("benchmark-complete")
+              phase: complete
                 ? "complete"
                 : index >= 0 && index % fragmentCount === 0
                   ? "boundary"
@@ -441,8 +450,20 @@ export async function collectTimelineStreamMetrics(
           maxOverlapPx: state.maxOverlap,
           maxGapPx: state.maxGap,
           maxPartTopMovementPx: state.maxPartTopMovement,
-          slowestFrames: state.slowFrames.sort((a, b) => b.duration - a.duration).slice(0, 20),
-          slowFramePhases: Object.fromEntries(
+          slowestRafGaps: state.slowFrames
+            .sort((a, b) => b.duration - a.duration)
+            .slice(0, 20)
+            .map((frame) => ({
+              durationMs: frame.duration,
+              index: frame.index,
+              phase: frame.phase,
+              tokenSpans: frame.tokenSpans,
+              blocks: frame.blocks,
+              codeBlocks: frame.codeBlocks,
+              heightPx: frame.height,
+              distancePx: frame.distance,
+            })),
+          slowRafGapPhases: Object.fromEntries(
             ["stream", "boundary", "complete", "unknown"].map((phase) => {
               const frames = state.slowFrames.filter((frame) => frame.phase === phase)
               return [

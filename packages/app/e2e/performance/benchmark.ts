@@ -25,21 +25,27 @@ export const benchmark = base.extend<BenchmarkFixtures>({
   benchmarkResult: [
     async ({ reportState }, use, testInfo) => {
       await use()
-      if (!reportState.payload) throw new Error(`Benchmark did not report metrics: ${benchmarkName(testInfo)}`)
+      const missing = !reportState.payload
       console.log(
         `BENCHMARK ${JSON.stringify({
+          schemaVersion: 2,
           runID: process.env.OPENCODE_PERFORMANCE_RUN_ID,
           name: benchmarkName(testInfo),
-          status: testInfo.status,
+          status: missing ? "failed" : testInfo.status,
           expectedStatus: testInfo.expectedStatus,
+          retry: testInfo.retry,
+          repeatEachIndex: testInfo.repeatEachIndex,
           context: {
             project: testInfo.project.name,
             platform: process.platform,
-            ...reportState.payload.context,
+            ...reportState.payload?.context,
           },
-          metrics: reportState.payload.metrics,
+          metrics: reportState.payload?.metrics ?? null,
+          error: missing ? "Benchmark did not report metrics" : undefined,
         })}`,
       )
+      if (missing && testInfo.status === testInfo.expectedStatus)
+        throw new Error(`Benchmark did not report metrics: ${benchmarkName(testInfo)}`)
     },
     { auto: true },
   ],
@@ -50,7 +56,7 @@ export const benchmark = base.extend<BenchmarkFixtures>({
       await use(page)
     } finally {
       try {
-        await reportPerformancePage(name, diagnostics)
+        await reportPerformancePage(name, diagnostics, testInfo)
       } finally {
         if (testInfo.status !== testInfo.expectedStatus) {
           await testInfo.attach("performance-navigations", {
@@ -91,7 +97,12 @@ async function observePerformancePage(page: Page, name: string) {
   return diagnostics
 }
 
-export async function withBenchmarkPage<T>(browser: Browser, name: string, run: (page: Page) => Promise<T>) {
+export async function withBenchmarkPage<T>(
+  browser: Browser,
+  name: string,
+  run: (page: Page) => Promise<T>,
+  testInfo?: TestInfo,
+) {
   const context = await browser.newContext()
   try {
     const page = await context.newPage()
@@ -99,19 +110,23 @@ export async function withBenchmarkPage<T>(browser: Browser, name: string, run: 
     try {
       return await run(page)
     } finally {
-      await reportPerformancePage(name, diagnostics)
+      await reportPerformancePage(name, diagnostics, testInfo)
     }
   } finally {
     await context.close()
   }
 }
 
-async function reportPerformancePage(name: string, diagnostics: PerformancePageDiagnostics) {
+async function reportPerformancePage(name: string, diagnostics: PerformancePageDiagnostics, testInfo?: TestInfo) {
   const trace = await diagnostics.stop()
   console.log(
     `BENCHMARK_PAGE ${JSON.stringify({
+      schemaVersion: 2,
       runID: process.env.OPENCODE_PERFORMANCE_RUN_ID,
       name,
+      test: testInfo ? benchmarkName(testInfo) : undefined,
+      retry: testInfo?.retry,
+      repeatEachIndex: testInfo?.repeatEachIndex,
       context: {
         platform: process.platform,
         trace,

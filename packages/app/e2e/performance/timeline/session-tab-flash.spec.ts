@@ -35,6 +35,7 @@ benchmark("samples cached session repaint after the click", async ({ page, repor
     destination: fixture.messages[fixture.targetID].map((message) => message.info.id),
     source: fixture.messages[fixture.sourceID].map((message) => message.info.id),
     last: fixture.expected.targetMessageIDs.at(-1)!,
+    windowMs: 1_000,
   })
 
   await page

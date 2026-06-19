@@ -18,14 +18,16 @@ type CachedRepaintTrace = {
   }[]
   mutations: { observedAtMs: number; changed: { type: string; node: number }[] }[]
   shifts: { occurredAtMs: number; value: number }[]
+  windowMs: number
   running: boolean
+  stop: () => void
 }
 
 export async function installCachedRepaintProbe(
   page: Page,
-  input: { targetHref: string; destination: string[]; source: string[]; last: string },
+  input: { targetHref: string; destination: string[]; source: string[]; last: string; windowMs: number },
 ) {
-  await page.evaluate(({ targetHref, destination, source, last }) => {
+  await page.evaluate(({ targetHref, destination, source, last, windowMs }) => {
     const destinationIDs = new Set(destination)
     const sourceIDs = new Set(source)
     const nodeIDs = new WeakMap<Node, number>()
@@ -42,15 +44,20 @@ export async function installCachedRepaintProbe(
       samples: [],
       mutations: [],
       shifts: [],
+      windowMs,
       running: false,
+      stop: () => {},
     }
-    new PerformanceObserver((entries) => {
+    const recordShifts = (entries: PerformanceEntry[]) => {
       if (!state.running) return
       state.shifts.push(
         ...entries
-          .getEntries()
           .map((entry) => {
-            if (entry.startTime < state.startedAtPerformanceMs) return
+            if (
+              entry.startTime < state.startedAtPerformanceMs ||
+              entry.startTime > state.startedAtPerformanceMs + state.windowMs
+            )
+              return
             return {
               occurredAtMs: entry.startTime - state.startedAtPerformanceMs,
               value: (entry as PerformanceEntry & { value: number }).value,
@@ -58,21 +65,34 @@ export async function installCachedRepaintProbe(
           })
           .filter((entry): entry is { occurredAtMs: number; value: number } => entry !== undefined),
       )
-    }).observe({ type: "layout-shift" })
-    new MutationObserver((entries) => {
+    }
+    const shiftObserver = new PerformanceObserver((entries) => recordShifts(entries.getEntries()))
+    shiftObserver.observe({ type: "layout-shift" })
+    const recordMutations = (entries: MutationRecord[]) => {
       if (!state.running) return
+      const observedAtMs = performance.now() - state.startedAtPerformanceMs
+      if (observedAtMs > state.windowMs) return
       const changed = entries.flatMap((entry) => [
         ...[...entry.addedNodes].map((node) => ({ type: "add", node: id(node) })),
         ...[...entry.removedNodes].map((node) => ({ type: "remove", node: id(node) })),
       ])
-      if (changed.length)
-        state.mutations.push({ observedAtMs: performance.now() - state.startedAtPerformanceMs, changed })
-    }).observe(document.documentElement, { childList: true, subtree: true })
+      if (changed.length) state.mutations.push({ observedAtMs, changed })
+    }
+    const mutationObserver = new MutationObserver(recordMutations)
+    mutationObserver.observe(document.documentElement, { childList: true, subtree: true })
+    state.stop = () => {
+      recordShifts(shiftObserver.takeRecords())
+      recordMutations(mutationObserver.takeRecords())
+      state.running = false
+      shiftObserver.disconnect()
+      mutationObserver.disconnect()
+    }
     const sample = () => {
       if (!state.running) return
       setTimeout(() => {
         if (!state.running) return
         const observedAtMs = performance.now() - state.startedAtPerformanceMs
+        if (observedAtMs > state.windowMs) return
         const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
           element.querySelector("[data-timeline-row]"),
         )
@@ -161,7 +181,7 @@ export async function waitForCachedRepaintWindow(page: Page, durationMs: number)
 export async function collectCachedRepaintTrace(page: Page) {
   return page.evaluate(() => {
     const state = (window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash!
-    state.running = false
+    state.stop()
     return state
   })
 }
@@ -222,6 +242,7 @@ export function compressCachedRepaintTrace(trace: CachedRepaintTrace) {
   return {
     timeOriginEpochMs: trace.timeOriginEpochMs,
     startedAtPerformanceMs: trace.startedAtPerformanceMs,
+    windowMs: trace.windowMs,
     summary: summarizeCachedRepaintTrace(trace),
     samples,
     mutations: trace.mutations,

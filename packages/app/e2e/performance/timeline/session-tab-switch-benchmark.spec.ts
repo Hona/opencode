@@ -7,13 +7,13 @@ import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switc
 
 type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
 
-benchmark("benchmarks cold and hot session tab switching", async ({ browser, report }) => {
+benchmark("benchmarks cold and hot session tab switching", async ({ browser, report }, testInfo) => {
   benchmark.setTimeout(180_000)
   const results = { cold: [] as Result[], hot: [] as Result[] }
   for (const mode of ["cold", "hot"] as const) {
     for (let run = 0; run < 5; run++) {
       results[mode].push(
-        await withBenchmarkPage(browser, `session-tab-switch-${mode}-${run}`, (page) => trial(page, mode)),
+        await withBenchmarkPage(browser, `session-tab-switch-${mode}-${run}`, (page) => trial(page, mode), testInfo),
       )
     }
   }

@@ -18,12 +18,13 @@ benchmark.describe("performance: session timeline streaming", () => {
     const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
     const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
     const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 320)
-    const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
-    const profileVisual = profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
+    const eventBatch = Number(process.env.TIMELINE_EVENT_BATCH ?? 1)
     const minimal = process.env.TIMELINE_MINIMAL === "1"
+    const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
+    const profileVisual = !minimal && profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
     const fixture = await setupTimelineBenchmark(page, {
       historyTurns,
-      eventBatch: Number(process.env.TIMELINE_EVENT_BATCH ?? 1),
+      eventBatch,
     })
 
     fixture.transport.enqueue(buildInitialStreamEvent(deltaCount))
@@ -51,6 +52,8 @@ benchmark.describe("performance: session timeline streaming", () => {
       { timeout: 420_000 },
     )
     await expect(fixture.text).toContainText("benchmark-complete")
+    await expect(fixture.text).toContainText("Streaming")
+    await fixture.waitForStableGeometry()
     const metrics = await collectTimelineStreamMetrics(page, {
       textPartID,
       finalIndex: deltaCount,
@@ -73,11 +76,10 @@ benchmark.describe("performance: session timeline streaming", () => {
         minimal,
         queuedDeltas: deltas.length,
         historyTurns,
+        eventBatch,
       },
     )
 
     await profile.reset()
-    await expect(fixture.text).toContainText("Streaming")
-    await fixture.waitForStableGeometry()
   })
 })

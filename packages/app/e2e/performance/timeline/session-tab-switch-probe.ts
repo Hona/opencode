@@ -32,16 +32,21 @@ async function installSessionSwitchProbe(
               return rect.bottom > view.top && rect.top < view.bottom
             })
             .map((element) => element.dataset.messageId!)
+          const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some((element) => {
+            const rect = element.getBoundingClientRect()
+            return rect.bottom > view.top && rect.top < view.bottom
+          })
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           samples.push({
             observedAtMs,
             destination: visible.filter((id) => destination.has(id)),
             source: visible.filter((id) => source.has(id)),
+            hasVisibleRows,
             last: visible.includes(lastID),
             bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
           })
         } else {
-          samples.push({ observedAtMs, destination: [], source: [], last: false })
+          samples.push({ observedAtMs, destination: [], source: [], hasVisibleRows: false, last: false })
         }
         requestAnimationFrame(sample)
       }, 0)
