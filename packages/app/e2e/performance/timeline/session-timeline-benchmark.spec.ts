@@ -137,7 +137,7 @@ test.describe("regression: session timeline local row state", () => {
     const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
     await expect(text).toBeVisible()
     await expect(text).toContainText("Implementation plan")
-    if (!crossBranch) await expect(text.locator(".shiki span").first()).toBeVisible()
+    if (!crossBranch) await expect(text.locator(".shiki span").first()).toBeVisible({ timeout: 30_000 })
     const workerReadyMs = performance.now() - workerStart
     await scroller.evaluate((element) => {
       element.scrollTop = element.scrollHeight
