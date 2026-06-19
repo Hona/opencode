@@ -59,9 +59,9 @@ Committed smoke and regression tests continue to own correctness coverage for pa
 Set `OPENCODE_PERFORMANCE_TRACE_DIR` to emit a standard Chrome DevTools trace for every benchmark page automatically:
 
 ```sh
-OPENCODE_PERFORMANCE=1 \
 OPENCODE_PERFORMANCE_TRACE_DIR=/tmp/opencode-performance-traces \
-bun test:e2e:local -- e2e/performance/timeline/session-tab-switch-benchmark.spec.ts
+bunx playwright test --config e2e/performance/playwright.config.ts \
+  timeline/session-tab-switch-benchmark.spec.ts
 ```
 
 The emitted JSON is a standard Chrome trace and can be loaded directly into the Chrome DevTools Performance panel. `devtools-tracing` can optionally inspect it from the command line without adding package scripts or dependencies:
@@ -69,9 +69,9 @@ The emitted JSON is a standard Chrome trace and can be loaded directly into the 
 Trace capture mirrors [Puppeteer's official tracing defaults and lifecycle](https://pptr.dev/api/puppeteer.tracing), using Chrome's `ReturnAsStream` transfer mode and failing when Chromium reports trace data loss.
 
 ```sh
-bunx devtools-tracing stats /tmp/opencode-performance-traces/session-tab-switch-cold.json
-bunx devtools-tracing inp /tmp/opencode-performance-traces/session-tab-switch-cold.json
-bunx devtools-tracing selector-stats /tmp/opencode-performance-traces/session-tab-switch-cold.json
+bunx devtools-tracing stats /tmp/opencode-performance-traces/session-tab-switch-cold-0.json
 ```
+
+INP analysis requires a trace with a supported navigation/interaction insight. Selector statistics require a trace captured with `OPENCODE_PERFORMANCE_SELECTOR_TRACE=1`.
 
 `e2e/performance/playwright.uncapped.config.ts` disables Chromium frame-rate limiting for explicit uncapped diagnostics. Native product benchmarks should use the default Playwright configuration.
