@@ -24,7 +24,10 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report e2e/playwright-report"
+    "test:e2e:report": "playwright show-report e2e/playwright-report",
+    "trace:stats": "devtools-tracing stats",
+    "trace:inp": "devtools-tracing inp",
+    "trace:selectors": "devtools-tracing selector-stats"
   },
   "license": "MIT",
   "devDependencies": {
@@ -37,6 +40,7 @@
     "@types/luxon": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "devtools-tracing": "1.7.2",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
