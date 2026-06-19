@@ -2,7 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../../utils/waits"
-import { expect } from "../performance-test"
+import { expect } from "../benchmark"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"

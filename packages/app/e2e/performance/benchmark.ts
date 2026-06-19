@@ -1,6 +1,10 @@
 import { expect, test as base, type Page } from "@playwright/test"
 import { startChromeTrace } from "./chrome-trace"
 
+type BenchmarkFixtures = {
+  report: (metrics: Record<string, unknown>, context?: Record<string, unknown>) => void
+}
+
 export type PerformancePageDiagnostics = {
   navigations: string[]
   stop: () => Promise<string | undefined>
@@ -8,7 +12,22 @@ export type PerformancePageDiagnostics = {
 
 const pages = new WeakMap<Page, PerformancePageDiagnostics>()
 
-export const test = base.extend({
+export const benchmark = base.extend<BenchmarkFixtures>({
+  report: async ({}, use, testInfo) => {
+    await use((metrics, context = {}) => {
+      console.log(
+        `BENCHMARK ${JSON.stringify({
+          name: testInfo.titlePath.join(" > "),
+          context: {
+            project: testInfo.project.name,
+            platform: process.platform,
+            ...context,
+          },
+          metrics,
+        })}`,
+      )
+    })
+  },
   page: async ({ page }, use, testInfo) => {
     const diagnostics = await observePerformancePage(page, testInfo.titlePath.join("-"))
     try {
@@ -49,7 +68,7 @@ export async function observePerformancePage(page: Page, name: string, trace = t
   return diagnostics
 }
 
-export function performanceDiagnostics(page: Page) {
+export function benchmarkDiagnostics(page: Page) {
   const diagnostics = pages.get(page)
   if (!diagnostics) throw new Error("Performance diagnostics are not installed for this page")
   return diagnostics

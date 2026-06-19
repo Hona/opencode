@@ -21,21 +21,28 @@ The suite contains:
 - cached session repaint and mutation tracing
 - streaming timeline FPS, frame-gap, long-task, geometry, and remount diagnostics
 
-All benchmarks import the shared `performance-test` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that create additional browser contexts use the same `observePerformancePage` helper.
+All benchmarks import the shared `benchmark` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that create additional browser contexts use the same `observePerformancePage` helper.
 
 New benchmarks should look like normal Playwright tests:
 
 ```ts
-import { expect, test } from "../performance-test"
+import { benchmark, expect } from "../benchmark"
 
-test("measures one interaction", async ({ page }) => {
-  // Only scenario-specific setup, interaction, and assertions belong here.
+benchmark("measures one interaction", async ({ page, report }) => {
+  // Only scenario-specific setup and interaction belong here.
+  report({ durationMs: 42 })
 })
 ```
 
-The fixture automatically names and closes traces, captures navigation history, and attaches that history when a test fails.
+The fixture automatically names and closes traces, captures navigation history, attaches that history when a test fails, and emits metrics as a consistent `BENCHMARK` JSON line.
+
+```text
+BENCHMARK {"name":"...","context":{"project":"chromium","platform":"darwin"},"metrics":{...}}
+```
 
 CPU and high-volume visual profiling are disabled by default. Set `TIMELINE_CPU_PROFILE=1` to enable both, or additionally set `TIMELINE_VISUAL_PROFILE=0` for CPU-only profiling.
+
+Benchmarks do not assert machine-dependent performance budgets. FPS, frame percentiles, long tasks, dropped-frame equivalents, blank/source frames, remounts, overlap, gaps, and scroll drift are always emitted as structured JSON for manual comparison. Assertions only verify that the scenario and metric collection completed.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
 

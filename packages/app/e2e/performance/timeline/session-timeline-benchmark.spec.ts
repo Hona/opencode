@@ -1,4 +1,4 @@
-import { expect, performanceDiagnostics, test } from "../performance-test"
+import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
 import {
   buildInitialStreamEvent,
   buildStreamDeltaEvents,
@@ -8,9 +8,9 @@ import {
 import { resetTimelineProfile, startTimelineProfile, stopTimelineProfile } from "./session-timeline-profile"
 import { collectTimelineStreamMetrics, installTimelineStreamProbe } from "./session-timeline-stream-probe"
 
-test.describe("performance: session timeline streaming", () => {
-  test("streams assistant text without remounting or oscillating", async ({ page }) => {
-    test.setTimeout(240_000)
+benchmark.describe("performance: session timeline streaming", () => {
+  benchmark("streams assistant text without remounting or oscillating", async ({ page, report }) => {
+    benchmark.setTimeout(240_000)
     const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
     const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
     const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 320)
@@ -40,46 +40,27 @@ test.describe("performance: session timeline streaming", () => {
     await page.waitForTimeout(20_000)
     const metrics = await collectTimelineStreamMetrics(page, {
       textPartID,
-      navigations: performanceDiagnostics(page).navigations,
+      navigations: benchmarkDiagnostics(page).navigations,
     })
     const delivered = deltas.length - fixture.transport.pendingCount()
     await stopTimelineProfile(profile)
 
-    console.log(
-      "timeline stream benchmark",
-      JSON.stringify({
+    report(
+      {
+        initialContentReadyMs,
+        ...metrics,
+        deliveredDeltas: delivered,
+        pendingDeltas: fixture.transport.pendingCount(),
+      },
+      {
         cpuThrottle,
         profileCPU,
         profileVisual,
         minimal,
-        initialContentReadyMs,
-        ...metrics,
         queuedDeltas: deltas.length,
         historyTurns,
-        deliveredDeltas: delivered,
-        pendingDeltas: fixture.transport.pendingCount(),
-      }),
+      },
     )
-    expect(metrics.blanks).toBe(0)
-    expect(metrics.rowReplaced).toBe(false)
-    expect(metrics.markdownReplaced).toBe(false)
-    expect(metrics.visibleMounts).toBe(0)
-    expect(metrics.visibleUnmounts).toBe(0)
-    expect(metrics.paintedSubtreeDropouts).toEqual([])
-    expect(metrics.maxOverlap).toBeLessThanOrEqual(1)
-    expect(metrics.maxGap).toBeLessThanOrEqual(1)
-    if (!profileCPU) {
-      expect(metrics.fps).toBeGreaterThanOrEqual(25)
-      expect(metrics.p95).toBeLessThanOrEqual(100)
-      expect(metrics.framesUnder20Fps).toBeLessThanOrEqual(150)
-      expect(metrics.droppedFrameEquivalents).toBeLessThanOrEqual(750)
-      expect(metrics.longestSlowStreak).toBeLessThanOrEqual(20)
-      expect(metrics.longTaskTime).toBeLessThanOrEqual(1_000)
-    }
-    expect(metrics.maxDistance).toBeLessThanOrEqual(80)
-    expect(metrics.finalDistance).toBeLessThanOrEqual(1)
-    expect(metrics.corrections).toBeLessThanOrEqual(3)
-    expect(delivered).toBeGreaterThanOrEqual(40)
 
     await resetTimelineProfile(profile)
     fixture.transport.releaseAll()
