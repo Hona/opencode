@@ -197,7 +197,6 @@ export async function installTimelineStreamProbe(
               const removed = [node, ...node.querySelectorAll(critical)].filter((element) => element.matches(critical))
               removed.forEach((element) => state.visibleSubtreeUnmounts.push(describe(element)))
             })
-            if (record.addedNodes.length > 0 && record.removedNodes.length > 0) state.visibleSubtreeReplacements += 1
           })
         }).observe(root, { childList: true, subtree: true })
 
