@@ -49,9 +49,14 @@ async function trial(page: Page, mode: "cold" | "hot") {
 }
 
 function summarize(results: Record<"cold" | "hot", Result[]>) {
-  const stats = (values: number[]) => {
-    const sorted = values.slice().sort((a, b) => a - b)
-    return { min: sorted[0], median: sorted[Math.floor(sorted.length / 2)], max: sorted.at(-1) }
+  const stats = (values: (number | null)[]) => {
+    const sorted = values.filter((value): value is number => value !== null).sort((a, b) => a - b)
+    return {
+      min: sorted[0] ?? null,
+      median: sorted[Math.floor(sorted.length / 2)] ?? null,
+      max: sorted.at(-1) ?? null,
+      missing: values.length - sorted.length,
+    }
   }
   return Object.fromEntries(
     Object.entries(results).map(([mode, values]) => [

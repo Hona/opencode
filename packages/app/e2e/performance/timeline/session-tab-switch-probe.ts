@@ -77,7 +77,14 @@ async function waitForStableSessionSwitch(page: Page) {
     return samples.some((_, index) => {
       const stable = samples.slice(index, index + 3)
       return (
-        stable.length === 3 && stable.every((sample) => sample.last && Math.abs(sample.bottomErrorPx ?? Infinity) <= 1)
+        stable.length === 3 &&
+        stable.every(
+          (sample) =>
+            sample.destination.length > 0 &&
+            sample.source.length === 0 &&
+            sample.last &&
+            Math.abs(sample.bottomErrorPx ?? Infinity) <= 1,
+        )
       )
     })
   })

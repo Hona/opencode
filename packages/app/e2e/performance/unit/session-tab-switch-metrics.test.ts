@@ -35,3 +35,20 @@ test("does not classify mixed source and destination content as correct", () => 
   expect(result.firstCorrectObservedMs).toBe(32)
   expect(result.stableObservedMs).toBe(64)
 })
+
+test("reports missing correctness without throwing", () => {
+  const result = classifySessionSwitch([
+    {
+      observedAtMs: 16,
+      destination: ["destination"],
+      source: ["source"],
+      hasVisibleRows: true,
+      last: true,
+      bottomErrorPx: 0,
+    },
+  ])
+
+  expect(result.firstDestinationObservedMs).toBe(16)
+  expect(result.firstCorrectObservedMs).toBeNull()
+  expect(result.stableObservedMs).toBeNull()
+})

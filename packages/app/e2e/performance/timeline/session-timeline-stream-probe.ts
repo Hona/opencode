@@ -238,16 +238,17 @@ export async function installTimelineStreamProbe(
       }
       const mutationObserver = profileVisual ? new MutationObserver(recordMutations) : undefined
       mutationObserver?.observe(root, { childList: true, subtree: true })
+      const currentPart = () => root.querySelector<HTMLElement>(`[data-timeline-part-id="${textPartID}"]`)
       const observeProgress = (at: number) => {
         if (!state.running) return
-        const content = part.textContent ?? ""
+        const content = currentPart()?.textContent ?? ""
         const index = content.includes("benchmark-complete")
           ? finalIndex
           : Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
         if (index >= 0 && index !== state.applied.at(-1)?.index) state.applied.push({ at, index })
       }
       const progressObserver = new MutationObserver(() => observeProgress(performance.now()))
-      progressObserver.observe(part, { characterData: true, childList: true, subtree: true })
+      progressObserver.observe(root, { characterData: true, childList: true, subtree: true })
       state.cleanup = () => {
         recordLongTasks(longTaskObserver.takeRecords())
         recordLayoutShifts(layoutShiftObserver?.takeRecords() ?? [])
@@ -350,7 +351,8 @@ export async function installTimelineStreamProbe(
             state.visibleSubtrees = visibleSubtrees
           }
           if (profileVisual && duration > 33.34) {
-            const content = part.textContent ?? ""
+            const livePart = currentPart()
+            const content = livePart?.textContent ?? ""
             const complete = content.includes("benchmark-complete")
             const index = complete
               ? finalIndex
@@ -365,10 +367,10 @@ export async function installTimelineStreamProbe(
                   : index >= 0
                     ? "stream"
                     : "unknown",
-              tokenSpans: part.querySelectorAll(".shiki span").length,
-              blocks: part.querySelectorAll("[data-markdown-block]").length,
-              codeBlocks: part.querySelectorAll('[data-component="markdown-code"]').length,
-              height: part.getBoundingClientRect().height,
+              tokenSpans: livePart?.querySelectorAll(".shiki span").length ?? 0,
+              blocks: livePart?.querySelectorAll("[data-markdown-block]").length ?? 0,
+              codeBlocks: livePart?.querySelectorAll('[data-component="markdown-code"]').length ?? 0,
+              height: livePart?.getBoundingClientRect().height ?? 0,
               distance: root.scrollHeight - root.clientHeight - root.scrollTop,
             })
           }
