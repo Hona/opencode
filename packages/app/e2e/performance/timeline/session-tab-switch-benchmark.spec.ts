@@ -3,15 +3,9 @@ import { expectSessionTitle } from "../../utils/waits"
 import { startChromeTrace } from "../chrome-trace"
 import { fixture } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
+import { classifySessionSwitch, isStableDestination } from "./session-tab-switch-metrics"
 
-type Result = {
-  firstDestinationMs: number
-  firstCorrectMs: number
-  stableMs: number
-  wrongDestinationFrames: number
-  blankFrames: number
-  sourceAfterDestination: number
-}
+type Result = ReturnType<typeof classifySessionSwitch>
 
 test("benchmarks cold and hot session tab switching", async ({ browser }) => {
   test.setTimeout(180_000)
@@ -23,7 +17,7 @@ test("benchmarks cold and hot session tab switching", async ({ browser }) => {
   results.hot.forEach((result) => {
     expect(result.wrongDestinationFrames).toBe(0)
     expect(result.blankFrames).toBe(0)
-    expect(result.sourceAfterDestination).toBe(0)
+    expect(result.sourceFrames).toBe(0)
   })
 })
 
@@ -37,6 +31,7 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
   if (mode === "hot") {
     await page.goto(stressSessionHref(fixture.targetID))
     await expectSessionTitle(page, fixture.expected.targetTitle)
+    await waitForDestinationReady(page, fixture.expected.targetMessageIDs.at(-1)!)
     await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
   } else {
     await page.goto(stressSessionHref(fixture.sourceID))
@@ -124,7 +119,7 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
       )
     })
   })
-  const result = await page.evaluate(() => {
+  const samples = await page.evaluate(() => {
     const probe = (
       window as Window & {
         __sessionSwitchProbe?: {
@@ -134,31 +129,54 @@ async function trial(browser: Browser, mode: "cold" | "hot", run: number) {
       }
     ).__sessionSwitchProbe!
     probe.stop()
-    const firstDestination = probe.samples.findIndex((sample) => sample.destination.length > 0)
-    const firstCorrect = probe.samples.findIndex(
-      (sample) => sample.last && Math.abs(sample.bottomError ?? Infinity) <= 1,
-    )
-    const stable = probe.samples.findIndex((_, index) => {
-      const values = probe.samples.slice(index, index + 3)
-      return (
-        values.length === 3 && values.every((sample) => sample.last && Math.abs(sample.bottomError ?? Infinity) <= 1)
-      )
-    })
-    return {
-      firstDestinationMs: probe.samples[firstDestination]!.at,
-      firstCorrectMs: probe.samples[firstCorrect]!.at,
-      stableMs: probe.samples[stable + 2]!.at,
-      wrongDestinationFrames: probe.samples
-        .slice(firstDestination)
-        .filter((sample) => sample.destination.length > 0 && !sample.last).length,
-      blankFrames: probe.samples.slice(firstDestination).filter((sample) => sample.destination.length === 0).length,
-      sourceAfterDestination: probe.samples.slice(firstDestination).filter((sample) => sample.source.length > 0).length,
-    }
+    return probe.samples
   })
+  const result = classifySessionSwitch(samples)
   const trace = await stopTrace?.()
   if (trace) console.log(`TRACE ${trace}`)
   await context.close()
   return result
+}
+
+async function waitForDestinationReady(page: Page, lastID: string) {
+  const samples: { last: boolean; bottomError?: number }[] = []
+  await expect
+    .poll(
+      async () => {
+        samples.push(
+          await page.evaluate(
+            (lastID) =>
+              new Promise<{ last: boolean; bottomError?: number }>((resolve) => {
+                requestAnimationFrame(() =>
+                  setTimeout(() => {
+                    const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+                      element.querySelector("[data-timeline-row]"),
+                    )
+                    if (!root) {
+                      resolve({ last: false })
+                      return
+                    }
+                    const view = root.getBoundingClientRect()
+                    const last = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].some((element) => {
+                      if (element.dataset.messageId !== lastID) return false
+                      const rect = element.getBoundingClientRect()
+                      return rect.bottom > view.top && rect.top < view.bottom
+                    })
+                    const spacer = root
+                      .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
+                      ?.getBoundingClientRect()
+                    resolve({ last, bottomError: spacer ? spacer.bottom - view.bottom : undefined })
+                  }, 0),
+                )
+              }),
+            lastID,
+          ),
+        )
+        return isStableDestination(samples.slice(-3))
+      },
+      { timeout: 30_000, intervals: [0] },
+    )
+    .toBe(true)
 }
 
 function summarize(results: Record<"cold" | "hot", Result[]>) {

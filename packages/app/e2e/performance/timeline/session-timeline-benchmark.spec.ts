@@ -105,7 +105,6 @@ test.describe("regression: session timeline local row state", () => {
     test.setTimeout(240_000)
     const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
     const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
-    const crossBranch = process.env.TIMELINE_CROSS_BRANCH === "1"
     const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
     const profileVisual = profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
     const minimal = process.env.TIMELINE_MINIMAL === "1"
@@ -133,12 +132,12 @@ test.describe("regression: session timeline local row state", () => {
         },
       },
     })
-    const workerStart = performance.now()
+    const contentStart = performance.now()
     const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
     await expect(text).toBeVisible()
     await expect(text).toContainText("Implementation plan")
-    if (!crossBranch) await expect(text.locator(".shiki span").first()).toBeVisible({ timeout: 30_000 })
-    const workerReadyMs = performance.now() - workerStart
+    await expect(text.locator('[data-component="markdown-code"]').first()).toBeVisible()
+    const initialContentReadyMs = performance.now() - contentStart
     await scroller.evaluate((element) => {
       element.scrollTop = element.scrollHeight
     })
@@ -628,7 +627,7 @@ test.describe("regression: session timeline local row state", () => {
         profileCPU,
         profileVisual,
         minimal,
-        workerReadyMs,
+        initialContentReadyMs,
         ...metrics,
         queuedDeltas: deltas.length,
         historyTurns: Number(process.env.TIMELINE_HISTORY_TURNS ?? 320),
@@ -661,8 +660,7 @@ test.describe("regression: session timeline local row state", () => {
     eventBatch = events.length
     await expect(text).toContainText("benchmark-complete", { timeout: 60_000 })
     await expect(text).toContainText("Streaming")
-    if (!crossBranch)
-      await expect(text.locator('[data-component="markdown-code"]').last().locator(".shiki span")).not.toHaveCount(0)
+    await expect(text.locator('[data-component="markdown-code"]').last()).toBeVisible()
     await waitForStableGeometry(page, scroller)
   })
 
