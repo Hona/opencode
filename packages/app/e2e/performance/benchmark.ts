@@ -32,17 +32,20 @@ export const benchmark = base.extend<BenchmarkFixtures>({
     if (!reported) throw new Error(`Benchmark did not report metrics: ${benchmarkName(testInfo)}`)
   },
   page: async ({ page }, use, testInfo) => {
-    const diagnostics = await observePerformancePage(page, benchmarkName(testInfo))
+    const name = benchmarkName(testInfo)
+    const diagnostics = await observePerformancePage(page, name)
     try {
       await use(page)
     } finally {
-      const trace = await diagnostics.stop()
-      if (trace) console.log(`TRACE ${trace}`)
-      if (testInfo.status !== testInfo.expectedStatus) {
-        await testInfo.attach("performance-navigations", {
-          body: JSON.stringify(diagnostics.navigations, null, 2),
-          contentType: "application/json",
-        })
+      try {
+        await reportPerformancePage(name, diagnostics)
+      } finally {
+        if (testInfo.status !== testInfo.expectedStatus) {
+          await testInfo.attach("performance-navigations", {
+            body: JSON.stringify(diagnostics.navigations, null, 2),
+            contentType: "application/json",
+          })
+        }
       }
     }
   },
@@ -60,15 +63,16 @@ async function observePerformancePage(page: Page, name: string) {
     if (frame === page.mainFrame()) navigations.push(frame.url())
   }
   page.on("framenavigated", onNavigation)
-  const stopTrace = await startChromeTrace(page, name)
-  let stopped = false
-  const diagnostics = {
+  const stopTrace = await startChromeTrace(page, name).catch((error) => {
+    page.off("framenavigated", onNavigation)
+    throw error
+  })
+  let stopping: Promise<string | undefined> | undefined
+  const diagnostics: PerformancePageDiagnostics = {
     navigations,
-    async stop() {
-      if (stopped) return
-      stopped = true
+    stop() {
       page.off("framenavigated", onNavigation)
-      return stopTrace?.()
+      return (stopping ??= stopTrace?.() ?? Promise.resolve(undefined))
     },
   }
   pages.set(page, diagnostics)
@@ -77,15 +81,32 @@ async function observePerformancePage(page: Page, name: string) {
 
 export async function withBenchmarkPage<T>(browser: Browser, name: string, run: (page: Page) => Promise<T>) {
   const context = await browser.newContext()
-  const page = await context.newPage()
-  const diagnostics = await observePerformancePage(page, name)
   try {
-    return await run(page)
+    const page = await context.newPage()
+    const diagnostics = await observePerformancePage(page, name)
+    try {
+      return await run(page)
+    } finally {
+      await reportPerformancePage(name, diagnostics)
+    }
   } finally {
-    const trace = await diagnostics.stop()
-    if (trace) console.log(`TRACE ${trace}`)
     await context.close()
   }
+}
+
+async function reportPerformancePage(name: string, diagnostics: PerformancePageDiagnostics) {
+  const trace = await diagnostics.stop()
+  console.log(
+    `BENCHMARK_PAGE ${JSON.stringify({
+      name,
+      context: {
+        platform: process.platform,
+        trace,
+        selectorTrace: process.env.OPENCODE_PERFORMANCE_SELECTOR_TRACE === "1",
+      },
+      navigations: diagnostics.navigations,
+    })}`,
+  )
 }
 
 export function benchmarkDiagnostics(page: Page) {
