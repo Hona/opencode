@@ -25,7 +25,7 @@
     "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
-    "test:bench": "bun test ./e2e/performance/chrome-trace-write.test.ts ./e2e/performance/timeline/session-tab-switch-metrics.test.ts && OPENCODE_PERFORMANCE=1 playwright test e2e/performance",
+    "test:bench": "bun test ./e2e/performance/unit && OPENCODE_PERFORMANCE=1 playwright test e2e/performance --workers=1",
     "trace:stats": "devtools-tracing stats",
     "trace:inp": "devtools-tracing inp",
     "trace:selectors": "devtools-tracing selector-stats"

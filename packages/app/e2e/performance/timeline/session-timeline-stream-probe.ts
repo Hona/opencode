@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test"
 
+const STREAM_MARKER_PATTERN = "stream-(\\d+)"
+const STREAM_FRAGMENT_COUNT = 18
+
 type TimelineProbeState = {
   frames: number[]
   frameAt: number[]
@@ -55,7 +58,7 @@ export async function installTimelineStreamProbe(
   page: Page,
   options: { textPartID: string; profileVisual: boolean; minimal: boolean },
 ) {
-  await page.evaluate(({ textPartID, profileVisual, minimal }) => {
+  await page.evaluate(({ textPartID, profileVisual, minimal, markerPattern, fragmentCount }) => {
     const part = document.querySelector<HTMLElement>(`[data-timeline-part-id="${textPartID}"]`)
     const row = part?.closest<HTMLElement>("[data-timeline-row]")
     const markdown = part?.querySelector<HTMLElement>('[data-component="markdown"]')
@@ -272,18 +275,13 @@ export async function installTimelineStreamProbe(
         }
         if (profileVisual && duration > 33.34) {
           const content = part.textContent ?? ""
-          const index = Number(
-            content
-              .match(/streamedValue(\d+)/g)
-              ?.at(-1)
-              ?.match(/\d+/)?.[0] ?? -1,
-          )
+          const index = Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
           state.slowFrames.push({
             duration,
             index,
             phase: content.includes("benchmark-complete")
               ? "complete"
-              : index >= 0 && index % 20 === 0
+              : index >= 0 && index % fragmentCount === 0
                 ? "boundary"
                 : index >= 0
                   ? "code"
@@ -299,7 +297,21 @@ export async function installTimelineStreamProbe(
       }, 0)
     }
     requestAnimationFrame(sample)
-  }, options)
+  }, { ...options, markerPattern: STREAM_MARKER_PATTERN, fragmentCount: STREAM_FRAGMENT_COUNT })
+}
+
+export function streamProgress(content: string) {
+  const index = Number(content.match(new RegExp(STREAM_MARKER_PATTERN, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
+  return {
+    index,
+    phase: content.includes("benchmark-complete")
+      ? ("complete" as const)
+      : index >= 0 && index % STREAM_FRAGMENT_COUNT === 0
+        ? ("boundary" as const)
+        : index >= 0
+          ? ("code" as const)
+          : ("unknown" as const),
+  }
 }
 
 export async function collectTimelineStreamMetrics(page: Page, options: { textPartID: string; navigations: string[] }) {

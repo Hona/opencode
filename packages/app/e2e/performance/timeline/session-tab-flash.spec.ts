@@ -3,8 +3,8 @@ import { expectSessionTitle } from "../../utils/waits"
 import { fixture } from "./session-timeline-stress.fixture"
 import {
   collectCachedRepaintTrace,
+  compressCachedRepaintTrace,
   installCachedRepaintProbe,
-  summarizeCachedRepaintTrace,
 } from "./session-tab-repaint-probe"
 import {
   installStressSessionTabs,
@@ -40,6 +40,6 @@ benchmark("traces cached session repaint after the correct first frame", async (
   await expectSessionTitle(page, fixture.expected.targetTitle)
   await page.waitForTimeout(1_000)
   const result = await collectCachedRepaintTrace(page)
-  report(summarizeCachedRepaintTrace(result))
+  report(compressCachedRepaintTrace(result))
   expect(result.frames.length).toBeGreaterThan(0)
 })

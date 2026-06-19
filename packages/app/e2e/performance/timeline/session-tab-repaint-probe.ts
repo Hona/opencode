@@ -167,3 +167,23 @@ export function summarizeCachedRepaintTrace(trace: CachedRepaintTrace) {
     maxLayoutShift: Math.max(0, ...trace.shifts.map((shift) => shift.value)),
   }
 }
+
+export function compressCachedRepaintTrace(trace: CachedRepaintTrace) {
+  const frames: { at: number[]; state: Omit<CachedRepaintTrace["frames"][number], "at"> }[] = []
+  for (const frame of trace.frames) {
+    const { at, ...state } = frame
+    const previous = frames.at(-1)
+    if (previous && JSON.stringify(previous.state) === JSON.stringify(state)) {
+      previous.at.push(at)
+      continue
+    }
+    frames.push({ at: [at], state })
+  }
+  return {
+    started: trace.started,
+    summary: summarizeCachedRepaintTrace(trace),
+    frames,
+    mutations: trace.mutations,
+    shifts: trace.shifts,
+  }
+}

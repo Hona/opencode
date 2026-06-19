@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { writeChromeTrace } from "./chrome-trace"
+import { writeChromeTrace } from "../chrome-trace"
 
 test("creates the configured trace directory", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "opencode-trace-"))

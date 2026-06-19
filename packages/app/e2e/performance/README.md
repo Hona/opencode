@@ -42,7 +42,7 @@ BENCHMARK {"name":"...","context":{"project":"chromium","platform":"darwin"},"me
 
 CPU and high-volume visual profiling are disabled by default. Set `TIMELINE_CPU_PROFILE=1` to enable both, or additionally set `TIMELINE_VISUAL_PROFILE=0` for CPU-only profiling.
 
-Benchmarks do not assert machine-dependent performance budgets. FPS, frame percentiles, long tasks, dropped-frame equivalents, blank/source frames, remounts, overlap, gaps, and scroll drift are always emitted as structured JSON for manual comparison. Assertions only verify that the scenario and metric collection completed.
+Benchmarks do not assert machine-dependent performance budgets. FPS, frame percentiles, long tasks, dropped-frame equivalents, blank/source frames, remounts, overlap, gaps, and scroll drift are always emitted as structured JSON for manual comparison. Assertions only verify that the scenario and metric collection completed. Repeated repaint states are run-length grouped, but every original frame timestamp is retained alongside raw mutation batches and layout shifts.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
 

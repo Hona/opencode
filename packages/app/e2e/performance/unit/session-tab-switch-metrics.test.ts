@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { classifySessionSwitch } from "./session-tab-switch-metrics"
+import { classifySessionSwitch } from "../timeline/session-tab-switch-metrics"
 
 test("counts source and blank frames before the destination paints", () => {
   const result = classifySessionSwitch([
