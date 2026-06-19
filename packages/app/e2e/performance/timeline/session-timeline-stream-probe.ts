@@ -5,6 +5,7 @@ const STREAM_FRAGMENT_COUNT = 18
 
 type TimelineProbeState = {
   started: number
+  ended: number
   profileVisual: boolean
   minimal: boolean
   frames: number[]
@@ -75,6 +76,7 @@ export async function installTimelineStreamProbe(
       const viewport = root.getBoundingClientRect()
       const state: TimelineProbeState = {
         started: 0,
+        ended: Infinity,
         profileVisual,
         minimal,
         frames: [],
@@ -147,7 +149,11 @@ export async function installTimelineStreamProbe(
 
       const recordLongTasks = (entries: PerformanceEntry[]) => {
         if (!state.running) return
-        state.longTasks.push(...entries.map((entry) => entry.duration))
+        state.longTasks.push(
+          ...entries
+            .filter((entry) => entry.startTime >= state.started && entry.startTime <= state.ended)
+            .map((entry) => entry.duration),
+        )
       }
       const longTaskObserver = new PerformanceObserver((list) => recordLongTasks(list.getEntries()))
       longTaskObserver.observe({ type: "longtask" })
@@ -171,7 +177,17 @@ export async function installTimelineStreamProbe(
       const visible = (element: Element) => {
         const rect = element.getBoundingClientRect()
         const viewport = root.getBoundingClientRect()
-        return rect.bottom > viewport.top && rect.top < viewport.bottom
+        const style = getComputedStyle(element)
+        return (
+          element.isConnected &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.bottom > viewport.top &&
+          rect.top < viewport.bottom &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity) > 0
+        )
       }
       const critical = [
         "[data-timeline-part-id]",
@@ -413,6 +429,7 @@ export async function collectTimelineStreamMetrics(
   return page.evaluate(({ textPartID, finalIndex, navigations }) => {
     const state = (window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark
     if (!state) throw new Error(`missing streaming benchmark state after navigation: ${JSON.stringify(navigations)}`)
+    state.ended = performance.now()
     state.cleanup()
     state.running = false
     const part = document.querySelector<HTMLElement>(`[data-timeline-part-id="${textPartID}"]`)
@@ -522,7 +539,7 @@ export async function collectTimelineStreamMetrics(
       geometry,
       rowReplaced: row !== state.row,
       markdownReplaced: markdown !== state.markdown,
-      renderedCharacters: part?.textContent?.length ?? 0,
+      domTextCharacters: part?.textContent?.length ?? 0,
     }
   }, options)
 }
