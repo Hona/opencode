@@ -1,3 +1,7 @@
+## Priorities
+
+- Prioritise, in this order: stability, simplicity, performance.
+
 ## Debugging
 
 - NEVER try to restart the app, or the server process, EVER.
