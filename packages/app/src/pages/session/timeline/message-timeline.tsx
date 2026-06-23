@@ -73,6 +73,7 @@ import { makeTimer } from "@solid-primitives/timer"
 import { scheduleConnectedMeasure } from "./measure"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
+import { mapVirtualItems } from "./virtual-items"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -480,10 +481,8 @@ export function MessageTimeline(props: {
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
     item.end <= instance.getLogicalScrollOffset()
-  const virtualItemByKey = createMemo(
-    () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
-  )
-  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
+  const virtualItemByKey = createMemo(() => mapVirtualItems(virtualizer.getVirtualItems()))
+  const virtualRowKeys = createMemo(() => [...virtualItemByKey().keys()].map((key) => key as string))
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
