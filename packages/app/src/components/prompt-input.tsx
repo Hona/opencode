@@ -2120,6 +2120,28 @@ function composerPickerOptionId(key: string) {
   return `composer-picker-option-${encodeURIComponent(key)}`
 }
 
+function composerPickerNavigableKeys(
+  projects: ComposerPickerProject[],
+  projectLabel: (project: ComposerPickerProject) => string,
+  query: string,
+) {
+  const trimmed = query.trim().toLowerCase()
+  const items = !trimmed
+    ? projects
+    : projects.filter((project) => projectLabel(project).toLowerCase().includes(trimmed))
+  return [...items.map((project) => project.worktree), COMPOSER_PICKER_ACTION_KEY]
+}
+
+function composerPickerActiveKey(
+  keys: string[],
+  selectedWorktree: string | undefined,
+  mode: "selected" | "first",
+) {
+  if (keys.length === 0) return ""
+  if (mode === "selected" && selectedWorktree && keys.includes(selectedWorktree)) return selectedWorktree
+  return keys[0]
+}
+
 function ComposerPicker(props: { state: ComposerPickerState }) {
   let searchRef: HTMLInputElement | undefined
   let listRef: HTMLDivElement | undefined
@@ -2132,23 +2154,22 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
     return props.state.projects.filter((project) => props.state.projectLabel(project).toLowerCase().includes(query))
   })
 
-  const navigableKeys = createMemo(() => [...items().map((project) => project.worktree), COMPOSER_PICKER_ACTION_KEY])
-
-  const syncActive = (keys: string[]) => {
-    if (keys.length === 0) {
-      setActive("")
-      return
-    }
-    if (!keys.includes(active())) setActive(keys[0])
-  }
-
-  createEffect(() => syncActive(navigableKeys()))
+  const navigableKeys = createMemo(() =>
+    composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, search()),
+  )
 
   createEffect(
     on(
       () => props.state.open,
       (open) => {
         if (open) {
+          setActive(
+            composerPickerActiveKey(
+              composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, ""),
+              props.state.selectedWorktree,
+              "selected",
+            ),
+          )
           requestAnimationFrame(() => searchRef?.focus())
           return
         }
@@ -2214,7 +2235,17 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                 aria-controls={COMPOSER_PICKER_LISTBOX_ID}
                 aria-activedescendant={active() ? composerPickerOptionId(active()) : undefined}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => setSearch(event.currentTarget.value)}
+                onInput={(event) => {
+                  const value = event.currentTarget.value
+                  setSearch(value)
+                  setActive(
+                    composerPickerActiveKey(
+                      composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, value),
+                      props.state.selectedWorktree,
+                      "first",
+                    ),
+                  )
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault()
@@ -2245,6 +2276,13 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                   class="flex size-5 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onClick={() => {
                     setSearch("")
+                    setActive(
+                      composerPickerActiveKey(
+                        composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, ""),
+                        props.state.selectedWorktree,
+                        "selected",
+                      ),
+                    )
                     queueMicrotask(() => searchRef?.focus())
                   }}
                   aria-label={props.state.clearLabel}
