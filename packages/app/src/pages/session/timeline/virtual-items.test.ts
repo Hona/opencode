@@ -1,11 +1,6 @@
 import { expect, test } from "bun:test"
-import type { VirtualItem } from "@tanstack/solid-virtual"
-import { mapVirtualItems } from "./virtual-items"
+import { filterVirtualIndexes } from "./virtual-items"
 
-test("maps virtual items when the virtualizer returns a sparse array", () => {
-  const item = { key: "row-1" } as VirtualItem
-  const items = new Array<VirtualItem>(2)
-  items[1] = item
-
-  expect([...mapVirtualItems(items)]).toEqual([["row-1", item]])
+test("removes pinned indexes left behind after the timeline shrinks", () => {
+  expect(filterVirtualIndexes([0, 2, 4, 8], 5)).toEqual([0, 2, 4])
 })
