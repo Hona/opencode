@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
@@ -59,6 +60,24 @@ test("shows a comment button when a line number is hovered", async ({ page }) =>
   }).toPass()
   await comment.click()
   await expect(review.getByRole("textbox")).toBeVisible()
+})
+
+test("stages a submitted line comment in the prompt context", async ({ page }) => {
+  const requests: string[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "GET") requests.push(`${request.method()} ${new URL(request.url()).pathname}`)
+  })
+
+  const review = page.locator('[data-component="session-review"]')
+  await review.getByText("export const value = 'after'", { exact: true }).click()
+  await review.getByRole("textbox").fill("Use the existing value instead")
+  await review.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()
+
+  await expect(review.getByText("Use the existing value instead", { exact: true })).toBeVisible()
+  const context = page.getByText("Use the existing value instead", { exact: true }).last()
+  await expect(context).toBeVisible()
+  await expect(context.locator("..")).toContainText("review.ts:2")
+  expect(requests).toEqual([])
 })
 
 async function openReview(page: Page) {
@@ -134,8 +153,4 @@ async function openReview(page: Page) {
     .getByRole("button")
     .first()
     .click()
-}
-
-function base64Encode(value: string) {
-  return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
 }
