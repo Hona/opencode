@@ -37,7 +37,6 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
-import { loadHome } from "@/pages/home-module"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
@@ -311,10 +310,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentTab = () => matchRoute(layout.route())
 
             createEffect(() => {
-              if (tabsStore.length === 1) void loadHome()
-            })
-
-            createEffect(() => {
               const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
@@ -527,9 +522,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             const placement = global.sessionPlacement.get(tab.server, tab.sessionId)
                             const ctx = serverCtx()
                             if (!placement || !ctx) return
-                            return ctx.sync.child(placement.directory, { bootstrap: false })[0].session.find(
-                              (session) => session.id === tab.sessionId,
-                            )
+                            return ctx.sync
+                              .child(placement.directory, { bootstrap: false })[0]
+                              .session.find((session) => session.id === tab.sessionId)
                           })
 
                           const [loadedSession] = createResource(

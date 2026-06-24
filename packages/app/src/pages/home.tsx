@@ -50,7 +50,6 @@ import {
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
-import { loadSession } from "@/pages/session-module"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
@@ -143,7 +142,6 @@ export function NewHome() {
   const notification = useNotification()
   const marked = useMarked()
   let focusSessionSearch: (() => void) | undefined
-  onMount(() => void loadSession())
   const [state, setState] = createStore({
     search: "",
     selection: { server: server.key } as HomeProjectSelection,

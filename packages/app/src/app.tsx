@@ -49,69 +49,61 @@ import { WslServersProvider } from "@/wsl/context"
 import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
-import { loadHome } from "@/pages/home-module"
-import { loadSession } from "@/pages/session-module"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./utils/session-route"
 
-const LegacyHome = lazy(() => loadHome().then((module) => ({ default: module.LegacyHome })))
-const NewHome = lazy(() => loadHome().then((module) => ({ default: module.NewHome })))
-const Session = lazy(() => loadSession())
+import Session from "@/pages/session"
+import { NewHome, LegacyHome } from "@/pages/home"
+
 const NewSession = lazy(() => import("@/pages/new-session"))
 
-const SessionRoute = Object.assign(
-  () => {
-    const settings = useSettings()
-    const params = useParams()
-    const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
-    const sdk = useSDK()
-    const server = useServer()
-    const tabs = useTabs()
+const SessionRoute = () => {
+  const settings = useSettings()
+  const params = useParams()
+  const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
+  const sdk = useSDK()
+  const server = useServer()
+  const tabs = useTabs()
 
-    if (params.id && settings.general.newLayoutDesigns()) {
-      return <Navigate href={sessionHref(server.key, params.id)} />
-    }
+  if (params.id && settings.general.newLayoutDesigns()) {
+    return <Navigate href={sessionHref(server.key, params.id)} />
+  }
 
-    // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
-    // is replaced by a draft at /new-session?draftId=…
-    createEffect(() => {
-      if (!settings.general.newLayoutDesigns()) return
-      if (params.id || search.draftId) return
-      if (!tabs.ready() || !sdk().directory) return
-      tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
-    })
+  // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
+  // is replaced by a draft at /new-session?draftId=…
+  createEffect(() => {
+    if (!settings.general.newLayoutDesigns()) return
+    if (params.id || search.draftId) return
+    if (!tabs.ready() || !sdk().directory) return
+    tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
+  })
 
-    return (
-      <SessionProviders>
-        <Session />
-      </SessionProviders>
-    )
-  },
-  { preload: Session.preload },
-)
+  return (
+    <SessionProviders>
+      <Session />
+    </SessionProviders>
+  )
+}
 
-const TargetSessionRoute = Object.assign(
-  () => {
-    const params = useParams<{ serverKey: string; id: string }>()
-    const server = useServer()
-    const conn = createMemo(() => {
-      const key = requireServerKey(params.serverKey)
-      return server.list.find((item) => ServerConnection.key(item) === key)
-    })
+const TargetSessionRoute = () => {
+  const params = useParams<{ serverKey: string; id: string }>()
+  const server = useServer()
+  const conn = createMemo(() => {
+    const key = requireServerKey(params.serverKey)
+    return server.list.find((item) => ServerConnection.key(item) === key)
+  })
 
-    return (
-      <Show when={`${params.serverKey}\0${params.id}`} keyed>
-        <ServerSDKProvider server={conn}>
-          <ServerSyncProvider server={conn}>
-            <ResolvedTargetSessionRoute />
-          </ServerSyncProvider>
-        </ServerSDKProvider>
-      </Show>
-    )
-  },
-  { preload: Session.preload },
-)
+  return (
+    <Show when={`${params.serverKey}\0${params.id}`} keyed>
+      <ServerSDKProvider server={conn}>
+        <ServerSyncProvider server={conn}>
+          <ResolvedTargetSessionRoute />
+        </ServerSyncProvider>
+      </ServerSDKProvider>
+    </Show>
+  )
+}
 
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
