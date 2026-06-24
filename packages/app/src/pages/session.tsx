@@ -1128,12 +1128,33 @@ export default function Page() {
 
   let captureHistoryAnchor = () => {}
   let restoreHistoryAnchor = (_done: boolean) => {}
-  const loadOlder = () =>
-    timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor })
+  let historyRequest = false
+  let historyContinuationFrame: number | undefined
+  const loadOlder = async () => {
+    if (historyRequest || historyLoading()) return
+    historyRequest = true
+    const before = timeline.messages().length
+    try {
+      await timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor })
+    } finally {
+      historyRequest = false
+    }
+    if (timeline.messages().length <= before) return
+    if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
+    if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
+    historyContinuationFrame = requestAnimationFrame(() => {
+      historyContinuationFrame = undefined
+      onHistoryScroll()
+    })
+  }
   const onHistoryScroll = () => {
-    if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200) return
+    if (historyRequest || historyLoading() || !autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200) return
     void loadOlder()
   }
+
+  onCleanup(() => {
+    if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
+  })
 
   fill = () => {
     if (fillFrame !== undefined) return

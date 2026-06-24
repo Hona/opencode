@@ -10,7 +10,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
-import { keepPreviousData, QueryClient, QueryClientProvider, useQuery } from "@tanstack/solid-query"
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
@@ -32,7 +32,7 @@ import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider } from "@/context/server-sync"
-import { GlobalProvider } from "@/context/global"
+import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -49,13 +49,15 @@ import { WslServersProvider } from "@/wsl/context"
 import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
+import { loadHome } from "@/pages/home-module"
+import { loadSession } from "@/pages/session-module"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./utils/session-route"
 
-const LegacyHome = lazy(() => import("@/pages/home").then((module) => ({ default: module.LegacyHome })))
-const NewHome = lazy(() => import("@/pages/home").then((module) => ({ default: module.NewHome })))
-const Session = lazy(() => import("@/pages/session"))
+const LegacyHome = lazy(() => loadHome().then((module) => ({ default: module.LegacyHome })))
+const NewHome = lazy(() => loadHome().then((module) => ({ default: module.NewHome })))
+const Session = lazy(() => loadSession())
 const NewSession = lazy(() => import("@/pages/new-session"))
 
 const SessionRoute = Object.assign(
@@ -159,40 +161,54 @@ function TargetDirectoryLayout(props: ParentProps) {
   const [search] = useSearchParams<{ draftId?: string }>()
   const settings = useSettings()
   const tabs = useTabs()
+  const global = useGlobal()
   const serverSDK = useServerSDK()
   const serverKey = createMemo(() => {
     if (params.serverKey) return requireServerKey(params.serverKey)
     if (!search.draftId) return undefined
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.server
   })
-
-  const resolved = useQuery(() => ({
-    queryKey: [serverSDK().scope, "session-route", params.id] as const,
-    enabled: !!params.serverKey && !!params.id,
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const session = (await serverSDK().client.session.get({ sessionID: params.id! })).data!
-      const root = await rootSession(session, (sessionID) =>
-        serverSDK()
-          .client.session.get({ sessionID })
-          .then((result) => result.data!),
-      )
-      return { session, rootID: root.id }
+  const placement = createMemo(() => {
+    const key = serverKey()
+    if (!key || !params.id) return
+    return global.sessionPlacement.get(key, params.id)
+  })
+  const [resolved] = createResource(
+    () => {
+      const key = serverKey()
+      const id = params.id
+      if (!params.serverKey || !key || !id || placement()) return
+      return { key, id, sdk: serverSDK() }
     },
-  }))
+    async ({ key, id, sdk }) => {
+      const session = (await sdk.client.session.get({ sessionID: id })).data!
+      const root = await rootSession(session, (sessionID) =>
+        sdk.client.session.get({ sessionID }).then((result) => result.data!),
+      )
+      global.sessionPlacement.set({ server: key, leafID: session.id, rootID: root.id, directory: session.directory })
+      return { directory: session.directory, rootID: root.id, server: key, sessionID: id }
+    },
+  )
+  const latestResolved = createMemo(() => {
+    if (resolved.state === "errored" || resolved.state === "unresolved") return
+    return resolved.latest
+  })
+  const currentResolved = createMemo(() => {
+    const value = latestResolved()
+    if (!value || value.server !== serverKey() || value.sessionID !== params.id) return
+    return value
+  })
   const resolvedDirectory = createMemo(() => {
-    if (params.serverKey) return resolved.data?.session.directory
+    if (params.serverKey) return placement()?.directory ?? currentResolved()?.directory
     if (!search.draftId) return undefined
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.directory
   })
-  const directory = createMemo<string | undefined>((prev) =>
-    search.draftId ? resolvedDirectory() : (prev ?? resolvedDirectory()),
-  )
+  const directory = createMemo(() => resolvedDirectory())
   const home = () => !params.serverKey && !search.draftId
   const targetDirectory = () => directory()!
 
   createEffect(() => {
-    const current = resolved.data
+    const current = placement() ?? currentResolved()
     const key = serverKey()
     if (!current || !key) return
     tabs.addSessionTab({
@@ -205,23 +221,57 @@ function TargetDirectoryLayout(props: ParentProps) {
     <NewServerScopedShell directory={() => (home() ? undefined : directory())} sessionID={() => params.id}>
       <Show when={!home()} fallback={props.children}>
         <Show when={!resolved.error} fallback={<ErrorPage error={resolved.error} />}>
-          <Show when={directory()}>
-            <Show
-              when={!params.serverKey || settings.general.newLayoutDesigns()}
-              fallback={<Navigate href={legacySessionHref(directory()!, params.id!)} />}
-            >
-              <SDKProvider directory={targetDirectory}>
-                <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-                  <Show when={!params.serverKey || (resolved.data && !resolved.isPlaceholderData)}>
-                    {props.children}
-                  </Show>
-                </DirectoryDataProvider>
-              </SDKProvider>
-            </Show>
-          </Show>
+          <TargetDirectoryContent
+            directory={directory}
+            placement={placement}
+            resolved={() => {
+              const value = resolved()
+              if (!value || value.server !== serverKey() || value.sessionID !== params.id) return
+              return value
+            }}
+            serverKey={serverKey}
+            serverRoute={() => !!params.serverKey}
+            legacy={() => !settings.general.newLayoutDesigns()}
+            sessionID={() => params.id}
+          >
+            {props.children}
+          </TargetDirectoryContent>
         </Show>
       </Show>
     </NewServerScopedShell>
+  )
+}
+
+function TargetDirectoryContent(
+  props: ParentProps<{
+    directory: () => string | undefined
+    placement: () => { directory: string; rootID: string } | undefined
+    resolved: () => { directory: string; rootID: string } | undefined
+    serverKey: () => ServerConnection.Key | undefined
+    serverRoute: () => boolean
+    legacy: () => boolean
+    sessionID: () => string | undefined
+  }>,
+) {
+  const directory = createMemo(() => {
+    if (!props.serverRoute()) return props.directory()
+    return props.placement()?.directory ?? props.resolved()?.directory
+  })
+  return (
+    <Show when={directory()} keyed>
+      {(directory) => (
+        <Show
+          when={!props.serverRoute() || !props.legacy()}
+          fallback={<Navigate href={legacySessionHref(directory, props.sessionID()!)} />}
+        >
+          <SDKProvider directory={directory}>
+            <DirectoryDataProvider directory={directory} server={props.serverKey}>
+              {props.children}
+            </DirectoryDataProvider>
+          </SDKProvider>
+        </Show>
+      )}
+    </Show>
   )
 }
 

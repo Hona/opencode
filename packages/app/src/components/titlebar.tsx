@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createRoot,
   createSignal,
   For,
   Match,
@@ -36,6 +37,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
+import { loadHome } from "@/pages/home-module"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
@@ -307,6 +309,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentTab = () => matchRoute(layout.route())
 
             createEffect(() => {
+              if (tabsStore.length === 1) void loadHome()
+            })
+
+            createEffect(() => {
               const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
@@ -510,25 +516,59 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             )
                           }
 
-                          const sdk = createMemo(() => {
-                            const conn = server.list.find((s) => ServerConnection.key(s) === tab.server)
-                            if (!conn) return null
-                            const { sdk } = global.createServerCtx(conn)
-                            return sdk
+                          const serverCtx = createMemo(() => {
+                            const conn = server.list.find((item) => ServerConnection.key(item) === tab.server)
+                            return conn ? global.createServerCtx(conn) : undefined
                           })
-                          const [session] = createResource(
+                          const sdk = createMemo(() => serverCtx()?.sdk ?? null)
+                          const cachedSession = createMemo(() => {
+                            const placement = global.sessionPlacement.get(tab.server, tab.sessionId)
+                            const ctx = serverCtx()
+                            if (!placement || !ctx) return
+                            return ctx.sync.child(placement.directory, { bootstrap: false })[0].session.find(
+                              (session) => session.id === tab.sessionId,
+                            )
+                          })
+
+                          const [loadedSession] = createResource(
                             () => {
+                              if (cachedSession()) return null
                               const id = tab.sessionId
-                              const _sdk = sdk()
-                              if (!_sdk) return null
-                              return { id, sdk: _sdk }
+                              const ctx = serverCtx()
+                              return ctx ? { id, ctx } : null
                             },
-                            ({ id, sdk }) =>
-                              sdk.client.session
+                            ({ id, ctx }) =>
+                              ctx.sdk.client.session
                                 .get({ sessionID: id })
-                                .then((x) => x.data)
+                                .then((x) => {
+                                  const session = x.data
+                                  if (!session) return
+                                  if (!session.parentID)
+                                    global.sessionPlacement.set({
+                                      server: tab.server,
+                                      leafID: session.id,
+                                      rootID: session.id,
+                                      directory: session.directory,
+                                    })
+                                  const currentIndex = tabsStore.findIndex((item) => item === currentTab())
+                                  if (currentIndex !== -1 && Math.abs(i() - currentIndex) === 1) {
+                                    createRoot((dispose) => {
+                                      try {
+                                        void ctx.sync
+                                          .createDirSyncContext(session.directory)
+                                          .session.sync(session.id)
+                                          .catch(() => {})
+                                          .finally(dispose)
+                                      } catch {
+                                        dispose()
+                                      }
+                                    })
+                                  }
+                                  return session
+                                })
                                 .catch(() => undefined),
                           )
+                          const session = createMemo(() => cachedSession() ?? loadedSession())
 
                           createEffect(() => {
                             if (tab.type !== "session") return

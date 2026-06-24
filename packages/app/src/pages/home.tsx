@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { batch, createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
@@ -38,6 +38,7 @@ import {
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
+import { loadSession } from "@/pages/session-module"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
@@ -123,9 +124,11 @@ export function NewHome() {
   const server = useServer()
   const language = useLanguage()
   const global = useGlobal()
+  const tabs = useTabs()
   const command = useCommand()
   const notification = useNotification()
   let focusSessionSearch: (() => void) | undefined
+  onMount(() => void loadSession())
   const [state, setState] = createStore({
     search: "",
     selection: { server: server.key } as HomeProjectSelection,
@@ -187,6 +190,30 @@ export function NewHome() {
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
+  const prefetched = new Set<string>()
+
+  createEffect(() => {
+    const ctx = focusedServerCtx()
+    if (!ctx) return
+    records()
+      .slice(0, 2)
+      .forEach((record) => {
+        const key = `${ServerConnection.key(focusedServer()!)}\0${record.session.id}`
+        if (prefetched.has(key)) return
+        prefetched.add(key)
+        createRoot((dispose) => {
+          try {
+            void ctx.sync
+              .createDirSyncContext(record.session.directory)
+              .session.sync(record.session.id)
+              .catch(() => {})
+              .finally(dispose)
+          } catch {
+            dispose()
+          }
+        })
+      })
+  })
 
   function setSelection(next: HomeProjectSelection) {
     batch(() => {
@@ -302,6 +329,13 @@ export function NewHome() {
     if (!conn) return
     const directory = project?.worktree ?? session.directory
     const ctx = global.createServerCtx(conn)
+    global.sessionPlacement.set({
+      server: ServerConnection.key(conn),
+      leafID: session.id,
+      rootID: session.id,
+      directory: session.directory,
+    })
+    tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
     navigateOnServer(conn, `/server/${base64Encode(ServerConnection.key(conn))}/session/${session.id}`)
