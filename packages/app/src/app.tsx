@@ -205,7 +205,6 @@ function TargetDirectoryLayout(props: ParentProps) {
   })
   const directory = createMemo(() => resolvedDirectory())
   const home = () => !params.serverKey && !search.draftId
-  const targetDirectory = () => directory()!
 
   createEffect(() => {
     const current = placement() ?? currentResolved()

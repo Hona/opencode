@@ -20,13 +20,17 @@ export async function installTimelineSettings(page: Page) {
   })
 }
 
-export function mockStressTimeline(page: Page) {
+export function mockStressTimeline(
+  page: Page,
+  input?: { onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void },
+) {
   return mockOpenCodeServer(page, {
     sessions: fixture.sessions,
     provider: fixture.provider,
     directory: fixture.directory,
     project: fixture.project,
     pageMessages,
+    onMessages: input?.onMessages,
   })
 }
 

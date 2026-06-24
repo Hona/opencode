@@ -550,25 +550,30 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                                       rootID: session.id,
                                       directory: session.directory,
                                     })
-                                  const currentIndex = tabsStore.findIndex((item) => item === currentTab())
-                                  if (currentIndex !== -1 && Math.abs(i() - currentIndex) === 1) {
-                                    createRoot((dispose) => {
-                                      try {
-                                        void ctx.sync
-                                          .createDirSyncContext(session.directory)
-                                          .session.sync(session.id)
-                                          .catch(() => {})
-                                          .finally(dispose)
-                                      } catch {
-                                        dispose()
-                                      }
-                                    })
-                                  }
                                   return session
                                 })
                                 .catch(() => undefined),
                           )
                           const session = createMemo(() => cachedSession() ?? loadedSession())
+                          let prefetched = false
+
+                          createEffect(() => {
+                            const ctx = serverCtx()
+                            const sess = session()
+                            if (!ctx || !sess || prefetched) return
+                            prefetched = true
+                            createRoot((dispose) => {
+                              try {
+                                void ctx.sync
+                                  .createDirSyncContext(sess.directory)
+                                  .session.sync(sess.id)
+                                  .catch(() => {})
+                                  .finally(dispose)
+                              } catch {
+                                dispose()
+                              }
+                            })
+                          })
 
                           createEffect(() => {
                             if (tab.type !== "session") return
