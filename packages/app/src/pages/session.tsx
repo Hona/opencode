@@ -693,6 +693,7 @@ export default function Page() {
   }
 
   createEffect(() => {
+    if (!sync().project) return
     const list = changesOptions()
     if (list.includes(store.changes)) return
     const next = list[0]
