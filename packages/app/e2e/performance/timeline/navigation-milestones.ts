@@ -40,6 +40,8 @@ export async function measureNavigationMilestones(
 ) {
   await page.evaluate(({ triggerSelector, milestones }) => {
     const samples: NavigationMilestoneSample[] = []
+    const streaks = new Map<string, number>()
+    const marked = new Set<string>()
     let started: number | undefined
     let running = true
     const visible = (selector: string) =>
@@ -53,15 +55,37 @@ export async function measureNavigationMilestones(
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (!running || started === undefined) return
+          const current = Object.fromEntries(
+            Object.entries(milestones).map(([name, milestone]) => [
+              name,
+              milestone.visible === false ? !document.querySelector(milestone.selector) : visible(milestone.selector),
+            ]),
+          )
           samples.push({
             observedAtMs: performance.now() - started,
-            milestones: Object.fromEntries(
-              Object.entries(milestones).map(([name, milestone]) => [
-                name,
-                milestone.visible === false ? !document.querySelector(milestone.selector) : visible(milestone.selector),
-              ]),
-            ),
+            milestones: current,
           })
+          Object.entries(current).forEach(([name, value]) => {
+            if (!value) {
+              streaks.set(name, 0)
+              return
+            }
+            if (!marked.has(`${name}.first`)) {
+              performance.mark(`opencode.navigation.${name}.first`)
+              marked.add(`${name}.first`)
+            }
+            const streak = (streaks.get(name) ?? 0) + 1
+            streaks.set(name, streak)
+            if (streak === 3) performance.mark(`opencode.navigation.${name}.stable`)
+          })
+          const all = Object.values(current).every(Boolean)
+          const allStreak = all ? (streaks.get("all") ?? 0) + 1 : 0
+          streaks.set("all", allStreak)
+          if (all && !marked.has("all.first")) {
+            performance.mark("opencode.navigation.all.first")
+            marked.add("all.first")
+          }
+          if (allStreak === 3) performance.mark("opencode.navigation.all.stable")
           sample()
         }, 0)
       })
@@ -71,6 +95,7 @@ export async function measureNavigationMilestones(
       (event) => {
         if (!(event.target instanceof Element) || !event.target.closest(triggerSelector)) return
         started = performance.now()
+        performance.mark("opencode.navigation.click")
         sample()
       },
       { capture: true, once: true },

@@ -287,7 +287,7 @@ export default function Page() {
       })
     }
     return key
-  }, sessionKey())
+  })
 
   let reviewFrame: number | undefined
   let todoFrame: number | undefined
