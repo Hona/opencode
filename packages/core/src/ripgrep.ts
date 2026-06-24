@@ -2,9 +2,8 @@ export * as Ripgrep from "./ripgrep"
 
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import path from "path"
+import { Entry, Match } from "@opencode-ai/schema/filesystem"
 import { LayerNode } from "./effect/layer-node"
-import { Entry, Match } from "./filesystem/schema"
 import { AppProcess, collectStream, waitForAbort } from "./process"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { RipgrepBinary } from "./ripgrep/binary"
@@ -176,12 +175,11 @@ export const layer = Layer.effect(
             ),
         }).pipe(
           Effect.map((result) =>
-            result.items.map(
-              (relative) =>
-                new Entry({
-                  path: RelativePath.make(relative),
-                  type: "file",
-                }),
+            result.items.map((relative) =>
+              Entry.make({
+                path: RelativePath.make(relative),
+                type: "file",
+              }),
             ),
           ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
@@ -206,7 +204,7 @@ export const layer = Layer.effect(
               .replace(/^[\\/]+/u, "")
               .replaceAll("\\", "/")
             return Effect.succeed(
-              new Entry({
+              Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
               }),
@@ -259,8 +257,8 @@ export const layer = Layer.effect(
                 .replace(/^(?:\.[\\/])+/u, "")
                 .replace(/^[\\/]+/u, "")
                 .replaceAll("\\", "/")
-              return new Match({
-                entry: new Entry({
+              return Match.make({
+                entry: Entry.make({
                   path: RelativePath.make(relative),
                   type: "file",
                 }),

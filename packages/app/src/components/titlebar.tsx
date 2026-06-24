@@ -41,7 +41,6 @@ import { loadHome } from "@/pages/home-module"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs } from "@/context/tabs"
 import "./titlebar.css"
-import { useServerSDK } from "@/context/server-sdk"
 import { Session } from "@opencode-ai/sdk/v2"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createTabPromptState } from "@/context/prompt"
@@ -264,7 +263,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const layout = useLayout()
             const global = useGlobal()
@@ -275,11 +273,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const [session] = createResource(
               () => {
                 const route = layout.route()
-                return route.type === "session" ? route : undefined
+                if (route.type !== "session") return undefined
+                const conn = global.servers
+                  .list()
+                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                return conn ? { route, sdk: global.createServerCtx(conn).sdk } : undefined
               },
-              (route) =>
-                serverSdk()
-                  .client.session.get({ sessionID: route.sessionId })
+              ({ route, sdk }) =>
+                sdk.client.session
+                  .get({ sessionID: route.sessionId })
                   .then((x) => x.data)
                   .catch(() => {}),
             )
@@ -932,7 +934,7 @@ function TabNavItem(props: {
   return (
     <div
       ref={props.ref}
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
@@ -1006,7 +1008,7 @@ function DraftTabItem(props: {
     <div
       ref={props.ref}
       data-active={props.active}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-overlay-simple-overlay-pressed)] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
@@ -1051,7 +1053,7 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
   return (
     <div
       ref={props.ref}
-      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      class="group relative flex h-7 w-56 shrink-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
