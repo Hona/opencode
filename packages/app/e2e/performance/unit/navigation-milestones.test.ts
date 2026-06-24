@@ -19,3 +19,16 @@ test("reports first and stable paint for each navigation milestone", () => {
     all: { firstObservedMs: 48, stableObservedMs: 80 },
   })
 })
+
+test("reports missing stability when a milestone appears in the final samples", () => {
+  expect(
+    summarizeNavigationMilestones([
+      { observedAtMs: 16, milestones: { content: false } },
+      { observedAtMs: 32, milestones: { content: true } },
+    ]),
+  ).toEqual({
+    samples: 2,
+    milestones: { content: { firstObservedMs: 32, stableObservedMs: null } },
+    all: { firstObservedMs: 32, stableObservedMs: null },
+  })
+})
