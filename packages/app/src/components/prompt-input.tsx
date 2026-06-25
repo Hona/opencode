@@ -16,7 +16,6 @@ import {
   type ComponentProps,
   type JSX,
 } from "solid-js"
-import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import type { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -36,6 +35,7 @@ import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
@@ -1993,11 +1993,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 type ComposerPickerItemState = {
   icon: IconProps["name"]
   label: string
-  selected?: boolean
-  active?: boolean
-  optionId?: string
-  optionKey?: string
-  onHighlight?: () => void
   onSelect: () => void
 }
 
@@ -2022,7 +2017,6 @@ type ComposerPickerState = {
   searchPlaceholder: string
   clearLabel: string
   action: ComposerPickerItemState
-  listClass?: string
   onOpenChange: (open: boolean) => void
   onSelect: (worktree: string) => void
 }
@@ -2074,65 +2068,10 @@ function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: Compos
   )
 }
 
-function ComposerPickerMenuItem(props: { state: ComposerPickerItemState }) {
-  return (
-    <button
-      type="button"
-      id={props.state.optionId}
-      data-option-key={props.state.optionKey}
-      role={props.state.optionId ? "option" : undefined}
-      aria-selected={props.state.optionId ? props.state.active : undefined}
-      class="flex h-7 w-full items-center gap-2 rounded-[4px] px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-      classList={{
-        "bg-v2-overlay-simple-overlay-hover": !!props.state.active,
-      }}
-      onMouseEnter={() => props.state.onHighlight?.()}
-      onClick={props.state.onSelect}
-    >
-      <Icon name={props.state.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
-      <span class="min-w-0 flex-1 truncate leading-5">{props.state.label}</span>
-      <Show when={props.state.selected}>
-        <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-      </Show>
-    </button>
-  )
-}
-
-const COMPOSER_PICKER_LISTBOX_ID = "composer-picker-listbox"
-const COMPOSER_PICKER_ACTION_KEY = "action"
-
-function composerPickerOptionId(key: string) {
-  if (key === COMPOSER_PICKER_ACTION_KEY) return "composer-picker-option-action"
-  return `composer-picker-option-${encodeURIComponent(key)}`
-}
-
-function composerPickerNavigableKeys(
-  projects: ComposerPickerProject[],
-  projectLabel: (project: ComposerPickerProject) => string,
-  query: string,
-) {
-  const trimmed = query.trim().toLowerCase()
-  const items = !trimmed
-    ? projects
-    : projects.filter((project) => projectLabel(project).toLowerCase().includes(trimmed))
-  return [...items.map((project) => project.worktree), COMPOSER_PICKER_ACTION_KEY]
-}
-
-function composerPickerActiveKey(
-  keys: string[],
-  selectedWorktree: string | undefined,
-  mode: "selected" | "first",
-) {
-  if (keys.length === 0) return ""
-  if (mode === "selected" && selectedWorktree && keys.includes(selectedWorktree)) return selectedWorktree
-  return keys[0]
-}
-
 function ComposerPicker(props: { state: ComposerPickerState }) {
   let searchRef: HTMLInputElement | undefined
-  let listRef: HTMLDivElement | undefined
+  let contentRef: HTMLDivElement | undefined
   const [search, setSearch] = createSignal("")
-  const [active, setActive] = createSignal("")
 
   const items = createMemo(() => {
     const query = search().trim().toLowerCase()
@@ -2140,120 +2079,56 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
     return props.state.projects.filter((project) => props.state.projectLabel(project).toLowerCase().includes(query))
   })
 
-  const navigableKeys = createMemo(() =>
-    composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, search()),
-  )
-
-  createEffect(
-    on(
-      () => props.state.open,
-      (open) => {
-        if (open) {
-          setActive(
-            composerPickerActiveKey(
-              composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, ""),
-              props.state.selectedWorktree,
-              "selected",
-            ),
-          )
-          requestAnimationFrame(() => searchRef?.focus())
-          return
-        }
-        setSearch("")
-        setActive("")
-      },
-    ),
-  )
-
-  const scrollActiveIntoView = () => {
-    const key = active()
-    if (!key || !listRef) return
-    const element = listRef.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(key)}"]`)
-    element?.scrollIntoView({ block: "nearest" })
-  }
-
-  const moveActive = (delta: number) => {
-    const keys = navigableKeys()
-    if (keys.length === 0) return
-    const index = keys.indexOf(active())
-    const start = index === -1 ? 0 : index
-    const next = (start + delta + keys.length) % keys.length
-    setActive(keys[next])
-    scrollActiveIntoView()
-  }
-
-  const selectActive = () => {
-    const key = active()
-    if (!key) return
-    if (key === COMPOSER_PICKER_ACTION_KEY) {
-      props.state.action.onSelect()
-      return
-    }
-    props.state.onSelect(key)
-  }
-
   return (
-    <KobaltePopover
+    <DropdownMenu
       open={props.state.open}
       placement="bottom-start"
       gutter={4}
       shift={-6}
-      modal={false}
-      onOpenChange={props.state.onOpenChange}
+      onOpenChange={(open) => {
+        props.state.onOpenChange(open)
+        if (!open) setSearch("")
+      }}
     >
-      <KobaltePopover.Trigger
-        as={ComposerPickerTrigger}
-        state={{ ...props.state.trigger, open: props.state.open }}
-      />
-      <KobaltePopover.Portal>
-        <KobaltePopover.Content
-          class="w-[243px] overflow-hidden rounded-md bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
-          onOpenAutoFocus={(event) => event.preventDefault()}
+      <DropdownMenu.Trigger as={ComposerPickerTrigger} state={{ ...props.state.trigger, open: props.state.open }} />
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          ref={contentRef}
+          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            queueMicrotask(() => searchRef?.focus())
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.target === searchRef ||
+              event.key.length !== 1 ||
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.isComposing
+            )
+              return
+            event.preventDefault()
+            setSearch(search() + event.key)
+            searchRef?.focus()
+          }}
         >
-          <div class={`flex flex-col p-0.5 ${props.state.listClass ?? ""}`}>
+          <div class="flex flex-col p-0.5">
             <div class="flex h-7 items-center gap-2 rounded-[4px] pl-3 pr-2.5 text-v2-icon-icon-muted">
               <Icon name="magnifying-glass" size="small" class="shrink-0" />
               <input
                 ref={searchRef}
                 value={search()}
                 placeholder={props.state.searchPlaceholder}
-                aria-autocomplete="list"
-                aria-controls={COMPOSER_PICKER_LISTBOX_ID}
-                aria-activedescendant={active() ? composerPickerOptionId(active()) : undefined}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => {
-                  const value = event.currentTarget.value
-                  setSearch(value)
-                  setActive(
-                    composerPickerActiveKey(
-                      composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, value),
-                      props.state.selectedWorktree,
-                      "first",
-                    ),
-                  )
-                }}
+                onInput={(event) => setSearch(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault()
-                    props.state.onOpenChange(false)
-                    return
-                  }
-                  if (navigableKeys().length === 0) return
-                  if (event.altKey || event.metaKey) return
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault()
-                    moveActive(1)
-                    return
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault()
-                    moveActive(-1)
-                    return
-                  }
-                  if (event.key === "Enter" && !event.isComposing) {
-                    event.preventDefault()
-                    selectActive()
-                  }
+                  if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing)
+                    event.stopPropagation()
+                  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+                  const selected = contentRef?.querySelector<HTMLElement>('[role="menuitemradio"][data-checked]')
+                  ;(selected ?? contentRef)?.focus()
                 }}
               />
               <Show when={search().trim()}>
@@ -2262,13 +2137,6 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                   class="flex size-5 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onClick={() => {
                     setSearch("")
-                    setActive(
-                      composerPickerActiveKey(
-                        composerPickerNavigableKeys(props.state.projects, props.state.projectLabel, ""),
-                        props.state.selectedWorktree,
-                        "selected",
-                      ),
-                    )
                     queueMicrotask(() => searchRef?.focus())
                   }}
                   aria-label={props.state.clearLabel}
@@ -2278,43 +2146,46 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
               </Show>
             </div>
           </div>
-          <div ref={listRef} id={COMPOSER_PICKER_LISTBOX_ID} role="listbox" class="flex flex-col">
+          <DropdownMenu.RadioGroup
+            value={props.state.selectedWorktree}
+            onChange={(value) => {
+              if (typeof value === "string") props.state.onSelect(value)
+            }}
+          >
             <div class="flex flex-col p-0.5">
               <For each={items()}>
                 {(project) => (
-                  <ComposerPickerMenuItem
-                    state={{
-                      icon: "folder",
-                      label: props.state.projectLabel(project),
-                      selected: props.state.selectedWorktree === project.worktree,
-                      active: active() === project.worktree,
-                      optionId: composerPickerOptionId(project.worktree),
-                      optionKey: project.worktree,
-                      onHighlight: () => setActive(project.worktree),
-                      onSelect: () => props.state.onSelect(project.worktree),
-                    }}
-                  />
+                  <DropdownMenu.RadioItem
+                    value={project.worktree}
+                    class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                  >
+                    <Icon name="folder" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                    <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
+                      {props.state.projectLabel(project)}
+                    </DropdownMenu.ItemLabel>
+                    <DropdownMenu.ItemIndicator>
+                      <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
                 )}
               </For>
             </div>
-            <div class="h-px bg-v2-border-border-muted" />
-            <div class="flex flex-col p-0.5">
-              <ComposerPickerMenuItem
-                state={{
-                  icon: props.state.action.icon,
-                  label: props.state.action.label,
-                  onSelect: props.state.action.onSelect,
-                  active: active() === COMPOSER_PICKER_ACTION_KEY,
-                  optionId: composerPickerOptionId(COMPOSER_PICKER_ACTION_KEY),
-                  optionKey: COMPOSER_PICKER_ACTION_KEY,
-                  onHighlight: () => setActive(COMPOSER_PICKER_ACTION_KEY),
-                }}
-              />
-            </div>
+          </DropdownMenu.RadioGroup>
+          <div class="h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col p-0.5">
+            <DropdownMenu.Item
+              class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+              onSelect={props.state.action.onSelect}
+            >
+              <Icon name={props.state.action.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
+              <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
+                {props.state.action.label}
+              </DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
           </div>
-        </KobaltePopover.Content>
-      </KobaltePopover.Portal>
-    </KobaltePopover>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
   )
 }
 
