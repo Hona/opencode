@@ -2,7 +2,6 @@ import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
-  batch,
   onCleanup,
   Show,
   Match,
@@ -67,6 +66,15 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError } from "@/utils/server-errors"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
+import {
+  completeSessionFollowup,
+  createSessionRequestTracker,
+  createSessionOwnership,
+  loadOwnedHistory,
+  runPromptRollbackMutation,
+  scheduleSessionRender,
+  sessionViewState,
+} from "./session/session-ownership"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -94,6 +102,7 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const sessionOwnership = createSessionOwnership(sessionKey)
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
@@ -256,9 +265,7 @@ export default function Page() {
   )
 
   const [store, setStore] = createStore({
-    messageId: undefined as string | undefined,
-    mobileTab: "session" as "session" | "changes",
-    changes: "git" as ChangeMode,
+    ...sessionViewState(),
     newSessionWorktree: "main",
     deferRender: false,
   })
@@ -282,8 +289,9 @@ export default function Page() {
     const key = sessionKey()
     if (key !== prev) {
       setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
+      scheduleSessionRender({
+        ownership: sessionOwnership,
+        render: () => setStore("deferRender", false),
       })
     }
     return key
@@ -551,8 +559,7 @@ export default function Page() {
     on(
       sessionKey,
       () => {
-        setStore("messageId", undefined)
-        setStore("changes", "git")
+        setStore(sessionViewState())
         setUi("pendingMessage", undefined)
       },
       { defer: true },
@@ -1129,27 +1136,32 @@ export default function Page() {
 
   let captureHistoryAnchor = () => {}
   let restoreHistoryAnchor = (_done: boolean) => {}
-  let historyRequest = false
+  const historyRequests = createSessionRequestTracker()
   let historyContinuationFrame: number | undefined
   const loadOlder = async () => {
-    if (historyRequest || historyLoading()) return
-    historyRequest = true
-    const before = timeline.messages().length
-    try {
-      await timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor })
-    } finally {
-      historyRequest = false
-    }
-    if (timeline.messages().length <= before) return
+    const owner = await loadOwnedHistory({
+      ownership: sessionOwnership,
+      requests: historyRequests,
+      loading: historyLoading,
+      count: () => timeline.messages().length,
+      load: () => timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor }),
+    })
+    if (!owner) return
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     historyContinuationFrame = requestAnimationFrame(() => {
       historyContinuationFrame = undefined
-      onHistoryScroll()
+      owner.run(onHistoryScroll)
     })
   }
   const onHistoryScroll = () => {
-    if (historyRequest || historyLoading() || !autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200)
+    if (
+      historyRequests.pending(sessionOwnership.key()) ||
+      historyLoading() ||
+      !autoScroll.userScrolled() ||
+      !scroller ||
+      scroller.scrollTop >= 200
+    )
       return
     void loadOlder()
   }
@@ -1220,8 +1232,8 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>) =>
-    sync().set("session", (list) => {
+  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) =>
+    target.set("session", (list) => {
       const idx = list.findIndex((item) => item.id === next.id)
       if (idx < 0) return list
       const out = list.slice()
@@ -1229,8 +1241,12 @@ export default function Page() {
       return out
     })
 
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"]) =>
-    sync().set("session", (list) => {
+  const roll = (
+    sessionID: string,
+    next: NonNullable<ReturnType<typeof info>>["revert"],
+    target = sync(),
+  ) =>
+    target.set("session", (list) => {
       const idx = list.findIndex((item) => item.id === sessionID)
       if (idx < 0) return list
       const out = list.slice()
@@ -1254,6 +1270,7 @@ export default function Page() {
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
+      const owner = sessionOwnership.capture()
       const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
 
@@ -1273,8 +1290,12 @@ export default function Page() {
       })
       if (!ok) return
 
-      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) resumeScroll()
+      completeSessionFollowup({
+        owner,
+        remove: () =>
+          setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id)),
+        resume: input.manual ? resumeScroll : undefined,
+      })
     },
   }))
 
@@ -1363,25 +1384,23 @@ export default function Page() {
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+      const client = sdk().client
+      const target = sync()
+      const last = target.session.get(input.sessionID)?.revert
       const value = draft(input.messageID)
-      batch(() => {
-        roll(input.sessionID, { messageID: input.messageID })
-        prompt.set(value)
+      await runPromptRollbackMutation({
+        capturePrompt: prompt.capture,
+        optimistic: (prompt) => {
+          roll(input.sessionID, { messageID: input.messageID }, target)
+          prompt.set(value)
+        },
+        request: () => halt(input.sessionID).then(() => client.session.revert(input)),
+        complete: (result) => {
+          if (result.data) merge(result.data, target)
+        },
+        rollback: () => roll(input.sessionID, last, target),
+        fail,
       })
-      await halt(input.sessionID)
-        .then(() => sdk().client.session.revert(input))
-        .then((result) => {
-          if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
-            roll(input.sessionID, last)
-            prompt.set(prev)
-          })
-          fail(err)
-        })
     },
   }))
 
@@ -1390,39 +1409,31 @@ export default function Page() {
       const sessionID = params.id
       if (!sessionID) return
 
+      const client = sdk().client
+      const target = sync()
       const next = userMessages().find((item) => item.id > id)
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+      const last = target.session.get(sessionID)?.revert
 
-      batch(() => {
-        roll(sessionID, next ? { messageID: next.id } : undefined)
-        if (next) {
-          prompt.set(draft(next.id))
-          return
-        }
-        prompt.reset()
+      await runPromptRollbackMutation({
+        capturePrompt: prompt.capture,
+        optimistic: (promptSession) => {
+          roll(sessionID, next ? { messageID: next.id } : undefined, target)
+          if (next) {
+            promptSession.set(draft(next.id))
+            return
+          }
+          promptSession.reset()
+        },
+        request: () =>
+          !next
+            ? halt(sessionID).then(() => client.session.unrevert({ sessionID }))
+            : halt(sessionID).then(() => client.session.revert({ sessionID, messageID: next.id })),
+        complete: (result) => {
+          if (result.data) merge(result.data, target)
+        },
+        rollback: () => roll(sessionID, last, target),
+        fail,
       })
-
-      const task = !next
-        ? halt(sessionID).then(() => sdk().client.session.unrevert({ sessionID }))
-        : halt(sessionID).then(() =>
-            sdk().client.session.revert({
-              sessionID,
-              messageID: next.id,
-            }),
-          )
-
-      await task
-        .then((result) => {
-          if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
-            roll(sessionID, last)
-            prompt.set(prev)
-          })
-          fail(err)
-        })
     },
   }))
 
