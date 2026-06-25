@@ -2071,6 +2071,7 @@ function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: Compos
 function ComposerPicker(props: { state: ComposerPickerState }) {
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
+  let restoreTrigger = true
   const [search, setSearch] = createSignal("")
 
   const items = createMemo(() => {
@@ -2079,13 +2080,22 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
     return props.state.projects.filter((project) => props.state.projectLabel(project).toLowerCase().includes(query))
   })
 
+  const focusSearchWithHighlight = (selector: string) => {
+    queueMicrotask(() => {
+      contentRef?.querySelector<HTMLElement>(selector)?.focus()
+      searchRef?.focus()
+    })
+  }
+
   return (
     <DropdownMenu
       open={props.state.open}
       placement="bottom-start"
       gutter={4}
       shift={-6}
+      modal={false}
       onOpenChange={(open) => {
+        if (open) restoreTrigger = true
         props.state.onOpenChange(open)
         if (!open) setSearch("")
       }}
@@ -2094,10 +2104,15 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&_[data-highlighted]]:!bg-v2-overlay-simple-overlay-hover"
           onOpenAutoFocus={(event) => {
             event.preventDefault()
-            queueMicrotask(() => searchRef?.focus())
+            focusSearchWithHighlight('[role="menuitemradio"][data-checked]')
+          }}
+          onPointerDownOutside={() => (restoreTrigger = false)}
+          onFocusOutside={() => (restoreTrigger = false)}
+          onCloseAutoFocus={(event) => {
+            if (!restoreTrigger) event.preventDefault()
           }}
           onKeyDown={(event) => {
             if (
@@ -2111,7 +2126,7 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
               return
             event.preventDefault()
             setSearch(search() + event.key)
-            searchRef?.focus()
+            focusSearchWithHighlight('[role^="menuitem"]')
           }}
         >
           <div class="flex flex-col p-0.5">
@@ -2122,13 +2137,23 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                 value={search()}
                 placeholder={props.state.searchPlaceholder}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => setSearch(event.currentTarget.value)}
+                onInput={(event) => {
+                  setSearch(event.currentTarget.value)
+                  focusSearchWithHighlight('[role^="menuitem"]')
+                }}
                 onKeyDown={(event) => {
+                  if (event.key === "Tab") {
+                    event.stopPropagation()
+                    return
+                  }
                   if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing)
                     event.stopPropagation()
-                  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
-                  const selected = contentRef?.querySelector<HTMLElement>('[role="menuitemradio"][data-checked]')
-                  ;(selected ?? contentRef)?.focus()
+                  if (event.key !== "Enter" || event.isComposing) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  contentRef
+                    ?.querySelector<HTMLElement>('[role^="menuitem"][data-highlighted]')
+                    ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
                 }}
               />
               <Show when={search().trim()}>
@@ -2137,7 +2162,7 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                   class="flex size-5 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onClick={() => {
                     setSearch("")
-                    queueMicrotask(() => searchRef?.focus())
+                    focusSearchWithHighlight('[role="menuitemradio"][data-checked]')
                   }}
                   aria-label={props.state.clearLabel}
                 >
@@ -2146,24 +2171,33 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
               </Show>
             </div>
           </div>
-          <DropdownMenu.RadioGroup
-            value={props.state.selectedWorktree}
-            onChange={(value) => {
-              if (typeof value === "string") props.state.onSelect(value)
-            }}
-          >
+          <DropdownMenu.RadioGroup value={props.state.selectedWorktree}>
             <div class="flex flex-col p-0.5">
               <For each={items()}>
                 {(project) => (
                   <DropdownMenu.RadioItem
                     value={project.worktree}
                     class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                    style={{
+                      "font-family": "var(--v2-font-family-sans)",
+                      "font-size": "13px",
+                      "font-weight": 440,
+                      "line-height": "20px",
+                      "letter-spacing": "-0.04px",
+                      color: "var(--v2-text-text-base)",
+                      padding: "0 12px",
+                    }}
+                    closeOnSelect
+                    onSelect={() => {
+                      restoreTrigger = false
+                      props.state.onSelect(project.worktree)
+                    }}
                   >
                     <Icon name="folder" size="small" class="shrink-0 text-v2-icon-icon-base" />
                     <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
                       {props.state.projectLabel(project)}
                     </DropdownMenu.ItemLabel>
-                    <DropdownMenu.ItemIndicator>
+                    <DropdownMenu.ItemIndicator style={{ right: "12px" }}>
                       <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
                     </DropdownMenu.ItemIndicator>
                   </DropdownMenu.RadioItem>
@@ -2175,7 +2209,19 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
           <div class="flex flex-col p-0.5">
             <DropdownMenu.Item
               class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
-              onSelect={props.state.action.onSelect}
+              style={{
+                "font-family": "var(--v2-font-family-sans)",
+                "font-size": "13px",
+                "font-weight": 440,
+                "line-height": "20px",
+                "letter-spacing": "-0.04px",
+                color: "var(--v2-text-text-base)",
+                padding: "0 12px",
+              }}
+              onSelect={() => {
+                restoreTrigger = false
+                props.state.action.onSelect()
+              }}
             >
               <Icon name={props.state.action.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
               <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">
