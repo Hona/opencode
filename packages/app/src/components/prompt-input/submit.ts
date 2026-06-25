@@ -4,7 +4,6 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
-import type { FileSelection } from "@/context/file"
 import { useServer } from "@/context/server"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
@@ -21,6 +20,7 @@ import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
+import { createPromptSubmissionState } from "./submission-state"
 
 type PendingPrompt = {
   abort: AbortController
@@ -196,15 +196,6 @@ type PromptSubmitInput = {
   onSubmit?: () => void
 }
 
-type CommentItem = {
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
-
 export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -255,9 +246,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       .catch(() => {})
   }
 
-  const restoreCommentItems = (items: CommentItem[]) => {
+  const restoreCommentItems = (
+    target: ReturnType<ReturnType<typeof usePrompt>["capture"]>,
+    items: (ContextItem & { key: string })[],
+  ) => {
     for (const item of items) {
-      prompt.context.add({
+      target.context.add({
         type: "file",
         path: item.path,
         selection: item.selection,
@@ -269,15 +263,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
   }
 
-  const removeCommentItems = (items: { key: string }[]) => {
-    for (const item of items) {
-      prompt.context.remove(item.key)
-    }
-  }
-
-  const clearContext = () => {
-    for (const item of prompt.context.items()) {
-      prompt.context.remove(item.key)
+  const clearContext = (target: ReturnType<ReturnType<typeof usePrompt>["capture"]>) => {
+    for (const item of target.context.items()) {
+      target.context.remove(item.key)
     }
   }
 
@@ -298,7 +286,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
 
-    const currentPrompt = prompt.current()
+    const target = prompt.capture()
+    const submission = createPromptSubmissionState({
+      target,
+      prompt: target.current(),
+      context: target.context.items().slice(),
+    })
+    const currentPrompt = submission.prompt
+    const context = submission.context
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
@@ -390,6 +385,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         const draftID = search.draftId
         if (draftID) tabs.promoteDraft(draftID, { server: server.key, sessionId: session.id })
         else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        submission.retarget(prompt.capture({ dir: base64Encode(sessionDirectory), id: session.id }))
       }
     }
     if (!session) {
@@ -405,7 +401,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
-    const context = prompt.context.items().slice()
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
@@ -417,13 +412,15 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const clearInput = () => {
-      prompt.reset()
+      submission.target().reset()
       input.setMode("normal")
       input.setPopover(null)
     }
 
     const restoreInput = () => {
-      prompt.set(currentPrompt, input.promptLength(currentPrompt))
+      const restored = submission.restore()
+      restored.target.set(restored.prompt, input.promptLength(restored.prompt))
+      if (!submission.current(prompt.capture())) return
       input.setMode(mode)
       input.setPopover(null)
       requestAnimationFrame(() => {
@@ -437,7 +434,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
       input.onQueue?.(draft)
-      clearContext()
+      clearContext(submission.target())
       clearInput()
       return
     }
@@ -507,7 +504,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    removeCommentItems(commentItems)
+    for (const item of commentItems) submission.target().context.remove(item.key)
     clearInput()
 
     const waitForWorktree = async () => {
@@ -524,7 +521,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sync().set("session_status", session.id, { type: "idle" })
         }
         removeOptimisticMessage()
-        restoreCommentItems(commentItems)
+        restoreCommentItems(submission.target(), commentItems)
         restoreInput()
       }
 
@@ -587,7 +584,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      restoreCommentItems(commentItems)
+      restoreCommentItems(submission.target(), commentItems)
       restoreInput()
     })
   }

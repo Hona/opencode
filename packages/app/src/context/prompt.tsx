@@ -213,7 +213,7 @@ function promptStore(): PromptStore {
 function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
-  return {
+  const value = {
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -250,7 +250,9 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
     },
     set: actions.set,
     reset: actions.reset,
+    capture: () => value,
   }
+  return value
 }
 
 export function createPromptState() {
@@ -349,6 +351,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
 
     return {
       ready,
+      capture: (scope?: Scope) => pick(scope).capture(),
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
