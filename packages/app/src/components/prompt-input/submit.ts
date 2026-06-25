@@ -56,16 +56,14 @@ const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttac
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
-  const [, setStore] = input.serverSync.child(input.draft.sessionDirectory)
-
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "busy" })
+    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "busy" })
   }
 
   const setIdle = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "idle" })
+    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "idle" })
   }
 
   const wait = async () => {
@@ -225,9 +223,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
-    serverSync().todo.set(sessionID, [])
-    const [, setStore] = serverSync().child(sdk().directory)
-    setStore("todo", sessionID, [])
+    serverSync().session.set("todo", sessionID, [])
 
     input.onAbort?.()
 
@@ -270,6 +266,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const seed = (dir: string, info: Session) => {
+    serverSync().session.remember(info)
     const [, setStore] = serverSync().child(dir)
     setStore("session", (list: Session[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
@@ -412,15 +409,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const clearInput = () => {
-      submission.target().reset()
+      submission.clear()
       input.setMode("normal")
       input.setPopover(null)
     }
 
     const restoreInput = () => {
       const restored = submission.restore()
+      if (!restored) return false
       restored.target.set(restored.prompt, input.promptLength(restored.prompt))
-      if (!submission.current(prompt.capture())) return
+      if (!submission.current(prompt.capture())) return true
       input.setMode(mode)
       input.setPopover(null)
       requestAnimationFrame(() => {
@@ -430,6 +428,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         setCursorPosition(editor, input.promptLength(currentPrompt))
         input.queueScroll()
       })
+      return true
     }
 
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
@@ -521,8 +520,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sync().set("session_status", session.id, { type: "idle" })
         }
         removeOptimisticMessage()
-        restoreCommentItems(submission.target(), commentItems)
-        restoreInput()
+        if (restoreInput()) restoreCommentItems(submission.target(), commentItems)
       }
 
       pending.set(pendingKey(session.id), { abort: controller, cleanup })
@@ -584,8 +582,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      restoreCommentItems(submission.target(), commentItems)
-      restoreInput()
+      if (restoreInput()) restoreCommentItems(submission.target(), commentItems)
     })
   }
 

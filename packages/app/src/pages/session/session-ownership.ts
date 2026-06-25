@@ -48,18 +48,20 @@ export function createSessionRequestTracker() {
   }
 }
 
+type SessionOwner = ReturnType<ReturnType<typeof createSessionOwnership>["capture"]>
+
 export async function loadOwnedHistory(input: {
   ownership: ReturnType<typeof createSessionOwnership>
   requests: ReturnType<typeof createSessionRequestTracker>
   loading: () => boolean
   count: () => number
-  load: () => Promise<void>
+  load: (owner: SessionOwner) => Promise<void>
 }) {
   const owner = input.ownership.capture()
   if (input.loading() || !input.requests.start(owner.key)) return
   const before = input.count()
   try {
-    await input.load()
+    await input.load(owner)
   } finally {
     input.requests.finish(owner.key)
   }
@@ -96,7 +98,7 @@ export function sessionViewState() {
 }
 
 export async function runSessionCommand<T>(input: {
-  owner: ReturnType<ReturnType<typeof createSessionOwnership>["capture"]>
+  owner: SessionOwner
   prompt: T
   request: () => Promise<unknown>
   updatePrompt: (prompt: T) => void
@@ -108,7 +110,7 @@ export async function runSessionCommand<T>(input: {
 }
 
 export function completeSessionFollowup(input: {
-  owner: ReturnType<ReturnType<typeof createSessionOwnership>["capture"]>
+  owner: SessionOwner
   remove: () => void
   resume?: () => void
 }) {

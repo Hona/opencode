@@ -37,4 +37,20 @@ describe("prompt submission state", () => {
     expect(session.context.items()).toHaveLength(1)
     expect(session.context.items()[0]).toMatchObject({ type: "file", path: "src/index.ts" })
   })
+
+  test("does not restore over a prompt edited after submission", () => {
+    const target = createPromptState()
+    target.set([{ type: "text", content: "submitted", start: 0, end: 9 }])
+    const submission = createPromptSubmissionState({
+      target,
+      prompt: target.current(),
+      context: [],
+    })
+
+    submission.clear()
+    target.set([{ type: "text", content: "new draft", start: 0, end: 9 }])
+
+    expect(submission.restore()).toBeUndefined()
+    expect(target.current()[0]).toMatchObject({ type: "text", content: "new draft" })
+  })
 })

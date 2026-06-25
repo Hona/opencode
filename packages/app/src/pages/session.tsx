@@ -524,9 +524,7 @@ export default function Page() {
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(
-          () => sync().data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined,
-        )
+        const cached = untrack(() => sync().data.todo[id] !== undefined)
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined
@@ -1144,7 +1142,11 @@ export default function Page() {
       requests: historyRequests,
       loading: historyLoading,
       count: () => timeline.messages().length,
-      load: () => timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor }),
+      load: (owner) =>
+        timeline.history.loadOlder({
+          before: () => owner.run(captureHistoryAnchor),
+          after: (done) => owner.run(() => restoreHistoryAnchor(done)),
+        }),
     })
     if (!owner) return
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
@@ -1232,27 +1234,17 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) =>
-    target.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === next.id)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = next
-      return out
-    })
+  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
 
   const roll = (
     sessionID: string,
     next: NonNullable<ReturnType<typeof info>>["revert"],
     target = sync(),
-  ) =>
-    target.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === sessionID)
-      if (idx < 0) return list
-      const out = list.slice()
-      out[idx] = { ...out[idx], revert: next }
-      return out
-    })
+  ) => {
+    const session = target.session.get(sessionID)
+    if (!session) return
+    target.session.remember({ ...session, revert: next })
+  }
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 

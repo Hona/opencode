@@ -53,6 +53,35 @@ describe("createSessionRequestTracker", () => {
 })
 
 describe("loadOwnedHistory", () => {
+  test("passes the captured owner to history callbacks", async () => {
+    const [session, setSession] = createSignal("A")
+    const ownership = createSessionOwnership(session)
+    const request = Promise.withResolvers<void>()
+    let captured = false
+    let restored = false
+    const pending = loadOwnedHistory({
+      ownership,
+      requests: createSessionRequestTracker(),
+      loading: () => false,
+      count: () => 1,
+      load: async (owner) => {
+        captured = !!owner
+        await request.promise
+        owner?.run(() => {
+          restored = true
+        })
+      },
+    })
+
+    setSession("B")
+    setSession("A")
+    request.resolve()
+    await pending
+
+    expect(captured).toBe(true)
+    expect(restored).toBe(false)
+  })
+
   test("allows B to load while A is pending and drops A's stale continuation", async () => {
     const [session, setSession] = createSignal("A")
     const ownership = createSessionOwnership(session)
