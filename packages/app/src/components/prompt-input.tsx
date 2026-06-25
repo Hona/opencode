@@ -68,6 +68,7 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { pathKey } from "@/utils/path-key"
@@ -345,25 +346,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
 
-  const [store, setStore] = createStore<{
-    popover: "at" | "slash" | null
-    historyIndex: number
-    savedPrompt: PromptHistoryEntry | null
-    placeholder: number
-    draggingType: "image" | "@mention" | null
-    mode: "normal" | "shell"
-    applyingHistory: boolean
-    variantOpen: boolean
-  }>({
-    popover: null,
-    historyIndex: -1,
-    savedPrompt: null as PromptHistoryEntry | null,
-    placeholder: Math.floor(Math.random() * EXAMPLES.length),
-    draggingType: null,
-    mode: "normal",
-    applyingHistory: false,
-    variantOpen: false,
-  })
+  const [store, setStore] = createPromptInputTransientState(
+    () => prompt.capture(),
+    Math.floor(Math.random() * EXAMPLES.length),
+  )
   const [picker, setPicker] = createStore({
     projectOpen: false,
   })
@@ -2381,7 +2367,9 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
                 )}
               </Show>
               <span class="truncate">{props.state.modelName}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="-ml-1 shrink-0 flex size-fit">
+                <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
+              </span>
             </Button>
           </TooltipKeybind>
         }
@@ -2410,7 +2398,9 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
               )}
             </Show>
             <span class="truncate">{props.state.modelName}</span>
-            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="-ml-1 shrink-0 flex size-fit">
+              <Icon name="chevron-down" size="small" class="text-v2-icon-icon-muted" />
+            </span>
           </ModelSelectorPopover>
         </TooltipKeybind>
       </Show>
