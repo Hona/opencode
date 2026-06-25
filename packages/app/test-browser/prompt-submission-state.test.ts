@@ -7,14 +7,14 @@ describe("prompt submission state", () => {
     const target = createPromptState()
     const submission = createPromptSubmissionState({
       target,
-      prompt: "prompt-A",
-      context: [{ type: "file" as const, path: "src/index.ts" }],
+      prompt: [{ type: "text", content: "prompt-A", start: 0, end: 8 }],
+      context: [{ key: "file:src/index.ts:undefined:undefined", type: "file", path: "src/index.ts" }],
     })
 
     expect(submission.restore()).toEqual({
       target,
-      prompt: "prompt-A",
-      context: [{ type: "file", path: "src/index.ts" }],
+      prompt: [{ type: "text", content: "prompt-A", start: 0, end: 8 }],
+      context: [{ key: "file:src/index.ts:undefined:undefined", type: "file", path: "src/index.ts" }],
     })
   })
 
@@ -23,16 +23,16 @@ describe("prompt submission state", () => {
     const session = createPromptState()
     const submission = createPromptSubmissionState({
       target: draft,
-      prompt: "first prompt",
-      context: [{ type: "file" as const, path: "src/index.ts" }],
+      prompt: [{ type: "text", content: "first prompt", start: 0, end: 12 }],
+      context: [{ key: "file:src/index.ts:undefined:undefined", type: "file", path: "src/index.ts" }],
     })
 
     submission.retarget(session)
 
     expect(submission.restore()).toEqual({
       target: session,
-      prompt: "first prompt",
-      context: [{ type: "file", path: "src/index.ts" }],
+      prompt: [{ type: "text", content: "first prompt", start: 0, end: 12 }],
+      context: [{ key: "file:src/index.ts:undefined:undefined", type: "file", path: "src/index.ts" }],
     })
     expect(session.context.items()).toHaveLength(1)
     expect(session.context.items()[0]).toMatchObject({ type: "file", path: "src/index.ts" })

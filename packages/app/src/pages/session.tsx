@@ -2,6 +2,7 @@ import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
+  batch,
   onCleanup,
   Show,
   Match,
@@ -66,15 +67,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError } from "@/utils/server-errors"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
-import {
-  completeSessionFollowup,
-  createSessionRequestTracker,
-  createSessionOwnership,
-  loadOwnedHistory,
-  runPromptRollbackMutation,
-  scheduleSessionRender,
-  sessionViewState,
-} from "./session/session-ownership"
+import { createSessionOwnership } from "./session/session-ownership"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -82,6 +75,35 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
+
+const sessionViewState = () => ({
+  messageId: undefined as string | undefined,
+  mobileTab: "session" as "session" | "changes",
+  changes: "git" as ChangeMode,
+})
+
+async function runPromptRollbackMutation<T, R>(input: {
+  capturePrompt: () => { current: () => T[]; set: (value: T[]) => void; reset: () => void }
+  optimistic: (prompt: { set: (value: T[]) => void; reset: () => void }) => void
+  request: () => Promise<R>
+  complete: (result: R) => void
+  rollback: () => void
+  fail: (error: unknown) => void
+}) {
+  const prompt = input.capturePrompt()
+  const previous = prompt.current().slice()
+  batch(() => input.optimistic(prompt))
+  await input
+    .request()
+    .then(input.complete)
+    .catch((error) => {
+      batch(() => {
+        input.rollback()
+        prompt.set(previous)
+      })
+      input.fail(error)
+    })
+}
 
 export default function Page() {
   const serverSync = useServerSync()
@@ -289,9 +311,9 @@ export default function Page() {
     const key = sessionKey()
     if (key !== prev) {
       setStore("deferRender", true)
-      scheduleSessionRender({
-        ownership: sessionOwnership,
-        render: () => setStore("deferRender", false),
+      const owner = sessionOwnership.capture()
+      requestAnimationFrame(() => {
+        setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
       })
     }
     return key
@@ -1134,21 +1156,22 @@ export default function Page() {
 
   let captureHistoryAnchor = () => {}
   let restoreHistoryAnchor = (_done: boolean) => {}
-  const historyRequests = createSessionRequestTracker()
+  const historyRequests = new Set<string>()
   let historyContinuationFrame: number | undefined
   const loadOlder = async () => {
-    const owner = await loadOwnedHistory({
-      ownership: sessionOwnership,
-      requests: historyRequests,
-      loading: historyLoading,
-      count: () => timeline.messages().length,
-      load: (owner) =>
-        timeline.history.loadOlder({
-          before: () => owner.run(captureHistoryAnchor),
-          after: (done) => owner.run(() => restoreHistoryAnchor(done)),
-        }),
-    })
-    if (!owner) return
+    const owner = sessionOwnership.capture()
+    if (historyLoading() || historyRequests.has(owner.key)) return
+    historyRequests.add(owner.key)
+    const before = timeline.messages().length
+    try {
+      await timeline.history.loadOlder({
+        before: () => owner.run(captureHistoryAnchor),
+        after: (done) => owner.run(() => restoreHistoryAnchor(done)),
+      })
+    } finally {
+      historyRequests.delete(owner.key)
+    }
+    if (!owner.current() || timeline.messages().length <= before) return
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     historyContinuationFrame = requestAnimationFrame(() => {
@@ -1158,7 +1181,7 @@ export default function Page() {
   }
   const onHistoryScroll = () => {
     if (
-      historyRequests.pending(sessionOwnership.key()) ||
+      historyRequests.has(sessionOwnership.key()) ||
       historyLoading() ||
       !autoScroll.userScrolled() ||
       !scroller ||
@@ -1236,11 +1259,7 @@ export default function Page() {
 
   const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
 
-  const roll = (
-    sessionID: string,
-    next: NonNullable<ReturnType<typeof info>>["revert"],
-    target = sync(),
-  ) => {
+  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
     const session = target.session.get(sessionID)
     if (!session) return
     target.session.remember({ ...session, revert: next })
@@ -1282,12 +1301,8 @@ export default function Page() {
       })
       if (!ok) return
 
-      completeSessionFollowup({
-        owner,
-        remove: () =>
-          setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id)),
-        resume: input.manual ? resumeScroll : undefined,
-      })
+      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
+      if (input.manual) owner.run(resumeScroll)
     },
   }))
 

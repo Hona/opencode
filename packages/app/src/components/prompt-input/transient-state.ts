@@ -13,7 +13,7 @@ export type PromptInputTransientState = {
   variantOpen: boolean
 }
 
-export function resetPromptInputTransientState(setStore: SetStoreFunction<PromptInputTransientState>) {
+function resetPromptInputTransientState(setStore: SetStoreFunction<PromptInputTransientState>) {
   setStore({
     popover: null,
     historyIndex: -1,
@@ -37,13 +37,7 @@ export function createPromptInputTransientState(identity: Accessor<unknown>, pla
     variantOpen: false,
   })
 
-  createComputed(
-    on(
-      identity,
-      () => resetPromptInputTransientState(setStore),
-      { defer: true },
-    ),
-  )
+  createComputed(on(identity, () => resetPromptInputTransientState(setStore), { defer: true }))
 
   return [store, setStore] as const
 }

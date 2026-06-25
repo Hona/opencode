@@ -20,7 +20,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useTabs } from "@/context/tabs"
 import { requireServerKey } from "@/utils/session-route"
-import { createSessionOwnership, openSessionDialog, runSessionCommand } from "./session-ownership"
+import { createSessionOwnership } from "./session-ownership"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -53,6 +53,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
+  const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
+    const owner = sessionOwnership.capture()
+    const value = await load()
+    owner.run(() => show(value))
+  }
+  const runCommand = async <T,>(input: {
+    owner: ReturnType<ReturnType<typeof createSessionOwnership>["capture"]>
+    prompt: T
+    request: () => Promise<unknown>
+    updatePrompt: (prompt: T) => void
+    updateViewport: () => void
+  }) => {
+    await input.request()
+    input.updatePrompt(input.prompt)
+    input.owner.run(input.updateViewport)
+  }
 
   const info = () => {
     const id = params.id
@@ -219,11 +235,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openFile = () => {
-    void openSessionDialog({
-      ownership: sessionOwnership,
-      load: () => import("@/components/dialog-select-file"),
-      show: (x) => dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />),
-    })
+    void openDialog(
+      () => import("@/components/dialog-select-file"),
+      (x) => dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />),
+    )
   }
 
   const closeTab = () => {
@@ -257,19 +272,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const chooseModel = () => {
-    void openSessionDialog({
-      ownership: sessionOwnership,
-      load: () => import("@/components/dialog-select-model"),
-      show: (x) => dialog.show(() => <x.DialogSelectModel model={local.model} />),
-    })
+    void openDialog(
+      () => import("@/components/dialog-select-model"),
+      (x) => dialog.show(() => <x.DialogSelectModel model={local.model} />),
+    )
   }
 
   const chooseMcp = () => {
-    void openSessionDialog({
-      ownership: sessionOwnership,
-      load: () => import("@/components/dialog-select-mcp"),
-      show: (x) => dialog.show(() => <x.DialogSelectMcp />),
-    })
+    void openDialog(
+      () => import("@/components/dialog-select-mcp"),
+      (x) => dialog.show(() => <x.DialogSelectMcp />),
+    )
   }
 
   const toggleAutoAccept = () => {
@@ -307,7 +320,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       await client.session.abort({ sessionID }).catch(() => {})
     }
 
-    await runSessionCommand({
+    await runCommand({
       owner,
       prompt: promptSession,
       request: () => client.session.revert({ sessionID, messageID: message.id }),
@@ -331,7 +344,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
     const next = messages.find((x) => x.id > revertMessageID)
     if (!next) {
-      await runSessionCommand({
+      await runCommand({
         owner,
         prompt: promptSession,
         request: () => client.session.unrevert({ sessionID }),
@@ -341,7 +354,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await runSessionCommand({
+    await runCommand({
       owner,
       prompt: promptSession,
       request: () => client.session.revert({ sessionID, messageID: next.id }),
@@ -371,11 +384,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const fork = () => {
-    void openSessionDialog({
-      ownership: sessionOwnership,
-      load: () => import("@/components/dialog-fork"),
-      show: (x) => dialog.show(() => <x.DialogFork />),
-    })
+    void openDialog(
+      () => import("@/components/dialog-fork"),
+      (x) => dialog.show(() => <x.DialogFork />),
+    )
   }
 
   const shareCmds = () => {

@@ -11,7 +11,6 @@ import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
-import { KeyedOwner } from "@/components/keyed-owner"
 import { useServerSync } from "@/context/server-sync"
 
 export function DirectoryDataProvider(
@@ -59,7 +58,7 @@ export function DirectoryDataProvider(
   })
 
   return (
-    <KeyedOwner value={directory()}>
+    <Show when={directory()} keyed>
       {(directory) => (
         <DataProvider
           data={sync().data}
@@ -70,7 +69,7 @@ export function DirectoryDataProvider(
           <LocalProvider>{props.children}</LocalProvider>
         </DataProvider>
       )}
-    </KeyedOwner>
+    </Show>
   )
 }
 

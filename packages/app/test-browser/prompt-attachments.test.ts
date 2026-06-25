@@ -12,15 +12,31 @@ describe("prompt attachment session ownership", () => {
         capture: () => sessions[active].capture(),
         editor: () => document.createElement("div"),
       })
-      const pending = attachments.addAttachment(
-        new File([new Uint8Array(1024 * 1024)], "a.png", { type: "image/png" }),
-      )
+      const pending = attachments.addAttachment(new File([new Uint8Array(1024 * 1024)], "a.png", { type: "image/png" }))
 
       active = "B"
       await pending
 
       expect(images(sessions.A)).toHaveLength(1)
       expect(images(sessions.B)).toHaveLength(0)
+      dispose()
+    })
+  })
+
+  test("finishes the captured attachment after the active editor is removed", async () => {
+    await createRoot(async (dispose) => {
+      const prompt = createPromptState()
+      let editor: HTMLDivElement | undefined = document.createElement("div")
+      const attachments = createPromptAttachmentsCore({
+        capture: prompt.capture,
+        editor: () => editor,
+      })
+      const pending = attachments.addAttachment(new File([new Uint8Array(1024 * 1024)], "a.png", { type: "image/png" }))
+
+      editor = undefined
+      await pending
+
+      expect(images(prompt)).toHaveLength(1)
       dispose()
     })
   })
