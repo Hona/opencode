@@ -1,4 +1,4 @@
-export function decorateLinkFavicons(root: ParentNode) {
+export function decorateLinkFavicons(root: HTMLDivElement) {
   const links = Array.from(root.querySelectorAll("a.external-link"))
   for (const link of links) {
     if (!(link instanceof HTMLAnchorElement)) continue
@@ -19,6 +19,6 @@ export function decorateLinkFavicons(root: ParentNode) {
     icon.setAttribute("aria-hidden", "true")
     icon.setAttribute("data-slot", "markdown-link-favicon")
     icon.addEventListener("error", () => icon.remove(), { once: true })
-    link.prepend(icon)
+    link.insertAdjacentElement("afterbegin", icon)
   }
 }
