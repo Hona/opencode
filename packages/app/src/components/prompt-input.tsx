@@ -2044,7 +2044,7 @@ type ComposerModelControlState = {
 }
 
 function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: ComposerPickerTriggerState }) {
-  const [local, rest] = splitProps(props, ["state", "class", "classList", "style", "onClick"])
+  const [local, rest] = splitProps(props, ["state", "class", "classList", "style", "onClick", "onKeyDown"])
   return (
     <button
       {...rest}
@@ -2058,6 +2058,14 @@ function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: Compos
       }}
       style={local.state.style}
       onClick={local.onClick ?? (() => local.state.onPress?.())}
+      onKeyDown={(event) => {
+        if (!local.state.open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+        if (typeof local.onKeyDown === "function") local.onKeyDown(event)
+      }}
     >
       <Show when={local.state.icon}>
         {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
@@ -2104,10 +2112,10 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&_[data-highlighted]]:!bg-v2-overlay-simple-overlay-hover"
+          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
           onOpenAutoFocus={(event) => {
             event.preventDefault()
-            focusSearchWithHighlight('[role="menuitemradio"][data-checked]')
+            setTimeout(() => focusSearchWithHighlight('[role="menuitemradio"][data-checked]'))
           }}
           onPointerDownOutside={() => (restoreTrigger = false)}
           onFocusOutside={() => (restoreTrigger = false)}
@@ -2151,9 +2159,11 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                   if (event.key !== "Enter" || event.isComposing) return
                   event.preventDefault()
                   event.stopPropagation()
-                  contentRef
-                    ?.querySelector<HTMLElement>('[role^="menuitem"][data-highlighted]')
-                    ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+                  queueMicrotask(() =>
+                    contentRef
+                      ?.querySelector<HTMLElement>('[role^="menuitem"][data-highlighted]')
+                      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+                  )
                 }}
               />
               <Show when={search().trim()}>
@@ -2177,7 +2187,7 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
                 {(project) => (
                   <DropdownMenu.RadioItem
                     value={project.worktree}
-                    class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                    class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
                     style={{
                       "font-family": "var(--v2-font-family-sans)",
                       "font-size": "13px",
@@ -2208,7 +2218,7 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">
             <DropdownMenu.Item
-              class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+              class="h-7 gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
               style={{
                 "font-family": "var(--v2-font-family-sans)",
                 "font-size": "13px",
@@ -2220,7 +2230,8 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
               }}
               onSelect={() => {
                 restoreTrigger = false
-                props.state.action.onSelect()
+                props.state.onOpenChange(false)
+                requestAnimationFrame(() => props.state.action.onSelect())
               }}
             >
               <Icon name={props.state.action.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
