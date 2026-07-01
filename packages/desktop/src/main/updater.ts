@@ -35,7 +35,14 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
         // quitAndInstall closes all windows before emitting before-quit, so
         // flag the quit first to keep window ids persisted for restore.
         setAppQuitting()
-        autoUpdater.quitAndInstall()
+        try {
+          autoUpdater.quitAndInstall()
+        } catch (error) {
+          // The install failed and the app keeps running; clear the flag so
+          // deliberate window closes prune ids again.
+          setAppQuitting(false)
+          throw error
+        }
       },
     },
     persistence: {

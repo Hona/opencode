@@ -65,8 +65,8 @@ export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
 }
 
-export function setAppQuitting() {
-  registry.setQuitting()
+export function setAppQuitting(quitting = true) {
+  registry.setQuitting(quitting)
 }
 
 export function setBackgroundColor(color: string) {
@@ -222,6 +222,9 @@ function registerWindow(win: BrowserWindow, id: string) {
   registry.register(id, win)
 
   win.on("focus", () => registry.focused(id))
+  // Windows never emits before-quit on OS shutdown/logoff, but each window
+  // gets session-end before it closes; flag the quit so ids stay persisted.
+  win.on("session-end", () => registry.setQuitting())
   win.on("closed", () => registry.closed(id))
 }
 

@@ -78,11 +78,14 @@ describe("window registry", () => {
     expect(app.registry.lastFocused()).toBeUndefined()
   })
 
-  test("returns registered windows by id", () => {
+  test("resumes forgetting closed windows after the quit flag resets", () => {
     const app = setup()
     app.registry.register("a", { name: "a" })
-    expect(app.registry.get("a")).toEqual({ name: "a" })
+    app.registry.register("b", { name: "b" })
+    app.registry.setQuitting()
+    app.registry.setQuitting(false)
     app.registry.closed("a")
-    expect(app.registry.get("a")).toBeUndefined()
+    expect(app.state.stored).toEqual(["b"])
+    expect(app.cleaned).toEqual(["a"])
   })
 })
