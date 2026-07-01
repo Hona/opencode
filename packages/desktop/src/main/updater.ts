@@ -4,6 +4,7 @@ import { UPDATER_ENABLED } from "./constants"
 import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
 import { getLogger } from "./logging"
 import { getStore } from "./store"
+import { setAppQuitting } from "./windows"
 
 const { autoUpdater } = pkg
 const key = "ready"
@@ -27,7 +28,16 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
-    backend: autoUpdater,
+    backend: {
+      checkForUpdates: () => autoUpdater.checkForUpdates(),
+      downloadUpdate: () => autoUpdater.downloadUpdate(),
+      quitAndInstall: () => {
+        // quitAndInstall closes all windows before emitting before-quit, so
+        // flag the quit first to keep window ids persisted for restore.
+        setAppQuitting()
+        autoUpdater.quitAndInstall()
+      },
+    },
     persistence: {
       get() {
         const value = store.get(key)
