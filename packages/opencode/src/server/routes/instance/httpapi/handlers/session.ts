@@ -62,9 +62,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
-      // Workspace routing already resolved the requested directory into the
-      // instance context; filter by that canonical form so equivalent hint
-      // spellings (trailing separators, "/" on Windows) match what create stored.
       const directory = ctx.query.directory ? yield* InstanceState.directory : undefined
       return yield* session.list({
         directory: ctx.query.scope === "project" ? undefined : directory,

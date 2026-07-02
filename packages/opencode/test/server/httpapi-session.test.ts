@@ -885,10 +885,6 @@ describe("session HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        // Same directory, different spelling: create resolves the hint before
-        // storing (FSUtil.resolve), so list filters must compare against the
-        // same canonical form. Desktop workspaces persisted as "/" or "C:\"
-        // hit this class of mismatch and show an empty sidebar (#34723).
         const hint = test.directory + path.sep
         const headers = { "x-opencode-directory": hint, "content-type": "application/json" }
         const created = yield* requestJson<Session.Info>(SessionPaths.create, {
