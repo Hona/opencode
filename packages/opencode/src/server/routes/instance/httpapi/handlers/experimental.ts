@@ -137,8 +137,11 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
+      // Filter by the instance directory the routing middleware resolved from
+      // the hint, so equivalent spellings match what create stored.
+      const directory = ctx.query.directory ? yield* InstanceState.directory : undefined
       const all = yield* sessions.listGlobal({
-        directory: ctx.query.directory,
+        directory,
         roots: ctx.query.roots,
         start: ctx.query.start,
         cursor: ctx.query.cursor,
