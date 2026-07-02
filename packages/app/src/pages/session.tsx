@@ -267,16 +267,27 @@ function createSessionLineage(sessionID: () => string) {
   const sync = useServerSync()
   const cached = createMemo(() => sync().session.lineage.peek(sessionID()))
   const [failure, setFailure] = createSignal<unknown>()
+  const [settled, setSettled] = createSignal(false)
   onMount(() => {
-    if (cached()) return
+    if (cached()) {
+      setSettled(true)
+      return
+    }
     sync()
       .session.lineage.resolve(sessionID())
+      .then(() => setSettled(true))
       .catch((error) => setFailure(() => error))
   })
   return createMemo(() => {
     const error = failure()
     if (error) throw error
-    return cached()
+    const lineage = cached()
+    // The viewed session is pinned and pinned lineages are exempt from cache pruning,
+    // so a lineage missing after settlement means the session (or an ancestor) was
+    // deleted, possibly by another client. Match the resolve error so the boundary
+    // shows the session not found fallback.
+    if (!lineage && settled()) throw new Error(`Session not found: ${sessionID()}`)
+    return lineage
   })
 }
 

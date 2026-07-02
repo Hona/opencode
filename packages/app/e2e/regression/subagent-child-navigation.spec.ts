@@ -12,9 +12,38 @@ const childTitle = "Subagent child session"
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
 
+type EventPayload = { directory: string; payload: Record<string, unknown> }
+
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test("navigates to a subagent child session missing from the session list", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+
+  await expectSessionTitle(page, taskDescription)
+  await expect(page.getByRole("heading", { name: parentTitle })).toHaveCount(0)
+
+  const titlebarRight = page.locator("#opencode-titlebar-right")
+  await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
+})
+
+test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
+  const events: EventPayload[] = []
+  await setup(page, () => events.splice(0, 1))
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+
+  events.push({
+    directory,
+    payload: { type: "session.deleted", properties: { info: childSession() } },
+  })
+
+  await expect(page.getByText("This session cannot be found")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
+})
+
+async function setup(page: Page, events?: () => EventPayload[]) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -40,6 +69,8 @@ test("navigates to a subagent child session missing from the session list", asyn
     },
     sessions: [session(parentID, parentTitle, 1700000000000), childSession()],
     pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages() : [] }),
+    events,
+    eventRetry: events ? 16 : undefined,
   })
   // The child session resolves via /session/:id but is absent from the /session list,
   // matching a subagent session that has not been loaded into the list cache yet.
@@ -54,7 +85,9 @@ test("navigates to a subagent child session missing from the session list", asyn
       }),
   )
   await configurePage(page)
+}
 
+async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
 
@@ -63,12 +96,7 @@ test("navigates to a subagent child session missing from the session list", asyn
   await card.click()
 
   await expect(page).toHaveURL(new RegExp(`/server/.+/session/${childID}$`), { timeout: 15_000 })
-  await expectSessionTitle(page, taskDescription)
-  await expect(page.getByRole("heading", { name: parentTitle })).toHaveCount(0)
-
-  const titlebarRight = page.locator("#opencode-titlebar-right")
-  await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
-})
+}
 
 function session(id: string, title: string, created: number, extra?: Record<string, unknown>) {
   return {
