@@ -187,6 +187,7 @@ declare global {
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+      setBackgroundColor?: (color: string) => Promise<void>
       exportDebugLogs?: () => Promise<string>
     }
   }
@@ -320,6 +321,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
       <ThemeProvider
         onThemeApplied={(_, mode) => {
           void window.api?.setTitlebar?.({ mode })
+          void window.api?.setBackgroundColor?.(getComputedStyle(document.documentElement).backgroundColor)
         }}
       >
         <LanguageProvider locale={props.locale}>
