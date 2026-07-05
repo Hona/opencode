@@ -74,13 +74,12 @@ test("keeps moving upward while drag-selecting above the timeline", async ({ pag
   await page.mouse.move(textBox.x + textBox.width - 10, textBox.y + textBox.height / 2)
   await page.mouse.down()
   await page.mouse.move(textBox.x + 20, scrollBox.y - 120, { steps: 30 })
-  await page.waitForTimeout(1_500)
-  await page.mouse.up()
 
-  expect(Number(await scroller.getAttribute("data-selection-length"))).toBeGreaterThan(0)
+  await expect.poll(() => scroller.evaluate((element) => Number(element.dataset.selectionLength))).toBeGreaterThan(0)
   await expect
     .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
     .toBeGreaterThan(500)
+  await page.mouse.up()
 })
 
 test("does not pull a keyboard-scrolled user during shell remeasurement", async ({ page }, testInfo) => {
