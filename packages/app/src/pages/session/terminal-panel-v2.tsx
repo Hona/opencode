@@ -43,7 +43,6 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
-  let root: HTMLDivElement | undefined
   let tabList: HTMLDivElement | undefined
 
   const [store, setStore] = createStore({
@@ -129,14 +128,6 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   )
 
   createEffect(() => {
-    if (opened()) return
-    const active = document.activeElement
-    if (!(active instanceof HTMLElement)) return
-    if (!root?.contains(active)) return
-    active.blur()
-  })
-
-  createEffect(() => {
     const dir = sdk().directory
     if (!dir) return
     if (!terminal.ready()) return
@@ -189,7 +180,6 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
 
   return (
     <aside
-      ref={root}
       id="terminal-panel"
       role="region"
       aria-label={language.t("terminal.title")}

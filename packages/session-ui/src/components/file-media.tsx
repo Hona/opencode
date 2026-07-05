@@ -8,6 +8,7 @@ import {
   isBinaryContent,
   mediaKindFromPath,
   normalizeMimeType,
+  svgMediaError,
   svgTextFromValue,
 } from "../pierre/media"
 
@@ -161,23 +162,17 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     if (!media || kind() !== "svg") return
     return dataUrlFromMediaValue(media.current as any, "svg")
   })
-  const svgInvalid = createMemo(() => {
+  const svgError = createMemo(() => {
     const media = cfg()
     if (!media || kind() !== "svg") return
-    if (svgSource() !== undefined) return
-    if (!hasMediaValue(media.current as any)) return
-    return [media.path, media.current] as const
+    return svgMediaError(media.current)
   })
 
   createEffect(
-    on(
-      svgInvalid,
-      (value) => {
-        if (!value) return
-        cfg()?.onError?.({ kind: "svg" })
-      },
-      { defer: true },
-    ),
+    on(svgError, (value) => {
+      if (!value) return
+      cfg()?.onError?.(value)
+    }),
   )
 
   const kindLabel = (value: "image" | "audio") =>

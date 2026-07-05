@@ -1,4 +1,4 @@
-import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
@@ -82,24 +82,11 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       }),
     )
 
-    // When config has permission: "allow", auto-enable directory-level auto-accept
-    createEffect(() => {
-      if (!ready()) return
-      const directory = props.directory?.() ?? decode64(params.dir)
-      if (!directory) return
+    function isPermissionAllowAll(directory: string) {
       const [childStore] = serverSync().child(directory)
       const perm = childStore.config.permission
-      if (typeof perm === "string" && perm === "allow") {
-        const key = directoryAcceptKey(directory)
-        if (store.autoAccept[key] === undefined) {
-          setStore(
-            produce((draft) => {
-              draft.autoAccept[key] = true
-            }),
-          )
-        }
-      }
-    })
+      return typeof perm === "string" && perm === "allow"
+    }
 
     const MAX_RESPONDED = 1000
     const RESPONDED_TTL_MS = 60 * 60 * 1000
@@ -143,16 +130,25 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function isAutoAccepting(sessionID: string, directory?: string) {
       const session = directory ? serverSync().child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
+      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory, {
+        permissionAllowAll: directory ? isPermissionAllowAll(directory) : false,
+        persistedReady: ready(),
+      })
     }
 
     function isAutoAcceptingDirectory(directory: string) {
-      return isDirectoryAutoAccepting(store.autoAccept, directory)
+      return isDirectoryAutoAccepting(store.autoAccept, directory, {
+        permissionAllowAll: isPermissionAllowAll(directory),
+        persistedReady: ready(),
+      })
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
       const session = directory ? serverSync().child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, permission, directory)
+      return autoRespondsPermission(store.autoAccept, session, permission, directory, {
+        permissionAllowAll: directory ? isPermissionAllowAll(directory) : false,
+        persistedReady: ready(),
+      })
     }
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
@@ -270,11 +266,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         disable(sessionID, directory)
       },
       permissionsEnabled,
-      isPermissionAllowAll(directory: string) {
-        const [childStore] = serverSync().child(directory)
-        const perm = childStore.config.permission
-        return typeof perm === "string" && perm === "allow"
-      },
+      isPermissionAllowAll,
     }
   },
 })

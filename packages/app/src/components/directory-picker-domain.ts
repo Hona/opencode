@@ -138,6 +138,27 @@ export function activeTreeNavigation(request: number, current: number) {
   return request === current
 }
 
+export function createTreeNavigationLifecycle() {
+  let generation = 0
+  let disposed = false
+
+  return {
+    begin() {
+      return ++generation
+    },
+    current() {
+      return generation
+    },
+    active(request: number) {
+      return !disposed && activeTreeNavigation(request, generation)
+    },
+    dispose() {
+      disposed = true
+      generation++
+    },
+  }
+}
+
 export function createPriorityTaskQueue<T>(concurrency: number) {
   type Job = {
     key: string

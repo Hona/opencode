@@ -81,6 +81,36 @@ describe("autoRespondsPermission", () => {
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
   })
+
+  test("derives allow-all config without persisting directory auto-accept", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" })]
+    const autoAccept = {}
+
+    expect(
+      autoRespondsPermission(autoAccept, sessions, permission("root"), directory, { permissionAllowAll: true }),
+    ).toBe(true)
+    expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
+    expect(autoAccept).toEqual({})
+  })
+
+  test("waits for persisted state before deriving allow-all config", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" })]
+
+    expect(
+      autoRespondsPermission({}, sessions, permission("root"), directory, {
+        permissionAllowAll: true,
+        persistedReady: false,
+      }),
+    ).toBe(false)
+    expect(
+      autoRespondsPermission({}, sessions, permission("root"), directory, {
+        permissionAllowAll: true,
+        persistedReady: true,
+      }),
+    ).toBe(true)
+  })
 })
 
 describe("isDirectoryAutoAccepting", () => {
@@ -98,5 +128,15 @@ describe("isDirectoryAutoAccepting", () => {
     const directory = "/tmp/project"
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
+  })
+
+  test("uses allow-all config only as a fallback to an explicit choice", () => {
+    const directory = "/tmp/project"
+    const key = `${base64Encode(directory)}/*`
+
+    expect(isDirectoryAutoAccepting({}, directory, { permissionAllowAll: true })).toBe(true)
+    expect(isDirectoryAutoAccepting({}, directory)).toBe(false)
+    expect(isDirectoryAutoAccepting({ [key]: false }, directory, { permissionAllowAll: true })).toBe(false)
+    expect(isDirectoryAutoAccepting({ [key]: true }, directory)).toBe(true)
   })
 })

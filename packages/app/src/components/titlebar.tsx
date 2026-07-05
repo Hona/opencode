@@ -291,21 +291,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentTab = () => matchRoute(layout.route())
 
             createEffect(() => {
-              const route = layout.route()
               if (!tabs.ready()) return
               const tab = currentTab()
-              if (tab) {
-                tabs.remember(tab)
-                return
-              }
-
-              if (route.type === "session") {
-                const s = session()
-                if (!s) return
-                const sessionId = s.parentID ?? s.id
-                const next = { server: route.server ?? server.key, sessionId }
-                tabsStoreActions.addSessionTab(next)
-              }
+              if (tab) tabs.remember(tab)
             })
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {

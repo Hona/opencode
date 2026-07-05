@@ -483,15 +483,13 @@ export function MessageTimeline(props: {
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
-  createEffect(() => {
-    props.setRevealMessage?.((id) => {
-      const index = messageRowIndex().get(id)
-      if (index === undefined) return
-      virtualizer.scrollToIndex(index, { align: "center" })
-    })
-    props.setScrollToEnd?.(() => virtualizer.scrollToEnd())
-    props.setHistoryAnchor?.({ capture: capturePrependAnchor, restore: restorePrependAnchor })
+  props.setRevealMessage?.((id) => {
+    const index = messageRowIndex().get(id)
+    if (index === undefined) return
+    virtualizer.scrollToIndex(index, { align: "center" })
   })
+  props.setScrollToEnd?.(() => virtualizer.scrollToEnd())
+  props.setHistoryAnchor?.({ capture: capturePrependAnchor, restore: restorePrependAnchor })
 
   let overscanFrame: number | undefined
   onMount(() => {
@@ -737,9 +735,12 @@ export function MessageTimeline(props: {
       ([id, description]) => {
         if (!id || description) return
         if (sync().data.message[id] !== undefined) return
-        void sync().session.sync(id)
+        void sync()
+          .session.sync(id)
+          .catch((error) =>
+            console.debug("[session-timeline] failed to sync parent messages", { sessionID: id, error }),
+          )
       },
-      { defer: true },
     ),
   )
 

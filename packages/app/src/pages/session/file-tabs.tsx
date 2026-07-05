@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, onCleanup, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -19,6 +19,7 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { createScheduledTask } from "@/pages/session/effect-lifecycle"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -210,6 +211,8 @@ export function FileTabContent(props: { tab: string }) {
     tab: () => props.tab,
     view,
   })
+  const focusClearTask = createScheduledTask(requestAnimationFrame, cancelAnimationFrame)
+  onCleanup(focusClearTask.cancel)
 
   const selectionPreview = (source: string, selection: FileSelection) => {
     return previewSelectedLines(source, {
@@ -354,17 +357,8 @@ export function FileTabContent(props: { tab: string }) {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  createEffect(
-    on(
-      path,
-      () => {
-        commentsUi.note.reset()
-      },
-      { defer: true },
-    ),
-  )
-
   createEffect(() => {
+    focusClearTask.cancel()
     const focus = comments.focus()
     const p = path()
     if (!focus || !p) return
@@ -375,7 +369,11 @@ export function FileTabContent(props: { tab: string }) {
     if (!target) return
 
     commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
-    requestAnimationFrame(() => comments.clearFocus())
+    focusClearTask.schedule(() => {
+      const current = comments.focus()
+      if (current?.file !== focus.file || current.id !== focus.id) return
+      comments.clearFocus()
+    })
   })
 
   let prev = {

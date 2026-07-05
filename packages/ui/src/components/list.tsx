@@ -38,10 +38,8 @@ export interface ListProps<T> extends FilteredListProps<T> {
   emptyMessage?: string
   loadingMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
-  onMove?: (item: T | undefined) => void
   onFilter?: (value: string) => void
   activeIcon?: IconProps["name"]
-  filter?: string
   search?: ListSearchProps | boolean
   itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
   divider?: boolean
@@ -61,12 +59,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const [store, setStore] = createStore({
     mouseActive: false,
     scrollRef: undefined as HTMLDivElement | undefined,
-    internalFilter: "",
   })
   const scrollRef = () => store.scrollRef
   const setScrollRef = (el: HTMLDivElement | undefined) => setStore("scrollRef", el)
-  const internalFilter = () => store.internalFilter
-  const setInternalFilter = (value: string) => setStore("internalFilter", value)
 
   const scrollIntoView = (container: HTMLDivElement, node: HTMLElement, block: "center" | "nearest") => {
     const containerRect = container.getBoundingClientRect()
@@ -98,7 +93,6 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const applyFilter = (value: string, options?: { ref?: boolean }) => {
     const prev = filter()
-    setInternalFilter(value)
     onInput(value)
     props.onFilter?.(value)
 
@@ -112,13 +106,6 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     }
     queueMicrotask(() => refetch())
   }
-
-  createEffect(() => {
-    if (props.filter === undefined) return
-    if (props.filter === internalFilter()) return
-    setInternalFilter(props.filter)
-    onInput(props.filter)
-  })
 
   createEffect(
     on(
@@ -156,13 +143,6 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const element = findByKey(scroll, key)
     if (!element) return
     scrollIntoView(scroll, element, "center")
-  })
-
-  createEffect(() => {
-    const all = flat()
-    const current = active()
-    const item = all.find((x) => props.key(x) === current)
-    props.onMove?.(item)
   })
 
   const handleSelect = (item: T | undefined, index: number) => {
@@ -290,7 +270,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 ref={(el: HTMLInputElement | HTMLTextAreaElement) => {
                   inputRef = el
                 }}
-                value={internalFilter()}
+                value={filter()}
                 onChange={(value) => applyFilter(value)}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
@@ -300,12 +280,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 autocapitalize="off"
               />
             </div>
-            <Show when={internalFilter()}>
+            <Show when={filter()}>
               <IconButton
                 icon="circle-x"
                 variant="ghost"
                 onClick={() => {
-                  setInternalFilter("")
+                  applyFilter("")
                   queueMicrotask(() => inputRef?.focus())
                 }}
                 aria-label={i18n.t("ui.list.clearFilter")}

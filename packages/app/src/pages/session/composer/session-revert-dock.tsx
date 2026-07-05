@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockTray } from "@opencode-ai/ui/dock-surface"
@@ -14,12 +14,6 @@ export function SessionRevertDock(props: {
   const language = useLanguage()
   const [store, setStore] = createStore({
     collapsed: true,
-  })
-
-  createEffect(() => {
-    props.items.length
-    props.items[0]?.id
-    setStore("collapsed", true)
   })
 
   const toggle = () => setStore("collapsed", (value) => !value)

@@ -16,10 +16,11 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { createStore } from "solid-js/store"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { effectiveFileTreeOpen } from "./file-tree-v2-domain"
 import {
-  dirsToExpand,
   pathToFileUrl,
   shouldListRoot,
   visibleKind,
@@ -198,6 +199,7 @@ export default function FileTreeV2(props: {
   const file = useFile()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
+  const [view, setView] = createStore({ collapsed: {} as Record<string, Record<string, boolean>> })
 
   const key = (p: string) =>
     file
@@ -226,6 +228,23 @@ export default function FileTreeV2(props: {
 
     return { files, dirs }
   })
+  const filterKey = createMemo(() => props.allowed?.join("\0") ?? "")
+
+  const expanded = (path: string) =>
+    effectiveFileTreeOpen({
+      path,
+      expanded: file.tree.state(path)?.expanded ?? false,
+      filter: filter(),
+      collapsed: view.collapsed[filterKey()]?.[path],
+    })
+  const setExpanded = (path: string, open: boolean) => {
+    if (filter()?.dirs.has(path)) {
+      setView("collapsed", filterKey(), path, !open)
+      return
+    }
+    if (open) file.tree.expand(path, { list: false })
+    if (!open) file.tree.collapse(path)
+  }
 
   const marks = createMemo(() => {
     if (props._marks) return props._marks
@@ -246,7 +265,7 @@ export default function FileTreeV2(props: {
     const out = new Map<string, number>()
 
     const root = props.path
-    if (!(file.tree.state(root)?.expanded ?? false)) return out
+    if (!expanded(root)) return out
 
     const seen = new Set<string>()
     const stack: { dir: string; lvl: number; i: number; kids: string[]; max: number }[] = []
@@ -258,7 +277,7 @@ export default function FileTreeV2(props: {
 
       const kids = file.tree
         .children(dir)
-        .filter((node) => node.type === "directory" && (file.tree.state(node.path)?.expanded ?? false))
+        .filter((node) => node.type === "directory" && expanded(node.path))
         .map((node) => node.path)
 
       stack.push({ dir, lvl, i: 0, kids, max: lvl })
@@ -287,18 +306,6 @@ export default function FileTreeV2(props: {
     return out
   })
 
-  createEffect(() => {
-    const current = filter()
-    const dirs = dirsToExpand({
-      level,
-      filter: current,
-      expanded: (dir) => untrack(() => file.tree.state(dir)?.expanded) ?? false,
-    })
-    // Nodes come from the `allowed` filter; skip listing so directories that only
-    // exist on the diff's base branch do not each fail with an error toast.
-    for (const dir of dirs) file.tree.expand(dir, { list: false })
-  })
-
   createEffect(
     on(
       () => props.path,
@@ -319,7 +326,7 @@ export default function FileTreeV2(props: {
     <div data-component="file-tree-v2" class="group/file-tree-v2">
       <For each={nodes()}>
         {(node) => {
-          const expanded = () => file.tree.state(node.path)?.expanded ?? false
+          const open = () => expanded(node.path)
           const deep = () => deeps().get(node.path) ?? -1
           const hasChildren = () => visibleNodesForPath(node.path, file.tree.children, filter()).length > 0
           return (
@@ -330,10 +337,8 @@ export default function FileTreeV2(props: {
                   class="w-full"
                   data-scope="file-tree-v2"
                   forceMount={false}
-                  open={expanded()}
-                  onOpenChange={(open) =>
-                    open ? file.tree.expand(node.path, { list: false }) : file.tree.collapse(node.path)
-                  }
+                  open={open()}
+                  onOpenChange={(open) => setExpanded(node.path, open)}
                 >
                   <Collapsible.Trigger>
                     <FileTreeNodeV2
@@ -346,7 +351,7 @@ export default function FileTreeV2(props: {
                     >
                       <div
                         data-slot="file-tree-v2-chevron"
-                        data-expanded={expanded() ? "" : undefined}
+                        data-expanded={open() ? "" : undefined}
                         class="size-4 flex items-center justify-center"
                       >
                         <Icon name="chevron-down" />
@@ -358,8 +363,8 @@ export default function FileTreeV2(props: {
                       <div
                         classList={{
                           "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
-                          "group-hover/file-tree-v2:opacity-100": expanded() && deep() === level,
-                          "group-hover/file-tree-v2:opacity-50": !(expanded() && deep() === level),
+                          "group-hover/file-tree-v2:opacity-100": open() && deep() === level,
+                          "group-hover/file-tree-v2:opacity-50": !(open() && deep() === level),
                         }}
                         style={`left: ${guideLineLeft(level)}px`}
                       />

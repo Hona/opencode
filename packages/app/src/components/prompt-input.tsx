@@ -9,6 +9,7 @@ import {
   createMemo,
   createSignal,
   createResource,
+  onMount,
   Switch,
   Match,
   type JSX,
@@ -68,6 +69,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
+import { createPromptInputEditCommand, type PromptInputEditCommand } from "./prompt-input/edit"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
@@ -162,7 +164,7 @@ export interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
-  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
+  editCommandRef?: (command: PromptInputEditCommand | undefined) => void
   onEditLoaded?: () => void
   shouldQueue?: () => boolean
   onQueue?: (draft: FollowupDraft) => void
@@ -1175,44 +1177,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     history.add(prompt, mode, mode === "shell" ? [] : historyComments())
   }
 
-  createEffect(
-    on(
-      () => props.edit?.id,
-      (id) => {
-        const edit = props.edit
-        if (!id || !edit) return
+  const editCommand = createPromptInputEditCommand({
+    apply: (edit) => {
+      for (const item of prompt.context.items()) {
+        prompt.context.remove(item.key)
+      }
 
-        for (const item of prompt.context.items()) {
-          prompt.context.remove(item.key)
-        }
-
-        for (const item of edit.context) {
-          prompt.context.add({
-            type: item.type,
-            path: item.path,
-            selection: item.selection,
-            comment: item.comment,
-            commentID: item.commentID,
-            commentOrigin: item.commentOrigin,
-            preview: item.preview,
-          })
-        }
-
-        setStore("mode", "normal")
-        setStore("popover", null)
-        setStore("historyIndex", -1)
-        setStore("savedPrompt", null)
-        prompt.set(edit.prompt, promptLength(edit.prompt))
-        requestAnimationFrame(() => {
-          editorRef.focus()
-          setCursorPosition(editorRef, promptLength(edit.prompt))
-          queueScroll()
+      for (const item of edit.context) {
+        prompt.context.add({
+          type: item.type,
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
+          preview: item.preview,
         })
-        props.onEditLoaded?.()
-      },
-      { defer: true },
-    ),
-  )
+      }
+
+      setStore("mode", "normal")
+      setStore("popover", null)
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+      prompt.set(edit.prompt, promptLength(edit.prompt))
+    },
+    focus: (edit) => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(edit.prompt))
+      queueScroll()
+    },
+    loaded: () => props.onEditLoaded?.(),
+    schedule: (callback) => requestAnimationFrame(callback),
+    cancel: (frame) => cancelAnimationFrame(frame),
+  })
+
+  onMount(() => {
+    props.editCommandRef?.(editCommand)
+    onCleanup(() => {
+      editCommand.dispose()
+      props.editCommandRef?.(undefined)
+    })
+  })
 
   const navigateHistory = (direction: "up" | "down") => {
     const result = navigatePromptHistory({

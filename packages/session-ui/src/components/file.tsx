@@ -22,6 +22,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
+import { createAnimationFrameScope } from "../pierre/animation-frame"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
 import { createFileFind } from "../pierre/file-find"
@@ -41,7 +42,11 @@ import {
   findFileLineNumber,
   readShadowLineSelection,
 } from "../pierre/file-selection"
-import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
+import {
+  createLineNumberSelectionBridge,
+  createSelectionReplay,
+  restoreShadowTextSelection,
+} from "../pierre/selection-bridge"
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
@@ -165,11 +170,12 @@ function useFileViewer(config: ViewerConfig) {
   let dragStart: number | undefined
   let dragEnd: number | undefined
   let dragMoved = false
-  let lastSelection: SelectedLineRange | null = null
   let pendingSelectionEnd = false
 
   const ready = createReadyWatcher()
+  const commentedFrames = createAnimationFrameScope()
   const bridge = createLineNumberSelectionBridge()
+  const selection = createSelectionReplay<SelectedLineRange | null>(null)
   const [rendered, setRendered] = createSignal(0)
 
   const getRoot = () => getViewerRoot(container)
@@ -191,7 +197,7 @@ function useFileViewer(config: ViewerConfig) {
       config.updateSelection(finishing)
       if (!pendingSelectionEnd) return
       pendingSelectionEnd = false
-      config.onLineSelectionEnd(lastSelection)
+      config.onLineSelectionEnd(selection.value)
     })
   }
 
@@ -256,7 +262,7 @@ function useFileViewer(config: ViewerConfig) {
       pendingSelectionEnd = false
       const selected = config.buildClickSelection()
       if (selected) config.setSelectedLines(selected)
-      config.onLineSelectionEnd(lastSelection)
+      config.onLineSelectionEnd(selection.value)
       dragStart = undefined
       dragEnd = undefined
       dragMoved = false
@@ -291,7 +297,8 @@ function useFileViewer(config: ViewerConfig) {
   createEffect(() => {
     rendered()
     const ranges = config.commentedLines()
-    requestAnimationFrame(() => {
+    const requestFrame = commentedFrames.start()
+    requestFrame(() => {
       const root = getRoot()
       if (!root) return
       config.markCommented(root, ranges)
@@ -313,6 +320,7 @@ function useFileViewer(config: ViewerConfig) {
 
   onCleanup(() => {
     clearReadyWatcher(ready)
+    commentedFrames.clear()
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
@@ -323,7 +331,7 @@ function useFileViewer(config: ViewerConfig) {
     dragEnd = undefined
     dragMoved = false
     bridge.reset()
-    lastSelection = null
+    selection.set(null)
     pendingSelectionEnd = false
   })
 
@@ -353,13 +361,14 @@ function useFileViewer(config: ViewerConfig) {
       return dragEnd
     },
     get lastSelection() {
-      return lastSelection
+      return selection.value
     },
     set lastSelection(v: SelectedLineRange | null) {
-      lastSelection = v
+      selection.set(v)
     },
     ready,
     bridge,
+    selection,
     rendered,
     setRendered,
     getRoot,
@@ -428,6 +437,9 @@ function createLineCallbacks(opts: {
   onLineSelectionEnd?: (range: SelectedLineRange | null) => void
   onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
 }) {
+  const selectionEndFrames = createAnimationFrameScope()
+  onCleanup(selectionEndFrames.clear)
+
   const select = (range: SelectedLineRange | null) => {
     if (!opts.normalize) return range
     const next = opts.normalize(range)
@@ -446,7 +458,8 @@ function createLineCallbacks(opts: {
       opts.viewer.lastSelection = next
       opts.onLineSelectionEnd?.(next)
       if (!opts.viewer.bridge.consume(next)) return
-      requestAnimationFrame(() => opts.onLineNumberSelectionEnd?.(next))
+      const requestFrame = selectionEndFrames.start()
+      requestFrame(() => opts.onLineNumberSelectionEnd?.(next))
     },
   }
 }
@@ -457,9 +470,11 @@ function useAnnotationRerender<A>(opts: {
   annotations: () => A[]
 }) {
   const applied = new WeakSet<AnnotationTarget<A>>()
+  const refreshFrames = createAnimationFrameScope()
   createEffect(() => {
     opts.viewer.rendered()
     const active = opts.current()
+    const requestFrame = refreshFrames.start()
     if (!active) return
     const annotations = opts.annotations()
     // renderViewer always draws with empty annotations, so skip the extra rerender
@@ -469,8 +484,9 @@ function useAnnotationRerender<A>(opts: {
     else applied.add(active)
     active.setLineAnnotations(annotations)
     active.rerender()
-    requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
+    requestFrame(() => opts.viewer.find.refresh({ reset: true }))
   })
+  onCleanup(refreshFrames.clear)
 }
 
 function notifyRendered(opts: {
@@ -794,8 +810,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   }
 
   const setSelectedLines = (range: SelectedLineRange | null) => {
-    viewer.lastSelection = range
-    applySelection(range)
+    viewer.selection.set(range, applySelection)
   }
 
   const adapter: ModeAdapter = {
@@ -862,7 +877,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
-        applySelection(viewer.lastSelection)
+        viewer.selection.replay(applySelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
       },
@@ -943,7 +958,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, findDiffLineNumber, diffMouseSide)
 
-  const setSelectedLines = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
+  const applySelection = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
     const active = instance
     if (!active) return
 
@@ -956,6 +971,10 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     viewer.lastSelection = fixed
     active.setSelectedLines(fixed)
     restoreShadowTextSelection(preserve?.root, preserve?.text)
+  }
+
+  const setSelectedLines = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
+    viewer.selection.set(range, (value) => applySelection(value, preserve))
   }
 
   const adapter: ModeAdapter = {
@@ -1067,7 +1086,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       settleFrames: 1,
       onReady: () => {
         done?.()
-        setSelectedLines(viewer.lastSelection)
+        viewer.selection.replay(applySelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
       },

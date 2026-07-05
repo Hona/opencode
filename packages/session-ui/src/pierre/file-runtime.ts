@@ -1,15 +1,41 @@
 type ReadyWatcher = {
   observer?: MutationObserver
   token: number
+  frames: Set<number>
+  requestFrame: (callback: FrameRequestCallback) => number
+  cancelFrame: (frame: number) => void
 }
 
-export function createReadyWatcher(): ReadyWatcher {
-  return { token: 0 }
+export function createReadyWatcher(
+  scheduler = {
+    request: (callback: FrameRequestCallback) => requestAnimationFrame(callback),
+    cancel: (frame: number) => cancelAnimationFrame(frame),
+  },
+): ReadyWatcher {
+  return { token: 0, frames: new Set(), requestFrame: scheduler.request, cancelFrame: scheduler.cancel }
 }
 
 export function clearReadyWatcher(state: ReadyWatcher) {
+  state.token++
   state.observer?.disconnect()
   state.observer = undefined
+  state.frames.forEach((frame) => state.cancelFrame(frame))
+  state.frames.clear()
+}
+
+function disconnectReadyObserver(state: ReadyWatcher) {
+  state.observer?.disconnect()
+  state.observer = undefined
+}
+
+function requestReadyFrame(state: ReadyWatcher, token: number, callback: FrameRequestCallback) {
+  if (token !== state.token) return
+  const frame = state.requestFrame((time) => {
+    state.frames.delete(frame)
+    if (token !== state.token) return
+    callback(time)
+  })
+  state.frames.add(frame)
 }
 
 export function getViewerHost(container: HTMLElement | undefined) {
@@ -57,7 +83,6 @@ export function notifyShadowReady(opts: {
   settleFrames?: number
 }) {
   clearReadyWatcher(opts.state)
-  opts.state.token += 1
 
   const token = opts.state.token
   const settle = Math.max(0, opts.settleFrames ?? 0)
@@ -69,10 +94,10 @@ export function notifyShadowReady(opts: {
         opts.onReady()
         return
       }
-      requestAnimationFrame(() => step(left - 1))
+      requestReadyFrame(opts.state, token, () => step(left - 1))
     }
 
-    requestAnimationFrame(() => step(settle))
+    requestReadyFrame(opts.state, token, () => step(settle))
   }
 
   const observeRoot = (root: ShadowRoot) => {
@@ -83,12 +108,12 @@ export function notifyShadowReady(opts: {
 
     if (typeof MutationObserver === "undefined") return
 
-    clearReadyWatcher(opts.state)
+    disconnectReadyObserver(opts.state)
     opts.state.observer = new MutationObserver(() => {
       if (token !== opts.state.token) return
       if (!opts.isReady(root)) return
 
-      clearReadyWatcher(opts.state)
+      disconnectReadyObserver(opts.state)
       runReady()
     })
     opts.state.observer.observe(root, { childList: true, subtree: true })

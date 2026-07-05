@@ -10,7 +10,6 @@ import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import {
   absoluteTreePath,
-  activeTreeNavigation,
   advanceTreePreload,
   nextSuggestionIndex,
   nextTreeScrollTop,
@@ -21,6 +20,7 @@ import {
   cleanPickerInput,
   createPriorityTaskQueue,
   createDirectorySearch,
+  createTreeNavigationLifecycle,
   currentPickerSuggestions,
   displayPickerPath,
   pickerParent,
@@ -62,7 +62,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
   let pathArea: HTMLDivElement | undefined
-  let navigation = 0
+  const navigation = createTreeNavigationLifecycle()
 
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
@@ -114,7 +114,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     const request =
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
-        if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
+        if (!navigation.active(generation)) return Promise.resolve(undefined)
         return sdk.client.file
           .list({ directory: absolute, path: "" })
           .then((result) => result.data ?? [])
@@ -122,7 +122,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       })
     listings.set(key, request)
     const nodes = await request
-    if (!activeTreeNavigation(generation, navigation)) return false
+    if (!navigation.active(generation)) return false
     if (!nodes) {
       listings.delete(key)
       if (!key) setError(true)
@@ -138,7 +138,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   async function navigate(path: string) {
     const value = policy.navigation(pickerAbsoluteInput(cleanPickerInput(path), home(), root() || start() || home()))
     if (!value) return
-    const token = ++navigation
+    const token = navigation.begin()
     setLoading(true)
     setRootValid(false)
     setSelected("")
@@ -150,7 +150,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     advanced.clear()
     tree?.resetPaths([])
     const valid = await load("", token)
-    if (!activeTreeNavigation(token, navigation)) return
+    if (!navigation.active(token)) return
     setRootValid(valid)
     setLoading(false)
   }
@@ -246,7 +246,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
         }
       `,
       onExpansionChange(change) {
-        if (change.expanded) void load(change.path, navigation)
+        if (change.expanded) void load(change.path, navigation.current())
       },
       onSelectionChange(paths) {
         const path = paths.at(-1)
@@ -264,7 +264,10 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     void navigate(path)
   })
 
-  onCleanup(() => tree?.cleanUp())
+  onCleanup(() => {
+    navigation.dispose()
+    tree?.cleanUp()
+  })
 
   return (
     <Dialog size="large" class="directory-picker-v2">

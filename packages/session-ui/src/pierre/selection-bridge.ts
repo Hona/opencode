@@ -79,6 +79,23 @@ export function restoreShadowTextSelection(root: ShadowRoot | undefined, range: 
   })
 }
 
+export function createSelectionReplay<T>(initial: T) {
+  let value = initial
+
+  return {
+    get value() {
+      return value
+    },
+    set(next: T, apply?: (value: T) => void) {
+      value = next
+      apply?.(next)
+    },
+    replay(apply: (value: T) => void) {
+      apply(value)
+    },
+  }
+}
+
 export function createLineNumberSelectionBridge() {
   let mode: PointerMode = "none"
   let line: number | undefined

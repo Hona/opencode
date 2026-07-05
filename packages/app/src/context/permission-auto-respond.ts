@@ -9,15 +9,37 @@ export function directoryAcceptKey(directory: string) {
   return `${base64Encode(directory)}/*`
 }
 
-function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
-  const key = acceptKey(sessionID, directory)
-  const directoryKey = directory ? directoryAcceptKey(directory) : undefined
-  return autoAccept[key] ?? autoAccept[sessionID] ?? (directoryKey ? autoAccept[directoryKey] : undefined)
+function directoryAutoAccept(
+  autoAccept: Record<string, boolean>,
+  directory: string,
+  options: { permissionAllowAll?: boolean; persistedReady?: boolean },
+) {
+  return (
+    autoAccept[directoryAcceptKey(directory)] ??
+    (options.persistedReady !== false && options.permissionAllowAll ? true : undefined)
+  )
 }
 
-export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {
-  const key = directoryAcceptKey(directory)
-  return autoAccept[key] ?? false
+function accepted(
+  autoAccept: Record<string, boolean>,
+  sessionID: string,
+  directory?: string,
+  options: { permissionAllowAll?: boolean; persistedReady?: boolean } = {},
+) {
+  const key = acceptKey(sessionID, directory)
+  return (
+    autoAccept[key] ??
+    autoAccept[sessionID] ??
+    (directory ? directoryAutoAccept(autoAccept, directory, options) : undefined)
+  )
+}
+
+export function isDirectoryAutoAccepting(
+  autoAccept: Record<string, boolean>,
+  directory: string,
+  options: { permissionAllowAll?: boolean; persistedReady?: boolean } = {},
+) {
+  return directoryAutoAccept(autoAccept, directory, options) ?? false
 }
 
 function sessionLineage(session: { id: string; parentID?: string }[], sessionID: string) {
@@ -43,9 +65,10 @@ export function autoRespondsPermission(
   session: { id: string; parentID?: string }[],
   permission: { sessionID: string },
   directory?: string,
+  options: { permissionAllowAll?: boolean; persistedReady?: boolean } = {},
 ) {
   const value = sessionLineage(session, permission.sessionID)
-    .map((id) => accepted(autoAccept, id, directory))
+    .map((id) => accepted(autoAccept, id, directory, options))
     .find((item): item is boolean => item !== undefined)
   return value ?? false
 }

@@ -166,12 +166,13 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   createEffect(() => {
     const focus = props.focusedComment
     if (!focus) return
+    focusToken++
+    const token = focusToken
     if (focus.file !== props.file) {
       // The focused file has no mounted preview (e.g. not in the current diff
       // set); clear the focus anyway so it cannot hijack a later diff refresh.
       // V1 clears unconditionally the same way.
       untrack(() => {
-        const token = focusToken
         requestAnimationFrame(() => {
           if (token !== focusToken) return
           props.onFocusedCommentChange?.(null)
@@ -189,8 +190,6 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       // The diff renders asynchronously, so poll for the comment anchor before
       // scrolling; clear the focus once handled so revisiting the file does not
       // re-open a stale comment (mirrors the v1 review behavior).
-      focusToken++
-      const token = focusToken
       const scrollTo = (attempt: number) => {
         if (token !== focusToken) return
         const anchor = scrollRef?.querySelector(`[data-comment-id="${focus.id}"]`)

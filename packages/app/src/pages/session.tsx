@@ -56,6 +56,7 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
+import { createPromptInputEditSlot, type PromptInputEdit } from "@/components/prompt-input/edit"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import {
@@ -69,7 +70,7 @@ import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { effectiveChangeMode, syncSessionModel, type ChangeMode } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
@@ -90,12 +91,11 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
+import { createInputRequestLatch, createScheduledTask } from "./session/effect-lifecycle"
 
 type FollowupItem = FollowupDraft & { id: string }
-type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
 const emptyFollowups: FollowupItem[] = []
 
-type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
 
 const sessionViewState = () => ({
@@ -550,7 +550,7 @@ export default function Page() {
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
       paused: Record<string, boolean | undefined>
-      edit: Record<string, FollowupEdit | undefined>
+      edit: Record<string, PromptInputEdit | undefined>
     }>({
       items: {},
       failed: {},
@@ -606,6 +606,7 @@ export default function Page() {
     list.push("turn")
     return list
   })
+  const changesMode = createMemo(() => effectiveChangeMode(store.changes, changesOptions()))
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
@@ -613,7 +614,8 @@ export default function Page() {
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
-    if (store.changes === "git" || store.changes === "branch") return store.changes
+    const mode = changesMode()
+    if (mode === "git" || mode === "branch") return mode
   })
   const vcsKey = createMemo(
     () =>
@@ -640,7 +642,7 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
-    if (store.changes === "git" || store.changes === "branch")
+    if (changesMode() === "git" || changesMode() === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
     return turnDiffs()
@@ -648,7 +650,7 @@ export default function Page() {
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
-    if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
+    if (changesMode() === "git" || changesMode() === "branch") return !vcsQuery.isPending
     return true
   }
 
@@ -806,7 +808,9 @@ export default function Page() {
             todoTimer = undefined
             if (sdk().directory !== dir || params.id !== id) return
             untrack(() => {
-              void sync().session.todo(id, cached ? { force: true } : undefined)
+              void sync()
+                .session.todo(id, cached ? { force: true } : undefined)
+                .catch((error) => console.debug("[session] failed to refresh todo", { sessionID: id, error }))
             })
           }, 0)
         })
@@ -967,15 +971,6 @@ export default function Page() {
     }
   }
 
-  createEffect(() => {
-    if (!sync().project) return
-    const list = changesOptions()
-    if (list.includes(store.changes)) return
-    const next = list[0]
-    if (!next) return
-    setStore("changes", next)
-  })
-
   createEffect(
     on(
       () => sync().data.session_status[params.id ?? ""]?.type,
@@ -1051,7 +1046,7 @@ export default function Page() {
     return (
       <Select
         options={changesOptions()}
-        current={store.changes}
+        current={changesMode()}
         label={changesLabel}
         onSelect={(option) => option && setStore("changes", option)}
         variant="ghost"
@@ -1070,7 +1065,7 @@ export default function Page() {
       <SelectV2
         appearance="inline"
         options={changesOptions()}
-        current={store.changes}
+        current={changesMode()}
         label={changesLabel}
         placement="bottom-start"
         gutter={6}
@@ -1102,18 +1097,18 @@ export default function Page() {
   )
 
   const reviewEmptyText = createMemo(() => {
-    if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
-    if (store.changes === "branch") return language.t("session.review.noBranchChanges")
+    if (changesMode() === "git") return language.t("session.review.noUncommittedChanges")
+    if (changesMode() === "branch") return language.t("session.review.noBranchChanges")
     return language.t("session.review.noChanges")
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
-    if (store.changes === "git" || store.changes === "branch") {
+    if (changesMode() === "git" || changesMode() === "branch") {
       if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
       return empty(reviewEmptyText())
     }
 
-    if (store.changes === "turn") {
+    if (changesMode() === "turn") {
       if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
     }
@@ -1126,10 +1121,10 @@ export default function Page() {
   }
 
   const reviewEmptyV2 = () => {
-    if ((store.changes === "git" || store.changes === "branch") && !reviewReady()) {
+    if ((changesMode() === "git" || changesMode() === "branch") && !reviewReady()) {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
-    if (store.changes === "turn" && nogit()) {
+    if (changesMode() === "turn" && nogit()) {
       return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
     }
     return <SessionReviewEmptyChangesV2 />
@@ -1299,13 +1294,19 @@ export default function Page() {
     setTree({ activeDiff: path, pendingDiff: path })
   }
 
+  const reviewDiffTask = createScheduledTask(requestAnimationFrame, cancelAnimationFrame)
   createEffect(() => {
+    reviewDiffTask.cancel()
     const pending = tree.pendingDiff
     if (!pending) return
     if (!tree.reviewScroll) return
     if (!reviewReady()) return
+    const owner = sessionOwnership.capture()
+
+    const schedule = (count: number) => reviewDiffTask.schedule(() => owner.run(() => attempt(count)))
 
     const attempt = (count: number) => {
+      if (!owner.current()) return
       if (tree.pendingDiff !== pending) return
       if (count > 60) {
         setTree("pendingDiff", undefined)
@@ -1314,18 +1315,18 @@ export default function Page() {
 
       const root = tree.reviewScroll
       if (!root) {
-        requestAnimationFrame(() => attempt(count + 1))
+        schedule(count + 1)
         return
       }
 
       if (!scrollToReviewDiff(pending)) {
-        requestAnimationFrame(() => attempt(count + 1))
+        schedule(count + 1)
         return
       }
 
       const top = reviewDiffTop(pending)
       if (top === undefined) {
-        requestAnimationFrame(() => attempt(count + 1))
+        schedule(count + 1)
         return
       }
 
@@ -1334,10 +1335,10 @@ export default function Page() {
         return
       }
 
-      requestAnimationFrame(() => attempt(count + 1))
+      schedule(count + 1)
     }
 
-    requestAnimationFrame(() => attempt(0))
+    schedule(0)
   })
 
   createEffect(() => {
@@ -1348,7 +1349,9 @@ export default function Page() {
     if (sync().data.session_diff[id] !== undefined) return
     if (sync().status === "loading") return
 
-    void sync().session.diff(id)
+    void sync()
+      .session.diff(id)
+      .catch((error) => console.debug("[session] failed to load session diff", { sessionID: id, error }))
   })
 
   createEffect(
@@ -1370,7 +1373,9 @@ export default function Page() {
           diffTimer = window.setTimeout(() => {
             diffTimer = undefined
             if (sessionKey() !== key) return
-            void sync().session.diff(id, { force: true })
+            void sync()
+              .session.diff(id, { force: true })
+              .catch((error) => console.debug("[session] failed to refresh session diff", { sessionID: id, error }))
           }, 0)
         })
       },
@@ -1501,20 +1506,30 @@ export default function Page() {
   let captureHistoryAnchor = () => {}
   let restoreHistoryAnchor = (_done: boolean) => {}
   const historyRequests = new Set<string>()
+  const historyRequest = createInputRequestLatch()
   let historyContinuationFrame: number | undefined
-  const loadOlder = async () => {
+  const historyCursor = () => {
+    const items = timeline.messages()
+    return `${items[0]?.id ?? ""}:${items.length}`
+  }
+  const loadOlder = async (inputKey: string) => {
     const owner = sessionOwnership.capture()
     if (historyLoading() || historyRequests.has(owner.key)) return
-    historyRequests.add(owner.key)
     const before = timeline.messages().length
-    try {
-      await timeline.history.loadOlder({
-        before: () => owner.run(captureHistoryAnchor),
-        after: (done) => owner.run(() => restoreHistoryAnchor(done)),
-      })
-    } finally {
-      historyRequests.delete(owner.key)
-    }
+    const request = historyRequest.run(
+      JSON.stringify([owner.key, historyCursor(), inputKey]),
+      () =>
+        timeline.history.loadOlder({
+          before: () => owner.run(captureHistoryAnchor),
+          after: (done) => owner.run(() => restoreHistoryAnchor(done)),
+        }),
+      (error) => console.debug("[session] failed to load older history", { sessionID: params.id, error }),
+    )
+    if (!request) return
+    historyRequests.add(owner.key)
+    const success = await request
+    historyRequests.delete(owner.key)
+    if (!success) return
     if (!owner.current() || timeline.messages().length <= before) return
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200 || !historyMore()) return
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
@@ -1523,16 +1538,19 @@ export default function Page() {
       owner.run(onHistoryScroll)
     })
   }
+  let historyScrollInput = 0
+  let historyNearStart = false
   const onHistoryScroll = () => {
-    if (
-      historyRequests.has(sessionOwnership.key()) ||
-      historyLoading() ||
-      !autoScroll.userScrolled() ||
-      !scroller ||
-      scroller.scrollTop >= 200
-    )
+    if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200) {
+      historyNearStart = false
       return
-    void loadOlder()
+    }
+    if (historyRequests.has(sessionOwnership.key()) || historyLoading()) return
+    if (!historyNearStart) {
+      historyNearStart = true
+      historyScrollInput += 1
+    }
+    void loadOlder(`scroll:${historyScrollInput}`)
   }
 
   onCleanup(() => {
@@ -1553,7 +1571,7 @@ export default function Page() {
       if (el.scrollHeight > el.clientHeight + 1) return
       if (!historyMore()) return
 
-      void loadOlder()
+      void loadOlder(`fill:${el.scrollHeight}:${el.clientHeight}`)
     })
   }
 
@@ -1622,6 +1640,7 @@ export default function Page() {
     if (!id) return
     return followup.edit[id]
   })
+  const followupEditCommand = createPromptInputEditSlot(editingFollowup)
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
@@ -1713,11 +1732,13 @@ export default function Page() {
 
     setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
     setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
-    setFollowup("edit", sessionID, {
+    const edit = {
       id: item.id,
       prompt: item.prompt,
       context: item.context,
-    })
+    }
+    setFollowup("edit", sessionID, edit)
+    followupEditCommand.load(edit)
   }
 
   const clearFollowupEdit = () => {
@@ -1856,6 +1877,7 @@ export default function Page() {
     visibleUserMessages,
     historyMore,
     historyLoading,
+    historyCursor,
     loadMore: (sessionID) => sync().session.history.loadMore(sessionID),
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
@@ -1896,6 +1918,7 @@ export default function Page() {
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    reviewDiffTask.cancel()
   })
 
   useUsageExceededDialogs()
@@ -1962,7 +1985,7 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
-            edit={editingFollowup()}
+            editCommandRef={followupEditCommand.mount}
             onEditLoaded={clearFollowupEdit}
             shouldQueue={queueEnabled}
             onQueue={queueFollowup}
