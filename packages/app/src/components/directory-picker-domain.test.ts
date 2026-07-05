@@ -15,7 +15,6 @@ import {
   treePathWithin,
   currentPickerSuggestions,
   createDirectorySearch,
-  createTreeNavigationLifecycle,
   createPriorityTaskQueue,
   displayPickerPath,
   pickerParent,
@@ -82,15 +81,6 @@ test("centralizes file and directory selection policy", () => {
 test("accepts mutations only from the active navigation", () => {
   expect(activeTreeNavigation(3, 3)).toBeTrue()
   expect(activeTreeNavigation(2, 3)).toBeFalse()
-})
-
-test("invalidates directory navigation when its lifecycle is disposed", () => {
-  const navigation = createTreeNavigationLifecycle()
-  const initial = navigation.begin()
-
-  expect(navigation.active(initial)).toBeTrue()
-  navigation.dispose()
-  expect(navigation.active(initial)).toBeFalse()
 })
 
 test("preserves POSIX case while matching Windows drives case-insensitively", () => {

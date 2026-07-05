@@ -7,6 +7,7 @@ import {
   createRoot,
   For,
   Match,
+  on,
   onCleanup,
   onMount,
   Show,
@@ -67,7 +68,6 @@ import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
-import { effectiveHomeSelection, homeSearchActiveKey } from "./home-domain"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -101,6 +101,8 @@ const HOME_SEARCH_RESULT_TITLE =
   "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-base [font-weight:530]"
 const HOME_SEARCH_RESULT_META =
   "min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]"
+
+let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
   sync: Pick<ServerSync, "child">
@@ -272,18 +274,9 @@ export function NewHome() {
     searchFocused: false,
   })
   const selection = layout.home.selection
-  const effectiveSelection = createMemo(() =>
-    effectiveHomeSelection(
-      selection(),
-      global.servers.list().map((conn) => ServerConnection.key(conn)),
-      server.key,
-    ),
-  )
 
   const focusedServer = createMemo(
-    () =>
-      global.servers.list().find((conn) => ServerConnection.key(conn) === effectiveSelection().server) ??
-      server.current,
+    () => global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ?? server.current,
   )
   const focusedServerCtx = createMemo(() => {
     const conn = focusedServer()
@@ -296,9 +289,7 @@ export function NewHome() {
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
   )
   const homedir = createMemo(() => focusedSync().data.path.home ?? "")
-  const selectedProject = createMemo(() =>
-    projects().find((project) => project.worktree === effectiveSelection().directory),
-  )
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
   const newSessionProject = createMemo(
     () =>
       selectedProject() ??
@@ -326,7 +317,7 @@ export function NewHome() {
     return language.t("home.sessions.search.placeholder")
   })
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", effectiveSelection().server, ...projectDirectories()] as const,
+    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
     queryFn: async () => {
       await Promise.all(
         projectDirectories().map((directory) =>
@@ -418,6 +409,20 @@ export function NewHome() {
     },
   ])
 
+  createEffect(() => {
+    const list = global.servers.list()
+    if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
+    const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
+    if (conn) setSelection({ server: ServerConnection.key(conn) })
+  })
+
+  createEffect(() => {
+    const pending = pendingHomeNavigation
+    if (!pending || pending.server !== server.key) return
+    pendingHomeNavigation = undefined
+    navigate(pending.href)
+  })
+
   function focusServer(conn: ServerConnection.Any) {
     setSelection({ server: ServerConnection.key(conn) })
   }
@@ -432,7 +437,7 @@ export function NewHome() {
         .some((project) => project.worktree === directory)
     )
       return
-    setSelection(toggleHomeProjectSelection(effectiveSelection(), key, directory))
+    setSelection(toggleHomeProjectSelection(selection(), key, directory))
   }
 
   function addProjects(conn: ServerConnection.Any, directories: string[]) {
@@ -540,7 +545,7 @@ export function NewHome() {
           projects={projects()}
           recentlyClosed={recentlyClosed()}
           homedir={homedir()}
-          selected={effectiveSelection()}
+          selected={selection()}
           focusServer={focusServer}
           selectProject={selectProject}
           openNewSession={openProjectNewSession}
@@ -549,7 +554,7 @@ export function NewHome() {
           editProject={editProject}
           closeProject={(conn, directory) => {
             const next = closeHomeProject(
-              effectiveSelection(),
+              selection(),
               ServerConnection.key(conn),
               global.ensureServerCtx(conn).projects,
               directory,
@@ -574,7 +579,7 @@ export function NewHome() {
             loading={sessionLoad.isLoading}
             results={searchResults()}
             showProjectName={!selectedProject()}
-            server={effectiveSelection().server}
+            server={selection().server}
             noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
             bindFocus={(focus) => {
               focusSessionSearch = focus
@@ -633,7 +638,7 @@ export function NewHome() {
                               <HomeSessionRow
                                 record={record}
                                 showProjectName={!selectedProject()}
-                                server={effectiveSelection().server}
+                                server={selection().server}
                                 openSession={openSession}
                                 archiveSession={archiveSession}
                               />
@@ -1163,10 +1168,27 @@ function HomeSessionSearch(props: {
     props.bindFocus(focusInput)
   })
 
-  const active = createMemo(() => homeSearchActiveKey(store.active, props.results.map(homeSessionSearchKey)))
+  const syncActive = (results: HomeSessionRecord[]) => {
+    if (results.length === 0) {
+      setStore("active", "")
+      return
+    }
+    if (!results.some((record) => homeSessionSearchKey(record) === store.active)) {
+      setStore("active", homeSessionSearchKey(results[0]))
+    }
+  }
+
+  createEffect(() => syncActive(props.results))
+
+  createEffect(
+    on(
+      () => props.value,
+      () => syncActive(props.results),
+    ),
+  )
 
   const scrollActiveIntoView = () => {
-    const key = active()
+    const key = store.active
     if (!key || !listRef) return
     const element = listRef.querySelector<HTMLElement>(`[data-key="${key}"]`)
     element?.scrollIntoView({ block: "nearest" })
@@ -1175,7 +1197,7 @@ function HomeSessionSearch(props: {
   const moveActive = (delta: number) => {
     const results = props.results
     if (results.length === 0) return
-    const index = results.findIndex((record) => homeSessionSearchKey(record) === active())
+    const index = results.findIndex((record) => homeSessionSearchKey(record) === store.active)
     const start = index === -1 ? 0 : index
     const next = (start + delta + results.length) % results.length
     setStore("active", homeSessionSearchKey(results[next]))
@@ -1183,7 +1205,7 @@ function HomeSessionSearch(props: {
   }
 
   const selectActive = () => {
-    const record = props.results.find((item) => homeSessionSearchKey(item) === active())
+    const record = props.results.find((item) => homeSessionSearchKey(item) === store.active)
     if (!record) return
     props.onSelect(record.session)
   }
@@ -1241,7 +1263,7 @@ function HomeSessionSearch(props: {
                                 record={record}
                                 showProjectName={props.showProjectName}
                                 server={props.server}
-                                selected={active() === homeSessionSearchKey(record)}
+                                selected={store.active === homeSessionSearchKey(record)}
                                 onHighlight={() => setStore("active", homeSessionSearchKey(record))}
                                 onSelect={(session, options) => props.onSelect(session, options)}
                               />
@@ -1267,7 +1289,9 @@ function HomeSessionSearch(props: {
             aria-expanded={props.open}
             aria-controls={HOME_SESSION_SEARCH_RESULTS_ID}
             aria-autocomplete="list"
-            aria-activedescendant={active() && props.open ? `home-session-search-option-${active()}` : undefined}
+            aria-activedescendant={
+              store.active && props.open ? `home-session-search-option-${store.active}` : undefined
+            }
             onFocus={() => props.onFocus()}
             onInput={(event) => props.onInput(event.currentTarget.value)}
             onKeyDown={(event) => {

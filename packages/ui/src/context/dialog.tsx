@@ -35,11 +35,9 @@ function init() {
   const lock = { value: false }
 
   onCleanup(() => {
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-    for (const item of stack()) item.dispose()
+    if (timer.current === undefined) return
+    clearTimeout(timer.current)
+    timer.current = undefined
   })
 
   const close = (id?: string) => {

@@ -19,14 +19,8 @@ import { normalizeServerUrl, ServerConnection, useServer } from "@/context/serve
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
-import { applyServerFormEvent, type ServerFormCallbacks } from "./dialog-select-server-domain"
 
 const DEFAULT_USERNAME = "opencode"
-
-type ServerManagementControllerOptions = ServerFormCallbacks & {
-  onSelect?: () => void
-  navigateOnAdd?: boolean
-}
 
 interface ServerFormProps {
   value: string
@@ -195,7 +189,7 @@ export function DialogSelectServer() {
   )
 }
 
-export function useServerManagementController(options: ServerManagementControllerOptions = {}) {
+export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
   const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
@@ -253,7 +247,7 @@ export function useServerManagementController(options: ServerManagementControlle
     mutationFn: async (value: string) => {
       const normalized = normalizeServerUrl(value)
       if (!normalized) {
-        setStore("addServer", { error: language.t("dialog.server.add.error") })
+        resetAdd()
         return
       }
 
@@ -270,40 +264,36 @@ export function useServerManagementController(options: ServerManagementControlle
         return
       }
 
+      resetAdd()
       if (options.navigateOnAdd === false) {
-        applyServerFormEvent("complete", resetAdd, options, () => {
-          server.add(conn)
-          options.onSelect?.()
-        })
+        server.add(conn)
+        options.onSelect?.()
         return
       }
-      resetAdd()
       await select(conn, true)
-      options.onFormComplete?.()
     },
   }))
 
   const editMutation = useMutation(() => ({
     mutationFn: async (input: { original: ServerConnection.Any; value: string }) => {
       if (input.original.type !== "http") return
-      const original = input.original
       const normalized = normalizeServerUrl(input.value)
       if (!normalized) {
-        setStore("editServer", { error: language.t("dialog.server.add.error") })
+        resetEdit()
         return
       }
 
       const name = store.editServer.name.trim() || undefined
       const username = store.editServer.username || undefined
       const password = store.editServer.password || undefined
-      const existingName = original.displayName
+      const existingName = input.original.displayName
       if (
-        normalized === original.http.url &&
+        normalized === input.original.http.url &&
         name === existingName &&
-        username === original.http.username &&
-        password === original.http.password
+        username === input.original.http.username &&
+        password === input.original.http.password
       ) {
-        applyServerFormEvent("complete", resetEdit, options)
+        resetEdit()
         return
       }
 
@@ -317,13 +307,13 @@ export function useServerManagementController(options: ServerManagementControlle
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
       }
-      applyServerFormEvent("complete", resetEdit, options, () => {
-        if (normalized === original.http.url) {
-          server.add(conn)
-          return
-        }
-        replaceServer(original, conn)
-      })
+      if (normalized === input.original.http.url) {
+        server.add(conn)
+      } else {
+        replaceServer(input.original, conn)
+      }
+
+      resetEdit()
     },
   }))
 
@@ -516,7 +506,7 @@ export function useServerManagementController(options: ServerManagementControlle
   createEffect(() => {
     if (!store.editServer.id) return
     if (editing()) return
-    applyServerFormEvent("invalidated", resetEdit, options)
+    resetEdit()
   })
 
   async function handleRemove(key: ServerConnection.Key) {

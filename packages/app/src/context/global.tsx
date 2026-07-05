@@ -10,12 +10,6 @@ import { getOwner } from "solid-js/web"
 import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
 
-export function effectiveSettingsServer<T, K>(selected: K | undefined, servers: readonly T[], key: (server: T) => K) {
-  const connection = servers.find((server) => key(server) === selected) ?? servers[0]
-  if (!connection) return undefined
-  return { key: key(connection), connection }
-}
-
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
   init: () => {
@@ -31,7 +25,14 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     })
 
     const settingsServer = createMemo(() => {
-      return effectiveSettingsServer(store.settings.serverKey, server.list, ServerConnection.key)
+      const list = server.list
+      return list.find((conn) => ServerConnection.key(conn) === store.settings.serverKey) ?? list[0]
+    })
+
+    createEffect(() => {
+      const conn = settingsServer()
+      const key = conn ? ServerConnection.key(conn) : undefined
+      if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
     })
 
     const serverCtxs = new Map<
@@ -77,9 +78,9 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       settings: {
         server: {
           get key() {
-            return settingsServer()?.key
+            return store.settings.serverKey
           },
-          selected: () => settingsServer()?.connection,
+          selected: settingsServer,
           set(key: ServerConnection.Key) {
             if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
           },

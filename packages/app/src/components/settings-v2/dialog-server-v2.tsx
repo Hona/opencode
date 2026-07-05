@@ -3,7 +3,7 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@op
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { type Component, Show, onCleanup, onMount } from "solid-js"
+import { type Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { type ServerConnection } from "@/context/server"
 import { useServerManagementController } from "../dialog-select-server"
@@ -16,18 +16,25 @@ export const DialogServerV2: Component<{
   const dialog = useDialog()
   const language = useLanguage()
   const controller = useServerManagementController({
+    onSelect: () => dialog.close(),
     navigateOnAdd: false,
-    onFormComplete: () => dialog.close(),
-    onFormInvalidated: () => dialog.close(),
   })
+  const [opened, setOpened] = createSignal(false)
 
   onMount(() => {
     if (props.mode === "add") controller.startAdd()
     if (props.mode === "edit" && props.server) controller.startEdit(props.server)
+    setOpened(true)
   })
 
   onCleanup(() => {
     controller.resetForm()
+  })
+
+  createEffect(() => {
+    if (!opened()) return
+    if (controller.isFormMode()) return
+    dialog.close()
   })
 
   const keyDown = (event: KeyboardEvent) => {

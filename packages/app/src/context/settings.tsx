@@ -148,22 +148,11 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
-export function migrateSettings(value: unknown) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return value
-  const general = "general" in value ? value.general : undefined
-  if (typeof general !== "object" || general === null || Array.isArray(general)) return value
-  if (!("followup" in general) || general.followup !== "queue") return value
-  return { ...value, general: { ...general, followup: "steer" } }
-}
-
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, _, ready] = persisted(
-      { key: "settings.v3", migrate: migrateSettings },
-      createStore<Settings>(defaultSettings),
-    )
+    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -179,6 +168,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       const root = document.documentElement
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+    })
+
+    createEffect(() => {
+      if (store.general?.followup !== "queue") return
+      setStore("general", "followup", "steer")
     })
 
     return {

@@ -20,7 +20,6 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
-import { createAnimationFrameScope } from "../pierre/animation-frame"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
 import type { LineCommentEditorProps } from "./line-comment"
@@ -164,12 +163,12 @@ type SessionReviewSelection = {
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
+  let focusToken = 0
   let frame: number | undefined
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
   const nodes = new Map<string, HTMLDivElement>()
-  const focusFrames = createAnimationFrameScope()
   const [store, setStore] = createStore({
     open: [] as string[],
     visible: {} as Record<string, boolean>,
@@ -251,7 +250,6 @@ export const SessionReview = (props: SessionReviewProps) => {
   }
 
   onCleanup(() => {
-    focusFrames.clear()
     if (frame === undefined) return
     cancelAnimationFrame(frame)
   })
@@ -290,7 +288,8 @@ export const SessionReview = (props: SessionReviewProps) => {
     if (!focus) return
 
     untrack(() => {
-      const requestFrame = focusFrames.start()
+      focusToken++
+      const token = focusToken
 
       setStore("opened", focus)
 
@@ -303,6 +302,8 @@ export const SessionReview = (props: SessionReviewProps) => {
       }
 
       const scrollTo = (attempt: number) => {
+        if (token !== focusToken) return
+
         const root = scroll
         if (!root) return
 
@@ -314,7 +315,7 @@ export const SessionReview = (props: SessionReviewProps) => {
         const target = ready ? anchor : wrapper
         if (!target) {
           if (attempt >= 120) return
-          requestFrame(() => scrollTo(attempt + 1))
+          requestAnimationFrame(() => scrollTo(attempt + 1))
           return
         }
 
@@ -326,12 +327,12 @@ export const SessionReview = (props: SessionReviewProps) => {
 
         if (ready) return
         if (attempt >= 120) return
-        requestFrame(() => scrollTo(attempt + 1))
+        requestAnimationFrame(() => scrollTo(attempt + 1))
       }
 
-      requestFrame(() => scrollTo(0))
+      requestAnimationFrame(() => scrollTo(0))
 
-      requestFrame(() => props.onFocusedCommentChange?.(null))
+      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
     })
   })
 

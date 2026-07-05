@@ -248,7 +248,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
   )
 }
 
-export function StatusPopoverBody(_props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
   const global = useGlobal()
   const server = useServer()
@@ -265,6 +265,10 @@ export function StatusPopoverBody(_props: { shown: Accessor<boolean> }) {
       description: err instanceof Error ? err.message : String(err),
     })
   }
+
+  createEffect(() => {
+    if (!props.shown()) return
+  })
 
   let dialogRun = 0
   let dialogDead = false

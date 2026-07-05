@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
+import { createEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./tooltip-v2.css"
@@ -67,21 +67,18 @@ export function TooltipV2(props: TooltipV2Props) {
     drop()
   }
 
-  const observe = (el: HTMLDivElement) => {
-    ref = el
+  createEffect(() => {
+    if (!ref) return
     sync()
     const obs = new MutationObserver(sync)
-    obs.observe(el, {
+    obs.observe(ref, {
       subtree: true,
       childList: true,
       attributes: true,
       attributeFilter: ["aria-expanded", "data-expanded"],
     })
-    onCleanup(() => {
-      obs.disconnect()
-      if (ref === el) ref = undefined
-    })
-  }
+    onCleanup(() => obs.disconnect())
+  })
 
   let justClickedTrigger = false
 
@@ -108,7 +105,7 @@ export function TooltipV2(props: TooltipV2Props) {
           }}
         >
           <KobalteTooltip.Trigger
-            ref={observe}
+            ref={ref}
             as="div"
             data-component="tooltip-v2-trigger"
             class={local.class}

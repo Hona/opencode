@@ -47,8 +47,6 @@ export function TextReveal(props: {
   let outRef: HTMLSpanElement | undefined
   let rootRef: HTMLSpanElement | undefined
   let frame: number | undefined
-  let readyFrame: number | undefined
-  let disposed = false
 
   const win = () => inRef?.scrollWidth ?? 0
   const wout = () => outRef?.scrollWidth ?? 0
@@ -84,14 +82,12 @@ export function TextReveal(props: {
         }
         if (frame !== undefined && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame)
         frame = requestAnimationFrame(() => {
-          frame = undefined
-          if (disposed) return
           widen(Math.max(win(), wout()))
           rootRef?.offsetHeight
           setState("swapping", false)
+          frame = undefined
         })
       },
-      { defer: true },
     ),
   )
 
@@ -102,31 +98,19 @@ export function TextReveal(props: {
       setState("ready", true)
       return
     }
-    const scheduleReady = () => {
-      if (disposed) return
-      readyFrame = requestAnimationFrame(() => {
-        readyFrame = undefined
-        if (disposed) return
-        setState("ready", true)
-      })
-    }
     if (!fonts) {
-      scheduleReady()
+      requestAnimationFrame(() => setState("ready", true))
       return
     }
-    const ready = () => {
-      if (disposed) return
+    void fonts.ready.finally(() => {
       widen(win())
-      scheduleReady()
-    }
-    void fonts.ready.then(ready, ready)
+      requestAnimationFrame(() => setState("ready", true))
+    })
   })
 
   onCleanup(() => {
-    disposed = true
-    if (typeof cancelAnimationFrame !== "function") return
-    if (frame !== undefined) cancelAnimationFrame(frame)
-    if (readyFrame !== undefined) cancelAnimationFrame(readyFrame)
+    if (frame === undefined || typeof cancelAnimationFrame !== "function") return
+    cancelAnimationFrame(frame)
   })
 
   return (

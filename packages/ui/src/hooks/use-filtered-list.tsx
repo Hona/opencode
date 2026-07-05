@@ -7,7 +7,6 @@ import { createList } from "solid-list"
 export interface FilteredListProps<T> {
   items: T[] | ((filter: string) => T[] | Promise<T[]>)
   key: (item: T) => string
-  filter?: string
   filterKeys?: string[]
   current?: T
   groupBy?: (x: T) => string
@@ -15,21 +14,19 @@ export interface FilteredListProps<T> {
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   skipFilter?: (item: T) => boolean
   onSelect?: (value: T | undefined, index: number) => void
-  onMove?: (value: T | undefined) => void
   noInitialSelection?: boolean
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
-  const filter = () => props.filter ?? store.filter
 
   type Group = { category: string; items: [T, ...T[]] }
   const empty: Group[] = []
 
   const [grouped, { refetch }] = createResource(
     () => ({
-      filter: filter(),
-      items: typeof props.items === "function" ? props.items(filter()) : props.items,
+      filter: store.filter,
+      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
     }),
     async ({ filter, items }) => {
       const query = filter ?? ""
@@ -65,35 +62,29 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     )
   })
 
-  function reconcileActive() {
+  function initialActive() {
     if (props.noInitialSelection) return ""
+    if (props.current) return props.key(props.current)
+
     const items = flat()
-    const current = props.current ? props.key(props.current) : undefined
-    if (current && items.some((item) => props.key(item) === current)) return current
-    const active = list.active()
-    if (active && items.some((item) => props.key(item) === active)) return active
-    return items[0] ? props.key(items[0]) : ""
+    if (items.length === 0) return ""
+    return props.key(items[0])
   }
 
   const list = createList({
     items: () => flat().map(props.key),
-    initialActive: props.noInitialSelection ? "" : props.current ? props.key(props.current) : "",
+    initialActive: initialActive(),
     loop: true,
   })
 
-  let moved: string | null = null
-  const notifyMove = () => {
-    const active = list.active()
-    if (active === moved) return
-    moved = active
-    props.onMove?.(flat().find((item) => props.key(item) === active))
-  }
-  const setActive = (key: string | null) => {
-    list.setActive(key)
-    notifyMove()
-  }
   const reset = () => {
-    setActive(reconcileActive())
+    if (props.noInitialSelection) {
+      list.setActive("")
+      return
+    }
+    const all = flat()
+    if (all.length === 0) return
+    list.setActive(props.key(all[0]))
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -110,13 +101,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
           bubbles: true,
         })
         list.onKeyDown(navEvent)
-        notifyMove()
       }
     } else {
       // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
       if (event.altKey || event.metaKey) return
       list.onKeyDown(event)
-      notifyMove()
     }
   }
 
@@ -132,7 +121,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   return {
     grouped,
-    filter,
+    filter: () => store.filter,
     flat,
     reset,
     refetch,
@@ -140,6 +129,6 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     onKeyDown,
     onInput,
     active: list.active,
-    setActive,
+    setActive: list.setActive,
   }
 }

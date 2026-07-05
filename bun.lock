@@ -999,7 +999,6 @@
         "strip-ansi": "7.1.2",
       },
       "devDependencies": {
-        "@happy-dom/global-registrator": "20.0.11",
         "@solidjs/meta": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",
@@ -1007,7 +1006,6 @@
         "@types/katex": "0.16.7",
         "@types/luxon": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "bun-plugin-solid": "1.0.0",
         "solid-js": "catalog:",
         "tailwindcss": "catalog:",
         "tw-animate-css": "1.4.0",
@@ -3246,8 +3244,6 @@
     "builder-util-runtime": ["builder-util-runtime@9.7.0", "", { "dependencies": { "debug": "^4.3.4", "sax": "^1.2.4" } }, "sha512-g/kR520giAFYkSXTzcmF3kqQq7wi8F6N6SzeDgZrqTBN+VHdmgWOyTdD1yD7AATDId/yXLvuP34CxW46/BwCdw=="],
 
     "bun-ffi-structs": ["bun-ffi-structs@0.2.2", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-N/ZWtyN0piZlrXQT7TO0V+q952orYqkfhXRXM1Hcbb+R3QSiBH4vLnib187Mrs1H7pWIYECAmPeapGYDOMCl+w=="],
-
-    "bun-plugin-solid": ["bun-plugin-solid@1.0.0", "", { "dependencies": { "@babel/core": ">=7.0.0", "@babel/preset-typescript": ">=7.0.0", "babel-preset-solid": ">=1.8.0" } }, "sha512-H4ZcW4afCLYLDtBsog5cvCfQo8f5E7SD8AeT1woVmIKBOMguy/ml9f1jz9UlikN/i+VK1bS6GII46ZR2OdhbBQ=="],
 
     "bun-pty": ["bun-pty@0.4.8", "", {}, "sha512-rO70Mrbr13+jxHHHu2YBkk2pNqrJE5cJn29WE++PUr+GFA0hq/VgtQPZANJ8dJo6d7XImvBk37Innt8GM7O28w=="],
 

@@ -108,10 +108,3 @@ export function hasMediaValue(value: MediaValue) {
   if (!record) return false
   return typeof record.content === "string" && record.content.length > 0
 }
-
-export function svgMediaError(value: MediaValue) {
-  if (!hasMediaValue(value)) return
-  if (svgTextFromValue(value) !== undefined) return
-  if (dataUrlFromMediaValue(value, "svg") !== undefined) return
-  return { kind: "svg" as const }
-}

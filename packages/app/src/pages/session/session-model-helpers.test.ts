@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
-import { effectiveChangeMode, resetSessionModel, syncSessionModel } from "./session-model-helpers"
+import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
 
 const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
   ({
@@ -48,14 +48,5 @@ describe("resetSessionModel", () => {
     })
 
     expect(calls).toEqual(["reset"])
-  })
-})
-
-describe("effectiveChangeMode", () => {
-  test("uses an available fallback without replacing the retained selection", () => {
-    const selected = "branch"
-
-    expect(effectiveChangeMode(selected, ["git", "turn"])).toBe("git")
-    expect(effectiveChangeMode(selected, ["git", "branch", "turn"])).toBe("branch")
   })
 })

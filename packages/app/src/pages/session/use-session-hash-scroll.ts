@@ -1,7 +1,6 @@
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
-import { createInputRequestLatch } from "./effect-lifecycle"
 import { messageIdFromHash } from "./message-id-from-hash"
 
 export const useSessionHashScroll = (input: {
@@ -11,7 +10,6 @@ export const useSessionHashScroll = (input: {
   visibleUserMessages: () => UserMessage[]
   historyMore: () => boolean
   historyLoading: () => boolean
-  historyCursor: () => string | undefined
   loadMore: (sessionID: string) => Promise<void>
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
@@ -28,7 +26,6 @@ export const useSessionHashScroll = (input: {
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
   let pendingKey = ""
   let clearing = false
-  const historyRequest = createInputRequestLatch()
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -178,27 +175,15 @@ export const useSessionHashScroll = (input: {
     const sessionID = input.sessionID()
     if (!sessionID || !input.messagesReady()) return
 
+    visibleUserMessages()
+
     let targetId = input.pendingMessage()
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
-    const requestKey = JSON.stringify([
-      input.sessionKey(),
-      sessionID,
-      targetId,
-      input.historyCursor(),
-      visibleUserMessages().length,
-    ])
-    historyRequest.observe(requestKey)
     if (!targetId) return
     if (messageById().has(targetId)) return
     if (!input.historyMore() || input.historyLoading()) return
 
-    void historyRequest.run(
-      requestKey,
-      () => input.loadMore(sessionID),
-      (error) => {
-        console.debug("[session] failed to load history for message", { sessionID, targetId, error })
-      },
-    )
+    void input.loadMore(sessionID)
   })
 
   onMount(() => {
