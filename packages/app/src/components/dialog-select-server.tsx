@@ -19,6 +19,7 @@ import { normalizeServerUrl, ServerConnection, useServer } from "@/context/serve
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
+import { completeServerForm } from "./server-form-lifecycle"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -189,7 +190,9 @@ export function DialogSelectServer() {
   )
 }
 
-export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
+export function useServerManagementController(
+  options: { onSelect?: () => void; onFormExit?: () => void; navigateOnAdd?: boolean } = {},
+) {
   const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
@@ -247,7 +250,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     mutationFn: async (value: string) => {
       const normalized = normalizeServerUrl(value)
       if (!normalized) {
-        resetAdd()
+        completeServerForm(resetAdd, options.onFormExit)
         return
       }
 
@@ -264,13 +267,16 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         return
       }
 
-      resetAdd()
       if (options.navigateOnAdd === false) {
-        server.add(conn)
-        options.onSelect?.()
+        completeServerForm(resetAdd, options.onFormExit, () => {
+          server.add(conn)
+          options.onSelect?.()
+        })
         return
       }
+      resetAdd()
       await select(conn, true)
+      options.onFormExit?.()
     },
   }))
 
@@ -279,7 +285,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
       if (input.original.type !== "http") return
       const normalized = normalizeServerUrl(input.value)
       if (!normalized) {
-        resetEdit()
+        completeServerForm(resetEdit, options.onFormExit)
         return
       }
 
@@ -293,7 +299,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         username === input.original.http.username &&
         password === input.original.http.password
       ) {
-        resetEdit()
+        completeServerForm(resetEdit, options.onFormExit)
         return
       }
 
@@ -313,7 +319,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         replaceServer(input.original, conn)
       }
 
-      resetEdit()
+      completeServerForm(resetEdit, options.onFormExit)
     },
   }))
 
@@ -506,7 +512,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   createEffect(() => {
     if (!store.editServer.id) return
     if (editing()) return
-    resetEdit()
+    completeServerForm(resetEdit, options.onFormExit)
   })
 
   async function handleRemove(key: ServerConnection.Key) {
