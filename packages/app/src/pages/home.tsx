@@ -102,8 +102,6 @@ const HOME_SEARCH_RESULT_TITLE =
 const HOME_SEARCH_RESULT_META =
   "min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]"
 
-let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
-
 function buildHomeSessionRecords(input: {
   sync: Pick<ServerSync, "child">
   projectDirectories: () => string[]
@@ -414,13 +412,6 @@ export function NewHome() {
     if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
     const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
-  })
-
-  createEffect(() => {
-    const pending = pendingHomeNavigation
-    if (!pending || pending.server !== server.key) return
-    pendingHomeNavigation = undefined
-    navigate(pending.href)
   })
 
   function focusServer(conn: ServerConnection.Any) {
