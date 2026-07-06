@@ -1,4 +1,4 @@
-import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -651,6 +651,23 @@ export default function Page() {
     if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
     return true
   }
+  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+    const mode = vcsMode()
+    if (!mode) return
+    return queryClient
+      .fetchQuery({
+        queryKey: [...vcsKey(), mode, "file", file, version] as const,
+        retry: 2,
+        queryFn: () =>
+          sdk()
+            .client.vcs.diff({ mode, file })
+            .then((result) => result.data?.find((diff) => diff.file === file)),
+      })
+      .catch((error) => {
+        console.debug("[session-review] failed to load vcs file diff", { mode, file, error })
+        return undefined
+      })
+  }
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -1182,6 +1199,10 @@ export default function Page() {
     },
     diffs: reviewDiffs,
     diffsReady: reviewReady,
+    get diffVersion() {
+      return vcsQuery.dataUpdatedAt
+    },
+    loadDiff: loadReviewDiff,
     get activeFile() {
       return tree.activeDiff
     },

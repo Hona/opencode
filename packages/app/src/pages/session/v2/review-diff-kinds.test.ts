@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { filterReviewFiles, reviewDiffKinds } from "./review-diff-kinds"
+import { filterReviewFiles, reviewDiffKinds, reviewDiffNeedsLoad } from "./review-diff-kinds"
 
 describe("reviewDiffKinds", () => {
   test("maps file and directory kinds", () => {
@@ -26,5 +26,30 @@ describe("filterReviewFiles", () => {
     const files = ["src/a.ts", "src/b.ts", "lib/c.ts"]
     expect(filterReviewFiles(files, "b.ts")).toEqual(["src/b.ts"])
     expect(filterReviewFiles(files, "")).toEqual(files)
+  })
+})
+
+describe("reviewDiffNeedsLoad", () => {
+  test("loads changed files whose aggregate patch has no hunks", () => {
+    expect(
+      reviewDiffNeedsLoad({
+        file: "src/a.ts",
+        additions: 1,
+        deletions: 0,
+        patch: "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts",
+      }),
+    ).toBe(true)
+  })
+
+  test("keeps complete patches and empty changes", () => {
+    expect(
+      reviewDiffNeedsLoad({
+        file: "src/a.ts",
+        additions: 1,
+        deletions: 0,
+        patch: "@@ -0,0 +1 @@\n+value",
+      }),
+    ).toBe(false)
+    expect(reviewDiffNeedsLoad({ file: "empty.txt", additions: 0, deletions: 0 })).toBe(false)
   })
 })

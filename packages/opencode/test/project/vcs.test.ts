@@ -237,6 +237,51 @@ describe("Vcs diff", () => {
   )
 
   it.instance(
+    "diff('git') loads one selected file",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "first.txt"), "original\n")
+        yield* write(path.join(test.directory, "second.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add files"])
+        yield* write(path.join(test.directory, "first.txt"), "first\n")
+        yield* write(path.join(test.directory, "second.txt"), "second\n")
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git", { file: "second.txt" })
+
+        expect(diff).toHaveLength(1)
+        expect(diff[0]?.file).toBe("second.txt")
+        expect(diff[0]?.patch).toContain("+second")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "diff('git') treats a selected filename as a literal pathspec",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "literal[1].txt"), "original\n")
+        yield* write(path.join(test.directory, "literal1.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add files"])
+        yield* write(path.join(test.directory, "literal[1].txt"), "selected\n")
+        yield* write(path.join(test.directory, "literal1.txt"), "other\n")
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git", { file: "literal[1].txt" })
+
+        expect(diff).toHaveLength(1)
+        expect(diff[0]?.file).toBe("literal[1].txt")
+        expect(diff[0]?.patch).toContain("+selected")
+        expect(diff[0]?.patch).not.toContain("+other")
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "diff('git') handles special filenames",
     () =>
       Effect.gen(function* () {

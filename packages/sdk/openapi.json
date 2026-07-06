@@ -2475,6 +2475,14 @@
             "required": true
           },
           {
+            "name": "file",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "context",
             "in": "query",
             "schema": {

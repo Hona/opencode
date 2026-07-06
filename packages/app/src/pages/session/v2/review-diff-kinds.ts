@@ -12,6 +12,11 @@ export function filterRenderableDiff(value: SnapshotFileDiff | VcsFileDiff): val
   return typeof value.file === "string"
 }
 
+export function reviewDiffNeedsLoad(diff: RenderDiff) {
+  if (diff.additions === 0 && diff.deletions === 0) return false
+  return !diff.patch || !/^@@ /m.test(diff.patch)
+}
+
 export function reviewDiffKinds(diffs: RenderDiff[]) {
   const merge = (a: Kind | undefined, b: Kind) => {
     if (!a) return b

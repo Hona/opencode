@@ -13,6 +13,7 @@ const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
 type DiffOptions = {
   readonly context?: number
+  readonly file?: string
 }
 
 const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
@@ -205,9 +206,10 @@ const diffAgainstRef = Effect.fnUntraced(function* (
   ref: string,
   options?: DiffOptions,
 ) {
-  const [list, stats, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)], {
-    concurrency: 3,
-  })
+  const [list, stats, extra] = yield* Effect.all(
+    [git.diff(cwd, ref, options?.file), git.stats(cwd, ref, options?.file), git.status(cwd, options?.file)],
+    { concurrency: 3 },
+  )
   return yield* files(
     git,
     cwd,
@@ -217,7 +219,7 @@ const diffAgainstRef = Effect.fnUntraced(function* (
       extra.filter((item) => item.code === "??"),
     ),
     nums(stats),
-    yield* batchPatches(git, cwd, ref, list, options),
+    options?.file ? emptyBatch() : yield* batchPatches(git, cwd, ref, list, options),
     options,
   )
 })
@@ -228,7 +230,7 @@ const track = Effect.fnUntraced(function* (
   ref: string | undefined,
   options?: DiffOptions,
 ) {
-  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), emptyBatch(), options)
+  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd, options?.file), new Map(), emptyBatch(), options)
   return yield* diffAgainstRef(git, cwd, ref, options)
 })
 

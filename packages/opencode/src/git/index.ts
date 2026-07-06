@@ -80,9 +80,9 @@ export interface Interface {
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
   readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
   readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
-  readonly status: (cwd: string) => Effect.Effect<Item[]>
-  readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
-  readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
+  readonly status: (cwd: string, file?: string) => Effect.Effect<Item[]>
+  readonly diff: (cwd: string, ref: string, file?: string) => Effect.Effect<Item[]>
+  readonly stats: (cwd: string, ref: string, file?: string) => Effect.Effect<Stat[]>
   readonly patch: (cwd: string, ref: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
@@ -97,6 +97,8 @@ const kind = (code: string): Kind => {
   if (code.includes("D") && !code.includes("A")) return "deleted"
   return "modified"
 }
+
+const pathspec = (file: string | undefined) => (file ? `:(literal)${file}` : ".")
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Git") {}
 
@@ -212,11 +214,12 @@ const layer = Layer.effect(
       return result.text()
     })
 
-    const status = Effect.fn("Git.status")(function* (cwd: string) {
+    const status = Effect.fn("Git.status")(function* (cwd: string, file?: string) {
       return nuls(
-        yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
-          cwd,
-        }),
+        yield* text(
+          ["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", pathspec(file)],
+          { cwd },
+        ),
       ).flatMap((item) => {
         const file = item.slice(3)
         if (!file) return []
@@ -225,9 +228,11 @@ const layer = Layer.effect(
       })
     })
 
-    const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
+    const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string, file?: string) {
       const list = nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
+        yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", pathspec(file)], {
+          cwd,
+        }),
       )
       return list.flatMap((code, idx) => {
         if (idx % 2 !== 0) return []
@@ -237,9 +242,11 @@ const layer = Layer.effect(
       })
     })
 
-    const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
+    const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string, file?: string) {
       return nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
+        yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", pathspec(file)], {
+          cwd,
+        }),
       ).flatMap((item) => {
         const a = item.indexOf("\t")
         const b = item.indexOf("\t", a + 1)
@@ -262,7 +269,16 @@ const layer = Layer.effect(
 
     const patch = Effect.fn("Git.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
       const result = yield* run(
-        ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", file],
+        [
+          "diff",
+          "--patch",
+          "--no-ext-diff",
+          "--no-renames",
+          `--unified=${options?.context ?? 3}`,
+          ref,
+          "--",
+          pathspec(file),
+        ],
         { cwd, maxOutputBytes: options?.maxOutputBytes },
       )
       return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch

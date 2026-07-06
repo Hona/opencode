@@ -9,12 +9,15 @@ const title = "Review terminal stacked"
 const branchDiffs = [
   fileDiff(".github/actions/setup-bun/action.yml", 7),
   ...Array.from({ length: 2_739 }, (_, index) =>
-    fileDiff(`src/branch/generated-${String(index).padStart(4, "0")}.ts`, 100),
+    fileDiff(`src/branch/generated-${String(index).padStart(4, "0")}.ts`, 100, false),
   ),
 ]
 
 test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
   test.setTimeout(120_000)
+  const events: Array<{ directory: string; payload: Record<string, unknown> }> = []
+  let detailVersion = 1
+  let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
     directory,
@@ -48,7 +51,10 @@ test("keeps the review tree and terminal sized when both panels are open", async
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
+    sessionStatus: { [sessionID]: { type: "idle" } },
     pageMessages: () => ({ items: [] }),
+    events: () => events.splice(0, 1),
+    eventRetry: 16,
   })
   await page.route(/\/vcs(?:\?.*)?$/, (route) =>
     route.fulfill({
@@ -57,17 +63,22 @@ test("keeps the review tree and terminal sized when both panels are open", async
       body: JSON.stringify({ branch: "review-pane-performance", default_branch: "dev" }),
     }),
   )
-  await page.route("**/vcs/diff**", (route) =>
-    route.fulfill({
+  await page.route("**/vcs/diff**", (route) => {
+    const url = new URL(route.request().url())
+    const file = url.searchParams.get("file")
+    if (file && detailFailures-- > 0) return route.fulfill({ status: 500, body: "retry detail" })
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(
-        new URL(route.request().url()).searchParams.get("mode") === "branch"
-          ? branchDiffs
+        url.searchParams.get("mode") === "branch"
+          ? file
+            ? [fileDiff(file, 100, true, detailVersion)]
+            : branchDiffs
           : Array.from({ length: 7 }, (_, index) => fileDiff(`src/git-${index}.ts`, 1)),
       ),
-    }),
-  )
+    })
+  })
   await page.route("**/pty", (route) =>
     route.fulfill({
       status: 200,
@@ -113,8 +124,27 @@ test("keeps the review tree and terminal sized when both panels are open", async
   })
   expect(bottomGap).toBeGreaterThanOrEqual(0)
   expect(bottomGap).toBeLessThanOrEqual(16)
+  const lazyDiff = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname === "/vcs/diff" && url.searchParams.get("file") === "src/branch/generated-2738.ts"
+  })
+  await lastFile.click()
+  await lazyDiff
+  const preview = page.locator('[data-slot="session-review-v2-diff-scroll"]')
+  await expect(preview).toContainText("after-1")
+  detailVersion = 2
+  events.push(statusEvent("busy"))
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
+  const refreshedDiff = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return url.pathname === "/vcs/diff" && url.searchParams.get("file") === "src/branch/generated-2738.ts"
+  })
+  events.push(statusEvent("idle"))
+  await refreshedDiff
+  await expect(preview).toContainText("after-2")
   await selectMode(page, "Branch changes", "Git changes")
   await expectTree(page, 8, "git-0.ts")
+  await page.getByRole("button", { name: "git-0.ts" }).click()
   await selectMode(page, "Git changes", "Branch changes")
   await expectTree(page, 2_745, "action.yml")
 
@@ -201,12 +231,21 @@ function base64Encode(value: string) {
   return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
 }
 
-function fileDiff(file: string, additions: number) {
+function statusEvent(type: "busy" | "idle") {
+  return {
+    directory,
+    payload: { type: "session.status", properties: { sessionID, status: { type } } },
+  }
+}
+
+function fileDiff(file: string, additions: number, loaded = true, version = 1) {
   return {
     file,
     additions,
     deletions: 0,
     status: "modified",
-    patch: `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after'\n`,
+    patch: loaded
+      ? `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after-${version}'\n`
+      : `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}`,
   }
 }
