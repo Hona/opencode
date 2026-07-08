@@ -1,4 +1,4 @@
-import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -35,7 +35,7 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
@@ -56,7 +56,6 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider, useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
-import { useSettingsCommand } from "@/components/settings-dialog"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
@@ -76,6 +75,7 @@ import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
+import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
@@ -152,7 +152,7 @@ export function TargetSessionRouteContent() {
   )
 }
 
-function SessionRouteErrorBoundary(
+export function SessionRouteErrorBoundary(
   props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
 ) {
   const settings = useSettings()
@@ -220,7 +220,6 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const settings = useSettings()
   const tabs = useTabs()
   const sync = useServerSync()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
@@ -247,16 +246,11 @@ function ResolvedTargetSessionRoute() {
           the terminal. Same-workspace tab switches keep it open because warm
           targets resolve synchronously from the sync cache. */}
       <Show when={directory()}>
-        <Show
-          when={settings.general.newLayoutDesigns()}
-          fallback={<Navigate href={legacySessionHref(directory()!, params.id)} />}
-        >
-          <SDKProvider directory={targetDirectory}>
-            <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-              <TargetSessionPage />
-            </DirectoryDataProvider>
-          </SDKProvider>
-        </Show>
+        <SDKProvider directory={targetDirectory}>
+          <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
+            <TargetSessionPage />
+          </DirectoryDataProvider>
+        </SDKProvider>
       </Show>
     </TargetServerScopedProviders>
   )
@@ -659,6 +653,46 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
+  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+    const mode = vcsMode()
+    if (!mode) return
+    const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
+    const directory = reviewDiffDirectory(root, file)
+    const source = reviewDiffs().find((diff) => diff.file === file)
+    const valid = (diff: VcsFileDiff | undefined) => {
+      if (!diff || !source) return
+      if (diff.additions !== source.additions || diff.deletions !== source.deletions) return
+      if (reviewDiffNeedsLoad(diff)) return
+      return diff
+    }
+    const request = (scope: string, context?: number) =>
+      queryClient
+        .fetchQuery({
+          queryKey: [serverSDK().scope, ...vcsKey(), mode, "directory", scope, context, version] as const,
+          staleTime: Number.POSITIVE_INFINITY,
+          retry: 2,
+          queryFn: () =>
+            sdk()
+              .client.vcs.diff({ mode, directory: scope, context })
+              .then((result) => result.data ?? []),
+        })
+        .then((diffs) => diffs.find((diff) => diff.file === file))
+
+    if (directory !== root) {
+      try {
+        const scoped = valid(await request(directory))
+        if (scoped) return scoped
+      } catch (error) {
+        console.debug("[session-review] failed to load scoped vcs diff", { mode, file, directory, error })
+      }
+    }
+    try {
+      const bounded = valid(await request(root, 3))
+      if (bounded) return bounded
+    } catch (error) {
+      console.debug("[session-review] failed to load bounded vcs diff", { mode, file, root, error })
+    }
+  }
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -1030,12 +1064,12 @@ export default function Page() {
   }
 
   useComposerCommands()
-  useSettingsCommand()
   useSessionCommands({
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
     review: reviewTab,
+    fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -1191,6 +1225,10 @@ export default function Page() {
     },
     diffs: reviewDiffs,
     diffsReady: reviewReady,
+    get diffVersion() {
+      return vcsQuery.dataUpdatedAt
+    },
+    loadDiff: loadReviewDiff,
     get activeFile() {
       return activeReviewFile()
     },
@@ -2167,6 +2205,7 @@ export default function Page() {
             diffsReady={reviewReady}
             empty={reviewEmptyText}
             hasReview={hasReview}
+            reviewHasFocusableContent={hasReview}
             reviewCount={reviewCount}
             reviewPanel={reviewPanel}
             activeDiff={activeReviewFile()}
@@ -2178,16 +2217,23 @@ export default function Page() {
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
-                <div class="min-h-0 flex-1">
+              <Show when={isDesktop()}>
+                <div
+                  classList={{
+                    "min-h-0 flex-1": desktopV2ReviewOpen() || desktopFileTreeOpen(),
+                    "size-0 shrink-0 overflow-hidden": !(desktopV2ReviewOpen() || desktopFileTreeOpen()),
+                  }}
+                >
                   <SessionSidePanel
                     canReview={canReview}
                     diffs={reviewDiffs}
                     diffsReady={reviewReady}
                     empty={reviewEmptyText}
                     hasReview={hasReview}
+                    reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
+                    fileBrowserState={reviewV2State}
                     activeDiff={activeReviewFile()}
                     focusReviewDiff={focusReviewDiff}
                     reviewSnap={ui.reviewSnap}
@@ -2214,7 +2260,12 @@ export default function Page() {
                 </div>
               </Show>
               <Show when={terminalOpen()}>
-                <div class="min-h-0 flex-1">
+                <div
+                  classList={{
+                    "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
+                    "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                  }}
+                >
                   <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
                 </div>
               </Show>

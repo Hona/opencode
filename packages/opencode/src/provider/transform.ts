@@ -1127,7 +1127,10 @@ export function options(input: {
     }
   }
 
-  if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+  if (
+    input.providerOptions?.setCacheKey !== false &&
+    (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/xai" || input.providerOptions?.setCacheKey)
+  ) {
     result["promptCacheKey"] = input.sessionID
   }
 
@@ -1240,9 +1243,6 @@ export function smallOptions(model: Provider.Model) {
     return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
-    if (model.providerID === "openrouter" && small.reasoning?.effort === "low") {
-      return { reasoning: { effort: "none" } }
-    }
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }

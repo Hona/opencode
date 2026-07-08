@@ -73,7 +73,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBeUndefined()
   })
 
-  test("should set promptCacheKey for openai provider regardless of setCacheKey", () => {
+  test("should set promptCacheKey for openai provider by default", () => {
     const openaiModel = {
       ...mockModel,
       providerID: "openai",
@@ -85,6 +85,56 @@ describe("ProviderTransform.options - setCacheKey", () => {
     }
     const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: {} })
     expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey for openai when explicitly disabled", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should set promptCacheKey for the xAI SDK by default regardless of provider ID", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "custom-xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({ model: xaiModel, sessionID, providerOptions: {} })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey for the xAI SDK when explicitly disabled", () => {
+    const xaiModel = {
+      ...mockModel,
+      providerID: "xai",
+      api: {
+        id: "grok-4",
+        url: "https://api.x.ai",
+        npm: "@ai-sdk/xai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: xaiModel,
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.promptCacheKey).toBeUndefined()
   })
 
   test("should set store=false for openai provider", () => {
@@ -4638,12 +4688,12 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
   }
 })
 
-test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
+test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning effort", () => {
   expect(
     ProviderTransform.smallOptions({
       providerID: "openrouter",
       api: {
-        id: "anthropic/claude-sonnet-4.6",
+        id: "google/gemini-3.5-flash",
         npm: "@openrouter/ai-sdk-provider",
       },
       variants: {
@@ -4652,7 +4702,7 @@ test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weak
         high: { reasoning: { effort: "high" } },
       },
     } as any),
-  ).toEqual({ reasoning: { effort: "none" } })
+  ).toEqual({ reasoning: { effort: "low" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {
