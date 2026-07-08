@@ -81,12 +81,6 @@ describe("translate app", () => {
         { keep: "Bonjour {{name}}", extra: "Extra", changed: "{{one}}" },
       ),
     ).toEqual({ missing: ["missing"], extra: ["extra"], placeholders: ["changed"] })
-    expect(
-      findDrift(
-        { "ui.sessionTurn.diffs.changed": "Changed" },
-        { "ui.sessionTurn.diffs.changed": "Fichiers modifiés : {{count}}" },
-      ),
-    ).toEqual({ missing: [], extra: [], placeholders: [] })
   })
 
   test("runs work with the requested maximum concurrency", async () => {

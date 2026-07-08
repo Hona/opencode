@@ -50,7 +50,6 @@ type Drift = ReturnType<typeof findDrift>
 type Domain = { name: string; source: string; target: string; drift: Drift }
 
 const desktopLocales = new Set<Locale>(locales.filter((locale) => locale !== "th" && locale !== "tr"))
-const localizedPlaceholderKeys = new Set(["ui.sessionTurn.diffs.changed"])
 const root = path.resolve(import.meta.dir, "..")
 
 export function parseTranslationArgs(args: string[]) {
@@ -103,10 +102,7 @@ export function findDrift(source: Dictionary, target: Dictionary) {
     missing: Object.keys(source).filter((key) => !Object.hasOwn(target, key)),
     extra: Object.keys(target).filter((key) => !Object.hasOwn(source, key)),
     placeholders: Object.keys(source).filter(
-      (key) =>
-        !localizedPlaceholderKeys.has(key) &&
-        Object.hasOwn(target, key) &&
-        tokens(source[key]).join() !== tokens(target[key]).join(),
+      (key) => Object.hasOwn(target, key) && tokens(source[key]).join() !== tokens(target[key]).join(),
     ),
   }
 }

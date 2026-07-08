@@ -16,6 +16,6 @@ Requirements:
 - Preserve meaning, intent, tone, capitalization, punctuation, whitespace, and formatting.
 - Preserve technical terms and artifacts exactly: OpenCode, API names, identifiers, code, commands, flags, paths, URLs, versions, error messages, config keys, and placeholder tokens.
 - Apply the locale glossary included in the request.
-- `ui.sessionTurn.diffs.changed` is intentionally locale-aware: keep English as `Changed`, but translate the non-English value as a complete count label containing `{{count}}`, such as `Fichiers modifiés : {{count}}`. The non-English renderer uses this value as the whole phrase.
+- `ui.sessionTurn.diffs.changed.one` and `ui.sessionTurn.diffs.changed.other` are complete count phrases. Preserve `{{count}}` and translate the whole phrase naturally rather than composing translated fragments.
 - Use only read, glob, grep, and edit tools. Do not run commands or delegate work.
 - Finish only when every requested key is synchronized and no other file has changed.

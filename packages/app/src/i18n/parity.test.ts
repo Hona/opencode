@@ -20,7 +20,6 @@ const appLocales = [
   "zht",
 ] as const
 const desktopLocales = appLocales.filter((locale) => locale !== "th" && locale !== "tr")
-const localizedPlaceholderKeys = new Set(["ui.sessionTurn.diffs.changed"])
 
 const domains = [
   {
@@ -67,10 +66,7 @@ describe("i18n parity", () => {
       for (const locale of domain.locales) {
         const target = await dictionary(domain.target(locale))
         const mismatched = Object.keys(source).filter(
-          (key) =>
-            !localizedPlaceholderKeys.has(key) &&
-            Object.hasOwn(target, key) &&
-            placeholders(source[key]).join() !== placeholders(target[key]).join(),
+          (key) => Object.hasOwn(target, key) && placeholders(source[key]).join() !== placeholders(target[key]).join(),
         )
         expect({ domain: domain.name, locale, mismatched }).toEqual({ domain: domain.name, locale, mismatched: [] })
       }
@@ -88,14 +84,18 @@ describe("i18n parity", () => {
     }
   })
 
-  test("changed-file summaries preserve English copy and localize the complete phrase", async () => {
+  test("changed-file summary keys preserve rendered English copy and localize complete phrases", async () => {
     const source = await dictionary("../../../ui/src/i18n/en.ts")
-    expect(source["ui.sessionTurn.diffs.changed"]).toBe("Changed")
+    expect(source["ui.sessionTurn.diffs.changed.one"].replace("{{count}}", "1")).toBe("1 Changed file")
+    expect(source["ui.sessionTurn.diffs.changed.other"].replace("{{count}}", "2")).toBe("2 Changed files")
+    expect(source["ui.sessionTurn.diffs.changed"]).toBeUndefined()
 
     for (const locale of appLocales) {
       const target = await dictionary(`../../../ui/src/i18n/${locale}.ts`)
-      expect(target["ui.sessionTurn.diffs.changed"].trim()).not.toBe("")
-      expect(placeholders(target["ui.sessionTurn.diffs.changed"])).toEqual(["count"])
+      for (const key of ["ui.sessionTurn.diffs.changed.one", "ui.sessionTurn.diffs.changed.other"]) {
+        expect(target[key].trim()).not.toBe("")
+        expect(placeholders(target[key])).toEqual(["count"])
+      }
     }
   })
 })
