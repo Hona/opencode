@@ -56,7 +56,7 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "إخفاء الخطوات",
   "ui.sessionTurn.summary.response": "استجابة",
   "ui.sessionTurn.diff.showMore": "إظهار المزيد من التغييرات ({{count}})",
-  "ui.sessionTurn.diffs.changed": "الملفات المعدلة: {{count}}",
+  "ui.sessionTurn.diffs.changed": "",
   "ui.sessionTurn.diffs.showAll": "إظهار الكل",
   "ui.sessionTurn.diffs.showLess": "إظهار أقل",
   "ui.sessionTurn.diffs.more": "ملفات إضافية: {{count}}",

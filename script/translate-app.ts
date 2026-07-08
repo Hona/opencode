@@ -168,6 +168,13 @@ export function translationConfig(agent: string, model: string, targets: string[
   }
 }
 
+export function unexpectedChanges(before: Record<string, string>, after: Record<string, string>, allowed: string[]) {
+  const targets = new Set(allowed)
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((file) => !targets.has(file) && before[file] !== after[file])
+    .sort()
+}
+
 export async function runPool<T, R>(items: readonly T[], concurrency: number, task: (item: T) => Promise<R>) {
   const results = new Map<number, R>()
   const entries = items.entries()
@@ -217,6 +224,8 @@ Examples:
   }
   if (options.dryRun || pending.length === 0) return
 
+  const targets = pending.flatMap((plan) => plan.domains.map((domain) => domain.target))
+  const baseline = await worktreeSnapshot()
   const variant = await resolveModelVariant(options.model, options.variant)
   console.log(`Resolved ${options.model} (${options.variant}): ${JSON.stringify(variant)}`)
   const template = await commandTemplate()
@@ -237,12 +246,13 @@ Examples:
   const failed = results.filter((result) => result.code !== 0)
   const checks = await runPool(pending, options.concurrency, (plan) => check(plan.locale))
   const incomplete = checks.filter((result) => result.code !== 0)
+  const escaped = unexpectedChanges(baseline, await worktreeSnapshot(), targets)
   incomplete.forEach((result) => {
     if (result.stdout) process.stderr.write(`\n[${result.locale} verification]\n${result.stdout}`)
     if (result.stderr) process.stderr.write(`\n[${result.locale} verification]\n${result.stderr}`)
   })
 
-  if (failed.length === 0 && incomplete.length === 0) {
+  if (failed.length === 0 && incomplete.length === 0 && escaped.length === 0) {
     console.log(`\nTranslated ${pending.map((plan) => plan.locale).join(", ")}.`)
     return
   }
@@ -250,7 +260,39 @@ Examples:
   if (failed.length) console.error(`\nOpenCode failed for: ${failed.map((result) => result.locale).join(", ")}`)
   if (incomplete.length)
     console.error(`Translation remains incomplete for: ${incomplete.map((plan) => plan.locale).join(", ")}`)
+  if (escaped.length) console.error(`Translation changed files outside its locale targets: ${escaped.join(", ")}`)
   process.exitCode = 1
+}
+
+async function worktreeSnapshot() {
+  const groups = await Promise.all([
+    gitPaths(["diff", "--name-only", "-z", "HEAD"]),
+    gitPaths(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ])
+  const files = [...new Set(groups.flat())]
+  return Object.fromEntries(
+    await Promise.all(
+      files.map(async (file) => {
+        const target = Bun.file(path.join(root, file))
+        if (!(await target.exists())) return [file, "<missing>"] as const
+        const hash = new Bun.CryptoHasher("sha256")
+        hash.update(await target.arrayBuffer())
+        return [file, hash.digest("hex")] as const
+      }),
+    ),
+  )
+}
+
+async function gitPaths(args: string[]) {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd: root,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const result = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  if (result[2] !== 0) throw new Error(result[1] || `git ${args.join(" ")} failed`)
+  return result[0].split("\0").filter(Boolean)
 }
 
 async function check(locale: Locale) {
@@ -289,9 +331,7 @@ async function dictionary(file: string) {
 }
 
 async function commandTemplate() {
-  return (await Bun.file(path.join(root, ".opencode/command/translate-app.md")).text())
-    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
-    .trim()
+  return (await Bun.file(path.join(root, "script/translate-app.md")).text()).trim()
 }
 
 async function translate(

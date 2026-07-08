@@ -10,6 +10,7 @@ import {
   targetFiles,
   textFromEvents,
   translationConfig,
+  unexpectedChanges,
 } from "./translate-app"
 
 describe("translate app", () => {
@@ -146,5 +147,22 @@ opencode/next
       "*": "deny",
       "packages/app/src/i18n/fr.ts": "allow",
     })
+  })
+
+  test("detects edits outside the locale targets", () => {
+    expect(
+      unexpectedChanges(
+        { "script/translate-app.ts": "before" },
+        {
+          "script/translate-app.ts": "before",
+          "packages/app/src/i18n/fr.ts": "translated",
+          "packages/app/src/app.tsx": "unexpected",
+        },
+        ["packages/app/src/i18n/fr.ts"],
+      ),
+    ).toEqual(["packages/app/src/app.tsx"])
+    expect(unexpectedChanges({ "already-dirty.ts": "before" }, { "already-dirty.ts": "after" }, [])).toEqual([
+      "already-dirty.ts",
+    ])
   })
 })
