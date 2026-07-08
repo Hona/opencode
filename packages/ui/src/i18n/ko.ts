@@ -185,7 +185,7 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.title": "아직 파일 변경 사항 없음",
   "ui.sessionReviewV2.empty.changes.description": "프로젝트 변경 사항이 여기에 표시됩니다",
   "ui.lineComment.cancel": "취소",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "변경된 파일: {{count}}개",
   "ui.sessionTurn.diffs.showAll": "모두 표시",
   "ui.sessionTurn.diffs.showLess": "간략히 표시",
   "ui.sessionTurn.diffs.more": "+{{count}}개 더 보기",

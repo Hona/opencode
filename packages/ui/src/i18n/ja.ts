@@ -55,7 +55,7 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "ステップを隠す",
   "ui.sessionTurn.summary.response": "応答",
   "ui.sessionTurn.diff.showMore": "さらに変更を表示 ({{count}})",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "変更済みファイル: {{count}}件",
   "ui.sessionTurn.diffs.showAll": "すべて表示",
   "ui.sessionTurn.diffs.showLess": "一部のみ表示",
   "ui.sessionTurn.diffs.more": "+他{{count}}件",

@@ -58,7 +58,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.steps.hide": "Приховати кроки",
   "ui.sessionTurn.summary.response": "Відповідь",
   "ui.sessionTurn.diff.showMore": "Показати більше змін ({{count}})",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "Змінені файли: {{count}}",
   "ui.sessionTurn.diffs.showAll": "Показати всі",
   "ui.sessionTurn.diffs.showLess": "Показати менше",
   "ui.sessionTurn.diffs.more": "+ ще {{count}}",

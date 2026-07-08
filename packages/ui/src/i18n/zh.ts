@@ -60,7 +60,7 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "隐藏步骤",
   "ui.sessionTurn.summary.response": "回复",
   "ui.sessionTurn.diff.showMore": "显示更多更改（{{count}}）",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "已更改文件：{{count}} 个",
   "ui.sessionTurn.diffs.showAll": "全部显示",
   "ui.sessionTurn.diffs.showLess": "收起",
   "ui.sessionTurn.diffs.more": "+{{count}} 个文件",

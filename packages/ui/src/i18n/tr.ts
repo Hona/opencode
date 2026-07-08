@@ -62,7 +62,7 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "Adımları gizle",
   "ui.sessionTurn.summary.response": "Yanıt",
   "ui.sessionTurn.diff.showMore": "Daha fazla değişiklik göster ({{count}})",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "Değiştirilen dosyalar: {{count}}",
   "ui.sessionTurn.diffs.showAll": "Tümünü göster",
   "ui.sessionTurn.diffs.showLess": "Daha az göster",
   "ui.sessionTurn.diffs.more": "+{{count}} dosya daha",

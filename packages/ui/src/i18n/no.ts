@@ -188,7 +188,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionReviewV2.empty.changes.title": "Ingen filendringer ennå",
   "ui.sessionReviewV2.empty.changes.description": "Prosjektendringer vises her",
   "ui.lineComment.cancel": "Avbryt",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "Endrede filer: {{count}}",
   "ui.sessionTurn.diffs.showAll": "Vis alle",
   "ui.sessionTurn.diffs.showLess": "Vis færre",
   "ui.sessionTurn.diffs.more": "+{{count}} til",

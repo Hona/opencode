@@ -20,6 +20,7 @@ const appLocales = [
   "zht",
 ] as const
 const desktopLocales = appLocales.filter((locale) => locale !== "th" && locale !== "tr")
+const localizedPlaceholderKeys = new Set(["ui.sessionTurn.diffs.changed"])
 
 const domains = [
   {
@@ -66,7 +67,10 @@ describe("i18n parity", () => {
       for (const locale of domain.locales) {
         const target = await dictionary(domain.target(locale))
         const mismatched = Object.keys(source).filter(
-          (key) => Object.hasOwn(target, key) && placeholders(source[key]).join() !== placeholders(target[key]).join(),
+          (key) =>
+            !localizedPlaceholderKeys.has(key) &&
+            Object.hasOwn(target, key) &&
+            placeholders(source[key]).join() !== placeholders(target[key]).join(),
         )
         expect({ domain: domain.name, locale, mismatched }).toEqual({ domain: domain.name, locale, mismatched: [] })
       }
@@ -81,6 +85,17 @@ describe("i18n parity", () => {
         expect(target[key]).toBeDefined()
         expect(target[key]).not.toBe(source[key])
       }
+    }
+  })
+
+  test("changed-file summaries preserve English copy and localize the complete phrase", async () => {
+    const source = await dictionary("../../../ui/src/i18n/en.ts")
+    expect(source["ui.sessionTurn.diffs.changed"]).toBe("Changed")
+
+    for (const locale of appLocales) {
+      const target = await dictionary(`../../../ui/src/i18n/${locale}.ts`)
+      expect(target["ui.sessionTurn.diffs.changed"].trim()).not.toBe("")
+      expect(placeholders(target["ui.sessionTurn.diffs.changed"])).toEqual(["count"])
     }
   })
 })

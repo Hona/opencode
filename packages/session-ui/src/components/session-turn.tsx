@@ -440,8 +440,13 @@ export function SessionTurn(
                 >
                   <div data-slot="session-turn-diffs-header">
                     <span data-slot="session-turn-diffs-label">
-                      {edited()} {i18n.t("ui.sessionTurn.diffs.changed")}{" "}
-                      {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+                      <Show
+                        when={i18n.locale() === "en"}
+                        fallback={i18n.t("ui.sessionTurn.diffs.changed", { count: String(edited()) })}
+                      >
+                        {edited()} {i18n.t("ui.sessionTurn.diffs.changed")}{" "}
+                        {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+                      </Show>
                     </span>
                     <DiffChanges changes={diffs()} />
                     <Show when={overflow() > 0}>

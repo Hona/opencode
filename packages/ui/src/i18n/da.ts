@@ -55,7 +55,7 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "Skjul trin",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere ændringer ({{count}})",
-  "ui.sessionTurn.diffs.changed": "",
+  "ui.sessionTurn.diffs.changed": "Ændrede filer: {{count}}",
   "ui.sessionTurn.diffs.showAll": "Vis alle",
   "ui.sessionTurn.diffs.showLess": "Vis færre",
   "ui.sessionTurn.diffs.more": "+{{count}} mere",
