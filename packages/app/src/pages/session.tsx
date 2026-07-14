@@ -47,7 +47,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
-import { PermissionProvider } from "@/context/permission"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
@@ -157,7 +156,7 @@ export function TargetSessionRouteContent() {
   const serverSync = useServerSync()
   const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
   return (
-    // Settings must keep the complete target-server context and remain registered
+    // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
       <TargetSessionSettingsCommand />
@@ -292,10 +291,10 @@ function TargetServerScopedProviders(
   props: ParentProps<{ directory?: () => string | undefined; sessionID?: () => string | undefined }>,
 ) {
   return (
-    <PermissionProvider directory={props.directory}>
+    <>
       <MarkSessionNotificationsViewed sessionID={props.sessionID} />
       <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-    </PermissionProvider>
+    </>
   )
 }
 
