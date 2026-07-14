@@ -434,6 +434,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
   const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
   const project = () => local.controller.selected()
   return (
+    // Avoid an inert template clone that Floating UI can measure before browser adoption.
     <Dynamic
       component="button"
       {...rest}
