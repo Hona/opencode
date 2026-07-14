@@ -7,7 +7,6 @@ import { useSettings } from "@/context/settings"
 import introducingTabsVideo from "@/assets/help/introducing-tabs.mp4"
 import homeImage from "@/assets/help/home.png"
 import tabsImage from "@/assets/help/tabs.png"
-import { tabsDrawerHasCloseButton } from "./help-button-visibility"
 
 const helpIcon = (
   <svg
@@ -118,7 +117,7 @@ export function TabsInfoPopup() {
           <p class="min-h-0 min-w-0 flex-1 text-[13px] font-[530] leading-5 tracking-[-0.04px] tabular-nums text-v2-text-text-muted">
             July 14
           </p>
-          <Show when={tabsDrawerHasCloseButton(platform.platform, platform.os)}>
+          <Show when={platform.platform !== "desktop" || platform.os !== "windows"}>
             <DrawerClose
               as={IconButtonV2}
               type="button"
