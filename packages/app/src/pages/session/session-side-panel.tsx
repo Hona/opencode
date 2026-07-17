@@ -95,6 +95,7 @@ export function SessionSidePanel(props: {
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(
     () =>
+      !settings.general.newLayoutDesigns() &&
       isDesktop() &&
       shouldShowFileTree({
         visible: shown(),

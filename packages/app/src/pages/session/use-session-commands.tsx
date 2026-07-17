@@ -88,7 +88,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const shown = settings.visibility.fileTree
 
   const messages = () => {
     const id = params.id
@@ -515,7 +514,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
-    ...(shown()
+    ...(!settings.general.newLayoutDesigns()
       ? [
           viewCommand({
             id: "fileTree.toggle",

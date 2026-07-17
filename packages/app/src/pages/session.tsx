@@ -454,6 +454,7 @@ export default function Page() {
   )
   const desktopFileTreeOpen = createMemo(
     () =>
+      !newSessionDesign() &&
       isDesktop() &&
       shouldShowFileTree({
         visible: settings.visibility.fileTree(),
