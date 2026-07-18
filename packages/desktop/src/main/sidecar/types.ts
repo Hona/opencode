@@ -43,3 +43,41 @@ export class BaseSidecarController implements SidecarInstance {
     }
   }
 }
+
+export function createLocalSidecarController(
+  id: string,
+  start: () => Promise<{ url: string; listener: { stop: () => Promise<void> } }>,
+): BaseSidecarController {
+  let stopFn = async () => {}
+  return new BaseSidecarController(
+    id,
+    "local",
+    async () => {
+      const res = await start()
+      stopFn = () => res.listener.stop()
+      return res.url
+    },
+    async () => {
+      await stopFn()
+    },
+  )
+}
+
+export function createWslSidecarController(
+  distro: string,
+  start: () => Promise<{ url: string; listener: { stop: () => void } }>,
+): BaseSidecarController {
+  let stopFn = async () => {}
+  return new BaseSidecarController(
+    distro,
+    "wsl",
+    async () => {
+      const res = await start()
+      stopFn = async () => res.listener.stop()
+      return res.url
+    },
+    async () => {
+      await stopFn()
+    },
+  )
+}
