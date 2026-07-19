@@ -53,10 +53,15 @@ export type DesktopMenuRole =
   | "zoomIn"
   | "zoomOut"
 
-export type DesktopMenuItem = {
+type DesktopMenuText =
+  | { label: string; labelKey: DesktopMenuLabelKey; translatable?: undefined }
+  | { label: string; labelKey?: undefined; translatable: false }
+
+export type DesktopMenuItem = (
+  | DesktopMenuText
+  | { label?: undefined; labelKey?: undefined; translatable?: undefined }
+) & {
   type: "item"
-  label?: string
-  labelKey?: DesktopMenuLabelKey
   command?: string
   action?: DesktopMenuAction
   role?: DesktopMenuRole
@@ -73,10 +78,8 @@ export type DesktopMenuSeparator = {
 
 export type DesktopMenuEntry = DesktopMenuItem | DesktopMenuSeparator
 
-export type DesktopMenu = {
+export type DesktopMenu = DesktopMenuText & {
   id: string
-  label: string
-  labelKey?: DesktopMenuLabelKey
   role?: DesktopMenuRole
   items?: DesktopMenuEntry[]
   platforms?: DesktopMenuPlatform[]
@@ -86,6 +89,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
   {
     id: "app",
     label: "OpenCode",
+    translatable: false,
     platforms: ["macos"],
     items: [
       { type: "item", label: "About OpenCode", labelKey: "desktop.appMenu.about", role: "about" },
