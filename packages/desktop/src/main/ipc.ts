@@ -2,8 +2,8 @@ import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
-import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { Event, IpcMainEvent, IpcMainInvokeEvent } from "electron"
+import type { DesktopMenuAction, DesktopMenuLabels } from "@opencode-ai/app/desktop-menu"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
@@ -39,6 +39,7 @@ type Deps = {
   updater: UpdaterController
   showUpdater: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
+  setDesktopMenuLabels: (labels: DesktopMenuLabels) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
 }
@@ -46,6 +47,13 @@ type Deps = {
 export function registerIpcHandlers(deps: Deps) {
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
+  const desktopMenuLabels = new Map<number, DesktopMenuLabels>()
+  const syncDesktopMenuLabels = (_event: Event, win: BrowserWindow) => {
+    const labels = desktopMenuLabels.get(win.webContents.id)
+    if (labels) deps.setDesktopMenuLabels(labels)
+  }
+  app.on("browser-window-focus", syncDesktopMenuLabels)
+  app.once("will-quit", () => app.off("browser-window-focus", syncDesktopMenuLabels))
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
@@ -81,6 +89,16 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("updater-check", () => deps.updater.check())
   ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  ipcMain.handle("set-desktop-menu-labels", (event: IpcMainInvokeEvent, labels: DesktopMenuLabels) => {
+    if (!desktopMenuLabels.has(event.sender.id)) {
+      event.sender.once("destroyed", () => desktopMenuLabels.delete(event.sender.id))
+    }
+    desktopMenuLabels.set(event.sender.id, labels)
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused && win !== focused) return
+    deps.setDesktopMenuLabels(labels)
+  })
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
     setForceFocus(event.sender, enabled),
