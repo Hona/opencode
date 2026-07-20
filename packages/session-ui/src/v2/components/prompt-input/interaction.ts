@@ -82,9 +82,7 @@ export function createPromptInputV2Controller(input: {
       draft.addMention(part)
       return true
     }
-    const text = draft.state.prompt.map((item) => ("content" in item ? item.content : "")).join("")
-    const cursor = draft.state.cursor ?? text.length
-    draft.setText(text.slice(0, cursor) + part.content + text.slice(cursor))
+    draft.addText(part.content)
     return true
   }
   const attachments = input.attachments
@@ -163,6 +161,10 @@ export function createPromptInputV2Controller(input: {
 
   function dispatch(event: PromptInputV2InteractionEvent) {
     const mode = state.mode
+    const menuDraft =
+      event.type === "popover.select" && state.popover.type === "command-menu"
+        ? { prompt: clonePrompt(draft.state.prompt), cursor: draft.state.cursor }
+        : undefined
     const result = transitionPromptInputV2(state, event, draft.state)
     setState(reconcile(result.state))
     result.commands.forEach(execute)
@@ -174,10 +176,13 @@ export function createPromptInputV2Controller(input: {
       const action = input.onSuggestionSelect?.(event.item)
       if (!action) return result.handled
       if (event.item.kind === "command") {
-        draft.setPrompt(
-          draft.state.prompt.filter((part): part is PromptInputV2Attachment => part.type === "image"),
-          0,
-        )
+        if (menuDraft) draft.setPrompt(menuDraft.prompt, menuDraft.cursor)
+        if (!menuDraft) {
+          draft.setPrompt(
+            draft.state.prompt.filter((part): part is PromptInputV2Attachment => part.type === "image"),
+            0,
+          )
+        }
       }
       action()
     }
