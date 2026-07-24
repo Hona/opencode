@@ -6,6 +6,7 @@ import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
+import { DesktopBrowser } from "@opencode-ai/core/desktop-browser"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -25,6 +26,7 @@ type SpawnLocalServerOptions = {
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
+  onBrowserRequest?: (request: DesktopBrowser.Request, abort: AbortSignal) => Promise<DesktopBrowser.Result>
 }
 
 export function getDefaultServerUrl(): string | null {
@@ -67,6 +69,40 @@ export async function spawnLocalServer(
   })
   let exited = false
   const exit = defer<number>()
+  const browserRequests = new Map<string, AbortController>()
+
+  const onMessage = (message: unknown) => {
+    if (DesktopBrowser.isCancel(message)) {
+      browserRequests.get(message.requestID)?.abort()
+      browserRequests.delete(message.requestID)
+      return
+    }
+    if (!DesktopBrowser.isRequest(message)) return
+    if (!options.onBrowserRequest) {
+      child.postMessage(browserError(message.requestID, "not_attached", "The desktop browser is unavailable.", true))
+      return
+    }
+    const abort = new AbortController()
+    browserRequests.set(message.requestID, abort)
+    void options
+      .onBrowserRequest(message, abort.signal)
+      .then((result) => {
+        if (abort.signal.aborted || exited) return
+        child.postMessage({
+          type: "desktop.browser.response",
+          version: DesktopBrowser.VERSION,
+          requestID: message.requestID,
+          result,
+        } satisfies DesktopBrowser.Response)
+      })
+      .catch((error) => {
+        if (abort.signal.aborted || exited) return
+        const detail = browserErrorDetail(error)
+        child.postMessage(browserError(message.requestID, detail.code, detail.message, detail.retryable))
+      })
+      .finally(() => browserRequests.delete(message.requestID))
+  }
+  child.on("message", onMessage)
 
   const onProcessGone = (_event: unknown, details: Details) => {
     if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
@@ -76,6 +112,9 @@ export async function spawnLocalServer(
   app.on("child-process-gone", onProcessGone)
   child.once("exit", (code) => {
     exited = true
+    child.off("message", onMessage)
+    for (const request of browserRequests.values()) request.abort()
+    browserRequests.clear()
     app.off("child-process-gone", onProcessGone)
     options.onExit?.(code)
     exit.resolve(code)
@@ -178,6 +217,27 @@ export async function spawnLocalServer(
       },
     },
     health: { wait },
+  }
+}
+
+function browserError(requestID: string, code: DesktopBrowser.ErrorCode, message: string, retryable: boolean) {
+  return {
+    type: "desktop.browser.response",
+    version: DesktopBrowser.VERSION,
+    requestID,
+    error: { code, message, retryable },
+  } satisfies DesktopBrowser.Response
+}
+
+function browserErrorDetail(error: unknown) {
+  if (error instanceof Error && "code" in error && typeof error.code === "string") {
+    const code = DesktopBrowser.ERROR_CODES.find((item) => item === error.code) ?? "internal"
+    return { code, message: error.message, retryable: "retryable" in error && error.retryable === true }
+  }
+  return {
+    code: "internal" as const,
+    message: error instanceof Error ? error.message : String(error),
+    retryable: false,
   }
 }
 

@@ -25,6 +25,15 @@ import { Parameters as Todo } from "../../src/tool/todo"
 import { Parameters as WebFetch } from "../../src/tool/webfetch"
 import { Parameters as WebSearch } from "../../src/tool/websearch"
 import { Parameters as Write } from "../../src/tool/write"
+import {
+  ClickParameters as BrowserClick,
+  FillParameters as BrowserFill,
+  NavigateParameters as BrowserNavigate,
+  PressParameters as BrowserPress,
+  ScreenshotParameters as BrowserScreenshot,
+  ScrollParameters as BrowserScroll,
+  SnapshotParameters as BrowserSnapshot,
+} from "../../src/tool/browser"
 
 const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S["Type"] =>
   Schema.decodeUnknownSync(schema)(input)
@@ -38,6 +47,13 @@ describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
     test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
+    test("browser_click", () => expect(toJsonSchema(BrowserClick)).toMatchSnapshot())
+    test("browser_fill", () => expect(toJsonSchema(BrowserFill)).toMatchSnapshot())
+    test("browser_navigate", () => expect(toJsonSchema(BrowserNavigate)).toMatchSnapshot())
+    test("browser_press", () => expect(toJsonSchema(BrowserPress)).toMatchSnapshot())
+    test("browser_screenshot", () => expect(toJsonSchema(BrowserScreenshot)).toMatchSnapshot())
+    test("browser_scroll", () => expect(toJsonSchema(BrowserScroll)).toMatchSnapshot())
+    test("browser_snapshot", () => expect(toJsonSchema(BrowserSnapshot)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
     test("grep", () => expect(toJsonSchema(Grep)).toMatchSnapshot())

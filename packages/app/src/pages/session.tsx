@@ -102,6 +102,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
+import { SessionBrowserPane } from "./session/browser-pane"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -360,6 +361,7 @@ export default function Page() {
   const language = useLanguage()
   const sdk = useSDK()
   const serverSDK = useServerSDK()
+  const server = useServer()
   const settings = useSettings()
   const platform = usePlatform()
   const prompt = usePrompt()
@@ -446,6 +448,16 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
+  const browserAvailable = createMemo(
+    () =>
+      !!platform.browserPane &&
+      settings.general.experimentalBrowser() &&
+      !!server.current &&
+      ServerConnection.builtin(server.current),
+  )
+  const desktopBrowserOpen = createMemo(
+    () => isDesktop() && browserAvailable() && view().browserPanel.opened() && !!params.id,
+  )
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
@@ -462,7 +474,9 @@ export default function Page() {
       }),
   )
   const desktopSessionResizeOpen = createMemo(() =>
-    newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen(),
+    newSessionDesign()
+      ? desktopV2ReviewOpen() || desktopBrowserOpen() || desktopTerminalOpen()
+      : desktopReviewOpen() || desktopBrowserOpen(),
   )
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   let panelRow: HTMLDivElement | undefined
@@ -504,10 +518,16 @@ export default function Page() {
   const desktopV2PanelLayout = createMemo(() =>
     sessionPanelLayout({
       review: desktopV2ReviewOpen(),
+      browser: desktopBrowserOpen(),
       terminal: desktopTerminalOpen(),
       files: desktopFileTreeOpen(),
     }),
   )
+
+  createEffect(() => {
+    if (browserAvailable()) return
+    if (view().browserPanel.opened()) view().browserPanel.close()
+  })
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -2300,25 +2320,40 @@ export default function Page() {
         </div>
 
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
-          <SessionSidePanel
-            canReview={canReview}
-            diffs={reviewDiffs}
-            diffsReady={reviewReady}
-            empty={reviewEmptyText}
-            hasReview={hasReview}
-            reviewHasFocusableContent={hasReview}
-            reviewCount={reviewCount}
-            reviewPanel={reviewPanel}
-            activeDiff={activeReviewFile()}
-            focusReviewDiff={focusReviewDiff}
-            reviewSnap={ui.reviewSnap}
-            size={size}
-          />
+          <Show
+            when={desktopBrowserOpen() && params.id}
+            keyed
+            fallback={
+              <SessionSidePanel
+                canReview={canReview}
+                diffs={reviewDiffs}
+                diffsReady={reviewReady}
+                empty={reviewEmptyText}
+                hasReview={hasReview}
+                reviewHasFocusableContent={hasReview}
+                reviewCount={reviewCount}
+                reviewPanel={reviewPanel}
+                activeDiff={activeReviewFile()}
+                focusReviewDiff={focusReviewDiff}
+                reviewSnap={ui.reviewSnap}
+                size={size}
+              />
+            }
+          >
+            {(sessionID) => <SessionBrowserPane sessionID={sessionID} />}
+          </Show>
         </Show>
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+              <Show when={isDesktop() && desktopBrowserOpen() && params.id} keyed>
+                {(sessionID) => (
+                  <div class="min-h-0 flex-1">
+                    <SessionBrowserPane sessionID={sessionID} />
+                  </div>
+                )}
+              </Show>
+              <Show when={isDesktop() && !desktopBrowserOpen() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
                 <div class="min-h-0 flex-1">
                   <SessionSidePanel
                     canReview={canReview}

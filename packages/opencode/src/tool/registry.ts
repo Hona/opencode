@@ -54,6 +54,17 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import { DesktopBrowserHost } from "@/desktop/browser"
+import {
+  BrowserClickTool,
+  BrowserFillTool,
+  BrowserNavigateTool,
+  BrowserPressTool,
+  BrowserScreenshotTool,
+  BrowserScrollTool,
+  BrowserSnapshotTool,
+} from "./browser"
+import type { SessionID } from "@/session/schema"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -65,6 +76,7 @@ type ReadDef = Tool.InferDef<typeof ReadTool>
 type State = {
   custom: Tool.Def[]
   builtin: Tool.Def[]
+  browser: Tool.Def[]
   task: TaskDef
   read: ReadDef
 }
@@ -78,6 +90,7 @@ export interface Interface {
     modelID: ModelV2.ID
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
+    sessionID?: SessionID
   }) => Effect.Effect<Tool.Def[]>
 }
 
@@ -92,6 +105,7 @@ const layer = Layer.effect(
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
     const mcp = yield* MCP.Service
+    const browser = yield* DesktopBrowserHost.Service
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -112,6 +126,17 @@ const layer = Layer.effect(
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
+    const browserInfo = browser.enabled
+      ? yield* Effect.all({
+          navigate: BrowserNavigateTool,
+          snapshot: BrowserSnapshotTool,
+          click: BrowserClickTool,
+          fill: BrowserFillTool,
+          press: BrowserPressTool,
+          scroll: BrowserScrollTool,
+          screenshot: BrowserScreenshotTool,
+        })
+      : undefined
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -200,6 +225,17 @@ const layer = Layer.effect(
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
+        const browserTools = browserInfo
+          ? yield* Effect.all([
+              Tool.init(browserInfo.navigate),
+              Tool.init(browserInfo.snapshot),
+              Tool.init(browserInfo.click),
+              Tool.init(browserInfo.fill),
+              Tool.init(browserInfo.press),
+              Tool.init(browserInfo.scroll),
+              Tool.init(browserInfo.screenshot),
+            ])
+          : []
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
@@ -241,7 +277,9 @@ const layer = Layer.effect(
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...browserTools,
           ],
+          browser: browserTools,
           task: tool.task,
           read: tool.read,
         }
@@ -284,7 +322,13 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const filtered = (yield* all()).filter((tool) => {
+      const browserAttached = input.sessionID ? yield* browser.attached(input.sessionID) : false
+      const current = yield* InstanceState.get(state)
+      const browserDefinitions = new Set(current.browser)
+      const filtered = [...current.builtin, ...current.custom].filter((tool) => {
+        if (browserDefinitions.has(tool)) {
+          return browserAttached
+        }
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
@@ -441,6 +485,7 @@ export const node = LayerNode.make({
     Format.node,
     Truncate.node,
     RuntimeFlags.node,
+    DesktopBrowserHost.node,
     MCP.node,
     Database.node,
     Ripgrep.node,

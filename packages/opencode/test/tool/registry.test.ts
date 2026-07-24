@@ -21,6 +21,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import { DesktopBrowserHost } from "@/desktop/browser"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -94,12 +95,44 @@ const withEmptyCodeMode = testEffect(
   ]),
 )
 const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
+const withBrowser = testEffect(
+  LayerNode.compile(root, [
+    ...replacements,
+    [
+      DesktopBrowserHost.node,
+      Layer.mock(DesktopBrowserHost.Service, {
+        enabled: true,
+        attached: (sessionID) => Effect.succeed(sessionID === "ses_attached"),
+        request: () => Effect.die("not used"),
+      }),
+    ],
+  ]),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
 describe("tool.registry", () => {
+  withBrowser.instance("exposes browser tools only for an attached desktop session", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const agent = yield* agents.defaultInfo()
+      const input = {
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent,
+      }
+      const attached = yield* registry.tools({ ...input, sessionID: SessionID.make("ses_attached") })
+      const detached = yield* registry.tools({ ...input, sessionID: SessionID.make("ses_detached") })
+
+      expect(attached.map((tool) => tool.id)).toContain("browser_navigate")
+      expect(attached.map((tool) => tool.id)).toContain("browser_screenshot")
+      expect(detached.map((tool) => tool.id)).not.toContain("browser_navigate")
+    }),
+  )
+
   it.instance("does not expose task_status", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
