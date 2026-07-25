@@ -22,6 +22,8 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { DesktopBrowserHost } from "@/desktop/browser"
+import { DesktopBrowser } from "@opencode-ai/core/desktop-browser"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -102,8 +104,16 @@ const withBrowser = testEffect(
       DesktopBrowserHost.node,
       Layer.mock(DesktopBrowserHost.Service, {
         enabled: true,
-        attached: (sessionID) => Effect.succeed(sessionID === "ses_attached"),
-        request: () => Effect.die("not used"),
+        attached: (sessionID) => sessionID === "ses_attached",
+        lease: (sessionID) =>
+          sessionID === "ses_attached"
+            ? {
+                id: "lease",
+                sessionID,
+                state: browserState,
+                request: () => Effect.die("not used"),
+              }
+            : undefined,
       }),
     ],
   ]),
@@ -130,6 +140,57 @@ describe("tool.registry", () => {
       expect(attached.map((tool) => tool.id)).toContain("browser_navigate")
       expect(attached.map((tool) => tool.id)).toContain("browser_screenshot")
       expect(detached.map((tool) => tool.id)).not.toContain("browser_navigate")
+    }),
+  )
+
+  withBrowser.instance("maps browser permissions to definition visibility", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const input = {
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+        sessionID: SessionID.make("ses_attached"),
+        permission: [{ permission: "browser_read", pattern: "*", action: "deny" }] satisfies PermissionV1.Ruleset,
+      }
+      const tools = yield* registry.tools(input)
+      expect(tools.map((tool) => tool.id)).not.toContain("browser_snapshot")
+      expect(tools.map((tool) => tool.id)).not.toContain("browser_screenshot")
+      expect(tools.map((tool) => tool.id)).toContain("browser_navigate")
+      expect(tools.map((tool) => tool.id)).toContain("browser_click")
+    }),
+  )
+
+  withBrowser.instance("keeps a same-named custom tool with explicit custom precedence", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "browser_snapshot.ts"),
+          [
+            "export default {",
+            "  description: 'custom browser snapshot',",
+            "  args: {},",
+            "  execute: async () => 'custom',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const resolved = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+        sessionID: SessionID.make("ses_attached"),
+        permission: [{ permission: "browser_read", pattern: "*", action: "deny" }] satisfies PermissionV1.Ruleset,
+      })
+      expect(resolved.filter((tool) => tool.id === "browser_snapshot")).toHaveLength(1)
+      expect(resolved.find((tool) => tool.id === "browser_snapshot")?.description).toBe("custom browser snapshot")
     }),
   )
 
@@ -603,3 +664,12 @@ describe("tool.registry", () => {
     }),
   )
 })
+
+const browserState: DesktopBrowser.State = {
+  url: "https://example.com/",
+  title: "Example",
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  generation: 1,
+}

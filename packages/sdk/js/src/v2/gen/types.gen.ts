@@ -1677,6 +1677,9 @@ export type PermissionConfig =
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
+      browser_read?: PermissionRuleConfig
+      browser_navigate?: PermissionRuleConfig
+      browser_interact?: PermissionRuleConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
       skill?: PermissionRuleConfig

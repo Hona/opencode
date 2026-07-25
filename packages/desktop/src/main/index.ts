@@ -357,6 +357,7 @@ const main = Effect.gen(function* () {
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
         onBrowserRequest: (request, abort) => browserPane.request(request, abort),
+        subscribeBrowserState: browserPane.subscribe,
       }),
     )
     server = listener

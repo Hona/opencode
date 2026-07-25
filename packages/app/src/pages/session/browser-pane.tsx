@@ -5,8 +5,19 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createEffect, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type BrowserPaneCommand, type BrowserPanePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
+
+export function runBrowserPaneCommand(
+  browser: BrowserPanePlatform | undefined,
+  command: BrowserPaneCommand,
+  onError: (message: string) => void,
+) {
+  if (!browser) return Promise.resolve()
+  return browser.command(command).catch((error) => {
+    onError(error instanceof Error ? error.message : String(error))
+  })
+}
 
 export function SessionBrowserPane(props: { sessionID: string }) {
   const platform = usePlatform()
@@ -90,17 +101,18 @@ export function SessionBrowserPane(props: { sessionID: string }) {
       browser?.setLayout({
         attached: false,
         visible: false,
+        sessionID: props.sessionID,
         destroy: !settings.general.experimentalBrowser(),
       })
     })
   })
 
-  const navigate = () => {
-    if (!browser) return
-    void browser.command({ type: "navigate", url: store.address }).catch((error) => {
-      setStore("state", "error", error instanceof Error ? error.message : String(error))
-    })
+  const command = (input: BrowserPaneCommand) => {
+    setStore("state", "error", undefined)
+    void runBrowserPaneCommand(browser, input, (error) => setStore("state", "error", error))
   }
+
+  const navigate = () => command({ type: "navigate", url: store.address })
 
   return (
     <aside
@@ -120,7 +132,7 @@ export function SessionBrowserPane(props: { sessionID: string }) {
           class="size-7 p-0"
           disabled={!store.state.canGoBack}
           aria-label={language.t("browser.back")}
-          onClick={() => void browser?.command({ type: "back" })}
+          onClick={() => command({ type: "back" })}
         >
           <Icon name="chevron-left" size="small" />
         </Button>
@@ -129,7 +141,7 @@ export function SessionBrowserPane(props: { sessionID: string }) {
           class="size-7 p-0"
           disabled={!store.state.canGoForward}
           aria-label={language.t("browser.forward")}
-          onClick={() => void browser?.command({ type: "forward" })}
+          onClick={() => command({ type: "forward" })}
         >
           <Icon name="chevron-right" size="small" />
         </Button>
@@ -137,7 +149,7 @@ export function SessionBrowserPane(props: { sessionID: string }) {
           variant="ghost"
           class="size-7 p-0"
           aria-label={language.t("browser.reload")}
-          onClick={() => void browser?.command(store.state.loading ? { type: "stop" } : { type: "reload" })}
+          onClick={() => command(store.state.loading ? { type: "stop" } : { type: "reload" })}
         >
           <Show when={store.state.loading} fallback={<Icon name="refresh" size="small" />}>
             <Spinner class="size-3" />

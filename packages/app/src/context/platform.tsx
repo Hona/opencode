@@ -5,6 +5,14 @@ import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
+import type { BrowserPanePlatform } from "../browser-pane"
+export type {
+  BrowserPaneBounds,
+  BrowserPaneCommand,
+  BrowserPaneLayout,
+  BrowserPanePlatform,
+  BrowserPaneState,
+} from "../browser-pane"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -25,35 +33,6 @@ export type FatalRendererErrorLog = {
   version?: string
   platform: PlatformName
   os?: DesktopOS
-}
-
-export type BrowserPaneBounds = { x: number; y: number; width: number; height: number }
-export type BrowserPaneLayout = {
-  attached: boolean
-  visible: boolean
-  destroy?: boolean
-  background?: string
-  sessionID?: string
-  bounds?: BrowserPaneBounds
-}
-export type BrowserPaneCommand =
-  | { type: "navigate"; url: string }
-  | { type: "back" }
-  | { type: "forward" }
-  | { type: "reload" }
-  | { type: "stop" }
-export type BrowserPaneState = {
-  url: string
-  title: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  error?: string
-}
-export type BrowserPanePlatform = {
-  setLayout(layout: BrowserPaneLayout): void
-  command(command: BrowserPaneCommand): Promise<void>
-  subscribe(cb: (state: BrowserPaneState) => void): Promise<() => void>
 }
 
 type PlatformBase = {

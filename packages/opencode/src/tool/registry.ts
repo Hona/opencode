@@ -63,6 +63,7 @@ import {
   BrowserScreenshotTool,
   BrowserScrollTool,
   BrowserSnapshotTool,
+  withLease,
 } from "./browser"
 import type { SessionID } from "@/session/schema"
 
@@ -76,7 +77,7 @@ type ReadDef = Tool.InferDef<typeof ReadTool>
 type State = {
   custom: Tool.Def[]
   builtin: Tool.Def[]
-  browser: Tool.Def[]
+  browser: Map<Tool.Def, "browser_read" | "browser_navigate" | "browser_interact">
   task: TaskDef
   read: ReadDef
 }
@@ -279,7 +280,16 @@ const layer = Layer.effect(
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
             ...browserTools,
           ],
-          browser: browserTools,
+          browser: new Map(
+            browserTools.map((tool) => [
+              tool,
+              tool.id === "browser_navigate"
+                ? "browser_navigate"
+                : tool.id === "browser_snapshot" || tool.id === "browser_screenshot"
+                  ? "browser_read"
+                  : "browser_interact",
+            ]),
+          ),
           task: tool.task,
           read: tool.read,
         }
@@ -322,12 +332,13 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const browserAttached = input.sessionID ? yield* browser.attached(input.sessionID) : false
+      const browserLease = input.sessionID ? browser.lease(input.sessionID) : undefined
       const current = yield* InstanceState.get(state)
-      const browserDefinitions = new Set(current.browser)
+      const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
       const filtered = [...current.builtin, ...current.custom].filter((tool) => {
-        if (browserDefinitions.has(tool)) {
-          return browserAttached
+        const browserPermission = current.browser.get(tool)
+        if (browserPermission) {
+          return !!browserLease && Permission.evaluate(browserPermission, "*", ruleset).action !== "deny"
         }
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
@@ -344,34 +355,42 @@ const layer = Layer.effect(
       const codeModeDescription = filtered.some((tool) => tool.id === "execute")
         ? yield* describeCodeMode(input)
         : undefined
-      const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
+      // Preserve existing resolution semantics explicitly: later custom registrations win built-in collisions.
+      const visible = filtered.filter(
+        (tool, index) =>
+          (tool.id !== "execute" || codeModeDescription) &&
+          filtered.findLastIndex((candidate) => candidate.id === tool.id) === index,
+      )
 
       return yield* Effect.forEach(
         visible,
         Effect.fnUntraced(function* (tool: Tool.Def) {
+          const definition = current.browser.has(tool) && browserLease ? withLease(tool, browserLease) : tool
           const output = {
-            description: tool.description,
-            parameters: tool.parameters,
-            jsonSchema: tool.jsonSchema,
+            description: definition.description,
+            parameters: definition.parameters,
+            jsonSchema: definition.jsonSchema,
           }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          yield* plugin.trigger("tool.definition", { toolID: definition.id }, output)
           const jsonSchema =
-            output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
+            output.parameters === definition.parameters || output.jsonSchema !== definition.jsonSchema
               ? output.jsonSchema
               : undefined
           return {
-            id: tool.id,
+            id: definition.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              tool.id === "execute" ? codeModeDescription : undefined,
+              definition.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              definition.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
             jsonSchema,
-            execute: tool.execute,
-            formatValidationError: tool.formatValidationError,
+            execute: (args: unknown, ctx: Tool.Context) => definition.execute(args, ctx),
+            formatValidationError: definition.formatValidationError
+              ? (error: unknown) => definition.formatValidationError?.(error) ?? String(error)
+              : undefined,
           }
         }),
         { concurrency: "unbounded" },

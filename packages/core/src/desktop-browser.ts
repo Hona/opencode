@@ -1,6 +1,6 @@
 export * as DesktopBrowser from "./desktop-browser"
 
-export const VERSION = 1 as const
+export const VERSION = 2 as const
 
 export type State = {
   url: string
@@ -13,7 +13,7 @@ export type State = {
 
 export type Command =
   | { type: "status" }
-  | { type: "navigate"; url: string }
+  | { type: "navigate"; url: string; generation: number }
   | { type: "snapshot"; generation: number }
   | { type: "click"; ref: string; generation: number }
   | { type: "fill"; ref: string; text: string; generation: number }
@@ -40,7 +40,8 @@ export type Command =
   | { type: "screenshot"; generation: number }
 
 export type Result =
-  | { type: "status"; attached: boolean; state?: State }
+  | { type: "status"; attached: false }
+  | { type: "status"; attached: true; lease: string; state: State }
   | { type: "snapshot"; state: State; content: string }
   | { type: "action"; state: State }
   | { type: "screenshot"; state: State; data: string; width: number; height: number }
@@ -50,7 +51,14 @@ export type Request = {
   version: typeof VERSION
   requestID: string
   sessionID: string
+  lease?: string
   command: Command
+}
+
+export type AttachmentState = {
+  type: "desktop.browser.state"
+  version: typeof VERSION
+  attachments: { sessionID: string; lease: string; state: State }[]
 }
 
 export type Cancel = {
@@ -90,7 +98,17 @@ export function isRequest(input: unknown): input is Request {
   if (!record(input)) return false
   if (input.type !== "desktop.browser.request" || input.version !== VERSION) return false
   if (typeof input.requestID !== "string" || typeof input.sessionID !== "string") return false
-  return command(input.command)
+  if (input.lease !== undefined && typeof input.lease !== "string") return false
+  if (!command(input.command)) return false
+  return input.command.type === "status" || typeof input.lease === "string"
+}
+
+export function isAttachmentState(input: unknown): input is AttachmentState {
+  if (!record(input) || input.type !== "desktop.browser.state" || input.version !== VERSION) return false
+  if (!Array.isArray(input.attachments)) return false
+  return input.attachments.every(
+    (item) => record(item) && typeof item.sessionID === "string" && typeof item.lease === "string" && state(item.state),
+  )
 }
 
 export function isCancel(input: unknown): input is Cancel {
@@ -116,7 +134,7 @@ function command(input: unknown): input is Command {
   if (!record(input) || typeof input.type !== "string") return false
   if (input.type === "status") return true
   if (input.type === "snapshot" || input.type === "screenshot") return finite(input.generation)
-  if (input.type === "navigate") return typeof input.url === "string"
+  if (input.type === "navigate") return typeof input.url === "string" && finite(input.generation)
   if (input.type === "click") return typeof input.ref === "string" && finite(input.generation)
   if (input.type === "fill") {
     return typeof input.ref === "string" && typeof input.text === "string" && finite(input.generation)
@@ -132,7 +150,10 @@ function command(input: unknown): input is Command {
 
 function result(input: unknown): input is Result {
   if (!record(input) || typeof input.type !== "string") return false
-  if (input.type === "status") return typeof input.attached === "boolean"
+  if (input.type === "status") {
+    if (input.attached === false) return input.lease === undefined && input.state === undefined
+    return input.attached === true && typeof input.lease === "string" && state(input.state)
+  }
   if (input.type === "snapshot") return state(input.state) && typeof input.content === "string"
   if (input.type === "action") return state(input.state)
   if (input.type === "screenshot") {
@@ -156,6 +177,37 @@ function state(input: unknown): input is State {
     typeof input.canGoForward === "boolean" &&
     finite(input.generation)
   )
+}
+
+export function normalizeURL(input: string) {
+  const value = input.trim()
+  if (!value) return "about:blank"
+  if (value === "about:blank") return value
+  const candidate = /^(localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(:\d+)?(?:\/|$)/i.test(value)
+    ? `http://${value}`
+    : /^[a-z][a-z\d+.-]*:/i.test(value)
+      ? value
+      : `https://${value}`
+  if (!URL.canParse(candidate)) throw new Error("Enter a valid HTTP, HTTPS, or file URL")
+  const url = new URL(candidate)
+  if (!allowedURL(url.href)) throw new Error("Only HTTP, HTTPS, and file URLs without credentials are supported")
+  return url.href
+}
+
+export function allowedURL(input: string) {
+  if (input === "about:blank") return true
+  if (!URL.canParse(input)) return false
+  const url = new URL(input)
+  return (
+    (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "file:") &&
+    !url.username &&
+    !url.password
+  )
+}
+
+export function normalizeRef(input: string) {
+  const value = input.trim()
+  return value.startsWith("@") ? value : `@${value}`
 }
 
 const PRESS_KEYS = [

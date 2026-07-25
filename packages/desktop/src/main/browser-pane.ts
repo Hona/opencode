@@ -1,26 +1,52 @@
+import { randomUUID } from "node:crypto"
 import { DesktopBrowser } from "@opencode-ai/core/desktop-browser"
 import { BrowserWindow, View, WebContentsView } from "electron"
 import type { BrowserPaneCommand, BrowserPaneLayout, BrowserPaneState } from "../preload/types"
 import {
   allowedBrowserURL,
+  boundedBrowserOperation,
   browserBottomMasks,
+  browserPartition,
+  browserProtocolError,
+  browserRef,
+  invalidateBrowserRefs,
   normalizeBrowserBounds,
   normalizeBrowserRef,
   normalizeBrowserURL,
+  runBrowserInputPair,
+  stopBrowserOperation,
 } from "./browser-pane-policy"
+import {
+  createBrowserPaneLifecycle,
+  fenceBrowserPaneOperation,
+  startBrowserPaneOperation,
+  SupersededError,
+  type BrowserPaneClaim,
+  type BrowserPaneLifecycle,
+  type BrowserPaneOperation,
+} from "./browser-pane-lifecycle"
 
 type Ref = { snapshot: number; backendNodeID: number }
-type Entry = {
+type Page = {
   win: BrowserWindow
   view: WebContentsView
-  masks: View[]
-  attached: boolean
-  sessionID?: string
-  attachment: number
   document: number
   snapshot: number
   refs: Map<string, Ref>
+  crashed: boolean
+  closed: boolean
+  cleanups: (() => void)[]
+  state: BrowserPaneState
+}
+type Entry = {
+  win: BrowserWindow
+  masks: View[]
+  lifecycle: BrowserPaneLifecycle<Page>
+  desired?: BrowserPaneLayout
+  disposed: boolean
+  cleanups: (() => void)[]
   requests: Set<AbortController>
+  active?: { controller: AbortController; context: Page }
   state: BrowserPaneState
   queue: Promise<void>
 }
@@ -63,29 +89,76 @@ const readableRoles = new Set([
   "row",
   "StaticText",
 ])
+const debuggerCommandTimeout = 10_000
 
 export function createBrowserPaneController() {
   const entries = new Map<number, Entry>()
+  const listeners = new Set<(state: DesktopBrowser.AttachmentState) => void>()
 
-  const publish = (entry: Entry, error?: string) => {
-    const contents = entry.view.webContents
-    const state = {
-      url: contents.getURL(),
-      title: contents.getTitle(),
-      loading: contents.isLoading(),
-      canGoBack: contents.navigationHistory.canGoBack(),
-      canGoForward: contents.navigationHistory.canGoForward(),
-      ...(error ? { error } : {}),
+  const publishAttachments = () => {
+    const state: DesktopBrowser.AttachmentState = {
+      type: "desktop.browser.state",
+      version: DesktopBrowser.VERSION,
+      attachments: [...entries.values()].flatMap((entry) => {
+        const claim = entry.lifecycle.current()
+        if (!claim) return []
+        return [
+          {
+            sessionID: claim.sessionID,
+            lease: claim.lease,
+            state: contractState(claim.context.state, claim.context.document),
+          },
+        ]
+      }),
     }
+    listeners.forEach((listener) => listener(state))
+  }
+
+  const publish = (entry: Entry, page?: Page, error?: string) => {
+    if (page && !entry.lifecycle.owns(page)) return entry.state
+    const contents = page?.view.webContents
+    const state = contents
+      ? {
+          url: contents.getURL(),
+          title: contents.getTitle(),
+          loading: contents.isLoading(),
+          canGoBack: contents.navigationHistory.canGoBack(),
+          canGoForward: contents.navigationHistory.canGoForward(),
+          ...(error ? { error } : {}),
+        }
+      : { ...entry.state, loading: false, ...(error ? { error } : {}) }
+    if (page) page.state = state
     entry.state = state
     if (!entry.win.isDestroyed()) entry.win.webContents.send("browser-pane-state", state)
+    publishAttachments()
     return state
   }
 
-  const create = (win: BrowserWindow) => {
+  const disposePage = (page: Page) => {
+    if (page.closed) return
+    page.closed = true
+    const contents = page.view.webContents
+    const browserSession = contents.session
+    try {
+      page.cleanups.splice(0).forEach((cleanup) => {
+        try {
+          cleanup()
+        } catch {}
+      })
+      browserSession.setPermissionRequestHandler(null)
+      browserSession.setPermissionCheckHandler(null)
+      browserSession.setDevicePermissionHandler(null)
+      browserSession.setDisplayMediaRequestHandler(null)
+    } finally {
+      if (!page.win.isDestroyed()) page.win.contentView.removeChildView(page.view)
+      if (!contents.isDestroyed()) contents.close()
+    }
+  }
+
+  const createPage = (win: BrowserWindow) => {
     const view = new WebContentsView({
       webPreferences: {
-        partition: `opencode-browser-${win.id}`,
+        partition: browserPartition(randomUUID()),
         nodeIntegration: false,
         nodeIntegrationInWorker: false,
         nodeIntegrationInSubFrames: false,
@@ -99,6 +172,8 @@ export function createBrowserPaneController() {
         safeDialogs: true,
         navigateOnDragDrop: false,
         autoplayPolicy: "document-user-activation-required",
+        focusOnNavigation: false,
+        disableDialogs: true,
         devTools: false,
       },
     })
@@ -106,26 +181,17 @@ export function createBrowserPaneController() {
     view.setBorderRadius(0)
     view.setBackgroundColor("#ffffff")
     win.contentView.addChildView(view)
-    const masks = Array.from({ length: 8 }, () => new View())
-    for (const mask of masks) {
-      mask.setVisible(false)
-      win.contentView.addChildView(mask)
-    }
-
-    const entry: Entry = {
+    const page: Page = {
       win,
       view,
-      masks,
-      attached: false,
-      attachment: 0,
       document: 0,
       snapshot: 0,
       refs: new Map(),
-      requests: new Set(),
+      crashed: false,
+      closed: false,
+      cleanups: [],
       state: { url: "", title: "", loading: false, canGoBack: false, canGoForward: false },
-      queue: Promise.resolve(),
     }
-    entries.set(win.id, entry)
 
     const contents = view.webContents
     const browserSession = contents.session
@@ -133,108 +199,163 @@ export function createBrowserPaneController() {
     browserSession.setPermissionCheckHandler(() => false)
     browserSession.setDevicePermissionHandler(() => false)
     browserSession.setDisplayMediaRequestHandler((_request, callback) => callback({}))
-    browserSession.on("will-download", (event) => event.preventDefault())
+    const onDownload = (event: Electron.Event) => event.preventDefault()
+    browserSession.on("will-download", onDownload)
+    page.cleanups.push(() => browserSession.off("will-download", onDownload))
 
     const preventUnsafeNavigation = (event: Electron.Event<{ url: string }>) => {
       if (allowedBrowserURL(event.url)) return
       event.preventDefault()
-      publish(entry, "Navigation was blocked by the browser security policy")
+      const entry = entries.get(win.id)
+      if (entry) publish(entry, page, "Navigation was blocked by the browser security policy")
     }
     contents.on("will-navigate", preventUnsafeNavigation)
+    page.cleanups.push(() => contents.off("will-navigate", preventUnsafeNavigation))
     contents.on("will-redirect", preventUnsafeNavigation)
-    contents.setWindowOpenHandler((details) => {
-      if (allowedBrowserURL(details.url)) {
-        void navigate(entry, details.url).catch((error) =>
-          publish(entry, error instanceof Error ? error.message : String(error)),
-        )
-      }
-      return { action: "deny" }
-    })
-    contents.on("content-bounds-updated", (event) => event.preventDefault())
-    contents.on("did-start-loading", () => publish(entry))
-    contents.on("did-stop-loading", () => publish(entry))
-    contents.on("did-navigate", () => publish(entry))
-    contents.on("did-navigate-in-page", () => publish(entry))
-    contents.on("page-title-updated", () => publish(entry))
-    contents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    page.cleanups.push(() => contents.off("will-redirect", preventUnsafeNavigation))
+    contents.setWindowOpenHandler(() => ({ action: "deny" }))
+    const onBounds = (event: Electron.Event) => event.preventDefault()
+    contents.on("content-bounds-updated", onBounds)
+    page.cleanups.push(() => contents.off("content-bounds-updated", onBounds))
+    const onPublish = () => {
+      const entry = entries.get(win.id)
+      if (entry) publish(entry, page)
+    }
+    contents.on("did-start-loading", onPublish)
+    page.cleanups.push(() => contents.off("did-start-loading", onPublish))
+    contents.on("did-stop-loading", onPublish)
+    page.cleanups.push(() => contents.off("did-stop-loading", onPublish))
+    contents.on("did-navigate", onPublish)
+    page.cleanups.push(() => contents.off("did-navigate", onPublish))
+    contents.on("did-navigate-in-page", onPublish)
+    page.cleanups.push(() => contents.off("did-navigate-in-page", onPublish))
+    contents.on("page-title-updated", onPublish)
+    page.cleanups.push(() => contents.off("page-title-updated", onPublish))
+    const onStartNavigation = (_event: Electron.Event, url: string, _inPlace: boolean, isMainFrame: boolean) => {
       if (!isMainFrame) return
-      entry.document++
-      entry.snapshot++
-      entry.refs.clear()
-    })
-    contents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
+      const entry = entries.get(win.id)
+      if (!entry?.lifecycle.owns(page)) return
+      page.crashed = false
+      page.document++
+      invalidateBrowserRefs(page)
+      page.state = { ...page.state, url, loading: true }
+      entry.state = page.state
+      publishAttachments()
+    }
+    contents.on("did-start-navigation", onStartNavigation)
+    page.cleanups.push(() => contents.off("did-start-navigation", onStartNavigation))
+    const onFailLoad = (
+      _event: Electron.Event,
+      code: number,
+      description: string,
+      _url: string,
+      isMainFrame: boolean,
+    ) => {
       if (!isMainFrame || code === -3) return
-      publish(entry, description)
-    })
-    contents.on("render-process-gone", () => {
-      entry.document++
-      entry.snapshot++
-      entry.refs.clear()
-      publish(entry, "The browser page crashed")
-    })
-    win.webContents.on("did-start-navigation", () => {
-      cancelEntry(entry)
-      entry.attached = false
-      entry.sessionID = undefined
-      hideEntry(entry)
-    })
-    win.webContents.on("render-process-gone", () => {
-      cancelEntry(entry)
-      entry.attached = false
-      entry.sessionID = undefined
-      hideEntry(entry)
-    })
-    contents.debugger.on("detach", () => {
-      entry.snapshot++
-      entry.refs.clear()
-    })
-    win.once("closed", () => disposeEntry(entry))
-    void contents.loadURL("about:blank")
+      const entry = entries.get(win.id)
+      if (entry) publish(entry, page, description)
+    }
+    contents.on("did-fail-load", onFailLoad)
+    page.cleanups.push(() => contents.off("did-fail-load", onFailLoad))
+
+    const replaceCrashedPage = (message: string) => {
+      const entry = entries.get(win.id)
+      if (entry) replacePage(entry, page, message)
+    }
+    const onRenderGone = () => replaceCrashedPage("The browser page crashed")
+    contents.on("render-process-gone", onRenderGone)
+    page.cleanups.push(() => contents.off("render-process-gone", onRenderGone))
+    const onDebuggerDetach = () => replaceCrashedPage("The browser debugger detached")
+    contents.debugger.on("detach", onDebuggerDetach)
+    page.cleanups.push(() => contents.debugger.off("detach", onDebuggerDetach))
+
+    return { context: page, ready: contents.loadURL("about:blank") }
+  }
+
+  const create = (win: BrowserWindow) => {
+    const masks = Array.from({ length: 8 }, () => new View())
+    for (const mask of masks) {
+      mask.setVisible(false)
+      win.contentView.addChildView(mask)
+    }
+    const entry: Entry = {
+      win,
+      masks,
+      lifecycle: createBrowserPaneLifecycle({
+        create: () => createPage(win),
+        close: disposePage,
+        lease: randomUUID,
+      }),
+      disposed: false,
+      cleanups: [],
+      requests: new Set(),
+      state: emptyState(),
+      queue: Promise.resolve(),
+    }
+    entries.set(win.id, entry)
+    const onParentNavigation = () => detachEntry(entry)
+    win.webContents.on("did-start-navigation", onParentNavigation)
+    entry.cleanups.push(() => win.webContents.off("did-start-navigation", onParentNavigation))
+    const onParentGone = () => detachEntry(entry)
+    win.webContents.on("render-process-gone", onParentGone)
+    entry.cleanups.push(() => win.webContents.off("render-process-gone", onParentGone))
+    const onClosed = () => disposeEntry(entry)
+    win.once("closed", onClosed)
+    entry.cleanups.push(() => win.off("closed", onClosed))
     return entry
   }
 
   const setLayout = (win: BrowserWindow, layout: BrowserPaneLayout) => {
     const entry = entries.get(win.id)
     if (layout.destroy) {
-      if (entry) disposeEntry(entry)
+      // Enablement is still renderer-owned in this local draft, so one disable must revoke every main-owned attachment.
+      dispose()
       return
     }
     if (!layout.attached || !layout.sessionID) {
-      if (!entry) return
-      if (entry.attached || entry.sessionID) cancelEntry(entry)
-      entry.attached = false
-      entry.sessionID = undefined
-      hideEntry(entry)
+      const owner = entry?.lifecycle.state()?.sessionID ?? entry?.desired?.sessionID
+      if (entry && layout.sessionID && owner !== layout.sessionID) return
+      if (entry) detachEntry(entry, layout.sessionID)
       return
     }
 
     const next = entry ?? create(win)
     const owner = [...entries.values()].find(
-      (item) => item !== next && item.attached && item.sessionID === layout.sessionID,
+      (item) => item !== next && item.lifecycle.state()?.sessionID === layout.sessionID,
     )
     if (owner) {
-      if (next.attached || next.sessionID) cancelEntry(next)
-      next.attached = false
-      next.sessionID = undefined
-      publish(next, "Browser tools for this session are attached in another window")
-    } else {
-      if (!next.attached || next.sessionID !== layout.sessionID) cancelEntry(next)
-      next.attached = true
-      next.sessionID = layout.sessionID
+      detachEntry(next)
+      publish(next, undefined, "Browser tools for this session are attached in another window")
+      return
     }
-    if (!layout.visible || !layout.bounds) {
+    next.desired = layout
+    const state = next.lifecycle.state()
+    if (state?.sessionID !== layout.sessionID) {
+      beginAttachment(next, layout)
+      return
+    }
+    const claim = next.lifecycle.current()
+    if (!claim) {
       hideEntry(next)
       return
     }
-    const bounds = normalizeBrowserBounds(layout.bounds, win.contentView.getBounds())
+    applyLayout(next, claim, layout)
+  }
+
+  const applyLayout = (entry: Entry, claim: BrowserPaneClaim<Page>, layout: BrowserPaneLayout) => {
+    if (!layout.visible || !layout.bounds || !entry.lifecycle.isCurrent(claim)) {
+      hideEntry(entry)
+      return
+    }
+    const bounds = normalizeBrowserBounds(layout.bounds, entry.win.contentView.getBounds())
     if (!bounds) {
-      hideEntry(next)
+      hideEntry(entry)
       return
     }
-    next.view.setBounds(bounds)
-    next.view.setVisible(true)
+    claim.context.view.setBounds(bounds)
+    claim.context.view.setVisible(true)
     const masks = browserBottomMasks(bounds)
-    next.masks.forEach((mask, index) => {
+    entry.masks.forEach((mask, index) => {
       const maskBounds = masks[index]
       if (!maskBounds) {
         mask.setVisible(false)
@@ -246,58 +367,141 @@ export function createBrowserPaneController() {
     })
   }
 
+  const beginAttachment = (entry: Entry, layout: BrowserPaneLayout) => {
+    if (!layout.sessionID) return
+    cancelEntry(entry)
+    entry.desired = layout
+    const pending = entry.lifecycle.claim(layout.sessionID)
+    hideEntry(entry)
+    publishAttachments()
+    void pending.then(
+      (claim) => {
+        if (!entry.lifecycle.isCurrent(claim)) return
+        const desired = entry.desired
+        if (!desired?.attached || desired.sessionID !== claim.sessionID) {
+          entry.lifecycle.release(claim.sessionID)
+          return
+        }
+        publish(entry, claim.context)
+        applyLayout(entry, claim, desired)
+      },
+      (error) => {
+        if (error instanceof SupersededError) return
+        const desired = entry.desired
+        if (!desired?.attached || desired.sessionID !== layout.sessionID) return
+        publish(entry, undefined, error instanceof Error ? error.message : String(error))
+      },
+    )
+  }
+
+  const replacePage = (entry: Entry, page: Page, message: string) => {
+    if (!entry.lifecycle.owns(page)) return
+    cancelEntry(entry)
+    page.crashed = true
+    page.document++
+    invalidateBrowserRefs(page)
+    const sessionID = entry.lifecycle.crash(page)
+    publish(entry, undefined, message)
+    publishAttachments()
+    const desired = entry.desired
+    if (!sessionID || !desired?.attached || desired.sessionID !== sessionID) return
+    beginAttachment(entry, desired)
+  }
+
   const command = async (win: BrowserWindow, input: BrowserPaneCommand) => {
     const entry = entries.get(win.id)
-    if (!entry?.attached) throw new Error("Open the Browser pane before using browser controls")
-    switch (input.type) {
-      case "navigate":
-        await navigate(entry, input.url)
-        return
-      case "back":
-        if (entry.view.webContents.navigationHistory.canGoBack()) entry.view.webContents.navigationHistory.goBack()
-        return
-      case "forward":
-        if (entry.view.webContents.navigationHistory.canGoForward()) {
-          entry.view.webContents.navigationHistory.goForward()
-        }
-        return
-      case "reload":
-        entry.view.webContents.reload()
-        return
-      case "stop":
-        entry.view.webContents.stop()
-        return
+    const claim = entry?.lifecycle.current()
+    if (!entry || !claim) throw new Error("Open the Browser pane before using browser controls")
+    if (input.type === "stop") {
+      const running = entry.active
+      stopBrowserOperation({
+        active: running?.controller,
+        stop: () => (running?.context ?? claim.context).view.webContents.stop(),
+      })
+      return
     }
+    const controller = new AbortController()
+    const operation = { started: false }
+    entry.requests.add(controller)
+    return enqueue(entry, () =>
+      fenceBrowserPaneOperation({
+        operation,
+        context: claim.context,
+        run: () =>
+          active(entry, controller, claim.context, async () => {
+            throwIfAborted(controller.signal)
+            if (!entry.lifecycle.isCurrent(claim)) {
+              throw browserError("not_attached", "The browser pane changed before the command could run.", true)
+            }
+            switch (input.type) {
+              case "navigate":
+                await navigate(entry, claim.context, input.url, controller.signal, undefined, operation)
+                return
+              case "back":
+                if (claim.context.view.webContents.navigationHistory.canGoBack())
+                  claim.context.view.webContents.navigationHistory.goBack()
+                return
+              case "forward":
+                if (claim.context.view.webContents.navigationHistory.canGoForward())
+                  claim.context.view.webContents.navigationHistory.goForward()
+                return
+              case "reload":
+                claim.context.view.webContents.reload()
+                return
+            }
+          }),
+        replace: (page) => replacePage(entry, page, "The browser context restarted after an interrupted operation"),
+      }),
+    ).finally(() => entry.requests.delete(controller))
   }
 
   const state = (win: BrowserWindow) => entries.get(win.id)?.state ?? emptyState()
 
   const request = async (input: DesktopBrowser.Request, abort?: AbortSignal): Promise<DesktopBrowser.Result> => {
-    const matches = [...entries.values()].filter((entry) => entry.attached && entry.sessionID === input.sessionID)
+    const matches = [...entries.values()].flatMap((entry) => {
+      const claim = entry.lifecycle.current()
+      return claim?.sessionID === input.sessionID ? [{ entry, claim }] : []
+    })
     const command = input.command
     if (command.type === "status") {
-      const entry = matches.length === 1 ? matches[0] : undefined
+      const match = input.lease
+        ? matches.find((item) => item.claim.lease === input.lease)
+        : matches.length === 1
+          ? matches[0]
+          : undefined
+      if (!match) return { type: "status", attached: false }
       return {
         type: "status",
-        attached: !!entry,
-        ...(entry ? { state: contractState(publish(entry), entry.document) } : {}),
+        attached: true,
+        lease: match.claim.lease,
+        state: contractState(publish(match.entry, match.claim.context), match.claim.context.document),
       }
     }
-    if (matches.length === 0)
-      throw browserError("not_attached", "Open the Browser pane for this session and retry.", true)
+    const match = matches.find((item) => item.claim.lease === input.lease)
+    if (!match)
+      throw browserError("not_attached", "The browser pane lease is no longer attached to this session.", true)
     if (matches.length > 1)
       throw browserError("internal", "More than one browser pane is attached to this session.", false)
-    const entry = matches[0]
-    const attachment = entry.attachment
+    const entry = match.entry
+    const claim = match.claim
     const controller = new AbortController()
+    const operation = { started: false }
     const onAbort = () => controller.abort()
     abort?.addEventListener("abort", onAbort, { once: true })
     entry.requests.add(controller)
-    return enqueue(entry, async () => {
-      const verify = () => assertActive(entry, input.sessionID, attachment, controller.signal)
-      verify()
-      return execute(entry, command, controller.signal, verify)
-    }).finally(() => {
+    return enqueue(entry, () =>
+      fenceBrowserPaneOperation({
+        operation,
+        context: claim.context,
+        run: () =>
+          active(entry, controller, claim.context, async () => {
+            const verify = () => assertActive(entry, claim, controller.signal)
+            verify()
+            return execute(entry, claim.context, command, controller.signal, verify, operation)
+          }),
+        replace: (page) => replacePage(entry, page, "The browser context restarted after an interrupted operation"),
+      }),
+    ).finally(() => {
       abort?.removeEventListener("abort", onAbort)
       entry.requests.delete(controller)
     })
@@ -306,81 +510,125 @@ export function createBrowserPaneController() {
   const dispose = () => {
     for (const entry of entries.values()) disposeEntry(entry)
     entries.clear()
+    publishAttachments()
+  }
+
+  const subscribe = (listener: (state: DesktopBrowser.AttachmentState) => void) => {
+    listeners.add(listener)
+    publishAttachments()
+    return () => listeners.delete(listener)
+  }
+
+  const detachEntry = (entry: Entry, sessionID?: string) => {
+    detach(entry, sessionID)
+    publishAttachments()
   }
 
   function disposeEntry(entry: Entry) {
-    entries.delete(entry.win.id)
+    if (entry.disposed) return
+    entry.disposed = true
+    if (entries.get(entry.win.id) === entry) entries.delete(entry.win.id)
     cancelEntry(entry)
+    entry.desired = undefined
+    entry.lifecycle.dispose()
+    entry.cleanups.splice(0).forEach((cleanup) => cleanup())
     if (!entry.win.isDestroyed()) {
-      entry.win.contentView.removeChildView(entry.view)
       for (const mask of entry.masks) entry.win.contentView.removeChildView(mask)
     }
-    if (entry.view.webContents.isDestroyed()) return
-    entry.view.webContents.close()
+    publishAttachments()
   }
 
-  return { setLayout, command, state, request, dispose }
+  return { setLayout, command, state, request, subscribe, dispose }
 }
 
 export type BrowserPaneController = ReturnType<typeof createBrowserPaneController>
 
 async function execute(
   entry: Entry,
+  page: Page,
   command: Exclude<DesktopBrowser.Command, { type: "status" }>,
   abort: AbortSignal,
   verify: () => void,
+  operation: BrowserPaneOperation,
 ) {
   throwIfAborted(abort)
-  if (command.type !== "navigate") assertDocument(entry, command.generation)
+  assertDocument(page, command.generation)
+  if (page.crashed && command.type !== "navigate") {
+    throw browserError("page_crashed", "The browser page crashed. Navigate or reload it and retry.", true)
+  }
   switch (command.type) {
     case "navigate":
-      await navigate(entry, command.url, abort)
-      return { type: "action" as const, state: contractState(entry.state, entry.document) }
+      await navigate(entry, page, command.url, abort, verify, operation)
+      return { type: "action" as const, state: contractState(page.state, page.document) }
     case "snapshot":
-      return snapshot(entry, command.generation, abort)
+      return snapshot(entry, page, command.generation, abort, verify, operation)
     case "click":
-      await click(entry, command.ref, command.generation, abort, verify)
-      return { type: "action" as const, state: contractState(publishState(entry), entry.document) }
+      await click(page, command.ref, command.generation, abort, verify, operation)
+      return { type: "action" as const, state: contractState(publishState(entry, page), page.document) }
     case "fill":
-      await fill(entry, command.ref, command.text, command.generation, abort, verify)
-      return { type: "action" as const, state: contractState(publishState(entry), entry.document) }
+      await fill(page, command.ref, command.text, command.generation, abort, verify, operation)
+      return { type: "action" as const, state: contractState(publishState(entry, page), page.document) }
     case "press":
-      await press(entry, command.key, command.generation, abort)
-      return { type: "action" as const, state: contractState(publishState(entry), entry.document) }
+      await press(page, command.key, command.generation, abort, verify, operation)
+      return { type: "action" as const, state: contractState(publishState(entry, page), page.document) }
     case "scroll":
-      await scroll(entry, command.direction, command.amount, command.generation, abort)
-      return { type: "action" as const, state: contractState(publishState(entry), entry.document) }
+      await scroll(page, command.direction, command.amount, command.generation, abort, verify, operation)
+      return { type: "action" as const, state: contractState(publishState(entry, page), page.document) }
     case "screenshot":
-      return screenshot(entry, command.generation, abort)
+      return screenshot(entry, page, command.generation, abort, verify, operation)
   }
   throw new Error("Unsupported browser command")
 }
 
-async function navigate(entry: Entry, input: string, abort?: AbortSignal) {
+async function navigate(
+  entry: Entry,
+  page: Page,
+  input: string,
+  abort: AbortSignal | undefined,
+  verify: (() => void) | undefined,
+  operation: BrowserPaneOperation,
+) {
   const url = normalizeBrowserURL(input)
   if (!allowedBrowserURL(url)) {
     throw browserError("invalid_url", "Only HTTP, HTTPS, and file URLs are supported.", false)
   }
   throwIfAborted(abort)
-  const onAbort = () => entry.view.webContents.stop()
+  const onAbort = () => page.view.webContents.stop()
   abort?.addEventListener("abort", onAbort, { once: true })
-  await entry.view.webContents
-    .loadURL(url)
+  await boundedBrowserOperation(() => startBrowserPaneOperation(operation, () => page.view.webContents.loadURL(url)), {
+    signal: abort,
+    timeout: 30_000,
+    aborted: () => browserError("aborted", "The browser navigation was aborted.", true),
+    timedOut: () => {
+      page.view.webContents.stop()
+      return browserError("timeout", "The browser navigation timed out.", true)
+    },
+  })
     .catch((error) => {
       if (abort?.aborted) throw browserError("aborted", "The browser navigation was aborted.", true)
+      if (error instanceof Error && "code" in error) throw error
       throw browserError("navigation_failed", String(error), true)
     })
     .finally(() => abort?.removeEventListener("abort", onAbort))
   throwIfAborted(abort)
-  publishState(entry)
+  verify?.()
+  publishState(entry, page)
 }
 
-async function snapshot(entry: Entry, generation: number, abort?: AbortSignal): Promise<DesktopBrowser.Result> {
+async function snapshot(
+  entry: Entry,
+  page: Page,
+  generation: number,
+  abort: AbortSignal,
+  verify: () => void,
+  operation: BrowserPaneOperation,
+): Promise<DesktopBrowser.Result> {
   throwIfAborted(abort)
-  await debuggerCommand(entry, "Accessibility.enable")
-  const response = await debuggerCommand(entry, "Accessibility.getFullAXTree")
+  await debuggerCommand(page, "Accessibility.enable", undefined, abort, operation)
+  const response = await debuggerCommand(page, "Accessibility.getFullAXTree", undefined, abort, operation)
+  verify?.()
   throwIfAborted(abort)
-  assertDocument(entry, generation)
+  assertDocument(page, generation)
   const nodes = readAXNodes(response).slice(0, 500)
   const parents = new Map(nodes.flatMap((node) => (node.nodeId ? [[node.nodeId, node.parentId] as const] : [])))
   const depth = (node: AXNode) => {
@@ -393,8 +641,7 @@ async function snapshot(entry: Entry, generation: number, abort?: AbortSignal): 
     return value
   }
 
-  entry.snapshot++
-  entry.refs.clear()
+  invalidateBrowserRefs(page)
   let index = 0
   const lines = nodes.flatMap((node) => {
     if (node.ignored) return []
@@ -407,9 +654,10 @@ async function snapshot(entry: Entry, generation: number, abort?: AbortSignal): 
     const interactive = interactiveRoles.has(role) || focusable
     if (!interactive && !readableRoles.has(role)) return []
     if (!interactive && !name && !value) return []
-    const ref = interactive && typeof node.backendDOMNodeId === "number" ? `@e${++index}` : undefined
+    const ref =
+      interactive && typeof node.backendDOMNodeId === "number" ? browserRef(page.snapshot, ++index) : undefined
     if (ref && node.backendDOMNodeId) {
-      entry.refs.set(ref, { snapshot: entry.snapshot, backendNodeID: node.backendDOMNodeId })
+      page.refs.set(ref, { snapshot: page.snapshot, backendNodeID: node.backendDOMNodeId })
     }
     const properties = node.properties?.flatMap((property) => {
       const name = String(property.name)
@@ -426,24 +674,33 @@ async function snapshot(entry: Entry, generation: number, abort?: AbortSignal): 
       `${"  ".repeat(depth(node))}${ref ? `${ref} ` : ""}[${role}]${detail ? ` ${detail}` : ""}${properties?.length ? ` ${properties.join(" ")}` : ""}`,
     ]
   })
-  const content = [
-    `Page: ${entry.view.webContents.getTitle()}`,
-    `URL: ${entry.view.webContents.getURL()}`,
-    "",
-    ...lines,
-  ]
+  const content = [`Page: ${page.view.webContents.getTitle()}`, `URL: ${page.view.webContents.getURL()}`, "", ...lines]
     .join("\n")
     .slice(0, 40 * 1024)
-  assertDocument(entry, generation)
-  return { type: "snapshot", state: contractState(publishState(entry), entry.document), content }
+  assertDocument(page, generation)
+  verify?.()
+  return { type: "snapshot", state: contractState(publishState(entry, page), page.document), content }
 }
 
-async function click(entry: Entry, ref: string, generation: number, abort: AbortSignal, verify: () => void) {
-  const node = resolveRef(entry, ref)
-  await debuggerCommand(entry, "DOM.scrollIntoViewIfNeeded", { backendNodeId: node.backendNodeID })
+async function click(
+  page: Page,
+  ref: string,
+  generation: number,
+  abort: AbortSignal,
+  verify: () => void,
+  operation: BrowserPaneOperation,
+) {
+  const node = resolveRef(page, ref)
+  await debuggerCommand(page, "DOM.scrollIntoViewIfNeeded", { backendNodeId: node.backendNodeID }, abort, operation)
   verify()
-  assertDocument(entry, generation)
-  const response = await debuggerCommand(entry, "DOM.getBoxModel", { backendNodeId: node.backendNodeID })
+  assertDocument(page, generation)
+  const response = await debuggerCommand(
+    page,
+    "DOM.getBoxModel",
+    { backendNodeId: node.backendNodeID },
+    abort,
+    operation,
+  )
   verify()
   const quad = readBoxQuad(response)
   const point = {
@@ -451,104 +708,185 @@ async function click(entry: Entry, ref: string, generation: number, abort: Abort
     y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4,
   }
   throwIfAborted(abort)
-  assertDocument(entry, generation)
-  await debuggerCommand(entry, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point })
+  assertDocument(page, generation)
+  await debuggerCommand(page, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point }, abort, operation)
   verify()
-  assertDocument(entry, generation)
-  await debuggerCommand(entry, "Input.dispatchMouseEvent", {
-    type: "mousePressed",
-    button: "left",
-    clickCount: 1,
-    ...point,
-  })
-  await debuggerCommand(entry, "Input.dispatchMouseEvent", {
-    type: "mouseReleased",
-    button: "left",
-    clickCount: 1,
-    ...point,
+  assertDocument(page, generation)
+  await runBrowserInputPair({
+    assert: () => {
+      verify()
+      assertDocument(page, generation)
+    },
+    press: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchMouseEvent",
+        { type: "mousePressed", button: "left", clickCount: 1, ...point },
+        abort,
+        operation,
+      ).then(() => undefined),
+    release: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchMouseEvent",
+        {
+          type: "mouseReleased",
+          button: "left",
+          clickCount: 1,
+          ...point,
+        },
+        undefined,
+        operation,
+      ).then(() => undefined),
   })
 }
 
 async function fill(
-  entry: Entry,
+  page: Page,
   ref: string,
   text: string,
   generation: number,
   abort: AbortSignal,
   verify: () => void,
+  operation: BrowserPaneOperation,
 ) {
   if (text.length > 10_000)
     throw browserError("result_too_large", "Browser fill text exceeds 10,000 characters.", false)
   throwIfAborted(abort)
-  const node = resolveRef(entry, ref)
-  await debuggerCommand(entry, "DOM.focus", { backendNodeId: node.backendNodeID })
+  const node = resolveRef(page, ref)
+  await debuggerCommand(page, "DOM.focus", { backendNodeId: node.backendNodeID }, abort, operation)
   verify()
-  assertDocument(entry, generation)
+  assertDocument(page, generation)
   const modifiers = process.platform === "darwin" ? 4 : 2
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "a",
-    code: "KeyA",
-    modifiers,
+  const assert = () => {
+    verify()
+    assertDocument(page, generation)
+  }
+  await runBrowserInputPair({
+    assert,
+    press: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchKeyEvent",
+        { type: "keyDown", key: "a", code: "KeyA", modifiers },
+        abort,
+        operation,
+      ).then(() => undefined),
+    release: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchKeyEvent",
+        { type: "keyUp", key: "a", code: "KeyA", modifiers },
+        undefined,
+        operation,
+      ).then(() => undefined),
   })
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers })
+  await runBrowserInputPair({
+    assert,
+    press: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchKeyEvent",
+        { type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 },
+        abort,
+        operation,
+      ).then(() => undefined),
+    release: () =>
+      debuggerCommand(
+        page,
+        "Input.dispatchKeyEvent",
+        {
+          type: "keyUp",
+          key: "Backspace",
+          code: "Backspace",
+          windowsVirtualKeyCode: 8,
+        },
+        undefined,
+        operation,
+      ).then(() => undefined),
+  })
+  await debuggerCommand(page, "Input.insertText", { text }, abort, operation)
   verify()
-  assertDocument(entry, generation)
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "Backspace",
-    code: "Backspace",
-    windowsVirtualKeyCode: 8,
-  })
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key: "Backspace",
-    code: "Backspace",
-    windowsVirtualKeyCode: 8,
-  })
-  verify()
-  assertDocument(entry, generation)
-  await debuggerCommand(entry, "Input.insertText", { text })
 }
 
 async function press(
-  entry: Entry,
+  page: Page,
   key: Extract<DesktopBrowser.Command, { type: "press" }>["key"],
   generation: number,
-  abort?: AbortSignal,
+  abort: AbortSignal,
+  verify: () => void,
+  operation: BrowserPaneOperation,
 ) {
   throwIfAborted(abort)
-  assertDocument(entry, generation)
+  assertDocument(page, generation)
   const info = keyInfo(key)
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", { type: "keyDown", ...info })
-  await debuggerCommand(entry, "Input.dispatchKeyEvent", { type: "keyUp", ...info })
-}
-
-async function scroll(
-  entry: Entry,
-  direction: Extract<DesktopBrowser.Command, { type: "scroll" }>["direction"],
-  amount: number,
-  generation: number,
-  abort?: AbortSignal,
-) {
-  throwIfAborted(abort)
-  assertDocument(entry, generation)
-  const bounds = entry.view.getBounds()
-  const distance = Math.min(2000, Math.max(1, amount))
-  await debuggerCommand(entry, "Input.dispatchMouseEvent", {
-    type: "mouseWheel",
-    x: Math.max(0, Math.round(bounds.width / 2)),
-    y: Math.max(0, Math.round(bounds.height / 2)),
-    deltaX: direction === "left" ? -distance : direction === "right" ? distance : 0,
-    deltaY: direction === "up" ? -distance : direction === "down" ? distance : 0,
+  await runBrowserInputPair({
+    assert: () => {
+      verify()
+      assertDocument(page, generation)
+    },
+    press: () =>
+      debuggerCommand(page, "Input.dispatchKeyEvent", { type: "keyDown", ...info }, abort, operation).then(
+        () => undefined,
+      ),
+    release: () =>
+      debuggerCommand(page, "Input.dispatchKeyEvent", { type: "keyUp", ...info }, undefined, operation).then(
+        () => undefined,
+      ),
   })
 }
 
-async function screenshot(entry: Entry, generation: number, abort?: AbortSignal): Promise<DesktopBrowser.Result> {
+async function scroll(
+  page: Page,
+  direction: Extract<DesktopBrowser.Command, { type: "scroll" }>["direction"],
+  amount: number,
+  generation: number,
+  abort: AbortSignal,
+  verify: () => void,
+  operation: BrowserPaneOperation,
+) {
   throwIfAborted(abort)
-  const source = await entry.view.webContents.capturePage()
+  assertDocument(page, generation)
+  const bounds = page.view.getBounds()
+  const distance = Math.min(2000, Math.max(1, amount))
+  await debuggerCommand(
+    page,
+    "Input.dispatchMouseEvent",
+    {
+      type: "mouseWheel",
+      x: Math.max(0, Math.round(bounds.width / 2)),
+      y: Math.max(0, Math.round(bounds.height / 2)),
+      deltaX: direction === "left" ? -distance : direction === "right" ? distance : 0,
+      deltaY: direction === "up" ? -distance : direction === "down" ? distance : 0,
+    },
+    abort,
+    operation,
+  )
+  verify()
+}
+
+async function screenshot(
+  entry: Entry,
+  page: Page,
+  generation: number,
+  abort: AbortSignal,
+  verify: () => void,
+  operation: BrowserPaneOperation,
+): Promise<DesktopBrowser.Result> {
   throwIfAborted(abort)
-  assertDocument(entry, generation)
+  const source = await boundedBrowserOperation(
+    () => startBrowserPaneOperation(operation, () => page.view.webContents.capturePage()),
+    {
+      signal: abort,
+      timeout: debuggerCommandTimeout,
+      aborted: () => browserError("aborted", "The browser screenshot was aborted.", true),
+      timedOut: () => browserError("timeout", "The browser screenshot timed out.", true),
+    },
+  )
+  verify?.()
+  throwIfAborted(abort)
+  assertDocument(page, generation)
+  verify?.()
   const size = source.getSize()
   const scale = Math.min(1, 2000 / Math.max(size.width, size.height))
   const image =
@@ -564,28 +902,48 @@ async function screenshot(entry: Entry, generation: number, abort?: AbortSignal)
     throw browserError("result_too_large", "The browser screenshot exceeds 5 MiB.", false)
   }
   const dimensions = image.getSize()
-  assertDocument(entry, generation)
+  assertDocument(page, generation)
+  verify?.()
   return {
     type: "screenshot",
-    state: contractState(publishState(entry), entry.document),
+    state: contractState(publishState(entry, page), page.document),
     data: output.toString("base64"),
     width: dimensions.width,
     height: dimensions.height,
   }
 }
 
-function resolveRef(entry: Entry, ref: string) {
-  const node = entry.refs.get(normalizeBrowserRef(ref))
-  if (!node || node.snapshot !== entry.snapshot) {
+function resolveRef(page: Page, ref: string) {
+  const node = page.refs.get(normalizeBrowserRef(ref))
+  if (!node || node.snapshot !== page.snapshot) {
     throw browserError("stale_ref", "The element reference is stale. Call browser_snapshot again.", true)
   }
   return node
 }
 
-async function debuggerCommand(entry: Entry, method: string, params?: Record<string, unknown>) {
-  const api = entry.view.webContents.debugger
-  if (!api.isAttached()) api.attach("1.3")
-  return (await api.sendCommand(method, params)) as unknown
+async function debuggerCommand(
+  page: Page,
+  method: string,
+  params: Record<string, unknown> | undefined,
+  abort: AbortSignal | undefined,
+  operation: BrowserPaneOperation,
+) {
+  throwIfAborted(abort)
+  const api = page.view.webContents.debugger
+  if (!api.isAttached()) {
+    operation.started = true
+    api.attach("1.3")
+  }
+  return boundedBrowserOperation(() => startBrowserPaneOperation(operation, () => api.sendCommand(method, params)), {
+    signal: abort,
+    timeout: debuggerCommandTimeout,
+    aborted: () => browserError("aborted", "The browser action was aborted.", true),
+    timedOut: () => browserError("timeout", "The browser command timed out.", true),
+  }).catch((error) => {
+    const stale = browserProtocolError(error)
+    if (stale) throw stale
+    throw error
+  })
 }
 
 function readAXNodes(input: unknown): AXNode[] {
@@ -628,8 +986,11 @@ function keyInfo(key: Extract<DesktopBrowser.Command, { type: "press" }>["key"])
   return { key: value, code, ...(windowsVirtualKeyCode ? { windowsVirtualKeyCode } : {}) }
 }
 
-function publishState(entry: Entry) {
-  const contents = entry.view.webContents
+function publishState(entry: Entry, page: Page) {
+  if (!entry.lifecycle.owns(page)) {
+    throw browserError("not_attached", "The browser pane context was replaced.", true)
+  }
+  const contents = page.view.webContents
   const state = {
     url: contents.getURL(),
     title: contents.getTitle(),
@@ -637,6 +998,7 @@ function publishState(entry: Entry) {
     canGoBack: contents.navigationHistory.canGoBack(),
     canGoForward: contents.navigationHistory.canGoForward(),
   }
+  page.state = state
   entry.state = state
   if (!entry.win.isDestroyed()) entry.win.webContents.send("browser-pane-state", state)
   return state
@@ -666,27 +1028,50 @@ function enqueue<T>(entry: Entry, run: () => Promise<T>) {
   return result
 }
 
-function assertActive(entry: Entry, sessionID: string, attachment: number, abort?: AbortSignal) {
+function assertActive(entry: Entry, claim: BrowserPaneClaim<Page>, abort?: AbortSignal) {
   throwIfAborted(abort)
-  if (!entry.attached || entry.sessionID !== sessionID || entry.attachment !== attachment) {
+  if (!entry.lifecycle.isCurrent(claim)) {
     throw browserError("not_attached", "The browser pane is no longer attached to this session.", true)
   }
 }
 
 function cancelEntry(entry: Entry) {
-  entry.attachment++
+  entry.active?.controller.abort()
+  entry.active = undefined
   for (const request of entry.requests) request.abort()
   entry.requests.clear()
-  if (!entry.view.webContents.isDestroyed()) entry.view.webContents.stop()
+  const page = entry.lifecycle.state()?.context
+  if (!page) return
+  invalidateBrowserRefs(page)
+  if (!page.view.webContents.isDestroyed()) page.view.webContents.stop()
+}
+
+async function active<T>(entry: Entry, controller: AbortController, context: Page, run: () => Promise<T>) {
+  const operation = { controller, context }
+  entry.active = operation
+  try {
+    return await run()
+  } finally {
+    if (entry.active === operation) entry.active = undefined
+  }
+}
+
+function detach(entry: Entry, sessionID?: string) {
+  const owner = entry.lifecycle.state()?.sessionID ?? entry.desired?.sessionID
+  if (sessionID && owner !== sessionID) return
+  cancelEntry(entry)
+  entry.desired = undefined
+  entry.lifecycle.release(sessionID)
+  hideEntry(entry)
 }
 
 function hideEntry(entry: Entry) {
-  entry.view.setVisible(false)
+  entry.lifecycle.state()?.context.view.setVisible(false)
   for (const mask of entry.masks) mask.setVisible(false)
 }
 
-function assertDocument(entry: Entry, generation: number) {
-  if (entry.document !== generation) {
+function assertDocument(page: Page, generation: number) {
+  if (page.document !== generation) {
     throw browserError("stale_ref", "The browser page changed. Call browser_snapshot again.", true)
   }
 }

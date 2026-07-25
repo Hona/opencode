@@ -1,6 +1,13 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { BrowserPanePlatform } from "@opencode-ai/app/browser-pane"
+export type {
+  BrowserPaneBounds,
+  BrowserPaneCommand,
+  BrowserPaneLayout,
+  BrowserPaneState,
+} from "@opencode-ai/app/browser-pane"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -41,43 +48,7 @@ export type FatalRendererError = {
   os?: string
 }
 
-export type BrowserPaneBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export type BrowserPaneLayout = {
-  attached: boolean
-  visible: boolean
-  destroy?: boolean
-  background?: string
-  sessionID?: string
-  bounds?: BrowserPaneBounds
-}
-
-export type BrowserPaneCommand =
-  | { type: "navigate"; url: string }
-  | { type: "back" }
-  | { type: "forward" }
-  | { type: "reload" }
-  | { type: "stop" }
-
-export type BrowserPaneState = {
-  url: string
-  title: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  error?: string
-}
-
-export type BrowserPaneAPI = {
-  setLayout: (layout: BrowserPaneLayout) => void
-  command: (command: BrowserPaneCommand) => Promise<void>
-  subscribe: (cb: (state: BrowserPaneState) => void) => Promise<() => void>
-}
+export type BrowserPaneAPI = BrowserPanePlatform
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>

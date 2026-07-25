@@ -27,6 +27,7 @@ type SpawnLocalServerOptions = {
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
   onBrowserRequest?: (request: DesktopBrowser.Request, abort: AbortSignal) => Promise<DesktopBrowser.Result>
+  subscribeBrowserState?: (listener: (state: DesktopBrowser.AttachmentState) => void) => () => void
 }
 
 export function getDefaultServerUrl(): string | null {
@@ -70,8 +71,14 @@ export async function spawnLocalServer(
   let exited = false
   const exit = defer<number>()
   const browserRequests = new Map<string, AbortController>()
+  let browserState: DesktopBrowser.AttachmentState | undefined
+  const unsubscribeBrowserState = options.subscribeBrowserState?.((state) => {
+    browserState = state
+    if (!exited) child.postMessage(state)
+  })
 
   const onMessage = (message: unknown) => {
+    if (record(message) && message.type === "ready" && browserState) child.postMessage(browserState)
     if (DesktopBrowser.isCancel(message)) {
       browserRequests.get(message.requestID)?.abort()
       browserRequests.delete(message.requestID)
@@ -115,6 +122,7 @@ export async function spawnLocalServer(
     child.off("message", onMessage)
     for (const request of browserRequests.values()) request.abort()
     browserRequests.clear()
+    unsubscribeBrowserState?.()
     app.off("child-process-gone", onProcessGone)
     options.onExit?.(code)
     exit.resolve(code)
@@ -285,6 +293,10 @@ function delay(ms: number) {
 function serializeError(error: unknown) {
   if (error instanceof Error) return { message: error.message, stack: error.stack }
   return { message: String(error) }
+}
+
+function record(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
 }
 
 function defer<T>() {

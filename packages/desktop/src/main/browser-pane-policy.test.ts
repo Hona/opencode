@@ -1,13 +1,33 @@
 import { describe, expect, test } from "bun:test"
 import {
   allowedBrowserURL,
+  boundedBrowserOperation,
   browserBottomMasks,
+  browserPartition,
+  browserRef,
+  browserProtocolError,
+  invalidateBrowserRefs,
   normalizeBrowserBounds,
   normalizeBrowserRef,
   normalizeBrowserURL,
+  runBrowserInputPair,
+  stopBrowserOperation,
 } from "./browser-pane-policy"
 
+async function rejected(promise: Promise<unknown>) {
+  return promise.then(
+    () => new Error("Expected operation to reject"),
+    (error) => (error instanceof Error ? error : new Error(String(error))),
+  )
+}
+
 describe("browser pane policy", () => {
+  test("uses unique nonpersistent context partitions", () => {
+    expect(browserPartition("context-a")).toBe("opencode-browser-context-a")
+    expect(browserPartition("context-b")).not.toBe(browserPartition("context-a"))
+    expect(browserPartition("context-a").startsWith("persist:")).toBe(false)
+  })
+
   test("normalizes browser URLs", () => {
     expect(normalizeBrowserURL("localhost:3000/test")).toBe("http://localhost:3000/test")
     expect(normalizeBrowserURL("example.com")).toBe("https://example.com/")
@@ -45,7 +65,66 @@ describe("browser pane policy", () => {
   })
 
   test("accepts browser refs with or without the display prefix", () => {
-    expect(normalizeBrowserRef("e2")).toBe("@e2")
-    expect(normalizeBrowserRef("@e2")).toBe("@e2")
+    expect(normalizeBrowserRef("4e2")).toBe("@4e2")
+    expect(normalizeBrowserRef("@4e2")).toBe("@4e2")
+  })
+
+  test("creates epoch-unique refs and invalidates prior snapshots", () => {
+    const state = { snapshot: 4, refs: new Map([["@4e1", 1]]) }
+    expect(browserRef(state.snapshot, 1)).toBe("@4e1")
+    invalidateBrowserRefs(state)
+    expect(browserRef(state.snapshot, 1)).toBe("@5e1")
+    expect(state.refs.size).toBe(0)
+  })
+
+  test("stops and aborts the active operation immediately", () => {
+    const active = new AbortController()
+    let stopped = false
+    stopBrowserOperation({ active, stop: () => (stopped = true) })
+    expect(active.signal.aborted).toBe(true)
+    expect(stopped).toBe(true)
+  })
+
+  test("bounds hung operations by timeout and cancellation", async () => {
+    const timeout = boundedBrowserOperation(() => new Promise<never>(() => undefined), {
+      timeout: 5,
+      aborted: () => new Error("aborted"),
+      timedOut: () => new Error("timed out"),
+    })
+    expect((await rejected(timeout)).message).toBe("timed out")
+
+    const controller = new AbortController()
+    const cancelled = boundedBrowserOperation(() => new Promise<never>(() => undefined), {
+      signal: controller.signal,
+      timeout: 1_000,
+      aborted: () => new Error("aborted"),
+      timedOut: () => new Error("timed out"),
+    })
+    controller.abort()
+    expect((await rejected(cancelled)).message).toBe("aborted")
+  })
+
+  test("releases paired input when cancellation races after press", async () => {
+    const events: string[] = []
+    const result = runBrowserInputPair({
+      assert: () => undefined,
+      press: async () => {
+        events.push("press")
+        throw new Error("aborted")
+      },
+      release: async () => {
+        events.push("release")
+      },
+    })
+    expect((await rejected(result)).message).toBe("aborted")
+    expect(events).toEqual(["press", "release"])
+  })
+
+  test("maps dynamic stale-node protocol failures to retryable stale refs", () => {
+    expect(browserProtocolError(new Error("Could not find node with given id"))).toMatchObject({
+      code: "stale_ref",
+      retryable: true,
+    })
+    expect(browserProtocolError(new Error("Method not found"))).toBeUndefined()
   })
 })
