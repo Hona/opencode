@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { ServerOptions } from "@opencode-ai/server/options"
+import { fromEnvironment, ServerOptions } from "@opencode-ai/server/options"
 import { Option, Schema } from "effect"
 
 const decode = Schema.decodeUnknownOption(ServerOptions)
@@ -14,7 +14,35 @@ test("rejects ports outside the valid range", () => {
 })
 
 test("accepts optional app metadata", () => {
+  expect(Option.getOrThrow(decode({ app: { name: "sdk", version: "1.2.3", channel: "beta" } })).app).toEqual({
+    name: "sdk",
+    version: "1.2.3",
+    channel: "beta",
+  })
+})
+
+test("assembles shared environment options without overriding explicit host options", () => {
   expect(
-    Option.getOrThrow(decode({ app: { name: "sdk", version: "1.2.3", channel: "beta" } })).app,
-  ).toEqual({ name: "sdk", version: "1.2.3", channel: "beta" })
+    fromEnvironment(
+      {
+        app: { channel: "beta" },
+        database: { path: ":memory:" },
+        models: { fetch: false },
+      },
+      {
+        OPENCODE_DB: "environment.db",
+        OPENCODE_MODELS_URL: "https://models.example.test",
+        OPENCODE_DISABLE_FILEWATCHER: "true",
+      },
+    ),
+  ).toMatchObject({
+    database: { path: ":memory:" },
+    models: { url: "https://models.example.test", fetch: false },
+    fs: { filewatcher: false },
+  })
+})
+
+test("selects the channel database through the shared server option seam", () => {
+  expect(fromEnvironment({ app: { channel: "prod" } }, {}).database?.path).toBe("opencode.db")
+  expect(fromEnvironment({ app: { channel: "feature/test" } }, {}).database?.path).toBe("opencode-feature-test.db")
 })

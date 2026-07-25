@@ -51,6 +51,7 @@ export type BrowserPaneState = {
   error?: string
 }
 export type BrowserPanePlatform = {
+  setEnabled(enabled: boolean): void
   setLayout(layout: BrowserPaneLayout): void
   command(command: BrowserPaneCommand): Promise<void>
   subscribe(cb: (state: BrowserPaneState) => void): Promise<() => void>

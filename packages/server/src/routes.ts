@@ -65,24 +65,30 @@ const applicationServices = LayerNode.group([
   SessionRestart.node,
 ])
 
-export function createRoutes(options: ServerOptions = {}, serviceURLs: () => ReadonlyArray<string> = () => []) {
+export function createRoutes(
+  options: ServerOptions = {},
+  serviceURLs: () => ReadonlyArray<string> = () => [],
+  replacements: LayerNode.Replacements = [],
+) {
   return makeRoutes(
     options.password
       ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
       : ServerAuth.Config.layer,
     options,
     serviceURLs,
+    replacements,
   )
 }
 
-export function createEmbeddedRoutes(options: ServerOptions = {}) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [])
+export function createEmbeddedRoutes(options: ServerOptions = {}, replacements: LayerNode.Replacements = []) {
+  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], replacements)
 }
 
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
   options: ServerOptions,
   serviceURLs: () => ReadonlyArray<string>,
+  compositionReplacements: LayerNode.Replacements,
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const replacements: LayerNode.Replacements = [
@@ -115,6 +121,7 @@ function makeRoutes<AuthError, AuthServices>(
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+    ...compositionReplacements,
   ]
   const serviceLayer = options.simulation
     ? Layer.unwrap(

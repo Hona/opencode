@@ -1,22 +1,30 @@
 import { randomUUID } from "node:crypto"
-import { BrowserControl } from "@opencode-ai/core/browser-control"
+import { BrowserControl } from "@opencode-ai/sdk-next/browser-control"
 import { BrowserWindow, View, WebContentsView } from "electron"
 import type { BrowserPaneCommand, BrowserPaneLayout, BrowserPaneState } from "../preload/types"
 import {
   allowedBrowserURL,
+  allowedBrowserDestination,
+  browserDestinationOrigin,
+  browserSnapshotExpression,
+  browserSnapshotLimit,
   boundedBrowserOperation,
   browserBottomMasks,
+  browserContextPartition,
+  browserContextEvictions,
   invalidateBrowserRefs,
   normalizeBrowserBounds,
   normalizeBrowserRef,
   normalizeBrowserURL,
+  ownBrowserParentListeners,
   runBrowserInputPair,
   stopBrowserOperation,
 } from "./browser-pane-policy"
 
-type Ref = { readonly snapshot: number; readonly backendNodeID: number }
+type Ref = { readonly snapshot: number; readonly token: string; readonly objectID: string }
 type Entry = {
   readonly win: BrowserWindow
+  readonly contextSessionID: string
   readonly view: WebContentsView
   readonly masks: View[]
   attached: boolean
@@ -25,55 +33,39 @@ type Entry = {
   attachment: number
   document: number
   snapshot: number
+  nextRef: number
+  snapshotObjectID?: string
+  approvedOrigin?: string
   readonly refs: Map<string, Ref>
   readonly requests: Set<AbortController>
   active?: AbortController
   state: BrowserPaneState
   queue: Promise<void>
+  lastUsed: number
+  disposed: boolean
+  readonly parentListeners: ReturnType<typeof ownBrowserParentListeners>
 }
 
-type AXNode = {
-  readonly nodeId?: string
-  readonly parentId?: string
-  readonly backendDOMNodeId?: number
-  readonly ignored?: boolean
-  readonly role?: { readonly value?: unknown }
-  readonly name?: { readonly value?: unknown }
-  readonly value?: { readonly value?: unknown }
-  readonly properties?: { readonly name?: unknown; readonly value?: { readonly value?: unknown } }[]
+type SnapshotNode = {
+  readonly token?: string
+  readonly role: string
+  readonly name: string
+  readonly value: string
+  readonly depth: number
+  readonly checked?: boolean
+  readonly disabled?: boolean
+  readonly expanded?: boolean
+  readonly selected?: boolean
 }
-
-const interactiveRoles = new Set([
-  "button",
-  "checkbox",
-  "combobox",
-  "link",
-  "menuitem",
-  "option",
-  "radio",
-  "searchbox",
-  "slider",
-  "spinbutton",
-  "switch",
-  "tab",
-  "textbox",
-])
-const readableRoles = new Set([
-  "article",
-  "cell",
-  "heading",
-  "image",
-  "list",
-  "listitem",
-  "paragraph",
-  "region",
-  "row",
-  "StaticText",
-])
 const debuggerCommandTimeout = 10_000
 
 export function createBrowserPaneController() {
+  // One retained context per Window+Session prevents cookies/history/page state crossing Session ownership.
   const entries = new Map<number, Entry>()
+  const contexts = new Map<number, Map<string, Entry>>()
+  const watched = new WeakSet<BrowserWindow>()
+  let enabled = false
+  let contextUse = 0
 
   const publish = (entry: Entry, error?: string) => {
     const contents = entry.view.webContents
@@ -90,10 +82,10 @@ export function createBrowserPaneController() {
     return state
   }
 
-  const create = (win: BrowserWindow) => {
+  const create = (win: BrowserWindow, contextSessionID: string) => {
     const view = new WebContentsView({
       webPreferences: {
-        partition: `opencode-browser-${win.id}`,
+        partition: `${browserContextPartition(win.id, contextSessionID)}-${randomUUID()}`,
         nodeIntegration: false,
         nodeIntegrationInWorker: false,
         nodeIntegrationInSubFrames: false,
@@ -105,6 +97,7 @@ export function createBrowserPaneController() {
         plugins: false,
         experimentalFeatures: false,
         safeDialogs: true,
+        disableDialogs: true,
         navigateOnDragDrop: false,
         autoplayPolicy: "document-user-activation-required",
         devTools: false,
@@ -120,20 +113,35 @@ export function createBrowserPaneController() {
       win.contentView.addChildView(mask)
     }
 
+    const parent = win.webContents
+    const parentListeners = ownBrowserParentListeners({
+      addNavigation: (listener) => parent.on("did-start-navigation", listener),
+      removeNavigation: (listener) => parent.removeListener("did-start-navigation", listener),
+      addCrash: (listener) => parent.on("render-process-gone", listener),
+      removeCrash: (listener) => parent.removeListener("render-process-gone", listener),
+      detach: () => detach(entry),
+    })
     const entry: Entry = {
       win,
+      contextSessionID,
       view,
       masks,
       attached: false,
       attachment: 0,
       document: 0,
       snapshot: 0,
+      nextRef: 0,
       refs: new Map(),
       requests: new Set(),
       state: emptyState(),
       queue: Promise.resolve(),
+      lastUsed: ++contextUse,
+      disposed: false,
+      parentListeners,
     }
-    entries.set(win.id, entry)
+    const windowContexts = contexts.get(win.id) ?? new Map<string, Entry>()
+    windowContexts.set(contextSessionID, entry)
+    contexts.set(win.id, windowContexts)
 
     const contents = view.webContents
     const browserSession = contents.session
@@ -144,20 +152,13 @@ export function createBrowserPaneController() {
     browserSession.on("will-download", (event) => event.preventDefault())
 
     const preventUnsafeNavigation = (event: Electron.Event<{ url: string }>) => {
-      if (allowedBrowserURL(event.url)) return
+      if (allowedBrowserDestination(event.url, entry.approvedOrigin)) return
       event.preventDefault()
       publish(entry, "Navigation was blocked by the browser security policy")
     }
     contents.on("will-navigate", preventUnsafeNavigation)
     contents.on("will-redirect", preventUnsafeNavigation)
-    contents.setWindowOpenHandler((details) => {
-      if (allowedBrowserURL(details.url)) {
-        void navigate(entry, details.url).catch((error) =>
-          publish(entry, error instanceof Error ? error.message : String(error)),
-        )
-      }
-      return { action: "deny" }
-    })
+    contents.setWindowOpenHandler(() => ({ action: "deny" }))
     contents.on("content-bounds-updated", (event) => event.preventDefault())
     contents.on("did-start-loading", () => publish(entry))
     contents.on("did-stop-loading", () => publish(entry))
@@ -167,7 +168,7 @@ export function createBrowserPaneController() {
     contents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
       if (!isMainFrame) return
       entry.document++
-      invalidateBrowserRefs(entry)
+      invalidateRefs(entry)
     })
     contents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
       if (!isMainFrame || code === -3) return
@@ -175,23 +176,28 @@ export function createBrowserPaneController() {
     })
     contents.on("render-process-gone", () => {
       entry.document++
-      invalidateBrowserRefs(entry)
+      invalidateRefs(entry)
       publish(entry, "The browser page crashed")
     })
-    win.webContents.on("did-start-navigation", () => detach(entry))
-    win.webContents.on("render-process-gone", () => detach(entry))
     contents.debugger.on("detach", () => {
-      invalidateBrowserRefs(entry)
+      invalidateRefs(entry)
     })
-    win.once("closed", () => disposeEntry(entry))
+    if (!watched.has(win)) {
+      watched.add(win)
+      win.once("closed", () => disposeWindow(win.id))
+    }
     void contents.loadURL("about:blank")
     return entry
   }
 
   const setLayout = (win: BrowserWindow, layout: BrowserPaneLayout) => {
     const entry = entries.get(win.id)
+    if (!enabled) {
+      if (entry) detach(entry)
+      return
+    }
     if (layout.destroy) {
-      if (entry) disposeEntry(entry)
+      disposeWindow(win.id)
       return
     }
     if (!layout.attached || !layout.sessionID) {
@@ -200,7 +206,11 @@ export function createBrowserPaneController() {
       return
     }
 
-    const next = entry ?? create(win)
+    if (entry && entry.contextSessionID !== layout.sessionID) {
+      detach(entry)
+      entries.delete(win.id)
+    }
+    const next = contexts.get(win.id)?.get(layout.sessionID) ?? create(win, layout.sessionID)
     const owner = [...entries.values()].find(
       (item) => item !== next && item.attached && item.sessionID === layout.sessionID,
     )
@@ -213,7 +223,10 @@ export function createBrowserPaneController() {
       next.attached = true
       next.sessionID = layout.sessionID
       next.lease = randomUUID()
+      entries.set(win.id, next)
     }
+    next.lastUsed = ++contextUse
+    pruneWindow(win.id)
     if (!layout.visible || !layout.bounds || !next.attached) {
       hideEntry(next)
       return
@@ -311,12 +324,24 @@ export function createBrowserPaneController() {
   }
 
   const dispose = () => {
-    for (const entry of entries.values()) disposeEntry(entry)
+    for (const entries of contexts.values()) for (const entry of entries.values()) disposeEntry(entry)
     entries.clear()
+    contexts.clear()
+  }
+
+  const setEnabled = (next: boolean) => {
+    enabled = next
+    if (!enabled) dispose()
   }
 
   function disposeEntry(entry: Entry) {
-    entries.delete(entry.win.id)
+    if (entry.disposed) return
+    entry.disposed = true
+    entry.parentListeners.dispose()
+    if (entries.get(entry.win.id) === entry) entries.delete(entry.win.id)
+    const windowContexts = contexts.get(entry.win.id)
+    windowContexts?.delete(entry.contextSessionID)
+    if (windowContexts?.size === 0) contexts.delete(entry.win.id)
     cancelEntry(entry)
     if (!entry.win.isDestroyed()) {
       entry.win.contentView.removeChildView(entry.view)
@@ -326,7 +351,29 @@ export function createBrowserPaneController() {
     entry.view.webContents.close()
   }
 
-  return { setLayout, command, state, request, dispose }
+  function disposeWindow(windowID: number) {
+    const windowContexts = contexts.get(windowID)
+    if (!windowContexts) return
+    for (const entry of windowContexts.values()) disposeEntry(entry)
+  }
+
+  function pruneWindow(windowID: number) {
+    const windowContexts = contexts.get(windowID)
+    if (!windowContexts) return
+    const evictions = browserContextEvictions(
+      [...windowContexts.values()].map((entry) => ({
+        id: entry.contextSessionID,
+        attached: entry.attached,
+        lastUsed: entry.lastUsed,
+      })),
+    )
+    for (const id of evictions) {
+      const entry = windowContexts.get(id)
+      if (entry) disposeEntry(entry)
+    }
+  }
+
+  return { setEnabled, setLayout, command, state, request, dispose }
 }
 
 export type BrowserPaneController = ReturnType<typeof createBrowserPaneController>
@@ -368,6 +415,7 @@ async function navigate(entry: Entry, input: string, abort?: AbortSignal, verify
   if (!allowedBrowserURL(url)) {
     throw browserError("invalid_url", "Only HTTP, HTTPS, and file URLs are supported.", false)
   }
+  entry.approvedOrigin = browserDestinationOrigin(url)
   throwIfAborted(abort)
   const onAbort = () => entry.view.webContents.stop()
   abort?.addEventListener("abort", onAbort, { once: true })
@@ -395,53 +443,57 @@ async function snapshot(
   verify?: () => void,
 ): Promise<BrowserControl.Result> {
   throwIfAborted(abort)
-  await debuggerCommand(entry, "Accessibility.enable", undefined, abort)
-  const response = await debuggerCommand(entry, "Accessibility.getFullAXTree", undefined, abort)
-  verify?.()
-  throwIfAborted(abort)
-  assertDocument(entry, generation)
-  const nodes = readAXNodes(response).slice(0, 500)
-  const parents = new Map(nodes.flatMap((node) => (node.nodeId ? [[node.nodeId, node.parentId] as const] : [])))
-  const depth = (node: AXNode) => {
-    let current = node.parentId
-    let value = 0
-    while (current && value < 6) {
-      value++
-      current = parents.get(current)
-    }
-    return value
-  }
-
-  invalidateBrowserRefs(entry)
-  let index = 0
-  const lines = nodes.flatMap((node) => {
-    if (node.ignored) return []
-    const role = axString(node.role) || "node"
-    const name = axString(node.name)
-    const value = axString(node.value)
-    const focusable = node.properties?.some(
-      (property) => property.name === "focusable" && property.value?.value === true,
-    )
-    const interactive = interactiveRoles.has(role) || focusable
-    if (!interactive && !readableRoles.has(role)) return []
-    if (!interactive && !name && !value) return []
-    const ref = interactive && typeof node.backendDOMNodeId === "number" ? `@e${++index}` : undefined
-    if (ref && node.backendDOMNodeId) {
-      entry.refs.set(ref, { snapshot: entry.snapshot, backendNodeID: node.backendDOMNodeId })
-    }
-    const properties = node.properties?.flatMap((property) => {
-      const name = String(property.name)
-      if (!["checked", "disabled", "expanded", "selected"].includes(name)) return []
-      return [`${name}=${String(property.value?.value)}`]
+  // The fixed traversal stops in the page process; cross-origin iframe contents are intentionally omitted.
+  const object = await debuggerCommand(
+    entry,
+    "Runtime.evaluate",
+    {
+      expression: browserSnapshotExpression(entry.nextRef),
+    },
+    abort,
+  )
+  const objectID = readRuntimeObjectID(object)
+  const result = await debuggerCommand(
+    entry,
+    "Runtime.callFunctionOn",
+    {
+      objectId: objectID,
+      functionDeclaration: "function() { return this.result }",
+      returnByValue: true,
+    },
+    abort,
+  )
+    .then((response) => {
+      verify?.()
+      throwIfAborted(abort)
+      assertDocument(entry, generation)
+      return readSnapshot(response)
     })
+    .catch((error) => {
+      releaseSnapshotObject(entry, objectID)
+      throw error
+    })
+
+  invalidateRefs(entry)
+  entry.snapshotObjectID = objectID
+  entry.nextRef = Math.max(entry.nextRef, result.nextRef)
+  const lines = result.nodes.flatMap((node) => {
+    const ref = node.token ? `@${node.token}` : undefined
+    if (ref && node.token) entry.refs.set(ref, { snapshot: entry.snapshot, token: node.token, objectID })
+    const properties = [
+      node.checked === undefined ? undefined : `checked=${node.checked}`,
+      node.disabled === undefined ? undefined : `disabled=${node.disabled}`,
+      node.expanded === undefined ? undefined : `expanded=${node.expanded}`,
+      node.selected === undefined ? undefined : `selected=${node.selected}`,
+    ].filter((item): item is string => item !== undefined)
     const detail = [
-      name ? JSON.stringify(name) : undefined,
-      value && value !== name ? `value=${JSON.stringify(value)}` : undefined,
+      node.name ? JSON.stringify(node.name) : undefined,
+      node.value && node.value !== node.name ? `value=${JSON.stringify(node.value)}` : undefined,
     ]
       .filter((item): item is string => item !== undefined)
       .join(" ")
     return [
-      `${"  ".repeat(depth(node))}${ref ? `${ref} ` : ""}[${role}]${detail ? ` ${detail}` : ""}${properties?.length ? ` ${properties.join(" ")}` : ""}`,
+      `${"  ".repeat(node.depth)}${ref ? `${ref} ` : ""}[${node.role}]${detail ? ` ${detail}` : ""}${properties.length ? ` ${properties.join(" ")}` : ""}`,
     ]
   })
   const content = [
@@ -459,16 +511,20 @@ async function snapshot(
 
 async function click(entry: Entry, ref: string, generation: number, abort: AbortSignal, verify: () => void) {
   const node = resolveRef(entry, ref)
-  await debuggerCommand(entry, "DOM.scrollIntoViewIfNeeded", { backendNodeId: node.backendNodeID }, abort)
+  const response = await debuggerCommand(
+    entry,
+    "Runtime.callFunctionOn",
+    {
+      objectId: node.objectID,
+      functionDeclaration:
+        "function(token) { const element = this.refs[token]; if (!element || !element.isConnected) throw new Error('stale element'); element.scrollIntoView({ block: 'center', inline: 'center' }); const bounds = element.getBoundingClientRect(); if (bounds.width <= 0 || bounds.height <= 0) throw new Error('element has no bounds'); return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 } }",
+      arguments: [{ value: node.token }],
+      returnByValue: true,
+    },
+    abort,
+  )
   verify()
-  assertDocument(entry, generation)
-  const response = await debuggerCommand(entry, "DOM.getBoxModel", { backendNodeId: node.backendNodeID }, abort)
-  verify()
-  const quad = readBoxQuad(response)
-  const point = {
-    x: (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
-    y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4,
-  }
+  const point = readPoint(response)
   throwIfAborted(abort)
   assertDocument(entry, generation)
   await debuggerCommand(entry, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point }, abort)
@@ -509,7 +565,19 @@ async function fill(
   }
   throwIfAborted(abort)
   const node = resolveRef(entry, ref)
-  await debuggerCommand(entry, "DOM.focus", { backendNodeId: node.backendNodeID }, abort)
+  const response = await debuggerCommand(
+    entry,
+    "Runtime.callFunctionOn",
+    {
+      objectId: node.objectID,
+      functionDeclaration:
+        "function(token) { const element = this.refs[token]; if (!element || !element.isConnected) throw new Error('stale element'); element.focus(); return true }",
+      arguments: [{ value: node.token }],
+      returnByValue: true,
+    },
+    abort,
+  )
+  readRuntimeValue(response)
   verify()
   assertDocument(entry, generation)
   const modifiers = process.platform === "darwin" ? 4 : 2
@@ -655,27 +723,72 @@ async function debuggerCommand(entry: Entry, method: string, params?: Record<str
     timeout: debuggerCommandTimeout,
     aborted: () => browserError("aborted", "The browser action was aborted.", true),
     timedOut: () => browserError("timeout", "The browser command timed out.", true),
+  }).catch((error) => {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "timeout" || error.code === "aborted") &&
+      api.isAttached()
+    )
+      api.detach()
+    throw error
   })
 }
 
-function readAXNodes(input: unknown): AXNode[] {
-  if (!record(input) || !Array.isArray(input.nodes)) throw new Error("Invalid accessibility snapshot response")
-  return input.nodes.filter(record) as AXNode[]
+function readSnapshot(input: unknown) {
+  const value = readRuntimeValue(input)
+  if (
+    !record(value) ||
+    !Array.isArray(value.nodes) ||
+    typeof value.nextRef !== "number" ||
+    !Number.isSafeInteger(value.nextRef)
+  ) {
+    throw new Error("Invalid browser snapshot response")
+  }
+  if (value.nodes.length > browserSnapshotLimit || !value.nodes.every(snapshotNode)) {
+    throw new Error("Invalid browser snapshot nodes")
+  }
+  return { nodes: value.nodes, nextRef: value.nextRef }
 }
 
-function readBoxQuad(input: unknown) {
-  if (!record(input) || !record(input.model)) throw new Error("Invalid DOM.getBoxModel response")
-  const quad = input.model.border ?? input.model.content
-  if (!Array.isArray(quad) || quad.length < 8 || !quad.every((value) => typeof value === "number")) {
+function snapshotNode(input: unknown): input is SnapshotNode {
+  if (!record(input)) return false
+  if (
+    typeof input.role !== "string" ||
+    typeof input.name !== "string" ||
+    typeof input.value !== "string" ||
+    !Number.isSafeInteger(input.depth) ||
+    Number(input.depth) < 0 ||
+    Number(input.depth) > 6
+  )
+    return false
+  if (input.token !== undefined && (typeof input.token !== "string" || !/^e\d+$/.test(input.token))) return false
+  if (input.expanded !== undefined && typeof input.expanded !== "boolean") return false
+  return [input.checked, input.disabled, input.selected].every(
+    (property) => property === undefined || typeof property === "boolean",
+  )
+}
+
+function readRuntimeObjectID(input: unknown) {
+  if (!record(input) || !record(input.result) || typeof input.result.objectId !== "string") {
+    throw new Error("Invalid browser runtime object")
+  }
+  return input.result.objectId
+}
+
+function readRuntimeValue(input: unknown) {
+  if (!record(input) || input.exceptionDetails !== undefined || !record(input.result) || !("value" in input.result)) {
+    throw new Error("Browser page operation failed")
+  }
+  return input.result.value
+}
+
+function readPoint(input: unknown) {
+  const value = readRuntimeValue(input)
+  if (!record(value) || typeof value.x !== "number" || typeof value.y !== "number") {
     throw new Error("Browser element has no clickable bounds")
   }
-  return quad
-}
-
-function axString(input: { readonly value?: unknown } | undefined) {
-  if (typeof input?.value === "string") return input.value.replaceAll(/\s+/g, " ").trim()
-  if (typeof input?.value === "number" || typeof input?.value === "boolean") return String(input.value)
-  return ""
+  return { x: value.x, y: value.y }
 }
 
 function keyInfo(key: Extract<BrowserControl.Command, { readonly type: "press" }>["key"]) {
@@ -751,12 +864,25 @@ function assertActive(
 
 function cancelEntry(entry: Entry) {
   entry.attachment++
-  invalidateBrowserRefs(entry)
+  invalidateRefs(entry)
   entry.active?.abort()
   entry.active = undefined
   for (const request of entry.requests) request.abort()
   entry.requests.clear()
   if (!entry.view.webContents.isDestroyed()) entry.view.webContents.stop()
+}
+
+function invalidateRefs(entry: Entry) {
+  const objectID = entry.snapshotObjectID
+  entry.snapshotObjectID = undefined
+  invalidateBrowserRefs(entry)
+  if (objectID) releaseSnapshotObject(entry, objectID)
+}
+
+function releaseSnapshotObject(entry: Entry, objectID: string) {
+  const api = entry.view.webContents.debugger
+  if (!api.isAttached()) return
+  void api.sendCommand("Runtime.releaseObject", { objectId: objectID }).catch(() => undefined)
 }
 
 async function active<T>(entry: Entry, controller: AbortController, run: () => Promise<T>) {

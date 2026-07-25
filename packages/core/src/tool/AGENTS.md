@@ -32,6 +32,10 @@ Built-ins and plugin tools register through `Tools.Service.register({ [name]: to
 namespace, which flattens direct model names to `<namespace>_<tool>`, and default into CodeMode (`codemode` defaults true;
 `codemode: false` keeps the tool on the provider's native tool list).
 
+Privileged bundled producers may register an internal request-scoped producer through `Tools.Service.registerProvider`.
+It returns the same `{ tools, options }` registration shape and is planned by the same canonical validation and ordering
+logic. This interface is not part of the public plugin surface. Request-scoped Code Mode registrations are rejected.
+
 Registrations are scoped:
 
 - The latest active same-placement registration wins.
@@ -54,5 +58,5 @@ Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOut
 
 ## Current Gaps
 
-- MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- A broader public design for Session-scoped registrations remains future work; the current request producer is privileged and internal.
 - The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

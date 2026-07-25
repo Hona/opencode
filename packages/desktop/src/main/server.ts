@@ -6,7 +6,7 @@ import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
-import { BrowserControl } from "@opencode-ai/core/browser-control"
+import { BrowserControl } from "@opencode-ai/sdk-next/browser-control"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -171,6 +171,11 @@ export async function spawnLocalServer(
       port,
       password,
       userDataPath: options.userDataPath,
+      version: app.getVersion(),
+      channel: import.meta.env.OPENCODE_CHANNEL,
+      serverAssetsPath: app.isPackaged
+        ? join(process.resourcesPath, "server-assets")
+        : join(app.getAppPath(), "resources/server-assets"),
     })
   }).catch((error) => {
     if (!exited) child.kill()
@@ -205,13 +210,12 @@ export async function spawnLocalServer(
       stop: () => {
         if (stopping) return stopping
         if (exited) return Promise.resolve()
-        child.postMessage({ type: "stop" })
-        stopping = Promise.race([
-          exit.promise.then(() => undefined),
-          delay(SIDECAR_STOP_TIMEOUT).then(() => {
-            if (!exited) child.kill()
-          }),
-        ])
+        stopping = (async () => {
+          child.postMessage({ type: "stop" })
+          if (await settlesWithin(exit.promise, SIDECAR_STOP_TIMEOUT)) return
+          if (!exited) child.kill()
+          await exit.promise
+        })()
         return stopping
       },
     },
@@ -277,8 +281,15 @@ function createSidecarEnv(): Record<string, string> {
   return env
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+function settlesWithin(promise: Promise<unknown>, ms: number) {
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => resolve(false), ms)
+    timeout.unref()
+    void promise.then(() => {
+      clearTimeout(timeout)
+      resolve(true)
+    })
+  })
 }
 
 function serializeError(error: unknown) {

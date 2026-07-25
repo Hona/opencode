@@ -24,18 +24,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BrowserHost") {}
 
-let installed: { readonly token: object; readonly control: BrowserControl.Interface } | undefined
-
-/** Installs one process-global transport adapter without exposing that transport to model-facing tools. */
-export function install(control: BrowserControl.Interface) {
-  const token = {}
-  installed = { token, control }
-  return () => {
-    if (installed?.token === token) installed = undefined
-  }
-}
-
-export function make(resolve: () => BrowserControl.Interface | undefined = () => installed?.control): Interface {
+export function make(resolve: () => BrowserControl.Interface | undefined = () => undefined): Interface {
   const send = Effect.fn("BrowserHost.request")(function* (
     control: BrowserControl.Interface,
     sessionID: SessionSchema.ID,
@@ -132,6 +121,16 @@ export function make(resolve: () => BrowserControl.Interface | undefined = () =>
   })
 }
 
-export const layer = Layer.succeed(Service, make())
+export function configured(control?: BrowserControl.Interface) {
+  return makeGlobalNode({
+    service: Service,
+    layer: Layer.succeed(
+      Service,
+      make(() => control),
+    ),
+    deps: [],
+  })
+}
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+export const layer = Layer.succeed(Service, make())
+export const node = configured()

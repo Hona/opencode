@@ -79,7 +79,6 @@ const locationServiceNodes = [
   ToolOutputStore.node,
   ToolRegistry.node,
   ToolRegistry.toolsNode,
-  ToolRegistry.providersNode,
   BrowserTool.node,
   Image.node,
   SkillInstructions.node,

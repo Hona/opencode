@@ -10,7 +10,6 @@ import { Wildcard } from "./util/wildcard"
 export interface Materialization {
   readonly tool?: Any
   readonly instructions?: string
-  readonly names?: ReadonlySet<string>
 }
 
 export interface Interface {
@@ -69,7 +68,6 @@ const layer = Layer.effect(
         return {
           tool: ExecuteTool.create(registrations),
           instructions: ExecuteTool.instructions(registrations),
-          names: new Set(registrations.keys()),
         }
       }),
     })

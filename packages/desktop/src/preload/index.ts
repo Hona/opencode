@@ -124,6 +124,7 @@ const api: ElectronAPI = {
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   browserPane: {
+    setEnabled: (enabled) => ipcRenderer.send("browser-pane-enabled", enabled),
     setLayout: (layout) => ipcRenderer.send("browser-pane-layout", layout),
     command: (command) => ipcRenderer.invoke("browser-pane-command", command),
     subscribe: async (cb) => {

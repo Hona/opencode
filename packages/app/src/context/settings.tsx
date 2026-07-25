@@ -240,6 +240,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+    const experimentalBrowser = withFallback(
+      () => store.general?.experimentalBrowser,
+      defaultSettings.general.experimentalBrowser,
+    )
     const sunset = oldInterfaceSunset
     const [oldInterfaceRetired, setOldInterfaceRetired] = createSignal(sunset ? Date.now() >= sunset.getTime() : false)
     const layoutTransitionClassified = createMemo(() => typeof store.general?.layoutTransitionEligible === "boolean")
@@ -333,6 +337,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       setStore("general", "followup", "steer")
     })
 
+    createEffect(() => platform.browserPane?.setEnabled(experimentalBrowser()))
+
     return {
       ready,
       get current() {
@@ -399,12 +405,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
-        experimentalBrowser: withFallback(
-          () => store.general?.experimentalBrowser,
-          defaultSettings.general.experimentalBrowser,
-        ),
+        experimentalBrowser,
         setExperimentalBrowser(value: boolean) {
           setStore("general", "experimentalBrowser", value)
+          platform.browserPane?.setEnabled(value)
           if (!value) platform.browserPane?.setLayout({ attached: false, visible: false, destroy: true })
         },
         mobileTitlebarPosition: withFallback(

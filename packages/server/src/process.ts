@@ -16,6 +16,7 @@ import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
 import type { ServerOptions } from "./options"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 export interface Lifecycle<E = never, R = never> {
   readonly instanceID: string
@@ -23,6 +24,10 @@ export interface Lifecycle<E = never, R = never> {
     address: HttpServer.Address,
     shutdown: Effect.Effect<void>,
   ) => Effect.Effect<Effect.Effect<void>, E, R>
+}
+
+export interface Composition {
+  readonly replacements?: LayerNode.Replacements
 }
 
 type App = Effect.Effect<
@@ -34,6 +39,7 @@ type App = Effect.Effect<
 export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
+  composition?: Composition,
 ) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
@@ -85,6 +91,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           const host = address.family === "IPv6" ? `[${address.address}]` : address.address
           return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
         },
+        composition?.replacements,
       ).pipe(Layer.provide(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )

@@ -6,6 +6,7 @@ describe("runBrowserPaneCommand", () => {
   test("routes every toolbar command rejection to the error handler", async () => {
     const errors: string[] = []
     const browser: BrowserPanePlatform = {
+      setEnabled: () => undefined,
       setLayout: () => undefined,
       subscribe: async () => () => undefined,
       command: (command) => Promise.reject(new Error(`failed:${command.type}`)),

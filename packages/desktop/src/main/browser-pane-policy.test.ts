@@ -1,13 +1,23 @@
 import { describe, expect, test } from "bun:test"
+import { EventEmitter } from "node:events"
 import {
   allowedBrowserURL,
   boundedBrowserOperation,
   browserBottomMasks,
+  browserContextPartition,
+  browserContextEvictions,
+  browserContextLimit,
+  browserDestinationOrigin,
+  browserSnapshotExpression,
+  browserSnapshotLimit,
   invalidateBrowserRefs,
   normalizeBrowserBounds,
   normalizeBrowserRef,
   normalizeBrowserURL,
+  ownBrowserParentListeners,
   runBrowserInputPair,
+  allowedBrowserDestination,
+  privateBrowserOrigin,
   stopBrowserOperation,
 } from "./browser-pane-policy"
 
@@ -65,6 +75,93 @@ describe("browser pane policy", () => {
     invalidateBrowserRefs(state)
     expect(state.snapshot).toBe(5)
     expect(state.refs.size).toBe(0)
+  })
+
+  test("isolates Session contexts while preserving same-Session identity", () => {
+    expect(browserContextPartition(1, "ses_a")).toBe(browserContextPartition(1, "ses_a"))
+    expect(browserContextPartition(1, "ses_a")).not.toBe(browserContextPartition(1, "ses_b"))
+    expect(browserContextPartition(1, "ses_a")).not.toBe(browserContextPartition(2, "ses_a"))
+  })
+
+  test("evicts oldest idle contexts without evicting attached contexts", () => {
+    const contexts = [
+      { id: "active", attached: true, lastUsed: 0 },
+      ...Array.from({ length: browserContextLimit }, (_, index) => ({
+        id: `idle-${index}`,
+        attached: false,
+        lastUsed: index + 1,
+      })),
+    ]
+    expect(browserContextEvictions(contexts)).toEqual(["idle-0"])
+    expect(browserContextEvictions(contexts).includes("active")).toBe(false)
+  })
+
+  test("LRU disposal removes parent listeners and makes captured callbacks inert", () => {
+    const parent = new EventEmitter()
+    const closed = new Set<string>()
+    const touched: string[] = []
+    const contexts = [
+      { id: "active", attached: true, lastUsed: 0 },
+      ...Array.from({ length: browserContextLimit }, (_, index) => ({
+        id: `idle-${index}`,
+        attached: false,
+        lastUsed: index + 1,
+      })),
+    ].map((context) => ({
+      ...context,
+      listeners: ownBrowserParentListeners({
+        addNavigation: (listener) => parent.on("navigation", listener),
+        removeNavigation: (listener) => parent.removeListener("navigation", listener),
+        addCrash: (listener) => parent.on("crash", listener),
+        removeCrash: (listener) => parent.removeListener("crash", listener),
+        detach: () => {
+          if (closed.has(context.id)) throw new Error(`Touched closed context: ${context.id}`)
+          touched.push(context.id)
+        },
+      }),
+    }))
+    const evicted = browserContextEvictions(contexts)
+    const stale = contexts.find((context) => context.id === evicted[0])?.listeners
+
+    for (const id of evicted) {
+      const context = contexts.find((context) => context.id === id)
+      context?.listeners.dispose()
+      context?.listeners.dispose()
+      closed.add(id)
+    }
+
+    expect(parent.listenerCount("navigation")).toBe(browserContextLimit)
+    expect(parent.listenerCount("crash")).toBe(browserContextLimit)
+    expect(() => stale?.didStartNavigation()).not.toThrow()
+    expect(() => stale?.renderProcessGone()).not.toThrow()
+    parent.emit("navigation")
+    parent.emit("crash")
+    expect(touched).toHaveLength(browserContextLimit * 2)
+    expect(touched.includes("idle-0")).toBe(false)
+  })
+
+  test("caps semantic traversal in the page producer", () => {
+    const expression = browserSnapshotExpression(41)
+    expect(expression).toContain(`while (visited++ < ${browserSnapshotLimit})`)
+    expect(expression).toContain("let ref = 41")
+    expect(expression).toContain('"e" + (++ref)')
+    expect(expression).toContain('editable ? ""')
+    expect(expression).not.toContain("textContent")
+    expect(expression).not.toContain("getFullAXTree")
+    expect(() => new Bun.Transpiler({ loader: "js" }).transformSync(expression)).not.toThrow()
+  })
+
+  test("requires an explicit origin for private destinations", () => {
+    expect(privateBrowserOrigin("http://127.0.0.1:3000")).toBe("http://127.0.0.1:3000")
+    expect(allowedBrowserDestination("http://127.0.0.1:3000/path")).toBe(false)
+    expect(allowedBrowserDestination("http://127.0.0.1:3000/path", "http://127.0.0.1:3000")).toBe(true)
+    expect(allowedBrowserDestination("http://169.254.169.254/latest")).toBe(false)
+    expect(allowedBrowserDestination("file:///tmp/secret.txt")).toBe(false)
+    expect(allowedBrowserDestination("file:///tmp/secret.txt", "file:")).toBe(true)
+    expect(allowedBrowserDestination("https://example.com/redirect")).toBe(false)
+    expect(allowedBrowserDestination("https://example.com/redirect", "https://example.com")).toBe(true)
+    expect(browserDestinationOrigin("https://example.com/path")).toBe("https://example.com")
+    expect(allowedBrowserDestination("https://other.example/redirect", "https://example.com")).toBe(false)
   })
 
   test("stops and aborts the active operation immediately", () => {

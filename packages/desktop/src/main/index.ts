@@ -163,9 +163,15 @@ const main = Effect.gen(function* () {
       },
     },
   )
-  const stopSidecars = async () => {
-    await killSidecar()
-    wslServers.stopAll()
+  let sidecarsStopped = false
+  let sidecarsStopping: Promise<void> | undefined
+  const stopSidecars = () => {
+    if (sidecarsStopping) return sidecarsStopping
+    sidecarsStopping = killSidecar().finally(() => {
+      wslServers.stopAll()
+      sidecarsStopped = true
+    })
+    return sidecarsStopping
   }
   const relaunch = () => {
     setAppQuitting()
@@ -220,14 +226,15 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     setAppQuitting()
-    void stopSidecars()
+    if (sidecarsStopped) return
+    event.preventDefault()
+    void stopSidecars().finally(() => app.quit())
   })
 
   app.on("will-quit", () => {
     setAppQuitting()
-    void stopSidecars()
   })
 
   app.on("child-process-gone", (_event, details) => {

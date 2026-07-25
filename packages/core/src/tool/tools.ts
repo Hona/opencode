@@ -1,9 +1,15 @@
 export * as Tools from "./tools"
 
 import { Context, Effect, Scope } from "effect"
+import { SessionSchema } from "../session/schema"
 import { Tool } from "./tool"
 
 export type RegisterOptions = Tool.RegisterOptions
+export type Registration = {
+  readonly tools: Readonly<Record<string, Tool.Any>>
+  readonly options?: Tool.RegisterOptions
+}
+export type Provider = (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Registration>>
 
 export interface Interface {
   readonly register: (
@@ -12,11 +18,10 @@ export interface Interface {
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   /** Internal atomic registration capability used by plugin transforms. */
   readonly registerBatch: (
-    registrations: ReadonlyArray<{
-      readonly tools: Readonly<Record<string, Tool.Any>>
-      readonly options?: Tool.RegisterOptions
-    }>,
+    registrations: ReadonlyArray<Registration>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
+  /** Privileged internal request-scoped registrations; not exposed through the plugin interface. */
+  readonly registerProvider: (provider: Provider) => Effect.Effect<void, never, Scope.Scope>
 }
 
 /** Narrow registration-only Location capability. */

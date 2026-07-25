@@ -1,0 +1,28 @@
+import {
+  Agent,
+  Command,
+  Connection,
+  Credential,
+  Integration,
+  Model,
+  Plugin,
+  Provider,
+  Reference,
+  Skill,
+} from "@opencode-ai/plugin/v2"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
+
+const key = Symbol.for("opencode.plugin.v2.promise")
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[key] = {
+  Agent,
+  Command,
+  Connection,
+  Credential,
+  Integration,
+  Model,
+  Plugin,
+  Provider,
+  Reference,
+  Skill,
+  Tool,
+}

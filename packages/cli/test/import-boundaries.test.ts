@@ -30,6 +30,7 @@ describe("CLI frontend import boundaries", () => {
       "toolOutputText",
     ])
     expect(Object.keys(cli.exports).filter((key) => key === "./mini" || key.startsWith("./mini/"))).toEqual([])
+    expect(cli.dependencies[["@opencode-ai", "core"].join("/")]).toBeUndefined()
   })
 
   test("keeps run and Mini on separate evaluation graphs", async () => {

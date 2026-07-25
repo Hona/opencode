@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./registry"
 
 import { type ToolCall, type ToolContent, type ToolDefinition } from "@opencode-ai/ai"
-import { Context, Effect, Layer, Scope, Semaphore } from "effect"
+import { Context, Effect, Layer, Option, Scope, Semaphore } from "effect"
 import type { AgentV2 } from "../agent"
 import { Image } from "../image"
 import { PermissionV2 } from "../permission"
@@ -12,7 +12,6 @@ import { Wildcard } from "../util/wildcard"
 import { CodeMode } from "../codemode"
 import { Tool, nonEmpty, registrationEntries, toLLMDefinition, validateName, validateNamespace } from "./tool"
 import { Tools } from "./tools"
-import { ToolProviders } from "./providers"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { toSessionError } from "../session/to-session-error"
@@ -42,8 +41,8 @@ export interface Interface {
       readonly options?: Tools.RegisterOptions
     }>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
-  /** Internal request-local direct provider capability exposed only through ToolProviders.Service. */
-  readonly registerProvider: (provider: ToolProviders.Provider) => Effect.Effect<void, never, Scope.Scope>
+  /** Internal request-local registration capability exposed only through Tools.Service. */
+  readonly registerProvider: (provider: Tools.Provider) => Effect.Effect<void, never, Scope.Scope>
 }
 
 /**
@@ -118,9 +117,36 @@ const registryLayer = Layer.effect(
     })
 
     type Registration = Tool.Registration
-    const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
-    const providers: Array<{ readonly token: object; readonly provider: ToolProviders.Provider }> = []
+    type ActiveRegistration = { readonly token: object; readonly registration: Registration; readonly order: number }
+    const local = new Map<string, Array<ActiveRegistration>>()
+    const providers: Array<{ readonly token: object; readonly provider: Tools.Provider; readonly order: number }> = []
     const registrationLock = Semaphore.makeUnsafe(1)
+    let registrationOrder = 0
+
+    const plan = (registrations: ReadonlyArray<Tools.Registration>) =>
+      Effect.forEach(registrations, ({ tools, options }) =>
+        Effect.gen(function* () {
+          if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
+          const entries = registrationEntries(tools, options)
+          yield* Effect.forEach(entries, (entry) => validateName(entry.name), { discard: true })
+          const collision = entries.find(
+            (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
+          )
+          if (collision)
+            return yield* new Tool.RegistrationError({
+              name: collision.key,
+              message: `Duplicate normalized tool name: ${collision.key}`,
+            })
+          const codemode = options?.codemode ?? true
+          const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
+          if (reserved)
+            return yield* new Tool.RegistrationError({
+              name: reserved.key,
+              message: 'Tool name "execute" is reserved for CodeMode',
+            })
+          return { entries, codemode }
+        }),
+      )
 
     const executeTool = Effect.fn("ToolRegistry.executeTool")(function* (input: ExecuteInput, tool: Tool.Any) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach executeTool.
@@ -232,33 +258,7 @@ const registryLayer = Layer.effect(
 
     const registerBatch: Interface["registerBatch"] = Effect.fn("ToolRegistry.registerBatch")(
       function* (registrations) {
-        const planned = yield* Effect.forEach(registrations, ({ tools, options }) =>
-          Effect.gen(function* () {
-            if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
-            const entries = registrationEntries(tools, options)
-            yield* Effect.forEach(entries, (entry) => validateName(entry.name), { discard: true })
-            const collision = entries.find(
-              (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
-            )
-            if (collision)
-              return yield* Effect.fail(
-                new Tool.RegistrationError({
-                  name: collision.key,
-                  message: `Duplicate normalized tool name: ${collision.key}`,
-                }),
-              )
-            const codemode = options?.codemode ?? true
-            const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
-            if (reserved)
-              return yield* Effect.fail(
-                new Tool.RegistrationError({
-                  name: reserved.key,
-                  message: 'Tool name "execute" is reserved for CodeMode',
-                }),
-              )
-            return { tools, options, entries, codemode }
-          }),
-        )
+        const planned = yield* plan(registrations)
         // CodeMode registrations live in the CodeMode service; the registry keeps only direct tools.
         yield* Effect.forEach(
           planned.filter((plan) => plan.codemode && plan.entries.length > 0),
@@ -271,12 +271,14 @@ const registryLayer = Layer.effect(
           registrationLock.withPermit(
             Effect.gen(function* () {
               const token = {}
-              for (const { entries } of direct)
+              for (const { entries } of direct) {
+                const order = ++registrationOrder
                 for (const entry of entries)
                   local.set(entry.key, [
                     ...(local.get(entry.key) ?? []),
                     {
                       token,
+                      order,
                       registration: {
                         tool: entry.tool,
                         name: entry.name,
@@ -285,6 +287,7 @@ const registryLayer = Layer.effect(
                       },
                     },
                   ])
+              }
               yield* Effect.addFinalizer(() =>
                 registrationLock.withPermit(
                   Effect.sync(() => {
@@ -309,7 +312,7 @@ const registryLayer = Layer.effect(
         registrationLock.withPermit(
           Effect.gen(function* () {
             const token = {}
-            providers.push({ token, provider })
+            providers.push({ token, provider, order: ++registrationOrder })
             yield* Effect.addFinalizer(() =>
               registrationLock.withPermit(
                 Effect.sync(() => {
@@ -337,40 +340,51 @@ const registryLayer = Layer.effect(
       snapshot: Effect.fn("ToolRegistry.snapshot")(function* (permissions, sessionID) {
         const captured = yield* registrationLock.withPermit(
           Effect.gen(function* () {
-            const direct = new Map<string, Registration>()
-            const rules = permissions ?? []
+            const direct = new Map<string, { registration: Registration; order: number; suborder: number }>()
             for (const [name, entries] of local) {
-              const registration = entries.at(-1)?.registration
-              if (!registration) continue
-              if (whollyDisabled(registration.permission, rules)) continue
-              direct.set(name, registration)
+              const active = entries.at(-1)
+              if (!active) continue
+              direct.set(name, { registration: active.registration, order: active.order, suborder: 0 })
             }
             const codeModeMaterialization = yield* codeMode.materialize(permissions)
-            return { direct, codeModeMaterialization, providers: providers.map((entry) => entry.provider) }
+            return { direct, codeModeMaterialization, providers: [...providers] }
           }),
         )
         if (sessionID !== undefined) {
-          const supplied = yield* Effect.forEach(captured.providers, (provider) => provider(sessionID))
-          for (const tools of supplied) {
-            for (const [name, item] of Object.entries(tools)) {
-              yield* validateName(name).pipe(Effect.orDie)
-              if (
-                name === "execute" ||
-                captured.direct.has(name) ||
-                captured.codeModeMaterialization.names?.has(name)
-              ) {
-                yield* Effect.logWarning("request tool provider collision ignored", { name })
+          for (const provider of captured.providers) {
+            const planned = yield* plan(yield* provider.provider(sessionID)).pipe(Effect.option)
+            if (Option.isNone(planned)) {
+              yield* Effect.logWarning("invalid request-scoped tool registration ignored")
+              continue
+            }
+            for (const [suborder, registration] of planned.value.entries()) {
+              if (registration.codemode) {
+                yield* Effect.logWarning("request-scoped Code Mode registration ignored")
                 continue
               }
-              const registration: Registration = {
-                name,
-                tool: item.tool,
-                permission: item.permission ?? name,
+              for (const entry of registration.entries) {
+                const current = captured.direct.get(entry.key)
+                if (
+                  current &&
+                  (current.order > provider.order || (current.order === provider.order && current.suborder >= suborder))
+                )
+                  continue
+                captured.direct.set(entry.key, {
+                  order: provider.order,
+                  suborder,
+                  registration: {
+                    tool: entry.tool,
+                    name: entry.name,
+                    namespace: entry.namespace,
+                    permission: entry.permission,
+                  },
+                })
               }
-              if (whollyDisabled(registration.permission, permissions ?? [])) continue
-              captured.direct.set(name, registration)
             }
           }
+        }
+        for (const [name, item] of captured.direct) {
+          if (whollyDisabled(item.registration.permission, permissions ?? [])) captured.direct.delete(name)
         }
         const codemodeTool = captured.codeModeMaterialization.tool
         return {
@@ -381,12 +395,12 @@ const registryLayer = Layer.effect(
             // Definitions are prompt-cache prefix bytes, so order only after effective registrations settle.
             ...Array.from(captured.direct)
               .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-              .map(([name, registration]) => toLLMDefinition(name, registration.tool)),
+              .map(([name, item]) => toLLMDefinition(name, item.registration.tool)),
             ...(codemodeTool ? [toLLMDefinition("execute", codemodeTool)] : []),
           ],
           execute: (input: ExecuteInput) => {
             if (input.call.name === "execute" && codemodeTool) return executeTool(input, codemodeTool)
-            const registration = captured.direct.get(input.call.name)
+            const registration = captured.direct.get(input.call.name)?.registration
             if (registration) return executeTool(input, registration.tool)
             return Effect.succeed<ToolOutcome>({
               status: "error",
@@ -402,17 +416,15 @@ const registryLayer = Layer.effect(
 const layer = Layer.effect(
   Tools.Service,
   Service.use((registry) =>
-    Effect.succeed(Tools.Service.of({ register: registry.register, registerBatch: registry.registerBatch })),
-  ),
-).pipe(
-  Layer.merge(
-    Layer.effect(
-      ToolProviders.Service,
-      Service.use((registry) => Effect.succeed(ToolProviders.Service.of({ register: registry.registerProvider }))),
+    Effect.succeed(
+      Tools.Service.of({
+        register: registry.register,
+        registerBatch: registry.registerBatch,
+        registerProvider: registry.registerProvider,
+      }),
     ),
   ),
-  Layer.provideMerge(registryLayer),
-)
+).pipe(Layer.provideMerge(registryLayer))
 
 function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
@@ -427,12 +439,6 @@ export const node = makeLocationNode({
 
 export const toolsNode = makeLocationNode({
   service: Tools.Service,
-  layer,
-  deps: [CodeMode.node, ToolOutputStore.node, ToolHooks.node, Image.node],
-})
-
-export const providersNode = makeLocationNode({
-  service: ToolProviders.Service,
   layer,
   deps: [CodeMode.node, ToolOutputStore.node, ToolHooks.node, Image.node],
 })

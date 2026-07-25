@@ -103,6 +103,10 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.on("browser-pane-enabled", (event: IpcMainEvent, enabled: unknown) => {
+    if (!browserWindow(event) || typeof enabled !== "boolean") return
+    deps.browserPane.setEnabled(enabled)
+  })
   ipcMain.on("browser-pane-layout", (event: IpcMainEvent, input: unknown) => {
     const win = browserWindow(event)
     const layout = browserLayout(input)

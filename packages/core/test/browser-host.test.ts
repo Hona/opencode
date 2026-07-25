@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { BrowserControl } from "@opencode-ai/core/browser-control"
 import { BrowserHost } from "@opencode-ai/core/browser-host"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Deferred, Effect, Fiber, Option } from "effect"
 import { it } from "./lib/effect"
 
@@ -16,6 +17,27 @@ const state: BrowserControl.State = {
 }
 
 describe("BrowserHost", () => {
+  it.effect("keeps independently composed host authority isolated", () =>
+    Effect.gen(function* () {
+      const control = (lease: string): BrowserControl.Interface => ({
+        request: (request) =>
+          Promise.resolve({
+            type: "desktop.browser.response",
+            version: BrowserControl.VERSION,
+            requestID: request.requestID,
+            result: { type: "status", attached: true, lease, state },
+          } satisfies BrowserControl.Response),
+      })
+      const lease = BrowserHost.Service.use((host) => host.lease(sessionID))
+      const [left, right] = yield* Effect.all([
+        lease.pipe(Effect.provide(LayerNode.compile(BrowserHost.configured(control("left"))))),
+        lease.pipe(Effect.provide(LayerNode.compile(BrowserHost.configured(control("right"))))),
+      ])
+      expect(Option.getOrThrow(left).id).toBe("left")
+      expect(Option.getOrThrow(right).id).toBe("right")
+    }),
+  )
+
   it.effect("captures a lease generation and never redirects it", () =>
     Effect.gen(function* () {
       let current = "lease-1"

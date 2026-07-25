@@ -173,6 +173,19 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("cannot execute a permission-filtered tool from the captured request", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ question: make() }, { codemode: false })
+      const toolSet = yield* service.snapshot([{ action: "question", resource: "*", effect: "deny" }])
+      expect(toolSet.definitions).toEqual([])
+      expect(yield* toolSet.execute(call("question"))).toEqual({
+        status: "error",
+        error: { type: "tool.unknown", message: "Unknown tool: question" },
+      })
+    }),
+  )
+
   it.effect("keeps permission options isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -422,7 +435,7 @@ describe("ToolRegistry", () => {
             input: Schema.Struct({ value: Transformed }),
             output: Schema.Struct({ value: Transformed }),
             execute: ({ value }) =>
-              Effect.sync(() => executed.push(value)).pipe(Effect.as({ output: { value }, content: String(value) })),
+              Effect.sync(() => executed.push(value)).pipe(Effect.as({ output: { value }, content: value })),
           }),
         },
         { codemode: false },
@@ -508,17 +521,44 @@ describe("ToolRegistry", () => {
       yield* service.register({ echo: constant("direct") }, { codemode: false })
       yield* service.register({ nested: constant("codemode") })
       yield* service.registerProvider(() =>
-        Effect.succeed({
-          echo: { tool: constant("provider") },
-          nested: { tool: constant("provider nested") },
-          execute: { tool: constant("provider execute") },
-        }),
+        Effect.succeed([
+          {
+            tools: { echo: constant("provider"), nested: constant("provider nested") },
+            options: { codemode: false },
+          },
+        ]),
+      )
+      yield* service.registerProvider(() =>
+        Effect.succeed([{ tools: { execute: constant("provider execute") }, options: { codemode: false } }]),
       )
 
       const toolSet = yield* service.snapshot(undefined, sessionID)
-      expect(toolSet.definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+      expect(toolSet.definitions.map((tool) => tool.name)).toEqual(["echo", "nested", "execute"])
       expect(toolSet.codeModeInstructions).toContain("tools.nested")
-      expect((yield* toolSet.execute(call("echo"))).content).toEqual([{ type: "text", text: "direct" }])
+      expect((yield* toolSet.execute(call("echo"))).content).toEqual([{ type: "text", text: "provider" }])
+    }),
+  )
+
+  it.effect("plans and scopes request registrations through the canonical registration shape", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const scope = yield* Scope.make()
+      yield* service
+        .registerProvider(() =>
+          Effect.succeed([
+            {
+              tools: { "echo.tool": constant("request") },
+              options: { namespace: "browser", codemode: false },
+            },
+          ]),
+        )
+        .pipe(Scope.provide(scope))
+
+      expect((yield* service.snapshot(undefined, sessionID)).definitions.map((tool) => tool.name)).toEqual([
+        "browser_echo_tool",
+      ])
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* service.snapshot(undefined, sessionID)).definitions).toEqual([])
     }),
   )
 

@@ -74,6 +74,7 @@ export type BrowserPaneState = {
 }
 
 export type BrowserPaneAPI = {
+  setEnabled: (enabled: boolean) => void
   setLayout: (layout: BrowserPaneLayout) => void
   command: (command: BrowserPaneCommand) => Promise<void>
   subscribe: (cb: (state: BrowserPaneState) => void) => Promise<() => void>
