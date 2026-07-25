@@ -29,6 +29,7 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
+import { macTitlebarLeftPadding } from "./titlebar-padding"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -237,8 +238,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
       }}
       style={{
         "min-height": minHeight(),
-        // Keep native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": mac() ? `${84 / zoom()}px` : 0,
+        // Keep visible native macOS traffic lights clear even when the desktop window is narrow.
+        "padding-left": mac() ? macTitlebarLeftPadding(zoom(), platform.windowFullscreen?.() ?? false) : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
           ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
