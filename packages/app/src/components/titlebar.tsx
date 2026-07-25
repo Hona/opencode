@@ -161,9 +161,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
         "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
         "h-10 bg-background-base overflow-hidden": !useV2Titlebar(),
         "order-last": bottom(),
-        // Track the macOS fullscreen transition while the traffic lights animate away.
-        "transition-[padding-left] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none":
-          mac(),
       }}
       style={{
         "min-height": minHeight(),
