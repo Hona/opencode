@@ -474,8 +474,13 @@ function wireZoom(win: BrowserWindow) {
 }
 
 function wireFullscreen(win: BrowserWindow) {
-  win.on("enter-full-screen", () => win.webContents.send("window-fullscreen-changed", true))
-  win.on("leave-full-screen", () => win.webContents.send("window-fullscreen-changed", false))
+  const send = (fullscreen: boolean) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return
+    win.webContents.send("window-fullscreen-changed", fullscreen)
+  }
+
+  win.on("enter-full-screen", () => send(true))
+  win.on("leave-full-screen", () => send(false))
 }
 
 function clampZoom(value: number) {

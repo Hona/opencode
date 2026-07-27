@@ -65,6 +65,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const web = createMemo(() => platform.platform === "web")
+  const fullscreen = createMemo(() => platform.windowFullscreen?.() ?? false)
+  const macTrafficLights = createMemo(() => mac() && !fullscreen())
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
@@ -164,8 +166,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
       }}
       style={{
         "min-height": minHeight(),
-        // Keep visible native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": mac() ? macTitlebarLeftPadding(zoom(), platform.windowFullscreen?.() ?? false) : 0,
+        // Keep native macOS traffic lights clear even when the desktop window is narrow.
+        "padding-left": mac() ? macTitlebarLeftPadding(zoom(), fullscreen()) : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "align-self": windows() ? "flex-start" : undefined,
@@ -382,8 +384,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 classList={{
                   "pt-2": !bottom(),
                   "pb-2": bottom(),
-                  "md:pl-2": mac(),
-                  "md:pl-4": !mac(),
+                  "md:pl-2": macTrafficLights(),
+                  "md:pl-4": !macTrafficLights(),
                 }}
               >
                 <ChannelIndicator debugTools={props.debugTools} />
@@ -463,7 +465,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             <div
               classList={{
                 "flex items-center min-w-0": true,
-                "pl-2": !mac(),
+                "pl-2": !macTrafficLights(),
               }}
             >
               <Show when={windows() || linux()}>
