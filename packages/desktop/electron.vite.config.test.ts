@@ -3,7 +3,7 @@ import config from "./electron.vite.config"
 
 test("bundles the Node browser client into Electron main", () => {
   expect(config.main?.build?.externalizeDeps).toEqual({
-    include: [`@lydell/node-pty-${process.platform}-${process.arch}`],
+    include: [`@lydell/node-pty-${process.platform}-${process.arch}`, "bufferutil", "utf-8-validate"],
     exclude: ["@opencode-ai/client"],
   })
 })
