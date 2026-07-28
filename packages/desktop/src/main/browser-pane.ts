@@ -426,15 +426,22 @@ export function createBrowserPaneController(clients: BrowserPaneClients) {
       state: emptyBrowserPaneState(),
     }
     entries.set(win.id, entry)
+    const contents = win.webContents
     const onParentNavigation = () => detachEntry(entry)
-    win.webContents.on("did-start-navigation", onParentNavigation)
-    entry.cleanups.push(() => win.webContents.off("did-start-navigation", onParentNavigation))
+    contents.on("did-start-navigation", onParentNavigation)
+    entry.cleanups.push(() => {
+      if (!contents.isDestroyed()) contents.off("did-start-navigation", onParentNavigation)
+    })
     const onParentGone = () => detachEntry(entry)
-    win.webContents.on("render-process-gone", onParentGone)
-    entry.cleanups.push(() => win.webContents.off("render-process-gone", onParentGone))
+    contents.on("render-process-gone", onParentGone)
+    entry.cleanups.push(() => {
+      if (!contents.isDestroyed()) contents.off("render-process-gone", onParentGone)
+    })
     const onClosed = () => disposeEntry(entry)
     win.once("closed", onClosed)
-    entry.cleanups.push(() => win.off("closed", onClosed))
+    entry.cleanups.push(() => {
+      if (!win.isDestroyed()) win.off("closed", onClosed)
+    })
     return entry
   }
 
