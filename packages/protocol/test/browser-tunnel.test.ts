@@ -14,13 +14,13 @@ describe("BrowserTunnelProtocol", () => {
   })
 
   test("round trips typed control messages", async () => {
-    const message: BrowserTunnel.FromDesktop = {
+    const message: BrowserTunnel.ControlFromDesktop = {
       type: "browser.tunnel.open",
       sessionID: Session.ID.make("ses_browser_tunnel"),
       leaseID: Browser.LeaseID.make("brl_browsertunnel"),
       target: { host: BrowserTunnel.Host.make("localhost"), port: BrowserTunnel.Port.make(5173) },
-      receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-      receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+      receiveWindow: BrowserTunnel.WindowSize.make(256 * 1_024),
+      receiveFrames: BrowserTunnel.FrameWindow.make(16),
     }
     const decoded = await Effect.runPromise(
       BrowserTunnelProtocol.decodeFromDesktop(BrowserTunnelProtocol.encodeFromDesktop(message)),
@@ -32,7 +32,7 @@ describe("BrowserTunnelProtocol", () => {
     for (const input of [
       "unframed",
       new Uint8Array([9, 0]),
-      new Uint8Array([BrowserTunnelProtocol.FrameType.Control, 255]),
+      new Uint8Array([1, 255]),
     ]) {
       expect(await Effect.runPromise(BrowserTunnelProtocol.decodeFromDesktop(input).pipe(Effect.result))).toMatchObject(
         {
@@ -45,7 +45,7 @@ describe("BrowserTunnelProtocol", () => {
 
   test("pins control framing and public size limits", async () => {
     expect(Array.from(BrowserTunnelProtocol.encodeFromDesktop({ type: "browser.tunnel.end" }))).toEqual([
-      BrowserTunnelProtocol.FrameType.Control,
+      1,
       ...new TextEncoder().encode('{"type":"browser.tunnel.end"}'),
     ])
     expect(() => BrowserTunnelProtocol.data(new Uint8Array())).toThrow()
@@ -53,7 +53,7 @@ describe("BrowserTunnelProtocol", () => {
 
     const extra = new TextEncoder().encode('{"type":"browser.tunnel.end","extra":true}')
     const frame = new Uint8Array(extra.byteLength + 1)
-    frame[0] = BrowserTunnelProtocol.FrameType.Control
+    frame[0] = 1
     frame.set(extra, 1)
     expect(await Effect.runPromise(BrowserTunnelProtocol.decodeFromDesktop(frame).pipe(Effect.result))).toMatchObject({
       _tag: "Failure",

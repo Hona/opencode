@@ -3,44 +3,45 @@ export * as BrowserTunnelProtocol from "./browser-tunnel.js"
 import { BrowserTunnel } from "@opencode-ai/schema/browser-tunnel"
 import { Effect, Schema } from "effect"
 
-export const FrameType = {
+export const Path = "/api/browser/tunnel"
+export const Subprotocol = "opencode.browser.tunnel.v1"
+
+const FrameType = {
   Data: 0,
   Control: 1,
 } as const
 
 export const MaxDataBytes = 64 * 1_024
 export const MaxControlBytes = 16 * 1_024
-export const InitialWindowBytes = 256 * 1_024
-export const InitialFrameWindow = 16
 
-export class FrameError extends Schema.TaggedErrorClass<FrameError>()("BrowserTunnelProtocol.FrameError", {
+class FrameError extends Schema.TaggedErrorClass<FrameError>()("BrowserTunnelProtocol.FrameError", {
   kind: Schema.Literals(["invalid", "too_large"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export type DataFrame = {
+type DataFrame = {
   readonly type: "data"
   readonly data: Uint8Array
 }
 
-export type ControlFrame<Message> = {
+type ControlFrame<Message> = {
   readonly type: "control"
   readonly message: Message
 }
 
-export type FromDesktop = DataFrame | ControlFrame<BrowserTunnel.FromDesktop>
-export type FromServer = DataFrame | ControlFrame<BrowserTunnel.FromServer>
+type FromDesktop = DataFrame | ControlFrame<BrowserTunnel.ControlFromDesktop>
+type FromServer = DataFrame | ControlFrame<BrowserTunnel.ControlFromServer>
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder("utf-8", { fatal: true })
-const encodeDesktop = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromDesktop))
-const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromServer))
-const decodeDesktop = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.FromDesktop), {
+const encodeDesktop = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.ControlFromDesktop))
+const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.ControlFromServer))
+const decodeDesktop = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.ControlFromDesktop), {
   errors: "all",
   onExcessProperty: "error",
 })
-const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.FromServer), {
+const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.ControlFromServer), {
   errors: "all",
   onExcessProperty: "error",
 })
@@ -55,11 +56,11 @@ export function data(input: Uint8Array) {
   return frame
 }
 
-export function encodeFromDesktop(input: BrowserTunnel.FromDesktop) {
+export function encodeFromDesktop(input: BrowserTunnel.ControlFromDesktop) {
   return control(encodeDesktop(input))
 }
 
-export function encodeFromServer(input: BrowserTunnel.FromServer) {
+export function encodeFromServer(input: BrowserTunnel.ControlFromServer) {
   return control(encodeServer(input))
 }
 

@@ -77,46 +77,39 @@ export const Command = Schema.Union([
   .annotate({ identifier: "Browser.Command" })
 export type Command = typeof Command.Type
 
-export interface NavigateResult extends Schema.Schema.Type<typeof NavigateResult> {}
-export const NavigateResult = Schema.Struct({
+const NavigateResult = Schema.Struct({
   type: Schema.Literal("navigate"),
   state: State,
 }).annotate({ identifier: "Browser.NavigateResult" })
 
-export interface SnapshotResult extends Schema.Schema.Type<typeof SnapshotResult> {}
-export const SnapshotResult = Schema.Struct({
+const SnapshotResult = Schema.Struct({
   type: Schema.Literal("snapshot"),
   state: State,
   format: Schema.Literal("opencode.semantic.v1"),
   content: Schema.String.check(Schema.isMaxLength(100_000)),
 }).annotate({ identifier: "Browser.SnapshotResult" })
 
-export interface ClickResult extends Schema.Schema.Type<typeof ClickResult> {}
-export const ClickResult = Schema.Struct({
+const ClickResult = Schema.Struct({
   type: Schema.Literal("click"),
   state: State,
 }).annotate({ identifier: "Browser.ClickResult" })
 
-export interface FillResult extends Schema.Schema.Type<typeof FillResult> {}
-export const FillResult = Schema.Struct({
+const FillResult = Schema.Struct({
   type: Schema.Literal("fill"),
   state: State,
 }).annotate({ identifier: "Browser.FillResult" })
 
-export interface PressResult extends Schema.Schema.Type<typeof PressResult> {}
-export const PressResult = Schema.Struct({
+const PressResult = Schema.Struct({
   type: Schema.Literal("press"),
   state: State,
 }).annotate({ identifier: "Browser.PressResult" })
 
-export interface ScrollResult extends Schema.Schema.Type<typeof ScrollResult> {}
-export const ScrollResult = Schema.Struct({
+const ScrollResult = Schema.Struct({
   type: Schema.Literal("scroll"),
   state: State,
 }).annotate({ identifier: "Browser.ScrollResult" })
 
-export interface ScreenshotResult extends Schema.Schema.Type<typeof ScreenshotResult> {}
-export const ScreenshotResult = Schema.Struct({
+const ScreenshotResult = Schema.Struct({
   type: Schema.Literal("screenshot"),
   state: State,
   mediaType: Schema.Literal("image/png"),
@@ -138,8 +131,6 @@ export const Result = Schema.Union([
   .annotate({ identifier: "Browser.Result" })
 export type Result = typeof Result.Type
 
-export type ResultFor<Input extends Command> = Extract<Result, { readonly type: Input["type"] }>
-
 export const ErrorCode = Schema.Literals([
   "not_attached",
   "stale_ref",
@@ -155,15 +146,13 @@ export const ErrorCode = Schema.Literals([
 ]).annotate({ identifier: "Browser.ErrorCode" })
 export type ErrorCode = typeof ErrorCode.Type
 
-export interface Failure extends Schema.Schema.Type<typeof Failure> {}
-export const Failure = Schema.Struct({
+const Failure = Schema.Struct({
   type: Schema.Literal("failure"),
   code: ErrorCode,
   message: Schema.String.check(Schema.isMaxLength(1_024)),
 }).annotate({ identifier: "Browser.Failure" })
 
-export interface Success extends Schema.Schema.Type<typeof Success> {}
-export const Success = Schema.Struct({
+const Success = Schema.Struct({
   type: Schema.Literal("success"),
   result: Result,
 }).annotate({ identifier: "Browser.Success" })

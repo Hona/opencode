@@ -2,7 +2,7 @@ export * as BrowserTunnel from "./browser-tunnel.js"
 
 import { Schema } from "effect"
 import { Browser } from "./browser.js"
-import { Session } from "./session.js"
+import { SessionID } from "./session-id.js"
 
 export const Host = Schema.NonEmptyString.check(Schema.isMaxLength(253), Schema.isPattern(/^[^\s/?#]+$/))
   .pipe(Schema.brand("BrowserTunnel.Host"))
@@ -35,30 +35,28 @@ export const Target = Schema.Struct({
   port: Port,
 }).annotate({ identifier: "BrowserTunnel.Target" })
 
-export interface Open extends Schema.Schema.Type<typeof Open> {}
-export const Open = Schema.Struct({
+const Open = Schema.Struct({
   type: Schema.Literal("browser.tunnel.open"),
-  sessionID: Session.ID,
+  sessionID: SessionID,
   leaseID: Browser.LeaseID,
   target: Target,
   receiveWindow: WindowSize,
   receiveFrames: FrameWindow,
 }).annotate({ identifier: "BrowserTunnel.Open" })
 
-export interface Ready extends Schema.Schema.Type<typeof Ready> {}
-export const Ready = Schema.Struct({
+const Ready = Schema.Struct({
   type: Schema.Literal("browser.tunnel.ready"),
 }).annotate({ identifier: "BrowserTunnel.Ready" })
 
-export interface Opened extends Schema.Schema.Type<typeof Opened> {}
-export const Opened = Schema.Struct({
+const Opened = Schema.Struct({
   type: Schema.Literal("browser.tunnel.opened"),
   receiveWindow: WindowSize,
   receiveFrames: FrameWindow,
 }).annotate({ identifier: "BrowserTunnel.Opened" })
 
-export interface Window extends Schema.Schema.Type<typeof Window> {}
-export const Window = Schema.Struct({
+// Acknowledges an exact ordered prefix of complete DATA frames. `bytes` must
+// equal the sum of the first `frames` outstanding payload lengths.
+const Window = Schema.Struct({
   type: Schema.Literal("browser.tunnel.window"),
   bytes: WindowBytes,
   frames: FrameWindow,
@@ -73,15 +71,13 @@ export const OpenErrorCode = Schema.Literals([
 ]).annotate({ identifier: "BrowserTunnel.OpenErrorCode" })
 export type OpenErrorCode = typeof OpenErrorCode.Type
 
-export interface Rejected extends Schema.Schema.Type<typeof Rejected> {}
-export const Rejected = Schema.Struct({
+const Rejected = Schema.Struct({
   type: Schema.Literal("browser.tunnel.rejected"),
   code: OpenErrorCode,
   message: Schema.String.check(Schema.isMaxLength(1_024)),
 }).annotate({ identifier: "BrowserTunnel.Rejected" })
 
-export interface End extends Schema.Schema.Type<typeof End> {}
-export const End = Schema.Struct({
+const End = Schema.Struct({
   type: Schema.Literal("browser.tunnel.end"),
 }).annotate({ identifier: "BrowserTunnel.End" })
 
@@ -94,18 +90,17 @@ export const ResetCode = Schema.Literals([
 ]).annotate({ identifier: "BrowserTunnel.ResetCode" })
 export type ResetCode = typeof ResetCode.Type
 
-export interface Reset extends Schema.Schema.Type<typeof Reset> {}
-export const Reset = Schema.Struct({
+const Reset = Schema.Struct({
   type: Schema.Literal("browser.tunnel.reset"),
   code: ResetCode,
 }).annotate({ identifier: "BrowserTunnel.Reset" })
 
-export const FromDesktop = Schema.Union([Open, Window, End, Reset])
+export const ControlFromDesktop = Schema.Union([Open, Window, End, Reset])
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "BrowserTunnel.FromDesktop" })
-export type FromDesktop = typeof FromDesktop.Type
+  .annotate({ identifier: "BrowserTunnel.ControlFromDesktop" })
+export type ControlFromDesktop = typeof ControlFromDesktop.Type
 
-export const FromServer = Schema.Union([Ready, Opened, Rejected, Window, End, Reset])
+export const ControlFromServer = Schema.Union([Ready, Opened, Rejected, Window, End, Reset])
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "BrowserTunnel.FromServer" })
-export type FromServer = typeof FromServer.Type
+  .annotate({ identifier: "BrowserTunnel.ControlFromServer" })
+export type ControlFromServer = typeof ControlFromServer.Type

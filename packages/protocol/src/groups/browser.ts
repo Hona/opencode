@@ -1,22 +1,8 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ConflictError, ServiceUnavailableError } from "../errors.js"
-
-export const BROWSER_CONTROL_PROTOCOL = "opencode.browser.control.v1"
-export const BROWSER_TUNNEL_PROTOCOL = "opencode.browser.tunnel.v1"
-
-export function isBrowserConnectURL(input: string) {
-  try {
-    const path = decodeURI(new URL(input, "http://localhost").pathname)
-      .replace(/;[^/]*$/, "")
-      .replace(/\/+/g, "/")
-      .replace(/\/$/, "")
-      .toLowerCase()
-    return path === "/api/browser/control" || path === "/api/browser/tunnel"
-  } catch {
-    return false
-  }
-}
+import { BrowserControlProtocol } from "../browser-control.js"
+import { BrowserTunnelProtocol } from "../browser-tunnel.js"
 
 const websocket = (
   identifier: string,
@@ -46,7 +32,7 @@ const websocket = (
 
 export const BrowserGroup = HttpApiGroup.make("server.browser")
   .add(
-    HttpApiEndpoint.get("browser.control.connect", "/api/browser/control", {
+    HttpApiEndpoint.get("browser.control.connect", BrowserControlProtocol.Path, {
       success: Schema.Boolean,
       error: ConflictError,
     }).annotateMerge(
@@ -54,14 +40,14 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
         "v2.browser.control.connect",
         "Connect desktop browser host",
         "Establish an authenticated WebSocket carrying Session-scoped browser attachments and semantic browser commands.",
-        BROWSER_CONTROL_PROTOCOL,
+        BrowserControlProtocol.Subprotocol,
         "BrowserControl.FromDesktop",
         "BrowserControl.FromServer",
       ),
     ),
   )
   .add(
-    HttpApiEndpoint.get("browser.tunnel.connect", "/api/browser/tunnel", {
+    HttpApiEndpoint.get("browser.tunnel.connect", BrowserTunnelProtocol.Path, {
       success: Schema.Boolean,
       error: ServiceUnavailableError,
     }).annotateMerge(
@@ -69,9 +55,9 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
         "v2.browser.tunnel.connect",
         "Open browser network tunnel",
         "Establish an authenticated WebSocket carrying one TCP stream dialed from the OpenCode server.",
-        BROWSER_TUNNEL_PROTOCOL,
-        "BrowserTunnel.FromDesktop and binary DATA frames",
-        "BrowserTunnel.FromServer and binary DATA frames",
+        BrowserTunnelProtocol.Subprotocol,
+        "BrowserTunnel.ControlFromDesktop and binary DATA frames",
+        "BrowserTunnel.ControlFromServer and binary DATA frames",
       ),
     ),
   )

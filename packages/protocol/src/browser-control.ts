@@ -3,9 +3,11 @@ export * as BrowserControlProtocol from "./browser-control.js"
 import { BrowserControl } from "@opencode-ai/schema/browser-control"
 import { Effect, Schema } from "effect"
 
+export const Path = "/api/browser/control"
+export const Subprotocol = "opencode.browser.control.v1"
 export const MaxMessageBytes = 8 * 1_024 * 1_024
 
-export class MessageError extends Schema.TaggedErrorClass<MessageError>()("BrowserControlProtocol.MessageError", {
+class MessageError extends Schema.TaggedErrorClass<MessageError>()("BrowserControlProtocol.MessageError", {
   kind: Schema.Literals(["invalid", "too_large"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
@@ -23,6 +25,9 @@ const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserCon
   errors: "all",
   onExcessProperty: "error",
 })
+
+// Server sends Ready, Desktop publishes a full monotonically revised Sync, and
+// Server acknowledges that revision before issuing requests for its leases.
 
 export function encodeFromDesktop(input: BrowserControl.FromDesktop) {
   return encode(input, encodeDesktop)
