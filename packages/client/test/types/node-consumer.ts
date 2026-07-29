@@ -4,6 +4,7 @@ import {
   BrowserDriverError,
   OpenCode,
   type BrowserAttachment,
+  type BrowserRegistration,
   type ChromiumController,
   type ChromiumDriver,
   type ChromiumPort,
@@ -32,15 +33,15 @@ declare const port: ChromiumPort<{ readonly page: true }>
 const chromium: ChromiumDriver<{ readonly page: true }> = BrowserDriver.chromium(() => port)
 
 declare const client: ReturnType<typeof OpenCode.make>
-const attachment: Promise<BrowserAttachment<{ readonly proxyURL: string }>> = client.browser.attach({
+const registration: Promise<BrowserRegistration> = client.browser.register({
   sessionID: "ses_type_fixture",
-  driver,
+  open: () => undefined,
 })
-
-void attachment
-const chromiumAttachment: Promise<BrowserAttachment<ChromiumController<{ readonly page: true }>>> =
-  client.browser.attach({
-    sessionID: "ses_chromium_type_fixture",
+void registration.then((handle) => {
+  const attachment: Promise<BrowserAttachment<{ readonly proxyURL: string }>> = handle.attach({ driver })
+  const chromiumAttachment: Promise<BrowserAttachment<ChromiumController<{ readonly page: true }>>> = handle.attach({
     driver: chromium,
   })
-void chromiumAttachment
+  void attachment
+  void chromiumAttachment
+})

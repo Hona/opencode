@@ -9,11 +9,10 @@ import type { BrowserPanePlatform } from "../browser-pane"
 export type {
   BrowserPaneBinding,
   BrowserPaneBounds,
-  BrowserPaneCommand,
   BrowserPaneEndpoint,
   BrowserPaneLayout,
   BrowserPanePlatform,
-  BrowserPaneState,
+  BrowserPaneRegistration,
   BrowserPaneTarget,
 } from "../browser-pane"
 export { browserPaneAvailable, createBrowserPaneBinding } from "../browser-pane"

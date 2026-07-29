@@ -24,6 +24,12 @@ export type {
   BrowserProxy,
 } from "./browser/driver.js"
 export type { ChromiumController, ChromiumDriver, ChromiumPort } from "./browser/chromium.js"
-export type { BrowserAttachment, BrowserAttachOptions, BrowserClient } from "./browser/client.js"
+export type {
+  BrowserAttachment,
+  BrowserAttachOptions,
+  BrowserClient,
+  BrowserRegistration,
+  BrowserRegisterOptions,
+} from "./browser/client.js"
 export type { EventSubscribeOutput as OpenCodeEvent } from "../promise/generated/types.js"
 export type OpenCodeClient = ReturnType<typeof import("./client.js").make>

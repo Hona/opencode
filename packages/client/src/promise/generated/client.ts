@@ -213,8 +213,8 @@ import type {
   WebsearchProvidersOutput,
   WebsearchQueryInput,
   WebsearchQueryOutput,
-} from "./types.js"
-import { ClientError } from "./client-error.js"
+} from "./types"
+import { ClientError } from "./client-error"
 
 export interface ClientOptions {
   readonly baseUrl: string

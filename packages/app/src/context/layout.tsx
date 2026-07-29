@@ -285,9 +285,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: DEFAULT_REVIEW_PANEL_OPENED,
         },
-        browser: {
-          panelOpened: false,
-        },
         fileTree: {
           opened: false,
           width: DEFAULT_FILE_TREE_WIDTH,
@@ -714,10 +711,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("fileTree", "tab", tab)
-        },
-        open() {
-          if (store.browser?.panelOpened) setStore("browser", "panelOpened", false)
-          if (!store.fileTree) {
+          },
+          open() {
+            if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
@@ -730,10 +726,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
           setStore("fileTree", "opened", false)
         },
-        toggle() {
-          const next = !(store.fileTree?.opened ?? true)
-          if (next && store.browser?.panelOpened) setStore("browser", "panelOpened", false)
-          if (!store.fileTree) {
+          toggle() {
+            const next = !(store.fileTree?.opened ?? true)
+            if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
@@ -825,7 +820,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
-        const browserPanelOpened = createMemo(() => store.browser?.panelOpened ?? false)
         const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
 
         function setTerminalOpened(next: boolean) {
@@ -841,7 +835,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
 
         function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
-          if (next && browserPanelOpened()) setStore("browser", "panelOpened", false)
           const nextSource = next ? source : "other"
           const current = store.review
           if (!current) {
@@ -860,24 +853,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           batch(() => {
             setStore("review", "panelOpened", next)
             setEphemeral("reviewPanelSource", nextSource)
-          })
-        }
-
-        function setBrowserPanelOpened(next: boolean) {
-          const current = store.browser
-          if (!current) {
-            batch(() => {
-              setStore("browser", { panelOpened: next })
-              if (next) setReviewPanelOpened(false, "other")
-              if (next && store.fileTree?.opened) setStore("fileTree", "opened", false)
-            })
-            return
-          }
-          if ((current.panelOpened ?? false) === next) return
-          batch(() => {
-            setStore("browser", "panelOpened", next)
-            if (next) setReviewPanelOpened(false, "other")
-            if (next && store.fileTree?.opened) setStore("fileTree", "opened", false)
           })
         }
 
@@ -923,18 +898,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setReviewPanelOpened(!reviewPanelOpened(), "other")
-            },
-          },
-          browserPanel: {
-            opened: browserPanelOpened,
-            open() {
-              setBrowserPanelOpened(true)
-            },
-            close() {
-              setBrowserPanelOpened(false)
-            },
-            toggle() {
-              setBrowserPanelOpened(!browserPanelOpened())
             },
           },
           review: {

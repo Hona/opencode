@@ -234,24 +234,22 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     storage,
 
     browserPane: {
-      setLayout: (binding, layout) => window.api.browserPane.setLayout(binding, layout),
-      command: (binding, command) => window.api.browserPane.command(binding, command),
-      subscribe: async (binding, callback) => {
-        let endpointRevision = -1
-        const update = (next: Awaited<ReturnType<typeof window.api.browserPane.state>>) => {
-          if (
-            next.serverKey !== binding.serverKey ||
-            next.sessionID !== binding.sessionID ||
-            next.bindingID !== binding.bindingID ||
-            next.endpointRevision < endpointRevision
-          )
-            return
-          endpointRevision = next.endpointRevision
-          callback(next.state)
+      register: (binding, onOpen) => {
+        let closed = false
+        const ready = window.api.browserPane.register(binding)
+        const disposeOpen = window.api.browserPane.onOpen((event) => {
+          if (!closed && event.bindingID === binding.bindingID) onOpen()
+        })
+        return {
+          setLayout: (layout) =>
+            void ready.then(() => window.api.browserPane.setLayout(binding.bindingID, layout)).catch(() => undefined),
+          close: () => {
+            if (closed) return
+            closed = true
+            disposeOpen()
+            void ready.then(() => window.api.browserPane.unregister(binding.bindingID)).catch(() => undefined)
+          },
         }
-        const dispose = window.api.browserPane.onState(update)
-        update(await window.api.browserPane.state(binding))
-        return dispose
       },
     },
 

@@ -5,12 +5,7 @@ import { BrowserControlProtocol } from "../browser-control.js"
 import { BrowserTunnelProtocol } from "../browser-tunnel.js"
 import { HeaderOnlyAuthorization } from "../middleware/authorization.js"
 
-const websocket = (
-  identifier: string,
-  summary: string,
-  description: string,
-  subprotocol: string,
-) =>
+const websocket = (identifier: string, summary: string, description: string, subprotocol: string) =>
   OpenApi.annotations({
     identifier,
     summary,
@@ -34,11 +29,12 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
       error: ConflictError,
     })
       .annotate(HeaderOnlyAuthorization, true)
+      .annotate(OpenApi.Exclude, true)
       .annotateMerge(
         websocket(
           "v2.browser.control.connect",
-          "Connect desktop browser host",
-          "Establish an authenticated WebSocket carrying Session-scoped browser attachments and semantic browser commands.",
+          "Connect Session browser host",
+          "Establish an authenticated WebSocket controlling the browser attachment for one Session.",
           BrowserControlProtocol.Subprotocol,
         ),
       ),
@@ -49,6 +45,7 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
       error: ServiceUnavailableError,
     })
       .annotate(HeaderOnlyAuthorization, true)
+      .annotate(OpenApi.Exclude, true)
       .annotateMerge(
         websocket(
           "v2.browser.tunnel.connect",

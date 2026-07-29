@@ -52,6 +52,7 @@ import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { browserPaneAvailable, createBrowserPaneBinding, usePlatform } from "@/context/platform"
+import type { BrowserPaneRegistration } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServer } from "@/context/server"
@@ -457,7 +458,6 @@ export default function Page() {
   const browserAvailable = createMemo(() =>
     browserPaneAvailable({
       platform: !!platform.browserPane,
-      enabled: settings.general.experimentalBrowser(),
       sessionID: params.id,
       protocol: serverProtocol(),
     }),
@@ -469,7 +469,6 @@ export default function Page() {
       const serverKey = ServerConnection.key(routeServer)
       const connection = server.list.find((item) => ServerConnection.key(item) === serverKey) ?? routeServer
       return {
-        serverKey,
         endpoint: {
           url: connection.http.url,
           username: connection.http.username,
@@ -482,7 +481,6 @@ export default function Page() {
       equals: (left, right) => {
         if (!left || !right) return left === right
         return (
-          left.serverKey === right.serverKey &&
           left.endpoint.url === right.endpoint.url &&
           left.endpoint.username === right.endpoint.username &&
           left.endpoint.password === right.endpoint.password
@@ -494,11 +492,38 @@ export default function Page() {
     if (!params.id) return undefined
     const target = browserServer()
     if (!target) return undefined
-    return createBrowserPaneBinding({ serverKey: target.serverKey, sessionID: params.id, endpoint: target.endpoint })
+    return createBrowserPaneBinding({ sessionID: params.id, endpoint: target.endpoint })
+  })
+  const [browserPane, setBrowserPane] = createStore<{
+    registration?: BrowserPaneRegistration
+    opened: boolean
+  }>({ opened: false })
+  createEffect(() => {
+    const binding = browserBinding()
+    const browser = platform.browserPane
+    if (!binding || !browser) {
+      setBrowserPane({ registration: undefined, opened: false })
+      return
+    }
+    const registration = browser.register(binding, () => {
+      view().reviewPanel.close()
+      layout.fileTree.close()
+      setBrowserPane("opened", true)
+    })
+    setBrowserPane("registration", registration)
+    onCleanup(() => {
+      setBrowserPane({ registration: undefined, opened: false })
+      registration.close()
+    })
+  })
+  createEffect(() => {
+    if (!browserPane.opened) return
+    if (!view().reviewPanel.opened() && !layout.fileTree.opened()) return
+    setBrowserPane("opened", false)
   })
   const desktopBrowserBinding = createMemo(() => {
-    if (!isDesktop() || !browserAvailable() || !view().browserPanel.opened()) return undefined
-    return browserBinding()
+    if (!isDesktop() || !browserAvailable() || !browserPane.opened) return undefined
+    return browserPane.registration
   })
   const desktopBrowserOpen = createMemo(() => !!desktopBrowserBinding())
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
@@ -566,11 +591,6 @@ export default function Page() {
       files: desktopFileTreeOpen(),
     }),
   )
-
-  createEffect(() => {
-    if (browserAvailable() || serverProtocol.loading) return
-    if (view().browserPanel.opened()) view().browserPanel.close()
-  })
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1205,7 +1225,6 @@ export default function Page() {
     focusInput,
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
-    browser: browserAvailable,
   })
   command.register("session-palette", () => [
     {
@@ -2307,7 +2326,7 @@ export default function Page() {
 
   return (
     <SessionRouteFrame>
-      <SessionHeader browserAvailable={browserAvailable()} />
+      <SessionHeader />
       <div
         ref={panelRow}
         class="flex-1 min-h-0 flex flex-col md:flex-row"
@@ -2383,16 +2402,16 @@ export default function Page() {
               </Suspense>
             }
           >
-            {(binding) => <SessionBrowserPane binding={binding} />}
+            {(registration) => <SessionBrowserPane registration={registration} />}
           </Show>
         </Show>
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
               <Show when={desktopBrowserBinding()} keyed>
-                {(binding) => (
+                {(registration) => (
                   <div class="min-h-0 flex-1">
-                    <SessionBrowserPane binding={binding} />
+                    <SessionBrowserPane registration={registration} />
                   </div>
                 )}
               </Show>

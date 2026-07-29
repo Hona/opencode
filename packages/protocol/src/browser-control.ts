@@ -15,9 +15,9 @@ class MessageError extends Schema.TaggedErrorClass<MessageError>()("BrowserContr
 
 const decoder = new TextDecoder("utf-8", { fatal: true })
 const encoder = new TextEncoder()
-const encodeDesktop = Schema.encodeSync(Schema.fromJsonString(BrowserControl.FromDesktop))
+const encodeClient = Schema.encodeSync(Schema.fromJsonString(BrowserControl.FromClient))
 const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserControl.FromServer))
-const decodeDesktop = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserControl.FromDesktop), {
+const decodeClient = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserControl.FromClient), {
   errors: "all",
   onExcessProperty: "error",
 })
@@ -26,13 +26,8 @@ const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserCon
   onExcessProperty: "error",
 })
 
-// Server sends Ready, Desktop publishes a full monotonically revised Session
-// registration snapshot, and Server acknowledges it before issuing requests.
-// Available registrations accept reveal requests; attached registrations also
-// carry a lease for semantic browser commands.
-
-export function encodeFromDesktop(input: BrowserControl.FromDesktop) {
-  return encode(input, encodeDesktop)
+export function encodeFromClient(input: BrowserControl.FromClient) {
+  return encode(input, encodeClient)
 }
 
 export function encodeFromServer(input: BrowserControl.FromServer) {
@@ -47,8 +42,8 @@ function encode<Message>(input: Message, encodeMessage: (input: Message) => stri
   return output
 }
 
-export function decodeFromDesktop(input: string | Uint8Array) {
-  return decode(input, decodeDesktop)
+export function decodeFromClient(input: string | Uint8Array) {
+  return decode(input, decodeClient)
 }
 
 export function decodeFromServer(input: string | Uint8Array) {

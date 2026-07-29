@@ -5,117 +5,65 @@ import { Effect, Schema } from "effect"
 
 export const Path = "/api/browser/tunnel"
 export const Subprotocol = "opencode.browser.tunnel.v1"
+export const MaxFrameBytes = 64 * 1_024
+export const MaxHandshakeBytes = 16 * 1_024
 
-const FrameType = {
-  Data: 0,
-  Control: 1,
-} as const
-
-// Every WebSocket message is binary. The first byte selects raw DATA or a
-// strict JSON control message for the corresponding connection direction.
-
-export const MaxDataBytes = 64 * 1_024
-export const MaxControlBytes = 16 * 1_024
-
-class FrameError extends Schema.TaggedErrorClass<FrameError>()("BrowserTunnelProtocol.FrameError", {
+class MessageError extends Schema.TaggedErrorClass<MessageError>()("BrowserTunnelProtocol.MessageError", {
   kind: Schema.Literals(["invalid", "too_large"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-type DataFrame = {
-  readonly type: "data"
-  readonly data: Uint8Array
-}
-
-type ControlFrame<Message> = {
-  readonly type: "control"
-  readonly message: Message
-}
-
-type FromDesktop = DataFrame | ControlFrame<BrowserTunnel.ControlFromDesktop>
-type FromServer = DataFrame | ControlFrame<BrowserTunnel.ControlFromServer>
-
 const encoder = new TextEncoder()
-const decoder = new TextDecoder("utf-8", { fatal: true })
-const encodeDesktop = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.ControlFromDesktop))
-const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.ControlFromServer))
-const decodeDesktop = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.ControlFromDesktop), {
+const encodeClient = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromClient))
+const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromServer))
+const decodeClient = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.FromClient), {
   errors: "all",
   onExcessProperty: "error",
 })
-const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.ControlFromServer), {
+const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.FromServer), {
   errors: "all",
   onExcessProperty: "error",
 })
 
-export function data(input: Uint8Array) {
-  if (input.byteLength === 0 || input.byteLength > MaxDataBytes) {
-    throw new RangeError(`Browser tunnel data must contain between 1 and ${MaxDataBytes} bytes.`)
+export function encodeFromClient(input: BrowserTunnel.FromClient) {
+  return encode(encodeClient(input))
+}
+
+export function encodeFromServer(input: BrowserTunnel.FromServer) {
+  return encode(encodeServer(input))
+}
+
+function encode(input: string) {
+  if (encoder.encode(input).byteLength > MaxHandshakeBytes) {
+    throw new RangeError(`Browser tunnel handshake must not exceed ${MaxHandshakeBytes} bytes.`)
   }
-  const frame = new Uint8Array(input.byteLength + 1)
-  frame[0] = FrameType.Data
-  frame.set(input, 1)
-  return frame
+  return input
 }
 
-export function encodeFromDesktop(input: BrowserTunnel.ControlFromDesktop) {
-  return control(encodeDesktop(input))
+export function decodeFromClient(input: string | Uint8Array) {
+  return decode(input, decodeClient)
 }
 
-export function encodeFromServer(input: BrowserTunnel.ControlFromServer) {
-  return control(encodeServer(input))
-}
-
-function control(input: string) {
-  const payload = encoder.encode(input)
-  if (payload.byteLength > MaxControlBytes) {
-    throw new RangeError(`Browser tunnel control data must not exceed ${MaxControlBytes} bytes.`)
-  }
-  const frame = new Uint8Array(payload.byteLength + 1)
-  frame[0] = FrameType.Control
-  frame.set(payload, 1)
-  return frame
-}
-
-export function decodeFromDesktop(input: string | Uint8Array): Effect.Effect<FromDesktop, FrameError> {
-  return decode(input, decodeDesktop)
-}
-
-export function decodeFromServer(input: string | Uint8Array): Effect.Effect<FromServer, FrameError> {
+export function decodeFromServer(input: string | Uint8Array) {
   return decode(input, decodeServer)
 }
 
 function decode<Message>(
   input: string | Uint8Array,
   decodeMessage: (input: unknown) => Effect.Effect<Message, unknown>,
-): Effect.Effect<DataFrame | ControlFrame<Message>, FrameError> {
-  if (typeof input === "string" || input.byteLength === 0) {
-    return Effect.fail(new FrameError({ kind: "invalid", message: "Browser tunnel frames must use binary framing." }))
+): Effect.Effect<Message, MessageError> {
+  if (typeof input !== "string") {
+    return Effect.fail(new MessageError({ kind: "invalid", message: "Browser tunnel handshake must be text." }))
   }
-  if (input[0] === FrameType.Data) {
-    if (input.byteLength === 1 || input.byteLength > MaxDataBytes + 1) {
-      return Effect.fail(new FrameError({ kind: "too_large", message: "Browser tunnel data frame size is invalid." }))
-    }
-    return Effect.succeed({ type: "data", data: input.subarray(1) })
+  if (encoder.encode(input).byteLength > MaxHandshakeBytes) {
+    return Effect.fail(new MessageError({ kind: "too_large", message: "Browser tunnel handshake is too large." }))
   }
-  if (input[0] !== FrameType.Control) {
-    return Effect.fail(new FrameError({ kind: "invalid", message: "Browser tunnel frame type is invalid." }))
-  }
-  if (input.byteLength > MaxControlBytes + 1) {
-    return Effect.fail(new FrameError({ kind: "too_large", message: "Browser tunnel control frame is too large." }))
-  }
-  return Effect.try({
-    try: () => decoder.decode(input.subarray(1)),
-    catch: (cause) =>
-      new FrameError({ kind: "invalid", message: "Browser tunnel control frame is not valid UTF-8.", cause }),
-  }).pipe(
-    Effect.flatMap(decodeMessage),
-    Effect.map((message) => ({ type: "control" as const, message })),
+  return decodeMessage(input).pipe(
     Effect.mapError((cause) =>
-      cause instanceof FrameError
+      cause instanceof MessageError
         ? cause
-        : new FrameError({ kind: "invalid", message: "Browser tunnel control frame is invalid.", cause }),
+        : new MessageError({ kind: "invalid", message: "Browser tunnel handshake is invalid.", cause }),
     ),
   )
 }

@@ -43,14 +43,19 @@ const client = OpenCode.make({
   baseUrl: "https://opencode.example",
   headers: { authorization: `Basic ${credentials}` },
 })
-const attachment = await client.browser.attach({ sessionID, driver })
+const registration = await client.browser.register({
+  sessionID,
+  open: () => showBrowserPane(),
+})
+const attachment = await registration.attach({ driver })
 
 await attachment.resource.navigate("example.com")
 const view = attachment.resource.resource
 await attachment.close()
+await registration.close()
 ```
 
-`attach` resolves only after the server acknowledges the exact Session lease. Each attachment has its own proxy and driver resource; `close()` and `Symbol.asyncDispose` are idempotent. A single Node client multiplexes up to 16 distinct Sessions over one lazily opened control WebSocket.
+`register` owns one control WebSocket for one Session. Its `open` callback is invoked when the server requests the browser pane. `attach` resolves only after the server acknowledges the exact lease; closing an attachment leaves its registration connected for a later `open`, while closing the registration closes the socket.
 
 Driver factories should return after configuring their resource rather than await a proxied navigation: tunnel dialing is deliberately held behind the first lease acknowledgement, which is published after the driver supplies its initial state.
 

@@ -2,7 +2,6 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import { BrowserHost } from "@opencode-ai/core/browser-host"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
@@ -16,7 +15,6 @@ import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
-import { BrowserTunnelServer } from "./browser-tunnel"
 import type { ServerOptions } from "./options"
 
 export interface Lifecycle<E = never, R = never> {
@@ -48,7 +46,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   })
   const bound = yield* listen({ hostname, port })
   const application = yield* Ref.make(Option.none<App>())
-  const applicationShutdown = yield* Ref.make(Effect.void)
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
@@ -71,7 +68,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* Effect.addFinalizer(() =>
     status.beginStopping.pipe(
       Effect.andThen(Ref.set(application, Option.none())),
-      Effect.andThen(Ref.get(applicationShutdown).pipe(Effect.flatMap((shutdown) => shutdown))),
       Effect.andThen(Effect.sync(() => bound.server.closeAllConnections())),
     ),
   )
@@ -98,12 +94,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       )
     }
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
-    yield* Ref.set(
-      applicationShutdown,
-      Context.get(context, BrowserTunnelServer.Service).shutdown.pipe(
-        Effect.andThen(Context.get(context, BrowserHost.Service).shutdown),
-      ),
-    )
     yield* status.ready
     return { address: bound.http.address, shutdown: Deferred.await(shutdown) }
   }).pipe(

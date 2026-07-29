@@ -1,8 +1,7 @@
 import { NodeHttpServerRequest } from "@effect/platform-node"
-import { BrowserHost } from "@opencode-ai/core/browser-host"
 import { BrowserControlProtocol } from "@opencode-ai/protocol/browser-control"
 import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
-import { ConflictError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
+import { ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -14,7 +13,6 @@ import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "../cors"
 
 export const BrowserHandler = HttpApiBuilder.group(Api, "server.browser", (handlers) =>
   Effect.gen(function* () {
-    const browser = yield* BrowserHost.Service
     const tunnels = yield* BrowserTunnelServer.Service
     const cors = yield* CorsConfig
 
@@ -24,21 +22,10 @@ export const BrowserHandler = HttpApiBuilder.group(Api, "server.browser", (handl
         Effect.fn("BrowserHandler.control")(function* (ctx) {
           const rejected = rejectUpgrade(ctx.request.headers, BrowserControlProtocol.Subprotocol, cors)
           if (rejected) return rejected
-          const connection = yield* browser.claim.pipe(
-            Effect.mapError((error) => new ConflictError({ resource: "browser", message: error.message })),
-          )
           const socket = yield* Effect.orDie(ctx.request.upgrade)
-          const peer = yield* BrowserControlConnection.make(
+          yield* BrowserControlConnection.run(
             socket,
             Effect.sync(() => markUpgraded(ctx.request)),
-          )
-          yield* connection.run(peer).pipe(
-            Effect.catchTags({
-              "BrowserHost.ProtocolError": (error) =>
-                Effect.logWarning("Browser control protocol failed", { message: error.message }),
-              "BrowserHost.ConnectionError": (error) =>
-                Effect.logDebug("Browser control connection closed", { message: error.message }),
-            }),
           )
           return HttpServerResponse.empty()
         }),

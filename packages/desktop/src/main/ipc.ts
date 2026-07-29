@@ -4,6 +4,7 @@ import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import { BrowserPaneIPC } from "../browser-pane-ipc"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
@@ -20,7 +21,7 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
-import type { BrowserDesktop } from "./browser-desktop"
+import type { BrowserPane } from "./browser-pane"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -49,7 +50,7 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
-  browser: BrowserDesktop.Controller
+  browser: BrowserPane.Controller
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -97,18 +98,19 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
-  ipcMain.on("browser-pane-layout", (event, binding: unknown, layout: unknown) => {
+  ipcMain.handle(BrowserPaneIPC.register, (event, binding: unknown) => {
+    return deps.browser.register(requireTrustedWindow(event), binding)
+  })
+  ipcMain.handle(BrowserPaneIPC.unregister, (event, bindingID: unknown) => {
+    if (typeof bindingID !== "string") throw new TypeError("Invalid browser pane binding ID")
+    return deps.browser.unregister(requireTrustedWindow(event), bindingID)
+  })
+  ipcMain.on(BrowserPaneIPC.layout, (event, input: unknown) => {
     const win = trustedWindow(event)
     if (!win) return
     try {
-      deps.browser.setLayout(win, binding, layout)
+      deps.browser.setLayout(win, input)
     } catch {}
-  })
-  ipcMain.handle("browser-pane-command", (event, binding: unknown, command: unknown) => {
-    return deps.browser.command(requireTrustedWindow(event), binding, command)
-  })
-  ipcMain.handle("browser-pane-state", (event, binding: unknown) => {
-    return deps.browser.state(requireTrustedWindow(event), binding)
   })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {

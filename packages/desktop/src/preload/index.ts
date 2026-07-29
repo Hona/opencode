@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import type { BrowserPaneStateUpdate, ElectronAPI, WslServersEvent } from "./types"
+import type { ElectronAPI, WslServersEvent } from "./types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import { BrowserPaneIPC, type BrowserPaneOpenEvent } from "../browser-pane-ipc"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
 let updaterState: UpdaterState | undefined
@@ -57,13 +58,13 @@ const api: ElectronAPI = {
     install: () => ipcRenderer.invoke("updater-install"),
   },
   browserPane: {
-    setLayout: (binding, layout) => ipcRenderer.send("browser-pane-layout", binding, layout),
-    command: (binding, command) => ipcRenderer.invoke("browser-pane-command", binding, command),
-    state: (binding) => ipcRenderer.invoke("browser-pane-state", binding),
-    onState: (callback) => {
-      const handler = (_event: unknown, update: BrowserPaneStateUpdate) => callback(update)
-      ipcRenderer.on("browser-pane-state", handler)
-      return () => ipcRenderer.removeListener("browser-pane-state", handler)
+    register: (binding) => ipcRenderer.invoke(BrowserPaneIPC.register, binding),
+    unregister: (bindingID) => ipcRenderer.invoke(BrowserPaneIPC.unregister, bindingID),
+    setLayout: (bindingID, layout) => ipcRenderer.send(BrowserPaneIPC.layout, { bindingID, layout }),
+    onOpen: (callback) => {
+      const handler = (_event: unknown, input: BrowserPaneOpenEvent) => callback(input)
+      ipcRenderer.on(BrowserPaneIPC.open, handler)
+      return () => ipcRenderer.removeListener(BrowserPaneIPC.open, handler)
     },
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),

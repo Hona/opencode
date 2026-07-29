@@ -26,7 +26,6 @@ export type SessionCommandContext = {
   focusInput: () => void
   review?: () => boolean
   fileBrowser?: () => boolean
-  browser?: () => boolean
 }
 
 const withCategory = (category: string) => {
@@ -515,16 +514,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
-    ...(actions.browser?.()
-      ? [
-          viewCommand({
-            id: "browser.toggle",
-            title: language.t("command.browser.toggle"),
-            keybind: "mod+shift+b",
-            onSelect: () => view().browserPanel.toggle(),
-          }),
-        ]
-      : []),
     ...(shown()
       ? [
           viewCommand({

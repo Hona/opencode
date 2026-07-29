@@ -3,10 +3,9 @@ import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type {
   BrowserPaneBinding,
-  BrowserPaneCommand,
   BrowserPaneLayout,
-  BrowserPaneState,
 } from "@opencode-ai/app/browser-pane"
+import type { BrowserPaneOpenEvent } from "../browser-pane-ipc"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -33,15 +32,11 @@ export type UpdaterAPI = {
   check: () => Promise<UpdaterState>
   install: () => Promise<void>
 }
-export type BrowserPaneStateUpdate = Pick<BrowserPaneBinding, "serverKey" | "sessionID" | "bindingID"> & {
-  readonly endpointRevision: number
-  readonly state: BrowserPaneState
-}
 export type BrowserPaneAPI = {
-  setLayout: (binding: BrowserPaneBinding, layout: BrowserPaneLayout) => void
-  command: (binding: BrowserPaneBinding, command: BrowserPaneCommand) => Promise<void>
-  state: (binding: BrowserPaneBinding) => Promise<BrowserPaneStateUpdate>
-  onState: (callback: (update: BrowserPaneStateUpdate) => void) => () => void
+  register: (binding: BrowserPaneBinding) => Promise<void>
+  unregister: (bindingID: string) => Promise<void>
+  setLayout: (bindingID: string, layout?: BrowserPaneLayout) => void
+  onOpen: (callback: (event: BrowserPaneOpenEvent) => void) => () => void
 }
 
 export type LinuxDisplayBackend = "wayland" | "auto"

@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url"
 
 const directory = resolve(import.meta.dir, "../..")
 
-test("built Node entrypoint imports in Node and treats HTTP authentication rejection as fatal", async () => {
+test("built Node entrypoint imports and exposes browser registration in Node", async () => {
   await buildClient()
   const output = await Bun.file(join(directory, "dist/node/index.js")).text()
   expect(output).not.toMatch(/(?:from\s+|import\s*)["']\.\.?\//)
@@ -121,43 +121,13 @@ function importPath(from: string, to: string) {
 }
 
 function nodeScenario(moduleURL: string) {
-  return `import { createServer } from "node:http"
-const sdk = await import(${JSON.stringify(moduleURL)})
+  return `const sdk = await import(${JSON.stringify(moduleURL)})
 if (typeof sdk.OpenCode.make !== "function") throw new Error("Missing OpenCode.make")
 if (typeof sdk.BrowserDriver.define !== "function") throw new Error("Missing BrowserDriver.define")
 if (typeof sdk.BrowserDriver.chromium !== "function") throw new Error("Missing BrowserDriver.chromium")
 if (typeof sdk.BrowserDriverError !== "function") throw new Error("Missing BrowserDriverError")
 if (!sdk.Browser.State) throw new Error("Missing canonical Browser export")
-
-let upgrades = 0
-const server = createServer()
-server.on("upgrade", (_request, socket) => {
-  upgrades++
-  socket.end("HTTP/1.1 401 Unauthorized\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
-})
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-const address = server.address()
-if (!address || typeof address === "string") throw new Error("Server did not bind")
-let disposed = 0
-const driver = () => ({
-  resource: undefined,
-  state: () => ({ url: "about:blank", title: "", loading: false, canGoBack: false, canGoForward: false, generation: 0 }),
-  subscribe: () => () => undefined,
-  execute: async () => { throw new sdk.BrowserDriverError("internal", "unavailable") },
-  dispose: () => { disposed++ },
-})
-const client = sdk.OpenCode.make({ baseUrl: \`http://127.0.0.1:\${address.port}\` })
-const error = await Promise.race([
-  client.browser.attach({ sessionID: "ses_node_auth_rejection", driver }).then(
-    () => new Error("Expected authentication rejection"),
-    (cause) => cause,
-  ),
-  new Promise((resolve) => setTimeout(() => resolve(new Error("Authentication rejection timed out")), 2_000)),
-])
-await new Promise((resolve) => setTimeout(resolve, 250))
-await new Promise((resolve) => server.close(resolve))
-if (!(error instanceof Error) || !error.message.includes("HTTP 401")) throw error
-if (upgrades !== 1) throw new Error(\`Expected one upgrade, received \${upgrades}\`)
-if (disposed !== 1) throw new Error(\`Expected one driver disposal, received \${disposed}\`)
+const client = sdk.OpenCode.make({ baseUrl: "http://127.0.0.1:1" })
+if (typeof client.browser.register !== "function") throw new Error("Missing browser.register")
 console.log("ok")`
 }
