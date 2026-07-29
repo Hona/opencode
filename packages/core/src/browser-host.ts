@@ -79,7 +79,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BrowserHost") {}
 
-type Attachment = BrowserControl.Attachment & {
+type Sync = Extract<BrowserControl.FromDesktop, { readonly type: "browser.control.sync" }>
+type Response = Extract<BrowserControl.FromDesktop, { readonly type: "browser.control.response" }>
+type Attachment = Sync["attachments"][number] & {
   readonly token: object
   readonly revoked: Deferred.Deferred<void>
 }
@@ -203,7 +205,7 @@ export function make(
       }
     })
 
-    const sync = Effect.fn("BrowserHost.sync")(function* (token: object, input: BrowserControl.Sync) {
+    const sync = Effect.fn("BrowserHost.sync")(function* (token: object, input: Sync) {
       const sessionIDs = new Set(input.attachments.map((attachment) => attachment.sessionID))
       const leaseIDs = new Set(input.attachments.map((attachment) => attachment.leaseID))
       if (sessionIDs.size !== input.attachments.length || leaseIDs.size !== input.attachments.length) {
@@ -276,7 +278,7 @@ export function make(
       return yield* result.peer.send({ type: "browser.control.synced", revision: input.revision })
     })
 
-    const respond = Effect.fn("BrowserHost.respond")(function* (token: object, input: BrowserControl.Response) {
+    const respond = Effect.fn("BrowserHost.respond")(function* (token: object, input: Response) {
       const pending = yield* SynchronizedRef.modifyEffect(
         state,
         Effect.fnUntraced(function* (current) {
