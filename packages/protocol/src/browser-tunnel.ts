@@ -11,6 +11,9 @@ const FrameType = {
   Control: 1,
 } as const
 
+// Every WebSocket message is binary. The first byte selects raw DATA or a
+// strict JSON control message for the corresponding connection direction.
+
 export const MaxDataBytes = 64 * 1_024
 export const MaxControlBytes = 16 * 1_024
 

@@ -9,8 +9,6 @@ const websocket = (
   summary: string,
   description: string,
   subprotocol: string,
-  incoming: string,
-  outgoing: string,
 ) =>
   OpenApi.annotations({
     identifier,
@@ -20,8 +18,6 @@ const websocket = (
       ...operation,
       "x-websocket": true,
       "x-websocket-subprotocol": subprotocol,
-      "x-websocket-incoming": incoming,
-      "x-websocket-outgoing": outgoing,
       responses: {
         ...operation.responses,
         403: { description: "WebSocket Origin is not allowed." },
@@ -41,8 +37,6 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
         "Connect desktop browser host",
         "Establish an authenticated WebSocket carrying Session-scoped browser attachments and semantic browser commands.",
         BrowserControlProtocol.Subprotocol,
-        "BrowserControl.FromDesktop",
-        "BrowserControl.FromServer",
       ),
     ),
   )
@@ -56,8 +50,6 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
         "Open browser network tunnel",
         "Establish an authenticated WebSocket carrying one TCP stream dialed from the OpenCode server.",
         BrowserTunnelProtocol.Subprotocol,
-        "BrowserTunnel.ControlFromDesktop and binary DATA frames",
-        "BrowserTunnel.ControlFromServer and binary DATA frames",
       ),
     ),
   )
