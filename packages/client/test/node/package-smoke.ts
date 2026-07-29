@@ -66,7 +66,6 @@ async function stageWorkspaceDependencies(temporary: string) {
       [
         `export { BrowserControlProtocol } from ${JSON.stringify(importPath(temporary, resolve(directory, "../protocol/src/browser-control.ts")))}`,
         `export { BrowserTunnelProtocol } from ${JSON.stringify(importPath(temporary, resolve(directory, "../protocol/src/browser-tunnel.ts")))}`,
-        `export { BROWSER_CONTROL_PROTOCOL, BROWSER_TUNNEL_PROTOCOL } from ${JSON.stringify(importPath(temporary, resolve(directory, "../protocol/src/groups/browser.ts")))}`,
       ].join("\n"),
     ),
   ])
@@ -110,7 +109,6 @@ async function stageWorkspaceDependencies(temporary: string) {
         exports: {
           "./browser-control": "./index.js",
           "./browser-tunnel": "./index.js",
-          "./groups/browser": "./index.js",
         },
       }),
     ),

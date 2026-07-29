@@ -1,6 +1,5 @@
 import { BrowserControlProtocol } from "@opencode-ai/protocol/browser-control"
 import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
-import { BROWSER_CONTROL_PROTOCOL, BROWSER_TUNNEL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
 import { BrowserControl } from "@opencode-ai/schema/browser-control"
 import { BrowserTunnel } from "@opencode-ai/schema/browser-tunnel"
 import { Session } from "@opencode-ai/schema/session"
@@ -28,6 +27,8 @@ const initialState: Browser.State = {
   canGoForward: false,
   generation: 1,
 }
+const receiveWindowBytes = 256 * 1_024
+const receiveWindowFrames = 16
 
 describe("Node browser client", () => {
   test("rejects authentication failures on Bun without unsupported ws response events", async () => {
@@ -140,8 +141,8 @@ describe("Node browser client", () => {
       tunnel.send(
         BrowserTunnelProtocol.encodeFromServer({
           type: "browser.tunnel.opened",
-          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-          receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+          receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
         }),
         { binary: true },
       )
@@ -717,15 +718,15 @@ async function controlServer(authorization?: string) {
       return
     }
     if (
-      request.url === "/api/browser/control" &&
-      request.headers["sec-websocket-protocol"] === BROWSER_CONTROL_PROTOCOL
+      request.url === BrowserControlProtocol.Path &&
+      request.headers["sec-websocket-protocol"] === BrowserControlProtocol.Subprotocol
     ) {
       webSockets.handleUpgrade(request, socket, head, (webSocket) => webSockets.emit("connection", webSocket, request))
       return
     }
     if (
-      request.url === "/api/browser/tunnel" &&
-      request.headers["sec-websocket-protocol"] === BROWSER_TUNNEL_PROTOCOL
+      request.url === BrowserTunnelProtocol.Path &&
+      request.headers["sec-websocket-protocol"] === BrowserTunnelProtocol.Subprotocol
     ) {
       tunnels.handleUpgrade(request, socket, head, (webSocket) => tunnels.emit("connection", webSocket, request))
       return

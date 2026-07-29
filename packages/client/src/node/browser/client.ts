@@ -1,5 +1,4 @@
 import { BrowserControlProtocol } from "@opencode-ai/protocol/browser-control"
-import { BROWSER_CONTROL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
 import { Browser } from "@opencode-ai/schema/browser"
 import { BrowserControl } from "@opencode-ai/schema/browser-control"
 import { Session } from "@opencode-ai/schema/session"
@@ -56,6 +55,9 @@ type ActiveAttachment = AttachmentRecord & {
   readonly state: Browser.State
   readonly execute: BrowserDriverInstance<unknown>["execute"]
 }
+
+type BrowserRequest = Extract<BrowserControl.FromServer, { readonly type: "browser.control.request" }>
+type BrowserFailure = Extract<Browser.Outcome, { readonly type: "failure" }>
 
 type Waiter = {
   readonly key: string
@@ -276,7 +278,7 @@ class BrowserClientControl {
       }
     }
     if (this.socket || this.retry || this.attachments().length === 0) return
-    const socket = new WebSocket(controlURL(this.server), BROWSER_CONTROL_PROTOCOL, {
+    const socket = new WebSocket(controlURL(this.server), BrowserControlProtocol.Subprotocol, {
       ...(this.server.authorization ? { headers: { Authorization: this.server.authorization } } : {}),
       handshakeTimeout: 10_000,
       maxPayload: BrowserControlProtocol.MaxMessageBytes,
@@ -372,7 +374,7 @@ class BrowserClientControl {
     this.send(socket, { type: "browser.control.sync", revision, attachments })
   }
 
-  private async request(socket: WebSocket, message: BrowserControl.Request) {
+  private async request(socket: WebSocket, message: BrowserRequest) {
     if (this.requests.has(message.requestID)) return this.protocolError(socket)
     const record = this.records.get(message.sessionID)
     if (!record?.active || record.closed || record.leaseID !== message.leaseID || !record.execute) {
@@ -590,7 +592,7 @@ function contractState(state: Browser.State) {
   return Object.freeze({ ...state })
 }
 
-function driverFailure(error: unknown): Browser.Failure {
+function driverFailure(error: unknown): BrowserFailure {
   return {
     type: "failure",
     code:
@@ -613,7 +615,7 @@ function endpoint(options: ClientOptions): BrowserTunnelEndpoint {
 function controlURL(endpoint: BrowserTunnelEndpoint) {
   const url = new URL(endpoint.url)
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-  url.pathname = "/api/browser/control"
+  url.pathname = BrowserControlProtocol.Path
   url.search = ""
   url.hash = ""
   return url

@@ -1,5 +1,4 @@
 import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
-import { BROWSER_TUNNEL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
 import { Browser } from "@opencode-ai/schema/browser"
 import { BrowserTunnel } from "@opencode-ai/schema/browser-tunnel"
 import { Session } from "@opencode-ai/schema/session"
@@ -12,6 +11,8 @@ import { BrowserTunnelError, openBrowserTunnel } from "../../src/node/browser/tu
 
 const sessionID = Session.ID.make("ses_client_tunnel")
 const leaseID = Browser.LeaseID.make("brl_clienttunnel")
+const receiveWindowBytes = 256 * 1_024
+const receiveWindowFrames = 16
 
 describe("browser tunnel", () => {
   test("enforces byte and frame windows and preserves both half-closes", async () => {
@@ -39,8 +40,8 @@ describe("browser tunnel", () => {
       socket.send(
         BrowserTunnelProtocol.encodeFromServer({
           type: "browser.tunnel.opened",
-          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-          receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+          receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
         }),
         { binary: true },
       )
@@ -48,7 +49,7 @@ describe("browser tunnel", () => {
 
       let writeSettled = false
       const writing = new Promise<void>((resolve, reject) => {
-        tunnel.write(Buffer.alloc(BrowserTunnelProtocol.InitialWindowBytes + 1, 7), (error) => {
+        tunnel.write(Buffer.alloc(receiveWindowBytes + 1, 7), (error) => {
           writeSettled = true
           if (error) reject(error)
           else resolve()
@@ -111,8 +112,8 @@ describe("browser tunnel", () => {
       socket.send(
         BrowserTunnelProtocol.encodeFromServer({
           type: "browser.tunnel.opened",
-          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-          receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+          receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
         }),
         { binary: true },
       )
@@ -154,9 +155,9 @@ async function tunnelServer() {
   webSockets.once("connection", resolveConnected)
   http.on("upgrade", (request, socket, head) => {
     if (
-      request.url !== "/api/browser/tunnel" ||
+      request.url !== BrowserTunnelProtocol.Path ||
       request.headers.authorization !== authorization ||
-      request.headers["sec-websocket-protocol"] !== BROWSER_TUNNEL_PROTOCOL
+      request.headers["sec-websocket-protocol"] !== BrowserTunnelProtocol.Subprotocol
     ) {
       socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n")
       return

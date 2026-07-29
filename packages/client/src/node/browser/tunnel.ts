@@ -1,11 +1,13 @@
 import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
-import { BROWSER_TUNNEL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
 import { Browser } from "@opencode-ai/schema/browser"
 import { BrowserTunnel } from "@opencode-ai/schema/browser-tunnel"
 import { Session } from "@opencode-ai/schema/session"
 import { Effect, Schema } from "effect"
 import { Duplex } from "node:stream"
 import WebSocket from "ws"
+
+const ReceiveWindowBytes = 256 * 1_024
+const ReceiveWindowFrames = 16
 
 export type BrowserTunnelEndpoint = {
   readonly url: string
@@ -53,8 +55,8 @@ class BrowserTunnelStream extends Duplex {
   private readonly outstanding: number[] = []
   private activeWrite?: { readonly data: Buffer; offset: number; readonly callback: (error?: Error | null) => void }
   private sending = false
-  private receiveWindowBytes = BrowserTunnelProtocol.InitialWindowBytes
-  private receiveWindowFrames = BrowserTunnelProtocol.InitialFrameWindow
+  private receiveWindowBytes = ReceiveWindowBytes
+  private receiveWindowFrames = ReceiveWindowFrames
   private heldWindowBytes = 0
   private heldWindowFrames = 0
   private paused = false
@@ -66,8 +68,8 @@ class BrowserTunnelStream extends Duplex {
   constructor(input: BrowserTunnelOpen) {
     super({
       allowHalfOpen: true,
-      readableHighWaterMark: BrowserTunnelProtocol.InitialWindowBytes,
-      writableHighWaterMark: BrowserTunnelProtocol.InitialWindowBytes,
+      readableHighWaterMark: ReceiveWindowBytes,
+      writableHighWaterMark: ReceiveWindowBytes,
     })
     this.opened = new Promise<void>((resolve, reject) => {
       this.resolveOpened = resolve
@@ -75,7 +77,7 @@ class BrowserTunnelStream extends Duplex {
     })
     this.on("error", () => undefined)
     this.signal = input.signal
-    this.socket = new WebSocket(endpointURL(input.endpoint), BROWSER_TUNNEL_PROTOCOL, {
+    this.socket = new WebSocket(endpointURL(input.endpoint), BrowserTunnelProtocol.Subprotocol, {
       ...(input.endpoint.authorization ? { headers: { Authorization: input.endpoint.authorization } } : {}),
       handshakeTimeout: 10_000,
       maxPayload: Math.max(BrowserTunnelProtocol.MaxDataBytes, BrowserTunnelProtocol.MaxControlBytes) + 1,
@@ -241,8 +243,8 @@ class BrowserTunnelStream extends Duplex {
           sessionID: input.sessionID,
           leaseID: input.leaseID,
           target: input.target,
-          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-          receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+          receiveWindow: BrowserTunnel.WindowSize.make(ReceiveWindowBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(ReceiveWindowFrames),
         }),
         (error) => {
           if (error) this.fail(new BrowserTunnelError("transport", error.message))
@@ -376,7 +378,7 @@ function endpointURL(endpoint: BrowserTunnelEndpoint) {
     throw new TypeError("Browser server endpoint must be an HTTP URL without embedded credentials")
   }
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-  url.pathname = "/api/browser/tunnel"
+  url.pathname = BrowserTunnelProtocol.Path
   url.search = ""
   url.hash = ""
   return url
