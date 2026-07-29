@@ -52,6 +52,7 @@ const cancellationCase = (cause: "reader" | "lease") =>
     const cancelled = yield* Deferred.make<void>()
     const browser = BrowserHost.Service.of({
       claim: Effect.die("unused"),
+      registration: () => Effect.succeed(Option.none()),
       lease: () =>
         Effect.succeed(
           Option.some({

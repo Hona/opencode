@@ -240,8 +240,9 @@ it.live(
         encodeControl({
           type: "browser.control.sync",
           revision: 1,
-          attachments: [
+          registrations: [
             {
+              type: "attached",
               sessionID,
               leaseID,
               state: {
@@ -456,8 +457,9 @@ it.live(
             encodeControl({
               type: "browser.control.sync",
               revision: 1,
-              attachments: [
+              registrations: [
                 {
+                  type: "attached",
                   sessionID,
                   leaseID,
                   state: {
