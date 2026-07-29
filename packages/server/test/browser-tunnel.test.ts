@@ -19,6 +19,8 @@ const state: Browser.State = {
   canGoForward: false,
   generation: 1,
 }
+const receiveWindowBytes = 256 * 1_024
+const receiveWindowFrames = 16
 const end = Symbol("end")
 
 const makeSocket = Effect.gen(function* () {
@@ -85,8 +87,8 @@ const cancellationCase = (cause: "reader" | "lease") =>
         sessionID,
         leaseID,
         target: { host: BrowserTunnel.Host.make("target.example"), port: BrowserTunnel.Port.make(443) },
-        receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-        receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+        receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+        receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
       }),
     )
     yield* Deferred.await(started)

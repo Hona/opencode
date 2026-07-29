@@ -1,6 +1,7 @@
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { BrowserHost } from "@opencode-ai/core/browser-host"
-import { BROWSER_CONTROL_PROTOCOL, BROWSER_TUNNEL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
+import { BrowserControlProtocol } from "@opencode-ai/protocol/browser-control"
+import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
 import { ConflictError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -21,7 +22,7 @@ export const BrowserHandler = HttpApiBuilder.group(Api, "server.browser", (handl
       .handleRaw(
         "browser.control.connect",
         Effect.fn("BrowserHandler.control")(function* (ctx) {
-          const rejected = rejectUpgrade(ctx.request.headers, BROWSER_CONTROL_PROTOCOL, cors)
+          const rejected = rejectUpgrade(ctx.request.headers, BrowserControlProtocol.Subprotocol, cors)
           if (rejected) return rejected
           const connection = yield* browser.claim.pipe(
             Effect.mapError((error) => new ConflictError({ resource: "browser", message: error.message })),
@@ -45,7 +46,7 @@ export const BrowserHandler = HttpApiBuilder.group(Api, "server.browser", (handl
       .handleRaw(
         "browser.tunnel.connect",
         Effect.fn("BrowserHandler.tunnel")(function* (ctx) {
-          const rejected = rejectUpgrade(ctx.request.headers, BROWSER_TUNNEL_PROTOCOL, cors)
+          const rejected = rejectUpgrade(ctx.request.headers, BrowserTunnelProtocol.Subprotocol, cors)
           if (rejected) return rejected
           const connection = yield* tunnels.acquire.pipe(
             Effect.mapError((error) => new ServiceUnavailableError({ service: "browser", message: error.message })),

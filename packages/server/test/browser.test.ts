@@ -3,10 +3,10 @@ import { Browser } from "@opencode-ai/schema/browser"
 import { BrowserControl } from "@opencode-ai/schema/browser-control"
 import { BrowserTunnel } from "@opencode-ai/schema/browser-tunnel"
 import { Session } from "@opencode-ai/schema/session"
-import { BROWSER_CONTROL_PROTOCOL, BROWSER_TUNNEL_PROTOCOL } from "@opencode-ai/protocol/groups/browser"
+import { BrowserControlProtocol } from "@opencode-ai/protocol/browser-control"
 import { BrowserTunnelProtocol } from "@opencode-ai/protocol/browser-tunnel"
 import { expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Queue, Schema, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Queue, Scope } from "effect"
 import { TestConsole } from "effect/testing"
 import { HttpServer } from "effect/unstable/http"
 import { randomBytes } from "node:crypto"
@@ -16,8 +16,11 @@ import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
 const authorization = `Basic ${Buffer.from("opencode:secret").toString("base64")}`
-const encodeControl = Schema.encodeSync(Schema.fromJsonString(BrowserControl.FromDesktop))
-const decodeControl = Schema.decodeUnknownSync(Schema.fromJsonString(BrowserControl.FromServer))
+const receiveWindowBytes = 256 * 1_024
+const receiveWindowFrames = 16
+const controlFrameType = 1
+const encodeControl = BrowserControlProtocol.encodeFromDesktop
+const decodeControl = (input: string | Uint8Array) => Effect.runSync(BrowserControlProtocol.decodeFromServer(input))
 
 const startServer = Effect.fn("BrowserServerTest.startServer")(function* () {
   const server = yield* ServerProcess.start<never, never>({
@@ -160,12 +163,11 @@ const pushServer = Effect.acquireRelease(
   (server) => Effect.sync(() => server.close()),
 )
 
-const collectData = (
+const collectData = Effect.fn("BrowserServerTest.collectData")(function* (
   tunnel: Effect.Success<ReturnType<typeof open>>,
-  bytes = 0,
-  frames = 0,
-): Effect.Effect<{ readonly bytes: number; readonly frames: number }, Error | BrowserTunnelProtocol.FrameError> =>
-  Effect.gen(function* () {
+) {
+  const received = { bytes: 0, frames: 0 }
+  while (true) {
     const decoded = yield* BrowserTunnelProtocol.decodeFromServer((yield* next(tunnel)).data)
     if (decoded.type === "data") {
       tunnel.webSocket.send(
@@ -176,31 +178,34 @@ const collectData = (
         }),
         { binary: true },
       )
-      return yield* collectData(tunnel, bytes + decoded.data.byteLength, frames + 1)
+      received.bytes += decoded.data.byteLength
+      received.frames++
+      continue
     }
-    if (decoded.message.type === "browser.tunnel.window") return yield* collectData(tunnel, bytes, frames)
-    if (decoded.message.type === "browser.tunnel.end") return { bytes, frames }
+    if (decoded.message.type === "browser.tunnel.window") continue
+    if (decoded.message.type === "browser.tunnel.end") return received
     return yield* Effect.fail(new Error(`Unexpected browser tunnel message: ${decoded.message.type}`))
-  })
+  }
+})
 
 it.live(
   "authenticates browser upgrades and tunnels TCP through an attached lease",
   () =>
     Effect.gen(function* () {
       const base = yield* startServer()
-      const controlURL = new URL("/api/browser/control", base)
-      const tunnelURL = new URL("/api/browser/tunnel", base)
+      const controlURL = new URL(BrowserControlProtocol.Path, base)
+      const tunnelURL = new URL(BrowserTunnelProtocol.Path, base)
 
-      expect(yield* upgradeStatus(controlURL, BROWSER_CONTROL_PROTOCOL, {})).toBe(401)
+      expect(yield* upgradeStatus(controlURL, BrowserControlProtocol.Subprotocol, {})).toBe(401)
       const queryAuth = new URL(controlURL)
       queryAuth.searchParams.set("auth_token", Buffer.from("opencode:secret").toString("base64"))
-      expect(yield* upgradeStatus(queryAuth, BROWSER_CONTROL_PROTOCOL, {})).toBe(401)
+      expect(yield* upgradeStatus(queryAuth, BrowserControlProtocol.Subprotocol, {})).toBe(401)
       for (const [path, protocol] of [
-        ["/api/browser/control/", BROWSER_CONTROL_PROTOCOL],
-        ["/%61pi/%62rowser/%63ontrol", BROWSER_CONTROL_PROTOCOL],
-        ["/API//browser/control;jsessionid=ignored", BROWSER_CONTROL_PROTOCOL],
-        ["/api/browser/tunnel/", BROWSER_TUNNEL_PROTOCOL],
-        ["/%61pi/%62rowser/%74unnel", BROWSER_TUNNEL_PROTOCOL],
+        ["/api/browser/control/", BrowserControlProtocol.Subprotocol],
+        ["/%61pi/%62rowser/%63ontrol", BrowserControlProtocol.Subprotocol],
+        ["/API//browser/control;jsessionid=ignored", BrowserControlProtocol.Subprotocol],
+        ["/api/browser/tunnel/", BrowserTunnelProtocol.Subprotocol],
+        ["/%61pi/%62rowser/%74unnel", BrowserTunnelProtocol.Subprotocol],
       ] as const) {
         const alternate = new URL(path, base)
         alternate.searchParams.set("auth_token", Buffer.from("opencode:secret").toString("base64"))
@@ -208,15 +213,15 @@ it.live(
       }
       expect(yield* upgradeStatus(controlURL, "opencode.browser.control.invalid")).toBe(426)
       expect(
-        yield* upgradeStatus(controlURL, BROWSER_CONTROL_PROTOCOL, {
+        yield* upgradeStatus(controlURL, BrowserControlProtocol.Subprotocol, {
           authorization,
           origin: "https://malicious.example",
         }),
       ).toBe(403)
 
-      const control = yield* open(controlURL, BROWSER_CONTROL_PROTOCOL)
+      const control = yield* open(controlURL, BrowserControlProtocol.Subprotocol)
       expect(decodeControl((yield* next(control)).data)).toEqual({ type: "browser.control.ready" })
-      expect(yield* upgradeStatus(controlURL, BROWSER_CONTROL_PROTOCOL)).toBe(409)
+      expect(yield* upgradeStatus(controlURL, BrowserControlProtocol.Subprotocol)).toBe(409)
 
       const sessionID = Session.ID.make("ses_browser_server")
       const leaseID = Browser.LeaseID.make("brl_browserserver")
@@ -254,7 +259,7 @@ it.live(
       expect(acknowledged.binary).toBe(false)
       expect(decodeControl(acknowledged.data)).toEqual({ type: "browser.control.synced", revision: 1 })
 
-      const stale = yield* open(tunnelURL, BROWSER_TUNNEL_PROTOCOL)
+      const stale = yield* open(tunnelURL, BrowserTunnelProtocol.Subprotocol)
       expect(yield* tunnelControl(yield* next(stale))).toEqual({ type: "browser.tunnel.ready" })
       const rejected = yield* exchange(
         stale,
@@ -263,8 +268,8 @@ it.live(
           sessionID,
           leaseID: Browser.LeaseID.make("brl_stale"),
           target: { host: BrowserTunnel.Host.make("127.0.0.1"), port: BrowserTunnel.Port.make(1) },
-          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-          receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+          receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
         }),
       )
       expect(yield* tunnelControl(rejected)).toMatchObject({
@@ -276,15 +281,15 @@ it.live(
       const target = yield* echoServer
       const address = target.server.address()
       if (address === null || typeof address === "string") throw new Error("echo server did not bind TCP")
-      const tunnel = yield* open(tunnelURL, BROWSER_TUNNEL_PROTOCOL)
+      const tunnel = yield* open(tunnelURL, BrowserTunnelProtocol.Subprotocol)
       expect(yield* tunnelControl(yield* next(tunnel))).toEqual({ type: "browser.tunnel.ready" })
       const openFrame = BrowserTunnelProtocol.encodeFromDesktop({
         type: "browser.tunnel.open",
         sessionID,
         leaseID,
         target: { host: BrowserTunnel.Host.make("127.0.0.1"), port: BrowserTunnel.Port.make(address.port) },
-        receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-        receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+        receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+        receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
       })
       yield* Effect.callback<void, Error>((resume) =>
         tunnel.webSocket.send(openFrame, { binary: true }, (error) => resume(error ? Effect.fail(error) : Effect.void)),
@@ -294,8 +299,8 @@ it.live(
       expect(opened.binary).toBe(true)
       expect(yield* tunnelControl(opened)).toEqual({
         type: "browser.tunnel.opened",
-        receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-        receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+        receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+        receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
       })
 
       yield* Effect.callback<void, Error>((resume) =>
@@ -334,7 +339,36 @@ it.live(
       const pushing = yield* pushServer
       const pushingAddress = pushing.address()
       if (pushingAddress === null || typeof pushingAddress === "string") throw new Error("push server did not bind TCP")
-      const large = yield* open(tunnelURL, BROWSER_TUNNEL_PROTOCOL)
+      const mismatch = yield* open(tunnelURL, BrowserTunnelProtocol.Subprotocol)
+      yield* tunnelControl(yield* next(mismatch))
+      yield* exchange(
+        mismatch,
+        BrowserTunnelProtocol.encodeFromDesktop({
+          type: "browser.tunnel.open",
+          sessionID,
+          leaseID,
+          target: { host: BrowserTunnel.Host.make("127.0.0.1"), port: BrowserTunnel.Port.make(pushingAddress.port) },
+          receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.MaxDataBytes),
+          receiveFrames: BrowserTunnel.FrameWindow.make(1),
+        }),
+      )
+      const mismatchData = yield* BrowserTunnelProtocol.decodeFromServer((yield* next(mismatch)).data)
+      if (mismatchData.type !== "data") throw new Error("expected browser tunnel data frame")
+      mismatch.webSocket.send(
+        BrowserTunnelProtocol.encodeFromDesktop({
+          type: "browser.tunnel.window",
+          bytes: BrowserTunnel.WindowBytes.make(mismatchData.data.byteLength - 1),
+          frames: BrowserTunnel.FrameWindow.make(1),
+        }),
+        { binary: true },
+      )
+      expect(yield* tunnelControl(yield* next(mismatch))).toEqual({
+        type: "browser.tunnel.reset",
+        code: "protocol_error",
+      })
+      expect(yield* Deferred.await(mismatch.closed)).toMatchObject({ code: 1002 })
+
+      const large = yield* open(tunnelURL, BrowserTunnelProtocol.Subprotocol)
       yield* tunnelControl(yield* next(large))
       yield* exchange(
         large,
@@ -364,9 +398,12 @@ it.live(
     Effect.gen(function* () {
       const base = yield* startServer()
       const control = new Uint8Array(BrowserTunnelProtocol.MaxControlBytes + 2)
-      control[0] = BrowserTunnelProtocol.FrameType.Control
+      control[0] = controlFrameType
       for (const frame of [new Uint8Array(BrowserTunnelProtocol.MaxDataBytes + 2), control]) {
-        const tunnel = yield* open(new URL("/api/browser/tunnel", base), BROWSER_TUNNEL_PROTOCOL)
+        const tunnel = yield* open(
+          new URL(BrowserTunnelProtocol.Path, base),
+          BrowserTunnelProtocol.Subprotocol,
+        )
         expect(yield* tunnelControl(yield* next(tunnel))).toEqual({ type: "browser.tunnel.ready" })
 
         const rejected = yield* exchange(tunnel, frame)
@@ -394,7 +431,10 @@ it.live(
       }).pipe(Effect.provideService(Scope.Scope, scope))
       const base = new URL(HttpServer.formatAddress(server.address))
       base.protocol = "ws:"
-      const control = yield* open(new URL("/api/browser/control", base), BROWSER_CONTROL_PROTOCOL)
+      const control = yield* open(
+        new URL(BrowserControlProtocol.Path, base),
+        BrowserControlProtocol.Subprotocol,
+      )
       expect(decodeControl((yield* next(control)).data)).toEqual({ type: "browser.control.ready" })
 
       const sessionID = Session.ID.make("ses_browser_shutdown")
@@ -438,7 +478,7 @@ it.live(
       const target = yield* echoServer
       const address = target.server.address()
       if (address === null || typeof address === "string") throw new Error("echo server did not bind TCP")
-      const tunnel = yield* open(new URL("/api/browser/tunnel", base), BROWSER_TUNNEL_PROTOCOL)
+      const tunnel = yield* open(new URL(BrowserTunnelProtocol.Path, base), BrowserTunnelProtocol.Subprotocol)
       expect(yield* tunnelControl(yield* next(tunnel))).toEqual({ type: "browser.tunnel.ready" })
       expect(
         yield* tunnelControl(
@@ -449,8 +489,8 @@ it.live(
               sessionID,
               leaseID,
               target: { host: BrowserTunnel.Host.make("127.0.0.1"), port: BrowserTunnel.Port.make(address.port) },
-              receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-              receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+              receiveWindow: BrowserTunnel.WindowSize.make(receiveWindowBytes),
+              receiveFrames: BrowserTunnel.FrameWindow.make(receiveWindowFrames),
             }),
           ),
         ),

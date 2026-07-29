@@ -24,7 +24,10 @@ import { Socket } from "effect/unstable/socket"
 import { BrowserClose } from "./browser-close"
 
 const ActiveLimit = 64
-const InboundCapacity = BrowserTunnelProtocol.InitialFrameWindow * 2 + 4
+const ReceiveWindowBytes = 256 * 1_024
+const ReceiveWindowFrames = 16
+const InboundCapacity = ReceiveWindowFrames * 2 + 4
+const MaxFrameBytes = Math.max(BrowserTunnelProtocol.MaxDataBytes, BrowserTunnelProtocol.MaxControlBytes) + 1
 
 export class CapacityError extends Schema.TaggedErrorClass<CapacityError>()("BrowserTunnel.CapacityError", {
   limit: Schema.Int,
@@ -201,21 +204,23 @@ const serve = Effect.fn("BrowserTunnel.serve")(function* (
     return
   }
   const first = firstResult.success
-  const firstFrame = yield* BrowserTunnelProtocol.decodeFromDesktop(first.message).pipe(Effect.option)
+  const firstFrame = yield* Effect.result(BrowserTunnelProtocol.decodeFromDesktop(first.message))
   if (
-    Option.isNone(firstFrame) ||
-    firstFrame.value.type !== "control" ||
-    firstFrame.value.message.type !== "browser.tunnel.open"
+    Result.isFailure(firstFrame) ||
+    firstFrame.success.type !== "control" ||
+    firstFrame.success.message.type !== "browser.tunnel.open"
   ) {
     yield* reject(
       writeSocket,
       "invalid_open",
       "Browser tunnel open message is invalid.",
-      BrowserClose.Code.InvalidPayload,
+      Result.isFailure(firstFrame) && firstFrame.failure.kind === "too_large"
+        ? BrowserClose.Code.MessageTooLarge
+        : BrowserClose.Code.InvalidPayload,
     )
     return
   }
-  const open = firstFrame.value.message
+  const open = firstFrame.success.message
 
   const lease = yield* browser.lease(open.sessionID)
   if (Option.isNone(lease)) {
@@ -265,13 +270,13 @@ const serve = Effect.fn("BrowserTunnel.serve")(function* (
   const sending = yield* Semaphore.make(1)
   const outboundBytes = yield* Semaphore.make(open.receiveWindow)
   const outboundFrames = yield* Semaphore.make(open.receiveFrames)
-  const outboundOutstanding = yield* Ref.make({ bytes: 0, frames: 0 })
+  const outboundOutstanding = yield* Ref.make<ReadonlyArray<number>>([])
   const inboundRemaining = yield* Ref.make({
-    bytes: BrowserTunnelProtocol.InitialWindowBytes,
-    frames: BrowserTunnelProtocol.InitialFrameWindow,
+    bytes: ReceiveWindowBytes,
+    frames: ReceiveWindowFrames,
   })
   const targetEnded = yield* Deferred.make<void>()
-  const send = (message: BrowserTunnel.FromServer) =>
+  const send = (message: BrowserTunnel.ControlFromServer) =>
     sending.withPermits(1)(
       writeSocket(BrowserTunnelProtocol.encodeFromServer(message)).pipe(
         Effect.mapError(
@@ -284,10 +289,7 @@ const serve = Effect.fn("BrowserTunnel.serve")(function* (
     outboundFrames.take(1).pipe(
       Effect.andThen(outboundBytes.take(data.byteLength)),
       Effect.andThen(
-        Ref.update(outboundOutstanding, (outstanding) => ({
-          bytes: outstanding.bytes + data.byteLength,
-          frames: outstanding.frames + 1,
-        })),
+        Ref.update(outboundOutstanding, (outstanding) => [...outstanding, data.byteLength]),
       ),
       Effect.andThen(
         sending.withPermits(1)(
@@ -302,8 +304,8 @@ const serve = Effect.fn("BrowserTunnel.serve")(function* (
 
   yield* send({
     type: "browser.tunnel.opened",
-    receiveWindow: BrowserTunnel.WindowSize.make(BrowserTunnelProtocol.InitialWindowBytes),
-    receiveFrames: BrowserTunnel.FrameWindow.make(BrowserTunnelProtocol.InitialFrameWindow),
+    receiveWindow: BrowserTunnel.WindowSize.make(ReceiveWindowBytes),
+    receiveFrames: BrowserTunnel.FrameWindow.make(ReceiveWindowFrames),
   })
 
   const output = yield* Queue.bounded<TargetOutput, TransportError>(2)
@@ -404,19 +406,14 @@ const serve = Effect.fn("BrowserTunnel.serve")(function* (
           return
         }
         if (control.type === "browser.tunnel.window") {
-          const released = yield* Ref.modify(outboundOutstanding, (outstanding) =>
-            control.bytes <= outstanding.bytes && control.frames <= outstanding.frames
-              ? [
-                  true,
-                  {
-                    bytes: outstanding.bytes - control.bytes,
-                    frames: outstanding.frames - control.frames,
-                  },
-                ]
-              : ([false, outstanding] as const),
-          )
+          const released = yield* Ref.modify(outboundOutstanding, (outstanding) => {
+            if (control.frames > outstanding.length) return [false, outstanding] as const
+            const bytes = outstanding.slice(0, control.frames).reduce((total, size) => total + size, 0)
+            if (bytes !== control.bytes) return [false, outstanding] as const
+            return [true, outstanding.slice(control.frames)] as const
+          })
           if (!released) {
-            yield* new TransportError({ kind: "protocol", message: "Browser tunnel window exceeds sent data." })
+            yield* new TransportError({ kind: "protocol", message: "Browser tunnel window does not match sent frames." })
             return
           }
           yield* outboundBytes.release(control.bytes)
@@ -520,11 +517,7 @@ function rawFrameError(message: string | Uint8Array) {
   if (typeof message === "string") {
     return new TransportError({ kind: "protocol", message: "Browser tunnel frames must use binary framing." })
   }
-  const limit =
-    message[0] === BrowserTunnelProtocol.FrameType.Control
-      ? BrowserTunnelProtocol.MaxControlBytes + 1
-      : BrowserTunnelProtocol.MaxDataBytes + 1
-  if (message.byteLength <= limit) return undefined
+  if (message.byteLength <= MaxFrameBytes) return undefined
   return new TransportError({ kind: "too_large", message: "Browser tunnel frame is too large." })
 }
 
