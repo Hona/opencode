@@ -15,6 +15,7 @@ class MessageError extends Schema.TaggedErrorClass<MessageError>()("BrowserTunne
 }) {}
 
 const encoder = new TextEncoder()
+const decoder = new TextDecoder("utf-8", { fatal: true })
 const encodeClient = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromClient))
 const encodeServer = Schema.encodeSync(Schema.fromJsonString(BrowserTunnel.FromServer))
 const decodeClient = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserTunnel.FromClient), {
@@ -53,13 +54,18 @@ function decode<Message>(
   input: string | Uint8Array,
   decodeMessage: (input: unknown) => Effect.Effect<Message, unknown>,
 ): Effect.Effect<Message, MessageError> {
-  if (typeof input !== "string") {
-    return Effect.fail(new MessageError({ kind: "invalid", message: "Browser tunnel handshake must be text." }))
-  }
-  if (encoder.encode(input).byteLength > MaxHandshakeBytes) {
+  if ((typeof input === "string" ? encoder.encode(input).byteLength : input.byteLength) > MaxHandshakeBytes) {
     return Effect.fail(new MessageError({ kind: "too_large", message: "Browser tunnel handshake is too large." }))
   }
-  return decodeMessage(input).pipe(
+  const text =
+    typeof input === "string"
+      ? Effect.succeed(input)
+      : Effect.try({
+          try: () => decoder.decode(input),
+          catch: (cause) => new MessageError({ kind: "invalid", message: "Invalid tunnel handshake UTF-8.", cause }),
+        })
+  return text.pipe(
+    Effect.flatMap(decodeMessage),
     Effect.mapError((cause) =>
       cause instanceof MessageError
         ? cause
