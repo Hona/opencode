@@ -26,12 +26,23 @@ const state: Browser.State = {
 }
 const assertions: Permission.AssertInput[] = []
 const requests: Browser.Command[] = []
+let registered: Session.ID | undefined
 let attached: Session.ID | undefined
+let reveals = 0
 let leaseID = Browser.LeaseID.make("brl_first")
 let page = state
 let snapshotContent = "@e1 [link]"
 
 const browser = Layer.mock(BrowserHost.Service, {
+  registration: (requested) =>
+    Effect.sync(() => {
+      if (requested !== registered && requested !== attached) return Option.none()
+      return Option.some({
+        sessionID: requested,
+        revoked: Effect.never,
+        reveal: Effect.sync(() => reveals++),
+      })
+    }),
   lease: (requested) =>
     Effect.sync(() => {
       if (requested !== attached) return Option.none()
@@ -116,16 +127,27 @@ const browserNames = (snapshot: Tool.Snapshot) =>
   snapshot.definitions.map((definition) => definition.name).filter((name) => name.startsWith("browser_"))
 
 describe("BrowserTool", () => {
-  it.effect("materializes schemas only for the exact attached Session", () =>
+  it.effect("offers open before attachment and full tools after attachment", () =>
     Effect.gen(function* () {
+      registered = undefined
       attached = undefined
+      reveals = 0
       page = state
       const tools = yield* Tool.Service
       expect(browserNames(yield* tools.snapshot(undefined, sessionID))).toEqual([])
 
+      registered = sessionID
+      const available = yield* tools.snapshot(undefined, sessionID)
+      expect(browserNames(available)).toEqual(["browser_open"])
+      expect(available.definitions.find((definition) => definition.name === "browser_open")?.description).toContain(
+        "browser_navigate, browser_snapshot, browser_click, browser_fill, browser_press, browser_scroll, browser_screenshot",
+      )
+      expect((yield* execute(available, "browser_open")).status).toBe("completed")
+      expect(reveals).toBe(1)
+
       attached = sessionID
       const snapshot = yield* tools.snapshot(undefined, sessionID)
-      expect(browserNames(snapshot)).toEqual([...BrowserTool.names].sort())
+      expect(browserNames(snapshot)).toEqual(BrowserTool.names.filter((name) => name !== "browser_open").sort())
       expect(browserNames(yield* tools.snapshot(undefined, otherSessionID))).toEqual([])
       expect(browserNames(yield* tools.snapshot())).toEqual([])
       expect(

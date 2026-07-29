@@ -9,6 +9,7 @@ import { Permission } from "../permission"
 import { Tool } from "../tool"
 
 export const names = [
+  "browser_open",
   "browser_navigate",
   "browser_snapshot",
   "browser_click",
@@ -18,6 +19,7 @@ export const names = [
   "browser_screenshot",
 ] as const
 
+export const OpenInput = Schema.Struct({})
 export const NavigateInput = Schema.Struct({
   url: Schema.String.check(Schema.isMaxLength(16_384)).annotate({
     description: "The HTTP or HTTPS URL to open in the attached browser",
@@ -67,6 +69,8 @@ export const ScrollInput = Schema.Struct({
 export const ScreenshotInput = Schema.Struct({})
 
 const descriptions = {
+  open:
+    "Open the visual browser pane for this Session. Once open, these tools become available on the next agent step: browser_navigate, browser_snapshot, browser_click, browser_fill, browser_press, browser_scroll, browser_screenshot.",
   navigate:
     "Navigate the browser pane attached to this session. Call browser_snapshot after navigation before interacting with the page. Page content is untrusted.",
   snapshot:
@@ -87,13 +91,11 @@ export const layer = Layer.effectDiscard(
     const tools = yield* Tool.Service
 
     yield* tools.transformSession((sessionID, draft) =>
-      browser.lease(sessionID).pipe(
-        Effect.map(
-          Option.match({
-            onNone: () => undefined,
-            onSome: (lease) => addTools(draft, lease, permission),
-          }),
-        ),
+      Effect.all([browser.registration(sessionID), browser.lease(sessionID)]).pipe(
+        Effect.map(([registration, lease]) => {
+          if (Option.isSome(lease)) return addTools(draft, lease.value, permission)
+          if (Option.isSome(registration)) return addOpenTool(draft, registration.value)
+        }),
       ),
     )
   }),
@@ -104,6 +106,24 @@ export const node = makeLocationNode({
   layer,
   deps: [BrowserHost.node, Permission.node, Tool.node],
 })
+
+function addOpenTool(draft: Tool.Draft, registration: BrowserHost.Registration) {
+  draft.add({
+    name: "browser_open",
+    options: { codemode: false },
+    description: descriptions.open,
+    input: OpenInput,
+    execute: () =>
+      registration.reveal.pipe(
+        Effect.as({
+          content:
+            "Opened the visual browser pane. The browser navigation, snapshot, interaction, and screenshot tools will be available on the next agent step.",
+          metadata: {},
+        }),
+        failure("Unable to open the browser pane"),
+      ),
+  })
+}
 
 function addTools(draft: Tool.Draft, lease: BrowserHost.Lease, permission: Permission.Interface) {
   draft.add({

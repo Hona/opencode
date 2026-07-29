@@ -44,6 +44,10 @@ export class RequestError extends Schema.TaggedErrorClass<RequestError>()("Brows
   message: Schema.String,
 }) {}
 
+export class RevealError extends Schema.TaggedErrorClass<RevealError>()("BrowserHost.RevealError", {
+  message: Schema.String,
+}) {}
+
 export type CloseReason =
   | "disconnected"
   | "protocol_error"
@@ -70,9 +74,16 @@ export interface Lease {
   readonly request: (command: Browser.Command) => Effect.Effect<Browser.Result, RequestError>
 }
 
+export interface Registration {
+  readonly sessionID: Session.ID
+  readonly revoked: Effect.Effect<void>
+  readonly reveal: Effect.Effect<void, RevealError>
+}
+
 export interface Interface {
   /** Claims the sole desktop browser host for this server process. */
   readonly claim: Effect.Effect<Connection, OwnerExistsError, Scope.Scope>
+  readonly registration: (sessionID: Session.ID) => Effect.Effect<Option.Option<Registration>>
   readonly lease: (sessionID: Session.ID) => Effect.Effect<Option.Option<Lease>>
   readonly shutdown: Effect.Effect<void>
 }
@@ -81,9 +92,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Br
 
 type Sync = Extract<BrowserControl.FromDesktop, { readonly type: "browser.control.sync" }>
 type Response = Extract<BrowserControl.FromDesktop, { readonly type: "browser.control.response" }>
-type Attachment = Sync["attachments"][number] & {
+type Revealed = Extract<BrowserControl.FromDesktop, { readonly type: "browser.control.revealed" }>
+type RegistrationInfo = Sync["registrations"][number]
+type AttachedInfo = Extract<RegistrationInfo, { readonly type: "attached" }>
+type Attachment = AttachedInfo & {
   readonly token: object
   readonly revoked: Deferred.Deferred<void>
+}
+
+type RegistrationRecord = {
+  readonly token: object
+  readonly sessionID: Session.ID
+  readonly revoked: Deferred.Deferred<void>
+  readonly attachment?: Attachment
 }
 
 type Pending = {
@@ -95,12 +116,20 @@ type Pending = {
   readonly done: Deferred.Deferred<Browser.Outcome>
 }
 
+type PendingReveal = {
+  readonly token: object
+  readonly requestID: BrowserControl.RequestID
+  readonly sessionID: Session.ID
+  readonly done: Deferred.Deferred<Revealed["outcome"]>
+}
+
 type Active = {
   readonly token: object
   readonly peer?: Peer
   readonly revision: number
-  readonly attachments: ReadonlyMap<Session.ID, Attachment>
+  readonly registrations: ReadonlyMap<Session.ID, RegistrationRecord>
   readonly pending: ReadonlyMap<BrowserControl.RequestID, Pending>
+  readonly reveals: ReadonlyMap<BrowserControl.RequestID, PendingReveal>
 }
 
 type State = {
@@ -109,20 +138,28 @@ type State = {
 }
 
 type Released = {
+  readonly registrations: ReadonlyArray<RegistrationRecord>
   readonly attachments: ReadonlyArray<Attachment>
   readonly pending: ReadonlyArray<Pending>
+  readonly reveals: ReadonlyArray<PendingReveal>
   readonly peer?: Peer
 }
 
 type SyncResult = {
-  readonly revoked: ReadonlyArray<Attachment>
+  readonly revokedRegistrations: ReadonlyArray<RegistrationRecord>
+  readonly revokedAttachments: ReadonlyArray<Attachment>
   readonly cancelled: ReadonlyArray<Pending>
+  readonly cancelledReveals: ReadonlyArray<PendingReveal>
   readonly peer: Peer
 }
 
 type RequestStart =
   | { readonly type: "error"; readonly error: RequestError }
   | { readonly type: "ready"; readonly peer: Peer; readonly pending: Pending }
+
+type RevealStart =
+  | { readonly type: "error"; readonly error: RevealError }
+  | { readonly type: "ready"; readonly peer: Peer; readonly pending: PendingReveal }
 
 export function make(
   sessionExists: (sessionID: Session.ID) => Effect.Effect<boolean>,
@@ -136,6 +173,7 @@ export function make(
       close: CloseReason,
       reason: string,
     ) {
+      for (const registration of released.registrations) Deferred.doneUnsafe(registration.revoked, Effect.void)
       for (const attachment of released.attachments) Deferred.doneUnsafe(attachment.revoked, Effect.void)
       for (const pending of released.pending) {
         Deferred.doneUnsafe(
@@ -147,16 +185,28 @@ export function make(
           }),
         )
       }
+      for (const pending of released.reveals) {
+        Deferred.doneUnsafe(
+          pending.done,
+          Effect.succeed({ type: "failure", message: "The browser registration is no longer available." }),
+        )
+      }
       if (released.peer) yield* released.peer.close(close, reason)
     })
 
     const release = Effect.fn("BrowserHost.release")(function* (token: object, close: CloseReason, reason: string) {
       const released = yield* SynchronizedRef.modify(state, (current): readonly [Released, State] => {
-        if (current.active?.token !== token) return [{ attachments: [], pending: [] }, current]
+        if (current.active?.token !== token) {
+          return [{ registrations: [], attachments: [], pending: [], reveals: [] }, current]
+        }
         return [
           {
-            attachments: Array.from(current.active.attachments.values()),
+            registrations: Array.from(current.active.registrations.values()),
+            attachments: Array.from(current.active.registrations.values()).flatMap((item) =>
+              item.attachment ? [item.attachment] : [],
+            ),
             pending: Array.from(current.active.pending.values()),
+            reveals: Array.from(current.active.reveals.values()),
             peer: current.active.peer,
           },
           { shutdown: current.shutdown },
@@ -168,20 +218,31 @@ export function make(
     const revokeSession = Effect.fn("BrowserHost.revokeSession")(function* (sessionID: Session.ID) {
       const revoked = yield* SynchronizedRef.modify(state, (current): readonly [Released, State] => {
         const active = current.active
-        const attachment = active?.attachments.get(sessionID)
-        if (!active || !attachment) return [{ attachments: [], pending: [] }, current]
-        const attachments = new Map(active.attachments)
-        attachments.delete(sessionID)
+        const registration = active?.registrations.get(sessionID)
+        if (!active || !registration) {
+          return [{ registrations: [], attachments: [], pending: [], reveals: [] }, current]
+        }
+        const registrations = new Map(active.registrations)
+        registrations.delete(sessionID)
         const pending = Array.from(active.pending.values()).filter((item) => item.sessionID === sessionID)
         const pendingIDs = new Set(pending.map((item) => item.requestID))
+        const reveals = Array.from(active.reveals.values()).filter((item) => item.sessionID === sessionID)
+        const revealIDs = new Set(reveals.map((item) => item.requestID))
         return [
-          { attachments: [attachment], pending, peer: active.peer },
+          {
+            registrations: [registration],
+            attachments: registration.attachment ? [registration.attachment] : [],
+            pending,
+            reveals,
+            peer: active.peer,
+          },
           {
             shutdown: current.shutdown,
             active: {
               ...active,
-              attachments,
+              registrations,
               pending: new Map(Array.from(active.pending).filter(([requestID]) => !pendingIDs.has(requestID))),
+              reveals: new Map(Array.from(active.reveals).filter(([requestID]) => !revealIDs.has(requestID))),
             },
           },
         ]
@@ -192,6 +253,13 @@ export function make(
           .send({ type: "browser.control.cancel", requestID: pending.requestID, leaseID: pending.leaseID })
           .pipe(Effect.catch(() => Effect.void))
       }
+      for (const pending of revoked.reveals) {
+        if (!revoked.peer) break
+        yield* revoked.peer
+          .send({ type: "browser.control.reveal.cancel", requestID: pending.requestID })
+          .pipe(Effect.catch(() => Effect.void))
+      }
+      for (const registration of revoked.registrations) Deferred.doneUnsafe(registration.revoked, Effect.void)
       for (const attachment of revoked.attachments) Deferred.doneUnsafe(attachment.revoked, Effect.void)
       for (const pending of revoked.pending) {
         Deferred.doneUnsafe(
@@ -203,21 +271,30 @@ export function make(
           }),
         )
       }
+      for (const pending of revoked.reveals) {
+        Deferred.doneUnsafe(
+          pending.done,
+          Effect.succeed({ type: "failure", message: "The browser Session no longer exists." }),
+        )
+      }
     })
 
     const sync = Effect.fn("BrowserHost.sync")(function* (token: object, input: Sync) {
-      const sessionIDs = new Set(input.attachments.map((attachment) => attachment.sessionID))
-      const leaseIDs = new Set(input.attachments.map((attachment) => attachment.leaseID))
-      if (sessionIDs.size !== input.attachments.length || leaseIDs.size !== input.attachments.length) {
+      const sessionIDs = new Set(input.registrations.map((registration) => registration.sessionID))
+      const attached = input.registrations.filter((registration) => registration.type === "attached")
+      const leaseIDs = new Set(attached.map((registration) => registration.leaseID))
+      if (sessionIDs.size !== input.registrations.length || leaseIDs.size !== attached.length) {
         return yield* new ProtocolError({
-          message: "Browser attachment snapshots must contain unique Sessions and leases.",
+          message: "Browser registration snapshots must contain unique Sessions and leases.",
         })
       }
-      const existing = yield* Effect.forEach(input.attachments, (attachment) => sessionExists(attachment.sessionID), {
-        concurrency: "unbounded",
-      })
+      const existing = yield* Effect.forEach(
+        input.registrations,
+        (registration) => sessionExists(registration.sessionID),
+        { concurrency: "unbounded" },
+      )
       if (existing.some((value) => !value)) {
-        return yield* new ProtocolError({ message: "Browser attachment snapshot contains an unknown Session." })
+        return yield* new ProtocolError({ message: "Browser registration snapshot contains an unknown Session." })
       }
 
       const result = yield* SynchronizedRef.modifyEffect(
@@ -231,33 +308,55 @@ export function make(
             return yield* new ProtocolError({ message: "Browser attachment revision must increase monotonically." })
           }
 
-          const next = new Map<Session.ID, Attachment>()
-          for (const info of input.attachments) {
-            const previous = active.attachments.get(info.sessionID)
-            next.set(
-              info.sessionID,
-              previous?.leaseID === info.leaseID
-                ? { ...previous, state: info.state }
-                : { ...info, token: {}, revoked: Deferred.makeUnsafe<void>() },
-            )
+          const next = new Map<Session.ID, RegistrationRecord>()
+          for (const info of input.registrations) {
+            const previous = active.registrations.get(info.sessionID)
+            const attachment =
+              info.type === "available"
+                ? undefined
+                : previous?.attachment?.leaseID === info.leaseID
+                  ? { ...previous.attachment, state: info.state }
+                  : { ...info, token: {}, revoked: Deferred.makeUnsafe<void>() }
+            next.set(info.sessionID, {
+              token: previous?.token ?? {},
+              sessionID: info.sessionID,
+              revoked: previous?.revoked ?? Deferred.makeUnsafe<void>(),
+              attachment,
+            })
           }
 
-          const revoked = Array.from(active.attachments.values()).filter(
-            (attachment) => next.get(attachment.sessionID)?.token !== attachment.token,
+          const revokedRegistrations = Array.from(active.registrations.values()).filter(
+            (registration) => next.get(registration.sessionID)?.token !== registration.token,
           )
+          const revokedAttachments = Array.from(active.registrations.values()).flatMap((registration) => {
+            const attachment = registration.attachment
+            if (!attachment || next.get(registration.sessionID)?.attachment?.token === attachment.token) return []
+            return [attachment]
+          })
           const cancelled = Array.from(active.pending.values()).filter(
-            (pending) => next.get(pending.sessionID)?.leaseID !== pending.leaseID,
+            (pending) => next.get(pending.sessionID)?.attachment?.leaseID !== pending.leaseID,
+          )
+          const cancelledReveals = Array.from(active.reveals.values()).filter(
+            (pending) => !next.has(pending.sessionID),
           )
           const cancelledIDs = new Set(cancelled.map((pending) => pending.requestID))
+          const cancelledRevealIDs = new Set(cancelledReveals.map((pending) => pending.requestID))
           const pending = new Map(Array.from(active.pending).filter(([requestID]) => !cancelledIDs.has(requestID)))
+          const reveals = new Map(
+            Array.from(active.reveals).filter(([requestID]) => !cancelledRevealIDs.has(requestID)),
+          )
           return [
-            { revoked, cancelled, peer: active.peer },
-            { shutdown: current.shutdown, active: { ...active, revision: input.revision, attachments: next, pending } },
+            { revokedRegistrations, revokedAttachments, cancelled, cancelledReveals, peer: active.peer },
+            {
+              shutdown: current.shutdown,
+              active: { ...active, revision: input.revision, registrations: next, pending, reveals },
+            },
           ] as readonly [SyncResult, State]
         }),
       )
 
-      for (const attachment of result.revoked) Deferred.doneUnsafe(attachment.revoked, Effect.void)
+      for (const registration of result.revokedRegistrations) Deferred.doneUnsafe(registration.revoked, Effect.void)
+      for (const attachment of result.revokedAttachments) Deferred.doneUnsafe(attachment.revoked, Effect.void)
       for (const pending of result.cancelled) {
         Deferred.doneUnsafe(
           pending.done,
@@ -273,6 +372,15 @@ export function make(
             requestID: pending.requestID,
             leaseID: pending.leaseID,
           })
+          .pipe(Effect.catch(() => Effect.void))
+      }
+      for (const pending of result.cancelledReveals) {
+        Deferred.doneUnsafe(
+          pending.done,
+          Effect.succeed({ type: "failure", message: "The browser registration was removed." }),
+        )
+        yield* result.peer
+          .send({ type: "browser.control.reveal.cancel", requestID: pending.requestID })
           .pipe(Effect.catch(() => Effect.void))
       }
       return yield* result.peer.send({ type: "browser.control.synced", revision: input.revision })
@@ -305,9 +413,31 @@ export function make(
       if (pending) Deferred.doneUnsafe(pending.done, Effect.succeed(input.outcome))
     })
 
+    const respondReveal = Effect.fn("BrowserHost.respondReveal")(function* (token: object, input: Revealed) {
+      const pending = yield* SynchronizedRef.modifyEffect(
+        state,
+        Effect.fnUntraced(function* (current) {
+          const active = current.active
+          if (active?.token !== token) {
+            return yield* new ProtocolError({ message: "Browser control connection is no longer active." })
+          }
+          const pending = active.reveals.get(input.requestID)
+          if (!pending) return [undefined, current] as readonly [PendingReveal | undefined, State]
+          const reveals = new Map(active.reveals)
+          reveals.delete(input.requestID)
+          return [pending, { shutdown: current.shutdown, active: { ...active, reveals } }] as readonly [
+            PendingReveal | undefined,
+            State,
+          ]
+        }),
+      )
+      if (pending) Deferred.doneUnsafe(pending.done, Effect.succeed(input.outcome))
+    })
+
     const receive = Effect.fn("BrowserHost.receive")(function* (token: object, message: BrowserControl.FromDesktop) {
       if (message.type === "browser.control.sync") return yield* sync(token, message)
-      return yield* respond(token, message)
+      if (message.type === "browser.control.response") return yield* respond(token, message)
+      return yield* respondReveal(token, message)
     })
 
     const removePending = Effect.fn("BrowserHost.removePending")(function* (token: object, pending: Pending) {
@@ -326,6 +456,29 @@ export function make(
       if (!(yield* removePending(token, pending))) return
       yield* peer
         .send({ type: "browser.control.cancel", requestID: pending.requestID, leaseID: pending.leaseID })
+        .pipe(Effect.catch(() => Effect.void))
+    })
+
+    const removeReveal = Effect.fn("BrowserHost.removeReveal")(function* (token: object, pending: PendingReveal) {
+      return yield* SynchronizedRef.modify(state, (current): readonly [boolean, State] => {
+        const active = current.active
+        if (active?.token !== token || active.reveals.get(pending.requestID)?.token !== pending.token) {
+          return [false, current]
+        }
+        const reveals = new Map(active.reveals)
+        reveals.delete(pending.requestID)
+        return [true, { shutdown: current.shutdown, active: { ...active, reveals } }]
+      })
+    })
+
+    const cancelReveal = Effect.fn("BrowserHost.cancelReveal")(function* (
+      token: object,
+      peer: Peer,
+      pending: PendingReveal,
+    ) {
+      if (!(yield* removeReveal(token, pending))) return
+      yield* peer
+        .send({ type: "browser.control.reveal.cancel", requestID: pending.requestID })
         .pipe(Effect.catch(() => Effect.void))
     })
 
@@ -348,7 +501,7 @@ export function make(
       }
       const start = yield* SynchronizedRef.modify(state, (current): readonly [RequestStart, State] => {
         const active = current.active
-        const currentAttachment = active?.attachments.get(attachment.sessionID)
+        const currentAttachment = active?.registrations.get(attachment.sessionID)?.attachment
         if (
           active?.token !== connectionToken ||
           !active.peer ||
@@ -429,6 +582,80 @@ export function make(
       return outcome.result
     })
 
+    const reveal = Effect.fn("BrowserHost.reveal")(function* (
+      connectionToken: object,
+      registration: RegistrationRecord,
+    ) {
+      if (!(yield* sessionExists(registration.sessionID))) {
+        yield* revokeSession(registration.sessionID)
+        return yield* new RevealError({ message: "The browser Session no longer exists." })
+      }
+      const pending: PendingReveal = {
+        token: {},
+        requestID: BrowserControl.RequestID.create(),
+        sessionID: registration.sessionID,
+        done: Deferred.makeUnsafe<Revealed["outcome"]>(),
+      }
+      const start = yield* SynchronizedRef.modify(state, (current): readonly [RevealStart, State] => {
+        const active = current.active
+        const currentRegistration = active?.registrations.get(registration.sessionID)
+        if (
+          active?.token !== connectionToken ||
+          !active.peer ||
+          currentRegistration?.token !== registration.token
+        ) {
+          return [
+            { type: "error", error: new RevealError({ message: "The browser registration is no longer available." }) },
+            current,
+          ]
+        }
+        if (active.pending.size + active.reveals.size >= PendingLimit) {
+          return [
+            { type: "error", error: new RevealError({ message: "The browser host has too many pending requests." }) },
+            current,
+          ]
+        }
+        return [
+          { type: "ready", peer: active.peer, pending },
+          {
+            shutdown: current.shutdown,
+            active: { ...active, reveals: new Map(active.reveals).set(pending.requestID, pending) },
+          },
+        ]
+      })
+      if (start.type === "error") return yield* start.error
+
+      const cancelPending = cancelReveal(connectionToken, start.peer, start.pending)
+      const outcome = yield* start.peer
+        .send({
+          type: "browser.control.reveal",
+          requestID: pending.requestID,
+          sessionID: pending.sessionID,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) => new RevealError({ message: `Failed to send browser reveal request: ${error.message}` }),
+          ),
+          Effect.andThen(
+            Deferred.await(pending.done).pipe(
+              Effect.raceFirst(
+                Deferred.await(registration.revoked).pipe(
+                  Effect.andThen(new RevealError({ message: "The browser registration is no longer available." })),
+                ),
+              ),
+              Effect.timeoutOrElse({
+                duration: "30 seconds",
+                orElse: () => Effect.fail(new RevealError({ message: "The browser pane did not open in time." })),
+              }),
+            ),
+          ),
+          Effect.tapError(() => cancelPending),
+          Effect.onInterrupt(() => cancelPending),
+          Effect.ensuring(removeReveal(connectionToken, pending)),
+        )
+      if (outcome.type === "failure") return yield* new RevealError({ message: outcome.message })
+    })
+
     const claim: Interface["claim"] = Effect.gen(function* () {
       const token = {}
       yield* SynchronizedRef.modifyEffect(
@@ -442,7 +669,10 @@ export function make(
           }
           return [
             undefined,
-            { shutdown: false, active: { token, revision: -1, attachments: new Map(), pending: new Map() } },
+            {
+              shutdown: false,
+              active: { token, revision: -1, registrations: new Map(), pending: new Map(), reveals: new Map() },
+            },
           ] as const
         }),
       )
@@ -492,13 +722,13 @@ export function make(
                 duration: "5 seconds",
                 orElse: () =>
                   Effect.fail(
-                    new ProtocolError({ message: "Browser host did not publish attachments after connecting." }),
+                    new ProtocolError({ message: "Browser host did not publish registrations after connecting." }),
                   ),
               }),
               Effect.raceFirst(
                 Fiber.join(running).pipe(
                   Effect.andThen(
-                    new ProtocolError({ message: "Browser host disconnected before publishing attachments." }),
+                    new ProtocolError({ message: "Browser host disconnected before publishing registrations." }),
                   ),
                 ),
               ),
@@ -509,13 +739,28 @@ export function make(
       }
     })
 
+    const registration: Interface["registration"] = Effect.fn("BrowserHost.registration")(function* (sessionID) {
+      if (!(yield* sessionExists(sessionID))) {
+        yield* revokeSession(sessionID)
+        return Option.none()
+      }
+      const active = (yield* SynchronizedRef.get(state)).active
+      const record = active?.peer ? active.registrations.get(sessionID) : undefined
+      if (!active || !record) return Option.none()
+      return Option.some({
+        sessionID,
+        revoked: Deferred.await(record.revoked),
+        reveal: reveal(active.token, record),
+      })
+    })
+
     const lease: Interface["lease"] = Effect.fn("BrowserHost.lease")(function* (sessionID) {
       if (!(yield* sessionExists(sessionID))) {
         yield* revokeSession(sessionID)
         return Option.none()
       }
       const active = (yield* SynchronizedRef.get(state)).active
-      const attachment = active?.peer ? active.attachments.get(sessionID) : undefined
+      const attachment = active?.peer ? active.registrations.get(sessionID)?.attachment : undefined
       if (!active || !attachment) return Option.none()
       return Option.some({
         id: attachment.leaseID,
@@ -530,11 +775,15 @@ export function make(
       const released = yield* SynchronizedRef.modify(state, (current): readonly [Released, State] => [
         current.active
           ? {
-              attachments: Array.from(current.active.attachments.values()),
+              registrations: Array.from(current.active.registrations.values()),
+              attachments: Array.from(current.active.registrations.values()).flatMap((item) =>
+                item.attachment ? [item.attachment] : [],
+              ),
               pending: Array.from(current.active.pending.values()),
+              reveals: Array.from(current.active.reveals.values()),
               peer: current.active.peer,
             }
-          : { attachments: [], pending: [] },
+          : { registrations: [], attachments: [], pending: [], reveals: [] },
         { shutdown: true },
       ])
       yield* settleReleased(released, "restart", "Server restarting")
@@ -544,7 +793,7 @@ export function make(
 
     yield* Effect.addFinalizer(() => shutdown)
 
-    return Service.of({ claim, lease, shutdown })
+    return Service.of({ claim, registration, lease, shutdown })
   })
 }
 

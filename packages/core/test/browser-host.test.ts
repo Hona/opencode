@@ -49,7 +49,14 @@ const attach = (peer: Effect.Success<typeof makePeer>, leaseID: Browser.LeaseID,
   Queue.offer(peer.inbound, {
     type: "browser.control.sync" as const,
     revision,
-    attachments: [{ sessionID, leaseID, state }],
+    registrations: [{ type: "attached" as const, sessionID, leaseID, state }],
+  }).pipe(Effect.asVoid)
+
+const register = (peer: Effect.Success<typeof makePeer>, revision = 1) =>
+  Queue.offer(peer.inbound, {
+    type: "browser.control.sync" as const,
+    revision,
+    registrations: [{ type: "available" as const, sessionID }],
   }).pipe(Effect.asVoid)
 
 const awaitSynced = Effect.fn("BrowserHostTest.awaitSynced")(function* (peer: Effect.Success<typeof makePeer>) {
@@ -66,7 +73,45 @@ const awaitLease = Effect.fn("BrowserHostTest.awaitLease")(function* (host: Brow
   }
 })
 
+const awaitRegistration = Effect.fn("BrowserHostTest.awaitRegistration")(function* (host: BrowserHost.Interface) {
+  while (true) {
+    const registration = yield* host.registration(sessionID)
+    if (Option.isSome(registration)) return registration.value
+    yield* Effect.yieldNow
+  }
+})
+
 describe("BrowserHost", () => {
+  it.effect("reveals an available registration before it becomes attached", () =>
+    Effect.gen(function* () {
+      const host = yield* BrowserHost.Service
+      const connection = yield* host.claim
+      const transport = yield* makePeer
+      yield* Effect.forkChild(connection.run(transport.peer))
+      yield* register(transport)
+      yield* awaitSynced(transport)
+      const registration = yield* awaitRegistration(host)
+      expect(Option.isNone(yield* host.lease(sessionID))).toBe(true)
+
+      const revealing = yield* Effect.forkChild(registration.reveal)
+      const request = yield* Queue.take(transport.outbound)
+      if (request.type !== "browser.control.reveal") throw new Error("expected reveal request")
+      expect(request.sessionID).toBe(sessionID)
+
+      const leaseID = Browser.LeaseID.make("brl_revealed")
+      yield* attach(transport, leaseID, 2)
+      yield* awaitSynced(transport)
+      yield* Queue.offer(transport.inbound, {
+        type: "browser.control.revealed",
+        requestID: request.requestID,
+        outcome: { type: "success" },
+      })
+
+      yield* Fiber.join(revealing)
+      expect((yield* awaitLease(host)).id).toBe(leaseID)
+    }),
+  )
+
   it.effect("correlates requests with the exact synced lease", () =>
     Effect.gen(function* () {
       const host = yield* BrowserHost.Service
@@ -227,7 +272,7 @@ describe("BrowserHost", () => {
     }),
   )
 
-  it.effect("requires an initial attachment snapshot", () =>
+  it.effect("requires an initial registration snapshot", () =>
     Effect.gen(function* () {
       const host = yield* BrowserHost.Service
       const connection = yield* host.claim
@@ -265,7 +310,7 @@ describe("BrowserHost", () => {
     }),
   )
 
-  denied.effect("rejects attachment snapshots for unknown Sessions", () =>
+  denied.effect("rejects registration snapshots for unknown Sessions", () =>
     Effect.gen(function* () {
       const host = yield* BrowserHost.Service
       const connection = yield* host.claim
