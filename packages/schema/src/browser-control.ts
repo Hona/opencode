@@ -17,11 +17,21 @@ export const RequestID = RequestIDSchema.pipe(
 )
 export type RequestID = typeof RequestID.Type
 
-const Attachment = Schema.Struct({
+const AvailableRegistration = Schema.Struct({
+  type: Schema.Literal("available"),
+  sessionID: SessionID,
+}).annotate({ identifier: "BrowserControl.AvailableRegistration" })
+
+const AttachedRegistration = Schema.Struct({
+  type: Schema.Literal("attached"),
   sessionID: SessionID,
   leaseID: Browser.LeaseID,
   state: Browser.State,
-}).annotate({ identifier: "BrowserControl.Attachment" })
+}).annotate({ identifier: "BrowserControl.AttachedRegistration" })
+
+const Registration = Schema.Union([AvailableRegistration, AttachedRegistration])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "BrowserControl.Registration" })
 
 const Ready = Schema.Struct({
   type: Schema.Literal("browser.control.ready"),
@@ -30,7 +40,7 @@ const Ready = Schema.Struct({
 const Sync = Schema.Struct({
   type: Schema.Literal("browser.control.sync"),
   revision: NonNegativeInt,
-  attachments: Schema.Array(Attachment).check(Schema.isMaxLength(16)),
+  registrations: Schema.Array(Registration).check(Schema.isMaxLength(16)),
 }).annotate({ identifier: "BrowserControl.Sync" })
 
 const Synced = Schema.Struct({
@@ -59,12 +69,39 @@ const Cancel = Schema.Struct({
   leaseID: Browser.LeaseID,
 }).annotate({ identifier: "BrowserControl.Cancel" })
 
-export const FromDesktop = Schema.Union([Sync, Response])
+const Reveal = Schema.Struct({
+  type: Schema.Literal("browser.control.reveal"),
+  requestID: RequestID,
+  sessionID: SessionID,
+}).annotate({ identifier: "BrowserControl.Reveal" })
+
+const RevealOutcome = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("success") }),
+  Schema.Struct({
+    type: Schema.Literal("failure"),
+    message: Schema.String.check(Schema.isMaxLength(1_024)),
+  }),
+])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "BrowserControl.RevealOutcome" })
+
+const Revealed = Schema.Struct({
+  type: Schema.Literal("browser.control.revealed"),
+  requestID: RequestID,
+  outcome: RevealOutcome,
+}).annotate({ identifier: "BrowserControl.Revealed" })
+
+const RevealCancel = Schema.Struct({
+  type: Schema.Literal("browser.control.reveal.cancel"),
+  requestID: RequestID,
+}).annotate({ identifier: "BrowserControl.RevealCancel" })
+
+export const FromDesktop = Schema.Union([Sync, Response, Revealed])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "BrowserControl.FromDesktop" })
 export type FromDesktop = typeof FromDesktop.Type
 
-export const FromServer = Schema.Union([Ready, Synced, Request, Cancel])
+export const FromServer = Schema.Union([Ready, Synced, Request, Cancel, Reveal, RevealCancel])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "BrowserControl.FromServer" })
 export type FromServer = typeof FromServer.Type

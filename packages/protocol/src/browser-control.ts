@@ -26,8 +26,10 @@ const decodeServer = Schema.decodeUnknownEffect(Schema.fromJsonString(BrowserCon
   onExcessProperty: "error",
 })
 
-// Server sends Ready, Desktop publishes a full monotonically revised Sync, and
-// Server acknowledges that revision before issuing requests for its leases.
+// Server sends Ready, Desktop publishes a full monotonically revised Session
+// registration snapshot, and Server acknowledges it before issuing requests.
+// Available registrations accept reveal requests; attached registrations also
+// carry a lease for semantic browser commands.
 
 export function encodeFromDesktop(input: BrowserControl.FromDesktop) {
   return encode(input, encodeDesktop)

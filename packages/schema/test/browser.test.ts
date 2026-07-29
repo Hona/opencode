@@ -27,8 +27,9 @@ describe("browser contracts", () => {
     const message: BrowserControl.FromDesktop = {
       type: "browser.control.sync",
       revision: 1,
-      attachments: [
+      registrations: [
         {
+          type: "attached",
           sessionID: Session.ID.make("ses_browser_contract"),
           leaseID: Browser.LeaseID.make("brl_contract"),
           state,
