@@ -3,6 +3,7 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ConflictError, ServiceUnavailableError } from "../errors.js"
 import { BrowserControlProtocol } from "../browser-control.js"
 import { BrowserTunnelProtocol } from "../browser-tunnel.js"
+import { HeaderOnlyAuthorization } from "../middleware/authorization.js"
 
 const websocket = (
   identifier: string,
@@ -31,27 +32,31 @@ export const BrowserGroup = HttpApiGroup.make("server.browser")
     HttpApiEndpoint.get("browser.control.connect", BrowserControlProtocol.Path, {
       success: Schema.Boolean,
       error: ConflictError,
-    }).annotateMerge(
-      websocket(
-        "v2.browser.control.connect",
-        "Connect desktop browser host",
-        "Establish an authenticated WebSocket carrying Session-scoped browser attachments and semantic browser commands.",
-        BrowserControlProtocol.Subprotocol,
+    })
+      .annotate(HeaderOnlyAuthorization, true)
+      .annotateMerge(
+        websocket(
+          "v2.browser.control.connect",
+          "Connect desktop browser host",
+          "Establish an authenticated WebSocket carrying Session-scoped browser attachments and semantic browser commands.",
+          BrowserControlProtocol.Subprotocol,
+        ),
       ),
-    ),
   )
   .add(
     HttpApiEndpoint.get("browser.tunnel.connect", BrowserTunnelProtocol.Path, {
       success: Schema.Boolean,
       error: ServiceUnavailableError,
-    }).annotateMerge(
-      websocket(
-        "v2.browser.tunnel.connect",
-        "Open browser network tunnel",
-        "Establish an authenticated WebSocket carrying one TCP stream dialed from the OpenCode server.",
-        BrowserTunnelProtocol.Subprotocol,
+    })
+      .annotate(HeaderOnlyAuthorization, true)
+      .annotateMerge(
+        websocket(
+          "v2.browser.tunnel.connect",
+          "Open browser network tunnel",
+          "Establish an authenticated WebSocket carrying one TCP stream dialed from the OpenCode server.",
+          BrowserTunnelProtocol.Subprotocol,
+        ),
       ),
-    ),
   )
   .annotateMerge(
     OpenApi.annotations({
