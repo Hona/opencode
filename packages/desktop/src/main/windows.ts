@@ -4,7 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -14,6 +14,7 @@ import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
+import { resolveExternalTarget } from "./external-target"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -204,6 +205,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   allowRendererPermissions(win)
   wireWindowRecovery(win, id)
+  wireNavigationPolicy(win)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -228,6 +230,27 @@ export function createMainWindow(id: string = randomUUID()) {
   })
 
   return win
+}
+
+function wireNavigationPolicy(win: BrowserWindow) {
+  const open = (value: string) => {
+    const target = resolveExternalTarget(value)
+    if (!target) return
+    if (target.type === "url") {
+      void shell.openExternal(target.value)
+      return
+    }
+    void shell.openPath(target.value)
+  }
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    open(url)
+    return { action: "deny" }
+  })
+  win.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault()
+    open(url)
+  })
 }
 
 function registerWindow(win: BrowserWindow, id: string) {

@@ -13,6 +13,7 @@ import { getStore, removeStoreFileIfEmpty } from "./store"
 import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import { resolveExternalTarget } from "./external-target"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -178,7 +179,13 @@ export function registerIpcHandlers(deps: Deps) {
   )
 
   ipcMain.on("open-link", (_event: IpcMainEvent, url: string) => {
-    void shell.openExternal(url)
+    const target = resolveExternalTarget(url)
+    if (!target) return
+    if (target.type === "url") {
+      void shell.openExternal(target.value)
+      return
+    }
+    void shell.openPath(target.value)
   })
 
   ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {

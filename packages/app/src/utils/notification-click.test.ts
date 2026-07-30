@@ -3,7 +3,7 @@ import { handleNotificationClick, setNavigate } from "./notification-click"
 
 describe("notification click", () => {
   afterEach(() => {
-    setNavigate(undefined as any)
+    setNavigate(undefined)
   })
 
   test("navigates via registered navigate function", () => {
@@ -20,8 +20,11 @@ describe("notification click", () => {
     expect(calls).toEqual([])
   })
 
-  test("falls back to location.assign without registered navigate", () => {
+  test("queues navigation until a navigate function is registered", () => {
+    const calls: string[] = []
     handleNotificationClick("/abc/session/123")
-    // falls back to window.location.assign — no error thrown
+    expect(calls).toEqual([])
+    setNavigate((href) => calls.push(href))
+    expect(calls).toEqual(["/abc/session/123"])
   })
 })

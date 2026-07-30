@@ -1614,6 +1614,14 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
+                  onSubtitleClick={(event) => {
+                    if (!data.navigateToSession) return
+                    if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                    const id = taskId()
+                    if (!id) return
+                    event.preventDefault()
+                    data.navigateToSession(id)
+                  }}
                 />
               )
             }}
