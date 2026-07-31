@@ -27,4 +27,12 @@ describe("notification click", () => {
     setNavigate((href) => calls.push(href))
     expect(calls).toEqual(["/abc/session/123"])
   })
+
+  test("keeps only the latest click while unregistered", () => {
+    const calls: string[] = []
+    handleNotificationClick("/abc/session/1")
+    handleNotificationClick("/abc/session/2")
+    setNavigate((href) => calls.push(href))
+    expect(calls).toEqual(["/abc/session/2"])
+  })
 })

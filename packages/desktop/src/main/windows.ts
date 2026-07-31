@@ -242,12 +242,26 @@ export function openExternalTarget(value: string) {
     void shell.openExternal(target.value)
     return
   }
-  void shell.openPath(target.value)
+  void shell.openPath(target.value).then((error) => {
+    if (error) writeLog("window", "failed to open path", { path: target.value, error }, "error")
+  })
 }
 
 function wireNavigationPolicy(win: BrowserWindow) {
+  // Navigation events fire from untrusted content (markdown anchors, file
+  // drops), so only web URLs may leave through them. shell.openPath would
+  // execute files; local file links stay on the explicit open-link IPC path.
+  const openURL = (value: string) => {
+    const target = resolveExternalTarget(value)
+    if (target?.type !== "url") {
+      writeLog("window", "blocked navigation target", { url: value }, "warn")
+      return
+    }
+    void shell.openExternal(target.value)
+  }
+
   win.webContents.setWindowOpenHandler(({ url }) => {
-    openExternalTarget(url)
+    openURL(url)
     return { action: "deny" }
   })
   // Renderer reloads (window.location.reload) navigate to the app's own URL
@@ -255,7 +269,7 @@ function wireNavigationPolicy(win: BrowserWindow) {
   win.webContents.on("will-navigate", (event, url) => {
     if (isRendererUrl(url)) return
     event.preventDefault()
-    openExternalTarget(url)
+    openURL(url)
   })
 }
 
