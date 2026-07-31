@@ -1,6 +1,6 @@
 import { AppIcon } from "@opencode-ai/ui/app-icon"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { createMemo, For, Show, type ParentProps } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, Show, type ParentProps } from "solid-js"
 import { useOpenInApp } from "@/components/session/open-in-app"
 import { useLanguage } from "@/context/language"
 import { reviewFilePath } from "@/pages/session/v2/review-diff-kinds"
@@ -9,6 +9,7 @@ export function ReviewFileContextMenu(
   props: ParentProps<{ root: string; target: { path: string; type: "file" | "directory"; deleted: boolean } }>,
 ) {
   const language = useLanguage()
+  const [rowTarget, setRowTarget] = createSignal(false)
   const absolute = createMemo(() => (props.target.path ? reviewFilePath(props.root, props.target.path) : ""))
   const open = useOpenInApp({ directory: absolute })
   const defaultOption = createMemo(() => open.options().find((item) => item.id === "finder"))
@@ -18,10 +19,24 @@ export function ReviewFileContextMenu(
       .filter((item) => item.id !== "finder")
       .filter((item) => props.target.type === "directory" || !("directoryOnly" in item && item.directoryOnly)),
   )
+  let trigger!: HTMLDivElement
+
+  onMount(() => {
+    const guard = (event: MouseEvent) =>
+      setRowTarget(event.target instanceof Element && !!event.target.closest('[data-slot="file-tree-v2-row"]'))
+    trigger.addEventListener("contextmenu", guard, true)
+    onCleanup(() => trigger.removeEventListener("contextmenu", guard, true))
+  })
 
   return (
     <MenuV2.Context gutter={4}>
-      <MenuV2.Context.Trigger as="div" class="contents">
+      <MenuV2.Context.Trigger
+        as="div"
+        ref={trigger}
+        class="contents"
+        disabled={!rowTarget()}
+        onContextMenu={(event) => event.preventDefault()}
+      >
         {props.children}
       </MenuV2.Context.Trigger>
       <MenuV2.Context.Portal>
