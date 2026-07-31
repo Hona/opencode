@@ -43,10 +43,22 @@ export const MAC_OPEN_APPS = [
     icon: "antigravity",
     openWith: "Antigravity",
   },
-  { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
-  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
-  { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
-  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
+  {
+    id: "terminal",
+    label: "session.header.open.app.terminal",
+    icon: "terminal",
+    openWith: "Terminal",
+    directoryOnly: true,
+  },
+  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm", directoryOnly: true },
+  {
+    id: "ghostty",
+    label: "session.header.open.app.ghostty",
+    icon: "ghostty",
+    openWith: "Ghostty",
+    directoryOnly: true,
+  },
+  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp", directoryOnly: true },
   { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
@@ -71,12 +83,14 @@ export const WINDOWS_OPEN_APPS = [
     label: "session.header.open.app.powershell",
     icon: "powershell",
     openWith: "pwsh",
+    directoryOnly: true,
   },
   {
     id: "windows-powershell",
     label: "session.header.open.app.windowsPowershell",
     icon: "windows-powershell",
     openWith: "powershell",
+    directoryOnly: true,
   },
   {
     id: "sublime-text",
@@ -185,9 +199,11 @@ export function useOpenInApp(input: { directory: () => string }) {
   )
   const opening = createMemo(() => openRequest.app !== undefined)
 
-  const selectApp = (app: OpenApp | "finder") => {
-    if (!options().some((item) => item.id === app)) return
-    setPrefs("app", app)
+  const selectApp = (app: unknown) => {
+    if (typeof app !== "string") return
+    const option = options().find((item) => item.id === app)
+    if (!option) return
+    setPrefs("app", option.id)
   }
 
   const openDir = (app: OpenApp | "finder") => {
@@ -206,17 +222,18 @@ export function useOpenInApp(input: { directory: () => string }) {
       })
   }
 
-  const copyPath = () => {
-    const directory = input.directory()
-    if (!directory) return
-    navigator.clipboard
-      .writeText(directory)
+  const copyPath = (path = input.directory()) => {
+    if (!path) return
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    const request = platform.writeClipboardText?.(path) ?? clipboard?.writeText(path)
+    if (!request) return
+    request
       .then(() => {
         showToast({
           variant: "success",
           icon: "circle-check",
           title: language.t("session.share.copy.copied"),
-          description: directory,
+          description: path,
         })
       })
       .catch((err: unknown) => showRequestError(language, err))
