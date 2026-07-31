@@ -12,6 +12,21 @@ describe("external targets", () => {
     expect(resolveExternalTarget("http://example.com")).toEqual({ type: "url", value: "http://example.com/" })
   })
 
+  test("opens mail links externally", () => {
+    expect(resolveExternalTarget("mailto:hello@opencode.ai")).toEqual({
+      type: "url",
+      value: "mailto:hello@opencode.ai",
+    })
+  })
+
+  test("opens localhost file URLs as local paths", () => {
+    // WHATWG URL parsing normalizes file://localhost to an empty host.
+    expect(resolveExternalTarget("file://localhost/c:/example.html")).toEqual({
+      type: "path",
+      value: fileURLToPath(new URL("file:///c:/example.html")),
+    })
+  })
+
   test("opens local file URLs as paths", () => {
     const url = pathToFileURL(resolve("example.html"))
     expect(resolveExternalTarget(url.href)).toEqual({ type: "path", value: fileURLToPath(url) })

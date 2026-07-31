@@ -5,8 +5,10 @@ type ExternalTarget = { type: "url"; value: string } | { type: "path"; value: st
 export function resolveExternalTarget(value: string): ExternalTarget | undefined {
   if (!URL.canParse(value)) return undefined
   const url = new URL(value)
-  if (url.protocol === "http:" || url.protocol === "https:") return { type: "url", value: url.href }
-  if (url.protocol !== "file:" || (url.hostname && url.hostname !== "localhost")) return undefined
+  if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:")
+    return { type: "url", value: url.href }
+  // Remote file hosts are UNC shares; only local files may open.
+  if (url.protocol !== "file:" || url.hostname) return undefined
 
   try {
     return { type: "path", value: fileURLToPath(url) }

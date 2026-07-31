@@ -232,24 +232,30 @@ export function createMainWindow(id: string = randomUUID()) {
   return win
 }
 
-function wireNavigationPolicy(win: BrowserWindow) {
-  const open = (value: string) => {
-    const target = resolveExternalTarget(value)
-    if (!target) return
-    if (target.type === "url") {
-      void shell.openExternal(target.value)
-      return
-    }
-    void shell.openPath(target.value)
+export function openExternalTarget(value: string) {
+  const target = resolveExternalTarget(value)
+  if (!target) {
+    writeLog("window", "blocked external target", { url: value }, "warn")
+    return
   }
+  if (target.type === "url") {
+    void shell.openExternal(target.value)
+    return
+  }
+  void shell.openPath(target.value)
+}
 
+function wireNavigationPolicy(win: BrowserWindow) {
   win.webContents.setWindowOpenHandler(({ url }) => {
-    open(url)
+    openExternalTarget(url)
     return { action: "deny" }
   })
+  // Renderer reloads (window.location.reload) navigate to the app's own URL
+  // and must stay in-window; everything else leaves through the OS.
   win.webContents.on("will-navigate", (event, url) => {
+    if (isRendererUrl(url)) return
     event.preventDefault()
-    open(url)
+    openExternalTarget(url)
   })
 }
 
