@@ -14,7 +14,7 @@ import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
-import { resolveExternalTarget } from "./external-target"
+import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -232,36 +232,29 @@ export function createMainWindow(id: string = randomUUID()) {
   return win
 }
 
-export function openExternalTarget(value: string) {
-  const target = resolveExternalTarget(value)
-  if (!target) {
+export function openExternalURL(value: string) {
+  const url = resolveExternalURL(value)
+  if (!url) {
     writeLog("window", "blocked external target", { url: value }, "warn")
     return
   }
-  if (target.type === "url") {
-    void shell.openExternal(target.value)
+  void shell.openExternal(url)
+}
+
+export function openLocalFileURL(value: string) {
+  const path = resolveLocalFilePath(value)
+  if (!path) {
+    writeLog("window", "blocked local file target", { url: value }, "warn")
     return
   }
-  void shell.openPath(target.value).then((error) => {
-    if (error) writeLog("window", "failed to open path", { path: target.value, error }, "error")
+  void shell.openPath(path).then((error) => {
+    if (error) writeLog("window", "failed to open local file", { path, error }, "error")
   })
 }
 
 function wireNavigationPolicy(win: BrowserWindow) {
-  // Navigation events fire from untrusted content (markdown anchors, file
-  // drops), so only web URLs may leave through them. shell.openPath would
-  // execute files; local file links stay on the explicit open-link IPC path.
-  const openURL = (value: string) => {
-    const target = resolveExternalTarget(value)
-    if (target?.type !== "url") {
-      writeLog("window", "blocked navigation target", { url: value }, "warn")
-      return
-    }
-    void shell.openExternal(target.value)
-  }
-
   win.webContents.setWindowOpenHandler(({ url }) => {
-    openURL(url)
+    if (!isRendererUrl(url)) openExternalURL(url)
     return { action: "deny" }
   })
   // Renderer reloads (window.location.reload) navigate to the app's own URL
@@ -269,7 +262,7 @@ function wireNavigationPolicy(win: BrowserWindow) {
   win.webContents.on("will-navigate", (event, url) => {
     if (isRendererUrl(url)) return
     event.preventDefault()
-    openURL(url)
+    openExternalURL(url)
   })
 }
 
