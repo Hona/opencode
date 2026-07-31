@@ -213,9 +213,10 @@ export function useOpenInApp(input: { directory: () => string }) {
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
+    const cwd = item && "directoryOnly" in item ? item.directoryOnly : undefined
     setOpenRequest("app", app)
     platform
-      .openPath(directory, openWith)
+      .openPath(directory, openWith, { cwd })
       .catch((err: unknown) => showRequestError(language, err))
       .finally(() => {
         setOpenRequest("app", undefined)

@@ -21,6 +21,7 @@ import type {
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import {
   filterRenderableDiff,
   filterReviewFiles,
@@ -184,6 +185,7 @@ function ReviewPanelV2Sidebar(props: {
 }) {
   const language = useLanguage()
   const sdk = useSDK()
+  const sync = useSync()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
   const [contextTarget, setContextTarget] = createSignal<ReviewContextTarget>({
     path: "",
@@ -221,7 +223,10 @@ function ReviewPanelV2Sidebar(props: {
       minWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN}
       maxWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX}
     >
-      <ReviewFileContextMenu root={sdk().directory} target={contextTarget()}>
+      <ReviewFileContextMenu
+        root={sync().data.path.worktree || sync().project?.worktree || sdk().directory}
+        target={contextTarget()}
+      >
         <Show
           when={props.diffsReady()}
           fallback={
@@ -244,7 +249,7 @@ function ReviewPanelV2Sidebar(props: {
                   setContextTarget({
                     path: node.path,
                     type: node.type,
-                    deleted: props.kinds().get(normalizePath(node.path)) === "del",
+                    deleted: node.type === "file" && props.kinds().get(normalizePath(node.path)) === "del",
                   })
                 }
               />

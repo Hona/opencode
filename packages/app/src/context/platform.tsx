@@ -35,7 +35,7 @@ type PlatformBase = {
   openExternal(url: string): void
 
   /** Open a local path in a local app (desktop only) */
-  openPath?(path: string, app?: string): Promise<void>
+  openPath?(path: string, app?: string, options?: { cwd?: boolean }): Promise<void>
 
   /** Open a local file URL in its default app (desktop only) */
   openLocalFile?(url: string): void
