@@ -224,6 +224,9 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     async revealPath(path: string) {
       return window.api.revealPath(path)
     },
+    writeClipboardText(text: string) {
+      return window.api.writeClipboardText(text)
+    },
 
     storage,
 

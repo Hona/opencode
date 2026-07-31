@@ -43,6 +43,9 @@ type PlatformBase = {
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
+  /** Write plain text to the system clipboard through the host platform */
+  writeClipboardText?(text: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 

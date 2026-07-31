@@ -87,6 +87,7 @@ export type ElectronAPI = {
   openLocalFile: (url: string) => void
   openPath: (path: string, app?: string) => Promise<void>
   revealPath: (path: string) => Promise<boolean>
+  writeClipboardText: (text: string) => Promise<void>
   readClipboardImage: () => Promise<{ buffer: ArrayBuffer; width: number; height: number } | null>
   getWindowFocused: () => Promise<boolean>
   getWindowFullscreen: () => Promise<boolean>

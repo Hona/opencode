@@ -20,6 +20,7 @@ export const OPEN_APPS = [
   "xcode",
   "android-studio",
   "powershell",
+  "windows-powershell",
   "sublime-text",
 ] as const
 
@@ -69,13 +70,19 @@ export const WINDOWS_OPEN_APPS = [
     id: "powershell",
     label: "session.header.open.app.powershell",
     icon: "powershell",
+    openWith: "pwsh",
+  },
+  {
+    id: "windows-powershell",
+    label: "session.header.open.app.windowsPowershell",
+    icon: "windows-powershell",
     openWith: "powershell",
   },
   {
     id: "sublime-text",
     label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
-    openWith: "Sublime Text",
+    openWith: "subl",
   },
 ] as const
 
@@ -87,7 +94,7 @@ export const LINUX_OPEN_APPS = [
     id: "sublime-text",
     label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
-    openWith: "Sublime Text",
+    openWith: "subl",
   },
 ] as const
 

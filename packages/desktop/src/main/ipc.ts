@@ -210,6 +210,10 @@ export function registerIpcHandlers(deps: Deps) {
     return true
   })
 
+  ipcMain.handle("write-clipboard-text", (_event: IpcMainInvokeEvent, text: string) => {
+    clipboard.writeText(text)
+  })
+
   ipcMain.handle("read-clipboard-image", () => {
     const image = clipboard.readImage()
     if (image.isEmpty()) return null
