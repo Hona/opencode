@@ -4,6 +4,8 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 const STORE_MIGRATION = "electron-store-v1"
+const DRAFT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+const DRAFT_KEEP_RECENT = 100
 
 export type DesktopPersistence = ReturnType<typeof openDesktopPersistence>
 
@@ -54,6 +56,17 @@ export function openDesktopPersistence(path: string) {
     INSERT OR IGNORE INTO document (storage, key, value, updated_at)
     VALUES (?, ?, ?, ?)
   `)
+  const selectDrafts = database.prepare(`
+    SELECT storage, MAX(updated_at) AS updated_at
+    FROM document
+    WHERE storage LIKE 'opencode.draft.%.dat'
+    GROUP BY storage
+    ORDER BY updated_at DESC
+  `)
+  const deleteStorage = database.prepare("DELETE FROM document WHERE storage = ?")
+  const selectDocuments = database.prepare("SELECT value FROM document")
+  const selectBlobs = database.prepare("SELECT digest FROM blob")
+  const deleteBlob = database.prepare("DELETE FROM blob WHERE digest = ?")
 
   const readBlob = (digest: string, byteLength?: number) => {
     const row = selectBlob.get(digest) as { bytes: Uint8Array; byte_length: number } | undefined
@@ -118,6 +131,32 @@ export function openDesktopPersistence(path: string) {
         throw error
       }
     },
+    cleanup(now = Date.now()) {
+      const drafts = selectDrafts.all() as Array<{ storage: string; updated_at: number }>
+      const stale = drafts.filter(
+        (draft, index) => now - draft.updated_at > DRAFT_RETENTION_MS || index >= DRAFT_KEEP_RECENT,
+      )
+      const removed = { blobs: 0 }
+
+      database.exec("BEGIN IMMEDIATE")
+      try {
+        stale.forEach((draft) => deleteStorage.run(draft.storage))
+        const referenced = new Set<string>()
+        for (const row of selectDocuments.all() as Array<{ value: string }>) {
+          try {
+            collectBlobReferences(JSON.parse(row.value), referenced)
+          } catch {}
+        }
+        const orphaned = (selectBlobs.all() as Array<{ digest: string }>).filter((blob) => !referenced.has(blob.digest))
+        orphaned.forEach((blob) => deleteBlob.run(blob.digest))
+        removed.blobs = orphaned.length
+        database.exec("COMMIT")
+      } catch (error) {
+        database.exec("ROLLBACK")
+        throw error
+      }
+      return { drafts: stale.length, blobs: removed.blobs }
+    },
     close() {
       database.close()
     },
@@ -154,4 +193,18 @@ export function openDesktopPersistence(path: string) {
 
 function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex")
+}
+
+function collectBlobReferences(value: unknown, references: Set<string>) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectBlobReferences(item, references))
+    return
+  }
+  if (!value || typeof value !== "object") return
+  const record = value as Record<string, unknown>
+  const blob = record.blob
+  if (blob && typeof blob === "object" && "digest" in blob && typeof blob.digest === "string") {
+    references.add(blob.digest)
+  }
+  Object.values(record).forEach((item) => collectBlobReferences(item, references))
 }

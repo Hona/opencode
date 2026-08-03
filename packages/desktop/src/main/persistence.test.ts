@@ -106,4 +106,50 @@ describe("desktop persistence", () => {
     expect(persistence.read("opencode.global.dat", "added")).toBeNull()
     persistence.close()
   })
+
+  test("prunes stale drafts and unreferenced blobs", async () => {
+    const root = await tempRoot()
+    const path = join(root, "desktop.db")
+    const persistence = openDesktopPersistence(path)
+    const stale = persistence.putBlob(new TextEncoder().encode("stale"))
+    const retained = persistence.putBlob(new TextEncoder().encode("retained"))
+    const orphaned = persistence.putBlob(new TextEncoder().encode("orphaned"))
+    persistence.commit("opencode.draft.stale.dat", "draft:prompt", JSON.stringify({ blob: stale }))
+    persistence.commit("opencode.draft.recent.dat", "draft:prompt", JSON.stringify({ blob: retained }))
+
+    const database = new DatabaseSync(path)
+    const now = Date.now()
+    database
+      .prepare("UPDATE document SET updated_at = ? WHERE storage = ?")
+      .run(now - 31 * 24 * 60 * 60 * 1000, "opencode.draft.stale.dat")
+    database.close()
+
+    expect(persistence.cleanup(now)).toEqual({ drafts: 1, blobs: 2 })
+    expect(persistence.read("opencode.draft.stale.dat", "draft:prompt")).toBeNull()
+    expect(persistence.read("opencode.draft.recent.dat", "draft:prompt")).not.toBeNull()
+    expect(persistence.readBlob(stale.digest)).toBeNull()
+    expect(persistence.readBlob(orphaned.digest)).toBeNull()
+    expect(persistence.readBlob(retained.digest)).not.toBeNull()
+    persistence.close()
+  })
+
+  test("keeps the newest 100 drafts", async () => {
+    const root = await tempRoot()
+    const path = join(root, "desktop.db")
+    const persistence = openDesktopPersistence(path)
+    const now = Date.now()
+    const drafts = Array.from({ length: 101 }, (_, index) => index)
+    drafts.forEach((index) => {
+      persistence.commit(`opencode.draft.${index}.dat`, "draft:prompt", `{"index":${index}}`)
+    })
+    const database = new DatabaseSync(path)
+    const update = database.prepare("UPDATE document SET updated_at = ? WHERE storage = ?")
+    drafts.forEach((index) => update.run(now - index, `opencode.draft.${index}.dat`))
+    database.close()
+
+    expect(persistence.cleanup(now).drafts).toBe(1)
+    expect(persistence.read("opencode.draft.0.dat", "draft:prompt")).not.toBeNull()
+    expect(persistence.read("opencode.draft.100.dat", "draft:prompt")).toBeNull()
+    persistence.close()
+  })
 })

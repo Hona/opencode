@@ -257,7 +257,7 @@ const main = Effect.gen(function* () {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       setAppQuitting()
-      void stopSidecars().finally(() => app.exit(0))
+      void stopSidecars().finally(() => app.quit())
     })
   }
 
@@ -266,12 +266,6 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
-  const desktopPersistence = yield* Effect.sync(() =>
-    openDesktopPersistence(join(app.getPath("userData"), "opencode-desktop.db")),
-  )
-  desktopPersistence.importElectronStores(app.getPath("userData"), (message, error) => logger.warn(message, error))
-  persistence = desktopPersistence
-  app.once("will-quit", () => persistence?.close())
   yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
     Effect.tap((result) =>
       Effect.sync(() => {
@@ -285,6 +279,14 @@ const main = Effect.gen(function* () {
       }),
     ),
   )
+  const desktopPersistence = yield* Effect.sync(() =>
+    openDesktopPersistence(join(app.getPath("userData"), "opencode-desktop.db")),
+  )
+  desktopPersistence.importElectronStores(app.getPath("userData"), (message, error) => logger.warn(message, error))
+  const cleaned = desktopPersistence.cleanup()
+  if (cleaned.drafts > 0 || cleaned.blobs > 0) logger.log("cleaned desktop persistence", cleaned)
+  persistence = desktopPersistence
+  app.once("will-quit", () => persistence?.close())
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()

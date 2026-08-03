@@ -189,7 +189,7 @@ export function createPromptInputV2Attachments(
     if (!editor) return
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
-  const add = async (file: File, toast = true, target = capture()) => {
+  const add = async (file: File, toast = true, target = capture(), clipboard = false) => {
     if (!target) return false
     const mime = await attachmentMime(file)
     if (!mime) {
@@ -201,7 +201,14 @@ export function createPromptInputV2Attachments(
     const sourcePath = input.getPathForFile?.(file) || undefined
     const duplicate = target.prompt
       .current()
-      .some((part) => part.type === "image" && attachmentReference(part)?.digest === blob.digest)
+      .some(
+        (part) =>
+          part.type === "image" &&
+          attachmentReference(part)?.digest === blob.digest &&
+          (sourcePath
+            ? part.sourcePath === sourcePath
+            : !part.sourcePath && (clipboard || part.filename === file.name)),
+      )
     if (duplicate) {
       input.duplicate()
       return true
@@ -245,7 +252,7 @@ export function createPromptInputV2Attachments(
     const plainText = clipboardData.getData("text/plain") ?? ""
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
-      if (file && (await add(file, true, target))) return
+      if (file && (await add(file, true, target, true))) return
     }
     if (!plainText) return
     const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText

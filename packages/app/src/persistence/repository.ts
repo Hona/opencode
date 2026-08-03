@@ -33,15 +33,20 @@ export interface DurableRepository {
 export function createRepository(durable: DurableRepository): Repository {
   const checkpoints = new Map<string, ReturnType<typeof createCheckpointController<DocumentValue>>>()
   const id = (address: DocumentAddress) => `${address.storage}\0${address.key}`
+  const resolve = (value: DocumentValue) => (typeof value === "function" ? value() : value)
 
   return {
-    read: (address) => durable.read(address),
+    async read(address) {
+      const pending = checkpoints.get(id(address))?.pending()
+      if (pending !== undefined) return resolve(pending)
+      return durable.read(address)
+    },
     commit(input) {
       const key = id(input.address)
       const existing = checkpoints.get(key)
       if (existing) return existing.checkpoint(input.value)
       const checkpoint = createCheckpointController((value: DocumentValue) =>
-        durable.commit({ address: input.address, value: typeof value === "function" ? value() : value }),
+        durable.commit({ address: input.address, value: resolve(value) }),
       )
       checkpoints.set(key, checkpoint)
       checkpoint.checkpoint(input.value)

@@ -14,6 +14,7 @@ export function createCheckpointController<T>(commit: (value: T) => Promise<void
   let dirtySince: number | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let inFlight = false
+  let discarded = false
   let waiters: Waiter[] = []
   let idleWaiters: Array<() => void> = []
 
@@ -48,6 +49,7 @@ export function createCheckpointController<T>(commit: (value: T) => Promise<void
           inFlight = false
           idleWaiters.splice(0).forEach((resolve) => resolve())
           settle()
+          if (discarded) return
           if (committed === generation) return
           if (waiters.some((waiter) => waiter.generation > committed)) {
             run()
@@ -86,6 +88,7 @@ export function createCheckpointController<T>(commit: (value: T) => Promise<void
       })
     },
     discard() {
+      discarded = true
       if (timer !== undefined) clearTimeout(timer)
       timer = undefined
       generation = committed
@@ -97,6 +100,9 @@ export function createCheckpointController<T>(commit: (value: T) => Promise<void
     idle() {
       if (!inFlight) return Promise.resolve()
       return new Promise<void>((resolve) => idleWaiters.push(resolve))
+    },
+    pending(): T | undefined {
+      return committed === generation ? undefined : latest
     },
   }
 }

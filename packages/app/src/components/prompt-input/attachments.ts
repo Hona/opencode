@@ -23,7 +23,6 @@ type PromptAttachmentsCoreInput = {
   getPathForFile?: (file: File) => string
   putBlob: (bytes: Uint8Array) => Promise<BlobReference>
   readBlob: (reference: BlobReference) => Promise<Uint8Array | null>
-  duplicate?: () => void
 }
 
 export type PromptAttachmentsInput = {
@@ -148,12 +147,6 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
 
     const bytes = new Uint8Array(await file.arrayBuffer())
     const blob = await input.putBlob(bytes)
-    if (
-      target.prompt.current().some((part) => part.type === "image" && attachmentReference(part)?.digest === blob.digest)
-    ) {
-      input.duplicate?.()
-      return true
-    }
 
     const attachment: ImageAttachmentPart = {
       type: "image",
@@ -276,7 +269,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
         description: language.t("prompt.toast.pasteUnsupported.description"),
       })
     },
-    duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
   })
 
   const handleGlobalDragOver = (event: DragEvent) => {

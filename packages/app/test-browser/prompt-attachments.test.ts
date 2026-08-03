@@ -276,7 +276,7 @@ test("keeps a new V2 image preview stable when its pending blob read resolves", 
   })
 })
 
-test("rejects desktop duplicates and keeps changed files in the V2 prompt store", async () => {
+test("uses source identity when detecting V2 attachment duplicates", async () => {
   await createRoot(async (dispose) => {
     const [state, setState] = createStore({ prompt: [] as PromptInputV2Prompt })
     const duplicates: string[] = []
@@ -306,14 +306,21 @@ test("rejects desktop duplicates and keeps changed files in the V2 prompt store"
     expect(state.prompt).toHaveLength(2)
     expect(duplicates).toEqual(["duplicate", "duplicate"])
 
+    await attachments.addAttachments([
+      new File(["same"], "c.txt", { type: "text/plain" }),
+      new File(["same"], "d.txt", { type: "text/plain" }),
+    ])
+    expect(state.prompt).toHaveLength(4)
+    expect(duplicates).toHaveLength(2)
+
     await attachments.addAttachments([new File(["edited"], "a.txt", { type: "text/plain" })])
-    expect(state.prompt).toHaveLength(3)
+    expect(state.prompt).toHaveLength(5)
 
     await attachments.addAttachments([
       new File(["same"], "browser.txt", { type: "text/plain" }),
       new File(["same"], "browser.txt", { type: "text/plain" }),
     ])
-    expect(state.prompt).toHaveLength(4)
+    expect(state.prompt).toHaveLength(6)
     expect(duplicates).toHaveLength(3)
     dispose()
   })
