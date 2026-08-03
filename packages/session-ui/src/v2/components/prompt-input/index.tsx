@@ -14,6 +14,7 @@ import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
 import type {
   PromptInputV2Attachment,
+  PromptInputV2BlobReference,
   PromptInputV2Comment,
   PromptInputV2Option,
   PromptInputV2PersistedState,
@@ -25,6 +26,7 @@ import "./attachments.css"
 
 export type {
   PromptInputV2Attachment,
+  PromptInputV2BlobReference,
   PromptInputV2Comment,
   PromptInputV2Option,
   PromptInputV2PersistedState,
@@ -134,6 +136,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             comments={props.controller.comments()}
             activeCommentID={state.activeContextID}
             removeLabel="Remove attachment"
+            previewUrl={props.controller.attachmentUrl}
             onAttachmentClick={props.controller.openAttachment}
             onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
@@ -372,6 +375,7 @@ export function PromptInputV2Attachments(props: {
   comments?: PromptInputV2Comment[]
   activeCommentID?: string
   removeLabel: string
+  previewUrl: (attachment: PromptInputV2Attachment) => string | undefined
   onAttachmentClick?: (attachment: PromptInputV2Attachment) => void
   onAttachmentRemove: (attachment: PromptInputV2Attachment) => void
   onCommentClick?: (comment: PromptInputV2Comment) => void
@@ -425,7 +429,7 @@ export function PromptInputV2Attachments(props: {
                     }
                   >
                     <img
-                      src={attachment.dataUrl}
+                      src={props.previewUrl(attachment)}
                       alt={attachment.filename}
                       class="w-[58px] h-[46px] rounded-[6px] object-cover"
                       onClick={() => props.onAttachmentClick?.(attachment)}

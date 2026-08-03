@@ -5,6 +5,7 @@ import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerScope } from "@/utils/server-scope"
+import type { BlobReference } from "@/persistence"
 
 interface PartBase {
   content: string
@@ -37,7 +38,7 @@ export interface ImageAttachmentPart {
   filename: string
   sourcePath?: string
   mime: string
-  dataUrl: string
+  blob: BlobReference
 }
 
 export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ImageAttachmentPart
@@ -101,7 +102,7 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
     case "image":
-      return partB.type === "image" && partA.id === partB.id
+      return partB.type === "image" && partA.blob?.digest === partB.blob?.digest
   }
 }
 
@@ -120,7 +121,7 @@ function cloneSelection(selection?: FileSelection) {
 
 function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
-  if (part.type === "image") return { ...part }
+  if (part.type === "image") return { ...part, blob: { ...part.blob } }
   if (part.type === "agent") return { ...part }
   return {
     ...part,

@@ -1,6 +1,7 @@
-import { onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
+import type { PromptInputV2Attachment, PromptInputV2BlobReference, PromptInputV2Prompt } from "./types"
 
 const accepted = [
   "image/png",
@@ -78,6 +79,8 @@ export type PromptInputV2AttachmentConfig = {
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  putBlob: (bytes: Uint8Array) => Promise<PromptInputV2BlobReference>
+  readBlob: (reference: PromptInputV2BlobReference) => Promise<Uint8Array | null>
 }
 
 export function createPromptInputV2Attachments(
@@ -89,34 +92,116 @@ export function createPromptInputV2Attachments(
     setDraggingType: (type: "image" | "@mention" | null) => void
   },
 ) {
+  const [previews, setPreviews] = createStore<Record<string, string | undefined>>({})
+  const loading = new Set<string>()
+  const migrating = new Set<string>()
+  const revoke = (digest: string) => {
+    const url = previews[digest]
+    if (url) URL.revokeObjectURL(url)
+    setPreviews(digest, undefined)
+    loading.delete(digest)
+  }
+  const cachePreview = (attachment: PromptInputV2Attachment, bytes: Uint8Array) => {
+    const reference = attachmentReference(attachment)
+    if (!reference) return
+    const previous = previews[reference.digest]
+    const next = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: attachment.mime }))
+    setPreviews(reference.digest, next)
+    loading.delete(reference.digest)
+    if (previous) URL.revokeObjectURL(previous)
+  }
+  const previewUrl = (attachment: PromptInputV2Attachment) => {
+    const reference = attachmentReference(attachment)
+    if (!reference) return
+    const digest = reference.digest
+    const current = previews[digest]
+    if (current || loading.has(digest)) return current
+    loading.add(digest)
+    void input
+      .readBlob(reference)
+      .then((bytes) => {
+        if (!bytes || previews[digest]) {
+          loading.delete(digest)
+          return
+        }
+        if (
+          !input
+            .capture()
+            .current()
+            .some((part) => part.type === "image" && attachmentReference(part)?.digest === digest)
+        ) {
+          loading.delete(digest)
+          return
+        }
+        cachePreview(attachment, bytes)
+      })
+      .catch(() => loading.delete(digest))
+    return previews[digest]
+  }
+  createEffect(() => {
+    const target = input.capture()
+    target.current().forEach((part) => {
+      if (part.type !== "image") return
+      const url = legacyAttachmentUrl(part)
+      if (!url || migrating.has(part.id)) return
+      migrating.add(part.id)
+      void fetch(url)
+        .then((response) => response.arrayBuffer())
+        .then((buffer) => {
+          const bytes = new Uint8Array(buffer)
+          return input.putBlob(bytes).then((blob) => ({ bytes, blob }))
+        })
+        .then(({ bytes, blob }) => {
+          const current = target.current()
+          if (!current.some((item) => item.type === "image" && item.id === part.id && legacyAttachmentUrl(item))) return
+          const attachment: PromptInputV2Attachment = {
+            type: "image",
+            id: part.id,
+            filename: part.filename,
+            sourcePath: part.sourcePath,
+            mime: part.mime,
+            blob,
+          }
+          target.set(
+            current.map((item) => (item.type === "image" && item.id === part.id ? attachment : item)),
+            target.cursor(),
+          )
+          cachePreview(attachment, bytes)
+        })
+        .catch(() => {})
+        .finally(() => migrating.delete(part.id))
+    })
+    const active = new Set(
+      target.current().flatMap((part) => {
+        const reference = part.type === "image" ? attachmentReference(part) : undefined
+        return reference ? [reference.digest] : []
+      }),
+    )
+    Object.keys(previews).forEach((digest) => {
+      if (!active.has(digest)) revoke(digest)
+    })
+  })
+  onCleanup(() => Object.keys(previews).forEach(revoke))
+
   const capture = () => {
     const prompt = input.capture()
     const editor = input.editor()
     if (!editor) return
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
-  const add = async (file: File, toast = true, target = capture(), clipboard = false) => {
+  const add = async (file: File, toast = true, target = capture()) => {
     if (!target) return false
     const mime = await attachmentMime(file)
     if (!mime) {
       if (toast) input.warn()
       return false
     }
-    const url = await dataUrl(file, mime)
-    if (!url) return false
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const blob = await input.putBlob(bytes)
     const sourcePath = input.getPathForFile?.(file) || undefined
-    // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
-    // clipboard content is matched on bytes alone.
     const duplicate = target.prompt
       .current()
-      .some(
-        (part) =>
-          part.type === "image" &&
-          part.dataUrl === url &&
-          (sourcePath
-            ? part.sourcePath === sourcePath
-            : !part.sourcePath && (clipboard || part.filename === file.name)),
-      )
+      .some((part) => part.type === "image" && attachmentReference(part)?.digest === blob.digest)
     if (duplicate) {
       input.duplicate()
       return true
@@ -127,9 +212,10 @@ export function createPromptInputV2Attachments(
       filename: file.name,
       sourcePath,
       mime,
-      dataUrl: url,
+      blob,
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
+    cachePreview(attachment, bytes)
     return true
   }
   const addAttachments = async (files: File[], toast = true, target = capture()) => {
@@ -159,7 +245,7 @@ export function createPromptInputV2Attachments(
     const plainText = clipboardData.getData("text/plain") ?? ""
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
-      if (file && (await add(file, true, target, true))) return
+      if (file && (await add(file, true, target))) return
     }
     if (!plainText) return
     const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
@@ -205,6 +291,8 @@ export function createPromptInputV2Attachments(
 
   return {
     addAttachments,
+    previewUrl,
+    revoke,
     handlePaste,
     handleDrop,
     pick(fallback: () => void) {
@@ -219,17 +307,13 @@ export function createPromptInputV2Attachments(
   }
 }
 
-function dataUrl(file: File, mime: string) {
-  return new Promise<string>((resolve) => {
-    const reader = new FileReader()
-    reader.addEventListener("error", () => resolve(""))
-    reader.addEventListener("load", () => {
-      const value = typeof reader.result === "string" ? reader.result : ""
-      const index = value.indexOf(",")
-      resolve(index === -1 ? value : `data:${mime};base64,${value.slice(index + 1)}`)
-    })
-    reader.readAsDataURL(file)
-  })
+function attachmentReference(attachment: PromptInputV2Attachment) {
+  return (attachment as PromptInputV2Attachment & { blob?: PromptInputV2BlobReference }).blob
+}
+
+function legacyAttachmentUrl(attachment: PromptInputV2Attachment) {
+  const value = (attachment as PromptInputV2Attachment & { dataUrl?: unknown }).dataUrl
+  return typeof value === "string" && value.startsWith("data:") ? value : undefined
 }
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])

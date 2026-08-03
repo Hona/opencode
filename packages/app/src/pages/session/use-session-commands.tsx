@@ -14,11 +14,12 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { extractPromptFromParts } from "@/utils/prompt"
+import { restorePromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import { usePlatform } from "@/context/platform"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -48,6 +49,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminal = useTerminal()
   const layout = useLayout()
   const local = useLocal()
+  const platform = usePlatform()
   const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
@@ -314,6 +316,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const message = findLast(messages, (x) => !revert || x.id < revert)
     if (!message) return
     const parts = sync().data.part[message.id]
+    const restored = parts
+      ? await restorePromptFromParts(parts, {
+          directory,
+          putBlob: (bytes) =>
+            platform.persistence?.putBlob(bytes) ?? Promise.reject(new Error("Attachment persistence is unavailable")),
+        })
+      : undefined
 
     if (sync().data.session_working(sessionID)) {
       await session.interrupt({ sessionID }).catch(() => {})
@@ -324,7 +333,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       prompt: promptSession,
       request: () => session.revert.stage({ sessionID, messageID: message.id }),
       updatePrompt: (promptSession) => {
-        if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
+        if (restored) promptSession.set(restored)
       },
       updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < message.id)),
     })

@@ -6,6 +6,8 @@ import {
   AppInterface,
   loadLocaleDict,
   normalizeLocale,
+  createRepository,
+  type DurableRepository,
   type Locale,
   type Platform,
   PlatformProvider,
@@ -15,7 +17,6 @@ import {
 } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
-import type { AsyncStorage } from "@solid-primitives/storage"
 import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import { render } from "solid-js/web"
@@ -136,32 +137,21 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     return window.api.runDesktopMenuAction(action)
   }
 
-  const storage = (() => {
-    const cache = new Map<string, AsyncStorage>()
-
-    const createStorage = (name: string) => {
-      const api: AsyncStorage = {
-        getItem: (key: string) => window.api.storeGet(name, key),
-        setItem: (key: string, value: string) => window.api.storeSet(name, key, value),
-        removeItem: (key: string) => window.api.storeDelete(name, key),
-        clear: () => window.api.storeClear(name),
-        key: async (index: number) => (await window.api.storeKeys(name))[index],
-        getLength: () => window.api.storeLength(name),
-        get length() {
-          return api.getLength()
-        },
-      }
-      return api
-    }
-
-    return (name = "default.dat") => {
-      const cached = cache.get(name)
-      if (cached) return cached
-      const api = createStorage(name)
-      cache.set(name, api)
-      return api
-    }
-  })()
+  const durable: DurableRepository = {
+    read: (address) => window.api.persistence.read(address.storage, address.key),
+    commit: (input) => window.api.persistence.commit(input.address.storage, input.address.key, input.value),
+    remove: (address) => window.api.persistence.remove(address.storage, address.key),
+    putBlob: (bytes) => window.api.persistence.putBlob(bytes),
+    readBlob: (reference) => window.api.persistence.readBlob(reference.digest, reference.byteLength),
+    drain: () => window.api.persistence.drain(),
+  }
+  const persistence = createRepository(durable)
+  window.api.persistence.onDrainRequest((request) => {
+    void persistence.drain().then(
+      () => window.api.persistence.acknowledgeDrain(request),
+      () => window.api.persistence.acknowledgeDrain(request),
+    )
+  })
 
   const wslServersApi = os === "windows" ? window.api.wslServers : undefined
 
@@ -225,7 +215,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       return window.api.revealPath(path)
     },
 
-    storage,
+    persistence,
 
     updater: {
       state: updaterState,
@@ -327,8 +317,10 @@ function LoadingSplash() {
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
   const platform = createPlatform(props.windowState)
   const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
-    const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
+    const current = await platform.persistence!.read({ storage: "opencode.global.dat", key: "language" })
+    const legacy = current
+      ? undefined
+      : await platform.persistence!.read({ storage: "default.dat", key: "language.v1" })
     const raw = current ?? legacy
     if (!raw) return
     const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]

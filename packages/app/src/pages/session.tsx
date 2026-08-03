@@ -97,7 +97,7 @@ import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
-import { extractPromptFromParts } from "@/utils/prompt"
+import { extractPromptFromParts, restorePromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
@@ -1673,6 +1673,13 @@ export default function Page() {
       directory: sdk().directory,
       attachmentName: language.t("common.attachment"),
     })
+  const restoreDraft = (id: string) =>
+    restorePromptFromParts(sync().data.part[id] ?? [], {
+      directory: sdk().directory,
+      attachmentName: language.t("common.attachment"),
+      putBlob: (bytes) =>
+        platform.persistence?.putBlob(bytes) ?? Promise.reject(new Error("Attachment persistence is unavailable")),
+    })
 
   const line = (id: string) => {
     const text = draft(id)
@@ -1729,6 +1736,7 @@ export default function Page() {
         serverSync: serverSync(),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
+        readBlob: (reference) => platform.persistence?.readBlob(reference) ?? Promise.resolve(null),
       }).catch((err) => {
         setFollowup("failed", input.sessionID, input.id)
         fail(err)
@@ -1829,7 +1837,7 @@ export default function Page() {
       const session = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
-      const value = draft(input.messageID)
+      const value = await restoreDraft(input.messageID)
       await runPromptRollbackMutation({
         capturePrompt: prompt.capture,
         optimistic: (prompt) => {
@@ -1852,14 +1860,15 @@ export default function Page() {
       const session = sdk().api.session
       const target = sync()
       const next = userMessages().find((item) => item.id > id)
+      const value = next ? await restoreDraft(next.id) : undefined
       const last = target.session.get(sessionID)?.revert
 
       await runPromptRollbackMutation({
         capturePrompt: prompt.capture,
         optimistic: (promptSession) => {
           roll(sessionID, next ? { messageID: next.id } : undefined, target)
-          if (next) {
-            promptSession.set(draft(next.id))
+          if (next && value) {
+            promptSession.set(value)
             return
           }
           promptSession.reset()

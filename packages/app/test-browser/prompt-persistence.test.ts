@@ -1,19 +1,18 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
-import type { AsyncStorage } from "@solid-primitives/storage"
+import type { Repository } from "@/persistence"
 import { createEffect, createRoot } from "solid-js"
 import { ServerScope } from "@/utils/server-scope"
 
 let Prompt: typeof import("@/context/prompt")
 let read: ((value: string | null) => void) | undefined
 
-const storage: AsyncStorage = {
-  getItem: () => new Promise((resolve) => (read = resolve)),
-  setItem: async () => undefined,
-  removeItem: async () => undefined,
-  clear: async () => undefined,
-  key: async () => null,
-  getLength: async () => 0,
-  length: Promise.resolve(0),
+const persistence: Repository = {
+  read: () => new Promise((resolve) => (read = resolve)),
+  commit: () => undefined,
+  remove: async () => undefined,
+  putBlob: async (bytes) => ({ digest: "digest", byteLength: bytes.byteLength }),
+  readBlob: async () => null,
+  drain: async () => undefined,
 }
 
 beforeAll(async () => {
@@ -30,7 +29,7 @@ beforeAll(async () => {
     }),
   }))
   mock.module("@/context/platform", () => ({
-    usePlatform: () => ({ platform: "desktop", storage: () => storage }),
+    usePlatform: () => ({ platform: "desktop", persistence }),
   }))
 
   Prompt = await import("@/context/prompt")

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
@@ -9,7 +10,6 @@ import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../prel
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
-import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
   getPinchZoomEnabled,
   getWindowID,
@@ -21,6 +21,7 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import type { DesktopPersistence } from "./persistence"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -48,7 +49,13 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  persistence: DesktopPersistence
 }
+
+const persistenceDrainRequests = new Map<
+  string,
+  { remaining: Set<number>; finish: () => void; timeout: ReturnType<typeof setTimeout> }
+>()
 
 export function registerIpcHandlers(deps: Deps) {
   const updaterSubscriptions = createUpdaterSubscriptions()
@@ -94,34 +101,28 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
-  ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    try {
-      const store = getStore(name)
-      const value = store.get(key)
-      if (value === undefined || value === null) return null
-      return typeof value === "string" ? value : JSON.stringify(value)
-    } catch {
-      return null
-    }
-  })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
-    getStore(name).set(key, value)
-  })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    getStore(name).delete(key)
-    void removeStoreFileIfEmpty(name)
-  })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
-    getStore(name).clear()
-    void removeStoreFileIfEmpty(name)
-  })
-  ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
-    return Object.keys(store.store)
-  })
-  ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
-    return Object.keys(store.store).length
+  ipcMain.handle("persistence-read", (_event: IpcMainInvokeEvent, storage: string, key: string) =>
+    deps.persistence.read(storage, key),
+  )
+  ipcMain.handle("persistence-commit", (_event: IpcMainInvokeEvent, storage: string, key: string, value: string) =>
+    deps.persistence.commit(storage, key, value),
+  )
+  ipcMain.handle("persistence-remove", (_event: IpcMainInvokeEvent, storage: string, key: string) =>
+    deps.persistence.remove(storage, key),
+  )
+  ipcMain.handle("persistence-put-blob", (_event: IpcMainInvokeEvent, bytes: Uint8Array) =>
+    deps.persistence.putBlob(bytes),
+  )
+  ipcMain.handle("persistence-read-blob", (_event: IpcMainInvokeEvent, digest: string, byteLength: number) =>
+    deps.persistence.readBlob(digest, byteLength),
+  )
+  ipcMain.handle("persistence-drain", () => deps.persistence.drain())
+  ipcMain.on("persistence-drain-ack", (event: IpcMainEvent, request: string) => {
+    const pending = persistenceDrainRequests.get(request)
+    if (!pending) return
+    pending.remaining.delete(event.sender.id)
+    if (pending.remaining.size > 0) return
+    pending.finish()
   })
 
   ipcMain.handle(
@@ -271,6 +272,30 @@ export function registerIpcHandlers(deps: Deps) {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
+  })
+}
+
+export function requestPersistenceDrains(timeoutMs = 1500) {
+  const renderers = BrowserWindow.getAllWindows()
+    .map((window) => window.webContents)
+    .filter((contents) => !contents.isDestroyed())
+  if (renderers.length === 0) return Promise.resolve()
+
+  const request = randomUUID()
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      const pending = persistenceDrainRequests.get(request)
+      if (!pending) return
+      clearTimeout(pending.timeout)
+      persistenceDrainRequests.delete(request)
+      resolve()
+    }
+    persistenceDrainRequests.set(request, {
+      remaining: new Set(renderers.map((contents) => contents.id)),
+      finish,
+      timeout: setTimeout(finish, timeoutMs),
+    })
+    renderers.forEach((contents) => contents.send("persistence-drain-request", request))
   })
 }
 

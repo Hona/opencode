@@ -9,7 +9,7 @@ import { setAppQuitting } from "./windows"
 const { autoUpdater } = pkg
 const key = "ready"
 
-export function setupAutoUpdater(stop: () => Promise<void>) {
+export function setupAutoUpdater(stop: () => Promise<void>, drain: () => Promise<void>) {
   const logger = getLogger()
   autoUpdater.logger = logger
   autoUpdater.channel = "latest"
@@ -31,11 +31,12 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     backend: {
       checkForUpdates: () => autoUpdater.checkForUpdates(),
       downloadUpdate: () => autoUpdater.downloadUpdate(),
-      quitAndInstall: () => {
+      quitAndInstall: async () => {
         // quitAndInstall closes all windows before emitting before-quit, so
         // flag the quit first to keep window ids persisted for restore.
         setAppQuitting()
         try {
+          await drain()
           autoUpdater.quitAndInstall()
         } catch (error) {
           // The install failed and the app keeps running; clear the flag so

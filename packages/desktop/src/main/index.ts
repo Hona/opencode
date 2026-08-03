@@ -14,7 +14,7 @@ import contextMenu from "electron-context-menu"
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL } from "./constants"
-import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
+import { registerIpcHandlers, requestPersistenceDrains, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { createMenu } from "./menu"
@@ -48,6 +48,7 @@ import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
+import { openDesktopPersistence, type DesktopPersistence } from "./persistence"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -65,6 +66,9 @@ const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
+let persistence: DesktopPersistence | undefined
+let persistenceDrainStarted = false
+let persistenceDrained = false
 
 const pendingDeepLinks: string[] = []
 
@@ -169,10 +173,8 @@ const main = Effect.gen(function* () {
   }
   const relaunch = () => {
     setAppQuitting()
-    void stopSidecars().finally(() => {
-      app.relaunch()
-      app.exit(0)
-    })
+    app.relaunch()
+    app.quit()
   }
 
   try {
@@ -220,9 +222,19 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     setAppQuitting()
     void stopSidecars()
+    if (!persistence || persistenceDrained) return
+    event.preventDefault()
+    if (persistenceDrainStarted) return
+    persistenceDrainStarted = true
+    void requestPersistenceDrains()
+      .then(() => persistence?.drain())
+      .finally(() => {
+        persistenceDrained = true
+        app.quit()
+      })
   })
 
   app.on("will-quit", () => {
@@ -254,6 +266,12 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
+  const desktopPersistence = yield* Effect.sync(() =>
+    openDesktopPersistence(join(app.getPath("userData"), "opencode-desktop.db")),
+  )
+  desktopPersistence.importElectronStores(app.getPath("userData"), (message, error) => logger.warn(message, error))
+  persistence = desktopPersistence
+  app.once("will-quit", () => persistence?.close())
   yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
     Effect.tap((result) =>
       Effect.sync(() => {
@@ -270,7 +288,10 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
-  const updater = setupAutoUpdater(stopSidecars)
+  const updater = setupAutoUpdater(stopSidecars, async () => {
+    await requestPersistenceDrains()
+    persistence?.drain()
+  })
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     relaunch,
@@ -298,6 +319,7 @@ const main = Effect.gen(function* () {
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
+    persistence,
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()

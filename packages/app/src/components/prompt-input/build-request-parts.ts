@@ -5,6 +5,7 @@ import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { attachmentReferenceUrl } from "@/utils/prompt"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -27,6 +28,7 @@ type BuildRequestPartsInput = {
   messageID: string
   sessionID: string
   sessionDirectory: string
+  attachmentUrls?: ReadonlyMap<string, string>
 }
 
 const absolute = (directory: string, path: string) => {
@@ -199,7 +201,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       id: Identifier.ascending("part"),
       type: "file",
       mime: attachment.mime,
-      url: attachment.dataUrl,
+      url: input.attachmentUrls?.get(attachment.blob.digest) ?? attachmentReferenceUrl(attachment.blob),
       filename: attachment.sourcePath ?? attachment.filename,
     } satisfies PromptRequestPart
   })

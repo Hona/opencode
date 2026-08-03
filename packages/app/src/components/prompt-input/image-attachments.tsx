@@ -14,6 +14,7 @@ type PromptCommentItem = ContextItem & { key: string }
 type PromptImageAttachmentsProps = {
   attachments: ImageAttachmentPart[]
   onOpen: (attachment: ImageAttachmentPart) => void
+  previewUrl: (attachment: ImageAttachmentPart) => string | undefined
   onRemove: (id: string) => void
   removeLabel: string
   newLayoutDesigns: boolean
@@ -100,7 +101,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                   }
                 >
                   <img
-                    src={attachment.dataUrl}
+                    src={props.previewUrl(attachment)}
                     alt={attachment.filename}
                     class={props.newLayoutDesigns ? imageClassV2 : imageClass}
                     onClick={() => props.onOpen(attachment)}

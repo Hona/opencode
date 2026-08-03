@@ -41,6 +41,17 @@ export type FatalRendererError = {
   os?: string
 }
 
+export type PersistenceAPI = {
+  read: (storage: string, key: string) => Promise<string | null>
+  commit: (storage: string, key: string, value: string) => Promise<void>
+  remove: (storage: string, key: string) => Promise<void>
+  putBlob: (bytes: Uint8Array) => Promise<{ digest: string; byteLength: number }>
+  readBlob: (digest: string, byteLength: number) => Promise<Uint8Array | null>
+  drain: () => Promise<void>
+  onDrainRequest: (cb: (request: string) => void) => () => void
+  acknowledgeDrain: (request: string) => void
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -57,12 +68,7 @@ export type ElectronAPI = {
   setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   checkAppExists: (appName: string) => Promise<boolean>
   resolveAppPath: (appName: string) => Promise<string | null>
-  storeGet: (name: string, key: string) => Promise<string | null>
-  storeSet: (name: string, key: string, value: string) => Promise<void>
-  storeDelete: (name: string, key: string) => Promise<void>
-  storeClear: (name: string) => Promise<void>
-  storeKeys: (name: string) => Promise<string[]>
-  storeLength: (name: string) => Promise<number>
+  persistence: PersistenceAPI
 
   getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void

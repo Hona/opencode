@@ -1,29 +1,14 @@
-import { onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { showToast } from "@/utils/toast"
 import { type ContentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
+import type { BlobReference } from "@/persistence"
 import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
-
-function dataUrl(file: File, mime: string) {
-  return new Promise<string>((resolve) => {
-    const reader = new FileReader()
-    reader.addEventListener("error", () => resolve(""))
-    reader.addEventListener("load", () => {
-      const value = typeof reader.result === "string" ? reader.result : ""
-      const idx = value.indexOf(",")
-      if (idx === -1) {
-        resolve(value)
-        return
-      }
-      resolve(`data:${mime};base64,${value.slice(idx + 1)}`)
-    })
-    reader.readAsDataURL(file)
-  })
-}
 
 type PromptTarget = Pick<ReturnType<ReturnType<typeof usePrompt>["capture"]>, "current" | "cursor" | "set">
 type AttachmentTarget = { prompt: PromptTarget; cursor: number | undefined }
@@ -36,6 +21,9 @@ type PromptAttachmentsCoreInput = {
   warn?: () => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  putBlob: (bytes: Uint8Array) => Promise<BlobReference>
+  readBlob: (reference: BlobReference) => Promise<Uint8Array | null>
+  duplicate?: () => void
 }
 
 export type PromptAttachmentsInput = {
@@ -47,9 +35,102 @@ export type PromptAttachmentsInput = {
   addPart: (part: ContentPart) => boolean
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  putBlob: (bytes: Uint8Array) => Promise<BlobReference>
+  readBlob: (reference: BlobReference) => Promise<Uint8Array | null>
 }
 
 export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
+  const [previews, setPreviews] = createStore<Record<string, string | undefined>>({})
+  const loading = new Set<string>()
+  const migrating = new Set<string>()
+  const revokePreview = (digest: string) => {
+    const url = previews[digest]
+    if (url) URL.revokeObjectURL(url)
+    setPreviews(digest, undefined)
+    loading.delete(digest)
+  }
+  const cachePreview = (attachment: ImageAttachmentPart, bytes: Uint8Array) => {
+    const reference = attachmentReference(attachment)
+    if (!reference) return
+    const previous = previews[reference.digest]
+    const next = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: attachment.mime }))
+    setPreviews(reference.digest, next)
+    loading.delete(reference.digest)
+    if (previous) URL.revokeObjectURL(previous)
+  }
+  const previewUrl = (attachment: ImageAttachmentPart) => {
+    const reference = attachmentReference(attachment)
+    if (!reference) return
+    const digest = reference.digest
+    const current = previews[digest]
+    if (current || loading.has(digest)) return current
+    loading.add(digest)
+    void input
+      .readBlob(reference)
+      .then((bytes) => {
+        if (!bytes || previews[digest]) {
+          loading.delete(digest)
+          return
+        }
+        if (
+          !input
+            .capture()
+            .current()
+            .some((part) => part.type === "image" && attachmentReference(part)?.digest === digest)
+        ) {
+          loading.delete(digest)
+          return
+        }
+        cachePreview(attachment, bytes)
+      })
+      .catch(() => loading.delete(digest))
+    return previews[digest]
+  }
+  createEffect(() => {
+    const target = input.capture()
+    target.current().forEach((part) => {
+      if (part.type !== "image") return
+      const url = legacyAttachmentUrl(part)
+      if (!url || migrating.has(part.id)) return
+      migrating.add(part.id)
+      void fetch(url)
+        .then((response) => response.arrayBuffer())
+        .then((buffer) => {
+          const bytes = new Uint8Array(buffer)
+          return input.putBlob(bytes).then((blob) => ({ bytes, blob }))
+        })
+        .then(({ bytes, blob }) => {
+          const current = target.current()
+          if (!current.some((item) => item.type === "image" && item.id === part.id && legacyAttachmentUrl(item))) return
+          const attachment: ImageAttachmentPart = {
+            type: "image",
+            id: part.id,
+            filename: part.filename,
+            sourcePath: part.sourcePath,
+            mime: part.mime,
+            blob,
+          }
+          target.set(
+            current.map((item) => (item.type === "image" && item.id === part.id ? attachment : item)),
+            target.cursor(),
+          )
+          cachePreview(attachment, bytes)
+        })
+        .catch(() => {})
+        .finally(() => migrating.delete(part.id))
+    })
+    const active = new Set(
+      target.current().flatMap((part) => {
+        const reference = part.type === "image" ? attachmentReference(part) : undefined
+        return reference ? [reference.digest] : []
+      }),
+    )
+    Object.keys(previews).forEach((digest) => {
+      if (!active.has(digest)) revokePreview(digest)
+    })
+  })
+  onCleanup(() => Object.keys(previews).forEach(revokePreview))
+
   const capture = (): AttachmentTarget | undefined => {
     const prompt = input.capture()
     const editor = input.editor()
@@ -65,8 +146,14 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
       return false
     }
 
-    const url = await dataUrl(file, mime)
-    if (!url) return false
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const blob = await input.putBlob(bytes)
+    if (
+      target.prompt.current().some((part) => part.type === "image" && attachmentReference(part)?.digest === blob.digest)
+    ) {
+      input.duplicate?.()
+      return true
+    }
 
     const attachment: ImageAttachmentPart = {
       type: "image",
@@ -74,9 +161,10 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
       filename: file.name,
       sourcePath: input.getPathForFile?.(file) || undefined,
       mime,
-      dataUrl: url,
+      blob,
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
+    cachePreview(attachment, bytes)
     return true
   }
 
@@ -103,6 +191,9 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
   const removeAttachment = (id: string) => {
     const target = input.capture()
     const current = target.current()
+    const attachment = current.find((part): part is ImageAttachmentPart => part.type === "image" && part.id === id)
+    const reference = attachment ? attachmentReference(attachment) : undefined
+    if (reference) revokePreview(reference.digest)
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
     target.set(next, target.cursor())
   }
@@ -160,8 +251,18 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     addAttachments,
     addClipboardAttachment,
     removeAttachment,
+    previewUrl,
     handlePaste,
   }
+}
+
+function attachmentReference(attachment: ImageAttachmentPart) {
+  return (attachment as ImageAttachmentPart & { blob?: BlobReference }).blob
+}
+
+function legacyAttachmentUrl(attachment: ImageAttachmentPart) {
+  const value = (attachment as ImageAttachmentPart & { dataUrl?: unknown }).dataUrl
+  return typeof value === "string" && value.startsWith("data:") ? value : undefined
 }
 
 export function createPromptAttachments(input: PromptAttachmentsInput) {
@@ -175,6 +276,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
         description: language.t("prompt.toast.pasteUnsupported.description"),
       })
     },
+    duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
   })
 
   const handleGlobalDragOver = (event: DragEvent) => {

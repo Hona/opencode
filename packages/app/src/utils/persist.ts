@@ -1,8 +1,8 @@
 import { Platform, usePlatform } from "@/context/platform"
-import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
+import { getIndexedDBRepository, type DocumentAddress, type Repository } from "@/persistence"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { createResource, type Accessor } from "solid-js"
-import type { SetStoreFunction, Store } from "solid-js/store"
+import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { pathKey } from "@/utils/path-key"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
 
@@ -11,7 +11,7 @@ type PersistedWithReady<T> = [
   Store<T>,
   SetStoreFunction<T>,
   InitType,
-  Accessor<boolean> & { promise: undefined | Promise<any> },
+  Accessor<boolean> & { promise: undefined | Promise<unknown> },
 ]
 
 type PersistTarget = {
@@ -23,145 +23,14 @@ type PersistTarget = {
   migrate?: (value: unknown) => unknown
 }
 
+type LegacyValue = {
+  value: string
+  remove(): void
+}
+
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const WINDOW_STORAGE = "opencode.window"
-const LOCAL_PREFIX = "opencode."
-const fallback = new Map<string, boolean>()
-
-const CACHE_MAX_ENTRIES = 500
-const CACHE_MAX_BYTES = 8 * 1024 * 1024
-
-type CacheEntry = { value: string; bytes: number }
-const cache = new Map<string, CacheEntry>()
-const cacheTotal = { bytes: 0 }
-
-function cacheDelete(key: string) {
-  const entry = cache.get(key)
-  if (!entry) return
-  cacheTotal.bytes -= entry.bytes
-  cache.delete(key)
-}
-
-function cachePrune() {
-  for (;;) {
-    if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
-    const oldest = cache.keys().next().value as string | undefined
-    if (!oldest) return
-    cacheDelete(oldest)
-  }
-}
-
-function cacheSet(key: string, value: string) {
-  const bytes = value.length * 2
-  if (bytes > CACHE_MAX_BYTES) {
-    cacheDelete(key)
-    return
-  }
-
-  const entry = cache.get(key)
-  if (entry) cacheTotal.bytes -= entry.bytes
-  cache.delete(key)
-  cache.set(key, { value, bytes })
-  cacheTotal.bytes += bytes
-  cachePrune()
-}
-
-function cacheGet(key: string) {
-  const entry = cache.get(key)
-  if (!entry) return
-  cache.delete(key)
-  cache.set(key, entry)
-  return entry.value
-}
-
-function fallbackDisabled(scope: string) {
-  return fallback.get(scope) === true
-}
-
-function fallbackSet(scope: string) {
-  fallback.set(scope, true)
-}
-
-function quota(error: unknown) {
-  if (error instanceof DOMException) {
-    if (error.name === "QuotaExceededError") return true
-    if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
-    if (error.name === "QUOTA_EXCEEDED_ERR") return true
-    if (error.code === 22 || error.code === 1014) return true
-    return false
-  }
-
-  if (!error || typeof error !== "object") return false
-  const name = (error as { name?: string }).name
-  if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
-  if (name && /quota/i.test(name)) return true
-
-  const code = (error as { code?: number }).code
-  if (code === 22 || code === 1014) return true
-
-  const message = (error as { message?: string }).message
-  if (typeof message !== "string") return false
-  if (/quota/i.test(message)) return true
-  return false
-}
-
-type Evict = { key: string; size: number }
-
-function evict(storage: Storage, keep: string, value: string) {
-  const total = storage.length
-  const indexes = Array.from({ length: total }, (_, index) => index)
-  const items: Evict[] = []
-
-  for (const index of indexes) {
-    const name = storage.key(index)
-    if (!name) continue
-    if (!name.startsWith(LOCAL_PREFIX)) continue
-    if (name === keep) continue
-    const stored = storage.getItem(name)
-    items.push({ key: name, size: stored?.length ?? 0 })
-  }
-
-  items.sort((a, b) => b.size - a.size)
-
-  for (const item of items) {
-    storage.removeItem(item.key)
-    cacheDelete(item.key)
-
-    try {
-      storage.setItem(keep, value)
-      cacheSet(keep, value)
-      return true
-    } catch (error) {
-      if (!quota(error)) throw error
-    }
-  }
-
-  return false
-}
-
-function write(storage: Storage, key: string, value: string) {
-  try {
-    storage.setItem(key, value)
-    cacheSet(key, value)
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
-  }
-
-  try {
-    storage.removeItem(key)
-    cacheDelete(key)
-    storage.setItem(key, value)
-    cacheSet(key, value)
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
-  }
-
-  const ok = evict(storage, key, value)
-  return ok
-}
 
 function snapshot(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as unknown
@@ -174,27 +43,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function merge(defaults: unknown, value: unknown): unknown {
   if (value === undefined) return defaults
   if (value === null) return value
+  if (Array.isArray(defaults)) return Array.isArray(value) ? value : defaults
+  if (!isRecord(defaults)) return value
+  if (!isRecord(value)) return defaults
 
-  if (Array.isArray(defaults)) {
-    if (Array.isArray(value)) return value
-    return defaults
-  }
-
-  if (isRecord(defaults)) {
-    if (!isRecord(value)) return defaults
-
-    const result: Record<string, unknown> = { ...defaults }
-    for (const key of Object.keys(value)) {
-      if (key in defaults) {
-        result[key] = merge((defaults as Record<string, unknown>)[key], (value as Record<string, unknown>)[key])
-      } else {
-        result[key] = (value as Record<string, unknown>)[key]
-      }
-    }
-    return result
-  }
-
-  return value
+  const result: Record<string, unknown> = { ...defaults }
+  Object.keys(value).forEach((key) => {
+    result[key] = key in defaults ? merge(defaults[key], value[key]) : value[key]
+  })
+  return result
 }
 
 function parse(value: string) {
@@ -208,133 +65,31 @@ function parse(value: string) {
 function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
   const parsed = parse(raw)
   if (parsed === undefined) return
-  const migrated = migrate ? migrate(parsed) : parsed
-  const merged = merge(defaults, migrated)
-  return JSON.stringify(merged)
+  return JSON.stringify(merge(defaults, migrate ? migrate(parsed) : parsed))
 }
 
-function readCurrent(input: {
-  storage: SyncStorage
-  key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
-}) {
-  const raw = input.storage.getItem(input.key)
-  if (raw === null) return
-  const next = normalize(input.defaults, raw, input.migrate)
-  if (next === undefined) {
-    input.storage.removeItem(input.key)
-    return null
-  }
-  if (raw !== next) input.storage.setItem(input.key, next)
-  return next
-}
-
-function migrateLegacy(input: {
-  current: SyncStorage
-  legacyStore?: SyncStorage
-  stores: SyncStorage[]
-  keys: string[]
-  key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
-}) {
-  for (const store of input.stores) {
-    const raw = store.getItem(input.key)
-    if (raw === null) continue
-
-    const next = normalize(input.defaults, raw, input.migrate)
-    if (next === undefined) {
-      store.removeItem(input.key)
-      continue
+async function migrateAttachmentData(persistence: Repository, raw: string) {
+  if (!raw.includes('"dataUrl"')) return raw
+  const visit = async (value: unknown): Promise<unknown> => {
+    if (Array.isArray(value)) return Promise.all(value.map(visit))
+    if (!isRecord(value)) return value
+    if (value.type === "image" && typeof value.dataUrl === "string") {
+      const match = /^data:[^;,]+;base64,(.*)$/s.exec(value.dataUrl)
+      if (!match) return value
+      const decoded = atob(match[1])
+      const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0))
+      const blob = await persistence.putBlob(bytes)
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => key !== "dataUrl")
+          .concat([["blob", blob]]),
+      )
     }
-    input.current.setItem(input.key, next)
-    store.removeItem(input.key)
-    return next
+    return Object.fromEntries(
+      await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await visit(item)])),
+    )
   }
-
-  if (!input.legacyStore) return null
-
-  for (const key of input.keys) {
-    const raw = input.legacyStore.getItem(key)
-    if (raw === null) continue
-
-    const next = normalize(input.defaults, raw, input.migrate)
-    if (next === undefined) {
-      input.legacyStore.removeItem(key)
-      continue
-    }
-    input.current.setItem(input.key, next)
-    input.legacyStore.removeItem(key)
-    return next
-  }
-
-  return null
-}
-
-async function readCurrentAsync(input: {
-  storage: AsyncStorage
-  key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
-}) {
-  const raw = await input.storage.getItem(input.key)
-  if (raw === null) return
-  const next = normalize(input.defaults, raw, input.migrate)
-  if (next === undefined) {
-    await input.storage.removeItem(input.key).catch(() => undefined)
-    return null
-  }
-  if (raw !== next) await input.storage.setItem(input.key, next)
-  return next
-}
-
-async function removeAsync(storage: AsyncStorage, key: string) {
-  try {
-    await storage.removeItem(key)
-  } catch {}
-}
-
-async function migrateLegacyAsync(input: {
-  current: AsyncStorage
-  legacyStore?: AsyncStorage
-  stores: AsyncStorage[]
-  keys: string[]
-  key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
-}) {
-  for (const store of input.stores) {
-    const raw = await store.getItem(input.key)
-    if (raw === null) continue
-
-    const next = normalize(input.defaults, raw, input.migrate)
-    if (next === undefined) {
-      await removeAsync(store, input.key)
-      continue
-    }
-    await input.current.setItem(input.key, next)
-    await store.removeItem(input.key)
-    return next
-  }
-
-  if (!input.legacyStore) return null
-
-  for (const key of input.keys) {
-    const raw = await input.legacyStore.getItem(key)
-    if (raw === null) continue
-
-    const next = normalize(input.defaults, raw, input.migrate)
-    if (next === undefined) {
-      await removeAsync(input.legacyStore, key)
-      continue
-    }
-    await input.current.setItem(input.key, next)
-    await input.legacyStore.removeItem(key)
-    return next
-  }
-
-  return null
+  return JSON.stringify(await visit(parse(raw)))
 }
 
 function workspaceStorage(dir: string) {
@@ -361,14 +116,11 @@ function legacyWorkspaceStorage(dir: string) {
   if (raw !== storage) result.add(raw)
 
   const key = pathKey(dir)
-  const drive = key.length >= 3 && key[1] === ":" && key[2] === "/"
-  if (drive) {
+  if (key.length >= 3 && key[1] === ":" && key[2] === "/") {
     const backslash = workspaceStorage(key.replaceAll("/", "\\"))
     if (backslash !== storage) result.add(backslash)
   }
-
-  if (result.size === 0) return
-  return [...result]
+  return result.size ? [...result] : undefined
 }
 
 function serverWorkspaceTarget(scope: ServerScopeValue, dir: string, key: string, legacy?: string[]): PersistTarget {
@@ -376,91 +128,99 @@ function serverWorkspaceTarget(scope: ServerScopeValue, dir: string, key: string
   return { storage: workspaceStorage(pathKey(dir)), legacyStorageNames: legacyWorkspaceStorage(dir), key, legacy }
 }
 
-function localStorageWithPrefix(prefix: string): SyncStorage {
-  const base = `${prefix}:`
-  const scope = `prefix:${prefix}`
-  const item = (key: string) => base + key
+function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget {
+  if (target.scope !== "window") return target
+  if (platform.platform === "desktop" && !platform.windowID) return { ...target, storage: GLOBAL_STORAGE }
   return {
-    getItem: (key) => {
-      const name = item(key)
-      const cached = cacheGet(name)
-      if (fallbackDisabled(scope)) return cached ?? null
-
-      const stored = (() => {
-        try {
-          return localStorage.getItem(name)
-        } catch {
-          fallbackSet(scope)
-          return null
-        }
-      })()
-      if (stored === null) return cached ?? null
-      cacheSet(name, stored)
-      return stored
-    },
-    setItem: (key, value) => {
-      const name = item(key)
-      if (fallbackDisabled(scope)) return
-      try {
-        if (write(localStorage, name, value)) return
-      } catch {
-        fallbackSet(scope)
-        return
-      }
-      fallbackSet(scope)
-    },
-    removeItem: (key) => {
-      const name = item(key)
-      cacheDelete(name)
-      if (fallbackDisabled(scope)) return
-      try {
-        localStorage.removeItem(name)
-      } catch {
-        fallbackSet(scope)
-      }
-    },
+    ...target,
+    storage: windowStorage(platform.platform === "desktop" ? (platform.windowID ?? "browser") : "browser"),
   }
 }
 
-function localStorageDirect(): SyncStorage {
-  const scope = "direct"
-  return {
-    getItem: (key) => {
-      const cached = cacheGet(key)
-      if (fallbackDisabled(scope)) return cached ?? null
+function address(target: PersistTarget): DocumentAddress {
+  return { storage: target.storage ?? LEGACY_STORAGE, key: target.key }
+}
 
-      const stored = (() => {
+function repository(platform: Platform) {
+  return platform.persistence ?? getIndexedDBRepository()
+}
+
+function legacyItem(storage: string | undefined, key: string): LegacyValue | undefined {
+  const name = storage ? `${storage}:${key}` : key
+  try {
+    const value = localStorage.getItem(name)
+    if (value === null) return
+    return {
+      value,
+      remove: () => {
         try {
-          return localStorage.getItem(key)
-        } catch {
-          fallbackSet(scope)
-          return null
-        }
-      })()
-      if (stored === null) return cached ?? null
-      cacheSet(key, stored)
-      return stored
-    },
-    setItem: (key, value) => {
-      if (fallbackDisabled(scope)) return
-      try {
-        if (write(localStorage, key, value)) return
-      } catch {
-        fallbackSet(scope)
-        return
-      }
-      fallbackSet(scope)
-    },
-    removeItem: (key) => {
-      cacheDelete(key)
-      if (fallbackDisabled(scope)) return
-      try {
-        localStorage.removeItem(key)
-      } catch {
-        fallbackSet(scope)
-      }
-    },
+          localStorage.removeItem(name)
+        } catch {}
+      },
+    }
+  } catch {
+    return
   }
+}
+
+function removeLegacy(storage: string | undefined, key: string) {
+  legacyItem(storage, key)?.remove()
+}
+
+function readLegacy(target: PersistTarget, defaults: unknown) {
+  const current = legacyItem(target.storage, target.key)
+  if (current) {
+    const value = normalize(defaults, current.value, target.migrate)
+    if (value === undefined) {
+      current.remove()
+      return null
+    }
+    return { value, source: current }
+  }
+
+  for (const storage of target.legacyStorageNames ?? []) {
+    const source = legacyItem(storage, target.key)
+    if (!source) continue
+    const value = normalize(defaults, source.value, target.migrate)
+    if (value === undefined) {
+      source.remove()
+      continue
+    }
+    return { value, source }
+  }
+
+  for (const key of target.legacy ?? []) {
+    const source = legacyItem(undefined, key)
+    if (!source) continue
+    const value = normalize(defaults, source.value, target.migrate)
+    if (value === undefined) {
+      source.remove()
+      continue
+    }
+    return { value, source }
+  }
+  return null
+}
+
+async function readRepositoryLegacy(persistence: Repository, target: PersistTarget, defaults: unknown) {
+  const candidates = [
+    ...(target.legacyStorageNames ?? []).map((storage) => ({ storage, key: target.key })),
+    ...(target.legacy ?? []).map((key) => ({ storage: LEGACY_STORAGE, key })),
+  ]
+  for (const candidate of candidates) {
+    const raw = await persistence.read(candidate)
+    if (raw === null) continue
+    const value = normalize(defaults, raw, target.migrate)
+    if (value === undefined) {
+      await persistence.remove(candidate)
+      continue
+    }
+    return {
+      value,
+      source: { remove: () => persistence.remove(candidate) },
+    }
+  }
+  return null
 }
 
 const DRAFT_PERSISTED_KEYS = ["prompt", "comments", "file-view", "layout"]
@@ -470,9 +230,6 @@ export function draftPersistedKeys() {
 }
 
 export const PersistTesting = {
-  localStorageDirect,
-  localStorageWithPrefix,
-  migrateLegacy,
   normalize,
   resolveTarget,
   windowStorage,
@@ -515,39 +272,20 @@ export const Persist = {
   },
 }
 
-function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget {
-  if (target.scope !== "window") return target
-  if (platform.platform === "desktop" && !platform.windowID) return { ...target, storage: GLOBAL_STORAGE }
-  const windowID = platform.platform === "desktop" ? (platform.windowID ?? "browser") : "browser"
-  return {
-    ...target,
-    storage: windowStorage(windowID),
-  }
-}
-
 export function removePersisted(
-  target: { storage?: string; legacyStorageNames?: string[]; key: string },
+  target: { storage?: string; scope?: "window"; legacyStorageNames?: string[]; key: string; legacy?: string[] },
   platform?: Platform,
 ) {
-  const isDesktop = platform?.platform === "desktop" && !!platform.storage
-
-  if (isDesktop) {
-    void platform.storage?.(target.storage)?.removeItem(target.key)
-    for (const storage of target.legacyStorageNames ?? []) {
-      void platform.storage?.(storage)?.removeItem(target.key)
-    }
-    return
-  }
-
-  if (!target.storage) {
-    localStorageDirect().removeItem(target.key)
-    return
-  }
-
-  localStorageWithPrefix(target.storage).removeItem(target.key)
-  for (const storage of target.legacyStorageNames ?? []) {
-    localStorageWithPrefix(storage).removeItem(target.key)
-  }
+  const config = platform ? resolveTarget(target, platform) : target
+  removeLegacy(config.storage, config.key)
+  config.legacyStorageNames?.forEach((storage) => removeLegacy(storage, config.key))
+  config.legacy?.forEach((key) => removeLegacy(undefined, key))
+  const persistence = platform?.persistence ?? getIndexedDBRepository()
+  return Promise.all([
+    persistence.remove(address(config)),
+    ...(config.legacyStorageNames ?? []).map((storage) => persistence.remove({ storage, key: config.key })),
+    ...(config.legacy ?? []).map((key) => persistence.remove({ storage: LEGACY_STORAGE, key })),
+  ]).then(() => undefined)
 }
 
 export function persisted<T>(
@@ -556,106 +294,50 @@ export function persisted<T>(
 ): PersistedWithReady<T> {
   const platform = usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
-
+  const persistence = repository(platform)
+  const document = address(config)
   const defaults = snapshot(store[0])
-  const legacy = config.legacy ?? []
+  let mutations = 0
 
-  const isDesktop = platform.platform === "desktop" && !!platform.storage
-
-  const currentStorage = (() => {
-    if (isDesktop) return platform.storage?.(config.storage)
-    if (!config.storage) return localStorageDirect()
-    return localStorageWithPrefix(config.storage)
-  })()
-
-  const legacyStorage = (() => {
-    if (!isDesktop) return localStorageDirect()
-    if (!config.storage) return platform.storage?.()
-    return platform.storage?.(LEGACY_STORAGE)
-  })()
-
-  const legacyStorageNames = config.legacyStorageNames ?? []
-
-  const storage = (() => {
-    if (!isDesktop) {
-      const current = currentStorage as SyncStorage
-      const legacyStore = legacyStorage as SyncStorage
-      const legacyStores = legacyStorageNames.map(localStorageWithPrefix)
-
-      const api: SyncStorage = {
-        getItem: (key) => {
-          const value = readCurrent({ storage: current, key, defaults, migrate: config.migrate })
-          if (value !== undefined) return value
-          return migrateLegacy({
-            current,
-            legacyStore,
-            stores: legacyStores,
-            keys: legacy,
-            key,
-            defaults,
-            migrate: config.migrate,
-          })
-        },
-        setItem: (key, value) => {
-          current.setItem(key, value)
-        },
-        removeItem: (key) => {
-          current.removeItem(key)
-        },
+  const init = (async () => {
+    const current = await persistence.read(document)
+    if (mutations) return current ?? ""
+    if (current !== null) {
+      const normalized = normalize(defaults, current, config.migrate)
+      if (normalized === undefined) {
+        await persistence.remove(document)
+        return ""
       }
-
-      return api
+      const value = await migrateAttachmentData(persistence, normalized)
+      if (!mutations) store[1](reconcile(parse(value) as T))
+      if (current !== value) persistence.commit({ address: document, value })
+      return value
     }
 
-    const current = currentStorage as AsyncStorage
-    const legacyStore = legacyStorage as AsyncStorage | undefined
-    const legacyStores = legacyStorageNames
-      .map((name) => platform.storage?.(name) as AsyncStorage | undefined)
-      .filter((x) => !!x)
-
-    const api: AsyncStorage = {
-      getItem: async (key) => {
-        const value = await readCurrentAsync({ storage: current, key, defaults, migrate: config.migrate })
-        if (value !== undefined) return value
-        return migrateLegacyAsync({
-          current,
-          legacyStore,
-          stores: legacyStores,
-          keys: legacy,
-          key,
-          defaults,
-          migrate: config.migrate,
-        })
-      },
-      setItem: async (key, value) => {
-        await current.setItem(key, value)
-      },
-      removeItem: async (key) => {
-        await current.removeItem(key)
-      },
-    }
-
-    return api
+    const legacy = (await readRepositoryLegacy(persistence, config, defaults)) ?? readLegacy(config, defaults)
+    if (!legacy || mutations) return ""
+    const value = await migrateAttachmentData(persistence, legacy.value)
+    persistence.commit({ address: document, value })
+    await persistence.drain()
+    await legacy.source.remove()
+    if (!mutations) store[1](reconcile(parse(value) as T))
+    return value
   })()
 
-  const [state, setState, init] = makePersisted(store, { name: config.key, storage })
+  const setState = ((...args: unknown[]) => {
+    Reflect.apply(store[1] as unknown as (...values: unknown[]) => void, undefined, args)
+    mutations += 1
+    persistence.commit({ address: document, value: () => JSON.stringify(snapshot(store[0])) })
+  }) as unknown as SetStoreFunction<T>
 
-  const isAsync = init instanceof Promise
   const [ready] = createResource(
     () => init,
-    async (initValue) => {
-      if (initValue instanceof Promise) await initValue
+    async (value: Promise<string>) => {
+      await value
       return true
     },
-    { initialValue: !isAsync },
+    { initialValue: false },
   )
 
-  return [
-    state,
-    setState,
-    init,
-    Object.assign(() => (ready.loading ? false : ready.latest === true), {
-      promise: init instanceof Promise ? init : undefined,
-    }),
-  ]
+  return [store[0], setState, init, Object.assign(() => !ready.loading && ready.latest === true, { promise: init })]
 }

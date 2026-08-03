@@ -112,10 +112,13 @@ describe("prompt-input history", () => {
         end: 12,
         selection: { startLine: 1, startChar: 1, endLine: 2, endChar: 1 },
       },
-      { type: "image", id: "1", filename: "img.png", mime: "image/png", dataUrl: "data:image/png;base64,abc" },
+      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { digest: "abc", byteLength: 3 } },
     ]
     const copy = clonePromptParts(original)
     expect(copy).not.toBe(original)
+    expect(copy[2]?.type === "image" ? copy[2].blob : undefined).not.toBe(
+      original[2]?.type === "image" ? original[2].blob : undefined,
+    )
     expect(promptLength(copy)).toBe(12)
     if (copy[1]?.type !== "file") throw new Error("expected file")
     copy[1].selection!.startLine = 9

@@ -49,6 +49,7 @@ type OptimisticItem = {
   parts: Part[]
   confirmedParts?: Part[]
   confirmedMessage?: boolean
+  cleanup?: () => void
 }
 
 type MessagePage = {
@@ -351,11 +352,13 @@ export function createServerSession(
 
   const clearOptimistic = (sessionID: string, messageID?: string) => {
     if (!messageID) {
+      optimistic.get(sessionID)?.forEach((item) => item.cleanup?.())
       optimistic.delete(sessionID)
       return
     }
     const items = optimistic.get(sessionID)
     if (!items) return
+    items.get(messageID)?.cleanup?.()
     items.delete(messageID)
     if (items.size === 0) optimistic.delete(sessionID)
   }
@@ -1130,7 +1133,6 @@ export function createServerSession(
         if (optimistic?.size === 0) load?.optimisticParts.delete(part.messageID)
         deltaBases.delete(part.id)
         trackPartChange(part.sessionID, part.messageID, part.id)
-        confirmOptimisticPart(part.sessionID, part.messageID, part)
         setData(
           "part_text_accum_delta",
           produce((draft) => void delete draft[part.id]),
@@ -1138,6 +1140,7 @@ export function createServerSession(
         const parts = data.part[part.messageID]
         if (!parts) {
           setData("part", part.messageID, [part])
+          confirmOptimisticPart(part.sessionID, part.messageID, part)
           return
         }
         const result = Binary.search(parts, part.id, (item) => item.id)
@@ -1148,6 +1151,7 @@ export function createServerSession(
             next.splice(result.index, 0, part)
             return next
           })
+        confirmOptimisticPart(part.sessionID, part.messageID, part)
         return
       }
       case "message.part.removed": {
@@ -1320,7 +1324,7 @@ export function createServerSession(
       return Date.now() - (meta.at[sessionID] ?? 0) <= ttl
     },
     optimistic: {
-      add(input: { sessionID: string; message: Message; parts: Part[] }) {
+      add(input: { sessionID: string; message: Message; parts: Part[]; cleanup?: () => void }) {
         const parts = input.parts
           .filter((part) => !!part?.id && !SKIP_PARTS.has(part.type))
           .sort((a, b) => cmp(a.id, b.id))
@@ -1335,6 +1339,7 @@ export function createServerSession(
           load.optimisticParts.set(input.message.id, new Set(parts.map((part) => part.id)))
         }
         const items = optimistic.get(input.sessionID)
+        items?.get(input.message.id)?.cleanup?.()
         const removedMessagesForSession = removedMessages.get(input.sessionID)
         removedMessagesForSession?.delete(input.message.id)
         if (removedMessagesForSession?.size === 0) removedMessages.delete(input.sessionID)

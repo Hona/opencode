@@ -7,10 +7,11 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@/utils/toast"
-import { extractPromptFromParts } from "@/utils/prompt"
+import { restorePromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 interface ForkableMessage {
   id: string
@@ -30,6 +31,7 @@ export const DialogFork: Component = () => {
   const prompt = usePrompt()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -62,15 +64,20 @@ export const DialogFork: Component = () => {
     if (!sessionID) return
 
     const parts = sync().data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, {
-      directory: sdk().directory,
-      attachmentName: language.t("common.attachment"),
-    })
     const dir = base64Encode(sdk().directory)
 
-    sdk()
-      .api.session.fork({ sessionID, messageID: item.id })
-      .then((forked) => {
+    void restorePromptFromParts(parts, {
+      directory: sdk().directory,
+      attachmentName: language.t("common.attachment"),
+      putBlob: (bytes) =>
+        platform.persistence?.putBlob(bytes) ?? Promise.reject(new Error("Attachment persistence is unavailable")),
+    })
+      .then((restored) =>
+        sdk()
+          .api.session.fork({ sessionID, messageID: item.id })
+          .then((forked) => ({ forked, restored })),
+      )
+      .then(({ forked, restored }) => {
         dialog.close()
         prompt.set(restored, undefined, { dir, id: forked.id })
         navigate(`/${dir}/session/${forked.id}`)

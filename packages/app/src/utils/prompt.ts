@@ -1,5 +1,33 @@
 import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@opencode-ai/sdk/v2"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
+import type { BlobReference } from "@/persistence"
+import { checksum } from "@opencode-ai/core/util/encode"
+
+const attachmentDataUrls = new Map<string, BlobReference>()
+
+export function attachmentReferenceUrl(reference: BlobReference) {
+  return `opencode-blob:${encodeURIComponent(reference.digest)}?byteLength=${reference.byteLength}`
+}
+
+export function rememberAttachmentDataUrl(url: string, reference: BlobReference) {
+  const key = checksum(url)
+  if (!key) return
+  attachmentDataUrls.delete(key)
+  attachmentDataUrls.set(key, reference)
+  const oldest = attachmentDataUrls.keys().next().value
+  if (attachmentDataUrls.size > 100 && oldest) attachmentDataUrls.delete(oldest)
+}
+
+function attachmentReferenceFromUrl(url: string) {
+  if (!url.startsWith("opencode-blob:")) {
+    const key = checksum(url)
+    return key ? attachmentDataUrls.get(key) : undefined
+  }
+  const value = new URL(url)
+  const byteLength = Number(value.searchParams.get("byteLength"))
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) return
+  return { digest: decodeURIComponent(value.pathname), byteLength }
+}
 
 type Inline =
   | {
@@ -101,13 +129,14 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
         continue
       }
 
-      if (filePart.url.startsWith("data:")) {
+      const blob = attachmentReferenceFromUrl(filePart.url)
+      if (blob) {
         images.push({
           type: "image",
           id: filePart.id,
           filename: filePart.filename ?? attachmentName,
           mime: filePart.mime,
-          dataUrl: filePart.url,
+          blob,
         })
       }
     }
@@ -200,4 +229,36 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
 
   if (images.length === 0) return result
   return [...result, ...images]
+}
+
+export async function restorePromptFromParts(
+  parts: Part[],
+  input: {
+    directory?: string
+    attachmentName?: string
+    putBlob: (bytes: Uint8Array) => Promise<BlobReference>
+  },
+) {
+  const prompt = extractPromptFromParts(parts, input)
+  const restored = new Set(prompt.flatMap((part) => (part.type === "image" ? [part.id] : [])))
+  const images = await Promise.all(
+    parts.flatMap((part) => {
+      if (part.type !== "file" || part.source?.text || restored.has(part.id) || !part.url.startsWith("data:")) return []
+      return [
+        (async () => {
+          const comma = part.url.indexOf(",")
+          const decoded = atob(part.url.slice(comma + 1))
+          const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0))
+          return {
+            type: "image" as const,
+            id: part.id,
+            filename: part.filename ?? input.attachmentName ?? "attachment",
+            mime: part.mime,
+            blob: await input.putBlob(bytes),
+          }
+        })(),
+      ]
+    }),
+  )
+  return images.length > 0 ? [...prompt, ...images] : prompt
 }

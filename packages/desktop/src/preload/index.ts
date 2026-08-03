@@ -67,12 +67,20 @@ const api: ElectronAPI = {
   setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
   checkAppExists: (appName) => ipcRenderer.invoke("check-app-exists", appName),
   resolveAppPath: (appName) => ipcRenderer.invoke("resolve-app-path", appName),
-  storeGet: (name, key) => ipcRenderer.invoke("store-get", name, key),
-  storeSet: (name, key, value) => ipcRenderer.invoke("store-set", name, key, value),
-  storeDelete: (name, key) => ipcRenderer.invoke("store-delete", name, key),
-  storeClear: (name) => ipcRenderer.invoke("store-clear", name),
-  storeKeys: (name) => ipcRenderer.invoke("store-keys", name),
-  storeLength: (name) => ipcRenderer.invoke("store-length", name),
+  persistence: {
+    read: (storage, key) => ipcRenderer.invoke("persistence-read", storage, key),
+    commit: (storage, key, value) => ipcRenderer.invoke("persistence-commit", storage, key, value),
+    remove: (storage, key) => ipcRenderer.invoke("persistence-remove", storage, key),
+    putBlob: (bytes) => ipcRenderer.invoke("persistence-put-blob", bytes),
+    readBlob: (digest, byteLength) => ipcRenderer.invoke("persistence-read-blob", digest, byteLength),
+    drain: () => ipcRenderer.invoke("persistence-drain"),
+    onDrainRequest: (cb) => {
+      const handler = (_: unknown, request: string) => cb(request)
+      ipcRenderer.on("persistence-drain-request", handler)
+      return () => ipcRenderer.removeListener("persistence-drain-request", handler)
+    },
+    acknowledgeDrain: (request) => ipcRenderer.send("persistence-drain-ack", request),
+  },
 
   getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {

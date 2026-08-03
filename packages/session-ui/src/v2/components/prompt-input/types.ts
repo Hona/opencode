@@ -25,13 +25,18 @@ export type PromptInputV2AgentPart = PromptInputV2PartBase & {
   name: string
 }
 
+export type PromptInputV2BlobReference = {
+  digest: string
+  byteLength: number
+}
+
 export type PromptInputV2Attachment = {
   type: "image"
   id: string
   filename: string
   sourcePath?: string
   mime: string
-  dataUrl: string
+  blob: PromptInputV2BlobReference
 }
 
 export type PromptInputV2Prompt = (

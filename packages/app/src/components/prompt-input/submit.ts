@@ -22,6 +22,9 @@ import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
+import { usePlatform } from "@/context/platform"
+import type { BlobReference } from "@/persistence"
+import { attachmentReferenceUrl, rememberAttachmentDataUrl } from "@/utils/prompt"
 
 type PendingPrompt = {
   abort: AbortController
@@ -29,6 +32,7 @@ type PendingPrompt = {
 }
 
 const pending = new Map<string, PendingPrompt>()
+type ReadBlob = (reference: BlobReference) => Promise<Uint8Array | null>
 
 export type FollowupDraft = {
   sessionID: string
@@ -48,11 +52,53 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
+  readBlob?: ReadBlob
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+
+async function resolveAttachmentFiles(images: ImageAttachmentPart[], readBlob?: ReadBlob) {
+  if (images.length > 0 && !readBlob) throw new Error("Attachment persistence is unavailable")
+  return Promise.all(
+    images.map(async (attachment) => {
+      const bytes = await readBlob!(attachment.blob)
+      if (!bytes) throw new Error(`Attachment blob not found: ${attachment.blob.digest}`)
+      if (bytes.byteLength !== attachment.blob.byteLength) {
+        throw new Error(`Attachment blob length mismatch: ${attachment.blob.digest}`)
+      }
+      const chunks: string[] = []
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)))
+      }
+      const uri = `data:${attachment.mime};base64,${btoa(chunks.join(""))}`
+      rememberAttachmentDataUrl(uri, attachment.blob)
+      return { attachment, uri, name: attachment.filename }
+    }),
+  )
+}
+
+async function createOptimisticAttachmentUrls(images: ImageAttachmentPart[], readBlob?: ReadBlob) {
+  if (images.length > 0 && !readBlob) throw new Error("Attachment persistence is unavailable")
+  const entries = await Promise.all(
+    images.map(async (attachment) => {
+      const bytes = await readBlob!(attachment.blob)
+      if (!bytes) throw new Error(`Attachment blob not found: ${attachment.blob.digest}`)
+      return [
+        attachment.blob.digest,
+        URL.createObjectURL(new Blob([bytes.slice().buffer], { type: attachment.mime })),
+      ] as const
+    }),
+  )
+  return {
+    urls: new Map(entries),
+    cleanup:
+      entries.length > 0
+        ? () => requestAnimationFrame(() => entries.forEach(([, url]) => URL.revokeObjectURL(url)))
+        : undefined,
+  }
+}
 
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
@@ -84,6 +130,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       }
 
       const messageID = Identifier.ascending("message")
+      const files = await resolveAttachmentFiles(images, input.readBlob)
       await input.api.command({
         sessionID: input.draft.sessionID,
         id: messageID,
@@ -95,10 +142,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           providerID: input.draft.model.providerID,
           variant: input.draft.variant,
         },
-        files: images.map((attachment) => ({
-          uri: attachment.dataUrl,
-          name: attachment.filename,
-        })),
+        files: files.map((file) => ({ uri: file.uri, name: file.name })),
       })
       return true
     } catch (err) {
@@ -108,6 +152,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
+  const optimisticAttachments = images.length
+    ? await createOptimisticAttachmentUrls(images, input.readBlob)
+    : { urls: new Map<string, string>(), cleanup: undefined }
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
@@ -116,6 +163,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     sessionID: input.draft.sessionID,
     messageID,
     sessionDirectory: input.draft.sessionDirectory,
+    attachmentUrls: optimisticAttachments.urls,
   })
 
   const message: Message = {
@@ -133,6 +181,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       sessionID: input.draft.sessionID,
       message,
       parts: optimisticParts,
+      cleanup: optimisticAttachments.cleanup,
     })
 
   const remove = () =>
@@ -156,15 +205,28 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    const files = await resolveAttachmentFiles(images, input.readBlob)
+    const urls = new Map(files.map((file) => [file.attachment.blob.digest, file.uri]))
+    const resolvedRequestParts = requestParts.map((part) => {
+      if (part.type !== "file") return part
+      const attachment = images.find(
+        (image) =>
+          attachmentReferenceUrl(image.blob) === part.url ||
+          optimisticAttachments.urls.get(image.blob.digest) === part.url,
+      )
+      if (!attachment) return part
+      const url = urls.get(attachment.blob.digest)
+      return url ? { ...part, url } : part
+    })
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
-      legacyParts: requestParts,
-      text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
-      files: requestParts.flatMap((part) => {
+      legacyParts: resolvedRequestParts,
+      text: resolvedRequestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+      files: resolvedRequestParts.flatMap((part) => {
         if (part.type !== "file") return []
         const text = part.source?.text
         return [
@@ -235,6 +297,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
+  const platform = usePlatform()
+  const persistence = platform.persistence
+  const readBlob = persistence ? (reference: BlobReference) => persistence.readBlob(reference) : undefined
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
 
   const errorMessage = (err: unknown) => {
@@ -508,27 +573,25 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         clearInput()
         const messageID = Identifier.ascending("message")
         serverSync().session.set("session_status", session.id, { type: "busy" })
-        sdk()
-          .api.session.command({
+        const send = (files: Awaited<ReturnType<typeof resolveAttachmentFiles>>) =>
+          sdk().api.session.command({
             sessionID: session.id,
             id: messageID,
             command: commandName,
             arguments: args.join(" "),
             agent,
             model: { id: model.modelID, providerID: model.providerID, variant },
-            files: images.map((attachment) => ({
-              uri: attachment.dataUrl,
-              name: attachment.filename,
-            })),
+            files: files.map((file) => ({ uri: file.uri, name: file.name })),
           })
-          .catch((err) => {
-            serverSync().session.set("session_status", session.id, { type: "idle" })
-            showToast({
-              title: language.t("prompt.toast.commandSendFailed.title"),
-              description: formatServerError(err, language.t, language.t("common.requestFailed")),
-            })
-            restoreInput()
+        const request = images.length > 0 ? resolveAttachmentFiles(images, readBlob).then(send) : send([])
+        void request.catch((err) => {
+          serverSync().session.set("session_status", session.id, { type: "idle" })
+          showToast({
+            title: language.t("prompt.toast.commandSendFailed.title"),
+            description: formatServerError(err, language.t, language.t("common.requestFailed")),
           })
+          restoreInput()
+        })
         return
       }
     }
@@ -613,6 +676,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
+      readBlob,
     }).catch((err) => {
       pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {

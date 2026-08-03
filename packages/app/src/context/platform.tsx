@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "../desktop-menu"
+import { getIndexedDBRepository, type Repository } from "../persistence"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
@@ -61,8 +61,8 @@ type PlatformBase = {
   /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
-  /** Storage mechanism, defaults to localStorage */
-  storage?: (name?: string) => SyncStorage | AsyncStorage
+  /** Durable app document and blob persistence */
+  persistence?: Repository
 
   /** Stable platform window identity for window-scoped persistence */
   windowID?: string
@@ -134,6 +134,7 @@ export type DisplayBackend = "auto" | "wayland"
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",
   init: (props: { value: Platform }) => {
-    return props.value
+    if (props.value.persistence) return props.value
+    return { ...props.value, persistence: getIndexedDBRepository() }
   },
 })

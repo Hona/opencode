@@ -1,18 +1,17 @@
 import { beforeAll, expect, mock, test } from "bun:test"
-import type { AsyncStorage } from "@solid-primitives/storage"
+import type { Repository } from "@/persistence"
 import { createEffect, createRoot } from "solid-js"
 
 let createReviewPanelV2State: typeof import("@/pages/session/v2/review-panel-v2-state").createReviewPanelV2State
 let read: ((value: string | null) => void) | undefined
 
-const storage: AsyncStorage = {
-  getItem: () => new Promise((resolve) => (read = resolve)),
-  setItem: async () => undefined,
-  removeItem: async () => undefined,
-  clear: async () => undefined,
-  key: async () => null,
-  getLength: async () => 0,
-  length: Promise.resolve(0),
+const persistence: Repository = {
+  read: () => new Promise((resolve) => (read = resolve)),
+  commit: () => undefined,
+  remove: async () => undefined,
+  putBlob: async (bytes) => ({ digest: "digest", byteLength: bytes.byteLength }),
+  readBlob: async () => null,
+  drain: async () => undefined,
 }
 
 beforeAll(async () => {
@@ -22,7 +21,7 @@ beforeAll(async () => {
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX: 480,
   }))
   mock.module("@/context/platform", () => ({
-    usePlatform: () => ({ platform: "desktop", storage: () => storage }),
+    usePlatform: () => ({ platform: "desktop", persistence }),
   }))
 
   createReviewPanelV2State = (await import("@/pages/session/v2/review-panel-v2-state")).createReviewPanelV2State

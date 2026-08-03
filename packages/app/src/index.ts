@@ -27,3 +27,5 @@ export {
   type WslServersState,
 } from "./wsl/types"
 export { ServerConnection } from "./context/server"
+export { createRepository } from "./persistence"
+export type { BlobReference, DocumentAddress, DocumentValue, DurableRepository, Repository } from "./persistence"

@@ -1160,7 +1160,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const { addAttachment, addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+  const { addAttachment, addAttachments, removeAttachment, handlePaste, previewUrl } = createPromptAttachments({
     prompt,
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
@@ -1172,6 +1172,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
     readClipboardImage: platform.readClipboardImage,
     getPathForFile: platform.getPathForFile,
+    putBlob: (bytes) => {
+      if (!platform.persistence) return Promise.reject(new Error("Attachment persistence is unavailable"))
+      return platform.persistence.putBlob(bytes)
+    },
+    readBlob: (reference) => platform.persistence?.readBlob(reference) ?? Promise.resolve(null),
   })
 
   const fileAttachmentInput = () => (
@@ -1488,9 +1493,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         />
         <PromptImageAttachments
           attachments={imageAttachments()}
-          onOpen={(attachment) =>
-            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
-          }
+          previewUrl={previewUrl}
+          onOpen={(attachment) => {
+            const src = previewUrl(attachment)
+            if (src) dialog.show(() => <ImagePreview src={src} alt={attachment.filename} />)
+          }}
           onRemove={removeAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
           newLayoutDesigns={false}

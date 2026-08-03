@@ -21,6 +21,7 @@ const session = (id: string, parentID?: string): Session => ({
 type UserMessage = Extract<Message, { role: "user" }>
 type AssistantMessage = Extract<Message, { role: "assistant" }>
 type TextPart = Extract<Part, { type: "text" }>
+type FilePart = Extract<Part, { type: "file" }>
 type MessageResponse = {
   data: { info: Message; parts: Part[] }[]
   response: { headers: Headers }
@@ -902,7 +903,8 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id, { text: "optimistic" })
     const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    let cleaned = 0
+    store.optimistic.add({ sessionID: "child", message, parts: [part], cleanup: () => cleaned++ })
     store.apply({
       type: "message.part.delta",
       properties: { sessionID: "child", messageID: message.id, partID: part.id, field: "text", delta: " delta" },
@@ -912,6 +914,7 @@ describe("server session", () => {
 
     expect(store.data.part[message.id]).toBeUndefined()
     expect(store.data.part_text_accum_delta[part.id]).toBeUndefined()
+    expect(cleaned).toBe(1)
   })
 
   test("does not remove content confirmed by a message event", () => {
@@ -931,7 +934,8 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id)
     const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    let cleaned = 0
+    store.optimistic.add({ sessionID: "child", message, parts: [part], cleanup: () => cleaned++ })
     store.apply({ type: "message.updated", properties: { sessionID: "child", info: message } })
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 2 } })
 
@@ -939,6 +943,37 @@ describe("server session", () => {
 
     expect(store.data.message.child).toEqual([message])
     expect(store.data.part[message.id]).toEqual([part])
+    expect(cleaned).toBe(1)
+  })
+
+  test("replaces an optimistic attachment URL before releasing it", () => {
+    const message = userMessage("message")
+    const optimistic: FilePart = {
+      id: "file",
+      sessionID: "child",
+      messageID: message.id,
+      type: "file",
+      mime: "image/png",
+      filename: "image.png",
+      url: "blob:optimistic",
+    }
+    const confirmed = { ...optimistic, url: "data:image/png;base64,AA==" }
+    const store = setup({ child: session("child") }).store
+    let urlAtCleanup: string | undefined
+    store.optimistic.add({
+      sessionID: "child",
+      message,
+      parts: [optimistic],
+      cleanup: () => {
+        const part = store.data.part[message.id]?.[0]
+        urlAtCleanup = part?.type === "file" ? part.url : undefined
+      },
+    })
+    store.apply({ type: "message.updated", properties: { sessionID: "child", info: message } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: confirmed, time: 2 } })
+
+    expect(urlAtCleanup).toBe(confirmed.url)
+    expect(store.data.part[message.id]).toEqual([confirmed])
   })
 
   test("treats a part event as confirmation when it precedes the message event", () => {

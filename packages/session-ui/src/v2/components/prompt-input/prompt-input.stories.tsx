@@ -121,7 +121,7 @@ function ControlledPromptInput() {
         id: "attachment-1",
         filename: "requirements.md",
         mime: "text/markdown",
-        dataUrl: "data:text/markdown;base64,IyBSZXF1aXJlbWVudHM=",
+        blob: { digest: "requirements", byteLength: 14 },
       },
     ],
     cursor: 0,
@@ -199,7 +199,7 @@ function ControlledPromptInput() {
       id: `attachment-${store.state.prompt.filter((part) => part.type === "image").length + 1}`,
       filename,
       mime,
-      dataUrl: `data:${mime};base64,`,
+      blob: { digest: `attachment-${store.state.prompt.length}`, byteLength: 0 },
     })
   }
 

@@ -61,7 +61,7 @@ export function createPromptInputV2Controller(input: {
   commands: Accessor<PromptInputV2Suggestion[]>
   context: Accessor<PromptInputV2Suggestion[]>
   searchContextFiles: (query: string) => PromptInputV2Suggestion[] | Promise<PromptInputV2Suggestion[]>
-  openAttachment?: (attachment: PromptInputV2Attachment) => void
+  openAttachment?: (attachment: PromptInputV2Attachment, previewUrl?: string) => void
   openContext?: (key: string) => void
   onContextRemove?: (item: PromptInputV2Comment) => void
   onEditor?: (element: HTMLElement) => void
@@ -322,9 +322,16 @@ export function createPromptInputV2Controller(input: {
       if (state.activeContextID === id) dispatch({ type: "context.active", id })
     },
     openAttachment(attachment: PromptInputV2Attachment) {
-      input.openAttachment?.(attachment)
+      input.openAttachment?.(attachment, attachments?.previewUrl(attachment))
+    },
+    attachmentUrl(attachment: PromptInputV2Attachment) {
+      return attachments?.previewUrl(attachment)
     },
     removeAttachment(id: string) {
+      const attachment = draft.state.prompt.find(
+        (part): part is PromptInputV2Attachment => part.type === "image" && part.id === id,
+      )
+      if (attachment?.blob) attachments?.revoke(attachment.blob.digest)
       draft.removeAttachment(id)
     },
     canSubmit() {
@@ -443,7 +450,11 @@ function canNavigateHistory(direction: "up" | "down", text: string, cursor: numb
 
 function clonePrompt(prompt: PromptInputV2PersistedState["prompt"]): PromptInputV2PersistedState["prompt"] {
   return prompt.map((part) =>
-    part.type === "file" ? { ...part, selection: part.selection ? { ...part.selection } : undefined } : { ...part },
+    part.type === "file"
+      ? { ...part, selection: part.selection ? { ...part.selection } : undefined }
+      : part.type === "image"
+        ? { ...part, blob: { ...part.blob } }
+        : { ...part },
   )
 }
 

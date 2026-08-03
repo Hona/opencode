@@ -21,7 +21,7 @@ describe("buildRequestParts", () => {
       prompt,
       context: [{ key: "ctx:1", type: "file", path: "src/bar.ts", comment: "check this" }],
       images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", blob: { digest: "a", byteLength: 3 } },
       ],
       text: "hello @src/foo.ts @planner",
       messageID: "msg_1",
@@ -54,13 +54,13 @@ describe("buildRequestParts", () => {
       prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
       context: [],
       images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", blob: { digest: "a", byteLength: 3 } },
         {
           type: "image",
           id: "img_2",
           filename: "b.pdf",
           mime: "application/pdf",
-          dataUrl: "data:application/pdf;base64,BBB",
+          blob: { digest: "b", byteLength: 3 },
         },
       ],
       text: "check these",
@@ -69,7 +69,7 @@ describe("buildRequestParts", () => {
       sessionDirectory: "/repo",
     })
 
-    const files = result.requestParts.filter((part) => part.type === "file" && part.url.startsWith("data:"))
+    const files = result.requestParts.filter((part) => part.type === "file" && part.url.startsWith("opencode-blob:"))
 
     expect(files).toHaveLength(2)
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
@@ -86,7 +86,7 @@ describe("buildRequestParts", () => {
           filename: "opencode.global.dat",
           sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
           mime: "text/plain",
-          dataUrl: "data:text/plain;base64,AAA",
+          blob: { digest: "external", byteLength: 3 },
         },
       ],
       text: "inspect this",

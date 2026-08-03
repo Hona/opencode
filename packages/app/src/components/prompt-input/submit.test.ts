@@ -21,6 +21,8 @@ const optimistic: Array<{
     model: { providerID: string; modelID: string }
     variant?: string
   }
+  parts?: Array<{ type: string; url?: string }>
+  cleanup?: () => void
 }> = []
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
@@ -32,6 +34,7 @@ const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
 const commands: Array<{ name: string }> = []
+const blobs = new Map<string, Uint8Array>()
 let serverSessionSyncs = 0
 
 let params: { id?: string } = {}
@@ -135,6 +138,7 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => undefined },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -217,6 +221,8 @@ beforeAll(async () => {
             directory?: string
             sessionID?: string
             message: { agent: string; model: { providerID: string; modelID: string; variant?: string } }
+            parts?: Array<{ type: string; url?: string }>
+            cleanup?: () => void
           }) => {
             optimistic.push(value)
             optimisticSeeded.push(
@@ -265,6 +271,9 @@ beforeAll(async () => {
   mock.module("@/context/platform", () => ({
     usePlatform: () => ({
       fetch: fetch,
+      persistence: {
+        readBlob: async (reference: { digest: string }) => blobs.get(reference.digest)?.slice() ?? null,
+      },
     }),
   }))
 
@@ -291,6 +300,7 @@ beforeEach(() => {
   promptInputs.length = 0
   sentCommands.length = 0
   commands.length = 0
+  blobs.clear()
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   params = {}
   search = {}
@@ -494,16 +504,24 @@ describe("prompt submit worktree selection", () => {
     ])
   })
 
-  test("submits slash commands through the current session API", async () => {
+  test("resolves attachment references to canonical data URLs at submission", async () => {
     params = { id: "session-1" }
-    variant = "high"
-    commands.push({ name: "review" })
-    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }]
+    blobs.set("image-digest", new Uint8Array([0, 255, 16]))
+    promptValue = [
+      { type: "text", content: "inspect", start: 0, end: 7 },
+      {
+        type: "image",
+        id: "image-1",
+        filename: "image.png",
+        mime: "image/png",
+        blob: { digest: "image-digest", byteLength: 3 },
+      },
+    ]
 
     const submit = createPromptSubmit({
       prompt,
       info: () => ({ id: "session-1" }),
-      imageAttachments: () => [],
+      imageAttachments: () => promptValue.filter((part) => part.type === "image"),
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "normal",
@@ -518,6 +536,51 @@ describe("prompt submit worktree selection", () => {
     })
 
     await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(promptInputs[0]).toMatchObject({
+      files: [{ uri: "data:image/png;base64,AP8Q", name: "image.png" }],
+    })
+    expect(optimistic[0]?.parts).toContainEqual(expect.objectContaining({ url: expect.stringMatching(/^blob:/) }))
+    expect(optimistic[0]?.cleanup).toBeFunction()
+    expect(JSON.stringify(promptInputs[0])).not.toContain("image-digest")
+  })
+
+  test("submits slash commands through the current session API", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+    commands.push({ name: "review" })
+    blobs.set("command-file", new TextEncoder().encode("hello"))
+    promptValue = [
+      { type: "text", content: "/review staged changes", start: 0, end: 22 },
+      {
+        type: "image",
+        id: "command-file",
+        filename: "notes.txt",
+        mime: "text/plain",
+        blob: { digest: "command-file", byteLength: 5 },
+      },
+    ]
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => promptValue.filter((part) => part.type === "image"),
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
 
     expect(sentCommands).toEqual([
       {
@@ -527,7 +590,7 @@ describe("prompt submit worktree selection", () => {
         arguments: "staged changes",
         agent: "agent",
         model: { id: "model", providerID: "provider", variant: "high" },
-        files: [],
+        files: [{ uri: "data:text/plain;base64,aGVsbG8=", name: "notes.txt" }],
       },
     ])
     expect(serverSessionSyncs).toBe(0)

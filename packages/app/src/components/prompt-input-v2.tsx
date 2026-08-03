@@ -343,8 +343,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onContextRemove(item) {
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
-    openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />),
+    openAttachment: (attachment, previewUrl) => {
+      if (previewUrl) dialog.show(() => <ImagePreview src={previewUrl} alt={attachment.filename} />)
+    },
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)
@@ -377,6 +378,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         }),
       readClipboardImage: platform.readClipboardImage,
       getPathForFile: platform.getPathForFile,
+      putBlob: (bytes) => {
+        if (!platform.persistence) return Promise.reject(new Error("Attachment persistence is unavailable"))
+        return platform.persistence.putBlob(bytes)
+      },
+      readBlob: (reference) => platform.persistence?.readBlob(reference) ?? Promise.resolve(null),
     },
     view: {
       placeholder: designPlaceholder,
