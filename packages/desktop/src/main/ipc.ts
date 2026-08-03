@@ -134,7 +134,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
   ipcMain.handle("draft-blob-get", (_event, id: string) => {
     const data = drafts.getBlob(id)
-    return data ? Uint8Array.from(data).buffer : null
+    return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
 
   ipcMain.handle(

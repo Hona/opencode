@@ -101,7 +101,27 @@ export function createBrowserDraftStore(): DraftStore {
     request.result.createObjectStore("blobs")
   })
   const db = new Promise<IDBDatabase>((resolve, reject) => {
-    request.addEventListener("success", () => resolve(request.result))
+    request.addEventListener("success", () => {
+      const database = request.result
+      const transaction = database.transaction(["documents", "blobs"], "readwrite")
+      const documents = transaction.objectStore("documents").getAll()
+      documents.addEventListener("success", () => {
+        const used = new Set<string>()
+        JSON.parse(`[${documents.result.join(",")}]`, (_key, item) => {
+          if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
+          return item
+        })
+        const blobs = transaction.objectStore("blobs").openKeyCursor()
+        blobs.addEventListener("success", () => {
+          const cursor = blobs.result
+          if (!cursor) return
+          if (!used.has(String(cursor.key))) cursor.delete()
+          cursor.continue()
+        })
+      })
+      transaction.addEventListener("complete", () => resolve(database))
+      transaction.addEventListener("abort", () => resolve(database))
+    })
     request.addEventListener("error", () => reject(request.error))
   })
   const get = async (store: string, key: string) => {
