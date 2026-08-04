@@ -16,7 +16,7 @@ import { isServer, render } from "solid-js/web"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { canReusePendingBlock } from "./markdown-projection"
+import { canReusePendingBlock, completedProjection } from "./markdown-projection"
 import type { Block, Projection } from "./markdown-stream"
 import {
   disposeMarkdownProjection,
@@ -376,11 +376,19 @@ export function Markdown(
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
+  let streamed = false
   const [projection] = createResource(
-    () => (isServer ? undefined : { key: owner, text: local.text, live: local.streaming ?? false }),
+    () => {
+      if (isServer) return
+      const live = local.streaming ?? false
+      if (live) streamed = true
+      if (!live && !streamed) return
+      return { key: owner, text: local.text, live }
+    },
     (src) => projectMarkdown(src.key, src.text, src.live),
   )
   const currentProjection = () => {
+    if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
     const value = projection.latest ?? projection()
     if (value?.text === local.text) return value
     return pendingProjection(local.text)
@@ -393,7 +401,7 @@ export function Markdown(
           key: local.cacheKey,
           projection: pendingProjection(local.text),
         }
-      const value = projection()
+      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection()
       if (!value || value.text !== local.text) return
       return {
         text: local.text,
@@ -471,7 +479,12 @@ export function Markdown(
         )
     },
     {
-      initialValue: initialResult(local.text, local.cacheKey, pendingProjection(local.text), owner),
+      initialValue: initialResult(
+        local.text,
+        local.cacheKey,
+        local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
+        owner,
+      ),
     },
   )
 
