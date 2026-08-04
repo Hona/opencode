@@ -84,12 +84,6 @@ export function stream(text: string, live: boolean): Block[] {
   return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
 }
 
-export function canReusePendingBlock(current: Pick<Block, "mode" | "raw"> | undefined, next: Block) {
-  if (!current || current.mode !== next.mode) return false
-  if (next.mode === "code") return next.raw.startsWith(current.raw)
-  return current.raw === next.raw
-}
-
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
   if (!live || !previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
   const tail = previous.blocks.at(-1)
