@@ -23,7 +23,7 @@ type Stream = {
 
 const streams = new Map<string, Stream>()
 const projections = new Map<string, Projection>()
-const highlighter = createHighlighter({ themes: [OpenCodeTheme], langs: [] })
+let highlighter: ReturnType<typeof createHighlighter> | undefined
 const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
   run: highlight,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
@@ -35,7 +35,7 @@ const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { ty
   dispose: (key) => void projections.delete(key),
 })
 const parser = createMarkdownParser(async (code, language) => {
-  const instance = await highlighter
+  const instance = await getHighlighter()
   const name = language in bundledLanguages ? language : "text"
   if (!instance.getLoadedLanguages().includes(name))
     await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
@@ -85,7 +85,7 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
 
 async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
-    const instance = await highlighter
+    const instance = await getHighlighter()
     const language = request.language in bundledLanguages ? request.language : "text"
     if (!instance.getLoadedLanguages().includes(language))
       await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
@@ -138,6 +138,10 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
       message: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+function getHighlighter() {
+  return (highlighter ??= createHighlighter({ themes: [OpenCodeTheme], langs: [] }))
 }
 
 function post(response: MarkdownWorkerResponse) {

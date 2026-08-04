@@ -1,12 +1,12 @@
-import { getSharedHighlighter, registerCustomTheme } from "@pierre/diffs"
+import { getSharedHighlighter } from "@pierre/diffs"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { createMarkdownParser } from "./marked-parser"
-import { OpenCodeTheme } from "./marked-theme"
+import { registerOpenCodeTheme } from "./marked-theme-register"
 
 export { OpenCodeTheme } from "./marked-theme"
 
-registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
+registerOpenCodeTheme()
 
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
