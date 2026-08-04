@@ -386,11 +386,13 @@ export function Markdown(
       return { key: owner, text: local.text, live }
     },
     (src) => projectMarkdown(src.key, src.text, src.live),
+    { initialValue: pendingProjection("") },
   )
   const currentProjection = () => {
     if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
-    const value = projection.latest ?? projection()
+    const value = projection.latest
     if (value?.text === local.text) return value
+    if (value?.text) return value
     return pendingProjection(local.text)
   }
   const [html] = createResource(
@@ -401,7 +403,7 @@ export function Markdown(
           key: local.cacheKey,
           projection: pendingProjection(local.text),
         }
-      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection()
+      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection.latest
       if (!value || value.text !== local.text) return
       return {
         text: local.text,
