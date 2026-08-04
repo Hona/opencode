@@ -128,7 +128,7 @@ function ToggleCell(props: {
   const content = () => (
     <button
       type="button"
-      aria-label={props.tip}
+      aria-label={`${props.label}: ${props.value}`}
       aria-pressed={props.active}
       classList={{
         "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus": true,
