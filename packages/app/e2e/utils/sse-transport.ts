@@ -256,8 +256,12 @@ export async function installSseTransport<T>(
         input.after ?? 0,
         { timeout: input.timeout },
       )
-      const result = await connection.jsonValue()
-      await connection.dispose()
+      let result: SseConnectionRecord | undefined
+      try {
+        result = await connection.jsonValue()
+      } finally {
+        await connection.dispose()
+      }
       if (!result) throw new Error("SSE transport connection disappeared while waiting")
       return result
     },
