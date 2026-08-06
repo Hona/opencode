@@ -1,4 +1,4 @@
-import { Component, createSignal } from "solid-js"
+import { Component } from "solid-js"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
@@ -12,9 +12,6 @@ import {
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
-
-const badgeOptions: ("count" | "dot" | "none")[] = ["count", "dot", "none"]
-const focusOptions: ("auto" | "always" | "never")[] = ["auto", "always", "never"]
 
 const soundSettings = {
   agent: {
@@ -62,8 +59,6 @@ export const SettingsNotificationsV2: Component = () => {
   const language = useLanguage()
   const settings = useSettings()
   const sounds = createSoundSettingsController()
-  const [unreadBadge, setUnreadBadge] = createSignal<"count" | "dot" | "none">("count")
-  const [focusMode, setFocusMode] = createSignal<"auto" | "always" | "never">("auto")
 
   const restoreDefaults = () => {
     settings.notifications.setAgent(true)
@@ -72,17 +67,15 @@ export const SettingsNotificationsV2: Component = () => {
     settings.sounds.setAgent("bip-bop-01")
     settings.sounds.setPermissions("alert-01")
     settings.sounds.setErrors("nope-01")
-    setUnreadBadge("count")
-    setFocusMode("auto")
   }
 
   return (
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.tab.notifications")}</h2>
+          <h2 class="settings-v2-tab-title">{language.t("settings.general.section.notifications")}</h2>
           <ButtonV2 size="small" variant="ghost-muted" onClick={restoreDefaults}>
-            {language.t("settings.action.restoreDefaults")}
+            {language.t("common.reset")}
           </ButtonV2>
         </div>
       </div>
@@ -136,45 +129,6 @@ export const SettingsNotificationsV2: Component = () => {
             <SoundSetting kind="permissions" channel={sounds.permissions} />
             <SoundSetting kind="errors" channel={sounds.errors} />
 
-            <SettingsRowV2
-              title={language.t("settings.notifications.unreadBadge.title")}
-              description={language.t("settings.notifications.unreadBadge.description")}
-            >
-              <SelectV2
-                appearance="inline"
-                data-action="settings-unread-badge"
-                options={badgeOptions}
-                current={unreadBadge()}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) => {
-                  if (option === "dot") return language.t("settings.notifications.unreadBadge.dot")
-                  if (option === "none") return language.t("settings.notifications.unreadBadge.none")
-                  return language.t("settings.notifications.unreadBadge.count")
-                }}
-                onSelect={(option) => option && setUnreadBadge(option)}
-              />
-            </SettingsRowV2>
-
-            <SettingsRowV2
-              title={language.t("settings.notifications.focusMode.title")}
-              description={language.t("settings.notifications.focusMode.description")}
-            >
-              <SelectV2
-                appearance="inline"
-                data-action="settings-focus-mode"
-                options={focusOptions}
-                current={focusMode()}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) => {
-                  if (option === "always") return language.t("settings.notifications.focusMode.always")
-                  if (option === "never") return language.t("settings.notifications.focusMode.never")
-                  return language.t("settings.notifications.focusMode.auto")
-                }}
-                onSelect={(option) => option && setFocusMode(option)}
-              />
-            </SettingsRowV2>
           </SettingsListV2>
         </div>
       </div>

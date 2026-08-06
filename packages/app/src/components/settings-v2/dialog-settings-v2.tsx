@@ -61,15 +61,15 @@ export const DialogSettings: Component<{
               <div class="flex flex-col gap-1 w-full">
                 <TabsV2.Trigger value="general">
                   <Icon name="sliders" />
-                  {language.t("settings.tab.general")}
+                  {language.t("settings.tab.preferences")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="appearance">
                   <Icon name="appearance" />
-                  {language.t("settings.tab.appearance")}
+                  {language.t("settings.general.section.appearance")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="notifications">
                   <Icon name="notifications" />
-                  {language.t("settings.tab.notifications")}
+                  {language.t("settings.general.section.notifications")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="shortcuts">
                   <Icon name="keyboard" />
@@ -81,7 +81,7 @@ export const DialogSettings: Component<{
               <div class="flex flex-col gap-1 w-full">
                 <TabsV2.Trigger value="servers">
                   <Icon name="server" />
-                  {language.t("settings.tab.servers")}
+                  {language.t("status.popover.tab.servers")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="projects">
                   <Icon name="folder" />
@@ -93,11 +93,11 @@ export const DialogSettings: Component<{
               <div class="flex flex-col gap-1 w-full">
                 <TabsV2.Trigger value="providers">
                   <Icon name="providers" />
-                  {language.t("settings.tab.providers")}
+                  {language.t("settings.providers.title")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="models">
                   <Icon name="models" />
-                  {language.t("settings.tab.models")}
+                  {language.t("settings.models.title")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="extensions">
                   <Icon name="extensions" />

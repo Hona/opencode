@@ -103,7 +103,7 @@ export const SettingsExtensionsV2: Component = () => {
             data-selected={activeSubTab() === "mcps" ? "" : undefined}
             onClick={() => setActiveSubTab("mcps")}
           >
-            {language.t("settings.tab.mcps")}
+            {language.t("status.popover.tab.mcp")}
           </button>
           <button
             type="button"
@@ -112,7 +112,7 @@ export const SettingsExtensionsV2: Component = () => {
             data-selected={activeSubTab() === "plugins" ? "" : undefined}
             onClick={() => setActiveSubTab("plugins")}
           >
-            {language.t("settings.tab.plugins")}
+            {language.t("status.popover.tab.plugins")}
           </button>
           <button
             type="button"
@@ -121,7 +121,7 @@ export const SettingsExtensionsV2: Component = () => {
             data-selected={activeSubTab() === "skills" ? "" : undefined}
             onClick={() => setActiveSubTab("skills")}
           >
-            {language.t("settings.tab.skills")}
+            {language.t("settings.permissions.tool.skill.title")}
           </button>
         </div>
 

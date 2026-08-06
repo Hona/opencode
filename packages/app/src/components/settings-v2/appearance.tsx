@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, createSignal } from "solid-js"
+import { Component, Show, createMemo, createResource } from "solid-js"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
@@ -15,8 +15,6 @@ import {
 import "./settings-v2.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
-const densityOptions: ("compact" | "default" | "comfortable")[] = ["compact", "default", "comfortable"]
-
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -74,7 +72,6 @@ export const SettingsAppearanceV2: Component = () => {
   const platform = usePlatform()
   const appearance = createAppearanceSettingsController()
   const desktop = createMemo(() => platform.platform === "desktop")
-  const [density, setDensity] = createSignal<"compact" | "default" | "comfortable">("default")
 
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
     () => desktop() && "getPinchZoomEnabled" in platform,
@@ -94,16 +91,15 @@ export const SettingsAppearanceV2: Component = () => {
     appearance.fonts.setUI("")
     appearance.fonts.setCode("")
     appearance.fonts.setTerminal("")
-    setDensity("default")
   }
 
   return (
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.tab.appearance")}</h2>
+          <h2 class="settings-v2-tab-title">{language.t("settings.general.section.appearance")}</h2>
           <ButtonV2 size="small" variant="ghost-muted" onClick={restoreDefaults}>
-            {language.t("settings.action.restoreDefaults")}
+            {language.t("common.reset")}
           </ButtonV2>
         </div>
       </div>
@@ -152,26 +148,6 @@ export const SettingsAppearanceV2: Component = () => {
                 value={(option) => option.id}
                 label={(option) => option.name}
                 onSelect={appearance.theme.select}
-              />
-            </SettingsRowV2>
-
-            <SettingsRowV2
-              title={language.t("settings.appearance.density.title")}
-              description={language.t("settings.appearance.density.description")}
-            >
-              <SelectV2
-                appearance="inline"
-                data-action="settings-density"
-                options={densityOptions}
-                current={density()}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) => {
-                  if (option === "compact") return language.t("settings.appearance.density.compact")
-                  if (option === "comfortable") return language.t("settings.appearance.density.comfortable")
-                  return language.t("settings.appearance.density.default")
-                }}
-                onSelect={(option) => option && setDensity(option)}
               />
             </SettingsRowV2>
 
