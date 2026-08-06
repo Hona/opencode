@@ -894,6 +894,7 @@ export const dict = {
   "settings.tab.general": "General",
   "settings.tab.preferences": "Preferences",
   "settings.tab.shortcuts": "Shortcuts",
+  "settings.tab.notifications": "Notifications",
   "settings.tab.projects": "Projects",
   "settings.tab.extensions": "Extensions",
   "settings.server.all": "All servers",

@@ -6,11 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
-import {
-  createSoundSettingsController,
-  soundOptions,
-  type SoundSettingsController,
-} from "./general-controllers"
+import { createSoundSettingsController, soundOptions, type SoundSettingsController } from "./general-controllers"
 import "./settings-v2.css"
 
 const soundSettings = {
@@ -73,7 +69,7 @@ export const SettingsNotificationsV2: Component = () => {
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.general.section.notifications")}</h2>
+          <h2 class="settings-v2-tab-title">{language.t("settings.tab.notifications")}</h2>
           <ButtonV2 size="small" variant="ghost-muted" onClick={restoreDefaults}>
             {language.t("common.reset")}
           </ButtonV2>
@@ -82,7 +78,6 @@ export const SettingsNotificationsV2: Component = () => {
 
       <div class="settings-v2-tab-body">
         <div class="settings-v2-section">
-          <h3 class="settings-v2-section-title">{language.t("settings.general.section.notifications")}</h3>
           <SettingsListV2>
             <SettingsRowV2
               title={language.t("settings.general.notifications.agent.title")}
@@ -128,7 +123,6 @@ export const SettingsNotificationsV2: Component = () => {
             <SoundSetting kind="agent" channel={sounds.agent} />
             <SoundSetting kind="permissions" channel={sounds.permissions} />
             <SoundSetting kind="errors" channel={sounds.errors} />
-
           </SettingsListV2>
         </div>
       </div>

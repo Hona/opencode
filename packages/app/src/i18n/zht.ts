@@ -1239,4 +1239,5 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
+  "settings.tab.notifications": "Notifications",
 } satisfies Partial<Record<Keys, string>>

@@ -69,7 +69,7 @@ export const DialogSettings: Component<{
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="notifications">
                   <Icon name="notifications" />
-                  {language.t("settings.general.section.notifications")}
+                  {language.t("settings.tab.notifications")}
                 </TabsV2.Trigger>
                 <TabsV2.Trigger value="shortcuts">
                   <Icon name="keyboard" />
