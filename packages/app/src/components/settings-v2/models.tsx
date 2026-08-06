@@ -4,13 +4,15 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { type Component, For, Show } from "solid-js"
+import { type Component, For, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { useServerSDK } from "@/context/server-sdk"
+import { ServerConnection, useServer } from "@/context/server"
 import { popularProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { InlineServerSelect } from "./parts/server-select"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
@@ -22,7 +24,9 @@ const PROVIDER_ICON_SIZE = 16
 export const SettingsModelsV2: Component = () => {
   const language = useLanguage()
   const models = useModels()
+  const server = useServer()
   const serverSdk = useServerSDK()
+  const [selectedServer, setSelectedServer] = createSignal<ServerConnection.Key | "all">(server.key)
   const [store, setStore] = persisted(
     Persist.serverGlobal(serverSdk().scope, "settings-v2.models.providers"),
     createStore({ collapsed: {} as Record<string, boolean> }),
@@ -53,7 +57,14 @@ export const SettingsModelsV2: Component = () => {
   return (
     <>
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
-        <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+        <div class="settings-v2-tab-header-row">
+          <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+          <InlineServerSelect
+            value={selectedServer()}
+            onChange={setSelectedServer}
+            includeAll
+          />
+        </div>
         <div class="settings-v2-tab-search">
           <TextInputV2
             type="search"
