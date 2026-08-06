@@ -13,7 +13,7 @@ import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
-import { buildSessionExport, downloadSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
@@ -223,14 +223,15 @@ export function SessionContextTab() {
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
-  const exportSession = () => {
-    const session = info()
-    if (!session) return
-    const msgs = messages()
-    const parts = sync().data.part as Record<string, Part[] | undefined>
-    const data = buildSessionExport(session, msgs, parts)
-    const filename = sessionExportFilename(session)
+  const exportSession = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
     try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
       showToast({
         variant: "success",

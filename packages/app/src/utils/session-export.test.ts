@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildSessionExport, sessionExportFilename } from "./session-export"
+import { fetchSessionExport, sessionExportFilename } from "./session-export"
 import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 
 describe("sessionExportFilename", () => {
@@ -18,25 +18,44 @@ describe("sessionExportFilename", () => {
   })
 })
 
-describe("buildSessionExport", () => {
-  test("combines session, messages, and parts", () => {
+describe("fetchSessionExport", () => {
+  test("fetches full transcript from client", async () => {
     const session = { id: "ses_1", title: "Test Session" } as Session
-    const msg1 = { id: "msg_1", role: "user" } as Message
-    const msg2 = { id: "msg_2", role: "assistant" } as Message
-    const part1 = { id: "prt_1", type: "text", text: "hello" } as Part
-    const part2 = { id: "prt_2", type: "text", text: "world" } as Part
+    const msg = { id: "msg_1", role: "user" } as Message
+    const part = { id: "prt_1", type: "text", text: "hello" } as Part
+    const messages = [{ info: msg, parts: [part] }]
 
-    const result = buildSessionExport(session, [msg1, msg2], {
-      msg_1: [part1],
-      msg_2: [part2],
+    const client = {
+      session: {
+        get: async () => ({ data: session }),
+        messages: async () => ({ data: messages }),
+      },
+    }
+
+    const result = await fetchSessionExport({
+      sessionID: "ses_1",
+      client,
     })
 
     expect(result).toEqual({
       info: session,
-      messages: [
-        { info: msg1, parts: [part1] },
-        { info: msg2, parts: [part2] },
-      ],
+      messages,
     })
+  })
+
+  test("throws when session not found", async () => {
+    const client = {
+      session: {
+        get: async () => ({ data: null }),
+        messages: async () => ({ data: [] }),
+      },
+    }
+
+    expect(
+      fetchSessionExport({
+        sessionID: "ses_missing",
+        client,
+      }),
+    ).rejects.toThrow("Session not found: ses_missing")
   })
 })

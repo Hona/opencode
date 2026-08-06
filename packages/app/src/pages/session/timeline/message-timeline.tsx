@@ -53,7 +53,7 @@ import type {
   UserMessage,
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
-import { buildSessionExport, downloadSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -807,14 +807,13 @@ export function MessageTimeline(props: {
     navigate(`/${params.dir}/session`)
   }
 
-  const exportSession = (sessionID: string) => {
-    const session = sync().session.get(sessionID)
-    if (!session) return
-    const messages = (sync().data.message[sessionID] ?? []) as MessageType[]
-    const parts = sync().data.part as Record<string, PartType[] | undefined>
-    const data = buildSessionExport(session, messages, parts)
-    const filename = sessionExportFilename(session)
+  const exportSession = async (sessionID: string) => {
     try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
       showToast({
         variant: "success",

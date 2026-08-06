@@ -9,17 +9,32 @@ export type SessionExportData = {
   }[]
 }
 
-export function buildSessionExport(
-  session: Session,
-  messages: Message[],
-  parts: Record<string, Part[] | undefined>,
-): SessionExportData {
+export type SessionExportClient = {
+  session: {
+    get: (input: { sessionID: string }) => Promise<{ data?: Session | null }>
+    messages: (input: { sessionID: string }) => Promise<{ data?: SessionExportData["messages"] | null }>
+  }
+}
+
+export async function fetchSessionExport(input: {
+  sessionID: string
+  client: SessionExportClient
+}): Promise<SessionExportData> {
+  const [sessionRes, messagesRes] = await Promise.all([
+    input.client.session.get({ sessionID: input.sessionID }),
+    input.client.session.messages({ sessionID: input.sessionID }),
+  ])
+
+  if (!sessionRes?.data) {
+    throw new Error(`Session not found: ${input.sessionID}`)
+  }
+  if (!messagesRes?.data) {
+    throw new Error(`Failed to load messages for session: ${input.sessionID}`)
+  }
+
   return {
-    info: session,
-    messages: messages.map((info) => ({
-      info,
-      parts: parts[info.id] ?? [],
-    })),
+    info: sessionRes.data,
+    messages: messagesRes.data,
   }
 }
 

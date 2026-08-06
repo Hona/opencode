@@ -12,7 +12,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
-import { buildSessionExport, downloadSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -232,14 +232,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       )
   }
 
-  const exportSession = () => {
-    const session = info()
-    if (!session) return
-    const msgs = messages() as Message[]
-    const parts = sync().data.part as Record<string, Part[] | undefined>
-    const data = buildSessionExport(session, msgs, parts)
-    const filename = sessionExportFilename(session)
+  const exportSession = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
     try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
       showToast({
         variant: "success",
