@@ -67,6 +67,7 @@ export function useFilteredWslServers(filter: Accessor<string>) {
 export function WslServerSettings(props: {
   domain: Pick<ServerCollectionController, "collection" | "defaults" | "connection">
   servers: ReturnType<typeof useFilteredWslServers>
+  onEdit: (key: ServerConnection.Key) => void
 }) {
   const platform = usePlatform()
   const language = useLanguage()
@@ -138,6 +139,9 @@ export function WslServerSettings(props: {
                     <MenuV2.Content>
                       <MenuV2.Group>
                         <MenuV2.GroupLabel>{language.t("wsl.server.menu.label")}</MenuV2.GroupLabel>
+                        <MenuV2.Item onSelect={() => props.onEdit(key)}>
+                          {language.t("dialog.server.menu.edit")}
+                        </MenuV2.Item>
                         <Show when={wslRuntimeRetryable(item.runtime)}>
                           <MenuV2.Item onSelect={() => api && request.mutate(() => api.startServer(key))}>
                             {language.t("wsl.server.retryStart")}

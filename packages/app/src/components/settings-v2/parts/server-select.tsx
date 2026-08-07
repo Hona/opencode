@@ -1,25 +1,47 @@
-import { Show, type Component } from "solid-js"
+import { Show, createMemo, type Component } from "solid-js"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/server"
 
-export const InlineServerSelect: Component = () => {
+const allServers = { type: "all" } as const
+type ServerOption = ServerConnection.Any | typeof allServers
+
+export const InlineServerSelect: Component<{
+  all?: {
+    label: string
+    selected: () => boolean
+    onSelect: () => void
+  }
+  onServerSelect?: () => void
+}> = (props) => {
   const global = useGlobal()
+  const options = createMemo<ServerOption[]>(() => [...(props.all ? [allServers] : []), ...global.servers.list()])
+  const current = () => (props.all?.selected() ? allServers : global.settings.server.selected())
 
   return (
-    <Show when={global.servers.list().length > 1}>
+    <Show when={options().length > 1}>
       <SelectV2
         appearance="inline"
         data-action="settings-server-select"
-        options={global.servers.list()}
-        current={global.settings.server.selected()}
-        value={ServerConnection.key}
-        label={(server) => serverName(server) || ServerConnection.key(server)}
-        optionDisabled={(server) => global.servers.health[ServerConnection.key(server)]?.healthy === false}
+        options={options()}
+        current={current()}
+        value={(server) => (server.type === "all" ? server.type : ServerConnection.key(server))}
+        label={(server) =>
+          server.type === "all" ? (props.all?.label ?? "") : serverName(server) || ServerConnection.key(server)
+        }
+        optionDisabled={(server) =>
+          server.type === "all" ? false : global.servers.health[ServerConnection.key(server)]?.healthy === false
+        }
         placement="bottom-end"
         gutter={6}
         onSelect={(server) => {
-          if (server) global.settings.server.set(ServerConnection.key(server))
+          if (!server) return
+          if (server.type === "all") {
+            props.all?.onSelect()
+            return
+          }
+          global.settings.server.set(ServerConnection.key(server))
+          props.onServerSelect?.()
         }}
       />
     </Show>

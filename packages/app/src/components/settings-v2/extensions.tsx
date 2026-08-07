@@ -50,11 +50,8 @@ export const SettingsExtensionsV2: Component = () => {
   })
 
   const [skills] = createResource(
-    () => serverSdk(),
-    async (sdk) => {
-      const result = await sdk.client.v2.skill.list(undefined, { throwOnError: true })
-      return result.data.data
-    },
+    serverSdk,
+    (sdk) => sdk.api.skill.list().then((result) => result.data),
     { initialValue: [] },
   )
 
@@ -64,7 +61,7 @@ export const SettingsExtensionsV2: Component = () => {
         <div class="settings-v2-tab-header-row">
           <div class="flex flex-col gap-1">
             <h2 class="settings-v2-tab-title">{language.t("settings.tab.extensions")}</h2>
-            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.mcps.description")}</span>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.extensions.description")}</span>
           </div>
           <InlineServerSelect />
         </div>
@@ -73,9 +70,9 @@ export const SettingsExtensionsV2: Component = () => {
       <div class="settings-v2-tab-body">
         <TabsV2 variant="pill" defaultValue="mcps" class="settings-v2-extensions-tabs">
           <TabsV2.List>
-            <TabsV2.Trigger value="mcps">{language.t("status.popover.tab.mcp")}</TabsV2.Trigger>
+            <TabsV2.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</TabsV2.Trigger>
             <TabsV2.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</TabsV2.Trigger>
-            <TabsV2.Trigger value="skills">{language.t("settings.permissions.tool.skill.title")}</TabsV2.Trigger>
+            <TabsV2.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</TabsV2.Trigger>
           </TabsV2.List>
 
           <TabsV2.Content value="mcps">

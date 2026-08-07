@@ -1,9 +1,7 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, createMemo } from "solid-js"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
@@ -65,28 +63,16 @@ const FontSetting: Component<{
 
 export const SettingsAppearanceV2: Component = () => {
   const language = useLanguage()
-  const platform = usePlatform()
   const appearance = createAppearanceSettingsController()
-  const desktop = createMemo(() => platform.platform === "desktop")
-
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => desktop() && "getPinchZoomEnabled" in platform,
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
-
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
 
   return (
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.general.section.appearance")}</h2>
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.general.section.appearance")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.appearance.description")}</span>
+          </div>
         </div>
       </div>
 
@@ -142,22 +128,6 @@ export const SettingsAppearanceV2: Component = () => {
             <FontSetting kind="terminal" fonts={appearance.fonts} />
           </SettingsListV2>
         </div>
-
-        <Show when={desktop()}>
-          <div class="settings-v2-section">
-            <h3 class="settings-v2-section-title">{language.t("settings.general.section.display")}</h3>
-            <SettingsListV2>
-              <SettingsRowV2
-                title={language.t("settings.general.row.pinchZoom.title")}
-                description={language.t("settings.general.row.pinchZoom.description")}
-              >
-                <div data-action="settings-pinch-zoom">
-                  <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
-                </div>
-              </SettingsRowV2>
-            </SettingsListV2>
-          </div>
-        </Show>
       </div>
     </>
   )

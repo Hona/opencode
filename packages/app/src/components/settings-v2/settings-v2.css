@@ -736,19 +736,23 @@
   color: var(--v2-state-fg-danger);
 }
 
-.settings-v2-extensions-tabs [data-slot="tabs-v2-list"] {
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {
   width: 280px;
-  padding-inline: 0;
+  padding-inline: 0 !important;
 }
 
-.settings-v2-extensions-tabs [data-slot="tabs-v2-list"]::before {
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"]::before {
   display: none;
 }
 
-.settings-v2-extensions-tabs [data-slot="tabs-v2-trigger-wrapper"] {
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger-wrapper"] {
   border-radius: 6px;
 }
 
-.settings-v2-extensions-tabs [data-slot="tabs-v2-trigger"] {
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger"] {
   padding-inline: 8px;
 }

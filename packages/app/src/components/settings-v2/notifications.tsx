@@ -59,12 +59,18 @@ export const SettingsNotificationsV2: Component = () => {
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.tab.notifications")}</h2>
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.tab.notifications")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">
+              {language.t("settings.notifications.description")}
+            </span>
+          </div>
         </div>
       </div>
 
       <div class="settings-v2-tab-body">
         <div class="settings-v2-section">
+          <h3 class="settings-v2-section-title">{language.t("settings.general.section.notifications")}</h3>
           <SettingsListV2>
             <SettingsRowV2
               title={language.t("settings.general.notifications.agent.title")}

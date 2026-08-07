@@ -148,7 +148,10 @@ export const SettingsProvidersV2: Component<{
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
+          </div>
           <InlineServerSelect />
         </div>
       </div>
