@@ -75,6 +75,11 @@ const pluralCategories = new Map(
   ),
 )
 const appFallbackKeys = new Set([
+  "dialog.provider.custom.label",
+  "dialog.model.unpaid.viewMoreProviders",
+  "session.header.reveal.finder",
+  "session.header.reveal.fileExplorer",
+  "session.header.reveal.containingFolder",
   "command.session.export",
   "command.session.export.description",
   "context.export.session",

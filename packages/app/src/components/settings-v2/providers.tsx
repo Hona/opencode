@@ -52,9 +52,15 @@ export const SettingsProvidersV2: Component<{
   }
 
   const connected = createMemo(() => {
-    return providers
-      .connected()
-      .filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input))
+    return providers.connected().filter(
+      (provider) =>
+        provider.id !== "opencode" ||
+        Object.values(provider.models).some((model) => {
+          if (typeof model !== "object" || model === null || !("cost" in model)) return false
+          const cost = model.cost
+          return typeof cost === "object" && cost !== null && "input" in cost
+        }),
+    )
   })
 
   const popular = createMemo(() => {
@@ -96,29 +102,6 @@ export const SettingsProvidersV2: Component<{
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
     return true
-  }
-
-  const disableProvider = async (providerID: string, name: string) => {
-    return
-    const before = serverSync().data.config.disabled_providers ?? []
-    const next = before.includes(providerID) ? before : [...before, providerID]
-    sync.set("config", "disabled_providers", next)
-
-    await sync
-      .updateConfig({ disabled_providers: next })
-      .then(() => {
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
-          description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
-        })
-      })
-      .catch((err: unknown) => {
-        sync.set("config", "disabled_providers", before)
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
   }
 
   const disconnect = async (providerID: string, name: string) => {

@@ -5,7 +5,7 @@ import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { ExternalLink } from "../external-link"
+import { Link } from "../link"
 import { InlineServerSelect } from "./parts/server-select"
 import "./settings-v2.css"
 
@@ -26,14 +26,14 @@ export const SettingsExtensionsV2: Component = () => {
     const configMcp = serverSync().data.config.mcp ?? {}
     return Object.entries(configMcp).map(([name, config]) => ({
       name,
-      enabled: config.enabled !== false,
+      enabled: typeof config !== "object" || config === null || !("enabled" in config) || config.enabled !== false,
     }))
   })
 
   const handleMcpToggle = (item: McpRowItem, checked: boolean) => {
     const before = serverSync().data.config.mcp ?? {}
     const config = before[item.name]
-    if (!config) return
+    if (typeof config !== "object" || config === null) return
     const next = { ...before, [item.name]: { ...config, enabled: checked } }
     serverSync().set("config", "mcp", next)
     void serverSync()
@@ -49,11 +49,9 @@ export const SettingsExtensionsV2: Component = () => {
     })
   })
 
-  const [skills] = createResource(
-    serverSdk,
-    (sdk) => sdk.api.skill.list().then((result) => result.data),
-    { initialValue: [] },
-  )
+  const [skills] = createResource(serverSdk, (sdk) => sdk.api.skill.list().then((result) => result.data), {
+    initialValue: [],
+  })
 
   return (
     <>
@@ -130,12 +128,12 @@ export const SettingsExtensionsV2: Component = () => {
                 <span class="text-13-medium text-v2-text-text-base">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink
+                <Link
                   class="text-13-regular text-v2-text-accent hover:underline"
                   href="https://opencode.ai/docs/skills/"
                 >
                   {language.t("settings.extensions.addSkills")}
-                </ExternalLink>
+                </Link>
               </div>
               <div class="bg-[var(--v2-background-bg-base)] border-[0.5px] border-[var(--v2-border-border-base)] rounded-[8px] pl-4 pr-3 overflow-hidden">
                 <For each={skills()}>

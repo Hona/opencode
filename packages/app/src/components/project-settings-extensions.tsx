@@ -8,7 +8,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
-import { ExternalLink } from "./external-link"
+import { Link } from "./link"
 
 type SkillItem = {
   name: string
@@ -111,9 +111,7 @@ export const ProjectSettingsExtensions: Component = () => {
   const [serverSkills] = createResource(
     serverSDK,
     (sdk): Promise<SkillItem[]> =>
-      sdk.api.skill
-        .list()
-        .then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
+      sdk.api.skill.list().then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
     { initialValue: [] },
   )
   const [directorySkills] = createResource(
@@ -200,9 +198,9 @@ export const ProjectSettingsExtensions: Component = () => {
           <div class="project-settings-extension-section">
             <div class="project-settings-extension-section-header">
               <span>{language.t("project.settings.extensions.added")}</span>
-              <ExternalLink class="project-settings-extension-link" href="https://opencode.ai/docs/skills/">
+              <Link class="project-settings-extension-link" href="https://opencode.ai/docs/skills/">
                 {language.t("settings.extensions.addSkills")}
-              </ExternalLink>
+              </Link>
             </div>
             <Show when={projectSkills().length > 0}>
               <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>

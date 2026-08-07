@@ -2,7 +2,7 @@ import { Component, createMemo } from "solid-js"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useLanguage } from "@/context/language"
-import { ExternalLink } from "../external-link"
+import { Link } from "../link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import { createAppearanceSettingsController, type AppearanceSettingsController } from "./general-controllers"
@@ -104,9 +104,9 @@ export const SettingsAppearanceV2: Component = () => {
               description={
                 <>
                   {language.t("settings.general.row.theme.description")}{" "}
-                  <ExternalLink class="settings-v2-link" href="https://opencode.ai/docs/themes/">
+                  <Link class="settings-v2-link" href="https://opencode.ai/docs/themes/">
                     {language.t("common.learnMore")}
-                  </ExternalLink>
+                  </Link>
                 </>
               }
             >
