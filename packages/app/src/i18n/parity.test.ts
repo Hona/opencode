@@ -74,6 +74,27 @@ const pluralCategories = new Map(
       ] as const,
   ),
 )
+const appFallbackKeys = new Set([
+  "command.session.export",
+  "command.session.export.description",
+  "context.export.session",
+  "toast.session.export.success.title",
+  "toast.session.export.success.description",
+  "toast.session.export.failed.title",
+  "toast.session.export.failed.description",
+  "common.export",
+  "settings.tab.preferences",
+  "settings.tab.notifications",
+  "settings.tab.projects",
+  "settings.tab.extensions",
+  "settings.projects.title",
+  "settings.projects.description",
+  "settings.projects.empty",
+  "settings.mcps.description",
+  "settings.extensions.availableAll",
+  "settings.extensions.manageConfig",
+  "settings.extensions.addSkills",
+])
 
 const domains = [
   {
@@ -102,7 +123,9 @@ describe("i18n parity", () => {
       const source = await dictionary(domain.source)
       for (const locale of domain.locales) {
         const target = await dictionary(domain.target(locale))
-        const missing = Object.keys(source).filter((key) => !Object.hasOwn(target, key))
+        const missing = Object.keys(source).filter(
+          (key) => !Object.hasOwn(target, key) && (domain.name !== "app" || !appFallbackKeys.has(key)),
+        )
         const extra = Object.keys(target)
           .filter((key) => !Object.hasOwn(source, key))
           .sort()

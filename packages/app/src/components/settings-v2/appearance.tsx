@@ -1,5 +1,4 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -8,10 +7,7 @@ import { usePlatform } from "@/context/platform"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
-import {
-  createAppearanceSettingsController,
-  type AppearanceSettingsController,
-} from "./general-controllers"
+import { createAppearanceSettingsController, type AppearanceSettingsController } from "./general-controllers"
 import "./settings-v2.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
@@ -86,21 +82,11 @@ export const SettingsAppearanceV2: Component = () => {
     void update.catch(() => setPinchZoom(!checked))
   }
 
-  const restoreDefaults = () => {
-    appearance.scheme.select("system")
-    appearance.fonts.setUI("")
-    appearance.fonts.setCode("")
-    appearance.fonts.setTerminal("")
-  }
-
   return (
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("settings.general.section.appearance")}</h2>
-          <ButtonV2 size="small" variant="ghost-muted" onClick={restoreDefaults}>
-            {language.t("common.reset")}
-          </ButtonV2>
         </div>
       </div>
 

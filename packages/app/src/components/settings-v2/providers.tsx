@@ -4,13 +4,13 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, createSignal, type Accessor, type Component, For, Show } from "solid-js"
+import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { ServerConnection, useServer } from "@/context/server"
 import { DialogConnectProvider, useProviderConnectController } from "../dialog-connect-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
+import { SettingsServerScope } from "../settings-server-picker"
 import { InlineServerSelect } from "./parts/server-select"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
@@ -42,12 +42,13 @@ export const SettingsProvidersV2: Component<{
   const providers = useProviders(props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
 
-  const server = useServer()
-  const [selectedServer, setSelectedServer] = createSignal<ServerConnection.Key | "all">(server.key)
-
   const connect = (provider?: string) => {
     providerConnect.select(provider)
-    void dialog.show(() => <DialogConnectProvider directory={props.directory} controller={providerConnect} />)
+    void dialog.show(() => (
+      <SettingsServerScope>
+        <DialogConnectProvider directory={props.directory} controller={providerConnect} />
+      </SettingsServerScope>
+    ))
   }
 
   const connected = createMemo(() => {
@@ -101,9 +102,9 @@ export const SettingsProvidersV2: Component<{
     return
     const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
-    serverSync().set("config", "disabled_providers", next)
+    sync.set("config", "disabled_providers", next)
 
-    await serverSync()
+    await sync
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -114,7 +115,7 @@ export const SettingsProvidersV2: Component<{
         })
       })
       .catch((err: unknown) => {
-        serverSync().set("config", "disabled_providers", before)
+        sync.set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
@@ -148,11 +149,7 @@ export const SettingsProvidersV2: Component<{
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
-          <InlineServerSelect
-            value={selectedServer()}
-            onChange={setSelectedServer}
-            includeAll
-          />
+          <InlineServerSelect />
         </div>
       </div>
 
@@ -256,7 +253,11 @@ export const SettingsProvidersV2: Component<{
                   variant="neutral"
                   icon="plus"
                   onClick={() => {
-                    dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
+                    dialog.show(() => (
+                      <SettingsServerScope>
+                        <DialogCustomProvider onBack={dialog.close} />
+                      </SettingsServerScope>
+                    ))
                   }}
                 >
                   {language.t("common.connect")}

@@ -1,5 +1,4 @@
 import { Component } from "solid-js"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { useLanguage } from "@/context/language"
@@ -56,23 +55,11 @@ export const SettingsNotificationsV2: Component = () => {
   const settings = useSettings()
   const sounds = createSoundSettingsController()
 
-  const restoreDefaults = () => {
-    settings.notifications.setAgent(true)
-    settings.notifications.setPermissions(true)
-    settings.notifications.setErrors(true)
-    settings.sounds.setAgent("bip-bop-01")
-    settings.sounds.setPermissions("alert-01")
-    settings.sounds.setErrors("nope-01")
-  }
-
   return (
     <>
       <div class="settings-v2-tab-header">
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("settings.tab.notifications")}</h2>
-          <ButtonV2 size="small" variant="ghost-muted" onClick={restoreDefaults}>
-            {language.t("common.reset")}
-          </ButtonV2>
         </div>
       </div>
 

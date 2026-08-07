@@ -1,12 +1,12 @@
-import { Component, For, Show, createMemo, createSignal } from "solid-js"
+import { Component, For, Show, createMemo } from "solid-js"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
-import { ServerConnection, useServer } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { useLayout, getProjectAvatarVariant } from "@/context/layout"
+import { getProjectAvatarVariant } from "@/context/layout"
+import { displayName } from "@/pages/layout/helpers"
 import { InlineServerSelect } from "./parts/server-select"
 import { DialogEditProjectV2 } from "../dialog-edit-project-v2"
 import "./settings-v2.css"
@@ -14,19 +14,18 @@ import "./settings-v2.css"
 export const SettingsProjectsV2: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const server = useServer()
   const global = useGlobal()
-  const layout = useLayout()
-  const [selectedServer, setSelectedServer] = createSignal<ServerConnection.Key | "all">(server.key)
-
+  const selected = global.settings.server.selected
   const projects = createMemo(() => {
-    return layout.projects.list()
+    const server = selected()
+    if (!server) return []
+    return global.ensureServerCtx(server).projects.list()
   })
 
-  const openProjectSettings = (project: ReturnType<typeof layout.projects.list>[number]) => {
-    const currentServer = server.current ?? global.servers.list()[0]
-    if (!currentServer) return
-    dialog.push(() => <DialogEditProjectV2 project={project} server={currentServer} />)
+  const openProjectSettings = (project: ReturnType<typeof projects>[number]) => {
+    const server = selected()
+    if (!server) return
+    dialog.push(() => <DialogEditProjectV2 project={project} server={server} />)
   }
 
   return (
@@ -37,11 +36,7 @@ export const SettingsProjectsV2: Component = () => {
             <h2 class="settings-v2-tab-title">{language.t("settings.projects.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.projects.description")}</span>
           </div>
-          <InlineServerSelect
-            value={selectedServer()}
-            onChange={setSelectedServer}
-            includeAll
-          />
+          <InlineServerSelect />
         </div>
       </div>
 
@@ -57,7 +52,7 @@ export const SettingsProjectsV2: Component = () => {
           >
             <For each={projects()}>
               {(project) => {
-                const name = () => project.name || project.worktree.split(/[/\\]/).pop() || project.worktree
+                const name = () => displayName(project)
                 const color = () => getProjectAvatarVariant(project.icon?.color)
 
                 return (
@@ -66,11 +61,7 @@ export const SettingsProjectsV2: Component = () => {
                     onClick={() => openProjectSettings(project)}
                   >
                     <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                      <ProjectAvatar
-                        fallback={name()}
-                        variant={color()}
-                        class="shrink-0"
-                      />
+                      <ProjectAvatar fallback={name()} variant={color()} class="shrink-0" />
                       <span class="text-13-medium text-v2-text-text-base truncate">{name()}</span>
                     </div>
                     <div class="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -13,10 +13,12 @@ import { SettingsModelsV2 } from "./models"
 import { SettingsServersV2 } from "./servers"
 import { SettingsProjectsV2 } from "./projects"
 import { SettingsExtensionsV2 } from "./extensions"
+import { SettingsServerScope } from "../settings-server-picker"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
+import { useGlobal } from "@/context/global"
 import "./settings-v2.css"
 
 export const DialogSettings: Component<{
@@ -29,8 +31,11 @@ export const DialogSettings: Component<{
   const layout = useLayout()
   const tabs = useTabs()
   const serverSync = useServerSync()
+  const global = useGlobal()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   const directory = createMemo(() => {
+    const server = global.settings.server.selected()
+    if (!server || serverSync() !== global.ensureServerCtx(server).sync) return
     const route = layout.route()
     if (route.type === "dir-new-sesssion") return route.dir
     if (route.type === "draft") {
@@ -131,15 +136,17 @@ export const DialogSettings: Component<{
         <TabsV2.Content value="projects" class="settings-v2-panel">
           <SettingsProjectsV2 />
         </TabsV2.Content>
-        <TabsV2.Content value="providers" class="settings-v2-panel">
-          <SettingsProvidersV2 directory={directory} onBack={showProviders} />
-        </TabsV2.Content>
-        <TabsV2.Content value="models" class="settings-v2-panel">
-          <SettingsModelsV2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="extensions" class="settings-v2-panel">
-          <SettingsExtensionsV2 />
-        </TabsV2.Content>
+        <SettingsServerScope>
+          <TabsV2.Content value="providers" class="settings-v2-panel">
+            <SettingsProvidersV2 directory={directory} onBack={showProviders} />
+          </TabsV2.Content>
+          <TabsV2.Content value="models" class="settings-v2-panel">
+            <SettingsModelsV2 />
+          </TabsV2.Content>
+          <TabsV2.Content value="extensions" class="settings-v2-panel">
+            <SettingsExtensionsV2 />
+          </TabsV2.Content>
+        </SettingsServerScope>
       </TabsV2>
     </Dialog>
   )

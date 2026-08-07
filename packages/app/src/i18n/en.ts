@@ -897,7 +897,6 @@ export const dict = {
   "settings.tab.notifications": "Notifications",
   "settings.tab.projects": "Projects",
   "settings.tab.extensions": "Extensions",
-  "settings.server.all": "All servers",
   "settings.projects.title": "Projects",
   "settings.projects.description": "View and configure projects on this server",
   "settings.projects.empty": "No projects found",
