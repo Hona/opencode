@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, Scope } from "effect"
+import { Effect, Layer, Scope } from "effect"
 import { OtlpLogger } from "effect/unstable/observability"
 import { runID } from "./shared.js"
 
@@ -71,36 +71,39 @@ export function loggers(options: Options | undefined, app: App) {
   ]
 }
 
-export async function tracingLayer(options: Options | undefined, app: App) {
+export const tracingLayer = Effect.fnUntraced(function* (options: Options | undefined, app: App) {
   if (!options?.endpoint) return Layer.empty
-  const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
-  const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
-  const SdkBase = await import("@opentelemetry/sdk-trace-base")
-  const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
-  const { context } = await import("@opentelemetry/api")
+  const [{ layer }, { OTLPTraceExporter }, { BatchSpanProcessor }, { AsyncLocalStorageContextManager }, { context }] =
+    yield* Effect.all(
+      [
+        Effect.promise(() => import("@effect/opentelemetry/NodeSdk")),
+        Effect.promise(() => import("@opentelemetry/exporter-trace-otlp-http")),
+        Effect.promise(() => import("@opentelemetry/sdk-trace-base")),
+        Effect.promise(() => import("@opentelemetry/context-async-hooks")),
+        Effect.promise(() => import("@opentelemetry/api")),
+      ],
+      { concurrency: "unbounded" },
+    )
 
   // The Effect Node SDK does not register a global context manager, but the AI SDK uses it to parent spans.
   const manager = new AsyncLocalStorageContextManager()
   manager.enable()
   context.setGlobalContextManager(manager)
 
-  const tracing = NodeSdk.layer(() => ({
+  const tracing = layer(() => ({
     resource: resource(app),
-    spanProcessor: new SdkBase.BatchSpanProcessor(
-      new OTLP.OTLPTraceExporter({
+    spanProcessor: new BatchSpanProcessor(
+      new OTLPTraceExporter({
         url: `${options.endpoint}/v1/traces`,
         headers: parseHeaders(options.headers),
       }),
     ),
   }))
   return Layer.effectContext(
-    Effect.gen(function* () {
-      // OTLP delivery is best-effort, including defects from rejected SDK shutdown promises.
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void).pipe(Effect.ignoreCause))
-      return yield* Layer.buildWithScope(tracing, scope)
-    }),
+    Effect.acquireRelease(Scope.make(), (scope, exit) =>
+      Scope.close(scope, exit).pipe(Effect.ignoreCause),
+    ).pipe(Effect.flatMap((scope) => Layer.buildWithScope(tracing, scope))),
   )
-}
+})
 
 export * as Otlp from "./otlp.js"

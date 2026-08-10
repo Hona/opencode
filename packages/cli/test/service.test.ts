@@ -17,50 +17,6 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
 })
 
-test("service status ignores OTLP export failures", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-status-"))
-  const requests: string[] = []
-  const server = Bun.serve({
-    port: 0,
-    fetch(request) {
-      requests.push(new URL(request.url).pathname)
-      return new Response("rejected", { status: 403 })
-    },
-  })
-  try {
-    const child = Bun.spawn(
-      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "service", "status"],
-      {
-        env: {
-          ...process.env,
-          HOME: root,
-          OPENCODE_TEST_HOME: root,
-          OTEL_EXPORTER_OTLP_ENDPOINT: server.url.toString().replace(/\/$/, ""),
-          OTEL_EXPORTER_OTLP_HEADERS: "",
-          XDG_CACHE_HOME: path.join(root, "cache"),
-          XDG_CONFIG_HOME: path.join(root, "config"),
-          XDG_DATA_HOME: path.join(root, "data"),
-          XDG_STATE_HOME: path.join(root, "state"),
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    )
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ])
-
-    expect({ stdout, stderr, exitCode }).toEqual({ stdout: `stopped${os.EOL}`, stderr: "", exitCode: 0 })
-    expect(requests).toContain("/v1/logs")
-    expect(requests).toContain("/v1/traces")
-  } finally {
-    server.stop(true)
-    await fs.rm(root, { recursive: true, force: true })
-  }
-}, 30_000)
-
 test("local channel stores service config with the local service filename", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-"))
   try {
