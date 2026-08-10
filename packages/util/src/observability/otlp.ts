@@ -1,4 +1,4 @@
-import { Layer } from "effect"
+import { Effect, Exit, Layer, Scope } from "effect"
 import { OtlpLogger } from "effect/unstable/observability"
 import { runID } from "./shared.js"
 
@@ -84,7 +84,7 @@ export async function tracingLayer(options: Options | undefined, app: App) {
   manager.enable()
   context.setGlobalContextManager(manager)
 
-  return NodeSdk.layer(() => ({
+  const tracing = NodeSdk.layer(() => ({
     resource: resource(app),
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
@@ -93,6 +93,14 @@ export async function tracingLayer(options: Options | undefined, app: App) {
       }),
     ),
   }))
+  return Layer.effectContext(
+    Effect.gen(function* () {
+      // OTLP delivery is best-effort, including defects from rejected SDK shutdown promises.
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void).pipe(Effect.ignoreCause))
+      return yield* Layer.buildWithScope(tracing, scope)
+    }),
+  )
 }
 
 export * as Otlp from "./otlp.js"
