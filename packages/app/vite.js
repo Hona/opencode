@@ -32,7 +32,7 @@ export default [
           format: "es",
         },
         optimizeDeps: {
-          include: ["@shikijs/stream", "katex", "marked", "marked-shiki", "remend"],
+          exclude: ["@shikijs/stream", "katex", "marked", "marked-shiki", "remend"],
         },
       }
     },
