@@ -88,10 +88,9 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
 
 export async function buildCliToResources(dest = windowsify("resources/opencode-cli")) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const baseline = process.arch === "x64"
-  const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}${baseline ? "-baseline" : ""}`
+  const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single ${baseline ? "--baseline" : []} --skip-install --outdir=${directory}`.env(
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --outdir=${directory}`.env(
       {
         ...process.env,
         OPENCODE_VERSION: `0.0.0-local-${Date.now()}`,
