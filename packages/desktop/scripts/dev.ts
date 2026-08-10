@@ -1,19 +1,16 @@
 import { $ } from "bun"
 import { parseArgs } from "node:util"
-import { buildCliToResources, downloadCliToResources, windowsify } from "./utils"
+import { buildCliToResources, downloadCliToResources } from "./utils"
 
-type DevOptions = {
-  build: boolean
-  version?: string
-}
+type ServerSource = { type: "build" } | { type: "download"; version: string }
 
 async function main() {
-  const options = parseOptions()
-  await prepareServer(options)
+  const server = selectServer()
+  await prepareServer(server)
   await startDesktop()
 }
 
-function parseOptions(): DevOptions {
+function selectServer(): ServerSource {
   const options = parseArgs({
     args: process.argv.slice(2),
     options: {
@@ -25,17 +22,13 @@ function parseOptions(): DevOptions {
   if (options["build-server"] && options["download-server"]) {
     throw new Error("--build-server and --download-server cannot be used together")
   }
-  return {
-    build: options["build-server"] ?? false,
-    version: options["download-server"],
-  }
+  if (options["download-server"]) return { type: "download", version: options["download-server"] }
+  return { type: "build" }
 }
 
-async function prepareServer(options: DevOptions) {
-  if (options.version) return downloadCliToResources(options.version)
-  const resource = windowsify("resources/opencode-cli")
-  if (options.build || !(await Bun.file(resource).exists())) return buildCliToResources()
-  console.log(`Reusing ${resource}`)
+async function prepareServer(source: ServerSource) {
+  if (source.type === "download") return downloadCliToResources(source.version)
+  return buildCliToResources()
 }
 
 async function startDesktop() {
