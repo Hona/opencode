@@ -18,7 +18,6 @@ type Logger = {
 
 type ServiceTarget = {
   stateHome?: string
-  port?: number
   command: "start" | "restart"
   existing: boolean
   cleanup: boolean
@@ -41,7 +40,7 @@ async function resolveCli(logger: Logger, isolated: boolean) {
 }
 
 function isolatedService(): ServiceTarget {
-  return { stateHome: app.getPath("userData"), port: 0, command: "restart", existing: false, cleanup: true }
+  return { stateHome: app.getPath("userData"), command: "restart", existing: false, cleanup: true }
 }
 
 async function sharedService(binary: string, logger: Logger, shellStateHome?: string): Promise<ServiceTarget> {
@@ -59,14 +58,10 @@ async function sharedService(binary: string, logger: Logger, shellStateHome?: st
 }
 
 async function connect(binary: string, service: ServiceTarget, logger: Logger) {
-  const url = await run(binary, ["service", service.command], logger, {
-    stateHome: service.stateHome,
-    port: service.port,
-  })
+  const url = await run(binary, ["service", service.command], logger, { stateHome: service.stateHome })
   const password = await run(binary, ["service", "get", "password"], logger, {
     redact: true,
     stateHome: service.stateHome,
-    port: service.port,
   })
   logger.log("v2 CLI background service ready", {
     existing: service.existing,
@@ -129,13 +124,12 @@ async function run(
   binary: string,
   args: string[],
   logger: Logger,
-  options: { redact?: boolean; stateHome?: string; port?: number } = {},
+  options: { redact?: boolean; stateHome?: string } = {},
 ) {
   logger.log("v2 CLI command started", { binary, args })
   const env = { ...process.env }
   if (options.stateHome === undefined) delete env.XDG_STATE_HOME
   else env.XDG_STATE_HOME = options.stateHome
-  if (options.port !== undefined) env.OPENCODE_PORT = String(options.port)
   return execFileAsync(binary, args, { env, windowsHide: true }).then(
     (result) => {
       const stdout = result.stdout.trim()

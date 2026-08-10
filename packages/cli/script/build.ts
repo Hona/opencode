@@ -49,7 +49,7 @@ const targets = singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) return false
       if (item.avx2 === false) return baselineFlag
-      return !baselineFlag && item.abi === undefined
+      return item.abi === undefined
     })
   : allTargets
 

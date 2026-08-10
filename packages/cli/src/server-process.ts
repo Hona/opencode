@@ -45,12 +45,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const environmentPort = process.env.OPENCODE_PORT === undefined ? undefined : Number(process.env.OPENCODE_PORT)
-      const port =
-        options.port ??
-        environmentPort ??
-        config.port ??
-        (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       if (
         serviceOptions !== undefined &&
         port !== undefined &&
