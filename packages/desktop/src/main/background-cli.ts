@@ -16,45 +16,67 @@ type Logger = {
   error(message: string, meta?: Record<string, unknown>): void
 }
 
+type ServiceTarget = {
+  stateHome?: string
+  command: "start" | "restart"
+  existing: boolean
+}
+
 export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
+  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const binary = await resolveCli(logger)
+  const service = isolated ? isolatedService() : await sharedService(binary, logger, shellStateHome)
+  return connect(binary, service, logger)
+}
+
+async function resolveCli(logger: Logger) {
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
     : join(root, "../../resources", executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = await run(bundled, ["--version"], logger)
-  const binary = app.isPackaged ? await installCli(bundled, version, logger) : bundled
+  return app.isPackaged ? installCli(bundled, version, logger) : bundled
+}
 
-  const candidates = [
-    ...new Set([stateHome, shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
-  ].filter((candidate) => candidate === undefined || existsSync(candidate))
-  const discovered = await Promise.all(
-    candidates.map(async (candidate) => ({
-      stateHome: candidate,
-      url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
-    })),
-  )
-  const found = discovered.find((candidate) => candidate.url !== undefined)
+function isolatedService(): ServiceTarget {
+  return { stateHome: app.getPath("userData"), command: "restart", existing: false }
+}
+
+async function sharedService(binary: string, logger: Logger, shellStateHome?: string): Promise<ServiceTarget> {
+  const found = await findBackgroundCli(binary, logger, shellStateHome)
   logger.log("v2 CLI background instance checked", {
     detected: Boolean(found),
     ...endpoint(found?.url),
   })
+  return { stateHome: found?.stateHome ?? stateHome, command: "start", existing: Boolean(found) }
+}
 
-  const daemonStateHome = found?.stateHome ?? stateHome
-  const url = await run(binary, ["service", "start"], logger, { stateHome: daemonStateHome })
+async function connect(binary: string, service: ServiceTarget, logger: Logger) {
+  const url = await run(binary, ["service", service.command], logger, { stateHome: service.stateHome })
   const password = await run(binary, ["service", "get", "password"], logger, {
     redact: true,
-    stateHome: daemonStateHome,
+    stateHome: service.stateHome,
   })
   logger.log("v2 CLI background service ready", {
-    existing: Boolean(found),
+    existing: service.existing,
     username: "opencode",
     ...endpoint(url),
   })
-  return {
-    url,
-    username: "opencode",
-    password,
-  }
+  return { url, username: "opencode", password }
+}
+
+async function findBackgroundCli(binary: string, logger: Logger, shellStateHome?: string) {
+  const candidates = [
+    ...new Set([stateHome, shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
+  ].filter((candidate) => candidate === undefined || existsSync(candidate))
+  return (
+    await Promise.all(
+      candidates.map(async (candidate) => ({
+        stateHome: candidate,
+        url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
+      })),
+    )
+  ).find((candidate) => candidate.url !== undefined)
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
