@@ -31,6 +31,9 @@ export default [
         worker: {
           format: "es",
         },
+        optimizeDeps: {
+          include: ["@shikijs/stream", "katex", "marked", "marked-shiki", "remend"],
+        },
       }
     },
   },
