@@ -92,7 +92,12 @@ export async function buildCliToResources() {
   const dest = windowsify("resources/opencode-cli")
   const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --outdir=${directory}`
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --outdir=${directory}`.env(
+      {
+        ...process.env,
+        OPENCODE_VERSION: `0.0.0-local-${Date.now()}`,
+      },
+    )
     await copyFile(join(directory, target, "bin", windowsify("opencode2")), dest)
   } finally {
     await rm(directory, { recursive: true, force: true })

@@ -24,18 +24,18 @@ type ServiceTarget = {
 
 export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
-  const binary = await resolveCli(logger)
+  const binary = await resolveCli(logger, isolated)
   const service = isolated ? isolatedService() : await sharedService(binary, logger, shellStateHome)
   return connect(binary, service, logger)
 }
 
-async function resolveCli(logger: Logger) {
+async function resolveCli(logger: Logger, isolated: boolean) {
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
     : join(root, "../../resources", executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = await run(bundled, ["--version"], logger)
-  return app.isPackaged ? installCli(bundled, version, logger) : bundled
+  return app.isPackaged || isolated ? installCli(bundled, version, logger) : bundled
 }
 
 function isolatedService(): ServiceTarget {
