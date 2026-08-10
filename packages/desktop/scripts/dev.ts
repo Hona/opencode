@@ -6,8 +6,14 @@ type DevOptions = { server: ServerSource; electron: string[] }
 
 async function main() {
   const options = selectOptions()
+  await prepareDesktop()
   await prepareServer(options.server)
   await startDesktop(options.electron)
+}
+
+async function prepareDesktop() {
+  await $`bun run install-electron`
+  await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 }
 
 function selectOptions(): DevOptions {
