@@ -1,39 +1,39 @@
 import { $ } from "bun"
-import { parseArgs } from "node:util"
-import { buildCliToResources, downloadCliToResources } from "./utils"
+import { buildCliToResources, downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
+type DevOptions = { server: ServerSource; electron: string[] }
 
 async function main() {
-  const server = selectServer()
-  await prepareServer(server)
-  await startDesktop()
+  const options = selectOptions()
+  await prepareServer(options.server)
+  await startDesktop(options.electron)
 }
 
-function selectServer(): ServerSource {
-  const options = parseArgs({
-    args: process.argv.slice(2),
-    options: {
-      "build-server": { type: "boolean" },
-      "download-server": { type: "string" },
-    },
-    strict: true,
-  }).values
-  if (options["build-server"] && options["download-server"]) {
+function selectOptions(): DevOptions {
+  const args = process.argv.slice(2)
+  const build = args.indexOf("--build-server")
+  const download = args.indexOf("--download-server")
+  if (build >= 0 && download >= 0) {
     throw new Error("--build-server and --download-server cannot be used together")
   }
-  if (options["download-server"]) return { type: "download", version: options["download-server"] }
-  return { type: "build" }
+  if (download >= 0 && !args[download + 1]) throw new Error("--download-server requires a version")
+  const consumed = new Set([build, download, download >= 0 ? download + 1 : -1])
+  return {
+    server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
+    electron: args.filter((_, index) => !consumed.has(index)),
+  }
 }
 
 async function prepareServer(source: ServerSource) {
-  if (source.type === "download") return downloadCliToResources(source.version)
-  return buildCliToResources()
+  const destination = windowsify("resources/opencode-cli-dev")
+  if (source.type === "download") return downloadCliToResources(source.version, destination)
+  return buildCliToResources(destination)
 }
 
-async function startDesktop() {
+async function startDesktop(args: string[]) {
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
-  await $`electron-vite dev`
+  await $`electron-vite dev ${args}`
 }
 
 await main()

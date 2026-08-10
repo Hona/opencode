@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
-import { chmod, copyFile, mkdir, rename, rm } from "node:fs/promises"
+import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -18,8 +18,10 @@ type Logger = {
 
 type ServiceTarget = {
   stateHome?: string
+  port?: number
   command: "start" | "restart"
   existing: boolean
+  cleanup: boolean
 }
 
 export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
@@ -32,14 +34,14 @@ export async function startBackgroundCli(logger: Logger, shellStateHome?: string
 async function resolveCli(logger: Logger, isolated: boolean) {
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
-    : join(root, "../../resources", executableName())
+    : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = await run(bundled, ["--version"], logger)
   return app.isPackaged || isolated ? installCli(bundled, version, logger) : bundled
 }
 
 function isolatedService(): ServiceTarget {
-  return { stateHome: app.getPath("userData"), command: "restart", existing: false }
+  return { stateHome: app.getPath("userData"), port: 0, command: "restart", existing: false, cleanup: true }
 }
 
 async function sharedService(binary: string, logger: Logger, shellStateHome?: string): Promise<ServiceTarget> {
@@ -48,21 +50,45 @@ async function sharedService(binary: string, logger: Logger, shellStateHome?: st
     detected: Boolean(found),
     ...endpoint(found?.url),
   })
-  return { stateHome: found?.stateHome ?? stateHome, command: "start", existing: Boolean(found) }
+  return {
+    stateHome: found?.stateHome ?? stateHome,
+    command: "start",
+    existing: Boolean(found),
+    cleanup: false,
+  }
 }
 
 async function connect(binary: string, service: ServiceTarget, logger: Logger) {
-  const url = await run(binary, ["service", service.command], logger, { stateHome: service.stateHome })
+  const url = await run(binary, ["service", service.command], logger, {
+    stateHome: service.stateHome,
+    port: service.port,
+  })
   const password = await run(binary, ["service", "get", "password"], logger, {
     redact: true,
     stateHome: service.stateHome,
+    port: service.port,
   })
   logger.log("v2 CLI background service ready", {
     existing: service.existing,
     username: "opencode",
     ...endpoint(url),
   })
+  if (service.cleanup) await cleanCliStages(binary, logger)
   return { url, username: "opencode", password }
+}
+
+async function cleanCliStages(binary: string, logger: Logger) {
+  const current = dirname(binary)
+  const root = dirname(current)
+  await Promise.all(
+    (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && join(root, entry.name) !== current)
+      .map((entry) =>
+        rm(join(root, entry.name), { recursive: true, force: true }).catch((error) =>
+          logger.error("failed to clean staged v2 CLI", { path: join(root, entry.name), error }),
+        ),
+      ),
+  )
 }
 
 async function findBackgroundCli(binary: string, logger: Logger, shellStateHome?: string) {
@@ -103,12 +129,13 @@ async function run(
   binary: string,
   args: string[],
   logger: Logger,
-  options: { redact?: boolean; stateHome?: string } = {},
+  options: { redact?: boolean; stateHome?: string; port?: number } = {},
 ) {
   logger.log("v2 CLI command started", { binary, args })
   const env = { ...process.env }
   if (options.stateHome === undefined) delete env.XDG_STATE_HOME
   else env.XDG_STATE_HOME = options.stateHome
+  if (options.port !== undefined) env.OPENCODE_PORT = String(options.port)
   return execFileAsync(binary, args, { env, windowsHide: true }).then(
     (result) => {
       const stdout = result.stdout.trim()
@@ -144,4 +171,8 @@ function endpoint(url: string | undefined) {
 
 function executableName() {
   return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+}
+
+function developmentExecutableName() {
+  return process.platform === "win32" ? "opencode-cli-dev.exe" : "opencode-cli-dev"
 }

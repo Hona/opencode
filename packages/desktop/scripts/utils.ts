@@ -69,10 +69,9 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function downloadCliToResources(version = CLI_VERSION) {
+export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const dest = windowsify("resources/opencode-cli")
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyFile(
@@ -87,12 +86,12 @@ export async function downloadCliToResources(version = CLI_VERSION) {
   console.log(`Copied ${cli.package}@${version} to ${dest}`)
 }
 
-export async function buildCliToResources() {
+export async function buildCliToResources(dest = windowsify("resources/opencode-cli")) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const dest = windowsify("resources/opencode-cli")
-  const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
+  const baseline = process.arch === "x64"
+  const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}${baseline ? "-baseline" : ""}`
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --outdir=${directory}`.env(
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single ${baseline ? "--baseline" : []} --skip-install --outdir=${directory}`.env(
       {
         ...process.env,
         OPENCODE_VERSION: `0.0.0-local-${Date.now()}`,
