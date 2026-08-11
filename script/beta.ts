@@ -4,7 +4,6 @@ import { $ } from "bun"
 import fs from "fs/promises"
 
 const model = "opencode/gpt-5.3-codex"
-const prepare = process.argv.includes("--prepare")
 
 interface PR {
   number: number
@@ -87,7 +86,7 @@ async function build() {
   console.log("  Running final build smoke check...")
 
   try {
-    await $`./script/build.ts --single`.cwd("packages/cli")
+    await $`./script/build.ts --single`.cwd("packages/opencode")
     return true
   } catch (err) {
     console.log(`Build failed: ${err}`)
@@ -201,7 +200,7 @@ async function smoke(prs: PR[], applied: number[]) {
     "The beta merge batch is complete, but the deterministic final smoke check failed.",
     `Merged PRs on HEAD:\n${done}`,
     "Run `bun typecheck` at the repo root.",
-    "Run `./script/build.ts --single` in `packages/cli`.",
+    "Run `./script/build.ts --single` in `packages/opencode`.",
     "Fix any merge-caused issues until both commands pass.",
     "Do not create a commit.",
   ].join("\n")
@@ -221,16 +220,21 @@ async function main() {
   console.log("Fetching open PRs with beta label...")
 
   const stdout =
-    await $`gh pr list --state open --draft=false --base v2 --label beta --json number,title,author,labels --limit 100`.text()
+    await $`gh pr list --state open --draft=false --label beta --json number,title,author,labels --limit 100`.text()
   const prs: PR[] = JSON.parse(stdout).sort((a: PR, b: PR) => a.number - b.number)
 
   console.log(`Found ${prs.length} open PRs with beta label`)
 
-  console.log("Fetching latest v2 branch...")
-  await $`git fetch origin v2`
+  if (prs.length === 0) {
+    console.log("No team PRs to merge")
+    return
+  }
+
+  console.log("Fetching latest dev branch...")
+  await $`git fetch origin dev`
 
   console.log("Checking out beta branch...")
-  await $`git checkout -B beta origin/v2`
+  await $`git checkout -B beta origin/dev`
 
   const applied: number[] = []
   const failed: FailedPR[] = []
@@ -258,7 +262,7 @@ async function main() {
         if (!(await fix(pr, files, prs, applied, idx))) {
           await cleanup()
           failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
-          await commentOnPR(pr.number, "Merge conflicts with v2 branch")
+          await commentOnPR(pr.number, "Merge conflicts with dev branch")
           continue
         }
       } else {
@@ -314,18 +318,33 @@ async function main() {
   await $`git fetch origin beta`
 
   const localTree = (await $`git rev-parse beta^{tree}`.text()).trim()
-  const remoteTree = (await $`git rev-parse origin/beta^{tree}`.text()).trim()
-  if (localTree === remoteTree) {
-    console.log("Beta branch has identical contents, no push needed")
-    await outputChanged(false)
+  const remoteTrees = (await $`git log origin/dev..origin/beta --format=%T`.text()).split("\n")
+
+  const matchIdx = remoteTrees.indexOf(localTree)
+  if (matchIdx !== -1) {
+    if (matchIdx !== 0) {
+      console.log(`Beta branch contains this sync, but additional commits exist after it. Leaving beta branch as is.`)
+    } else {
+      console.log("Beta branch has identical contents, no push needed")
+    }
     return
   }
 
   if (!(await smoke(prs, applied))) throw new Error("Final smoke check failed")
 
-  if (prepare) {
-    await outputChanged(true)
-    console.log("Validated beta branch is ready to push")
+  await $`git fetch origin beta`
+
+  const validatedTree = (await $`git rev-parse beta^{tree}`.text()).trim()
+  const remoteTreesAfterSmoke = (await $`git log origin/dev..origin/beta --format=%T`.text()).split("\n")
+  const matchIdxAfterSmoke = remoteTreesAfterSmoke.indexOf(validatedTree)
+  if (matchIdxAfterSmoke !== -1) {
+    if (matchIdxAfterSmoke !== 0) {
+      console.log(
+        `Beta branch contains this validated sync, but additional commits exist after it. Leaving beta branch as is.`,
+      )
+    } else {
+      console.log("Validated beta branch now matches remote contents, no push needed")
+    }
     return
   }
 
@@ -333,11 +352,6 @@ async function main() {
   await $`git push origin beta --force --no-verify`
 
   console.log("Successfully synced beta branch")
-}
-
-async function outputChanged(changed: boolean) {
-  if (!process.env.GITHUB_OUTPUT) return
-  await fs.appendFile(process.env.GITHUB_OUTPUT, `changed=${changed}\n`)
 }
 
 main().catch((err) => {

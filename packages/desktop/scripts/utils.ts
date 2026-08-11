@@ -69,12 +69,12 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function downloadCliToResources() {
+export async function downloadCliToResources(version = CLI_VERSION) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   const dest = windowsify("resources/opencode-cli")
   try {
-    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
+    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyFile(
       join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
       dest,
@@ -82,34 +82,13 @@ export async function downloadCliToResources() {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
-  await prepareCli(dest)
-
-  console.log(`Copied ${cli.package} to ${dest}`)
-}
-
-export async function copyBuiltCliToResources() {
-  const cli = getCurrentCli()
-  const dest = windowsify("resources/opencode-cli")
-  await copyFile(
-    join(
-      "../cli/dist",
-      cli.package.replace("@opencode-ai/", ""),
-      "bin",
-      cli.os === "win32" ? "opencode2.exe" : "opencode2",
-    ),
-    dest,
-  )
-  await prepareCli(dest)
-
-  console.log(`Copied the same-run ${cli.package} build to ${dest}`)
-}
-
-async function prepareCli(dest: string) {
   if (process.platform !== "win32") await chmod(dest, 0o755)
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
+
+  console.log(`Copied ${cli.package}@${version} to ${dest}`)
 }
 
 export function windowsify(path: string) {

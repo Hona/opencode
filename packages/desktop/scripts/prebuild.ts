@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 
-import { copyBuiltCliToResources, downloadCliToResources, resolveChannel } from "./utils"
+import { downloadCliToResources, resolveChannel } from "./utils"
 
 const channel = resolveChannel()
 await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
 if (channel === "dev") await downloadCliToResources()
-if (channel === "beta") await copyBuiltCliToResources()
+if (channel === "beta") await downloadCliToResources("next")

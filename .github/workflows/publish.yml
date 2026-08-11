@@ -132,7 +132,7 @@ jobs:
 
   build-node-cli:
     needs: version
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    if: github.repository == 'anomalyco/opencode'
     strategy:
       fail-fast: false
       matrix:
@@ -282,7 +282,6 @@ jobs:
   build-electron:
     needs:
       - version
-      - build-cli
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
     continue-on-error: false
     env:
@@ -335,12 +334,6 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name == 'beta'
-        with:
-          name: opencode-preview-cli
-          path: packages/cli/dist
 
       - name: Azure login
         if: runner.os == 'Windows'
@@ -400,7 +393,6 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
-          RUST_TARGET: ${{ matrix.settings.target }}
 
       - name: Package
         if: needs.version.outputs.release
@@ -522,13 +514,11 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'beta'
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'beta'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
@@ -597,4 +587,3 @@ jobs:
           LATEST_YML_DIR: /tmp/latest-yml
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          OPENCODE_DESKTOP_ONLY: ${{ github.ref_name == 'beta' }}

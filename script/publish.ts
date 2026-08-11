@@ -35,7 +35,7 @@ if (Script.release && !Script.preview) {
 
 await prepareReleaseFiles()
 
-if (Bun.env.OPENCODE_DESKTOP_ONLY !== "true") {
+if (Script.channel !== "beta") {
   console.log("\n=== schema ===\n")
   await $`bun ./packages/schema/script/publish.ts`
 

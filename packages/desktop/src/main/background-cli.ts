@@ -85,7 +85,6 @@ async function run(
 ) {
   logger.log("v2 CLI command started", { binary, args })
   const env = { ...process.env }
-  env.OPENCODE_DISABLE_AUTOUPDATE = "1"
   if (options.stateHome === undefined) delete env.XDG_STATE_HOME
   else env.XDG_STATE_HOME = options.stateHome
   return execFileAsync(binary, args, { env, windowsHide: true }).then(
