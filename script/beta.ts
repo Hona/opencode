@@ -216,6 +216,17 @@ async function smoke(prs: PR[], applied: number[]) {
   return commitSmokeChanges()
 }
 
+async function checkout() {
+  console.log("Fetching latest v2 branch...")
+  await $`git fetch origin v2`
+
+  console.log("Checking out beta branch...")
+  await $`git checkout -B beta origin/v2`
+
+  console.log("Installing v2 dependencies...")
+  await $`bun install --frozen-lockfile`
+}
+
 async function main() {
   console.log("Fetching open PRs with beta label...")
 
@@ -225,11 +236,7 @@ async function main() {
 
   console.log(`Found ${prs.length} open PRs with beta label`)
 
-  console.log("Fetching latest v2 branch...")
-  await $`git fetch origin v2`
-
-  console.log("Checking out beta branch...")
-  await $`git checkout -B beta origin/v2`
+  await checkout()
 
   const applied: number[] = []
   const failed: FailedPR[] = []
