@@ -1,6 +1,8 @@
 export * as PluginInternal from "./internal"
 
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Agent } from "../agent"
@@ -10,10 +12,12 @@ import { Config } from "../config"
 import { Credential } from "../credential"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
+import { ConfigInstructionPlugin } from "../config/plugin/instruction"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigPolicyPlugin } from "../config/plugin/policy"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
+import { ConfigPluginSource } from "../config/plugin/source"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch"
 import { Bus } from "../bus"
 import { Environment } from "../environment"
@@ -24,6 +28,7 @@ import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image"
+import { InstructionDiscovery } from "../instruction-discovery"
 import { Integration } from "../integration"
 import { KV } from "../kv"
 import { Location } from "../location"
@@ -37,6 +42,8 @@ import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
 import { Shell } from "../shell"
 import { Skill } from "../skill"
+import { SkillDiscovery } from "../skill/discovery"
+import { Watcher } from "../filesystem/watcher"
 import { PatchTool } from "../tool/plugin/patch"
 import { EditTool } from "../tool/plugin/edit"
 import { GlobTool } from "../tool/plugin/glob"
@@ -54,6 +61,7 @@ import { WellKnown } from "../wellknown"
 import { WriteTool } from "../tool/plugin/write"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
+import { PlanPlugin } from "./plan"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { WebSearchPlugins } from "./websearch"
@@ -70,6 +78,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const command = yield* Command.Service
   const config = yield* Config.Service
   const credential = yield* Credential.Service
+  const pluginSources = yield* ConfigPluginSource.Service
   const bus = yield* Bus.Service
   const environment = yield* Environment.Service
   const mutation = yield* FileMutation.Service
@@ -79,6 +88,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const global = yield* Global.Service
   const http = yield* HttpClient.HttpClient
   const image = yield* Image.Service
+  const instructionDiscovery = yield* InstructionDiscovery.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
   const location = yield* Location.Service
@@ -95,7 +105,9 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
   const skill = yield* Skill.Service
+  const skillDiscovery = yield* SkillDiscovery.Service
   const tools = yield* Tool.Service
+  const watcher = yield* Watcher.Service
   const wellknown = yield* WellKnown.Service
   return Context.mergeAll(
     Context.make(Agent.Service, agent),
@@ -103,6 +115,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Command.Service, command),
     Context.make(Config.Service, config),
     Context.make(Credential.Service, credential),
+    Context.make(ConfigPluginSource.Service, pluginSources),
     Context.make(Bus.Service, bus),
     Context.make(Environment.Service, environment),
     Context.make(FileMutation.Service, mutation),
@@ -112,6 +125,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Global.Service, global),
     Context.make(HttpClient.HttpClient, http),
     Context.make(Image.Service, image),
+    Context.make(InstructionDiscovery.Service, instructionDiscovery),
     Context.make(Integration.Service, integration),
     Context.make(KV.Service, kv),
     Context.make(Location.Service, location),
@@ -128,7 +142,9 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
     Context.make(Skill.Service, skill),
+    Context.make(SkillDiscovery.Service, skillDiscovery),
     Context.make(Tool.Service, tools),
+    Context.make(Watcher.Service, watcher),
     Context.make(WellKnown.Service, wellknown),
   )
 })
@@ -137,11 +153,51 @@ type ContextServices<A> = A extends Context.Context<infer R> ? R : never
 
 export type Requirements = ContextServices<Effect.Success<ReturnType<typeof services>>>
 
+export const requirements = LayerNode.group([
+  Agent.node,
+  Catalog.node,
+  Command.node,
+  Config.node,
+  Credential.node,
+  ConfigPluginSource.node,
+  Bus.node,
+  Environment.node,
+  FileMutation.node,
+  Formatter.node,
+  FileSystem.node,
+  FSUtil.node,
+  Global.node,
+  httpClient,
+  Image.node,
+  InstructionDiscovery.node,
+  Integration.node,
+  KV.node,
+  Location.node,
+  LocationMutation.node,
+  ModelsDev.node,
+  Npm.node,
+  Permission.node,
+  PluginRuntime.node,
+  Form.node,
+  ReadToolFileSystem.node,
+  Reference.node,
+  WebSearch.node,
+  Ripgrep.node,
+  SessionInstructions.node,
+  Shell.node,
+  Skill.node,
+  SkillDiscovery.node,
+  Tool.node,
+  Watcher.node,
+  WellKnown.node,
+])
+
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
   WellKnownPlugin.Plugin,
   AgentPlugin.Plugin,
+  PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
@@ -164,6 +220,7 @@ const pre = [
 ] as const satisfies readonly InternalPlugin[]
 
 const post = [
+  ConfigInstructionPlugin.Plugin,
   ConfigReferencePlugin.Plugin,
   ConfigAgentPlugin.Plugin,
   ConfigCommandPlugin.Plugin,

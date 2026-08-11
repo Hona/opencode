@@ -8,10 +8,11 @@ import type {
   KeymapCommand,
   KeymapLayer,
   Page,
+  SlotClaim,
   Route,
-  Slot,
 } from "@opencode-ai/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
@@ -142,7 +143,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   const commands = new Map<string, KeymapCommand>()
   let current = initialRoute ?? startRoute
   let renderDiff: Page["render"] | undefined
-  let renderCommands: Slot | undefined
+  let renderCommands: SlotClaim<"app">["render"] | undefined
   let vcsDiffInput: unknown
   const config = createTuiResolvedConfig()
   const transport = createFetch((url) => {
@@ -199,8 +200,8 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
           },
           current: () => current,
         },
-        slot(_name: string, render: Slot) {
-          renderCommands = render
+        slot(claim: SlotClaim<"app">) {
+          renderCommands = claim.render
           return () => {}
         },
       },
@@ -224,7 +225,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
         <ConfigProvider config={config}>
           <Keymap.Provider>
             <ToastProvider>
-              <ThemeProvider mode="dark">
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
                 <DialogProvider>
                   <Content />
                 </DialogProvider>

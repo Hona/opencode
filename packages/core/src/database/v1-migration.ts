@@ -7,7 +7,7 @@ import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
 import { KVTable } from "../kv/sql"
-import { EventSequenceTable, EventTable } from "../event/sql"
+import { EventSequenceTable } from "../event/sql"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode-ai/util/global"
 import { existsSync } from "node:fs"
@@ -161,6 +161,7 @@ type NextMessage = {
 
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
+const EVENT_DELETE_BATCH_SIZE = 1_000
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
@@ -467,10 +468,11 @@ function updateProgress(progress: Progress) {
   if (runtimeState.status === "running") runtimeState = { status: "running", progress }
 }
 
-export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service> {
+export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const { db } = yield* Database.Service
+      const global = yield* Global.Service
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
@@ -478,13 +480,21 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
         const now = Date.now()
         yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes)
-          VALUES (${Project.ID.global}, ${path.parse(Global.Path.data).root}, ${now}, ${now}, '[]')
+          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, '[]')
         `)
         if (state === undefined)
           yield* db
             .transaction((tx) =>
               Effect.gen(function* () {
-                yield* tx.delete(EventTable).run()
+                while (true) {
+                  yield* tx.run(sql`
+                    DELETE FROM event
+                    WHERE rowid IN (SELECT rowid FROM event LIMIT ${EVENT_DELETE_BATCH_SIZE})
+                  `)
+                  const deleted = (yield* tx.get<{ value: number }>(sql`SELECT changes() AS value`))?.value ?? 0
+                  if (deleted < EVENT_DELETE_BATCH_SIZE) break
+                  yield* Effect.yieldNow
+                }
                 yield* tx
                   .insert(KVTable)
                   .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
@@ -492,7 +502,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
               }),
             )
             .pipe(Effect.orDie)
-        const sourceTotal = yield* countNextSessions(nextPath(options))
+        const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
         const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
         const cursor = state?.phase === "sessions" ? state.cursor : undefined
         const migrated =
@@ -502,7 +512,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             : 0
         const denominator = sourceTotal + legacyTotal
         updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
-        yield* importNextDatabase(db, nextPath(options), (completed) => {
+        yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
           updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
         })
         updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
@@ -621,10 +631,10 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
   )
 }
 
-function nextPath(options: Options) {
+function nextPath(options: Options, data: string) {
   if (options.nextDatabasePath) return options.nextDatabasePath
   if (process.env.OPENCODE_DB === ":memory:") return undefined
-  return path.join(Global.Path.data, "opencode-next.db")
+  return path.join(data, "opencode-next.db")
 }
 
 function openNextDatabase(sourcePath: string) {

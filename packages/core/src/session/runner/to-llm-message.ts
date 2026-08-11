@@ -59,6 +59,25 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
   return []
 }
 
+const userAttachmentContent = (files: readonly FileAttachment[]) => {
+  const eligible = files.filter(
+    (file) => imageMimes.has(file.mime) && file.source.type === "inline" && file.mention?.text,
+  )
+  if (eligible.length < 2) return files.flatMap(attachmentContent)
+
+  const seen = new Map<string, Set<string>>()
+  return files.flatMap((file) => {
+    if (!imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
+      return attachmentContent(file)
+    const metadata = JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text])
+    const payloads = seen.get(metadata) ?? new Set<string>()
+    if (payloads.has(file.data)) return []
+    payloads.add(file.data)
+    seen.set(metadata, payloads)
+    return attachmentContent(file)
+  })
+}
+
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 const providerMetadata = (
@@ -186,7 +205,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       const content = [
         ...(message.skills ?? []).map((skill) => Message.text(skill.text)),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
-        ...(message.files ?? []).flatMap(attachmentContent),
+        ...userAttachmentContent(message.files ?? []),
       ]
       if (content.length === 0) return []
       return [

@@ -10930,7 +10930,7 @@
         "summary": "List references"
       }
     },
-    "/experimental/project/{projectID}/copy": {
+    "/api/experimental/project/{projectID}/copy": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.create",
@@ -11156,7 +11156,7 @@
         }
       }
     },
-    "/experimental/project/{projectID}/copy/refresh": {
+    "/api/experimental/project/{projectID}/copy/refresh": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.refresh",
@@ -12732,6 +12732,9 @@
             "enum": ["agent-switched"]
           },
           "agent": {
+            "type": "string"
+          },
+          "previous": {
             "type": "string"
           }
         },
@@ -14370,6 +14373,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "previous": {
+                "type": "string"
               }
             },
             "required": ["sessionID", "agent"],
@@ -14437,6 +14443,9 @@
                 ]
               },
               "model": {
+                "$ref": "#/components/schemas/Model.Ref"
+              },
+              "previous": {
                 "$ref": "#/components/schemas/Model.Ref"
               }
             },

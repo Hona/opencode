@@ -11,16 +11,21 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { Effect, Layer, Logger, Schedule, Schema, Scope } from "effect"
+import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { tmpdir } from "./fixture/tmpdir"
 import path from "path"
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClient | Scope.Scope>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClient | Scope.Scope | Global.Service>) =>
   Effect.runPromise(
-    Effect.scoped(effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })))),
+    Effect.scoped(
+      effect.pipe(
+        Effect.provideService(Global.Service, Global.make({ data: path.join(process.cwd(), ".test-data") })),
+        Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      ),
+    ),
   )
 
 const session = (
@@ -58,6 +63,7 @@ const session = (
   time_compacting: 3,
   time_archived: null,
   time_suspended: null,
+  resume_attempts: 0,
   ...overrides,
 })
 
@@ -772,7 +778,7 @@ describe("V1Migration database workflow", () => {
     `)
   })
 
-  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Scope.Scope>) =>
+  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope>) =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -789,6 +795,35 @@ describe("V1Migration database workflow", () => {
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
         expect(yield* V1Migration.status()).toEqual({ status: "completed" })
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+      }),
+    )
+  })
+
+  test("yields while clearing stale events in batches", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('stale', 2500)`)
+        yield* db.run(sql`
+          WITH RECURSIVE rows(value) AS (
+            VALUES(1)
+            UNION ALL
+            SELECT value + 1 FROM rows WHERE value < 2500
+          )
+          INSERT INTO event (id, aggregate_id, seq, created, type, data)
+          SELECT printf('event_%04d', value), 'stale', value, 1, 'session.renamed.1', '{}'
+          FROM rows
+        `)
+        let yielded = false
+        const heartbeat = yield* Effect.yieldNow.pipe(
+          Effect.andThen(Effect.sync(() => (yielded = true))),
+          Effect.forkChild({ startImmediately: true }),
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yielded).toBe(true)
+        yield* Fiber.join(heartbeat)
+        expect(yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM event`)).toEqual({ value: 0 })
       }),
     )
   })
@@ -935,6 +970,7 @@ describe("V1Migration database workflow", () => {
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
+        const global = yield* Global.Service
         yield* db.run(
           sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '1', 1, 2)`,
         )
@@ -944,7 +980,7 @@ describe("V1Migration database workflow", () => {
           project_id: "global",
         })
         expect(yield* db.get(sql`SELECT worktree FROM project WHERE id = 'global'`)).toEqual({
-          worktree: path.parse(Global.Path.data).root,
+          worktree: path.parse(global.data).root,
         })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
           value: '{"phase":"completed"}',

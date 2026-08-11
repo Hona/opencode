@@ -1,3 +1,4 @@
+import { Service } from "@opencode-ai/client/service"
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
 import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
@@ -8,68 +9,38 @@ import { app } from "electron"
 
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
-const stateHome = process.env.XDG_STATE_HOME
-const desktopStateNames = ["ai.opencode.desktop.dev", "ai.opencode.desktop.beta", "ai.opencode.desktop"]
 
 type Logger = {
   log(message: string, meta?: Record<string, unknown>): void
   error(message: string, meta?: Record<string, unknown>): void
 }
 
-type ServiceTarget = {
-  stateHome?: string
-  command: "start" | "restart"
-  existing: boolean
-  cleanup: boolean
-}
-
-export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
+export async function startBackgroundCli(logger: Logger) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
-  const binary = await resolveCli(logger, isolated)
-  const service = isolated ? isolatedService() : await sharedService(binary, logger, shellStateHome)
-  return connect(binary, service, logger)
-}
-
-async function resolveCli(logger: Logger, isolated: boolean) {
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
     : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = await run(bundled, ["--version"], logger)
-  return app.isPackaged || isolated ? installCli(bundled, version, logger) : bundled
-}
-
-function isolatedService(): ServiceTarget {
-  return { stateHome: app.getPath("userData"), command: "restart", existing: false, cleanup: true }
-}
-
-async function sharedService(binary: string, logger: Logger, shellStateHome?: string): Promise<ServiceTarget> {
-  const found = await findBackgroundCli(binary, logger, shellStateHome)
-  logger.log("v2 CLI background instance checked", {
-    detected: Boolean(found),
-    ...endpoint(found?.url),
+  const version = parseVersion(await run(bundled, ["--version"], logger))
+  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const service = await Service.ensure({
+    version,
+    command: [binary, "serve", "--service"],
+    onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
   })
-  return {
-    stateHome: found?.stateHome ?? stateHome,
-    command: "start",
-    existing: Boolean(found),
-    cleanup: false,
-  }
-}
-
-async function connect(binary: string, service: ServiceTarget, logger: Logger) {
-  const url = await run(binary, ["service", service.command], logger, { stateHome: service.stateHome })
-  const password = await run(binary, ["service", "get", "password"], logger, {
-    redact: true,
-    stateHome: service.stateHome,
-  })
+  if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   logger.log("v2 CLI background service ready", {
-    existing: service.existing,
-    username: "opencode",
-    ...endpoint(url),
+    username: service.auth.username,
+    version,
+    ...endpoint(service.url),
   })
-  if (service.cleanup) await cleanCliStages(binary, logger)
-  return { url, username: "opencode", password }
+  if (isolated) await cleanCliStages(binary, logger)
+  return {
+    url: service.url,
+    username: service.auth.username,
+    password: service.auth.password,
+  }
 }
 
 async function cleanCliStages(binary: string, logger: Logger) {
@@ -84,20 +55,6 @@ async function cleanCliStages(binary: string, logger: Logger) {
         ),
       ),
   )
-}
-
-async function findBackgroundCli(binary: string, logger: Logger, shellStateHome?: string) {
-  const candidates = [
-    ...new Set([stateHome, shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
-  ].filter((candidate) => candidate === undefined || existsSync(candidate))
-  return (
-    await Promise.all(
-      candidates.map(async (candidate) => ({
-        stateHome: candidate,
-        url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
-      })),
-    )
-  ).find((candidate) => candidate.url !== undefined)
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
@@ -120,21 +77,13 @@ async function installCli(source: string, version: string, logger: Logger) {
   return destination
 }
 
-async function run(
-  binary: string,
-  args: string[],
-  logger: Logger,
-  options: { redact?: boolean; stateHome?: string } = {},
-) {
+async function run(binary: string, args: string[], logger: Logger) {
   logger.log("v2 CLI command started", { binary, args })
-  const env = { ...process.env }
-  if (options.stateHome === undefined) delete env.XDG_STATE_HOME
-  else env.XDG_STATE_HOME = options.stateHome
-  return execFileAsync(binary, args, { env, windowsHide: true }).then(
+  return execFileAsync(binary, args, { windowsHide: true }).then(
     (result) => {
       const stdout = result.stdout.trim()
       const stderr = result.stderr.trim()
-      logger.log("v2 CLI command completed", { args, stdout: options.redact ? "[redacted]" : stdout, stderr })
+      logger.log("v2 CLI command completed", { args, stdout, stderr })
       return stdout
     },
     (error: unknown) => {
@@ -142,7 +91,7 @@ async function run(
       logger.error("v2 CLI command failed", {
         args,
         error: error instanceof Error ? error.message : String(error),
-        stdout: options.redact && output.stdout ? "[redacted]" : (output.stdout?.trim() ?? ""),
+        stdout: output.stdout?.trim() ?? "",
         stderr: output.stderr?.trim() ?? "",
       })
       throw error
@@ -150,11 +99,11 @@ async function run(
   )
 }
 
-function serviceUrl(status: string) {
-  if (URL.canParse(status)) return status
-  if (!status.startsWith("running ")) return
-  const url = status.slice("running ".length).trim()
-  return URL.canParse(url) ? url : undefined
+function parseVersion(output: string) {
+  const marker = output.lastIndexOf(" v")
+  const version = marker === -1 ? output : output.slice(marker + 2)
+  if (!version) throw new Error("V2 CLI did not provide a version")
+  return version
 }
 
 function endpoint(url: string | undefined) {

@@ -151,7 +151,15 @@ export const layer = (options?: Options) =>
             )
             if (!credential || credential.value.type !== "key") return []
             const variables = { [auth.env]: credential.value.key }
-            const configs = yield* wellknown.resolve(entry, variables).pipe(Effect.orDie)
+            const configs = yield* wellknown
+              .resolve(entry, variables)
+              .pipe(
+                Effect.catch(() =>
+                  Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
+                    Effect.as([] as const),
+                  ),
+                ),
+              )
             return yield* Effect.forEach(configs, (config) =>
               ConfigVariable.substitute({
                 type: "virtual",
@@ -196,13 +204,13 @@ export const layer = (options?: Options) =>
         const claude = [
           ...new Set([
             ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude"),
+            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
             ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".agents"),
+            ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 

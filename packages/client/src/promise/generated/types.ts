@@ -41,6 +41,7 @@ export type SessionMessageAgentSelected = {
   time: { created: number }
   type: "agent-switched"
   agent: string
+  previous?: string
 }
 
 export type PromptBase64 = string
@@ -435,7 +436,7 @@ export type SessionAgentSelected = {
   type: "session.agent.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; agent: string }
+  data: { sessionID: string; agent: string; previous?: string }
 }
 
 export type SessionModelSelected = {
@@ -445,7 +446,7 @@ export type SessionModelSelected = {
   type: "session.model.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; model: ModelRef }
+  data: { sessionID: string; model: ModelRef; previous?: ModelRef }
 }
 
 export type SessionMoved = {
@@ -2535,6 +2536,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -2786,6 +2788,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -3037,6 +3040,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string

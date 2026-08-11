@@ -4,6 +4,7 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 
 export interface Adapter {
+  readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined, never, never>
   readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined, never, never>
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined, never, never>
   readonly getAssistant: (
@@ -59,19 +60,23 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.created": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) => {
-        return adapter.appendMessage(
-          SessionMessage.AgentSelected.make({
-            id: SessionMessage.ID.fromEvent(event.id),
-            type: "agent-switched",
-            metadata: event.metadata,
-            agent: event.data.agent,
-            time: { created: event.created },
-          }),
-        )
+        return Effect.gen(function* () {
+          const previous = event.data.previous ?? (yield* adapter.getAgent())
+          yield* adapter.appendMessage(
+            SessionMessage.AgentSelected.make({
+              id: SessionMessage.ID.fromEvent(event.id),
+              type: "agent-switched",
+              metadata: event.metadata,
+              agent: event.data.agent,
+              previous,
+              time: { created: event.created },
+            }),
+          )
+        })
       },
       "session.model.selected": (event) => {
         return Effect.gen(function* () {
-          const previous = yield* adapter.getModel()
+          const previous = event.data.previous ?? (yield* adapter.getModel())
           yield* adapter.appendMessage(
             SessionMessage.ModelSelected.make({
               id: SessionMessage.ID.fromEvent(event.id),
