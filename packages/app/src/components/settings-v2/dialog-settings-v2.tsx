@@ -19,6 +19,7 @@ import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
 import { useGlobal } from "@/context/global"
+import { ServerConnection } from "@/context/server"
 import "./settings-v2.css"
 
 export const DialogSettings: Component<{
@@ -32,6 +33,8 @@ export const DialogSettings: Component<{
   const tabs = useTabs()
   const serverSync = useServerSync()
   const global = useGlobal()
+  const currentServer = global.servers.list().find((server) => global.ensureServerCtx(server).sync === serverSync())
+  if (currentServer) global.settings.server.set(ServerConnection.key(currentServer))
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   const directory = createMemo(() => {
     const server = global.settings.server.selected()

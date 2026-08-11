@@ -5,7 +5,7 @@ import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { Link } from "../link"
+import { ExternalLink } from "../external-link"
 import { InlineServerSelect } from "./parts/server-select"
 import "./settings-v2.css"
 
@@ -128,12 +128,12 @@ export const SettingsExtensionsV2: Component = () => {
                 <span class="text-13-medium text-v2-text-text-base">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <Link
+                <ExternalLink
                   class="text-13-regular text-v2-text-accent hover:underline"
                   href="https://opencode.ai/docs/skills/"
                 >
                   {language.t("settings.extensions.addSkills")}
-                </Link>
+                </ExternalLink>
               </div>
               <div class="bg-[var(--v2-background-bg-base)] border-[0.5px] border-[var(--v2-border-border-base)] rounded-[8px] pl-4 pr-3 overflow-hidden">
                 <For each={skills()}>

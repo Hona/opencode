@@ -8,7 +8,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
-import { Link } from "./link"
+import { ExternalLink } from "./external-link"
 
 type SkillItem = {
   name: string
@@ -198,9 +198,9 @@ export const ProjectSettingsExtensions: Component = () => {
           <div class="project-settings-extension-section">
             <div class="project-settings-extension-section-header">
               <span>{language.t("project.settings.extensions.added")}</span>
-              <Link class="project-settings-extension-link" href="https://opencode.ai/docs/skills/">
+              <ExternalLink class="project-settings-extension-link" href="https://opencode.ai/docs/skills/">
                 {language.t("settings.extensions.addSkills")}
-              </Link>
+              </ExternalLink>
             </div>
             <Show when={projectSkills().length > 0}>
               <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>

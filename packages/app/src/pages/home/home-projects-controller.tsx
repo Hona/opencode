@@ -62,7 +62,7 @@ export function createHomeProjectsController(home: HomeController) {
         serverManagement.defaults.set(conn ? ServerConnection.key(conn) : null),
       canRemove: (conn: ServerConnection.Any) => serverManagement.connection.canRemove(ServerConnection.key(conn)),
       remove: (conn: ServerConnection.Any) => serverManagement.connection.remove(ServerConnection.key(conn)),
-      edit: (conn: ServerConnection.Any) => dialog.show(() => <DialogServerV2 mode="edit" server={conn} />),
+      edit: (conn: ServerConnection.Http) => dialog.show(() => <DialogServerV2 mode="edit" server={conn} />),
       focus: home.selection.focusServer,
     },
     project: {

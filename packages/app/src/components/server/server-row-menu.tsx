@@ -9,7 +9,7 @@ import { ServerConnection } from "@/context/server"
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
   domain: ServerActionsController
-  onEdit: (server: ServerConnection.Any) => void
+  onEdit: (server: ServerConnection.Http) => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }> = (props) => {
@@ -49,7 +49,7 @@ export const ServerRowMenuView: Component<{
   canDefault: boolean
   isDefault: boolean
   canRemove: boolean
-  onEdit: (server: ServerConnection.Any) => void
+  onEdit: (server: ServerConnection.Http) => void
   onSetDefault: () => void
   onRemoveDefault: () => void
   onRemove: () => void
@@ -57,6 +57,7 @@ export const ServerRowMenuView: Component<{
   onOpenChange?: (open: boolean) => void
 }> = (props) => {
   const builtin = () => ServerConnection.builtin(props.server)
+  const httpServer = () => (props.server.type === "http" ? props.server : undefined)
   return (
     <MenuV2 gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
       <MenuV2.Trigger
@@ -70,7 +71,15 @@ export const ServerRowMenuView: Component<{
         <MenuV2.Content>
           <MenuV2.Group>
             <MenuV2.GroupLabel>{props.labels.server}</MenuV2.GroupLabel>
-            <MenuV2.Item onSelect={() => props.onEdit(props.server)}>{props.labels.edit}</MenuV2.Item>
+            <MenuV2.Item
+              disabled={builtin() || !httpServer()}
+              onSelect={() => {
+                const server = httpServer()
+                if (server) props.onEdit(server)
+              }}
+            >
+              {props.labels.edit}
+            </MenuV2.Item>
             <Show when={props.canDefault && !props.isDefault}>
               <MenuV2.Item onSelect={props.onSetDefault}>{props.labels.default}</MenuV2.Item>
             </Show>

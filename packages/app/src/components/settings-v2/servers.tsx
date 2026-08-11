@@ -42,13 +42,8 @@ export const SettingsServersV2: Component = () => {
     void dialog.push(() => <DialogServerV2 mode="add" />)
   }
 
-  const openEdit = (server: ServerConnection.Any) => {
+  const openEdit = (server: ServerConnection.Http) => {
     void dialog.push(() => <DialogServerV2 mode="edit" server={server} />)
-  }
-
-  const openWslEdit = (key: ServerConnection.Key) => {
-    const item = controller.collection.items().find((candidate) => ServerConnection.key(candidate) === key)
-    if (item) openEdit(item)
   }
 
   return (
@@ -105,7 +100,7 @@ export const SettingsServersV2: Component = () => {
           }
         >
           <SettingsListV2>
-            <WslServerSettings domain={controller} servers={wslServers} onEdit={openWslEdit} />
+            <WslServerSettings domain={controller} servers={wslServers} />
             <For each={filtered()}>
               {(item) => {
                 const key = ServerConnection.key(item)
