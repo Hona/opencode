@@ -91,7 +91,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Build legacy CLI
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         run: ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
@@ -109,7 +109,7 @@ jobs:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: |
@@ -117,7 +117,7 @@ jobs:
             packages/opencode/dist/opencode-linux*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/opencode-windows*
@@ -132,7 +132,7 @@ jobs:
 
   build-node-cli:
     needs: version
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
     strategy:
       fail-fast: false
       matrix:
@@ -184,7 +184,7 @@ jobs:
       - build-cli
       - version
     runs-on: blacksmith-4vcpu-windows-2025
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
+    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2' && github.ref_name != 'beta'
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -282,6 +282,7 @@ jobs:
   build-electron:
     needs:
       - version
+      - build-cli
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
     continue-on-error: false
     env:
@@ -334,6 +335,12 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name == 'beta'
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist
 
       - name: Azure login
         if: runner.os == 'Windows'
@@ -393,6 +400,7 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          RUST_TARGET: ${{ matrix.settings.target }}
 
       - name: Package
         if: needs.version.outputs.release
@@ -496,29 +504,31 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-signed-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'beta'
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'beta'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
@@ -587,3 +597,4 @@ jobs:
           LATEST_YML_DIR: /tmp/latest-yml
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPENCODE_DESKTOP_ONLY: ${{ github.ref_name == 'beta' }}

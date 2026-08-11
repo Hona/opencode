@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: "0 * * * *"
 
+concurrency: beta-sync
+
 jobs:
   sync:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -16,22 +18,33 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          ref: v2
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Setup Git Committer
-        id: setup-git-committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+      - name: Configure git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Install OpenCode
         run: bun i -g opencode-ai
 
       - name: Sync beta branch
+        id: sync
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-        run: bun script/beta.ts
+        run: bun script/beta.ts --prepare
+
+      - name: Setup Git Committer
+        if: steps.sync.outputs.changed == 'true'
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Push beta branch
+        if: steps.sync.outputs.changed == 'true'
+        run: git push origin beta --force --no-verify
