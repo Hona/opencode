@@ -512,11 +512,15 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     })
   }
 
+  let lastConnectedID: string | undefined
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
     const eventType: string = event.type
+    const duplicateConnected =
+      eventType === "server.connected" && event.id !== undefined && event.id === lastConnectedID
+    if (eventType === "server.connected") lastConnectedID = event.id
     if (event.current) session.applyV2(event.current)
     session.apply(event)
     if (event.current?.type === "session.created")
@@ -552,9 +556,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         })
     }
     homeSessions.refresh(event.type)
-    catalog.main({ type: eventType, directory })
-    connection.main({ type: eventType, directory })
-    if (event.current) location.main(event.current, directory)
+    if (!duplicateConnected) {
+      catalog.main({ type: eventType, directory })
+      connection.main({ type: eventType, directory })
+      if (event.current) location.main(event.current, directory)
+    }
 
     if (directory === "global") {
       applyGlobalEvent({

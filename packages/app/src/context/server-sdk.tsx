@@ -13,10 +13,6 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
 
-const isAbortError = (error: unknown) =>
-  error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
-
-const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
 export type ServerEvent = Event & { id?: string; current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
@@ -93,12 +89,6 @@ function currentDeltaFragment(event: CurrentDelta) {
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
   start()
-}
-
-export function requireServerConnected(event: IteratorResult<OpenCodeEvent>) {
-  if (event.done) throw new Error("Event stream disconnected")
-  if (event.value.type !== "server.connected") throw new Error("Event stream did not start with server.connected")
-  return event.value
 }
 
 type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<{ [key: string]: ServerEvent }>>
@@ -192,34 +182,45 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     error?: string
   }>({ status: "connecting", attempt: 0 })
 
-  const connect = async (signal: AbortSignal) => {
+  const connect = async (signal: AbortSignal): Promise<{ error: unknown; connectedAt: number | undefined }> => {
+    let connectedAt: number | undefined
+
     const request = new AbortController()
     const cancel = () => request.abort(signal.reason)
     const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), CONNECT_TIMEOUT_MS)
     signal.addEventListener("abort", cancel, { once: true })
-    const connectedAt = { value: undefined as number | undefined }
 
     try {
       const iterator = eventApi.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
-      const first = requireServerConnected(await iterator.next())
-      if (signal.aborted) return connectedAt.value
+      const first = await iterator.next()
+
+      if (signal.aborted) return { error: undefined, connectedAt }
+      if (first.done) {
+        const error =
+          request.signal.reason instanceof Error ? request.signal.reason : new Error("Event stream disconnected")
+        return { error, connectedAt }
+      }
+      if (first.value.type !== "server.connected")
+        return { error: new Error("Event stream did not start with server.connected"), connectedAt }
 
       clearTimeout(timeout)
-      publish(first)
-      connectedAt.value = Date.now()
+      publish(first.value)
+      connectedAt = Date.now()
       setConnection({ status: "connected", attempt: 0, error: undefined })
 
       let yielded = Date.now()
       while (!signal.aborted) {
         const event = await iterator.next()
-        if (signal.aborted) return connectedAt.value
-        if (event.done) throw new Error("Event stream disconnected")
+        if (signal.aborted) return { error: undefined, connectedAt }
+        if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
         publish(event.value)
         if (Date.now() - yielded < STREAM_YIELD_MS) continue
         yielded = Date.now()
         await wait(0)
       }
-      return connectedAt.value
+      return { error: undefined, connectedAt }
+    } catch (error) {
+      return { error, connectedAt }
     } finally {
       request.abort()
       clearTimeout(timeout)
@@ -227,46 +228,35 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     }
   }
 
-  const beginConnection = (retries: number) => {
-    setConnection({ status: retries === 0 ? "connecting" : "reconnecting", attempt: retries, error: undefined })
-  }
-
-  const prepareReconnect = async (retries: number, error?: string) => {
-    setConnection({ status: "reconnecting", attempt: retries, error })
-    await wait(RECONNECT_DELAY_MS)
-  }
-
   const main = async (active: number) => {
     let retries = 0
     // oxlint-disable-next-line no-unmodified-loop-condition -- stop() changes the lifecycle flags and aborts the active request
     while (!abort.signal.aborted && started && generation === active) {
-      beginConnection(retries)
+      setConnection({ status: retries === 0 ? "connecting" : "reconnecting", attempt: retries, error: undefined })
       attempt = new AbortController()
       const onAbort = () => attempt?.abort()
       abort.signal.addEventListener("abort", onAbort)
-      let connectedAt: number | undefined
-      let failure: string | undefined
-
-      try {
-        connectedAt = await connect(attempt.signal)
-      } catch (error) {
-        if (!isStreamClosed(error, attempt.signal)) {
-          failure = error instanceof Error ? error.message : String(error)
-          console.error("[global-sdk] event stream failed", {
-            url: server.http.url,
-            fetch: eventFetch ? "platform" : "webview",
-            error,
-          })
-        }
-      } finally {
-        abort.signal.removeEventListener("abort", onAbort)
-        attempt = undefined
-      }
+      const result = await connect(attempt.signal)
+      abort.signal.removeEventListener("abort", onAbort)
+      attempt = undefined
 
       if (abort.signal.aborted || !started || generation !== active) return
-      if (connectedAt !== undefined && Date.now() - connectedAt >= 1_000) retries = 0
-      retries++
-      await prepareReconnect(retries, failure)
+      if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) retries = 0
+      retries += 1
+      const message =
+        result.error === undefined
+          ? undefined
+          : result.error instanceof Error
+            ? result.error.message
+            : String(result.error)
+      console.info("[global-sdk] event stream disconnected", {
+        url: server.http.url,
+        fetch: eventFetch ? "platform" : "webview",
+        attempt: retries,
+        error: message,
+      })
+      setConnection({ status: "reconnecting", attempt: retries, error: message })
+      await wait(RECONNECT_DELAY_MS)
     }
   }
 

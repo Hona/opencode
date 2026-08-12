@@ -144,5 +144,9 @@ function json(route: Route, body: unknown, status = 200) {
 }
 
 function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
+  return route.fulfill({
+    status: 200,
+    contentType: "text/event-stream",
+    body: 'data: {"id":"evt_mock_connected","type":"server.connected","data":{}}\n\n',
+  })
 }
