@@ -54,7 +54,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { decode64 } from "@/utils/base64"
 
-import { TargetSessionRouteContent } from "@/pages/session"
+import { SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -93,11 +93,16 @@ function TargetServerRoute(props: ParentProps) {
   )
 }
 
-const TargetSessionRoute = () => (
-  <TargetServerRoute>
-    <TargetSessionRouteContent />
-  </TargetServerRoute>
-)
+function TargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <TargetServerRoute>
+        <TargetSessionRouteContent />
+      </TargetServerRoute>
+    </SessionRouteErrorBoundary>
+  )
+}
 
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
 // server via ServerKey, then provide the server-scoped shell for that server.
