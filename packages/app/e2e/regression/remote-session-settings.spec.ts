@@ -13,6 +13,8 @@ const sessionB = session("ses_server_b", directoryB, "Server B session")
 
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
   await mockServers(page, permissionRequests)
   await configureServers(page)
 
@@ -46,6 +48,7 @@ test("session settings use the remote server context", async ({ page }) => {
 test("auto-accept responds for an unfocused server session", async ({ page }) => {
   const permissionRequests: string[] = []
   const permissionResponses: PermissionResponse[] = []
+  await installSseTransport(page, { server: serverB })
   const transport = await installSseTransport<{ directory: string; payload: Record<string, unknown> }>(page, {
     server: serverA,
     retry: 20,
@@ -181,7 +184,6 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, true)
     }
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/provider")
       return json(route, {
         location: { directory },
@@ -323,13 +325,5 @@ function json(route: Route, body: unknown, status = 200) {
     contentType: "application/json",
     headers: { "access-control-allow-origin": "*" },
     body: JSON.stringify(body),
-  })
-}
-
-function sse(route: Route) {
-  return route.fulfill({
-    status: 200,
-    contentType: "text/event-stream",
-    body: 'data: {"id":"evt_mock_connected","type":"server.connected","data":{}}\n\n',
   })
 }

@@ -4,16 +4,18 @@ import type { ServerConnectionStatus } from "../server-sdk"
 export function createConnectionSync(input: {
   status: Accessor<ServerConnectionStatus>
   invalidate: () => void
-  connected: () => void
+  connected: (info: { reconnect: boolean }) => void
 }) {
   createEffect(() => {
     if (input.status() === "connected") return
     input.invalidate()
   })
 
+  let connectedOnce = false
   function main(event: { type: string; directory: string }) {
     if (event.directory !== "global" || event.type !== "server.connected") return
-    input.connected()
+    input.connected({ reconnect: connectedOnce })
+    connectedOnce = true
   }
 
   return { main }

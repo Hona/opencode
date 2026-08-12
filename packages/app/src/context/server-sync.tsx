@@ -358,8 +358,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const connection = createConnectionSync({
     status: serverSDK.connection.status,
     invalidate: session.invalidate,
-    connected: () => {
-      void session.refreshPinned()
+    connected: (info) => {
+      if (info.reconnect) void session.refreshPinned()
       if (activeSessionsQuery.data !== undefined && !activeSessionsQuery.isFetching) void activeSessionsQuery.refetch()
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
       for (const directory of Object.keys(children.children)) {
@@ -512,15 +512,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     })
   }
 
-  let lastConnectedID: string | undefined
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
     const eventType: string = event.type
-    const duplicateConnected =
-      eventType === "server.connected" && event.id !== undefined && event.id === lastConnectedID
-    if (eventType === "server.connected") lastConnectedID = event.id
     if (event.current) session.applyV2(event.current)
     session.apply(event)
     if (event.current?.type === "session.created")
@@ -556,11 +552,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         })
     }
     homeSessions.refresh(event.type)
-    if (!duplicateConnected) {
-      catalog.main({ type: eventType, directory })
-      connection.main({ type: eventType, directory })
-      if (event.current) location.main(event.current, directory)
-    }
+    catalog.main({ type: eventType, directory })
+    connection.main({ type: eventType, directory })
+    if (event.current) location.main(event.current, directory)
 
     if (directory === "global") {
       applyGlobalEvent({
