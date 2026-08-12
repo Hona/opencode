@@ -273,6 +273,9 @@ export function createServerSession(
         ...Object.entries(data.question)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
+        ...Object.entries(data.form)
+          .filter(([, items]) => items.length > 0)
+          .map(([sessionID]) => sessionID),
         ...Object.entries(data.session_status)
           .filter(([, status]) => status.type !== "idle")
           .map(([sessionID]) => sessionID),
@@ -515,6 +518,9 @@ export function createServerSession(
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
       ...Object.entries(data.question)
+        .filter(([, items]) => items.length > 0)
+        .map(([sessionID]) => sessionID),
+      ...Object.entries(data.form)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
       ...Object.entries(data.session_status)
