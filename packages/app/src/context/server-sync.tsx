@@ -599,6 +599,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (eventType === "mcp.status.changed") void queryClient.invalidateQueries(queryOptionsApi.mcp(key))
     if (eventType === "mcp.resources.changed") void queryClient.invalidateQueries(queryOptionsApi.mcpResources(key))
     const [store, setStore] = existing
+    if (eventType === "agent.updated")
+      void queryClient
+        .fetchQuery(queryOptionsApi.agents(key))
+        .then((data) => setStore("agent", data))
+        .catch(() => {})
     applyDirectoryEvent({
       event,
       directory,

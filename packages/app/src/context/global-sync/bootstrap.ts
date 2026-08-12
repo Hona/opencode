@@ -314,7 +314,7 @@ export async function bootstrapDirectory(input: {
     () => Promise.resolve(input.loadSessions(input.directory)),
     () =>
       input.queryClient
-        .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.api.agent))
+        .ensureQueryData(loadAgentsQuery(input.scope, directoryKey(input.directory), input.api.agent))
         .then((data) => input.setStore("agent", data)),
     !seededProject &&
       (() =>
@@ -324,14 +324,17 @@ export async function bootstrapDirectory(input: {
     !seededPath &&
       (() =>
         input.queryClient
-          .ensureQueryData(loadPathQuery(input.scope, input.directory, input.api.location))
+          .ensureQueryData(loadPathQuery(input.scope, directoryKey(input.directory), input.api.location))
           .then((data) => {
             const next = projectID(data.directory ?? input.directory, input.global.project)
             if (next) input.setStore("project", next)
           })),
     input.mcp &&
       (() => loadCommands(input.directory, input.api.command).then((commands) => input.setStore("command", commands))),
-    () => input.queryClient.fetchQuery(loadReferencesQuery(input.scope, input.directory, input.api.reference)),
+    () =>
+      input.queryClient.fetchQuery(
+        loadReferencesQuery(input.scope, directoryKey(input.directory), input.api.reference),
+      ),
     () =>
       retry(() =>
         input.api.permission.request
@@ -401,9 +404,11 @@ export async function bootstrapDirectory(input: {
           }),
       ),
     () => Promise.resolve(input.loadSessions(input.directory)),
-    input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.api.mcp))),
     input.mcp &&
-      (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp))),
+      (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, directoryKey(input.directory), input.api.mcp))),
+    input.mcp &&
+      (() =>
+        input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, directoryKey(input.directory), input.api.mcp))),
     () =>
       input.queryClient
         .fetchQuery(loadProvidersQuery(input.scope, directoryKey(input.directory), input.api))
