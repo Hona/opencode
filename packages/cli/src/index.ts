@@ -13,6 +13,13 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error) => {
+    if ("code" in error && error.code === "EPIPE") return
+    throw error
+  })
+}
+
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
   acp: () => import("./commands/handlers/acp"),
