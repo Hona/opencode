@@ -591,7 +591,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       event.current?.type === "session.moved" ||
       // event.current?.type === "session.archived" ||
       event.current?.type === "session.forked" ||
-      eventType === "command.updated" ||
       eventType === "config.updated" ||
       eventType === "agent.updated"
     )
@@ -604,6 +603,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         .fetchQuery(queryOptionsApi.agents(key))
         .then((data) => setStore("agent", data))
         .catch(() => {})
+    if (eventType === "command.updated")
+      void loadCommands(directory, serverSDK.api.command)
+        .then((commands) => setStore("command", commands))
+        .catch(() => {})
+    if (eventType === "project.directories.updated") void bootstrap.refetch()
     applyDirectoryEvent({
       event,
       directory,
