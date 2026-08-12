@@ -13,6 +13,7 @@ import {
   loadAgentsQuery,
   loadCommands,
   loadGlobalConfigQuery,
+  loadIntegrationsQuery,
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
@@ -179,6 +180,7 @@ function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
     globalConfig: () => loadGlobalConfigQuery(scope),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
+    integrations: (directory: PathKey | null) => loadIntegrationsQuery(scope, directory, serverAPI.integration),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent),
     references: (directory: PathKey) => loadReferencesQuery(scope, directory, serverAPI.reference),
@@ -338,14 +340,20 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     translate: language.t,
     queryOptions: queryOptionsApi,
     global: {
-      provider: globalStore.provider,
+      get provider() {
+        return globalStore.provider
+      },
     },
   })
   const catalog = createCatalogSync({
     scope: serverSDK.scope,
     queryClient,
     active: () => Object.keys(children.children).filter(children.active).map(pathKey),
-    load: (directory) => queryClient.fetchQuery(queryOptionsApi.providers(directory)).then(() => undefined),
+    load: (directory) =>
+      Promise.all([
+        queryClient.fetchQuery(queryOptionsApi.providers(directory)),
+        queryClient.fetchQuery(queryOptionsApi.integrations(directory)),
+      ]).then(() => undefined),
   })
   const connection = createConnectionSync({
     status: serverSDK.connection.status,

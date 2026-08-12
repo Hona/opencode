@@ -6,6 +6,8 @@ import type {
   CommandInfo,
   CommandListInput,
   CommandListOutput,
+  IntegrationListInput,
+  IntegrationListOutput,
   LocationGetInput,
   LocationGetOutput,
   PermissionRequest,
@@ -26,7 +28,7 @@ import { batch } from "solid-js"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import type { ServerSession } from "../server-session"
-import { cmp, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
+import { cmp, directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
@@ -221,6 +223,10 @@ type CommandListApi = {
   readonly list: (input?: CommandListInput) => Promise<CommandListOutput>
 }
 
+type IntegrationListApi = {
+  readonly list: (input?: IntegrationListInput) => Promise<IntegrationListOutput>
+}
+
 type ReferenceListApi = {
   readonly list: (input?: ReferenceListInput) => Promise<ReferenceListOutput>
 }
@@ -229,6 +235,13 @@ export const loadAgentsQuery = (scope: ServerScope, directory: string, sdk: Agen
   queryOptions({
     queryKey: [scope, directory, "agents"],
     queryFn: () => retry(() => sdk.list({ location: { directory } }).then((result) => normalizeAgentList(result.data))),
+  })
+
+export const loadIntegrationsQuery = (scope: ServerScope, directory: string | null, sdk: IntegrationListApi) =>
+  queryOptions({
+    queryKey: [scope, directory, "integrations"] as const,
+    queryFn: () =>
+      retry(() => sdk.list(directory ? { location: { directory } } : undefined).then((result) => result.data)),
   })
 
 export const loadCommands = (directory: string, api: CommandListApi): Promise<CommandInfo[]> =>
@@ -392,14 +405,16 @@ export async function bootstrapDirectory(input: {
     input.mcp &&
       (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp))),
     () =>
-      input.queryClient.fetchQuery(loadProvidersQuery(input.scope, input.directory, input.api)).catch((err) => {
-        const project = getFilename(input.directory)
-        showToast({
-          variant: "error",
-          title: input.translate("toast.project.reloadFailed.title", { project }),
-          description: formatServerError(err, input.translate),
-        })
-      }),
+      input.queryClient
+        .fetchQuery(loadProvidersQuery(input.scope, directoryKey(input.directory), input.api))
+        .catch((err) => {
+          const project = getFilename(input.directory)
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(err, input.translate),
+          })
+        }),
   ].filter(Boolean) as (() => Promise<any>)[]
 
   await waitForPaint()

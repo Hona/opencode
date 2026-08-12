@@ -20,25 +20,16 @@ import { pathKey } from "@/utils/path-key"
 export function createPromptInputController(input: {
   sessionKey: Accessor<string>
   sessionID: Accessor<string | undefined>
-  queryOptions: Pick<QueryOptionsApi, "agents" | "providers">
+  queryOptions: Pick<QueryOptionsApi, "agents">
   model?: ModelSelection
 }) {
   const layout = useLayout()
   const local = useLocal()
   const sdk = useSDK()
-  const serverSDK = useServerSDK()
   const sync = useSync()
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
-  const globalProvidersQuery = createQuery(() => ({
-    ...input.queryOptions.providers(null),
-    enabled: serverSDK().connection.status() === "connected",
-  }))
-  const providersQuery = createQuery(() => ({
-    ...input.queryOptions.providers(pathKey(sdk().directory)),
-    enabled: serverSDK().connection.status() === "connected",
-  }))
 
   return createMemo<PromptInputControls>(() => {
     return {
@@ -53,10 +44,7 @@ export function createPromptInputController(input: {
       model: {
         selection: input.model ?? local.model,
         paid: providers.paid().length > 0,
-        loading:
-          (local.agent.visible() && agentsQuery.isLoading) ||
-          !providersQuery.isSuccess ||
-          !globalProvidersQuery.isSuccess,
+        loading: (local.agent.visible() && agentsQuery.isLoading) || !providers.ready(),
       },
       session: {
         id: input.sessionID(),

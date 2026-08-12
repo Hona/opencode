@@ -219,13 +219,14 @@ export function createChildStoreManager(input: {
             projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
-              return instanceQueriesEnabled() && providerQuery.data !== undefined
+              return instanceQueriesEnabled() && (providerQuery.isSuccess || providerQuery.isRefetchError)
             },
             get provider() {
               const EMPTY = { all: new Map(), connected: [], default: {} }
-              if (providerQuery.isLoading) return EMPTY
-              if (providerQuery.data?.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
-              return providerQuery.data ?? EMPTY
+              if (!providerQuery.isSuccess && !providerQuery.isRefetchError) return EMPTY
+              const provider = providerQuery.data
+              if (provider.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
+              return provider
             },
             config: {},
             get path() {
