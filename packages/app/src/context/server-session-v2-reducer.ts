@@ -8,6 +8,7 @@ export type V2SessionReduction = {
   sessionID: string
   messages: SessionMessageInfo[]
   touched: string[]
+  removed?: string[]
   missing?: string
 }
 
@@ -28,13 +29,38 @@ export function createV2SessionReducer() {
     switch (event.type) {
       case "session.input.admitted":
         pending.set(key(sessionID, event.data.inputID), event.data.input)
-        return result([...source])
+        if (event.data.input.type === "user")
+          return append({
+            id: event.data.inputID,
+            type: "user",
+            metadata: event.data.input.data.metadata,
+            text: event.data.input.data.text,
+            files: event.data.input.data.files,
+            agents: event.data.input.data.agents,
+            time: { created: event.created },
+          })
+        return append({
+          id: event.data.inputID,
+          type: "synthetic",
+          metadata: event.data.input.data.metadata,
+          text: event.data.input.data.text,
+          description: event.data.input.data.description,
+          time: { created: event.created },
+        })
       case "session.input.cancelled":
         pending.delete(key(sessionID, event.data.inputID))
-        return
+        return {
+          ...result(source.filter((item) => item.id !== event.data.inputID)),
+          removed: source.some((item) => item.id === event.data.inputID) ? [event.data.inputID] : [],
+        }
       case "session.input.promoted": {
         const input = pending.get(key(sessionID, event.data.inputID))
         pending.delete(key(sessionID, event.data.inputID))
+        const existing = source.find((item) => item.id === event.data.inputID)
+        if (existing) {
+          const promoted = { ...existing, time: { ...existing.time, created: event.created } }
+          return result([...source.filter((item) => item.id !== existing.id), promoted], [existing.id])
+        }
         if (!input) return { ...result([...source]), missing: event.data.inputID }
         if (input.type === "user")
           return append({
@@ -83,6 +109,23 @@ export function createV2SessionReducer() {
             )?.model,
           time: { created: event.created },
         })
+      case "session.instructions.updated": {
+        const instructions = event.metadata?.instructions
+        if (
+          typeof instructions === "object" &&
+          instructions !== null &&
+          "initial" in instructions &&
+          instructions.initial === true
+        )
+          return
+        return append({
+          id: messageID(event.id),
+          type: "system",
+          text: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+          metadata: event.metadata,
+          time: { created: event.created },
+        })
+      }
       case "session.synthetic":
         return append({
           id: messageID(event.id),

@@ -26,12 +26,19 @@ export function createPromptInputController(input: {
   const layout = useLayout()
   const local = useLocal()
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
   const sync = useSync()
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
-  const globalProvidersQuery = createQuery(() => input.queryOptions.providers(null))
-  const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
+  const globalProvidersQuery = createQuery(() => ({
+    ...input.queryOptions.providers(null),
+    enabled: serverSDK().connection.status() === "connected",
+  }))
+  const providersQuery = createQuery(() => ({
+    ...input.queryOptions.providers(pathKey(sdk().directory)),
+    enabled: serverSDK().connection.status() === "connected",
+  }))
 
   return createMemo<PromptInputControls>(() => {
     return {
@@ -48,8 +55,8 @@ export function createPromptInputController(input: {
         paid: providers.paid().length > 0,
         loading:
           (local.agent.visible() && agentsQuery.isLoading) ||
-          providersQuery.isLoading ||
-          globalProvidersQuery.isLoading,
+          !providersQuery.isSuccess ||
+          !globalProvidersQuery.isSuccess,
       },
       session: {
         id: input.sessionID(),

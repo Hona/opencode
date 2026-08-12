@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
+import {
+  adaptServerEvent,
+  coalesceServerEvents,
+  enqueueServerEvent,
+  requireServerConnected,
+  resumeStreamAfterPageShow,
+} from "./server-sdk"
 
 describe("resumeStreamAfterPageShow", () => {
   test("restarts a stream only after a back-forward cache restore", () => {
@@ -41,6 +47,26 @@ describe("adaptServerEvent", () => {
       },
       current,
     })
+  })
+})
+
+describe("requireServerConnected", () => {
+  test("accepts the required event-stream handshake", () => {
+    const event = { type: "server.connected", id: "evt_1", data: {} } as Extract<
+      OpenCodeEvent,
+      { type: "server.connected" }
+    >
+    expect(requireServerConnected({ done: false, value: event })).toBe(event)
+  })
+
+  test("rejects a closed stream or an invalid first event", () => {
+    expect(() => requireServerConnected({ done: true, value: undefined })).toThrow("Event stream disconnected")
+    expect(() =>
+      requireServerConnected({
+        done: false,
+        value: { type: "catalog.updated", id: "evt_1", data: {} } as OpenCodeEvent,
+      }),
+    ).toThrow("Event stream did not start with server.connected")
   })
 })
 
