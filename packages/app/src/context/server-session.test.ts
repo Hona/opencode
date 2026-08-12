@@ -355,11 +355,11 @@ describe("server session", () => {
     apply({
       id: "evt_admitted",
       created: 1,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       data: {
         sessionID: "child",
-        inputID: "msg_input",
-        input: { type: "user", delivery: "steer", data: { text: "hello" } },
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
       },
     })
     apply({
@@ -377,8 +377,8 @@ describe("server session", () => {
     apply({
       id: "evt_cancelled",
       created: 3,
-      type: "session.input.cancelled",
-      data: { sessionID: "child", inputID: "msg_input" },
+      type: "session.inbox.cancelled",
+      data: { sessionID: "child", inboxID: "msg_input" },
     })
     apply({
       id: "evt_form_done",
@@ -401,11 +401,11 @@ describe("server session", () => {
     ctx.store.applyV2({
       id: "evt_admitted",
       created: 1,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       data: {
         sessionID: "child",
-        inputID: "msg_input",
-        input: { type: "user", delivery: "queue", data: { text: "new" } },
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "queue", payload: { text: "new" } },
       },
     } as OpenCodeEvent)
     response.resolve({ pending: [], forms: [] })

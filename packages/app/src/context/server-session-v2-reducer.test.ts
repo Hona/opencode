@@ -18,18 +18,18 @@ describe("v2 session reducer", () => {
     apply({
       ...base,
       id: "evt_admitted",
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       data: {
         sessionID: "ses_1",
-        inputID: "msg_user",
-        input: { type: "user", delivery: "steer", data: { text: "hello" } },
+        inboxID: "msg_user",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
       },
     })
     apply({
       ...base,
       id: "evt_promoted",
-      type: "session.input.promoted",
-      data: { sessionID: "ses_1", inputID: "msg_user" },
+      type: "session.inbox.delivered",
+      data: { sessionID: "ses_1", inboxID: "msg_user" },
     })
     apply({
       ...base,
@@ -203,8 +203,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 
@@ -241,11 +241,11 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_admitted",
-        type: "session.input.admitted",
+        type: "session.inbox.enqueued",
         data: {
           sessionID: "ses_1",
-          inputID: "msg_user",
-          input: { type: "user", delivery: "queue", data: { text: "cancel me" } },
+          inboxID: "msg_user",
+          item: { type: "user", delivery: "queue", payload: { text: "cancel me" } },
         },
       }),
     )
@@ -254,8 +254,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_cancelled",
-        type: "session.input.cancelled",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.cancelled",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
     const result = reducer.reduce(
@@ -263,8 +263,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 
@@ -278,11 +278,11 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_admitted",
-        type: "session.input.admitted",
+        type: "session.inbox.enqueued",
         data: {
           sessionID: "ses_1",
-          inputID: "msg_user",
-          input: { type: "user", delivery: "queue", data: { text: "steer me" } },
+          inboxID: "msg_user",
+          item: { type: "user", delivery: "queue", payload: { text: "steer me" } },
         },
       }),
     )
@@ -291,8 +291,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_steered",
-        type: "session.input.steered",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivery.changed",
+        data: { sessionID: "ses_1", inboxID: "msg_user", delivery: "steer" },
       }),
     )
     reducer.reduce(
@@ -300,8 +300,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_queued",
-        type: "session.input.queued",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivery.changed",
+        data: { sessionID: "ses_1", inboxID: "msg_user", delivery: "queue" },
       }),
     )
 
@@ -310,8 +310,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 

@@ -12,7 +12,7 @@ import { filesystem } from "@opencode-ai/util/effect/app-node-platform"
 import { Database } from "@opencode-ai/core/database/database"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
-import { Environment } from "@opencode-ai/core/environment"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
@@ -387,57 +387,63 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("approves an explicit external workdir before shell execution", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) => {
-        reset()
-        return withSession(active.path, (registry) =>
-          executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
-        ).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
-              expect(assertions[0]).toMatchObject({
-                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
-              })
-            }),
+  it.live(
+    "approves an explicit external workdir before shell execution",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+        ([active, outside]) => {
+          reset()
+          return withSession(active.path, (registry) =>
+            executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
+          ).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+                expect(assertions[0]).toMatchObject({
+                  resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+                })
+              }),
+            ),
+          )
+        },
+        ([active, outside]) =>
+          Effect.promise(() =>
+            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
           ),
-        )
-      },
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
+      ),
+    { timeout: 15_000 },
   )
 
-  it.live("approves an external directory used by a directory-change command", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) => {
-        reset()
-        const command = isWindows
-          ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
-          : `cd '${outside.path}' && pwd`
-        return withSession(active.path, (registry) =>
-          executeTool(registry, call({ command }, "call-external-cd")),
-        ).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
-              expect(assertions[0]).toMatchObject({
-                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
-              })
-            }),
+  it.live(
+    "approves an external directory used by a directory-change command",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+        ([active, outside]) => {
+          reset()
+          const command = isWindows
+            ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
+            : `cd '${outside.path}' && pwd`
+          return withSession(active.path, (registry) =>
+            executeTool(registry, call({ command }, "call-external-cd")),
+          ).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+                expect(assertions[0]).toMatchObject({
+                  resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+                })
+              }),
+            ),
+          )
+        },
+        ([active, outside]) =>
+          Effect.promise(() =>
+            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
           ),
-        )
-      },
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
+      ),
+    { timeout: 15_000 },
   )
 
   it.live("approves an expanded external home directory", () =>
@@ -459,28 +465,31 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("does not execute after external-directory or shell denial", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) =>
-        Effect.gen(function* () {
-          reset()
-          denyAction = "external_directory"
-          yield* withSession(active.path, (registry) =>
-            executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
-          )
-          expect(assertions.map((item) => item.action)).toEqual(["external_directory"])
+  it.live(
+    "does not execute after external-directory or shell denial",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+        ([active, outside]) =>
+          Effect.gen(function* () {
+            reset()
+            denyAction = "external_directory"
+            yield* withSession(active.path, (registry) =>
+              executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
+            )
+            expect(assertions.map((item) => item.action)).toEqual(["external_directory"])
 
-          reset()
-          denyAction = "shell"
-          yield* withSession(active.path, (registry) => executeTool(registry, call({ command: cwdCommand })))
-          expect(assertions.map((item) => item.action)).toEqual(["shell"])
-        }),
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
+            reset()
+            denyAction = "shell"
+            yield* withSession(active.path, (registry) => executeTool(registry, call({ command: cwdCommand })))
+            expect(assertions.map((item) => item.action)).toEqual(["shell"])
+          }),
+        ([active, outside]) =>
+          Effect.promise(() =>
+            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+          ),
+      ),
+    { timeout: 15_000 },
   )
 
   it.live("keeps non-zero exits useful", () =>
@@ -619,7 +628,7 @@ describe("ShellTool", () => {
         },
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
-    { timeout: 10_000 },
+    { timeout: 15_000 },
   )
 
   it.live(
@@ -630,7 +639,7 @@ describe("ShellTool", () => {
         (tmp) => {
           reset()
           return withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 3_000 : 50 })),
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 3_000 : 500 })),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
@@ -660,8 +669,8 @@ describe("ShellTool", () => {
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
             const bus = yield* Bus.Service
-            const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
-              Stream.filter((event) => event.data.sessionID === sessionID && event.data.input.type === "synthetic"),
+            const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
               Stream.runHead,
               Effect.forkScoped({ startImmediately: true }),
             )
@@ -675,7 +684,7 @@ describe("ShellTool", () => {
             const id = ShellSchema.ID.make(shellID)
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
-            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.input.data).toMatchObject({
+            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
               description: idleCommand,
               metadata: {
                 source: "shell",

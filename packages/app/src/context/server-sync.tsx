@@ -208,7 +208,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const hydrateSessionState = async (sessionID: string) => {
     await session.hydrateTransient(sessionID, async () => {
       const [pending, forms] = await Promise.all([
-        serverSDK.api.session.pending.list({ sessionID }),
+        serverSDK.api.session.inbox.list({ sessionID }),
         serverSDK.api.form.list({ sessionID }),
       ])
       return { pending, forms }

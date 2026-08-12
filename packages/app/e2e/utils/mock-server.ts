@@ -391,7 +391,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/form\/[^/]+\/(reply|cancel)$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (/^\/api\/session\/[^/]+\/pending$/.test(path) && route.request().method() === "GET")
+    if (/^\/api\/session\/[^/]+\/inbox$/.test(path) && route.request().method() === "GET")
       return json(route, { data: [] })
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })

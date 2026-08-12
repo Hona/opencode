@@ -1,12 +1,13 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { retry } from "@opencode-ai/core/util/retry"
 import type {
   FormInfo,
   OpenCodeEvent,
   SessionApi,
   SessionInfo,
+  SessionInboxInfo,
   SessionMessageInfo,
-  SessionPendingInfo,
 } from "@opencode-ai/client/promise"
 import type { Message, Part, Todo } from "@/types"
 import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
@@ -199,7 +200,7 @@ export function createServerSession(
     permission: {} as Record<string, PermissionRequest[]>,
     question: {} as Record<string, QuestionRequest[]>,
     form: {} as Record<string, FormInfo[]>,
-    pending: {} as Record<string, SessionPendingInfo[]>,
+    pending: {} as Record<string, SessionInboxInfo[]>,
     input: {} as Record<string, string[]>,
     message: {} as Record<string, Message[]>,
     session_message: {} as Record<string, SessionMessageInfo[]>,
@@ -926,47 +927,49 @@ export function createServerSession(
       setData("form", event.data.sessionID, (forms) => forms?.filter((form) => form.id !== event.data.id))
       return
     }
+    if (event.type === "project.directory.resolved") {
+      Object.values(data.info).forEach((info) => {
+        if (!info) return
+        const adopted = ProjectDirectories.adopt(
+          { projectID: info.projectID, directory: info.location.directory },
+          event.data,
+        )
+        if (adopted) remember({ ...info, ...adopted })
+      })
+      return
+    }
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     if (
-      event.type === "session.input.admitted" ||
-      event.type === "session.input.steered" ||
-      event.type === "session.input.queued" ||
-      event.type === "session.input.cancelled" ||
-      event.type === "session.input.promoted" ||
-      event.type === "session.compaction.admitted" ||
+      event.type === "session.inbox.enqueued" ||
+      event.type === "session.inbox.delivery.changed" ||
+      event.type === "session.inbox.cancelled" ||
+      event.type === "session.inbox.delivered" ||
       event.type === "session.compaction.started" ||
       event.type === "session.compaction.ended" ||
       event.type === "session.compaction.failed"
     )
       transientRevision.set(sessionID, (transientRevision.get(sessionID) ?? 0) + 1)
-    if (event.type === "session.input.admitted") {
+    if (event.type === "session.inbox.enqueued") {
       const current = data.pending[sessionID] ?? []
-      if (!current.some((item) => item.id === event.data.inputID))
+      if (!current.some((item) => item.id === event.data.inboxID))
         setData("pending", sessionID, [
           ...current,
-          { id: event.data.inputID, sessionID, timeCreated: event.created, ...event.data.input },
+          { id: event.data.inboxID, sessionID, timeCreated: event.created, ...event.data.item },
         ])
-      if (!data.input[sessionID]?.includes(event.data.inputID))
-        setData("input", sessionID, [...(data.input[sessionID] ?? []), event.data.inputID])
+      if (!data.input[sessionID]?.includes(event.data.inboxID))
+        setData("input", sessionID, [...(data.input[sessionID] ?? []), event.data.inboxID])
     }
-    if (event.type === "session.input.steered" || event.type === "session.input.queued")
+    if (event.type === "session.inbox.delivery.changed")
       setData("pending", sessionID, (items) =>
         items?.map((item) =>
-          item.id === event.data.inputID && item.type !== "compaction"
-            ? { ...item, delivery: event.type === "session.input.steered" ? "steer" : "queue" }
-            : item,
+          item.id === event.data.inboxID ? { ...item, delivery: event.data.delivery } : item,
         ),
       )
-    if (event.type === "session.input.cancelled" || event.type === "session.input.promoted") {
-      setData("pending", sessionID, (items) => items?.filter((item) => item.id !== event.data.inputID))
-      setData("input", sessionID, (items) => items?.filter((id) => id !== event.data.inputID))
+    if (event.type === "session.inbox.cancelled" || event.type === "session.inbox.delivered") {
+      setData("pending", sessionID, (items) => items?.filter((item) => item.id !== event.data.inboxID))
+      setData("input", sessionID, (items) => items?.filter((id) => id !== event.data.inboxID))
     }
-    if (event.type === "session.compaction.admitted")
-      setData("pending", sessionID, [
-        ...(data.pending[sessionID] ?? []).filter((item) => item.id !== event.data.inputID),
-        { id: event.data.inputID, sessionID, timeCreated: event.created, type: "compaction" },
-      ])
     if (event.type === "session.compaction.started" || event.type === "session.compaction.failed")
       setData("pending", sessionID, (items) => items?.filter((item) => item.id !== event.data.inputID))
     if (event.type === "session.compaction.ended")
@@ -1351,7 +1354,7 @@ export function createServerSession(
     sync,
     async hydrateTransient(
       sessionID: string,
-      load: () => Promise<{ pending: SessionPendingInfo[]; forms: FormInfo[] }>,
+      load: () => Promise<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>,
     ) {
       const revision = transientRevision.get(sessionID) ?? 0
       const result = await load()

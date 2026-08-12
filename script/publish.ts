@@ -15,7 +15,9 @@ const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
     absolute: true,
   }),
-).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
+).then((arr) =>
+  arr.filter((x) => !x.includes("node_modules") && !x.includes("dist") && !x.endsWith("/packages/drive/package.json")),
+)
 
 async function prepareReleaseFiles() {
   for (const file of pkgjsons) {
@@ -62,6 +64,9 @@ if (Script.channel !== "beta") {
 
   console.log("\n=== plugin ===\n")
   await $`bun ./packages/plugin/script/publish.ts`
+
+  console.log("\n=== core ===\n")
+  await $`bun ./packages/core/script/publish.ts`
 
   console.log("\n=== ui ===\n")
   await $`bun ./packages/ui/script/publish.ts`

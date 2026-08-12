@@ -250,6 +250,67 @@ sequenceDiagram
   expect(diagram.scrollX).toBeGreaterThan(0)
 })
 
+test("keeps surrounding Markdown anchored around a wide flowchart", async () => {
+  const testRenderer = await createTestRenderer({ width: 100, height: 40 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-wide-flowchart",
+    content: `## Architecture — the profile is three mechanisms
+
+\`\`\`mermaid
+flowchart TB
+  subgraph consumer["Durable Object"]
+    DO["ServerWorkerd.create({ storage, config })"]
+  end
+  DO --> SO["serverOptions()<br/><i>option flags</i>"]
+  DO --> RP["replacements()<br/><i>layer overrides</i>"]
+  SO -->|"fs: watcher/fff off<br/>events.persist: true<br/>mcp.stdio: false<br/>config as string"| SF["ServerFetch.make(options, { overrides })"]
+  RP -->|"Database → DO-SQLite<br/>Shell/FS/Pty → typed-unavailable<br/>Snapshot/Vcs → no-op<br/>plugins → precompiled only"| SF
+  SF --> GRAPH["LayerNode graph<br/>(core builds normally,<br/>swapped nodes substituted)"]
+  subgraph bundle["3rd mechanism: bundle conditions (build time)"]
+    COND["--conditions=workerd<br/>pty / fff / photon / shell-parser<br/>native modules → inert stubs<br/>#global-roots → workerd path rooting"]
+  end
+  COND -.->|import resolution| GRAPH
+\`\`\``,
+    syntaxStyle,
+    treeSitterClient,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const frame = testRenderer.captureCharFrame()
+  const heading = frame.split("\n").find((line) => line.includes("Architecture"))
+  const diagram = markdown.getChildren().find((child) => child instanceof CodeRenderable) as CodeRenderable
+  expect(heading?.trimStart()).toStartWith("Architecture")
+  expect(diagram.scrollX).toBe(0)
+  expect(frame).toContain("Durable Object")
+  expect(frame).not.toMatch(/<\/?i>|<br|events persist|mcp stdio/)
+})
+
+test("folds a horizontal flowchart to fit the Markdown viewport", async () => {
+  const testRenderer = await createTestRenderer({ width: 160, height: 30 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-horizontal-flowchart",
+    content: `\`\`\`mermaid
+flowchart LR
+  A["per TURN<br/>fresh sandbox each turn"] --- B["per SESSION/thread<br/>one sandbox per Slack thread"] --- C["per REPO<br/>threads share a sandbox"] --- D["GLOBAL registry<br/>(upstream today: hardwired at boot)"]
+\`\`\``,
+    syntaxStyle,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const diagram = markdown.getChildren()[0] as CodeRenderable
+  expect(diagram.scrollWidth).toBeLessThanOrEqual(diagram.width)
+  expect(diagram.scrollWidth).toBeLessThanOrEqual(120)
+  expect(testRenderer.captureCharFrame()).toContain("GLOBAL registry")
+})
+
 test("renders a Mermaid state fence inside MarkdownRenderable", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer
