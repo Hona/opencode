@@ -8,7 +8,6 @@ import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -19,6 +18,7 @@ import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
 import { pathKey } from "@/utils/path-key"
 import { SettingsListV2 } from "./parts/list"
+import { InlineServerSelect } from "./parts/server-select"
 import { useTabs } from "@/context/tabs"
 import { usePlatform } from "@/context/platform"
 import { clearWorkspaceTerminals } from "@/context/terminal"
@@ -252,7 +252,10 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   return (
     <>
       <div class="settings-v2-tab-header settings-v2-workspaces-header">
-        <h2 class="settings-v2-tab-title">{language.t("settings.tab.workspaces")}</h2>
+        <div class="settings-v2-tab-header-row">
+          <h2 class="settings-v2-tab-title">{language.t("settings.tab.workspaces")}</h2>
+          <InlineServerSelect />
+        </div>
       </div>
 
       <div class="settings-v2-tab-body settings-v2-workspaces">
@@ -262,16 +265,28 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
           </span>
           <div class="settings-v2-workspaces-toolbar-actions">
             <Show when={projects().length > 1}>
-              <SelectV2
-                appearance="inline"
-                options={projectOptions()}
-                current={projectOptions().find((option) => option.id === selectedProject())}
-                value={(option) => option.id}
-                label={(option) => option.label}
-                placement="bottom-end"
-                gutter={6}
-                onSelect={(option) => option && setStore("project", option.id)}
-              />
+              <MenuV2 placement="bottom-end" gutter={6}>
+                <MenuV2.Trigger class="flex h-6 max-w-48 items-center gap-1 rounded-sm px-2 text-13-medium hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
+                  <span class="min-w-0 truncate">
+                    {projectOptions().find((option) => option.id === selectedProject())?.label}
+                  </span>
+                  <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                </MenuV2.Trigger>
+                <MenuV2.Portal>
+                  <MenuV2.Content>
+                    <For each={projectOptions()}>
+                      {(option) => (
+                        <MenuV2.Item onSelect={() => setStore("project", option.id)}>
+                          <span class="min-w-0 flex-1 truncate">{option.label}</span>
+                          <Show when={selectedProject() === option.id}>
+                            <Icon name="check" size="small" class="shrink-0" />
+                          </Show>
+                        </MenuV2.Item>
+                      )}
+                    </For>
+                  </MenuV2.Content>
+                </MenuV2.Portal>
+              </MenuV2>
             </Show>
             <Show when={filtered().length > 0}>
               <MenuV2 placement="bottom-end" gutter={4}>
