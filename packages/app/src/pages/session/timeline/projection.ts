@@ -14,10 +14,11 @@ export function createTimelineProjection(input: {
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
   inlineComments: Accessor<boolean>
-  extensionRevision?: Accessor<unknown>
-  afterUser?: (message: UserMessage) => TimelineRow.TimelineRow[]
 }) {
   const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
+  const sessionMessageByID = createMemo(
+    () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
+  )
   const assistantMessagesByParent = createMemo(() => {
     const result = new Map<string, AssistantMessage[]>()
     input.messages().forEach((message) => {
@@ -32,7 +33,6 @@ export function createTimelineProjection(input: {
     return result
   })
   const projection = createMemo(() => {
-    const extension = input.extensionRevision?.()
     return Timeline.constructSessionMessageRows(
       input.sessionMessages(),
       (messageID) => messageByID().get(messageID) as UserMessage | AssistantMessage | undefined,
@@ -41,7 +41,6 @@ export function createTimelineProjection(input: {
       input.status().type,
       input.inlineComments(),
       input.userMessages(),
-      input.extensionRevision && extension === undefined ? undefined : input.afterUser,
     )
   })
   const activeMessageID = createMemo(() => projection().activeMessageID)
@@ -81,5 +80,6 @@ export function createTimelineProjection(input: {
     messageLastRowIndex,
     rowByKey,
     rows,
+    sessionMessageByID,
   }
 }

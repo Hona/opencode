@@ -55,7 +55,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { decode64 } from "@/utils/base64"
 
-import { TargetSessionRouteContent } from "@/pages/session"
+import { SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -87,18 +87,23 @@ function TargetServerRoute(props: ParentProps) {
   return (
     // Owns the server-identity remount. Session changes must not remount this subtree.
     <Show when={requireServerKey(params.serverKey)} keyed>
-      <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>{props.children}</ServerSyncProvider>
+      <ServerSDKProvider server={conn()}>
+        <ServerSyncProvider server={conn()}>{props.children}</ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
   )
 }
 
-const TargetSessionRoute = () => (
-  <TargetServerRoute>
-    <TargetSessionRouteContent />
-  </TargetServerRoute>
-)
+function TargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <TargetServerRoute>
+        <TargetSessionRouteContent />
+      </TargetServerRoute>
+    </SessionRouteErrorBoundary>
+  )
+}
 
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
 // server via ServerKey, then provide the server-scoped shell for that server.
@@ -131,16 +136,14 @@ function DraftRoute() {
 function ResolvedDraftRoute(props: { draft: DraftTab }) {
   const global = useGlobal()
   const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
-  const directory = () => props.draft.directory
-  const serverKey = () => props.draft.server
 
   return (
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
-      <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>
-          <ModelsProvider directory={directory}>
-            <SDKProvider directory={directory}>
-              <DirectoryDataProvider directory={directory} server={serverKey}>
+      <ServerSDKProvider server={conn()}>
+        <ServerSyncProvider server={conn()}>
+          <ModelsProvider directory={props.draft.directory}>
+            <SDKProvider directory={props.draft.directory}>
+              <DirectoryDataProvider directory={props.draft.directory} server={props.draft.server}>
                 <DraftProviders>
                   <NewSession />
                 </DraftProviders>
@@ -244,7 +247,7 @@ function DesktopCommands() {
 }
 
 type ServerScopedShellProps = ParentProps<{
-  directory?: () => string | undefined
+  directory?: string
   serverScoped?: JSX.Element
 }>
 
@@ -457,12 +460,10 @@ export function AppInterface(props: {
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
   const ServerShell = (shellProps: ParentProps) => (
-    <QueryProvider>
-      <SharedProviders>
-        {props.children}
-        {shellProps.children}
-      </SharedProviders>
-    </QueryProvider>
+    <SharedProviders>
+      {props.children}
+      {shellProps.children}
+    </SharedProviders>
   )
 
   return (

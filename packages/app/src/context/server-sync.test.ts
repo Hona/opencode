@@ -5,21 +5,19 @@ import type {
   SessionApi,
   SessionInfo,
   SessionListInput,
-  OpenCodeEvent,
 } from "@opencode-ai/client/promise"
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
 import {
-  captureSessionMove,
   loadActiveSessionsQuery,
   loadMcpQuery,
   loadMcpResourcesQuery,
+  reconcileActiveSessionStatuses,
   seedActiveSessionStatuses,
 } from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
-import { adaptServerEvent } from "./server-sdk"
 import type { ServerApi } from "@/utils/server"
 
 type McpApi = ServerApi["mcp"]
@@ -107,29 +105,16 @@ describe("active session query", () => {
       next: 10,
     })
   })
-})
 
-describe("session move normalization", () => {
-  test("captures and applies current moves from the source placement", () => {
+  test("replaces stale active statuses after reconnect", () => {
     const session = createServerSession({} as ServerApi["session"], {} as ServerApi["message"])
-    session.remember(sessionAt("/source"))
-    const current = {
-      id: "event-current-move",
-      created: 10,
-      type: "session.moved",
-      durable: { aggregateID: "session", seq: 1, version: 1 },
-      location: { directory: "/source" },
-      data: { sessionID: "session", location: { directory: "/destination" } },
-    } satisfies Extract<OpenCodeEvent, { type: "session.moved" }>
-    const event = adaptServerEvent(current)
+    session.set("session_status", "ses_stale", { type: "busy" })
+    session.set("session_status", "ses_active", { type: "idle" })
 
-    expect(captureSessionMove(event, session.get)).toEqual({
-      sessionID: "session",
-      from: "/source",
-    })
-    session.applyV2(current)
-    session.apply(event)
-    expect(session.get("session")?.location.directory).toBe("/destination")
+    reconcileActiveSessionStatuses(session, { ses_active: { type: "running" } })
+
+    expect(session.data.session_status.ses_stale).toEqual({ type: "idle" })
+    expect(session.data.session_status.ses_active).toEqual({ type: "busy" })
   })
 })
 

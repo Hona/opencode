@@ -91,8 +91,7 @@ test("selects an existing workspace from the start menu", async ({ page }) => {
   await init(page, { type: "draft", draftID, directory: root })
   const directories = page.waitForRequest(
     (request) =>
-      request.method() === "GET" &&
-      new URL(request.url()).pathname === `/api/project/${project.id}/directories`,
+      request.method() === "GET" && new URL(request.url()).pathname === `/api/project/${project.id}/directories`,
   )
 
   await page.goto(`/new-session?draftId=${draftID}`)
@@ -137,8 +136,7 @@ test("lists and manually deletes workspaces from settings", async ({ page }) => 
   await init(page, { type: "draft", draftID, directory: root })
   const directories = page.waitForRequest(
     (request) =>
-      request.method() === "GET" &&
-      new URL(request.url()).pathname === `/api/project/${project.id}/directories`,
+      request.method() === "GET" && new URL(request.url()).pathname === `/api/project/${project.id}/directories`,
   )
 
   await page.goto(`/new-session?draftId=${draftID}`)
@@ -166,8 +164,7 @@ test("lists and manually deletes workspaces from settings", async ({ page }) => 
   const confirmation = page.getByRole("dialog").filter({ hasText: 'Delete workspace "feature-clean"?' })
   const removed = page.waitForRequest(
     (request) =>
-      request.method() === "DELETE" &&
-      new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
+      request.method() === "DELETE" && new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
   )
   await confirmation.getByRole("button", { name: "Delete workspace", exact: true }).click()
   const request = await removed
@@ -206,8 +203,7 @@ test("submits the owning prompt after a new workspace is created", async ({ page
     const promptPath = `/api/session/${sessionID}/prompt`
     if (request.method() === "OPTIONS" && (url.pathname === "/api/session" || url.pathname === promptPath))
       return route.fulfill({ status: 204, headers: cors })
-    if (request.method() === "POST" && url.pathname === "/api/session")
-      return json(route, { data: createdSession })
+    if (request.method() === "POST" && url.pathname === "/api/session") return json(route, { data: createdSession })
     if (request.method() === "GET" && url.pathname === `/api/session/${sessionID}`)
       return json(route, { data: createdSession })
     if (request.method() !== "POST" || url.pathname !== promptPath) return route.fallback()
@@ -234,8 +230,7 @@ test("submits the owning prompt after a new workspace is created", async ({ page
 
   const copied = page.waitForRequest(
     (request) =>
-      request.method() === "POST" &&
-      new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
+      request.method() === "POST" && new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
   )
   const created = page.waitForRequest(
     (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/session",
@@ -304,8 +299,7 @@ test("moves a changed local session through workspace creation without changing 
       return route.fulfill({ status: 204, headers: cors })
     if (request.method() === "GET" && url.pathname === `/api/session/${sessionID}`)
       return json(route, { data: currentSession })
-    if (request.method() !== "POST" || url.pathname !== `/api/session/${sessionID}/move`)
-      return route.fallback()
+    if (request.method() !== "POST" || url.pathname !== `/api/session/${sessionID}/move`) return route.fallback()
     await moveReady
     currentSession.location.directory = createdWorkspace
     await route.fulfill({ status: 204, headers: cors })
@@ -319,21 +313,19 @@ test("moves a changed local session through workspace creation without changing 
 
   const copied = page.waitForRequest(
     (request) =>
-      request.method() === "POST" &&
-      new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
+      request.method() === "POST" && new URL(request.url()).pathname === `/experimental/project/${project.id}/copy`,
   )
   const moved = page.waitForRequest(
-    (request) =>
-      request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/move`,
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/move`,
   )
   await page.getByRole("menuitem", { name: "New workspace", exact: true }).click()
 
   await copied
-  await expect(page.getByText("Creating workspace", { exact: true })).toBeVisible()
   releaseCopy()
 
   const moveRequest = await moved
   expect(moveRequest.postDataJSON()).toEqual({ directory: createdWorkspace })
+  releaseMove()
   await transport.send({
     id: "evt_workspace_created",
     created: 3,
@@ -343,9 +335,9 @@ test("moves a changed local session through workspace creation without changing 
     data: {
       sessionID,
       location: { directory: createdWorkspace },
+      projectID: project.id,
       subpath: "",
     },
   })
-  releaseMove()
-  await expect(page.getByText("Workspace created", { exact: true })).toBeVisible()
+  await expect(page.getByText("Moved", { exact: true })).toBeVisible()
 })

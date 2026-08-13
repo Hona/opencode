@@ -15,7 +15,6 @@ import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { UserMessage } from "@/types"
-import { WorkspaceOperation } from "@/utils/workspace-operation"
 import type { SessionController } from "./session-controller"
 
 type SessionCommandSource = {
@@ -29,6 +28,10 @@ type SessionCommandSource = {
 
 export type SessionCommandContext = {
   session: SessionCommandSource
+  background: {
+    blocking: () => boolean
+    move: () => Promise<void>
+  }
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
@@ -71,8 +74,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     input.owner.run(input.updateViewport)
   }
 
-  const workspaceOperationPending = (sessionID: string) =>
-    WorkspaceOperation.get(sdk().scope, sessionID)?.status === "pending"
   const shown = settings.visibility.fileTree
 
   const showAllFiles = () => {
@@ -291,7 +292,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const undo = async () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    if (workspaceOperationPending(sessionID)) return
     const owner = actions.session.ownership.capture()
     const session = sdk().api.session
     const directory = sdk().directory
@@ -322,7 +322,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const redo = async () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    if (workspaceOperationPending(sessionID)) return
     const owner = actions.session.ownership.capture()
     const session = sdk().api.session
     const messages = actions.session.history.userMessages()
@@ -357,7 +356,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const compact = async () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    if (workspaceOperationPending(sessionID)) return
 
     await sdk().api.session.compact({ sessionID })
   }
@@ -365,7 +363,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fork = () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    if (workspaceOperationPending(sessionID)) return
     void openDialog(
       () => import("@/components/dialog-fork"),
       (x) => dialog.show(() => <x.DialogFork />),
@@ -421,10 +418,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled:
-        !actions.session.identity.params.id ||
-        actions.session.history.visibleUserMessages().length === 0 ||
-        workspaceOperationPending(actions.session.identity.params.id),
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: undo,
     }),
     sessionCommand({
@@ -432,10 +426,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled:
-        !actions.session.identity.params.id ||
-        !actions.session.data.info()?.revert?.messageID ||
-        workspaceOperationPending(actions.session.identity.params.id),
+      disabled: !actions.session.identity.params.id || !actions.session.data.info()?.revert?.messageID,
       onSelect: redo,
     }),
     sessionCommand({
@@ -443,21 +434,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.compact"),
       description: language.t("command.session.compact.description"),
       slash: "compact",
-      disabled:
-        !actions.session.identity.params.id ||
-        actions.session.history.visibleUserMessages().length === 0 ||
-        workspaceOperationPending(actions.session.identity.params.id),
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: compact,
+    }),
+    sessionCommand({
+      id: "session.background",
+      title: language.t("command.session.background"),
+      keybind: "ctrl+b",
+      disabled: !actions.background.blocking(),
+      onSelect: actions.background.move,
     }),
     sessionCommand({
       id: "session.fork",
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
       slash: "fork",
-      disabled:
-        !actions.session.identity.params.id ||
-        actions.session.history.visibleUserMessages().length === 0 ||
-        workspaceOperationPending(actions.session.identity.params.id),
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: fork,
     }),
     sessionCommand({

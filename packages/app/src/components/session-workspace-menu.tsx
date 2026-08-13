@@ -2,23 +2,15 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createStore } from "solid-js/store"
-import { For, Show, type ComponentProps, type JSX } from "solid-js"
+import { createSignal, For, Show, type ComponentProps, type JSX } from "solid-js"
 import type { Project } from "@/types"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { pathKey } from "@/utils/path-key"
-import { Worktree } from "@/utils/worktree"
-import { WorkspaceOperation } from "@/utils/workspace-operation"
 import { showToast } from "@/utils/toast"
-import type { ServerScope } from "@/utils/server-scope"
 import { workspaceDirectories } from "@/utils/workspace"
-import {
-  WORKSPACE_PLACEMENT_REFRESH_TIMEOUT_MS,
-  WORKSPACE_PREPARATION_TIMEOUT_MS,
-  workspaceRequestWithTimeout,
-} from "@/utils/workspace-request"
 
 export function SessionWorkspaceMenu(props: {
   eligible?: boolean
@@ -38,62 +30,41 @@ export function SessionWorkspaceMenu(props: {
   const serverSync = useServerSync()
   const openWorkspaces = useSettingsDialog("workspaces")
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
-  const operationPending = () => WorkspaceOperation.get(serverSDK().scope, props.sessionID)?.status === "pending"
-  const blocked = () =>
-    props.eligible === false || operationPending() || serverSync().session.data.session_working(props.sessionID)
-  const workspaces = () =>
-    workspaceDirectories(props.project).filter((workspace) => pathKey(workspace) !== pathKey(props.directory))
-
-  const fail = (scope: ServerScope, sessionID: string, message: string) => {
-    if (WorkspaceOperation.get(scope, sessionID)?.status === "complete") return
-    WorkspaceOperation.fail(scope, sessionID)
-    showToast({ variant: "error", title: language.t("workspace.move.failed"), description: message })
+  const [directories, setDirectories] = createSignal(workspaceDirectories(props.project))
+  const blocked = () => props.eligible === false || serverSync().session.data.session_working(props.sessionID)
+  const workspaces = () => directories().filter((workspace) => pathKey(workspace) !== pathKey(props.directory))
+  const onOpenChange = (open: boolean) => {
+    props.onOpenChange?.(open)
+    if (!open) return
+    const sdk = serverSDK()
+    void sdk.api.projectCopy
+      .refresh({ projectID: props.project.id, location: { directory: props.directory } })
+      .then(() =>
+        sdk.api.project.directories({ projectID: props.project.id, location: { directory: props.directory } }),
+      )
+      .then((items) =>
+        setDirectories(items.filter((item) => item.strategy !== undefined).map((item) => item.directory)),
+      )
+      .catch(() => undefined)
   }
   const move = async (selection: "create" | string) => {
     if (store.selected || blocked()) return
     const sdk = serverSDK()
-    const sync = serverSync()
-    const scope = sdk.scope
     const sessionID = props.sessionID
-    const messageID = props.messageID
     const source = props.directory
     setStore("selected", selection)
 
     try {
-      const destination =
-        selection === "create"
-          ? await createWorkspace(
-              props.project,
-              source,
-              sessionID,
-              messageID,
-              sdk,
-              (message) => fail(scope, sessionID, message),
-              {
-                createFailed: language.t("prompt.toast.worktreeCreateFailed.title"),
-              },
-            )
-          : selection
+      const destination = selection === "create" ? await createWorkspace(props.project, source, sdk) : selection
       if (!destination) return
 
-      WorkspaceOperation.start(scope, sessionID, selection === "create" ? "create" : "move", destination, messageID)
-      if (sync.session.data.session_working(sessionID)) throw new Error(language.t("workspace.move.failed"))
-      await workspaceRequestWithTimeout(
-        (signal) => sdk.api.session.move({ sessionID, directory: destination }, { signal }),
-        language.t("workspace.move.failed"),
-        WORKSPACE_PREPARATION_TIMEOUT_MS,
-      )
-      const session = await workspaceRequestWithTimeout(
-        (signal) => sync.session.resolve(sessionID, { force: true, signal }),
-        language.t("workspace.move.failed"),
-        WORKSPACE_PLACEMENT_REFRESH_TIMEOUT_MS,
-      )
-      if (!session || pathKey(session.location.directory) !== pathKey(destination))
-        throw new Error(language.t("workspace.move.failed"))
-      WorkspaceOperation.complete(scope, sessionID, destination)
-      sync.reindexSession(sessionID, source)
+      await sdk.api.session.move({ sessionID, directory: destination })
     } catch (error) {
-      fail(scope, sessionID, error instanceof Error ? error.message : language.t("common.requestFailed"))
+      showToast({
+        variant: "error",
+        title: language.t("workspace.move.failed"),
+        description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+      })
     } finally {
       setStore("selected", undefined)
     }
@@ -104,7 +75,7 @@ export function SessionWorkspaceMenu(props: {
       placement={props.placement ?? "bottom-end"}
       gutter={props.gutter ?? 4}
       modal={false}
-      onOpenChange={props.onOpenChange}
+      onOpenChange={onOpenChange}
     >
       <MenuV2.Trigger class={props.class} disabled={blocked()}>
         {props.children}
@@ -157,33 +128,14 @@ export function SessionWorkspaceMenu(props: {
 async function createWorkspace(
   project: Project,
   source: string,
-  sessionID: string,
-  messageID: string | undefined,
   serverSDK: ReturnType<ReturnType<typeof useServerSDK>>,
-  fail: (message: string) => void,
-  messages: { createFailed: string },
 ) {
-  WorkspaceOperation.start(serverSDK.scope, sessionID, "create", project.worktree, messageID)
-  const created = await workspaceRequestWithTimeout(
-    (signal) =>
-      serverSDK.api.projectCopy.create(
-        {
-          projectID: project.id,
-          strategy: "git_worktree",
-          directory: getDirectory(source),
-          location: { directory: source },
-        },
-        { signal },
-      ),
-    messages.createFailed,
-    WORKSPACE_PREPARATION_TIMEOUT_MS,
-  )
-    .catch((error) => {
-      fail(error instanceof Error ? error.message : messages.createFailed)
-      return undefined
-    })
-  if (!created?.directory) return
-  WorkspaceOperation.start(serverSDK.scope, sessionID, "create", created.directory, messageID)
-  Worktree.ready(serverSDK.scope, created.directory)
+  const created = await serverSDK.api.projectCopy.create({
+    projectID: project.id,
+    strategy: "git_worktree",
+    directory: getDirectory(source),
+    location: { directory: source },
+  })
+  await serverSDK.api.location.get({ location: { directory: created.directory } })
   return created.directory
 }

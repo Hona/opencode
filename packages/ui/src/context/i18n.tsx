@@ -8,10 +8,10 @@ export type UiI18nPluralKey = PluralKey
 export type UiPluralCategory = PluralCategory
 export type UiI18nPluralLookupKey = PluralLookupKey
 export type UiI18nLocaleKey = LocaleKey
-type UiTranslationKey<Key extends string> = Key extends UiI18nPluralLookupKey ? never : Key
+type UiTranslationKey<Value extends string> = Value extends UiI18nPluralLookupKey ? never : Value
 
 export type UiI18nParams = Record<string, string | number | boolean>
-export type UiTranslate = <Key extends string>(key: UiTranslationKey<Key>, params?: UiI18nParams) => string
+export type UiTranslate = <Value extends string>(key: UiTranslationKey<Value>, params?: UiI18nParams) => string
 
 export type UiI18n = {
   locale: Accessor<string>

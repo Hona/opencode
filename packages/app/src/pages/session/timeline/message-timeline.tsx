@@ -51,7 +51,6 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useLanguage } from "@/context/language"
-import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -62,10 +61,10 @@ import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows
 import { filterVirtualIndexes } from "./virtual-items"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { isWorkspaceDirectory } from "@/utils/workspace"
-import { WorkspaceOperation } from "@/utils/workspace-operation"
 import { SessionWorkspaceMenu } from "@/components/session-workspace-menu"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
 const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
@@ -203,23 +202,6 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[]; action?: JSX.Elem
   )
 }
 
-function WorkspaceLocationLoader() {
-  const dots = ["left-0 top-0", "right-0 top-0", "left-0 bottom-0", "right-0 bottom-0"]
-  return (
-    <span data-component="workspace-location-loader" class="relative block size-4" aria-hidden="true">
-      <span class="absolute left-[7px] top-[7px] size-0.5 bg-current" />
-      <For each={dots}>
-        {(position, index) => (
-          <span
-            class={`absolute size-1 bg-current ${position} animate-pulse`}
-            style={{ "animation-delay": `${index() * -180}ms` }}
-          />
-        )}
-      </For>
-    </span>
-  )
-}
-
 function WorkspaceMoveAction(props: {
   variant: "inline" | "panel"
   eligible: boolean
@@ -236,7 +218,7 @@ function WorkspaceMoveAction(props: {
     <div
       classList={{
         "group/workspace-move relative shrink-0": true,
-        "ml-auto h-5 w-[167px]": inline(),
+        "ms-auto h-5 w-[167px]": inline(),
         "-mt-2.5 h-[46px] w-full rounded-b-[6px] bg-v2-background-bg-layer-02 hover:bg-v2-background-bg-layer-03 transition-colors":
           !inline(),
         invisible: props.dismissed,
@@ -248,13 +230,13 @@ function WorkspaceMoveAction(props: {
         project={props.project}
         directory={props.directory}
         messageID={props.messageID}
-        placement={inline() ? "bottom-end" : "left-start"}
+        placement={inline() ? "bottom-end" : language.direction() === "rtl" ? "right-start" : "left-start"}
         gutter={inline() ? 4 : -22}
         contentClass={inline() ? undefined : "relative top-3.5"}
         class={
           inline()
-            ? "flex h-5 w-full items-center gap-1.5 rounded-[4px] pr-6 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed"
-            : "flex h-[46px] w-full items-center gap-2 rounded-b-[6px] px-3 pr-9 pt-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none"
+            ? "flex h-5 w-full items-center gap-1.5 rounded-[4px] pe-6 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed"
+            : "flex h-[46px] w-full items-center gap-2 rounded-b-[6px] px-3 pe-9 pt-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none"
         }
       >
         <IconV2 name="workspace-new" class="shrink-0 text-v2-icon-icon-muted" />
@@ -264,8 +246,8 @@ function WorkspaceMoveAction(props: {
         type="button"
         class={`absolute flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none ${
           inline()
-            ? "right-0 top-1/2"
-            : "hover-reveal right-3 top-[calc(50%+5px)] group-hover/workspace-move:opacity-100 group-focus-within/workspace-move:opacity-100"
+            ? "end-0 top-1/2"
+            : "hover-reveal end-3 top-[calc(50%+5px)] group-hover/workspace-move:opacity-100 group-focus-within/workspace-move:opacity-100"
         }`}
         aria-label={language.t("common.dismiss")}
         onClick={(event) => {
@@ -316,12 +298,12 @@ function SessionSummaryPanel(props: {
           project={props.project}
           directory={props.directory}
           messageID={props.messageID}
-          placement="left-start"
+          placement={language.direction() === "rtl" ? "right-start" : "left-start"}
           gutter={-22}
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
         >
           <IconV2 name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
-          <span class="min-w-0 flex-1 truncate text-left">{location()}</span>
+          <span class="min-w-0 flex-1 truncate text-start">{location()}</span>
           <IconV2 name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
         </SessionWorkspaceMenu>
         <div class={row}>
@@ -396,11 +378,11 @@ type MessageTimelineProps = {
   onScheduleScrollState: (el: HTMLDivElement) => void
   onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
-  hasScrollGesture: () => boolean
+  hasScrollGesture: boolean
   onUserScroll: () => void
   onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: () => boolean
+  shouldAnchorBottom: boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
@@ -429,15 +411,16 @@ function MessageTimelineView(
 ) {
   let touchGesture: number | undefined
   const language = useLanguage()
-  const serverSDK = useServerSDK()
   const serverSync = useServerSync()
   const sdk = useSDK()
   const sync = useSync()
   const command = useCommand()
+  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
+  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
-  const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
+  const coldBottomMount = !initialMeasurements?.length && shouldAnchorBottom()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = props.data.sessionID
@@ -451,9 +434,7 @@ function MessageTimelineView(
   const getMsgParts = props.data.parts
   const getMsgPart = props.data.part
   const projection = props.data.projection
-  const sessionDirectory = createMemo(
-    () => props.session.data.info()?.location.directory ?? sdk().directory,
-  )
+  const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
   const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
   const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
   const [summaryOpen, setSummaryOpen] = createSignal(false)
@@ -469,66 +450,51 @@ function MessageTimelineView(
     }),
   )
   const turnPadding = () => "px-4 md:px-5"
-  const workspaceOperation = createMemo(() => {
-    const id = sessionID()
-    if (!id) return
-    return WorkspaceOperation.get(serverSDK().scope, id)
-  })
-  const lifecycleTitle = createMemo(() => {
-    const operation = workspaceOperation()
-    if (operation?.status === "pending") {
-      return {
-        kind: "pending" as const,
-        text: language.t(operation.type === "create" ? "workspace.lifecycle.creating" : "workspace.lifecycle.moving"),
-      }
-    }
-    if (operation?.type === "create" && !props.data.titleValue())
-      return { kind: "created" as const, text: language.t("workspace.lifecycle.created") }
-    if (!props.data.titleValue())
-      return { kind: "starting" as const, text: language.t("workspace.lifecycle.starting") }
-    return
-  })
-  const workspaceOperationPending = (sessionID: string) =>
-    WorkspaceOperation.get(serverSDK().scope, sessionID)?.status === "pending"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
   const lastAssistantGroupKey = projection.lastAssistantGroupKey
   const messageByID = projection.messageByID
-  const timelineRows = createMemo(() => {
-    const rows = projection.rows()
-    const operation = workspaceOperation()
-    const userMessageID = operation?.messageID ?? props.userMessages.at(-1)?.id
-    if (!operation || !userMessageID) return rows
-    const index = rows.findIndex((row) => row._tag === "UserMessage" && row.userMessageID === userMessageID)
-    if (index < 0) return rows
-    return [
-      ...rows.slice(0, index + 1),
-      new TimelineRow.WorkspaceLifecycle({
-        userMessageID,
-        notice: { type: "operation", operation },
-      }),
-      ...rows.slice(index + 1),
-    ]
-  })
-  const timelineRowByKey = createMemo(
-    () => new Map(timelineRows().map((row) => [TimelineRow.key(row), row] as const)),
-  )
-  const messageRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
-    timelineRows().forEach((row, index) => {
-      if (!("userMessageID" in row) || result.has(row.userMessageID)) return
-      result.set(row.userMessageID, index)
-    })
-    return result
-  })
-  const messageLastRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
-    timelineRows().forEach((row, index) => {
-      if ("userMessageID" in row) result.set(row.userMessageID, index)
-    })
-    return result
-  })
+  const messageLastRowIndex = projection.messageLastRowIndex
+  const messageRowIndex = projection.messageRowIndex
+  const timelineRowByKey = projection.rowByKey
+  const timelineRows = projection.rows
+  const sessionMessageByID = projection.sessionMessageByID
+  const noticeContent = (message: SessionMessageInfo) => {
+    if (message.type === "agent-switched")
+      return {
+        label: language.t("ui.tool.agent.default"),
+        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
+      }
+    if (message.type === "model-switched")
+      return {
+        label: language.t("command.category.model"),
+        data: `${message.model.providerID}/${message.model.id}`,
+      }
+    if (message.type === "location-switched")
+      return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
+    if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
+    if (message.type === "system") return { label: message.description ?? message.text }
+    if (message.type === "compaction") return { label: language.t("ui.messagePart.compaction"), data: message.status }
+    if (message.type !== "synthetic") return
+    if (message.description === "Continuing after restart") return { label: message.description }
+    const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
+    const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
+    if (source === "subagent" || source === "shell") {
+      const agent = typeof message.metadata?.agent === "string" ? message.metadata.agent : undefined
+      const actor = source === "shell" ? language.t("ui.tool.shell") : (agent ?? language.t("ui.tool.agent.default"))
+      const label = language.t(
+        state === "error"
+          ? "session.timeline.notice.failed"
+          : state === "cancelled"
+            ? "session.timeline.notice.cancelled"
+            : "session.timeline.notice.finished",
+        { actor },
+      )
+      return { label, data: message.description }
+    }
+    return { label: message.description ?? message.text }
+  }
 
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
@@ -601,7 +567,7 @@ function MessageTimelineView(
     },
     getScrollElement: () => listRoot() ?? null,
     observeElementOffset: observeElementOffsetReconnectAware,
-    initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => (shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -639,11 +605,11 @@ function MessageTimelineView(
   const resizeItem = virtualizer.resizeItem
   let resizeAnchorScheduled = false
   const anchorResizedBottom = () => {
-    if (resizeAnchorScheduled || props.hasScrollGesture()) return
+    if (resizeAnchorScheduled || hasScrollGesture()) return
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      if (!shouldAnchorBottom() || hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -668,10 +634,10 @@ function MessageTimelineView(
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
+    if (root && shouldAnchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom()) return false
+    if (shouldAnchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -692,18 +658,18 @@ function MessageTimelineView(
   let overscanFrame: number | undefined
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
-      if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
         overscanFrame = undefined
         if (renderOverscan() < 20) setRenderOverscan(20)
-        if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+        if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       })
     })
   })
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+    if (!shouldAnchorBottom() || hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
@@ -815,7 +781,7 @@ function MessageTimelineView(
     if (prependLoading) updatePrependAnchor()
     props.onScheduleScrollState(event.currentTarget)
     props.onHistoryScroll()
-    if (!props.hasScrollGesture()) return
+    if (!props.hasScrollGesture) return
     props.onUserScroll()
     props.onAutoScrollHandleScroll()
     props.onMarkScrollGesture(event.currentTarget)
@@ -972,21 +938,21 @@ function MessageTimelineView(
     )
   }
 
-  function TimelineRowFrame(input: { row: Accessor<FramedTimelineRow>; children: JSX.Element }) {
+  function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
     const anchor = () => {
-      const row = input.row()
+      const row = input.row
       return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
     }
     const previousAssistantPart = () => {
-      const row = input.row()
+      const row = input.row
       return row._tag === "AssistantPart" && row.previousAssistantPart
     }
 
     return (
       <div
-        id={anchor() ? props.anchor(input.row().userMessageID) : undefined}
-        data-message-id={input.row().userMessageID}
-        data-timeline-row={input.row()._tag}
+        id={anchor() ? props.anchor(input.row.userMessageID) : undefined}
+        data-message-id={input.row.userMessageID}
+        data-timeline-row={input.row._tag}
         classList={{
           "min-w-0 w-full max-w-full": true,
           "md:max-w-200 2xl:max-w-[1000px]": props.centered,
@@ -1011,7 +977,7 @@ function MessageTimelineView(
           getMsgParts(commentStripRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
         )
         return (
-          <TimelineRowFrame row={commentStripRow}>
+          <TimelineRowFrame row={commentStripRow()}>
             <div class={`w-full pb-2 ${turnPadding()}`}>
               <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
                 <div class="flex w-max min-w-full justify-end gap-2">
@@ -1060,7 +1026,7 @@ function MessageTimelineView(
           return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
         })
         return (
-          <TimelineRowFrame row={userMessageRow}>
+          <TimelineRowFrame row={userMessageRow()}>
             <Show when={message()}>
               {(message) => (
                 <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
@@ -1079,54 +1045,29 @@ function MessageTimelineView(
           </TimelineRowFrame>
         )
       }
-      case "WorkspaceLifecycle": {
-        const workspaceRow = row as Accessor<TimelineRowByTag<"WorkspaceLifecycle">>
-        const operation = () => workspaceRow().notice.operation
-        const pending = () => operation().status === "pending"
-        const status = () => {
-          if (operation().status === "failed") return language.t("workspace.move.failed")
-          if (operation().type === "create")
-            return language.t(pending() ? "workspace.lifecycle.creating" : "workspace.lifecycle.created")
-          return language.t(pending() ? "workspace.lifecycle.moving" : "workspace.lifecycle.set")
-        }
-        const directory = () => getFilename(operation().directory)
+      case "Notice": {
+        const noticeRow = row as Accessor<TimelineRowByTag<"Notice">>
+        const content = createMemo(() => {
+          const message = sessionMessageByID().get(noticeRow().messageID)
+          return message ? noticeContent(message) : undefined
+        })
         return (
-          <TimelineRowFrame row={workspaceRow}>
-            <div class={`w-full ${turnPadding()}`} aria-live="polite">
-              <div class="flex h-7 items-center py-1 text-[13px] font-[440] leading-none tracking-[-0.04px]">
-                <Show
-                  when={!pending()}
-                  fallback={
-                    <div class="flex items-center gap-1.5">
-                      <TextShimmer text={status()} />
-                    </div>
-                  }
-                >
-                  <div
-                    classList={{
-                      "flex items-center gap-1.5": true,
-                      "text-v2-state-fg-danger": operation().status === "failed",
-                    }}
-                  >
-                    <span class={operation().status === "failed" ? "" : "text-v2-text-text-base"}>{status()}</span>
-                    <Show when={operation().status !== "failed"}>
-                      <span class="text-[11px] font-[530] italic text-v2-text-text-muted">·</span>
-                      <IconV2 name="workspace-isolated" class="shrink-0 text-v2-icon-icon-accent" />
-                      <Show when={directory()}>
-                        <span class="max-w-[240px] truncate text-v2-text-text-base">{directory()}</span>
-                      </Show>
-                    </Show>
-                  </div>
-                </Show>
-              </div>
-            </div>
+          <TimelineRowFrame row={noticeRow()}>
+            <Show when={content()}>
+              {(content) => (
+                <div data-slot="session-timeline-notice" class={`w-full pt-3 pb-1 text-13-regular ${turnPadding()}`}>
+                  <span class="text-13-medium text-text-strong">{content().label}</span>
+                  <Show when={content().data}>{(data) => <span class="text-text-weak"> · {data()}</span>}</Show>
+                </div>
+              )}
+            </Show>
           </TimelineRowFrame>
         )
       }
       case "TurnDivider": {
         const turnDividerRow = row as Accessor<TimelineRowByTag<"TurnDivider">>
         return (
-          <TimelineRowFrame row={turnDividerRow}>
+          <TimelineRowFrame row={turnDividerRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div data-slot="session-turn-compaction">
                 <MessageDivider
@@ -1142,7 +1083,7 @@ function MessageTimelineView(
       case "AssistantPart": {
         const assistantPartRow = row as Accessor<TimelineRowByTag<"AssistantPart">>
         return (
-          <TimelineRowFrame row={assistantPartRow}>
+          <TimelineRowFrame row={assistantPartRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div
                 data-slot="session-turn-assistant-content"
@@ -1157,7 +1098,7 @@ function MessageTimelineView(
       case "Thinking": {
         const thinkingRow = row as Accessor<TimelineRowByTag<"Thinking">>
         return (
-          <TimelineRowFrame row={thinkingRow}>
+          <TimelineRowFrame row={thinkingRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <TimelineThinkingRow
                 reasoningHeading={thinkingRow().reasoningHeading}
@@ -1170,7 +1111,7 @@ function MessageTimelineView(
       case "Retry": {
         const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
         return (
-          <TimelineRowFrame row={retryRow}>
+          <TimelineRowFrame row={retryRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <SessionRetry status={sessionStatus()} show={activeMessageID() === retryRow().userMessageID} />
             </div>
@@ -1187,7 +1128,7 @@ function MessageTimelineView(
           sync().project?.vcs === "git" &&
           sessionStatus().type === "idle"
         return (
-          <TimelineRowFrame row={diffSummaryRow}>
+          <TimelineRowFrame row={diffSummaryRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <TimelineDiffSummaryRow
                 diffs={diffSummaryRow().diffs}
@@ -1215,7 +1156,7 @@ function MessageTimelineView(
       case "Error": {
         const errorRow = row as Accessor<TimelineRowByTag<"Error">>
         return (
-          <TimelineRowFrame row={errorRow}>
+          <TimelineRowFrame row={errorRow()}>
             <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <Card variant="error" class="error-card">
                 {errorRow().text}
@@ -1395,35 +1336,26 @@ function MessageTimelineView(
                 <div class="flex items-center min-w-0 flex-1 w-full">
                   <Show when={props.data.newLayoutDesigns()}>
                     <Show
-                      when={workspaceOperation()?.status !== "pending"}
+                      when={workspaceSession()}
                       fallback={
                         <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                          <WorkspaceLocationLoader />
+                          <IconV2 name="monitor" />
                         </span>
                       }
                     >
-                      <Show
-                        when={workspaceSession()}
-                        fallback={
-                          <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                            <IconV2 name="monitor" />
-                          </span>
-                        }
+                      <TooltipV2
+                        placement="bottom-start"
+                        value={sessionDirectory()}
+                        contentClass="max-w-[calc(100vw-32px)] break-all"
                       >
-                        <TooltipV2
-                          placement="bottom-start"
-                          value={sessionDirectory()}
-                          contentClass="max-w-[calc(100vw-32px)] break-all"
+                        <span
+                          tabIndex={0}
+                          aria-label={sessionDirectory()}
+                          class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
                         >
-                          <span
-                            tabIndex={0}
-                            aria-label={sessionDirectory()}
-                            class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
-                          >
-                            <IconV2 name="workspace-isolated" />
-                          </span>
-                        </TooltipV2>
-                      </Show>
+                          <IconV2 name="workspace-isolated" />
+                        </span>
+                      </TooltipV2>
                     </Show>
                   </Show>
                   <Show when={parentID()}>
@@ -1443,71 +1375,56 @@ function MessageTimelineView(
                       /
                     </span>
                   </Show>
-                  <Show
-                    when={!lifecycleTitle()}
-                    fallback={
-                      <span
-                        class="px-2 text-[13px] font-[530] leading-4 tracking-[-0.04px]"
-                        classList={{ "text-v2-text-text-base": lifecycleTitle()?.kind === "created" }}
-                        aria-live="polite"
-                      >
-                        <Show when={lifecycleTitle()?.kind !== "created"} fallback={lifecycleTitle()?.text}>
-                          <TextShimmer text={lifecycleTitle()!.text} />
-                        </Show>
-                      </span>
-                    }
-                  >
-                    <Show when={childTitle() || title.editing}>
-                      <Show
-                        when={title.editing}
-                        fallback={
-                          <h1
-                            data-slot="session-title-child"
-                            classList={{
-                              "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                              "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
-                                props.data.newLayoutDesigns(),
-                              "grow-1 min-w-0": !props.data.newLayoutDesigns(),
-                            }}
-                            onClick={openTitleEditor}
-                          >
-                            {childTitle()}
-                          </h1>
-                        }
-                      >
-                        <InlineInput
-                          ref={(el) => {
-                            titleRef = el
-                          }}
+                  <Show when={childTitle() || title.editing}>
+                    <Show
+                      when={title.editing}
+                      fallback={
+                        <h1
                           data-slot="session-title-child"
-                          value={title.draft}
-                          disabled={props.pending.rename()}
                           classList={{
-                            "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                            "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !props.data.newLayoutDesigns(),
-                            "field-sizing-content self-start rounded-[6px] px-2 py-1 ": props.data.newLayoutDesigns(),
+                            "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
+                            "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
+                              props.data.newLayoutDesigns(),
+                            "grow-1 min-w-0": !props.data.newLayoutDesigns(),
                           }}
-                          style={{
-                            "--inline-input-shadow": props.data.newLayoutDesigns()
-                              ? "none"
-                              : "var(--shadow-xs-border-select)",
-                          }}
-                          onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            event.stopPropagation()
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void saveTitleEditor()
-                              return
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              closeTitleEditor()
-                            }
-                          }}
-                          onBlur={closeTitleEditor}
-                        />
-                      </Show>
+                          onClick={openTitleEditor}
+                        >
+                          {childTitle()}
+                        </h1>
+                      }
+                    >
+                      <InlineInput
+                        ref={(el) => {
+                          titleRef = el
+                        }}
+                        data-slot="session-title-child"
+                        value={title.draft}
+                        disabled={props.pending.rename()}
+                        classList={{
+                          "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
+                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !props.data.newLayoutDesigns(),
+                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ": props.data.newLayoutDesigns(),
+                        }}
+                        style={{
+                          "--inline-input-shadow": props.data.newLayoutDesigns()
+                            ? "none"
+                            : "var(--shadow-xs-border-select)",
+                        }}
+                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation()
+                          if (event.key === "Enter") {
+                            event.preventDefault()
+                            void saveTitleEditor()
+                            return
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault()
+                            closeTitleEditor()
+                          }
+                        }}
+                        onBlur={closeTitleEditor}
+                      />
                     </Show>
                   </Show>
                 </div>
@@ -1631,21 +1548,12 @@ function MessageTimelineView(
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item
-                                  disabled={workspaceOperationPending(id)}
-                                  onSelect={() => void props.action.export(id)}
-                                >
+                                <DropdownMenu.Item onSelect={() => void props.action.export(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                                 {/* TODO: Need a V2 session archive API. */}
                                 <DropdownMenu.Separator />
-                                <DropdownMenu.Item
-                                  disabled={workspaceOperationPending(id)}
-                                  onSelect={() => {
-                                    if (workspaceOperationPending(id)) return
-                                    props.action.showDelete(id)
-                                  }}
-                                >
+                                <DropdownMenu.Item onSelect={() => props.action.showDelete(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                               </DropdownMenu.Content>
@@ -1710,21 +1618,12 @@ function MessageTimelineView(
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              <MenuV2.Item
-                                disabled={workspaceOperationPending(id)}
-                                onSelect={() => void props.action.export(id)}
-                              >
+                              <MenuV2.Item onSelect={() => void props.action.export(id)}>
                                 {language.t("common.export")}...
                               </MenuV2.Item>
                               {/* TODO: Need a V2 session archive API. */}
                               <MenuV2.Separator />
-                              <MenuV2.Item
-                                disabled={workspaceOperationPending(id)}
-                                onSelect={() => {
-                                  if (workspaceOperationPending(id)) return
-                                  props.action.showDelete(id)
-                                }}
-                              >
+                              <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
                                 {language.t("common.delete")}...
                               </MenuV2.Item>
                             </MenuV2.Content>

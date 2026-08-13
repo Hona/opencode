@@ -39,7 +39,11 @@ type AppI18nPluralKey = {
 }[AppI18nKey]
 type PluralKey = AppI18nPluralKey | UiI18nPluralKey
 type AppI18nPluralLookupKey = `${AppI18nPluralKey}.${UiPluralCategory}`
-type TranslationKey<Key extends string> = Key extends AppI18nPluralLookupKey | UiI18nPluralLookupKey ? never : Key
+type TranslationKey<Key extends Extract<keyof Dictionary, string>> = Key extends
+  | AppI18nPluralLookupKey
+  | UiI18nPluralLookupKey
+  ? never
+  : Key
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
@@ -196,7 +200,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
-    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as <Key extends string>(
+    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as <
+      Key extends Extract<keyof Dictionary, string>,
+    >(
       key: TranslationKey<Key>,
       params?: Record<string, string | number | boolean>,
     ) => string

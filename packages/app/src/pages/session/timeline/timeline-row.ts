@@ -1,7 +1,6 @@
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
 import { Data, Equal } from "effect"
-import type { WorkspaceOperationState } from "@/utils/workspace-operation"
 
 export type SummaryDiff = FileDiffInfo
 
@@ -15,6 +14,10 @@ export namespace TimelineRow {
   export class UserMessage extends Data.TaggedClass("UserMessage")<{
     userMessageID: string
     anchor: boolean
+  }> {}
+  export class Notice extends Data.TaggedClass("Notice")<{
+    userMessageID: string
+    messageID: string
   }> {}
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
     userMessageID: string
@@ -40,22 +43,17 @@ export namespace TimelineRow {
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
   }> {}
-  export class WorkspaceLifecycle extends Data.TaggedClass("WorkspaceLifecycle")<{
-    userMessageID: string
-    notice: { type: "operation"; operation: WorkspaceOperationState }
-  }> {}
-
   export type TimelineRow =
     | TurnGap
     | CommentStrip
     | UserMessage
+    | Notice
     | TurnDivider
     | AssistantPart
     | Thinking
     | DiffSummary
     | Error
     | Retry
-    | WorkspaceLifecycle
 
   export const key = (row: TimelineRow) => {
     switch (row._tag) {
@@ -65,6 +63,8 @@ export namespace TimelineRow {
         return `comment-strip:${row.userMessageID}`
       case "UserMessage":
         return `user-message:${row.userMessageID}`
+      case "Notice":
+        return `notice:${row.messageID}`
       case "TurnDivider":
         return `turn-divider:${row.userMessageID}:${row.label}`
       case "AssistantPart":
@@ -77,8 +77,6 @@ export namespace TimelineRow {
         return `error:${row.userMessageID}`
       case "Retry":
         return `retry:${row.userMessageID}`
-      case "WorkspaceLifecycle":
-        return `workspace-lifecycle:${row.userMessageID}:${row.notice.type}`
     }
   }
 

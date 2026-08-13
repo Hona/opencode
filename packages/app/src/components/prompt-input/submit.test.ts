@@ -1,7 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import type { Prompt, PromptStore } from "@/context/prompt"
-import { WorkspaceOperation } from "@/utils/workspace-operation"
 import { ServerScope } from "@/utils/server-scope"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
@@ -47,7 +46,6 @@ let variant: string | undefined
 let createSessionGate: Promise<void> | undefined
 let createWorktreeGate: Promise<void> | undefined
 let worktreeFailure: Error | undefined
-let worktreeHung = false
 let worktreeCreates = 0
 let activeSDK = "server-a"
 let activeServerSync = "server-a"
@@ -139,17 +137,14 @@ const clientFor = (directory: string) => {
         },
       },
       projectCopy: {
-        create: async (_input: unknown, options?: { signal?: AbortSignal }) => {
+        create: async (_input: unknown) => {
           worktreeCreates++
-          if (worktreeHung)
-            return new Promise<never>((_, reject) => {
-              options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true })
-            })
           await createWorktreeGate
           if (worktreeFailure) throw worktreeFailure
           return { directory: worktreeDirectory }
         },
       },
+      location: { get: async () => ({ directory: worktreeDirectory }) },
     },
     session: {
       command: async () => ({ data: undefined }),
@@ -339,7 +334,6 @@ beforeEach(() => {
   serverSessionSyncs = 0
   createWorktreeGate = undefined
   worktreeFailure = undefined
-  worktreeHung = false
   worktreeCreates = 0
   for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
@@ -392,33 +386,6 @@ describe("prompt submit worktree selection", () => {
     expect(sentPrompts).toEqual([worktreeDirectory])
   })
 
-  test("aborts a hung new-workspace request and allows retry", async () => {
-    selected = "create"
-    worktreeHung = true
-    let resets = 0
-    const submit = makeSubmit({
-      onNewSessionWorktreeReset: () => resets++,
-      worktreeRequestTimeoutMs: 1,
-    })
-
-    await submit.handleSubmit(event)
-
-    expect(worktreeCreates).toBe(1)
-    expect(createdSessions).toEqual([])
-    expect(selected).toBe("create")
-    expect(promptValue).toEqual([{ type: "text", content: "ls", start: 0, end: 2 }])
-    expect(resets).toBe(0)
-
-    worktreeHung = false
-    await submit.handleSubmit(event)
-    await settle()
-
-    expect(worktreeCreates).toBe(2)
-    expect(createdSessions).toEqual([worktreeDirectory])
-    expect(sentPrompts).toEqual([worktreeDirectory])
-    expect(resets).toBe(1)
-  })
-
   test("keeps async submission effects bound to the initiating context", async () => {
     search = { draftId: "draft-1" }
     draftServers["draft-1"] = "project-server-a"
@@ -446,8 +413,6 @@ describe("prompt submit worktree selection", () => {
     expect(syncedServers.every((server) => server === "server-a")).toBe(true)
     expect(optimisticServers).toEqual(["server-a"])
     expect(promptCaptures.at(-1)?.target).toEqual({ server: "project-server-a", scope: ServerScope.local })
-    expect(WorkspaceOperation.get(ServerScope.local, "session-1")?.status).toBe("complete")
-    expect(WorkspaceOperation.get("server-b" as ServerScope, "session-1")).toBeUndefined()
     expect(submitted).toBe(0)
   })
 
@@ -532,6 +497,5 @@ describe("prompt submit worktree selection", () => {
       sessionID: "session-1",
       command: "ls",
     })
-    expect(WorkspaceOperation.get(ServerScope.local, "session-1")?.status).toBe("complete")
   })
 })

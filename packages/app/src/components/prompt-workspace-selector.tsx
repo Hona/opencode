@@ -62,14 +62,12 @@ export function PromptWorkspaceSelector(props: {
         openDelay={800}
         value={
           props.onboarding ? (
-            <div class="flex flex-col gap-1 text-left">
+            <div class="flex flex-col gap-1 text-start">
               <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
                 <Icon name="workspace-isolated" size="small" class="shrink-0 text-v2-text-text-accent" />
                 <span>{language.t("workspace.onboarding.title")}</span>
               </div>
-              <span class="font-[440] text-v2-text-text-muted">
-                {language.t("workspace.onboarding.description")}
-              </span>
+              <span class="font-[440] text-v2-text-text-muted">{language.t("workspace.onboarding.description")}</span>
             </div>
           ) : (
             language.t("session.new.workspace.trigger.tooltip")
@@ -186,7 +184,7 @@ export function PromptWorkspaceSelector(props: {
                   <MenuV2.Portal>
                     <MenuV2.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
                       <Show when={props.workspaces.length >= 10}>
-                        <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2 text-v2-icon-icon-muted">
+                        <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
                           <Icon name="magnifying-glass" size="small" class="shrink-0" />
                           <input
                             ref={(element) => {
@@ -233,7 +231,7 @@ export function PromptWorkspaceSelector(props: {
           </MenuV2.Portal>
         </MenuV2>
       </TooltipV2>
-      <PromptGitStatus branch={props.branch} from={selected() === "create"} class="ml-1" />
+      <PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />
     </>
   )
 }
@@ -263,11 +261,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
           contentClass="max-w-[calc(100vw-32px)] break-all"
         >
           <div class="flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
-            <Icon
-              name={icon()}
-              size="small"
-              class="shrink-0 text-v2-icon-icon-muted"
-            />
+            <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />
             <span class="min-w-0 truncate">{value()}</span>
           </div>
         </TooltipV2>
