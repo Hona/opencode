@@ -5,6 +5,7 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
+  type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
@@ -60,7 +61,7 @@ import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { Slot } from "../../plugin/render"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import {
   deduplicatePromptImages,
   preserveMentionlessPromptAttachments,
@@ -105,6 +106,22 @@ function randomIndex(count: number) {
 
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
+}
+
+export function PromptInterruptStatus(props: {
+  armed: boolean
+  text: ColorInput
+  subdued: ColorInput
+  warning: ColorInput
+}) {
+  return (
+    <text fg={props.armed ? props.warning : props.text} wrapMode="none" truncate flexShrink={1}>
+      esc{" "}
+      <span style={{ fg: props.armed ? props.warning : props.subdued }}>
+        {props.armed ? "again to interrupt" : "interrupt"}
+      </span>
+    </text>
+  )
 }
 
 function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
@@ -486,6 +503,7 @@ export function Prompt(props: PromptProps) {
           if (store.interrupt >= 2) {
             void client.api.session.interrupt({
               sessionID: props.sessionID,
+              continue: true,
             })
             setStore("interrupt", 0)
           }
@@ -1030,7 +1048,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit(delivery: SessionPending.Delivery = "steer") {
+  async function submit(delivery: SessionInbox.Delivery = "steer") {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -1046,7 +1064,7 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  async function submitInner(delivery: SessionPending.Delivery) {
+  async function submitInner(delivery: SessionInbox.Delivery) {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -1804,21 +1822,12 @@ export function Prompt(props: PromptProps) {
                           <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                         </Show>
                       </box>
-                      <text
-                        fg={store.interrupt > 0 ? theme.background.action.primary.default : theme.text.default}
-                        wrapMode="none"
-                        truncate
-                        flexShrink={1}
-                      >
-                        esc{" "}
-                        <span
-                          style={{
-                            fg: store.interrupt > 0 ? theme.background.action.primary.default : theme.text.subdued,
-                          }}
-                        >
-                          {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                        </span>
-                      </text>
+                      <PromptInterruptStatus
+                        armed={store.interrupt > 0}
+                        text={theme.text.default}
+                        subdued={theme.text.subdued}
+                        warning={theme.text.feedback.warning.default}
+                      />
                     </box>
                   </Match>
                   <Match when={move.progress()}>
