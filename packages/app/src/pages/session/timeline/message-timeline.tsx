@@ -865,7 +865,7 @@ function MessageTimelineView(
           <TimelineRowFrame row={noticeRow()}>
             <Show when={content()}>
               {(content) => (
-                <div data-slot="session-timeline-notice" class="w-full px-4 py-1 md:px-5 text-13-regular">
+                <div data-slot="session-timeline-notice" class="w-full px-4 pt-3 pb-1 md:px-5 text-13-regular">
                   <span class="text-13-medium text-text-strong">{content().label}</span>
                   <Show when={content().data}>{(data) => <span class="text-text-weak"> · {data()}</span>}</Show>
                 </div>
