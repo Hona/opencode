@@ -16,8 +16,7 @@ function installResizeObserverStacks() {
   const NativeResizeObserver = ResizeObserver
   type ResizeTrace = {
     created: string
-    callbackAt?: number
-    targets: Set<Element>
+    last?: { at: number; targets: Element[] }
   }
   const observers = new Set<ResizeTrace>()
 
@@ -27,28 +26,16 @@ function installResizeObserverStacks() {
     constructor(callback: ResizeObserverCallback) {
       const trace: ResizeTrace = {
         created: diagnosticStack("ResizeObserver created"),
-        targets: new Set<Element>(),
       }
       super((entries, observer) => {
-        trace.callbackAt = performance.now()
+        trace.last = { at: performance.now(), targets: entries.map((entry) => entry.target) }
         callback(entries, observer)
       })
       this.trace = trace
       observers.add(trace)
     }
 
-    override observe(target: Element, options?: ResizeObserverOptions) {
-      this.trace.targets.add(target)
-      super.observe(target, options)
-    }
-
-    override unobserve(target: Element) {
-      this.trace.targets.delete(target)
-      super.unobserve(target)
-    }
-
     override disconnect() {
-      this.trace.targets.clear()
       observers.delete(this.trace)
       super.disconnect()
     }
@@ -60,16 +47,16 @@ function installResizeObserverStacks() {
     const now = performance.now()
     const active = [...observers]
       .flatMap((observer) => {
-        if (observer.callbackAt === undefined || now - observer.callbackAt >= 100) return []
-        return [{ ...observer, callbackAt: observer.callbackAt }]
+        if (!observer.last || now - observer.last.at >= 100) return []
+        return [{ ...observer, last: observer.last }]
       })
-      .sort((a, b) => b.callbackAt - a.callbackAt)
+      .sort((a, b) => b.last.at - a.last.at)
       .slice(0, 5)
     const detail = active.length
       ? active
           .map(
             (observer, index) =>
-              `Recent ResizeObserver ${index + 1}; targets: ${[...observer.targets].map(describeElement).join(", ") || "none"}\n${observer.created}`,
+              `Recent ResizeObserver ${index + 1}; targets: ${observer.last.targets.map(describeElement).join(", ") || "none"}\n${observer.created}`,
           )
           .join("\n")
       : "No ResizeObserver callback was recorded in the previous 100 ms."
