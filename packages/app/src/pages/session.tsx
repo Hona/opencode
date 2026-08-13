@@ -1118,6 +1118,10 @@ export default function Page() {
   useComposerCommands()
   useSessionCommands({
     session: controller,
+    background: {
+      blocking: () => composer.background.blocking().length > 0,
+      move: composer.background.move,
+    },
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,

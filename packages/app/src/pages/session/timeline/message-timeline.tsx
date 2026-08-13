@@ -54,6 +54,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
 const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
@@ -262,10 +263,48 @@ function MessageTimelineView(
   const assistantMessagesByParent = projection.assistantMessagesByParent
   const lastAssistantGroupKey = projection.lastAssistantGroupKey
   const messageByID = projection.messageByID
+  const sessionMessageByID = projection.sessionMessageByID
   const messageLastRowIndex = projection.messageLastRowIndex
   const messageRowIndex = projection.messageRowIndex
   const timelineRowByKey = projection.rowByKey
   const timelineRows = projection.rows
+  const noticeContent = (message: SessionMessageInfo) => {
+    if (message.type === "agent-switched")
+      return {
+        label: language.t("ui.tool.agent.default"),
+        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
+      }
+    if (message.type === "model-switched")
+      return {
+        label: language.t("command.category.model"),
+        data: `${message.model.providerID}/${message.model.id}`,
+      }
+    if (message.type === "location-switched")
+      return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
+    if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
+    if (message.type === "system") return { label: message.description ?? message.text }
+    if (message.type === "compaction")
+      return { label: language.t("ui.messagePart.compaction"), data: message.status }
+    if (message.type !== "synthetic") return
+    if (message.description === "Continuing after restart") return { label: message.description }
+    const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
+    const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
+    if (source === "subagent" || source === "shell") {
+      const agent = typeof message.metadata?.agent === "string" ? message.metadata.agent : undefined
+      const actor =
+        source === "shell" ? language.t("ui.tool.shell") : (agent ?? language.t("ui.tool.agent.default"))
+      const label = language.t(
+        state === "error"
+          ? "session.timeline.notice.failed"
+          : state === "cancelled"
+            ? "session.timeline.notice.cancelled"
+            : "session.timeline.notice.finished",
+        { actor },
+      )
+      return { label, data: message.description }
+    }
+    return { label: message.description ?? message.text }
+  }
 
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
@@ -810,6 +849,25 @@ function MessageTimelineView(
                       comments={messageComments()}
                     />
                   </div>
+                </div>
+              )}
+            </Show>
+          </TimelineRowFrame>
+        )
+      }
+      case "Notice": {
+        const noticeRow = row as Accessor<TimelineRowByTag<"Notice">>
+        const content = createMemo(() => {
+          const message = sessionMessageByID().get(noticeRow().messageID)
+          return message ? noticeContent(message) : undefined
+        })
+        return (
+          <TimelineRowFrame row={noticeRow()}>
+            <Show when={content()}>
+              {(content) => (
+                <div data-slot="session-timeline-notice" class="w-full px-4 py-1 md:px-5 text-13-regular">
+                  <span class="text-13-medium text-text-strong">{content().label}</span>
+                  <Show when={content().data}>{(data) => <span class="text-text-weak"> · {data()}</span>}</Show>
                 </div>
               )}
             </Show>
