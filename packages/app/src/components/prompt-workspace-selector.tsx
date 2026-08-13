@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
@@ -17,8 +17,16 @@ export function PromptWorkspaceSelector(props: {
   onViewAll: () => void
 }) {
   const language = useLanguage()
+  const [search, setSearch] = createSignal("")
+  let searchInput: HTMLInputElement | undefined
+  let focusSearch = false
   let pending: { type: "select"; value: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
+  const workspaces = createMemo(() => {
+    const query = search().trim().toLowerCase()
+    if (!query) return props.workspaces
+    return props.workspaces.filter((workspace) => getFilename(workspace).toLowerCase().includes(query))
+  })
   const icon = () => {
     if (selected() === "main") return "monitor"
     if (selected() === "create") return "workspace-new"
@@ -28,7 +36,10 @@ export function PromptWorkspaceSelector(props: {
     pending = { type: "select", value }
   }
   const onOpenChange = (open: boolean) => {
-    if (open) return
+    if (open) {
+      setSearch("")
+      return
+    }
     const action = pending
     pending = undefined
     if (action?.type === "select") props.onChange(action.value)
@@ -88,14 +99,42 @@ export function PromptWorkspaceSelector(props: {
                 <MenuV2.GroupLabel>{language.t("session.new.workspace.runIn")}</MenuV2.GroupLabel>
                 <MenuV2.Item onSelect={() => select("main")}>
                   <Icon name="monitor" />
-                  <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.local")}</span>
+                  <TooltipV2
+                    placement="right"
+                    openDelay={800}
+                    value={
+                      <span class="flex flex-col gap-0.5">
+                        <span>{language.t("session.new.workspace.local")}</span>
+                        <span class="font-[440] text-v2-text-text-muted">
+                          {language.t("session.new.workspace.local.tooltip")}
+                        </span>
+                      </span>
+                    }
+                    class="min-w-0 flex-1"
+                  >
+                    <span class="min-w-0 truncate">{language.t("session.new.workspace.local")}</span>
+                  </TooltipV2>
                   <Show when={selected() === "main"}>
                     <Icon name="check" size="small" class="shrink-0" />
                   </Show>
                 </MenuV2.Item>
                 <MenuV2.Item onSelect={() => select("create")}>
                   <Icon name="workspace-new" />
-                  <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
+                  <TooltipV2
+                    placement="right"
+                    openDelay={800}
+                    value={
+                      <span class="flex flex-col gap-0.5">
+                        <span>{language.t("workspace.new")}</span>
+                        <span class="font-[440] text-v2-text-text-muted">
+                          {language.t("session.new.workspace.new.tooltip")}
+                        </span>
+                      </span>
+                    }
+                    class="min-w-0 flex-1"
+                  >
+                    <span class="min-w-0 truncate">{language.t("workspace.new")}</span>
+                  </TooltipV2>
                   <Show when={selected() === "create"}>
                     <Icon name="check" size="small" class="shrink-0" />
                   </Show>
@@ -113,8 +152,31 @@ export function PromptWorkspaceSelector(props: {
                 }
               >
                 <MenuV2.Separator class="h-[0.5px]" />
-                <MenuV2.Sub gutter={0} overlap overflowPadding={8}>
-                  <MenuV2.SubTrigger>
+                <MenuV2.Sub
+                  gutter={0}
+                  overlap
+                  overflowPadding={8}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      focusSearch = false
+                      return
+                    }
+                    if (!focusSearch || props.workspaces.length < 10) return
+                    focusSearch = false
+                    requestAnimationFrame(() => searchInput?.focus())
+                  }}
+                >
+                  <MenuV2.SubTrigger
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "ArrowRight" ||
+                        event.key === "ArrowLeft" ||
+                        event.key === "Enter" ||
+                        event.key === " "
+                      )
+                        focusSearch = true
+                    }}
+                  >
                     <Icon name="workspace-isolated" />
                     <span class="min-w-0 flex-1 truncate">
                       {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
@@ -122,7 +184,32 @@ export function PromptWorkspaceSelector(props: {
                   </MenuV2.SubTrigger>
                   <MenuV2.Portal>
                     <MenuV2.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
-                      <For each={props.workspaces}>
+                      <Show when={props.workspaces.length >= 10}>
+                        <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
+                          <Icon name="magnifying-glass" size="small" class="shrink-0" />
+                          <input
+                            ref={(element) => {
+                              searchInput = element
+                            }}
+                            value={search()}
+                            placeholder={language.t("session.new.workspace.search.placeholder")}
+                            aria-label={language.t("session.new.workspace.search.placeholder")}
+                            class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                            onInput={(event) => setSearch(event.currentTarget.value)}
+                            onKeyDown={(event) => {
+                              if (
+                                event.key === "Escape" ||
+                                event.key === "ArrowDown" ||
+                                event.key === "ArrowUp" ||
+                                event.key === "Enter"
+                              )
+                                return
+                              event.stopPropagation()
+                            }}
+                          />
+                        </div>
+                      </Show>
+                      <For each={workspaces()}>
                         {(workspace) => (
                           <MenuV2.Item onSelect={() => select(workspace)}>
                             <Icon name="workspace-isolated" />

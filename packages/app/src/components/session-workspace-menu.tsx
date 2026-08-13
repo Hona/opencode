@@ -17,6 +17,7 @@ export function SessionWorkspaceMenu(props: {
   sessionID: string
   project: Project
   directory: string
+  messageID?: string
   placement?: ComponentProps<typeof MenuV2>["placement"]
   gutter?: number
   class?: string
