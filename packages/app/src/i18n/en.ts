@@ -1187,7 +1187,8 @@ export const dict = {
   "settings.workspaces.deleteAll.warning":
     "The {{count}} selected workspaces in {{project}} will be permanently removed only if each is clean, inactive, and has no linked sessions.",
   "settings.workspaces.delete.blocked.active": "The active workspace cannot be deleted.",
-  "settings.workspaces.delete.blocked.linked": "This workspace has linked sessions and cannot be deleted.",
+  "settings.workspaces.delete.blocked.linked":
+    "Linked sessions will remain, but their working directory will be permanently removed.",
   "settings.workspaces.default.title": "Default environment",
   "settings.workspaces.default.description": "Choose where new sessions start",
   "settings.workspaces.default.lastUsed": "Last used per project",

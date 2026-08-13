@@ -139,9 +139,9 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     })
   }
 
-  const remove = async (workspace: Workspace, allowDirty = false, context = captureDeleteContext()) => {
+  const remove = async (workspace: Workspace, force = false, context = captureDeleteContext()) => {
     const preflight = await inspect(workspace, context)
-    if (preflight.result !== "safe" && (!allowDirty || preflight.result !== "dirty")) {
+    if (preflight.result === "active" || (!force && preflight.result !== "safe")) {
       blocked(preflight.result)
       return
     }
@@ -150,7 +150,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
         projectID: workspace.project.id,
         location: { directory: workspace.project.worktree },
         directory: workspace.directory,
-        force: allowDirty,
+        force,
       })
       .then(() => true)
       .catch((error) => {
@@ -484,9 +484,7 @@ function DialogDeleteWorkspace(props: {
         <ButtonV2
           type="button"
           variant="danger"
-          disabled={
-            status.isPending || status.isError || (status.data?.result !== "safe" && status.data?.result !== "dirty")
-          }
+          disabled={status.isPending || status.isError || status.data?.result === "active"}
           onClick={remove}
         >
           {language.t("workspace.delete.button")}
