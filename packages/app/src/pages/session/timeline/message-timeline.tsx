@@ -207,7 +207,6 @@ function WorkspaceMoveAction(props: {
   sessionID: string
   project: Project
   directory: string
-  messageID?: string
   dismissed: boolean
   onDismiss: () => void
 }) {
@@ -228,7 +227,6 @@ function WorkspaceMoveAction(props: {
         sessionID={props.sessionID}
         project={props.project}
         directory={props.directory}
-        messageID={props.messageID}
         placement={inline() ? "bottom-end" : language.direction() === "rtl" ? "right-start" : "left-start"}
         gutter={inline() ? 4 : -22}
         contentClass={inline() ? undefined : "relative top-3.5"}
@@ -269,7 +267,6 @@ function SessionSummaryPanel(props: {
   diffs?: { additions: number; deletions: number }[]
   sessionID: string
   moveEligible: boolean
-  messageID?: string
   moveDismissed: boolean
   onMoveDismiss: () => void
   onReview: () => void
@@ -300,7 +297,6 @@ function SessionSummaryPanel(props: {
           sessionID={props.sessionID}
           project={props.project}
           directory={props.directory}
-          messageID={props.messageID}
           placement={language.direction() === "rtl" ? "right-start" : "left-start"}
           gutter={-22}
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
@@ -356,7 +352,6 @@ function SessionSummaryPanel(props: {
           sessionID={props.sessionID}
           project={props.project}
           directory={props.directory}
-          messageID={props.messageID}
           dismissed={props.moveDismissed}
           onDismiss={props.onMoveDismiss}
         />
@@ -1148,7 +1143,6 @@ function MessageTimelineView(
                         sessionID={sessionID()!}
                         project={project()}
                         directory={sessionDirectory()}
-                        messageID={diffSummaryRow().userMessageID}
                         dismissed={workspaceSuggestionDismissed()}
                         onDismiss={() => setWorkspaceSuggestionDismissed(true)}
                       />
@@ -1479,7 +1473,6 @@ function MessageTimelineView(
                                 diffs={sessionDiffs()}
                                 sessionID={id}
                                 moveEligible={props.workspaceMoveEligible}
-                                messageID={props.userMessages.at(-1)?.id}
                                 moveDismissed={workspaceSuggestionDismissed()}
                                 onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
                                 onReview={() => {

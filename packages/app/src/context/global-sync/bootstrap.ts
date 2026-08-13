@@ -35,6 +35,7 @@ import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
+import { sameDirectory } from "@/utils/workspace"
 
 type GlobalStore = {
   ready: boolean
@@ -127,12 +128,18 @@ export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, work
                 .map(async (project) => {
                   const directories = await worktrees
                     .list({ projectID: project.id })
-                    .catch(() =>
-                      (project.sandboxes ?? []).map((directory) => ({ directory, strategy: "git" as const })),
-                    )
+                    .catch(() => [
+                      { directory: project.canonical },
+                      ...(project.sandboxes ?? [])
+                        .filter((directory) => !sameDirectory(project.canonical, directory))
+                        .map((directory) => ({ directory })),
+                    ])
                   return normalizeProjectInfo({
                     ...project,
-                    sandboxes: directories.filter((item) => item.strategy !== undefined).map((item) => item.directory),
+                    sandboxes: directories
+                      .map((item) => item.directory)
+                      .filter((directory) => !sameDirectory(project.canonical, directory)),
+                    worktrees: directories,
                   })
                 }),
             )

@@ -28,6 +28,7 @@ import {
   containsDirectory,
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
+  managedWorkspaceDirectories,
   mergeWorkspaceSessionInventory,
   removeWorkspacesSequentially,
   sessionsForWorkspace,
@@ -56,7 +57,9 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   })
 
   const workspaces = createMemo(() => workspaceInventory(serverSync().data.project))
-  const projects = createMemo(() => serverSync().data.project.filter((project) => project.sandboxes?.length))
+  const projects = createMemo(() =>
+    serverSync().data.project.filter((project) => managedWorkspaceDirectories(project).length > 0),
+  )
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
     { id: "all", label: language.t("settings.workspaces.filter.all") },
@@ -125,23 +128,25 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     })
     return { result, sessions }
   }
-  const inspectionMessage = (result: WorkspaceDeleteInspection) => {
-    if (result === "active") return language.t("settings.workspaces.delete.blocked.active")
-    if (result === "linked") return language.t("settings.workspaces.delete.blocked.linked")
-    if (result === "dirty") return language.t("workspace.status.dirty")
-    return language.t("workspace.status.clean")
+  const inspectionMessages = (result: WorkspaceDeleteInspection) => {
+    const messages = [
+      result.active ? language.t("settings.workspaces.delete.blocked.active") : undefined,
+      result.linked ? language.t("settings.workspaces.delete.blocked.linked") : undefined,
+      result.dirty ? language.t("workspace.status.dirty") : undefined,
+    ].filter((message): message is string => message !== undefined)
+    return messages.length > 0 ? messages : [language.t("workspace.status.clean")]
   }
   const blocked = (result: WorkspaceDeleteInspection) => {
     showToast({
       variant: "error",
       title: language.t("workspace.delete.failed.title"),
-      description: inspectionMessage(result),
+      description: inspectionMessages(result)[0],
     })
   }
 
   const remove = async (workspace: Workspace, force = false, context = captureDeleteContext()) => {
     const preflight = await inspect(workspace, context)
-    if (preflight.result === "active" || (!force && preflight.result !== "safe")) {
+    if (preflight.result.active || (!force && (preflight.result.linked || preflight.result.dirty))) {
       blocked(preflight.result)
       return
     }
@@ -185,6 +190,9 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
         project.sandboxes = (project.sandboxes ?? []).filter(
           (directory) => pathKey(directory) !== pathKey(workspace.directory),
         )
+        project.worktrees = project.worktrees.filter(
+          (worktree) => pathKey(worktree.directory) !== pathKey(workspace.directory),
+        )
       }),
     )
   }
@@ -220,7 +228,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
           scope={context.sdk.scope}
           inspectionID={current}
           inspect={() => inspect(workspace, context)}
-          inspectionMessage={inspectionMessage}
+          inspectionMessages={inspectionMessages}
           onDelete={() => transact(() => remove(workspace, true, context))}
         />
       ),
@@ -435,7 +443,7 @@ function DialogDeleteWorkspace(props: {
   scope: ServerScope
   inspectionID: number
   inspect: () => Promise<{ result: WorkspaceDeleteInspection; sessions: SessionInfo[] }>
-  inspectionMessage: (result: WorkspaceDeleteInspection) => string
+  inspectionMessages: (result: WorkspaceDeleteInspection) => string[]
   onDelete: () => Promise<void>
 }) {
   const dialog = useDialog()
@@ -445,10 +453,11 @@ function DialogDeleteWorkspace(props: {
     queryFn: props.inspect,
     staleTime: 0,
   }))
-  const description = () => {
-    if (status.isPending) return language.t("workspace.status.checking")
-    if (status.isError) return language.t("workspace.status.error")
-    return props.inspectionMessage(status.data?.result ?? "unknown")
+  const descriptions = () => {
+    if (status.isPending) return [language.t("workspace.status.checking")]
+    if (status.isError) return [language.t("workspace.status.error")]
+    if (!status.data) return []
+    return props.inspectionMessages(status.data.result)
   }
   const remove = () => {
     const deleting = props.onDelete()
@@ -470,8 +479,7 @@ function DialogDeleteWorkspace(props: {
               </code>
               <br />
               {language.t("settings.workspaces.delete.warning")}
-              <br />
-              {description()}
+              <For each={descriptions()}>{(description) => <div>{description}</div>}</For>
             </>
           }
         />
@@ -483,7 +491,7 @@ function DialogDeleteWorkspace(props: {
         <ButtonV2
           type="button"
           variant="danger"
-          disabled={status.isPending || status.isError || status.data?.result === "active"}
+          disabled={status.isPending || status.isError || status.data?.result.active}
           onClick={remove}
         >
           {language.t("workspace.delete.button")}

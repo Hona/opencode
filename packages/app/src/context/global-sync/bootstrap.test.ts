@@ -110,29 +110,40 @@ describe("query keys", () => {
     const calls: string[] = []
     const projects = {
       list: async () => [
-        { id: "b", worktree: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-        { id: "a", worktree: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
       ],
     } as unknown as ProjectApi
     const worktrees = {
       list: async ({ projectID }: { projectID: string }) => {
         calls.push(projectID)
-        return [{ directory: `/${projectID}` }, { directory: `/${projectID}/copy`, strategy: "git" }]
+        return [
+          { directory: `/${projectID}` },
+          { directory: `/${projectID}/clone` },
+          { directory: `/${projectID}/copy`, strategy: "git" },
+        ]
       },
     } as unknown as WorktreeApi
 
     const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
 
     expect(result.map((project) => project.id)).toEqual(["a", "b"])
-    expect(result.map((project) => project.sandboxes)).toEqual([["/a/copy"], ["/b/copy"]])
+    expect(result.map((project) => project.sandboxes)).toEqual([
+      ["/a/clone", "/a/copy"],
+      ["/b/clone", "/b/copy"],
+    ])
+    expect(result.map((project) => project.worktrees)).toEqual([
+      [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
+      [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
+    ])
     expect(calls.toSorted()).toEqual(["a", "b"])
   })
 
   test("keeps projects whose directory inventory cannot load", async () => {
     const projects = {
       list: async () => [
-        { id: "a", worktree: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
-        { id: "b", worktree: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
       ],
     } as unknown as ProjectApi
     const worktrees = {

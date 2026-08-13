@@ -43,8 +43,22 @@ describe("isWorkspaceSelection", () => {
 
 test("groups and filters workspace inventory by project", () => {
   const inventory = workspaceInventory([
-    { id: "a", worktree: "/a", sandboxes: ["/a", "/a/one", "/a/two"] },
-    { id: "b", worktree: "/b", sandboxes: ["/b/one"] },
+    {
+      id: "a",
+      worktree: "/a",
+      sandboxes: ["/a", "/a/one", "/a/two"],
+      worktrees: [
+        { directory: "/a" },
+        { directory: "/a/one", strategy: "git" },
+        { directory: "/a/two", strategy: "git" },
+      ],
+    },
+    {
+      id: "b",
+      worktree: "/b",
+      sandboxes: ["/b/one"],
+      worktrees: [{ directory: "/b/one", strategy: "git" }],
+    },
   ])
 
   expect(inventory.map((item) => [item.project.id, item.directory])).toEqual([
@@ -56,9 +70,8 @@ test("groups and filters workspace inventory by project", () => {
   expect(filterWorkspaceInventory(inventory, "all")).toEqual(inventory)
 })
 
-test("blocks unsafe workspace deletion", () => {
-  const session = (directory: string) =>
-    ({ location: { directory }, time: { created: 1, updated: 1 } }) as SessionInfo
+test("reports every workspace deletion condition", () => {
+  const session = (directory: string) => ({ location: { directory }, time: { created: 1, updated: 1 } }) as SessionInfo
   expect(
     inspectWorkspaceDeletion({
       workspace: "/workspace",
@@ -66,16 +79,24 @@ test("blocks unsafe workspace deletion", () => {
       sessions: [],
       status: "dirty",
     }),
-  ).toBe("active")
+  ).toEqual({ active: true, linked: false, dirty: true })
   expect(
     inspectWorkspaceDeletion({
       workspace: "/workspace",
       sessions: [session("/workspace/packages/app")],
       status: "dirty",
     }),
-  ).toBe("linked")
-  expect(inspectWorkspaceDeletion({ workspace: "/workspace", sessions: [], status: "dirty" })).toBe("dirty")
-  expect(inspectWorkspaceDeletion({ workspace: "/workspace", sessions: [], status: "clean" })).toBe("safe")
+  ).toEqual({ active: false, linked: true, dirty: true })
+  expect(inspectWorkspaceDeletion({ workspace: "/workspace", sessions: [], status: "dirty" })).toEqual({
+    active: false,
+    linked: false,
+    dirty: true,
+  })
+  expect(inspectWorkspaceDeletion({ workspace: "/workspace", sessions: [], status: "clean" })).toEqual({
+    active: false,
+    linked: false,
+    dirty: false,
+  })
   expect(
     inspectWorkspaceDeletion({
       workspace: "/workspace",
@@ -84,7 +105,7 @@ test("blocks unsafe workspace deletion", () => {
       ],
       status: "clean",
     }),
-  ).toBe("safe")
+  ).toEqual({ active: false, linked: false, dirty: false })
 })
 
 test("groups nested non-archived workspace sessions by latest activity", () => {

@@ -1,15 +1,28 @@
 import { pathKey } from "@/utils/path-key"
 import type { WorkspaceDefaultDestination, WorkspaceLastUsed } from "@/context/settings"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo, WorktreeDirectory } from "@opencode-ai/client/promise"
 
-type WorkspaceProject = { worktree: string; sandboxes?: readonly string[] }
+type WorkspaceProject = {
+  worktree: string
+  sandboxes?: readonly string[]
+  worktrees?: readonly WorktreeDirectory[]
+}
 
 export function workspaceDirectories(project: WorkspaceProject) {
   return (project.sandboxes ?? []).filter((directory) => !sameDirectory(project.worktree, directory))
 }
 
+export function managedWorkspaceDirectories(project: WorkspaceProject) {
+  return (project.worktrees ?? [])
+    .filter((worktree) => worktree.strategy !== undefined)
+    .map((worktree) => worktree.directory)
+    .filter((directory) => !sameDirectory(project.worktree, directory))
+}
+
 export function workspaceInventory<T extends WorkspaceProject & { id: string }>(projects: readonly T[]) {
-  return projects.flatMap((project) => workspaceDirectories(project).map((directory) => ({ directory, project })))
+  return projects.flatMap((project) =>
+    managedWorkspaceDirectories(project).map((directory) => ({ directory, project })),
+  )
 }
 
 export function filterWorkspaceInventory<T extends { project: { id: string } }>(
@@ -40,7 +53,11 @@ export function removeWorkspacesSequentially<T>(workspaces: readonly T[], remove
   return workspaces.reduce((previous, workspace) => previous.then(() => remove(workspace)), Promise.resolve())
 }
 
-export type WorkspaceDeleteInspection = "safe" | "active" | "linked" | "dirty"
+export type WorkspaceDeleteInspection = {
+  active: boolean
+  linked: boolean
+  dirty: boolean
+}
 
 export function inspectWorkspaceDeletion(input: {
   workspace: string
@@ -48,16 +65,14 @@ export function inspectWorkspaceDeletion(input: {
   sessions: readonly SessionInfo[]
   status: "clean" | "dirty"
 }): WorkspaceDeleteInspection {
-  if (input.activeDirectory && containsDirectory(input.workspace, input.activeDirectory)) return "active"
-  if (
-    input.sessions.some(
+  return {
+    active: !!input.activeDirectory && containsDirectory(input.workspace, input.activeDirectory),
+    linked: input.sessions.some(
       (session) =>
         session.time.archived === undefined && containsDirectory(input.workspace, session.location.directory),
-    )
-  )
-    return "linked"
-  if (input.status === "dirty") return "dirty"
-  return "safe"
+    ),
+    dirty: input.status === "dirty",
+  }
 }
 
 export function isWorkspaceDirectory(project: WorkspaceProject | undefined, directory: string) {

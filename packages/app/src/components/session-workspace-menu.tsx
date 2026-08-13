@@ -10,14 +10,13 @@ import { useServerSync } from "@/context/server-sync"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
-import { containsDirectory, workspaceDirectories } from "@/utils/workspace"
+import { containsDirectory, sameDirectory, workspaceDirectories } from "@/utils/workspace"
 
 export function SessionWorkspaceMenu(props: {
   eligible?: boolean
   sessionID: string
   project: Project
   directory: string
-  messageID?: string
   placement?: ComponentProps<typeof MenuV2>["placement"]
   gutter?: number
   class?: string
@@ -43,7 +42,9 @@ export function SessionWorkspaceMenu(props: {
       .refresh({ projectID: props.project.id })
       .then(() => sdk.api.worktree.list({ projectID: props.project.id }))
       .then((items) =>
-        setDirectories(items.filter((item) => item.strategy !== undefined).map((item) => item.directory)),
+        setDirectories(
+          items.map((item) => item.directory).filter((directory) => !sameDirectory(props.project.worktree, directory)),
+        ),
       )
       .catch(() => undefined)
   }
