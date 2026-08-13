@@ -1483,6 +1483,8 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
+  const shouldAnchorBottom = () =>
+    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
   createEffect(
     on(
       () => controller.identity.params.id,
@@ -2091,9 +2093,7 @@ export default function Page() {
                   onUserScroll={markUserScroll}
                   onHistoryScroll={onHistoryScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={
-                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                  }
+                  shouldAnchorBottom={shouldAnchorBottom()}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el

@@ -241,10 +241,12 @@ function MessageTimelineView(
 ) {
   let touchGesture: number | undefined
   const language = useLanguage()
+  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
+  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
-  const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom
+  const coldBottomMount = !initialMeasurements?.length && shouldAnchorBottom()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = props.data.sessionID
@@ -377,7 +379,7 @@ function MessageTimelineView(
     },
     getScrollElement: () => listRoot() ?? null,
     observeElementOffset: observeElementOffsetReconnectAware,
-    initialOffset: () => (props.shouldAnchorBottom ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => (shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -415,11 +417,11 @@ function MessageTimelineView(
   const resizeItem = virtualizer.resizeItem
   let resizeAnchorScheduled = false
   const anchorResizedBottom = () => {
-    if (resizeAnchorScheduled || props.hasScrollGesture) return
+    if (resizeAnchorScheduled || hasScrollGesture()) return
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom || props.hasScrollGesture) return
+      if (!shouldAnchorBottom() || hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -444,10 +446,10 @@ function MessageTimelineView(
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom) anchorResizedBottom()
+    if (root && shouldAnchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom) return false
+    if (shouldAnchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -468,18 +470,18 @@ function MessageTimelineView(
   let overscanFrame: number | undefined
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
-      if (props.shouldAnchorBottom) virtualizer.scrollToEnd()
+      if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
         overscanFrame = undefined
         if (renderOverscan() < 20) setRenderOverscan(20)
-        if (props.shouldAnchorBottom) virtualizer.scrollToEnd()
+        if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       })
     })
   })
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom || props.hasScrollGesture) return
+    if (!shouldAnchorBottom() || hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)

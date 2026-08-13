@@ -25,6 +25,11 @@ const assistant = (completed: boolean, tool = false, childID?: string) =>
   }) satisfies SessionMessageInfo
 
 test("renders current protocol notices in CLI order", async ({ page }) => {
+  const ownerWarnings: string[] = []
+  page.on("console", (message) => {
+    if (message.text().includes("computations created outside a `createRoot` or `render`"))
+      ownerWarnings.push(message.text())
+  })
   await setupTimeline(page, {
     currentMessages: [
       user,
@@ -55,6 +60,7 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
   await expect(notices.nth(1)).toContainText("explore finished · Search code")
   await expect(notices.nth(2)).toContainText("Continuing after restart")
   await expect(notices.nth(3)).toContainText("Skill · Review")
+  expect(ownerWarnings).toEqual([])
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
