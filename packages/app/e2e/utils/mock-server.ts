@@ -267,7 +267,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
     if (/^\/api\/credential\/[^/]+$/.test(path) && route.request().method() === "DELETE")
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
-    if (path === "/api/project") return json(route, [config.project])
+    if (path === "/api/project") {
+      const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
+      return json(route, [
+        {
+          ...project,
+          canonical: project.canonical ?? project.worktree ?? config.directory,
+        },
+      ])
+    }
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
     const worktree = path.match(/^\/api\/experimental\/project\/([^/]+)\/worktree$/)?.[1]
