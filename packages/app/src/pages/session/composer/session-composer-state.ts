@@ -44,7 +44,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     queryFn: () =>
       sdk()
         .api.shell.list({ location: { directory: sdk().directory } })
-        .then((result) => result.data),
+        .then((result) => result.data ?? []),
   }))
   onCleanup(
     sdk().event.listen((event) => {
