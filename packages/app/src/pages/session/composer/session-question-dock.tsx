@@ -263,18 +263,18 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
-  const reply = async (answer: FormAnswer) => {
+  const reply = (answer: FormAnswer) => {
     if (sending()) return
-    await replyMutation.mutateAsync(answer)
+    replyMutation.mutate(answer)
   }
 
-  const reject = async () => {
+  const reject = () => {
     if (sending()) return
-    await rejectMutation.mutateAsync()
+    rejectMutation.mutate()
   }
 
   const submit = () =>
-    void reply(
+    reply(
       Object.fromEntries(
         questions().flatMap((question, index) => {
           const answers = store.answers[index] ?? []
@@ -348,7 +348,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (event.key === "Escape") {
       event.preventDefault()
-      void reject()
+      reject()
       return
     }
 

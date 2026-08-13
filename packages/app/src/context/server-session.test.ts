@@ -398,7 +398,18 @@ describe("server session", () => {
   test("does not let transient hydration overwrite newer events", async () => {
     const ctx = setup({ child: session("child") })
     const response = Promise.withResolvers<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>()
-    const hydration = ctx.store.hydrateTransient("child", () => response.promise)
+    const form: FormInfo = {
+      id: "frm_1",
+      sessionID: "child",
+      title: "Choose",
+      fields: [{ key: "choice", type: "string" as const, title: "Choice" }],
+    }
+    let loads = 0
+    const hydration = ctx.store.hydrateTransient("child", () => {
+      loads += 1
+      if (loads === 1) return response.promise
+      return Promise.resolve({ pending: ctx.store.data.pending.child ?? [], forms: [form] })
+    })
 
     ctx.store.applyV2({
       id: "evt_admitted",
@@ -412,22 +423,16 @@ describe("server session", () => {
     } as OpenCodeEvent)
     response.resolve({
       pending: [],
-      forms: [
-        {
-          id: "frm_1",
-          sessionID: "child",
-          title: "Choose",
-          fields: [{ key: "choice", type: "string", title: "Choice" }],
-        },
-      ],
+      forms: [form],
     })
     await hydration
 
     expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input" }])
     expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1" }])
+    expect(loads).toBe(2)
   })
 
-  test("removes compaction inbox state when compaction settles", () => {
+  test("removes only the compaction input named by the start event", () => {
     const ctx = setup({ child: session("child") })
     const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
     apply({
@@ -445,13 +450,32 @@ describe("server session", () => {
     expect(ctx.store.data.pending.child).toHaveLength(1)
 
     apply({
-      id: "evt_compaction_ended",
+      id: "evt_compaction_inbox_2",
       created: 2,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction_2",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+    apply({
+      id: "evt_compaction_ended",
+      created: 3,
       type: "session.compaction.ended",
       data: { sessionID: "child", reason: "manual", text: "summary", recent: "recent" },
     })
 
-    expect(ctx.store.data.pending.child).toEqual([])
+    expect(ctx.store.data.pending.child).toHaveLength(2)
+
+    apply({
+      id: "evt_compaction_started",
+      created: 4,
+      type: "session.compaction.started",
+      data: { sessionID: "child", inputID: "msg_compaction", reason: "manual" },
+    })
+
+    expect(ctx.store.data.pending.child?.map((item) => item.id)).toEqual(["msg_compaction_2"])
   })
 
   test("projects committed revert before server reconciliation", () => {
@@ -473,6 +497,38 @@ describe("server session", () => {
     expect(ctx.store.data.info.child?.revert).toBeUndefined()
     expect(ctx.store.data.input.child).toEqual(["msg_1"])
     expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1"])
+  })
+
+  test("does not restore a message hydrated before a committed revert", async () => {
+    const response = Promise.withResolvers<SessionMessageInfo>()
+    const store = createServerSession({
+      session: {
+        get: async () => session("child"),
+        message: () => response.promise,
+      } as unknown as SessionApi,
+      message: {
+        list: async () => currentPage({ data: [], response: { headers: new Headers() } }),
+      } as unknown as MessageApi,
+    })
+    store.remember(session("child"))
+
+    store.applyV2({
+      id: "evt_delivered",
+      created: 1,
+      type: "session.inbox.delivered",
+      data: { sessionID: "child", inboxID: "msg_2" },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_revert",
+      created: 2,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+    response.resolve({ id: "msg_2", type: "user", text: "stale", time: { created: 1 } })
+    await response.promise
+    await Bun.sleep(0)
+
+    expect(store.data.session_message.child ?? []).toEqual([])
   })
 
   test("resolves lineage by session ID without directory", async () => {

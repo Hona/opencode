@@ -32,7 +32,6 @@ test("shows a pending question dock", async ({ page }) => {
         ],
       },
     ],
-    sessionStatus: { [sessionID]: { type: "busy" } },
   })
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
