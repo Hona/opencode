@@ -211,7 +211,7 @@ describe("v2 session reducer", () => {
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })
 
-  test("projects non-initial instruction updates", () => {
+  test("projects rendered instruction updates", () => {
     const reducer = createV2SessionReducer()
     const result = reducer.reduce(
       [],
@@ -219,7 +219,7 @@ describe("v2 session reducer", () => {
         ...base,
         id: "evt_instructions",
         type: "session.instructions.updated",
-        data: { sessionID: "ses_1", delta: { agents: "hash" } },
+        data: { sessionID: "ses_1", delta: { agents: "hash" }, text: "Changed instructions" },
       }),
     )
 
@@ -227,7 +227,8 @@ describe("v2 session reducer", () => {
       {
         id: "msg_instructions",
         type: "system",
-        text: "Instructions updated: agents",
+        text: "Changed instructions",
+        description: "Instructions updated: agents",
         metadata: undefined,
         time: { created: 1 },
       },

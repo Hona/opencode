@@ -2,18 +2,23 @@ import type { OpenCodeEvent, ShellInfo } from "@opencode-ai/client/promise"
 import type { QueryClient } from "@tanstack/solid-query"
 import { pathKey, type PathKey } from "@/utils/path-key"
 import type { ServerScope } from "@/utils/server-scope"
+import type { ServerApi } from "@/utils/server"
+
+type LocationApi = {
+  location: Pick<ServerApi["location"], "get">
+  vcs: Pick<ServerApi["vcs"], "get">
+  skill: Pick<ServerApi["skill"], "list">
+  websearch: Pick<ServerApi["websearch"], "providers">
+  shell: Pick<ServerApi["shell"], "list">
+}
 
 export function createLocationSync(input: {
   scope: ServerScope
   queryClient: QueryClient
   active: () => PathKey[]
-  info: (directory: PathKey) => Promise<unknown>
-  vcs: (directory: PathKey) => Promise<unknown>
-  skill: (directory: PathKey) => Promise<unknown>
-  websearch: (directory: PathKey) => Promise<unknown>
-  shell: (directory: PathKey) => Promise<ShellInfo[]>
+  api: LocationApi
 }) {
-  function main(event: OpenCodeEvent, directory: string) {
+  function handleEvent(event: OpenCodeEvent, directory: string) {
     if (event.type === "server.connected") {
       void refreshActive()
       return
@@ -42,23 +47,35 @@ export function createLocationSync(input: {
   }
 
   async function refreshInfo(directory: PathKey) {
-    input.queryClient.setQueryData(infoKey(directory), await input.info(directory))
+    input.queryClient.setQueryData(infoKey(directory), await input.api.location.get({ location: { directory } }))
   }
 
   async function refreshVcs(directory: PathKey) {
-    input.queryClient.setQueryData(vcsKey(directory), await input.vcs(directory))
+    input.queryClient.setQueryData(
+      vcsKey(directory),
+      (await input.api.vcs.get({ location: { directory } })).data,
+    )
   }
 
   async function refreshSkill(directory: PathKey) {
-    input.queryClient.setQueryData(skillKey(directory), await input.skill(directory))
+    input.queryClient.setQueryData(
+      skillKey(directory),
+      (await input.api.skill.list({ location: { directory } })).data,
+    )
   }
 
   async function refreshWebsearch(directory: PathKey) {
-    input.queryClient.setQueryData(websearchKey(directory), await input.websearch(directory))
+    input.queryClient.setQueryData(
+      websearchKey(directory),
+      (await input.api.websearch.providers({ location: { directory } })).data,
+    )
   }
 
   async function refreshShell(directory: PathKey) {
-    input.queryClient.setQueryData(shellKey(directory), await input.shell(directory))
+    input.queryClient.setQueryData(
+      shellKey(directory),
+      (await input.api.shell.list({ location: { directory } })).data,
+    )
   }
 
   function rememberShell(directory: PathKey, shell: ShellInfo) {
@@ -80,5 +97,5 @@ export function createLocationSync(input: {
   const websearchKey = (directory: PathKey) => [input.scope, directory, "websearch"] as const
   const shellKey = (directory: PathKey) => [input.scope, directory, "shell"] as const
 
-  return { main }
+  return { handleEvent }
 }

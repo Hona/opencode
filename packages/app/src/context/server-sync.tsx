@@ -167,12 +167,10 @@ export function reconcileActiveSessionStatuses(
   session: Pick<ServerSession, "data" | "set">,
   active: SessionActiveOutput,
 ) {
-  for (const sessionID of Object.keys(session.data.session_status)) {
-    if (active[sessionID] !== undefined) continue
-    if (session.data.session_status[sessionID]?.type !== "idle")
-      session.set("session_status", sessionID, { type: "idle" })
-  }
-  for (const sessionID of Object.keys(active)) session.set("session_status", sessionID, { type: "busy" })
+  Object.keys(session.data.session_status)
+    .filter((sessionID) => active[sessionID] === undefined && session.data.session_status[sessionID]?.type !== "idle")
+    .forEach((sessionID) => session.set("session_status", sessionID, { type: "idle" }))
+  Object.keys(active).forEach((sessionID) => session.set("session_status", sessionID, { type: "busy" }))
 }
 
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
@@ -227,9 +225,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       active: async () => {
         const active = await serverSDK.api.session.active()
         reconcileActiveSessionStatuses(session, active)
-        for (const sessionID of Object.keys(active)) {
+        Object.keys(active).forEach((sessionID) => {
           void Promise.all([session.resolve(sessionID), hydrateSessionState(sessionID)]).catch(() => undefined)
-        }
+        })
         return active
       },
     }),
@@ -362,21 +360,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       if (info.reconnect) void session.refreshPinned()
       if (activeSessionsQuery.data !== undefined && !activeSessionsQuery.isFetching) void activeSessionsQuery.refetch()
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
-      for (const directory of Object.keys(children.children)) {
-        if (children.active(directory)) queue.push(directory)
-      }
+      Object.keys(children.children).filter(children.active).forEach(queue.push)
     },
   })
   const location = createLocationSync({
     scope: serverSDK.scope,
     queryClient,
     active: () => Object.keys(children.children).filter(children.active).map(pathKey),
-    info: (directory) => serverSDK.api.location.get({ location: { directory } }),
-    vcs: (directory) => serverSDK.api.vcs.get({ location: { directory } }).then((result) => result.data),
-    skill: (directory) => serverSDK.api.skill.list({ location: { directory } }).then((result) => result.data),
-    websearch: (directory) =>
-      serverSDK.api.websearch.providers({ location: { directory } }).then((result) => result.data),
-    shell: (directory) => serverSDK.api.shell.list({ location: { directory } }).then((result) => result.data),
+    api: serverSDK.api,
   })
 
   async function loadSessions(directory: string, options?: { limit?: number }) {
@@ -552,9 +543,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         })
     }
     homeSessions.refresh(event.type)
-    catalog.main({ type: eventType, directory })
-    connection.main({ type: eventType, directory })
-    if (event.current) location.main(event.current, directory)
+    catalog.handleEvent({ type: eventType, directory })
+    connection.handleEvent({ type: eventType, directory })
+    if (event.current) location.handleEvent(event.current, directory)
 
     if (directory === "global") {
       applyGlobalEvent({
@@ -570,7 +561,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       )
         bootstrap.refetch()
       if (eventType === "global.disposed")
-        for (const directory of Object.keys(children.children)) if (children.active(directory)) queue.push(directory)
+        Object.keys(children.children).filter(children.active).forEach(queue.push)
       return
     }
 

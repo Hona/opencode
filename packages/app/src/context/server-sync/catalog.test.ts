@@ -17,7 +17,7 @@ test("invalidates the catalog for the event location", async () => {
     load: async () => {},
   })
 
-  catalog.main({ type: "catalog.updated", directory: "/one" })
+  catalog.handleEvent({ type: "catalog.updated", directory: "/one" })
   await Bun.sleep(0)
 
   expect(queryClient.getQueryState(one)?.isInvalidated).toBe(true)
@@ -39,7 +39,7 @@ test("invalidates global and active catalogs after connection", async () => {
     load: async () => {},
   })
 
-  catalog.main({ type: "server.connected", directory: "global" })
+  catalog.handleEvent({ type: "server.connected", directory: "global" })
   await Bun.sleep(0)
 
   expect(queryClient.getQueryState(global)?.isInvalidated).toBe(true)

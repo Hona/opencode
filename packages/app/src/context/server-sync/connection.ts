@@ -12,11 +12,11 @@ export function createConnectionSync(input: {
   })
 
   let connectedOnce = false
-  function main(event: { type: string; directory: string }) {
+  function handleEvent(event: { type: string; directory: string }) {
     if (event.directory !== "global" || event.type !== "server.connected") return
     input.connected({ reconnect: connectedOnce })
     connectedOnce = true
   }
 
-  return { main }
+  return { handleEvent }
 }

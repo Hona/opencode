@@ -13,7 +13,7 @@ export function createCatalogSync(input: {
   active: () => PathKey[]
   load: (directory: PathKey | null) => Promise<void>
 }) {
-  function main(event: CatalogEvent) {
+  function handleEvent(event: CatalogEvent) {
     if (event.type === "server.connected") {
       void refreshActive()
       return
@@ -42,7 +42,7 @@ export function createCatalogSync(input: {
   }
 
   return {
-    main,
+    handleEvent,
     refresh,
     refreshActive,
   }

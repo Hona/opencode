@@ -47,7 +47,6 @@ type MockStreamWindow = Window & {
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
-  const streamPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 
   await page.addInitScript(
     ({ port, retry }) => {
@@ -64,11 +63,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       host.__mockServerStream = {
         push(payloads: unknown[]) {
           const frames = payloads.map(frame)
-          if (!state.controller) {
+          const controller = state.controller
+          if (!controller) {
             state.buffer.push(...frames)
             return
           }
-          for (const item of frames) state.controller.enqueue(encoder.encode(item))
+          frames.forEach((item) => controller.enqueue(encoder.encode(item)))
         },
       }
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,7 +87,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
             controller.enqueue(
               encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
             )
-            for (const item of state.buffer.splice(0)) controller.enqueue(encoder.encode(item))
+            state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
             request.signal.addEventListener(
               "abort",
               () => {
@@ -114,7 +114,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { port: streamPort, retry: config.eventRetry },
+    { port: process.env.PLAYWRIGHT_SERVER_PORT ?? "4096", retry: config.eventRetry },
   )
 
   if (config.events) {

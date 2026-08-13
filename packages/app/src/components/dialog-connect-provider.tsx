@@ -139,9 +139,9 @@ export const DialogConnectProvider: Component<{
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const settings = useSettings()
-  const integrations = useIntegrations(() => props.directory)
   if (settings.general.newLayoutDesigns())
-    return <ProviderPickerV2 integrations={integrations.list} onSelect={props.onSelect} onPrepare={props.onPrepare} />
+    return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
+  const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
@@ -208,11 +208,8 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   )
 }
 
-function ProviderPickerV2(props: {
-  integrations: ReturnType<typeof useIntegrations>["list"]
-  onSelect: (provider: string) => void
-  onPrepare?: () => void
-}) {
+function ProviderPickerV2(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
+  const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
   const [store, setStore] = createStore({
     filter: "",
@@ -224,7 +221,7 @@ function ProviderPickerV2(props: {
   const all = createMemo(() => {
     language.locale()
     const query = store.filter.trim().toLowerCase()
-    const values = [custom(), ...props.integrations()]
+    const values = [custom(), ...integrations.list()]
     if (!query) return values
     return values.filter((provider) => `${provider.id} ${provider.name}`.toLowerCase().includes(query))
   })
@@ -387,16 +384,14 @@ function ProviderConnection(props: {
     },
   })
   const provider = createMemo(
-    () =>
-      providers.all().get(props.provider) ??
-      serverSync().data.provider.all.get(props.provider) ?? {
-        id: props.provider,
-        name: controller.integration()?.name ?? props.provider,
-        source: "custom" as const,
-        env: [],
-        options: {},
-        models: {},
-      },
+    () => ({
+      id: props.provider,
+      name:
+        providers.all().get(props.provider)?.name ??
+        serverSync().data.provider.all.get(props.provider)?.name ??
+        controller.integration()?.name ??
+        props.provider,
+    }),
   )
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""

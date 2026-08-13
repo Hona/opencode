@@ -42,8 +42,6 @@ export function applyGlobalEvent(input: {
     input.refresh()
     return
   }
-  if (input.event.type === "server.connected") return
-
   if (input.event.type !== "project.updated") return
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)

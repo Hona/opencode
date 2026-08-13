@@ -140,7 +140,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = 0
 
-  const flush = () => {
+  function flush() {
     if (timer) clearTimeout(timer)
     timer = undefined
 
@@ -160,18 +160,20 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     buffer.length = 0
   }
 
-  const schedule = () => {
+  function schedule() {
     if (timer) return
     const elapsed = Date.now() - last
     timer = setTimeout(flush, Math.max(0, FLUSH_FRAME_MS - elapsed))
   }
 
-  const publish = (event: OpenCodeEvent) => {
+  function publish(event: OpenCodeEvent) {
     const directory = event.location?.directory ?? "global"
     if (enqueueServerEvent(queue, { directory, payload: adaptServerEvent(event) })) schedule()
   }
 
-  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  function wait(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms))
+  }
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
@@ -182,15 +184,17 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     error?: string
   }>({ status: "connecting", attempt: 0 })
 
-  const connect = async (signal: AbortSignal): Promise<{ error: unknown; connectedAt: number | undefined }> => {
+  async function connect(signal: AbortSignal): Promise<{ error: unknown; connectedAt: number | undefined }> {
     let connectedAt: number | undefined
 
+    // Bound the initial handshake and tie this request to the stream lifetime.
     const request = new AbortController()
     const cancel = () => request.abort(signal.reason)
     const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), CONNECT_TIMEOUT_MS)
     signal.addEventListener("abort", cancel, { once: true })
 
     try {
+      // Open the event stream and validate its initial handshake.
       const iterator = eventApi.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
       const first = await iterator.next()
 
@@ -203,11 +207,13 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       if (first.value.type !== "server.connected")
         return { error: new Error("Event stream did not start with server.connected"), connectedAt }
 
+      // Publish the connected state before forwarding live events.
       clearTimeout(timeout)
       publish(first.value)
       connectedAt = Date.now()
       setConnection({ status: "connected", attempt: 0, error: undefined })
 
+      // Forward events until the stream closes or this connection is cancelled.
       let yielded = Date.now()
       while (!signal.aborted) {
         const event = await iterator.next()
@@ -228,17 +234,18 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     }
   }
 
-  const main = async (active: number) => {
+  async function runStream(active: number) {
     let retries = 0
     // oxlint-disable-next-line no-unmodified-loop-condition -- stop() changes the lifecycle flags and aborts the active request
     while (!abort.signal.aborted && started && generation === active) {
       setConnection({ status: retries === 0 ? "connecting" : "reconnecting", attempt: retries, error: undefined })
-      attempt = new AbortController()
-      const onAbort = () => attempt?.abort()
+      const controller = new AbortController()
+      attempt = controller
+      const onAbort = () => controller.abort()
       abort.signal.addEventListener("abort", onAbort)
-      const result = await connect(attempt.signal)
+      const result = await connect(controller.signal)
       abort.signal.removeEventListener("abort", onAbort)
-      attempt = undefined
+      if (attempt === controller) attempt = undefined
 
       if (abort.signal.aborted || !started || generation !== active) return
       if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) retries = 0
@@ -260,14 +267,14 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     }
   }
 
-  const start = () => {
+  function start() {
     if (started) return run
     started = true
     const active = ++generation
     const previous = run
     const current = (async () => {
       if (previous) await previous
-      await main(active)
+      await runStream(active)
     })().finally(() => {
       if (run !== current) return
       run = undefined
@@ -277,7 +284,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     return run
   }
 
-  const stop = () => {
+  function stop() {
     started = false
     generation++
     attempt?.abort()
