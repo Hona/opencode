@@ -69,10 +69,9 @@ export function getCurrentCli(target = CLI_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function downloadCliToResources(version = CLI_VERSION) {
+export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const dest = windowsify("resources/opencode-cli")
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyFile(
@@ -82,13 +81,17 @@ export async function downloadCliToResources(version = CLI_VERSION) {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+  await prepareCli(dest)
+
+  console.log(`Copied ${cli.package}@${version} to ${dest}`)
+}
+
+async function prepareCli(dest: string) {
   if (process.platform !== "win32") await chmod(dest, 0o755)
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
-
-  console.log(`Copied ${cli.package}@${version} to ${dest}`)
 }
 
 export function windowsify(path: string) {
