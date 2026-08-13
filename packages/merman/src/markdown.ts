@@ -17,6 +17,10 @@ import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./flowchart/style.js"
+import { drawGitGraphDiagramGrid } from "./gitgraph/drawing.js"
+import { parseMermaidGitGraphDiagram } from "./gitgraph/parser.js"
+import { renderGitGraphGridStyledText } from "./gitgraph/render-grid.js"
+import { resolveGitGraphStyleColors } from "./gitgraph/style.js"
 import { drawSequenceDiagramGrid } from "./sequence/drawing.js"
 import { parseMermaidSequenceDiagram } from "./sequence/parser.js"
 import { renderSequenceGridStyledText } from "./sequence/render-grid.js"
@@ -25,6 +29,10 @@ import { drawStateDiagramGrid } from "./state/drawing.js"
 import { parseMermaidStateDiagram } from "./state/parser.js"
 import { renderStateGridStyledText } from "./state/render-grid.js"
 import { resolveStateStyleColors } from "./state/style.js"
+import { drawTimelineDiagramGrid } from "./timeline/drawing.js"
+import { parseMermaidTimelineDiagram } from "./timeline/parser.js"
+import { renderTimelineGridStyledText } from "./timeline/render-grid.js"
+import { resolveTimelineStyleColors } from "./timeline/style.js"
 
 type DiagramKind = NonNullable<ReturnType<typeof detectMermaidDiagram>>
 
@@ -133,6 +141,25 @@ function prepareDiagram(
         height: size.height,
       }
     }
+    case "gitGraph": {
+      const grid = drawGitGraphDiagramGrid(parseMermaidGitGraphDiagram(source))
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderGitGraphGridStyledText(
+          grid,
+          resolveGitGraphStyleColors({
+            primary: color(colors.primary),
+            secondary: color(colors.secondary),
+            muted: color(colors.muted),
+            warning: color(colors.warning),
+            text: color(colors.text),
+          }),
+        ),
+        height: size.height,
+      }
+    }
     case "sequence": {
       const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(source), { compact: options.compact })
       const size = grid.getTextSize()
@@ -175,6 +202,25 @@ function prepareDiagram(
             start: color(colors.muted),
             end: color(colors.muted),
             choice: color(colors.secondary),
+          }),
+        ),
+        height: size.height,
+      }
+    }
+    case "timeline": {
+      const grid = drawTimelineDiagramGrid(parseMermaidTimelineDiagram(source))
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderTimelineGridStyledText(
+          grid,
+          resolveTimelineStyleColors({
+            title: color(colors.text),
+            section: color(colors.secondary),
+            period: color(colors.warning),
+            spine: color(colors.muted),
+            event: color(colors.primary),
           }),
         ),
         height: size.height,
