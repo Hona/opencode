@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
 import type {
+  FormInfo,
   OpenCodeEvent,
   SessionApi,
+  SessionInboxInfo,
   SessionInfo,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
@@ -395,7 +397,7 @@ describe("server session", () => {
 
   test("does not let transient hydration overwrite newer events", async () => {
     const ctx = setup({ child: session("child") })
-    const response = Promise.withResolvers<{ pending: []; forms: [] }>()
+    const response = Promise.withResolvers<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>()
     const hydration = ctx.store.hydrateTransient("child", () => response.promise)
 
     ctx.store.applyV2({
@@ -408,10 +410,69 @@ describe("server session", () => {
         item: { type: "user", delivery: "queue", payload: { text: "new" } },
       },
     } as OpenCodeEvent)
-    response.resolve({ pending: [], forms: [] })
+    response.resolve({
+      pending: [],
+      forms: [
+        {
+          id: "frm_1",
+          sessionID: "child",
+          title: "Choose",
+          fields: [{ key: "choice", type: "string", title: "Choice" }],
+        },
+      ],
+    })
     await hydration
 
     expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input" }])
+    expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1" }])
+  })
+
+  test("removes compaction inbox state when compaction settles", () => {
+    const ctx = setup({ child: session("child") })
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+    apply({
+      id: "evt_compaction_inbox",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+
+    expect(ctx.store.data.input.child).toBeUndefined()
+    expect(ctx.store.data.pending.child).toHaveLength(1)
+
+    apply({
+      id: "evt_compaction_ended",
+      created: 2,
+      type: "session.compaction.ended",
+      data: { sessionID: "child", reason: "manual", text: "summary", recent: "recent" },
+    })
+
+    expect(ctx.store.data.pending.child).toEqual([])
+  })
+
+  test("projects committed revert before server reconciliation", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember({ ...session("child"), revert: { messageID: "msg_2", partID: "prt_1" } })
+    ctx.store.set("input", "child", ["msg_1", "msg_2"])
+    ctx.store.set("session_message", "child", [
+      { id: "msg_1", type: "user", text: "keep", time: { created: 1 } },
+      { id: "msg_2", type: "user", text: "remove", time: { created: 2 } },
+    ])
+
+    ctx.store.applyV2({
+      id: "evt_revert",
+      created: 3,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+
+    expect(ctx.store.data.info.child?.revert).toBeUndefined()
+    expect(ctx.store.data.input.child).toEqual(["msg_1"])
+    expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1"])
   })
 
   test("resolves lineage by session ID without directory", async () => {
@@ -432,6 +493,17 @@ describe("server session", () => {
     expect(ctx.get).toEqual([{ sessionID: "root" }])
     expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
     expect(ctx.store.data.message.root).toEqual([])
+  })
+
+  test("reloads cached sessions after reconnect invalidation", async () => {
+    const ctx = setup({ root: session("root") })
+    await ctx.store.sync("root")
+
+    ctx.store.invalidate()
+    await ctx.store.sync("root")
+
+    expect(ctx.get).toHaveLength(2)
+    expect(ctx.messages).toHaveLength(2)
   })
 
   test("loads current session content through the current message API", async () => {

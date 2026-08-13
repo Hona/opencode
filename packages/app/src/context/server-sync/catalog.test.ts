@@ -7,8 +7,10 @@ import { pathKey } from "@/utils/path-key"
 test("invalidates the catalog for the event location", async () => {
   const queryClient = new QueryClient()
   const one = [ServerScope.local, "/one", "providers"] as const
+  const integrations = [ServerScope.local, "/one", "integrations"] as const
   const two = [ServerScope.local, "/two", "providers"] as const
   queryClient.setQueryData(one, { providers: ["one"] })
+  queryClient.setQueryData(integrations, { integrations: ["one"] })
   queryClient.setQueryData(two, { providers: ["two"] })
   const catalog = createCatalogSync({
     scope: ServerScope.local,
@@ -21,6 +23,7 @@ test("invalidates the catalog for the event location", async () => {
   await Bun.sleep(0)
 
   expect(queryClient.getQueryState(one)?.isInvalidated).toBe(true)
+  expect(queryClient.getQueryState(integrations)?.isInvalidated).toBe(true)
   expect(queryClient.getQueryState(two)?.isInvalidated).toBe(false)
 })
 

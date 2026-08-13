@@ -674,7 +674,15 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  const refreshVcs = debounce(() => {
+    void queryClient.invalidateQueries({ queryKey: vcsKey() })
+    void queryClient.invalidateQueries({ queryKey: [serverSDK().scope, ...vcsKey()] })
+  }, 100)
+  onCleanup(
+    sdk().event.listen((event) => {
+      if (event.details.type === "filesystem.changed") refreshVcs()
+    }),
+  )
   createEffect(
     on(
       () => desktopReviewOpen() || mobileChanges(),

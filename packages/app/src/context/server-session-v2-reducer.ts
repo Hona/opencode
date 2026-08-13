@@ -1,4 +1,4 @@
-import type { OpenCodeEvent, SessionInboxItem, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionInboxItem, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
@@ -15,7 +15,11 @@ export type V2SessionReduction = {
 export function createV2SessionReducer() {
   const pending = new Map<string, SessionInboxItem>()
 
-  const reduce = (source: readonly SessionMessageInfo[], event: OpenCodeEvent): V2SessionReduction | undefined => {
+  const reduce = (
+    source: readonly SessionMessageInfo[],
+    event: OpenCodeEvent,
+    session?: Pick<SessionInfo, "location" | "projectID" | "subpath">,
+  ): V2SessionReduction | undefined => {
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     const result = (messages: SessionMessageInfo[], touched: string[] = []): V2SessionReduction => ({
@@ -109,6 +113,22 @@ export function createV2SessionReducer() {
               (item): item is Extract<SessionMessageInfo, { type: "model-switched" | "assistant" }> =>
                 item.type === "model-switched" || item.type === "assistant",
             )?.model,
+          time: { created: event.created },
+        })
+      case "session.moved":
+        if (!session) return
+        return append({
+          id: messageID(event.id),
+          type: "location-switched",
+          metadata: event.metadata,
+          location: event.data.location,
+          projectID: event.data.projectID,
+          subpath: event.data.subpath,
+          previous: {
+            location: session.location,
+            projectID: session.projectID,
+            subpath: session.subpath,
+          },
           time: { created: event.created },
         })
       case "session.instructions.updated":
@@ -440,8 +460,11 @@ export function createV2SessionReducer() {
           type: "compaction",
           status: "failed",
           metadata: current?.metadata ?? event.metadata,
-          reason: event.data.reason,
-          error: event.data.error,
+          reason: event.data.reason ?? "manual",
+          error: event.data.error ?? {
+            type: "compaction.failed",
+            message: "Compaction failed before recording an error",
+          },
           time: current?.time ?? { created: event.created },
         }
         if (!current) return append(failed)

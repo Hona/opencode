@@ -183,6 +183,37 @@ describe("createChildStoreManager", () => {
     }
   })
 
+  test("writes refreshed VCS data to the child store", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        connected: () => true,
+        scope: ServerScope.local,
+        persist,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap() {},
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+      const [store] = manager.child("/project", { bootstrap: false })
+
+      manager.vcs("/project", { branch: "feature", default_branch: "main" })
+
+      expect(store.vcs).toEqual({ branch: "feature", default_branch: "main" })
+    } finally {
+      dispose()
+    }
+  })
+
   test("enables MCP only when requested for the directory", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
     const offset = querySingles.length

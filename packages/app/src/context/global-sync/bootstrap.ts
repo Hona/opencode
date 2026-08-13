@@ -26,7 +26,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import type { State, VcsCache } from "./types"
+import type { State } from "./types"
 import type { ServerSession } from "../server-session"
 import { cmp, directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
@@ -285,7 +285,6 @@ export async function bootstrapDirectory(input: {
   }
   store: Store<State>
   setStore: SetStoreFunction<State>
-  vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {

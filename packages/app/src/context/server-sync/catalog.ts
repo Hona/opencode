@@ -15,7 +15,7 @@ export function createCatalogSync(input: {
 }) {
   function handleEvent(event: CatalogEvent) {
     if (event.type === "server.connected") {
-      void refreshActive()
+      void refreshActive().catch(() => undefined)
       return
     }
 
@@ -24,16 +24,20 @@ export function createCatalogSync(input: {
       event.type === "integration.updated" ||
       event.type === "integration.connection.updated"
     ) {
-      void refresh(event.directory === "global" ? null : pathKey(event.directory))
+      void refresh(event.directory === "global" ? null : pathKey(event.directory)).catch(() => undefined)
     }
   }
 
   async function refresh(directory: PathKey | null) {
-    await input.queryClient.invalidateQueries({
-      queryKey: [input.scope, directory, "providers"],
-      exact: true,
-      refetchType: "none",
-    })
+    await Promise.all(
+      ["providers", "integrations"].map((resource) =>
+        input.queryClient.invalidateQueries({
+          queryKey: [input.scope, directory, resource],
+          exact: true,
+          refetchType: "none",
+        }),
+      ),
+    )
     await input.load(directory)
   }
 

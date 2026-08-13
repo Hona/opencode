@@ -387,6 +387,15 @@ export function createChildStoreManager(input: {
     setStore("icon", value)
   }
 
+  function vcs(directory: string, value: VcsInfo) {
+    const key = directoryKey(directory)
+    const child = ensureChild(directory)
+    const cached = vcsCache.get(key)
+    if (!cached) return
+    cached.setStore("value", value)
+    child[1]("vcs", value)
+  }
+
   return {
     children,
     ensureChild,
@@ -394,6 +403,7 @@ export function createChildStoreManager(input: {
     peek,
     projectMeta,
     projectIcon,
+    vcs,
     mark,
     pin,
     unpin,

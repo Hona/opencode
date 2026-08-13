@@ -235,6 +235,34 @@ describe("v2 session reducer", () => {
     ])
   })
 
+  test("projects session movement with the previous location", () => {
+    const result = createV2SessionReducer().reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_moved",
+        type: "session.moved",
+        data: {
+          sessionID: "ses_1",
+          projectID: "project_2",
+          location: { directory: "/repo-2" },
+          subpath: "packages/app",
+        },
+      }),
+      { projectID: "project_1", location: { directory: "/repo-1" } },
+    )
+
+    expect(result?.messages).toMatchObject([
+      {
+        id: "msg_moved",
+        type: "location-switched",
+        projectID: "project_2",
+        location: { directory: "/repo-2" },
+        previous: { projectID: "project_1", location: { directory: "/repo-1" } },
+      },
+    ])
+  })
+
   test("removes cancelled input from the pending promotion fold", () => {
     const reducer = createV2SessionReducer()
     reducer.reduce(

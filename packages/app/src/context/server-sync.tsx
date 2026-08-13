@@ -56,7 +56,6 @@ import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
 import { createCatalogSync } from "./server-sync/catalog"
 import { createConnectionSync } from "./server-sync/connection"
-import { createLocationSync } from "./server-sync/location"
 import { usePlatform } from "./platform"
 
 type GlobalStore = {
@@ -353,21 +352,36 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         queryClient.fetchQuery(queryOptionsApi.integrations(directory)),
       ]).then(() => undefined),
   })
+  const refreshVcs = (directory: string) =>
+    serverSDK.api.vcs
+      .get({ location: { directory } })
+      .then((result) =>
+        children.vcs(directory, {
+          branch: result.data.branch.current,
+          default_branch: result.data.branch.default,
+        }),
+      )
+      .catch(() => undefined)
   const connection = createConnectionSync({
     status: serverSDK.connection.status,
-    invalidate: session.invalidate,
+    invalidate: () => {
+      session.invalidate()
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === serverSDK.scope,
+        refetchType: "none",
+      })
+    },
     connected: (info) => {
-      if (info.reconnect) void session.refreshPinned()
+      if (info.reconnect) void session.refreshPinned(hydrateSessionState).catch(() => undefined)
       if (activeSessionsQuery.data !== undefined && !activeSessionsQuery.isFetching) void activeSessionsQuery.refetch()
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
-      Object.keys(children.children).filter(children.active).forEach(queue.push)
+      Object.keys(children.children)
+        .filter(children.active)
+        .forEach((directory) => {
+          queue.push(directory)
+          if (children.children[directory]?.[0].status !== "loading") void refreshVcs(directory)
+        })
     },
-  })
-  const location = createLocationSync({
-    scope: serverSDK.scope,
-    queryClient,
-    active: () => Object.keys(children.children).filter(children.active).map(pathKey),
-    api: serverSDK.api,
   })
 
   async function loadSessions(directory: string, options?: { limit?: number }) {
@@ -455,27 +469,28 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
-      const cache = children.vcsCache.get(key)
-      if (!cache) return
-      await bootstrapDirectory({
-        directory,
-        scope: serverSDK.scope,
-        mcp: children.mcp(key),
-        global: {
-          config: globalStore.config,
-          path: globalStore.path,
-          project: globalStore.project,
-          provider: globalStore.provider,
-        },
-        api: serverSDK.api,
-        store: child[0],
-        setStore: child[1],
-        vcsCache: cache,
-        loadSessions,
-        translate: language.t,
-        queryClient,
-        session,
-      })
+      const initial = child[0].status === "loading"
+      await Promise.all([
+        bootstrapDirectory({
+          directory,
+          scope: serverSDK.scope,
+          mcp: children.mcp(key),
+          global: {
+            config: globalStore.config,
+            path: globalStore.path,
+            project: globalStore.project,
+            provider: globalStore.provider,
+          },
+          api: serverSDK.api,
+          store: child[0],
+          setStore: child[1],
+          loadSessions,
+          translate: language.t,
+          queryClient,
+          session,
+        }),
+        initial ? refreshVcs(directory) : Promise.resolve(),
+      ])
     })
 
     booting.set(key, promise)
@@ -545,7 +560,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     homeSessions.refresh(event.type)
     catalog.handleEvent({ type: eventType, directory })
     connection.handleEvent({ type: eventType, directory })
-    if (event.current) location.handleEvent(event.current, directory)
 
     if (directory === "global") {
       applyGlobalEvent({

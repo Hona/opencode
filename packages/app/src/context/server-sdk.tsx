@@ -171,8 +171,16 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     if (enqueueServerEvent(queue, { directory, payload: adaptServerEvent(event) })) schedule()
   }
 
-  function wait(ms: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms))
+  function wait(delay: number, signal: AbortSignal) {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(done, delay)
+      signal.addEventListener("abort", done, { once: true })
+      function done() {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", done)
+        resolve()
+      }
+    })
   }
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
@@ -222,7 +230,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         publish(event.value)
         if (Date.now() - yielded < STREAM_YIELD_MS) continue
         yielded = Date.now()
-        await wait(0)
+        await wait(0, signal)
       }
       return { error: undefined, connectedAt }
     } catch (error) {
@@ -245,9 +253,11 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       abort.signal.addEventListener("abort", onAbort)
       const result = await connect(controller.signal)
       abort.signal.removeEventListener("abort", onAbort)
-      if (attempt === controller) attempt = undefined
 
-      if (abort.signal.aborted || !started || generation !== active) return
+      if (abort.signal.aborted || !started || generation !== active) {
+        if (attempt === controller) attempt = undefined
+        return
+      }
       if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) retries = 0
       retries += 1
       const message =
@@ -263,7 +273,8 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         error: message,
       })
       setConnection({ status: "reconnecting", attempt: retries, error: message })
-      await wait(RECONNECT_DELAY_MS)
+      await wait(RECONNECT_DELAY_MS, controller.signal)
+      if (attempt === controller) attempt = undefined
     }
   }
 
@@ -299,7 +310,11 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   onCleanup(() => {
     stop()
     abort.abort()
-    flush()
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    queue = []
+    buffer = []
+    emitter.clear()
   })
 
   const api = createApiForServer({ server: server.http, fetch: platform.fetch })
