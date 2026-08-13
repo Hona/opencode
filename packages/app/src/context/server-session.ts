@@ -313,19 +313,17 @@ export function createServerSession(
     return session
   }
 
-  const resolve = (sessionID: string, options?: { force?: boolean; signal?: AbortSignal }) => {
+  const resolve = (sessionID: string, options?: { force?: boolean }) => {
     const cached = data.info[sessionID]
     if (cached && !options?.force) return Promise.resolve(cached)
-    const pending = options?.signal ? undefined : requests.get(sessionID)
+    const pending = requests.get(sessionID)
     if (pending) return pending
     const active = generation(sessionID)
-    const request = sessionApi.get({ sessionID }, { signal: options?.signal })
+    const request = sessionApi.get({ sessionID })
     const resolved = request.then((result) => {
-      if (options?.signal?.aborted) return result
       if (generations.get(sessionID) !== active) return result
       return remember(result)
     })
-    if (options?.signal) return resolved
     requests.set(sessionID, resolved)
     const cleanup = () => {
       if (requests.get(sessionID) === resolved) requests.delete(sessionID)
@@ -1488,8 +1486,9 @@ export function createServerSession(
           )
           return
         }
+        const projectedIDs = new Set(projectMessageSource(item.message).map((message) => message.id))
         setData("session_message", input.sessionID, (messages) =>
-          messages?.filter((message) => message.id !== input.messageID),
+          messages?.filter((message) => !projectedIDs.has(message.id)),
         )
         setData("message", input.sessionID, (messages) => messages?.filter((message) => message.id !== input.messageID))
         setData(produce((draft) => deleteMessageParts(draft, input.messageID)))

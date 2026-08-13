@@ -5,9 +5,7 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 type WorkspaceProject = { worktree: string; sandboxes?: readonly string[] }
 
 export function workspaceDirectories(project: WorkspaceProject) {
-  return (project.sandboxes ?? []).filter(
-    (directory) => !containsDirectory(project.worktree, directory) || !containsDirectory(directory, project.worktree),
-  )
+  return (project.sandboxes ?? []).filter((directory) => !sameDirectory(project.worktree, directory))
 }
 
 export function workspaceInventory<T extends WorkspaceProject & { id: string }>(projects: readonly T[]) {
@@ -38,10 +36,6 @@ export function mergeWorkspaceSessionInventory(server: readonly SessionInfo[], c
   return [...sessions.values()]
 }
 
-export function removeWorkspacesSequentially<T>(workspaces: readonly T[], remove: (workspace: T) => Promise<void>) {
-  return workspaces.reduce((previous, workspace) => previous.then(() => remove(workspace)), Promise.resolve())
-}
-
 export type WorkspaceDeleteInspection = "safe" | "active" | "linked" | "dirty"
 
 export function inspectWorkspaceDeletion(input: {
@@ -63,8 +57,7 @@ export function inspectWorkspaceDeletion(input: {
 }
 
 export function isWorkspaceDirectory(project: WorkspaceProject | undefined, directory: string) {
-  if (!project || (containsDirectory(project.worktree, directory) && containsDirectory(directory, project.worktree)))
-    return false
+  if (!project || sameDirectory(project.worktree, directory)) return false
   return workspaceDirectories(project).some((workspace) => containsDirectory(workspace, directory))
 }
 
@@ -83,10 +76,14 @@ export function containsDirectory(parent: string, child: string) {
   return target === root || target.startsWith(root.endsWith("/") ? root : `${root}/`)
 }
 
+export function sameDirectory(a: string, b: string) {
+  return containsDirectory(a, b) && containsDirectory(b, a)
+}
+
 export function isWorkspaceSelection(project: WorkspaceProject | undefined, selection: string) {
   if (selection === "main" || selection === "create") return true
   if (!project) return false
-  if (containsDirectory(project.worktree, selection) && containsDirectory(selection, project.worktree)) return true
+  if (sameDirectory(project.worktree, selection)) return true
   return isWorkspaceDirectory(project, selection)
 }
 

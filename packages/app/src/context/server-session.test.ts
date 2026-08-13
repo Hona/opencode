@@ -1201,6 +1201,16 @@ describe("server session", () => {
     expect(store.data.part_text_accum_delta[part.id]).toBeUndefined()
   })
 
+  test("removes projected messages when rolling back optimistic content", () => {
+    const message = userMessage("message")
+    const store = setup({ child: session("child") }).store
+    store.optimistic.add({ sessionID: "child", message, parts: [] })
+
+    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+
+    expect(store.data.session_message.child).toEqual([])
+  })
+
   test("does not remove content confirmed by a message event", () => {
     const message = userMessage("message")
     const part = textPart(message.id)

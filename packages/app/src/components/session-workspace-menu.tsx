@@ -10,14 +10,13 @@ import { useServerSync } from "@/context/server-sync"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
-import { workspaceDirectories } from "@/utils/workspace"
+import { containsDirectory, workspaceDirectories } from "@/utils/workspace"
 
 export function SessionWorkspaceMenu(props: {
   eligible?: boolean
   sessionID: string
   project: Project
   directory: string
-  messageID?: string
   placement?: ComponentProps<typeof MenuV2>["placement"]
   gutter?: number
   class?: string
@@ -32,7 +31,9 @@ export function SessionWorkspaceMenu(props: {
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
   const [directories, setDirectories] = createSignal(workspaceDirectories(props.project))
   const blocked = () => props.eligible === false || serverSync().session.data.session_working(props.sessionID)
-  const workspaces = () => directories().filter((workspace) => pathKey(workspace) !== pathKey(props.directory))
+  const currentWorkspace = () => directories().find((workspace) => containsDirectory(workspace, props.directory))
+  const workspaces = () =>
+    directories().filter((workspace) => pathKey(workspace) !== pathKey(currentWorkspace() ?? props.directory))
   const onOpenChange = (open: boolean) => {
     props.onOpenChange?.(open)
     if (!open) return
@@ -133,7 +134,7 @@ async function createWorkspace(
   const created = await serverSDK.api.projectCopy.create({
     projectID: project.id,
     strategy: "git_worktree",
-    directory: getDirectory(source),
+    directory: getDirectory(project.worktree),
     location: { directory: source },
   })
   await serverSDK.api.location.get({ location: { directory: created.directory } })

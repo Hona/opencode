@@ -575,7 +575,6 @@ export default function Page() {
   const [store, setStore] = createStore({
     ...sessionViewState(),
     newSessionWorktree: "main",
-    sessionDetailsOpen: false,
     deferRender: false,
   })
 
@@ -680,23 +679,8 @@ export default function Page() {
         : skipToken,
     }
   })
-  const sessionDetailsQuery = createQuery(() => ({
-    queryKey: [serverSDK().scope, "session-details", sessionDirectory()] as const,
-    enabled:
-      store.sessionDetailsOpen && serverSDK().connection.status() === "connected" && sync().project?.vcs === "git",
-    queryFn: () =>
-      sdk()
-        .api.vcs.diff({ location: { directory: sessionDirectory() }, mode: "working" })
-        .then((result) => result.data)
-        .catch((error) => {
-          console.debug("[session-review] failed to load session details diff", { error })
-          return []
-        }),
-  }))
-  const sessionDetailsDiffs = () => (sessionDetailsQuery.isFetched ? (sessionDetailsQuery.data ?? []) : [])
   const refreshVcs = debounce(() => {
     void queryClient.invalidateQueries({ queryKey: vcsKey() })
-    void queryClient.invalidateQueries({ queryKey: [serverSDK().scope, "session-details", sessionDirectory()] })
   }, 100)
   onCleanup(
     sdk().event.listen((event) => {
@@ -2126,9 +2110,7 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
-                  diffs={sessionDetailsDiffs}
                   workspaceMoveEligible={workspaceMoveEligible()}
-                  onSummaryOpenChange={(open) => setStore("sessionDetailsOpen", open)}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore

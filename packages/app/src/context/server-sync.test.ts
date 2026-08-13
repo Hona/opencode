@@ -15,6 +15,7 @@ import {
   loadMcpResourcesQuery,
   reconcileActiveSessionStatuses,
   seedActiveSessionStatuses,
+  shouldRefreshWorkspaceSessions,
 } from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
@@ -188,18 +189,6 @@ function sessionInfo(id: string) {
   } as SessionInfo
 }
 
-function sessionAt(directory: string): SessionInfo {
-  return {
-    id: "session",
-    projectID: "project",
-    location: { directory },
-    title: "Session",
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 1, updated: 1 },
-  }
-}
-
 describe("estimateRootSessionTotal", () => {
   test("keeps exact total for full fetches", () => {
     expect(estimateRootSessionTotal({ count: 42, limit: 10, limited: false })).toBe(42)
@@ -211,6 +200,19 @@ describe("estimateRootSessionTotal", () => {
 
   test("keeps exact total when limited fetch is under limit", () => {
     expect(estimateRootSessionTotal({ count: 9, limit: 10, limited: true })).toBe(9)
+  })
+})
+
+describe("workspace session inventory", () => {
+  test("refreshes for session identity and location changes", () => {
+    const event = (type: string, current?: string) =>
+      ({ type, current: current ? { type: current } : undefined }) as Parameters<
+        typeof shouldRefreshWorkspaceSessions
+      >[0]
+
+    expect(shouldRefreshWorkspaceSessions(event("session.created"))).toBe(true)
+    expect(shouldRefreshWorkspaceSessions(event("session.updated", "session.moved"))).toBe(true)
+    expect(shouldRefreshWorkspaceSessions(event("message.updated"))).toBe(false)
   })
 })
 

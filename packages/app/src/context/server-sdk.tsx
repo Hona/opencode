@@ -154,9 +154,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     last = Date.now()
     const output = coalesceServerEvents(events)
     batch(() => {
-      output.forEach((event) => {
-        emitter.emit(event.directory, event.payload)
-      })
+      output.forEach((event) => emitter.emit(event.directory, event.payload))
     })
 
     buffer.length = 0

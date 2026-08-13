@@ -10,8 +10,8 @@ import {
   pluralKey,
   type UiI18nParams,
   type UiI18nPluralKey,
-  type UiTranslate,
   type UiPluralCategory,
+  type UiTranslate,
 } from "@opencode-ai/ui/context/i18n"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"

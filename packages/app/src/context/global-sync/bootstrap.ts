@@ -120,15 +120,23 @@ export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
     queryFn: () =>
       retry(() =>
         api.list().then(async (projects) => {
-          return (await Promise.all(
-            projects.filter((project) => !!project?.id).map(async (project) => {
-              const directories = await api.directories({ projectID: project.id })
-              return normalizeProjectInfo({
-                ...project,
-                sandboxes: directories.filter((item) => item.strategy !== undefined).map((item) => item.directory),
-              })
-            }),
-          ))
+          return (
+            await Promise.all(
+              projects
+                .filter((project) => !!project?.id)
+                .map(async (project) => {
+                  const directories = await api
+                    .directories({ projectID: project.id })
+                    .catch(() =>
+                      (project.sandboxes ?? []).map((directory) => ({ directory, strategy: "git_worktree" as const })),
+                    )
+                  return normalizeProjectInfo({
+                    ...project,
+                    sandboxes: directories.filter((item) => item.strategy !== undefined).map((item) => item.directory),
+                  })
+                }),
+            )
+          )
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
             .slice()
             .sort((a, b) => cmp(a.id, b.id))

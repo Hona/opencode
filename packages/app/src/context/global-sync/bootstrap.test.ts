@@ -114,10 +114,7 @@ describe("query keys", () => {
       ],
       directories: async ({ projectID }: { projectID: string }) => {
         calls.push(projectID)
-        return [
-          { directory: `/${projectID}` },
-          { directory: `/${projectID}/copy`, strategy: "git_worktree" },
-        ]
+        return [{ directory: `/${projectID}` }, { directory: `/${projectID}/copy`, strategy: "git_worktree" }]
       },
     } as unknown as ProjectApi
 
@@ -126,6 +123,26 @@ describe("query keys", () => {
     expect(result.map((project) => project.id)).toEqual(["a", "b"])
     expect(result.map((project) => project.sandboxes)).toEqual([["/a/copy"], ["/b/copy"]])
     expect(calls.toSorted()).toEqual(["a", "b"])
+  })
+
+  test("keeps projects whose directory inventory cannot load", async () => {
+    const api = {
+      list: async () => [
+        { id: "a", worktree: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", worktree: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+      ],
+      directories: async ({ projectID }: { projectID: string }) => {
+        if (projectID === "b") throw new Error("unavailable")
+        return [{ directory: "/a/copy", strategy: "git_worktree" as const }]
+      },
+    } as unknown as ProjectApi
+
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api))
+
+    expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
+      { id: "a", sandboxes: ["/a/copy"] },
+      { id: "b", sandboxes: [] },
+    ])
   })
 
   test("loads references from the current location-scoped endpoint", async () => {

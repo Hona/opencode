@@ -4,10 +4,10 @@ import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
-import { pathKey } from "@/utils/path-key"
 import {
   isWorkspaceDirectory,
   isWorkspaceSelection,
+  sameDirectory,
   workspaceDefaultSelection,
   workspaceDirectories,
 } from "@/utils/workspace"
@@ -21,12 +21,12 @@ export function resolveNewSessionWorktree(input: {
 }) {
   if (!input.enabled) return "main"
   if (input.selected) return input.selected
-  if (input.projectWorktree && input.directory !== input.projectWorktree) return input.directory
+  if (input.projectWorktree && !sameDirectory(input.directory, input.projectWorktree)) return input.directory
   return input.fallback ?? "main"
 }
 
 export function normalizeNewSessionWorktree(value: string, directory: string, projectWorktree?: string) {
-  if (value === "main" && projectWorktree !== directory) return projectWorktree
+  if (value === "main" && projectWorktree && !sameDirectory(directory, projectWorktree)) return projectWorktree
   return value
 }
 
@@ -85,7 +85,7 @@ export function createNewSessionWorkspaceController(input: {
   const remember = (worktree = value()) => {
     const project = sync().project
     if (!project) return
-    const local = worktree === "main" || pathKey(worktree) === pathKey(project.worktree)
+    const local = worktree === "main" || sameDirectory(worktree, project.worktree)
     settings.workspaces.setLastUsed(serverSDK().scope, project.id, local ? "local" : "workspace")
   }
 

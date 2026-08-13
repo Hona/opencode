@@ -17,7 +17,6 @@ import { useServerSync } from "@/context/server-sync"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
 import { pathKey } from "@/utils/path-key"
-import { SettingsListV2 } from "./parts/list"
 import { InlineServerSelect } from "./parts/server-select"
 import { useTabs } from "@/context/tabs"
 import { usePlatform } from "@/context/platform"
@@ -29,7 +28,6 @@ import {
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
   mergeWorkspaceSessionInventory,
-  removeWorkspacesSequentially,
   sessionsForWorkspace,
   type WorkspaceDeleteInspection,
   workspaceInventory,
@@ -190,7 +188,6 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     )
   }
 
-  let inspectionID = 0
   const releaseConfirmation = () => {
     if (store.transaction === "confirm") setStore("transaction", undefined)
   }
@@ -212,14 +209,12 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const confirmDelete = (workspace: Workspace) => {
     if (store.transaction) return
     const context = captureDeleteContext()
-    const current = ++inspectionID
     setStore("transaction", "confirm")
     void dialog.push(
       () => (
         <DialogDeleteWorkspace
           workspace={workspace}
           scope={context.sdk.scope}
-          inspectionID={current}
           inspect={() => inspect(workspace, context)}
           inspectionMessage={inspectionMessage}
           onDelete={() => transact(() => remove(workspace, true, context))}
@@ -228,125 +223,98 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       releaseConfirmation,
     )
   }
-  const removeAll = async (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
-    await removeWorkspacesSequentially(inventory, (workspace) => remove(workspace, false, context))
-  }
-  const confirmDeleteAll = () => {
-    if (store.transaction) return
-    const context = captureDeleteContext()
-    const inventory = [...filtered()]
-    const project = projectOptions().find((option) => option.id === selectedProject())?.label ?? selectedProject()
-    setStore("transaction", "confirm")
-    void dialog.push(
-      () => (
-        <DialogDeleteAllWorkspaces
-          count={inventory.length}
-          project={project}
-          onDelete={() => transact(() => removeAll(inventory, context))}
-        />
-      ),
-      releaseConfirmation,
-    )
-  }
-
   return (
     <>
-      <div class="settings-v2-tab-header settings-v2-workspaces-header">
+      <div class="settings-v2-tab-header pb-6 max-sm:px-5 max-sm:pt-6 max-sm:pb-5">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.tab.workspaces")}</h2>
+          <h2 class="settings-v2-tab-title font-[610]">{language.t("settings.tab.workspaces")}</h2>
           <InlineServerSelect />
         </div>
       </div>
 
-      <div class="settings-v2-tab-body settings-v2-workspaces">
-        <div class="settings-v2-workspaces-toolbar">
-          <span class="settings-v2-workspaces-count">
+      <div class="settings-v2-tab-body gap-4 max-sm:px-5 max-sm:pb-6">
+        <div class="flex min-w-0 items-center justify-between gap-4 max-sm:flex-wrap max-sm:items-start">
+          <span class="text-[15px] font-[530] leading-none text-v2-text-text-base">
             {language.plural("settings.workspaces.count", filtered().length)}
           </span>
-          <div class="settings-v2-workspaces-toolbar-actions">
-            <Show when={projects().length > 1}>
-              <MenuV2 placement="bottom-end" gutter={6}>
-                <MenuV2.Trigger class="flex h-6 max-w-48 items-center gap-1 rounded-sm px-2 text-13-medium hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
-                  <span class="min-w-0 truncate">
-                    {projectOptions().find((option) => option.id === selectedProject())?.label}
-                  </span>
-                  <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                </MenuV2.Trigger>
-                <MenuV2.Portal>
-                  <MenuV2.Content>
-                    <For each={projectOptions()}>
-                      {(option) => (
-                        <MenuV2.Item onSelect={() => setStore("project", option.id)}>
-                          <span class="min-w-0 flex-1 truncate">{option.label}</span>
-                          <Show when={selectedProject() === option.id}>
-                            <Icon name="check" size="small" class="shrink-0" />
-                          </Show>
-                        </MenuV2.Item>
-                      )}
-                    </For>
-                  </MenuV2.Content>
-                </MenuV2.Portal>
-              </MenuV2>
-            </Show>
-            <Show when={filtered().length > 0}>
-              <MenuV2 placement="bottom-end" gutter={4}>
-                <MenuV2.Trigger
-                  as={IconButtonV2}
-                  type="button"
-                  variant="ghost-muted"
-                  size="small"
-                  aria-label={language.t("common.moreOptions")}
-                  disabled={!!store.transaction}
-                  icon={<Icon name="outline-dots" size="small" />}
-                />
-                <MenuV2.Portal>
-                  <MenuV2.Content>
-                    <MenuV2.Item onSelect={confirmDeleteAll}>
-                      <span class="settings-v2-workspaces-delete-all">
-                        {language.t("settings.workspaces.deleteAll")}
-                      </span>
-                    </MenuV2.Item>
-                  </MenuV2.Content>
-                </MenuV2.Portal>
-              </MenuV2>
-            </Show>
-          </div>
+          <Show when={projects().length > 1}>
+            <MenuV2 placement="bottom-end" gutter={6}>
+              <MenuV2.Trigger class="flex h-6 max-w-48 items-center gap-1 rounded-sm px-2 text-13-medium hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed">
+                <span class="min-w-0 truncate">
+                  {projectOptions().find((option) => option.id === selectedProject())?.label}
+                </span>
+                <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              </MenuV2.Trigger>
+              <MenuV2.Portal>
+                <MenuV2.Content>
+                  <For each={projectOptions()}>
+                    {(option) => (
+                      <MenuV2.Item onSelect={() => setStore("project", option.id)}>
+                        <span class="min-w-0 flex-1 truncate">{option.label}</span>
+                        <Show when={selectedProject() === option.id}>
+                          <Icon name="check" size="small" class="shrink-0" />
+                        </Show>
+                      </MenuV2.Item>
+                    )}
+                  </For>
+                </MenuV2.Content>
+              </MenuV2.Portal>
+            </MenuV2>
+          </Show>
         </div>
 
-        <div class="settings-v2-workspaces-inventory">
+        <div>
           <Show
             when={filtered().length > 0}
-            fallback={<div class="settings-v2-workspaces-empty">{language.t("settings.workspaces.empty")}</div>}
+            fallback={
+              <div class="flex items-center justify-center py-12 text-[13px] font-[440] leading-none text-v2-text-text-muted">
+                {language.t("settings.workspaces.empty")}
+              </div>
+            }
           >
-            <SettingsListV2>
+            <div
+              data-component="settings-v2-list"
+              class="flex flex-col gap-0 rounded-[6px] bg-v2-background-bg-base p-5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] max-sm:p-3.5"
+            >
               <For each={filtered()}>
                 {(workspace) => {
                   const linked = () => workspaceSessions(workspace)
                   return (
-                    <div class="settings-v2-workspaces-row">
-                      <div class="settings-v2-workspaces-row-header">
-                        <div class="settings-v2-workspaces-copy">
-                          <div class="settings-v2-workspaces-main">
+                    <div class="flex min-w-0 flex-col gap-3 [&:not(:last-child)]:mb-5 [&:not(:last-child)]:border-b-[0.5px] [&:not(:last-child)]:border-v2-border-border-base [&:not(:last-child)]:pb-5">
+                      <div class="flex min-w-0 items-start justify-between gap-5">
+                        <div class="flex min-w-0 flex-1 flex-col gap-2">
+                          <div class="flex min-w-0 max-sm:items-start">
                             <TooltipV2
                               value={workspace.directory}
                               placement="top-start"
+                              class="min-w-0"
                               contentClass="max-w-[calc(100vw-32px)] break-all"
                             >
-                              <span tabIndex={0} aria-label={workspace.directory} class="settings-v2-workspaces-path">
+                              <span
+                                tabIndex={0}
+                                dir="ltr"
+                                aria-label={workspace.directory}
+                                class="block min-w-0 cursor-default overflow-hidden text-ellipsis whitespace-nowrap p-0 text-left text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base max-sm:overflow-visible max-sm:whitespace-normal max-sm:[overflow-wrap:anywhere]"
+                              >
                                 {workspace.directory}
                               </span>
                             </TooltipV2>
                           </div>
-                          <span class="settings-v2-workspaces-meta">{sessionCount(workspace)}</span>
+                          <span class="text-[13px] font-[440] leading-none text-v2-text-text-faint">
+                            {sessionCount(workspace)}
+                          </span>
                         </div>
-                        <div class="settings-v2-workspaces-row-actions">
+                        <div class="flex shrink-0 items-center justify-end gap-3">
                           <Show when={lastActive(workspace)}>
                             {(value) => (
                               <TooltipV2
                                 value={language.t("settings.workspaces.lastActiveSession")}
                                 placement="top-end"
                               >
-                                <span tabIndex={0} class="settings-v2-workspaces-active">
+                                <span
+                                  tabIndex={0}
+                                  class="shrink-0 text-[11px] font-[440] leading-none text-v2-text-text-faint max-sm:hidden"
+                                >
                                   {value()}
                                 </span>
                               </TooltipV2>
@@ -366,13 +334,19 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                         </div>
                       </div>
                       <Show when={linked().length > 0}>
-                        <div class="settings-v2-workspaces-sessions">
+                        <div class="flex flex-col overflow-hidden rounded-[4px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-base">
                           <For each={linked()}>
                             {(session) => (
-                              <div class="settings-v2-workspaces-session">
-                                <span>{session.title}</span>
+                              <div class="flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 text-[13px] font-[440] leading-4 text-v2-text-text-base [&:not(:last-child)]:border-b-[0.5px] [&:not(:last-child)]:border-v2-border-border-base">
+                                <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                                  {session.title}
+                                </span>
                                 <Show when={sessionTime(session)}>
-                                  {(time) => <span class="settings-v2-workspaces-session-time">{time()}</span>}
+                                  {(time) => (
+                                    <span class="shrink-0 text-[11px] leading-none text-v2-text-text-muted">
+                                      {time()}
+                                    </span>
+                                  )}
                                 </Show>
                               </div>
                             )}
@@ -383,7 +357,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                   )
                 }}
               </For>
-            </SettingsListV2>
+            </div>
           </Show>
         </div>
       </div>
@@ -391,45 +365,9 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   )
 }
 
-function DialogDeleteAllWorkspaces(props: { count: number; project: string; onDelete: () => Promise<void> }) {
-  const dialog = useDialog()
-  const language = useLanguage()
-  const remove = () => {
-    const deleting = props.onDelete()
-    dialog.close()
-    void deleting
-  }
-
-  return (
-    <Dialog fit>
-      <DialogHeader>
-        <DialogTitleGroup
-          title={language.t("settings.workspaces.deleteAll")}
-          description={
-            <>
-              {language.t("settings.workspaces.deleteAll.confirm", { count: props.count })}
-              <br />
-              {language.t("settings.workspaces.deleteAll.warning", { count: props.count, project: props.project })}
-            </>
-          }
-        />
-      </DialogHeader>
-      <DialogFooter>
-        <ButtonV2 type="button" variant="neutral" onClick={() => dialog.close()}>
-          {language.t("common.cancel")}
-        </ButtonV2>
-        <ButtonV2 type="button" variant="danger" onClick={remove}>
-          {language.t("settings.workspaces.deleteAll")}
-        </ButtonV2>
-      </DialogFooter>
-    </Dialog>
-  )
-}
-
 function DialogDeleteWorkspace(props: {
   workspace: Workspace
   scope: ServerScope
-  inspectionID: number
   inspect: () => Promise<{ result: WorkspaceDeleteInspection; sessions: SessionInfo[] }>
   inspectionMessage: (result: WorkspaceDeleteInspection) => string
   onDelete: () => Promise<void>
@@ -437,7 +375,7 @@ function DialogDeleteWorkspace(props: {
   const dialog = useDialog()
   const language = useLanguage()
   const status = useQuery(() => ({
-    queryKey: [props.scope, pathKey(props.workspace.directory), "workspace-delete-status", props.inspectionID] as const,
+    queryKey: [props.scope, pathKey(props.workspace.directory), "workspace-delete-status"] as const,
     queryFn: props.inspect,
     staleTime: 0,
   }))

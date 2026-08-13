@@ -364,19 +364,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             .create({
               projectID: submissionSync.data.project,
               strategy: "git_worktree",
-              directory: getDirectory(projectDirectory),
+              directory: getDirectory(submissionSync.project?.worktree ?? projectDirectory),
               location: { directory: projectDirectory },
+            })
+            .then(async (created) => {
+              await submissionSDK.api.location.get({ location: { directory: created.directory } })
+              return created
             })
             .catch((err) => {
               showToast({
                 title: language.t("prompt.toast.worktreeCreateFailed.title"),
                 description: errorMessage(err),
               })
-              return undefined
             })
 
           if (!createdWorktree) return
-          await submissionSDK.api.location.get({ location: { directory: createdWorktree.directory } })
           sessionDirectory = createdWorktree.directory
         }
 

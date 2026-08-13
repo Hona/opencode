@@ -46,6 +46,7 @@ let variant: string | undefined
 let createSessionGate: Promise<void> | undefined
 let createWorktreeGate: Promise<void> | undefined
 let worktreeFailure: Error | undefined
+let locationFailure: Error | undefined
 let worktreeCreates = 0
 let activeSDK = "server-a"
 let activeServerSync = "server-a"
@@ -144,7 +145,12 @@ const clientFor = (directory: string) => {
           return { directory: worktreeDirectory }
         },
       },
-      location: { get: async () => ({ directory: worktreeDirectory }) },
+      location: {
+        get: async () => {
+          if (locationFailure) throw locationFailure
+          return { directory: worktreeDirectory }
+        },
+      },
     },
     session: {
       command: async () => ({ data: undefined }),
@@ -334,6 +340,7 @@ beforeEach(() => {
   serverSessionSyncs = 0
   createWorktreeGate = undefined
   worktreeFailure = undefined
+  locationFailure = undefined
   worktreeCreates = 0
   for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
@@ -384,6 +391,17 @@ describe("prompt submit worktree selection", () => {
     expect(worktreeCreates).toBe(1)
     expect(createdSessions).toHaveLength(1)
     expect(sentPrompts).toEqual([worktreeDirectory])
+  })
+
+  test("stops when the created workspace cannot initialize", async () => {
+    selected = "create"
+    locationFailure = new Error("initialization failed")
+
+    await makeSubmit().handleSubmit(event)
+
+    expect(worktreeCreates).toBe(1)
+    expect(createdSessions).toEqual([])
+    expect(sentPrompts).toEqual([])
   })
 
   test("keeps async submission effects bound to the initiating context", async () => {
