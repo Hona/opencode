@@ -39,11 +39,9 @@ export function SessionWorkspaceMenu(props: {
     props.onOpenChange?.(open)
     if (!open) return
     const sdk = serverSDK()
-    void sdk.api.projectCopy
-      .refresh({ projectID: props.project.id, location: { directory: props.directory } })
-      .then(() =>
-        sdk.api.project.directories({ projectID: props.project.id, location: { directory: props.directory } }),
-      )
+    void sdk.api.worktree
+      .refresh({ projectID: props.project.id })
+      .then(() => sdk.api.worktree.list({ projectID: props.project.id }))
       .then((items) =>
         setDirectories(items.filter((item) => item.strategy !== undefined).map((item) => item.directory)),
       )
@@ -53,11 +51,10 @@ export function SessionWorkspaceMenu(props: {
     if (store.selected || blocked()) return
     const sdk = serverSDK()
     const sessionID = props.sessionID
-    const source = props.directory
     setStore("selected", selection)
 
     try {
-      const destination = selection === "create" ? await createWorkspace(props.project, source, sdk) : selection
+      const destination = selection === "create" ? await createWorkspace(props.project, sdk) : selection
       if (!destination) return
 
       await sdk.api.session.move({ sessionID, directory: destination })
@@ -127,16 +124,11 @@ export function SessionWorkspaceMenu(props: {
   )
 }
 
-async function createWorkspace(
-  project: Project,
-  source: string,
-  serverSDK: ReturnType<ReturnType<typeof useServerSDK>>,
-) {
-  const created = await serverSDK.api.projectCopy.create({
+async function createWorkspace(project: Project, serverSDK: ReturnType<ReturnType<typeof useServerSDK>>) {
+  const created = await serverSDK.api.worktree.create({
     projectID: project.id,
-    strategy: "git_worktree",
+    strategy: "git",
     directory: getDirectory(project.worktree),
-    location: { directory: source },
   })
   await serverSDK.api.location.get({ location: { directory: created.directory } })
   return created.directory

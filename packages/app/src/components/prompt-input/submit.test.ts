@@ -137,7 +137,7 @@ const clientFor = (directory: string) => {
           sentShellDirectories.push(sessionDirectories[input.sessionID] ?? directory)
         },
       },
-      projectCopy: {
+      worktree: {
         create: async (_input: unknown) => {
           worktreeCreates++
           await createWorktreeGate

@@ -145,10 +145,9 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       blocked(preflight.result)
       return
     }
-    const removed = await context.sdk.api.projectCopy
+    const removed = await context.sdk.api.worktree
       .remove({
         projectID: workspace.project.id,
-        location: { directory: workspace.project.worktree },
         directory: workspace.directory,
         force,
       })

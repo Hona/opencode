@@ -105,8 +105,8 @@ export const loadGlobalConfigQuery = (scope: ServerScope) =>
 type ProjectApi = {
   readonly list: () => Promise<ProjectListOutput>
   readonly current: (input?: ProjectCurrentInput) => Promise<ProjectCurrentOutput>
-  readonly directories: ServerApi["project"]["directories"]
 }
+type WorktreeApi = Pick<ServerApi["worktree"], "list">
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
 type McpApi = ServerApi["mcp"]
@@ -114,21 +114,21 @@ type PermissionApi = ServerApi["permission"]
 type QuestionApi = ServerApi["question"]
 type VcsApi = ServerApi["vcs"]
 
-export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
+export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, worktrees: WorktreeApi) =>
   queryOptions({
     queryKey: [scope, "project"],
     queryFn: () =>
       retry(() =>
-        api.list().then(async (projects) => {
+        projects.list().then(async (items) => {
           return (
             await Promise.all(
-              projects
+              items
                 .filter((project) => !!project?.id)
                 .map(async (project) => {
-                  const directories = await api
-                    .directories({ projectID: project.id })
+                  const directories = await worktrees
+                    .list({ projectID: project.id })
                     .catch(() =>
-                      (project.sandboxes ?? []).map((directory) => ({ directory, strategy: "git_worktree" as const })),
+                      (project.sandboxes ?? []).map((directory) => ({ directory, strategy: "git" as const })),
                     )
                   return normalizeProjectInfo({
                     ...project,
@@ -145,7 +145,11 @@ export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
   })
 
 export async function bootstrapGlobal(input: {
-  serverAPI: CatalogApi & { readonly location: LocationApi; readonly project: ProjectApi }
+  serverAPI: CatalogApi & {
+    readonly location: LocationApi
+    readonly project: ProjectApi
+    readonly worktree: WorktreeApi
+  }
   scope: ServerScope
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
@@ -159,7 +163,7 @@ export async function bootstrapGlobal(input: {
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
     () =>
       input.queryClient
-        .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project))
+        .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project, input.serverAPI.worktree))
         .then((data) => input.setGlobalStore("project", data)),
   ]
   await runAll(slow)

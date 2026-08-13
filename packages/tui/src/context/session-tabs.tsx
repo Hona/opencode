@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
-import { useData } from "./data"
+import { locationKey, useData } from "./data"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
@@ -66,6 +66,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
+    const scrollPositions = new Map<string, number>()
+
+    createEffect(() => {
+      if (config.experimental?.tab_scroll === true) return
+      scrollPositions.clear()
+    })
 
     function state() {
       if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
@@ -159,9 +165,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     })
 
-    // Load lightweight session metadata concurrently so persisted tabs can resolve their project
-    // labels immediately. Delay the heavier per-tab data so the visible session keeps the first
-    // connection slots and switches still render from a warm cache.
+    // Load lightweight session and location metadata concurrently so persisted tabs can resolve
+    // their project and branch labels. Delay the heavier per-tab data so the visible session keeps
+    // the first connection slots and switches still render from a warm cache.
     const openTabSessions = createMemo(() =>
       state()
         .tabs.map((tab) => tab.sessionID)
@@ -171,10 +177,25 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!enabled()) return
       if (client.connection.status() !== "connected") return
-      const sessionIDs = openTabSessions()
-      if (sessionIDs === "") return
-      void Promise.allSettled(sessionIDs.split("\n").map((sessionID) => data.session.sync(sessionID)))
+      const signature = openTabSessions()
+      if (signature === "") return
+      const sessionIDs = signature.split("\n")
       let stale = false
+      void (async () => {
+        await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID)))
+        if (stale) return
+        const locations = new Map(
+          sessionIDs
+            .map((sessionID) => data.session.get(sessionID)?.location)
+            .filter((location) => location !== undefined)
+            .map((location) => [locationKey(location), location]),
+        )
+        await Promise.allSettled(
+          Array.from(locations.values(), (location) =>
+            Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)]),
+          ),
+        )
+      })()
       const timer = setTimeout(async () => {
         const sessions = state()
           .tabs.map((tab) => tab.sessionID)
@@ -216,6 +237,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
+      scrollPositions.delete(target)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -247,6 +269,19 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
+      scrollPosition(sessionID: string) {
+        const target = root(sessionID)
+        if (!state().tabs.some((tab) => tab.sessionID === target)) return
+        return scrollPositions.get(target)
+      },
+      setScrollPosition(sessionID: string, position: number | undefined) {
+        const target = root(sessionID)
+        if (position === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
+          scrollPositions.delete(target)
+          return
+        }
+        scrollPositions.set(target, position)
+      },
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })

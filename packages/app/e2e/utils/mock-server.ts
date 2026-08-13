@@ -270,21 +270,23 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (path === "/api/project") return json(route, [config.project])
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
-    if (/^\/api\/project\/[^/]+\/directories$/.test(path))
+    const worktree = path.match(/^\/api\/experimental\/project\/([^/]+)\/worktree$/)?.[1]
+    if (worktree && route.request().method() === "GET")
       return json(route, [
         { directory: config.directory },
         ...((config.project as { sandboxes?: string[] }).sandboxes ?? []).map((directory) => ({
           directory,
-          strategy: "git_worktree",
+          strategy: "git",
         })),
       ])
     if (path === "/api/location") return json(route, location(config))
-    const projectCopy = path.match(/^\/experimental\/project\/([^/]+)\/copy$/)?.[1]
-    if (projectCopy && route.request().method() === "POST") {
+    if (worktree && route.request().method() === "POST") {
       const input = route.request().postDataJSON() as { directory: string; name?: string }
       return json(route, { directory: `${input.directory}/${input.name ?? "copy"}` })
     }
-    if (projectCopy && route.request().method() === "DELETE")
+    if (worktree && route.request().method() === "DELETE")
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    if (/^\/api\/experimental\/project\/[^/]+\/worktree\/refresh$/.test(path))
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     if (path === "/api/permission/request")
       return json(route, {

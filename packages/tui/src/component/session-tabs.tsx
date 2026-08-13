@@ -21,6 +21,7 @@ import {
   moveSessionTab,
   NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
+  sessionTabDetail,
   sessionTabShortcutLabel,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
@@ -408,10 +409,20 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const titleFades = createMemo(() => marqueeOverflows(title(), titleWidth()) && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
                 const fixture = tabs.detail?.(tab.sessionID)
-                if (fixture !== undefined) return Locale.takeWidth(fixture, titleWidth())
+                if (fixture !== undefined) return fixture
                 const value = session()
-                return Locale.takeWidth(projectName(project(), value?.location.directory) ?? "", titleWidth())
+                const currentProject = project()
+                const projectLabel = projectName(currentProject, value?.location.directory) ?? ""
+                const vcs = value ? data.location.vcs.info(value.location) : undefined
+                const location = value ? data.location.info(value.location) : undefined
+                const worktree = !!location && location.project.directory !== location.project.canonical
+                return sessionTabDetail(projectLabel, vcs?.branch.current, vcs?.branch.default, worktree)
               })
+              const visibleDetail = createMemo(() => Locale.takeWidth(detail(), titleWidth()))
+              const visibleDetailParts = createMemo(() => Locale.graphemes(visibleDetail()))
+              const detailFades = createMemo(
+                () => marqueeOverflows(detail(), titleWidth()) && titleWidth() > FADE_WIDTH,
+              )
               const background = createMemo(() => {
                 if (selected()) return theme.background.action.primary.selected
                 if (hovered() === tab.sessionID || dragging() === tab.sessionID)
@@ -453,6 +464,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const detailFlashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.42))
               const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
               const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
+              const detailTextColor = (index: number) =>
+                detailFades()
+                  ? fadeTitleColor(detailColor(), pulseBackground(), index, visibleDetailParts().length, 0)
+                  : detailColor()
               const glows = () => status().glows
               const previous = createMemo(() => items()[index() - 1])
               const previousStatus = createMemo(() => {
@@ -547,8 +562,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     outerComplete={previousStatus().complete && !previousStatus().attention}
                     glow={glows()}
                     outerGlow={previousGlows()}
-                    breathe={status().attention}
-                    outerBreathe={previousStatus().attention}
                     color={separatorLowerPulseColor()}
                     width={indicatorWidth}
                     outerColor={separatorUpperPulseColor()}
@@ -576,8 +589,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       outerComplete={false}
                       glow={glows()}
                       outerGlow={false}
-                      breathe={status().attention}
-                      outerBreathe={false}
                       color={tint(theme.background.default, theme.text.default, 0.04)}
                       width={indicatorWidth}
                       outerColor={tint(theme.background.default, theme.text.default, 0.006)}
@@ -599,7 +610,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}
-                      breathe={status().attention}
                       color={pulseColor()}
                       width={indicatorWidth}
                       glowColor={glowColor()}
@@ -658,7 +668,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}
-                      breathe={status().attention}
                       color={detailPulseColor()}
                       width={indicatorWidth}
                       glowColor={detailGlowColor()}
@@ -670,7 +679,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     />
                     <box zIndex={1} width="100%" flexDirection="row" paddingLeft={numberWidth() + 1} paddingRight={2}>
                       <text fg={detailColor()} wrapMode="none" selectable={false}>
-                        {detail()}
+                        <Show when={detailFades()} fallback={visibleDetail()}>
+                          <For each={visibleDetailParts()}>
+                            {(character, index) => <span style={{ fg: detailTextColor(index()) }}>{character}</span>}
+                          </For>
+                        </Show>
                       </text>
                     </box>
                   </box>
@@ -1054,7 +1067,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 promptPulse={status().promptPulse}
                 complete={status().complete && !status().attention}
                 glow={glows()}
-                breathe={status().attention}
                 color={pulseColor()}
                 glowColor={glowColor()}
                 flashColor={flashColor()}

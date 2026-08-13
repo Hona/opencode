@@ -196,7 +196,7 @@ export function reconcileActiveSessionStatuses(
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
-    projects: () => loadProjectsQuery(scope, serverAPI.project),
+    projects: () => loadProjectsQuery(scope, serverAPI.project, serverAPI.worktree),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     integrations: (directory: PathKey | null) => loadIntegrationsQuery(scope, directory, serverAPI.integration),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
@@ -640,11 +640,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         refresh: () => void bootstrap.refetch(),
         setGlobalProject: setProjects,
       })
-      if (
-        eventType === "config.updated" ||
-        eventType === "agent.updated" ||
-        eventType === "project.directories.updated"
-      )
+      if (eventType === "config.updated" || eventType === "agent.updated" || eventType === "worktree.updated")
         bootstrap.refetch()
       if (eventType === "global.disposed") Object.keys(children.children).filter(children.active).forEach(queue.push)
       return
@@ -679,7 +675,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void loadCommands(directory, serverSDK.api.command)
         .then((commands) => setStore("command", commands))
         .catch(() => {})
-    if (eventType === "project.directories.updated") void bootstrap.refetch()
+    if (eventType === "worktree.updated") void bootstrap.refetch()
     const projected = toDirectoryEvent(event)
     if (projected)
       applyDirectoryEvent({

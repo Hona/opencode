@@ -360,12 +360,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       let sessionDirectory = projectDirectory
       if (isNewSession) {
         if (worktreeSelection === "create") {
-          const createdWorktree = await submissionSDK.api.projectCopy
+          const createdWorktree = await submissionSDK.api.worktree
             .create({
               projectID: submissionSync.data.project,
-              strategy: "git_worktree",
+              strategy: "git",
               directory: getDirectory(submissionSync.project?.worktree ?? projectDirectory),
-              location: { directory: projectDirectory },
             })
             .then(async (created) => {
               await submissionSDK.api.location.get({ location: { directory: created.directory } })
