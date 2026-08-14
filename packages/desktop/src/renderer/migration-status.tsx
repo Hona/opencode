@@ -2,7 +2,7 @@ import { OpenCode, type MigrationV1StatusOutput } from "@opencode-ai/client/prom
 import { useLanguage } from "@opencode-ai/app"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { showToastV2, toasterV2, ToastV2 } from "@opencode-ai/ui/v2/toast-v2"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../preload/types"
 
 type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
@@ -12,28 +12,35 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   const [progress, setProgress] = createSignal<Progress>()
   const abort = new AbortController()
   let toastID: number | undefined
+  let disposeToast: (() => void) | undefined
 
   const hide = () => {
-    if (toastID === undefined) return
-    toasterV2.dismiss(toastID)
+    if (toastID !== undefined) toasterV2.dismiss(toastID)
     toastID = undefined
+    disposeToast?.()
+    disposeToast = undefined
   }
 
   const show = () => {
     if (toastID !== undefined) return
     toastID = toasterV2.show(
-      ({ toastId }) => (
-        <ToastV2 toastId={toastId}>
-          <div data-slot="toast-v2-header" class="col-span-full">
-            <ToastV2.Icon>
-              <LoaderV2 />
-            </ToastV2.Icon>
-            <ToastV2.Content>
-              <ToastV2.Title dir="auto">{format(progress())}</ToastV2.Title>
-            </ToastV2.Content>
-          </div>
-        </ToastV2>
-      ),
+      ({ toastId }) =>
+        createRoot((dispose) => {
+          disposeToast?.()
+          disposeToast = dispose
+          return (
+            <ToastV2 toastId={toastId}>
+              <div data-slot="toast-v2-header" class="col-span-full">
+                <ToastV2.Icon>
+                  <LoaderV2 />
+                </ToastV2.Icon>
+                <ToastV2.Content>
+                  <ToastV2.Title dir="auto">{format(progress())}</ToastV2.Title>
+                </ToastV2.Content>
+              </div>
+            </ToastV2>
+          )
+        }),
       { persistent: true },
     )
   }
