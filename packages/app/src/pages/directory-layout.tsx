@@ -33,7 +33,7 @@ export function DirectoryDataProvider(
     return `/${slug()}/session/${sessionID}`
   }
   const navigateToSession = async (sessionID: string) => {
-    const session = serverSync().session
+    const session = serverSync.session
     await Promise.allSettled([session.lineage.resolve(sessionID), session.sync(sessionID)])
     navigate(href(sessionID))
   }
