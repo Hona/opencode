@@ -2,7 +2,7 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { skipToken, useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
-import { type Accessor, createEffect, createMemo, type JSX, startTransition } from "solid-js"
+import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
@@ -112,7 +112,7 @@ export function createHomeSessionsController(home: HomeController) {
         const key = `${ServerConnection.key(conn)}\0${record.session.id}`
         if (prefetched.has(key)) return
         prefetched.add(key)
-        void ctx.sync.session.sync(record.session.id).catch(() => {})
+        void untrack(() => ctx.sync.session.sync(record.session.id)).catch(() => {})
       })
   })
 
