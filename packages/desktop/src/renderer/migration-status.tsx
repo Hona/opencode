@@ -7,7 +7,7 @@ import type { ServerReadyData } from "../preload/types"
 
 type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
 
-export function MigrationStatus(props: { server: ServerReadyData; test?: boolean }) {
+export function MigrationStatus(props: { server: ServerReadyData }) {
   const language = useLanguage()
   const [progress, setProgress] = createSignal<Progress>()
   const abort = new AbortController()
@@ -48,11 +48,10 @@ export function MigrationStatus(props: { server: ServerReadyData; test?: boolean
         ? { Authorization: `Basic ${btoa(`${props.server.username ?? "opencode"}:${props.server.password}`)}` }
         : undefined,
     })
-    const readStatus = props.test ? createTestStatus() : (signal: AbortSignal) => client.migration.v1.status({ signal })
 
     void (async () => {
       while (true) {
-        const status = await readStatus(abort.signal)
+        const status = await client.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
         if (status.status === "running") show()
         else hide()
@@ -78,17 +77,6 @@ export function MigrationStatus(props: { server: ServerReadyData; test?: boolean
   })
 
   return null
-}
-
-function createTestStatus(): (signal: AbortSignal) => Promise<MigrationV1StatusOutput> {
-  let numerator = 0
-  return async () => {
-    if (numerator > 10) return { status: "completed" }
-    return {
-      status: "running",
-      progress: { label: "Migrating sessions", numerator: numerator++, denominator: 10 },
-    }
-  }
 }
 
 function format(progress: Progress | undefined) {

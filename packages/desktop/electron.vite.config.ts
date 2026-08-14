@@ -74,7 +74,6 @@ const require = __cjs_mod__.createRequire(import.meta.url);
   renderer: {
     define: {
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
-      "import.meta.env.OPENCODE_TEST_MIGRATION": JSON.stringify(process.env.OPENCODE_TEST_MIGRATION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
     plugins: [appPlugin, sentry],
