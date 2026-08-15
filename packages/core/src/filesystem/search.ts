@@ -33,6 +33,7 @@ type InventoryKey = {
   readonly home: boolean
 }
 type Inventory = {
+  readonly scope: Scope.Scope
   index: ReturnType<typeof emptyIndex>
   initialized: boolean
   settledAt: number
@@ -51,11 +52,16 @@ const inventoriesLayer = Layer.effect(
   Inventories,
   RcMap.make({
     lookup: () =>
-      Effect.succeed<Inventory>({
-        index: emptyIndex(),
-        initialized: false,
-        settledAt: Number.NEGATIVE_INFINITY,
-        refreshing: false,
+      Effect.gen(function* () {
+        const scope = yield* Scope.Scope
+        const inventory: Inventory = {
+          scope,
+          index: emptyIndex(),
+          initialized: false,
+          settledAt: Number.NEGATIVE_INFINITY,
+          refreshing: false,
+        }
+        return inventory
       }),
   }),
 )
@@ -89,7 +95,6 @@ export const ripgrepLayer = Layer.effect(
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
     const inventories = yield* Inventories
-    const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
     const limit = location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000
@@ -124,9 +129,13 @@ export const ripgrepLayer = Layer.effect(
       inventory.initialized = true
     }).pipe(
       Effect.orDie,
-      Effect.ensuring(
+      Effect.tap(() =>
         Effect.sync(() => {
           inventory.settledAt = clock.currentTimeMillisUnsafe()
+        }),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
           inventory.refreshing = false
         }),
       ),
@@ -135,7 +144,7 @@ export const ripgrepLayer = Layer.effect(
       if (inventory.refreshing || clock.currentTimeMillisUnsafe() < inventory.settledAt + REFRESH_INTERVAL) return
       inventory.refreshing = true
       return scan
-    }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(scope)) : Effect.void)))
+    }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(inventory.scope)) : Effect.void)))
     yield* refresh
     return Service.of({
       find: (input) =>

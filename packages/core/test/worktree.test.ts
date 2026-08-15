@@ -155,8 +155,9 @@ describe("Worktree", () => {
       yield* Effect.yieldNow
 
       expect(calls).toBe(1)
+      yield* Fiber.interrupt(first)
       yield* Deferred.succeed(release, undefined)
-      expect(yield* Fiber.join(second)).toEqual(yield* Fiber.join(first))
+      expect(yield* Fiber.join(second)).toEqual({ updated: [], removed: [] })
     }),
   )
 

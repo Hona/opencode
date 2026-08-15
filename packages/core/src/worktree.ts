@@ -1,6 +1,6 @@
 export * as Worktree from "./worktree.js"
 
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, FiberSet, Layer, Schema } from "effect"
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
@@ -148,6 +148,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const forkRefresh = yield* FiberSet.makeRuntime<never, void, never>()
 
     const changed = Effect.fnUntraced(function* (projectID: ProjectSchema.ID, update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
@@ -338,14 +339,19 @@ const layer = Layer.effect(
         if (existing) return Deferred.await(existing)
         const deferred = Deferred.makeUnsafe<RefreshResult, Error>()
         bootRefreshes.set(input.projectID, deferred)
-        return refresh(input).pipe(
-          Effect.onExit((exit) =>
-            Effect.sync(() => {
-              if (bootRefreshes.get(input.projectID) === deferred) bootRefreshes.delete(input.projectID)
-              Deferred.doneUnsafe(deferred, exit)
-            }),
+        forkRefresh(
+          refresh(input).pipe(
+            Effect.exit,
+            Effect.tap((exit) =>
+              Effect.sync(() => {
+                if (bootRefreshes.get(input.projectID) === deferred) bootRefreshes.delete(input.projectID)
+                Deferred.doneUnsafe(deferred, exit)
+              }),
+            ),
+            Effect.asVoid,
           ),
         )
+        return Deferred.await(deferred)
       })
 
     return Service.of({

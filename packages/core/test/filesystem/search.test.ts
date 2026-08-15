@@ -3,7 +3,7 @@ import fuzzysort from "fuzzysort"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -28,6 +28,7 @@ describe("FileSystemSearch", () => {
     await fs.symlink(root.path, alias, process.platform === "win32" ? "junction" : "dir")
     let scans = 0
     const scanned = Effect.runSync(Deferred.make<void>())
+    const release = Effect.runSync(Deferred.make<void>())
     const ripgrep = Layer.succeed(
       Ripgrep.Service,
       Ripgrep.Service.of({
@@ -35,8 +36,9 @@ describe("FileSystemSearch", () => {
           Effect.gen(function* () {
             scans++
             const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
-            if (input.onEntry) yield* input.onEntry(entry)
             yield* Deferred.succeed(scanned, undefined)
+            yield* Deferred.await(release)
+            if (input.onEntry) yield* input.onEntry(entry)
             return [entry]
           }),
         glob: () => Effect.succeed([]),
@@ -52,13 +54,23 @@ describe("FileSystemSearch", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
-          const first = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(root.path) }))
-          const second = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(alias) }))
+          const firstScope = yield* Scope.make()
+          const secondScope = yield* Scope.make()
+          yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+          yield* locations
+            .contextEffect(Location.Ref.make({ directory: AbsolutePath.make(root.path) }))
+            .pipe(Scope.provide(firstScope))
           yield* Deferred.await(scanned)
-          const find = FileSystemSearch.Service.use((search) => search.find({ query: "index", type: "file" }))
+          const second = yield* locations
+            .contextEffect(Location.Ref.make({ directory: AbsolutePath.make(alias) }))
+            .pipe(Scope.provide(secondScope))
+          yield* Scope.close(firstScope, Exit.void)
+          yield* Deferred.succeed(release, undefined)
+          const find = FileSystemSearch.Service.use((search) => search.find({ query: "index", type: "file" })).pipe(
+            Effect.provideContext(second),
+          )
 
-          expect(yield* find.pipe(Effect.provideContext(first))).toHaveLength(1)
-          expect(yield* find.pipe(Effect.provideContext(second))).toHaveLength(1)
+          expect(yield* find.pipe(Effect.repeat({ until: (entries) => entries.length > 0 }))).toHaveLength(1)
           expect(scans).toBe(1)
         }).pipe(Effect.provide(layer), Effect.scoped),
       )
