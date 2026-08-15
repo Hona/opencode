@@ -28,7 +28,7 @@ describe("Plugin", () => {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
       const host = yield* PluginHost.make(plugins)
-      const received = yield* host.event.subscribe().pipe(
+      const received = yield* host.event.subscribe("config.updated").pipe(
         Stream.filter((event) => event.type === "config.updated"),
         Stream.runHead,
         Effect.provideService(
@@ -39,6 +39,9 @@ describe("Plugin", () => {
       )
       yield* Effect.sleep("10 millis")
 
+      yield* bus.publish(Agent.Event.Updated, {})
+      yield* Effect.sleep("10 millis")
+      expect(received.pollUnsafe()).toBeUndefined()
       yield* bus.publish(ConfigSchema.Event.Updated, {})
 
       expect((yield* Fiber.join(received)).valueOrUndefined?.type).toBe("config.updated")

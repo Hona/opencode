@@ -5,13 +5,11 @@ import { Document } from "@opencode-ai/schema/config"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Wildcard } from "../../util/wildcard.js"
-import { Bus } from "../../bus.js"
 
 export const Plugin = define({
   id: "opencode.config.policy",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const bus = yield* Bus.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.catalog.transform((catalog) => {
       // User-global policy takes priority over policy authored by a repository.
@@ -24,7 +22,7 @@ export const Plugin = define({
         if (policy?.effect === "deny") catalog.provider.remove(record.provider.id)
       }
     })
-    yield* bus.subscribe(Config.Event.Updated).pipe(
+    yield* ctx.event.subscribe("config.updated").pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

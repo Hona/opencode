@@ -1,5 +1,4 @@
 export * as Config from "./config.js"
-export { Event } from "@opencode-ai/schema/config"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"

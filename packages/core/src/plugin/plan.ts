@@ -4,7 +4,6 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Agent } from "../agent.js"
-import { Bus } from "../bus.js"
 import { SessionEvent } from "../session/event.js"
 
 const plan = Agent.ID.make("plan")
@@ -22,7 +21,6 @@ You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. 
 export const Plugin = define({
   id: "opencode.plan",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     yield* ctx.agent.transform((draft) => {
       draft.update(plan, (item) => {
         item.name = Agent.Name.make("Plan")
@@ -40,7 +38,11 @@ export const Plugin = define({
       })
     })
 
-    yield* bus.subscribe([SessionEvent.Created, SessionEvent.AgentSelected]).pipe(
+    yield* ctx.event.subscribe(["session.created", "session.agent.selected"]).pipe(
+      Stream.filter(
+        (event): event is SessionEvent.Created | SessionEvent.AgentSelected =>
+          event.type === "session.created" || event.type === "session.agent.selected",
+      ),
       Stream.runForEach((event) => {
         const text = reminder(event)
         if (!text) return Effect.void

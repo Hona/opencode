@@ -4,6 +4,7 @@ import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
 import type { Context, Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
+import type { EventSelection } from "./event.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
@@ -149,9 +150,9 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () =>
+            subscribe: (selection?: EventSelection) =>
               Stream.toAsyncIterable(
-                host.event.subscribe().pipe(
+                host.event.subscribe(selection).pipe(
                   Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
