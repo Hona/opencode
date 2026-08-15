@@ -182,6 +182,8 @@ export function createServerSession(
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
   const echoes = new Map<string, Map<string, "sending" | "admitted">>()
+  const messageSnapshots = new Map<string, Set<string>>()
+  const settledInputs = new Map<string, Set<string>>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
   const markEcho = (sessionID: string, messageID: string) => {
     const messages = echoes.get(sessionID) ?? new Map<string, "sending" | "admitted">()
@@ -405,6 +407,8 @@ export function createServerSession(
       messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
       generations.delete(sessionID)
       echoes.delete(sessionID)
+      messageSnapshots.delete(sessionID)
+      settledInputs.delete(sessionID)
       requests.delete(sessionID)
       inflight.delete(sessionID)
       inflightTodo.delete(sessionID)
@@ -573,6 +577,8 @@ export function createServerSession(
     preserveUnfetched: boolean | ((message: Message) => boolean),
     cleanupOrphans: boolean,
   ) => {
+    if (page.sourceMode === "latest")
+      messageSnapshots.set(sessionID, new Set((page.source ?? []).map((message) => message.id)))
     page.source?.forEach((message) => releaseEcho(sessionID, message.id))
     const source = page.source
       ? (() => {
@@ -879,10 +885,26 @@ export function createServerSession(
     return true
   }
 
-  const reconcileEchoes = (sessionID: string) => {
+  const reconcileInbox = (sessionID: string) => {
+    const pending = new Set((data.pending[sessionID] ?? []).map((item) => item.id))
+    const fetched = messageSnapshots.get(sessionID) ?? new Set<string>()
+    const removed = [...(settledInputs.get(sessionID) ?? [])].filter(
+      (messageID) => !pending.has(messageID) && !fetched.has(messageID),
+    )
+    settledInputs.delete(sessionID)
+    if (removed.length) {
+      const ids = new Set(removed)
+      const source = data.session_message[sessionID] ?? []
+      projectV2({
+        sessionID,
+        messages: source.filter((message) => !ids.has(message.id)),
+        touched: [],
+        removed: source.filter((message) => ids.has(message.id)).map((message) => message.id),
+      })
+    }
+
     const messages = echoes.get(sessionID)
     if (!messages) return
-    const pending = new Set((data.pending[sessionID] ?? []).map((item) => item.id))
     const projected = new Set((data.session_message[sessionID] ?? []).map((message) => message.id))
     for (const [messageID, state] of messages) {
       if (projected.has(messageID)) {
@@ -1345,17 +1367,20 @@ export function createServerSession(
       while (true) {
         const pendingAt = pendingRevision.get(sessionID) ?? 0
         const formAt = formRevision.get(sessionID) ?? 0
+        const previous = new Set(data.input[sessionID] ?? [])
         const result = await load()
         const pendingStable = (pendingRevision.get(sessionID) ?? 0) === pendingAt
         const formStable = (formRevision.get(sessionID) ?? 0) === formAt
         if (pendingStable) {
+          const current = new Set(result.pending.filter((item) => item.type !== "compaction").map((item) => item.id))
+          const settled = settledInputs.get(sessionID) ?? new Set<string>()
+          previous.forEach((messageID) => {
+            if (!current.has(messageID)) settled.add(messageID)
+          })
+          if (settled.size) settledInputs.set(sessionID, settled)
           result.pending.forEach(v2.confirm)
           setData("pending", sessionID, reconcile(result.pending))
-          setData(
-            "input",
-            sessionID,
-            reconcile(result.pending.filter((item) => item.type !== "compaction").map((item) => item.id)),
-          )
+          setData("input", sessionID, reconcile([...current]))
         }
         if (formStable) setData("form", sessionID, reconcile(result.forms))
         if (pendingStable && formStable) return
@@ -1365,7 +1390,7 @@ export function createServerSession(
       const sessions = [...pinned.keys()]
       return Promise.all(
         sessions.flatMap((sessionID) => [sync(sessionID, { force: true }), hydrateTransient(sessionID)]),
-      ).then(() => sessions.forEach(reconcileEchoes))
+      ).then(() => sessions.forEach(reconcileInbox))
     },
     invalidate() {
       invalidationRevision += 1
@@ -1445,7 +1470,7 @@ export function createServerSession(
         })
       },
       confirm: confirmInbox,
-      reconcile: reconcileEchoes,
+      reconcile: reconcileInbox,
       clearEcho(input: { sessionID: string; messageID: string }) {
         if (echoes.get(input.sessionID)?.get(input.messageID) !== "sending") return false
         return removeEcho(input.sessionID, input.messageID)

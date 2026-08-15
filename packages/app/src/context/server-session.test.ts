@@ -1199,6 +1199,30 @@ describe("server session", () => {
     expect(store.data.part.msg_prompt).toBeUndefined()
   })
 
+  test("retires a stale enqueued message when inbox hydration finishes after history", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.applyV2({
+      id: "evt_prompt",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
+
+    await store.sync("child")
+    await store.hydrateTransient("child", async () => ({ pending: [], forms: [] }))
+    store.inbox.reconcile("child")
+
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.session_message.child).toEqual([])
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
+  })
+
   test("deduplicates the durable admission event against its local echo", () => {
     const store = setup({ child: session("child") }).store
     store.inbox.echo(promptEcho("msg_prompt"))
