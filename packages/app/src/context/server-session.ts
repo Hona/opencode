@@ -18,7 +18,13 @@ import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/s
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
-import { createCommentMetadata, formatCommentNote, type PromptComment } from "@/utils/comment-note"
+import {
+  createCommentMetadata,
+  formatCommentNote,
+  parseCommentNote,
+  readCommentMetadata,
+  type PromptComment,
+} from "@/utils/comment-note"
 
 type MessageApi = ServerApi["message"]
 
@@ -195,6 +201,22 @@ export function createServerSession(
     messages.delete(messageID)
     if (messages.size === 0) echoes.delete(sessionID)
     return state
+  }
+  const present = (messageID: string, parts: Part[]) => {
+    const local = data.part[messageID] ?? []
+    const comments = local.filter(
+      (part) =>
+        part.type === "text" &&
+        part.synthetic &&
+        (readCommentMetadata(part.metadata) !== undefined || parseCommentNote(part.text) !== undefined),
+    )
+    if (!comments.length) return parts
+    const text = local.find((part) => part.type === "text" && !part.synthetic)
+    const projected = parts.flatMap((part) => {
+      if (part.id !== `${messageID}:text:0` || part.type !== "text") return [part]
+      return text?.type === "text" && text.text ? [{ ...part, text: text.text }] : []
+    })
+    return merge(projected, comments)
   }
   const deleteMessageParts = (
     cache: { part: Record<string, Part[] | undefined>; part_text_accum_delta: Record<string, string | undefined> },
@@ -497,9 +519,10 @@ export function createServerSession(
   ) => {
     for (const item of items) {
       if (!messageIDs.has(item.id)) continue
-      const fetched = load?.clearedMessageParts.has(item.id)
-        ? []
-        : item.part.filter((part) => !SKIP_PARTS.has(part.type))
+      const fetched = present(
+        item.id,
+        load?.clearedMessageParts.has(item.id) ? [] : item.part.filter((part) => !SKIP_PARTS.has(part.type)),
+      )
       const fetchedIDs = new Set(fetched.map((part) => part.id))
       const pending = pendingParts.get(sessionID)?.get(item.id)
       const touched = new Set([...(load?.touchedParts.get(item.id) ?? []), ...(pending ?? [])])
@@ -796,7 +819,7 @@ export function createServerSession(
         apply({ type: "message.updated", properties: { sessionID: reduction.sessionID, info: message } })
       }
       for (const messageID of touched) {
-        const next = normalized.parts.get(messageID) ?? []
+        const next = present(messageID, normalized.parts.get(messageID) ?? [])
         const nextIDs = new Set(next.map((part) => part.id))
         for (const part of next) {
           apply({ type: "message.part.updated", properties: { sessionID: reduction.sessionID, part } })
@@ -854,6 +877,24 @@ export function createServerSession(
     if (index < 0) setData("pending", item.sessionID, [...current, item])
     if (index >= 0) setData("pending", item.sessionID, index, reconcile(item))
     return true
+  }
+
+  const reconcileEchoes = (sessionID: string) => {
+    const messages = echoes.get(sessionID)
+    if (!messages) return
+    const pending = new Set((data.pending[sessionID] ?? []).map((item) => item.id))
+    const projected = new Set((data.session_message[sessionID] ?? []).map((message) => message.id))
+    for (const [messageID, state] of messages) {
+      if (projected.has(messageID)) {
+        releaseEcho(sessionID, messageID)
+        continue
+      }
+      if (pending.has(messageID)) {
+        confirmEcho(sessionID, messageID)
+        continue
+      }
+      if (state === "admitted") removeEcho(sessionID, messageID)
+    }
   }
 
   const applyV2 = (event: OpenCodeEvent) => {
@@ -1321,9 +1362,10 @@ export function createServerSession(
       }
     },
     refreshPinned(hydrateTransient: (sessionID: string) => Promise<void>) {
+      const sessions = [...pinned.keys()]
       return Promise.all(
-        [...pinned.keys()].flatMap((sessionID) => [sync(sessionID, { force: true }), hydrateTransient(sessionID)]),
-      ).then(() => undefined)
+        sessions.flatMap((sessionID) => [sync(sessionID, { force: true }), hydrateTransient(sessionID)]),
+      ).then(() => sessions.forEach(reconcileEchoes))
     },
     invalidate() {
       invalidationRevision += 1
@@ -1390,7 +1432,7 @@ export function createServerSession(
           synthetic: true,
           metadata: createCommentMetadata(comment),
         }))
-        const parts = [...(projected.parts.get(input.messageID) ?? []), ...comments].sort((a, b) => cmp(a.id, b.id))
+        const parts = merge(projected.parts.get(input.messageID) ?? [], comments).sort((a, b) => cmp(a.id, b.id))
         removedMessages.get(input.sessionID)?.delete(input.messageID)
         markEcho(input.sessionID, input.messageID)
         pendingRevision.set(input.sessionID, (pendingRevision.get(input.sessionID) ?? 0) + 1)
@@ -1403,6 +1445,7 @@ export function createServerSession(
         })
       },
       confirm: confirmInbox,
+      reconcile: reconcileEchoes,
       clearEcho(input: { sessionID: string; messageID: string }) {
         if (echoes.get(input.sessionID)?.get(input.messageID) !== "sending") return false
         return removeEcho(input.sessionID, input.messageID)

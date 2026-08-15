@@ -1109,6 +1109,29 @@ describe("server session", () => {
       { id: "msg_prompt:file:0", type: "file", filename: "foo.ts" },
       { id: "msg_prompt:text:0", type: "text", text: "hello" },
     ])
+
+    store.applyV2({
+      id: "evt_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: {
+          type: "user",
+          delivery: "steer",
+          payload: {
+            text: "hello\nThe user made the following comment regarding line 4 of src/foo.ts: check this",
+          },
+        },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.data.part.msg_prompt).toMatchObject([
+      { id: "msg_prompt:comment:0", type: "text", synthetic: true },
+      { id: "msg_prompt:text:0", type: "text", text: "hello" },
+    ])
   })
 
   test("preserves a local echo while message history omits pending input", async () => {
@@ -1127,6 +1150,53 @@ describe("server session", () => {
 
     expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
     expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
+  })
+
+  test("preserves local comment presentation through message refresh", async () => {
+    const note = "The user made the following comment regarding line 4 of src/foo.ts: check this"
+    const message = userMessage("msg_prompt")
+    const store = createServerSession(
+      messageClient(response([{ info: message, parts: [textPart(message.id, { text: note })] }])),
+    )
+    store.inbox.echo({
+      ...promptEcho(message.id),
+      text: `hello\n${note}`,
+      comments: [
+        {
+          path: "src/foo.ts",
+          selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+          comment: "check this",
+          origin: "review",
+        },
+      ],
+    })
+
+    await store.sync("child")
+
+    expect(store.data.part.msg_prompt).toMatchObject([
+      { id: "msg_prompt:comment:0", type: "text", synthetic: true },
+      { id: "msg_prompt:text:0", type: "text", text: "hello" },
+    ])
+  })
+
+  test("retires an admitted echo absent from authoritative reconnect state", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
+
+    await Promise.all([store.sync("child"), store.hydrateTransient("child", async () => ({ pending: [], forms: [] }))])
+    store.inbox.reconcile("child")
+
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
   })
 
   test("deduplicates the durable admission event against its local echo", () => {
