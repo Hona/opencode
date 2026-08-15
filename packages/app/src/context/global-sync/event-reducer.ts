@@ -321,16 +321,16 @@ export function applyDirectoryEvent(input: {
         input.setStore("part", part.messageID, [part])
         break
       }
-      const index = parts.findIndex((item) => item.id === part.id)
-      if (index >= 0) {
-        input.setStore("part", part.messageID, index, reconcile(part))
+      const result = Binary.search(parts, part.id, (item) => item.id)
+      if (result.found) {
+        input.setStore("part", part.messageID, result.index, reconcile(part))
         break
       }
       input.setStore(
         "part",
         part.messageID,
         produce((draft) => {
-          draft.push(part)
+          draft.splice(result.index, 0, part)
         }),
       )
       break
@@ -344,14 +344,15 @@ export function applyDirectoryEvent(input: {
       )
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      if (parts.some((part) => part.id === props.partID)) {
+      const result = Binary.search(parts, props.partID, (part) => part.id)
+      if (result.found) {
         input.setStore(
           produce((draft) => {
             const list = draft.part[props.messageID]
             if (!list) return
-            const index = list.findIndex((part) => part.id === props.partID)
-            if (index < 0) return
-            list.splice(index, 1)
+            const next = Binary.search(list, props.partID, (part) => part.id)
+            if (!next.found) return
+            list.splice(next.index, 1)
             if (list.length === 0) delete draft.part[props.messageID]
           }),
         )
@@ -362,10 +363,10 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      const index = parts.findIndex((part) => part.id === props.partID)
-      if (index < 0) break
+      const result = Binary.search(parts, props.partID, (part) => part.id)
+      if (!result.found) break
       const field = props.field as keyof (typeof parts)[number]
-      const current = parts[index]?.[field]
+      const current = parts[result.index]?.[field]
       input.setStore(
         "part_text_accum_delta",
         props.partID,
@@ -375,7 +376,7 @@ export function applyDirectoryEvent(input: {
         "part",
         props.messageID,
         produce((draft) => {
-          const part = draft[index]
+          const part = draft[result.index]
           const field = props.field as keyof typeof part
           const existing = part[field] as string | undefined
           ;(part[field] as string) = (existing ?? "") + props.delta
