@@ -194,6 +194,8 @@ export function configured(options?: Options) {
           typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
         }
         const routed = new Set<RoutedSubscription>()
+        const routedByType = new Map<string, Set<RoutedSubscription>>()
+        const routedWildcard = new Set<RoutedSubscription>()
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
         const durableLocks = KeyedMutex.makeUnsafe<string>()
@@ -218,13 +220,26 @@ export function configured(options?: Options) {
                 const subscription = yield* PubSub.subscribe(pubsub)
                 const route = { types, location, pubsub }
                 routed.add(route)
+                if (types === undefined) routedWildcard.add(route)
+                else
+                  for (const type of types) {
+                    const selected = routedByType.get(type) ?? new Set()
+                    selected.add(route)
+                    routedByType.set(type, selected)
+                  }
                 return { route, subscription }
               }),
               ({ route }) =>
-                Effect.sync(() => routed.delete(route)).pipe(
-                  Effect.andThen(PubSub.shutdown(route.pubsub)),
-                  Effect.asVoid,
-                ),
+                Effect.sync(() => {
+                  routed.delete(route)
+                  if (route.types === undefined) routedWildcard.delete(route)
+                  else
+                    for (const type of route.types) {
+                      const selected = routedByType.get(type)
+                      selected?.delete(route)
+                      if (selected?.size === 0) routedByType.delete(type)
+                    }
+                }).pipe(Effect.andThen(PubSub.shutdown(route.pubsub)), Effect.asVoid),
             ).pipe(Effect.map(({ subscription }) => Stream.fromSubscription(subscription))),
           )
 
@@ -465,8 +480,8 @@ export function configured(options?: Options) {
             )
             const typed = pubsub.typed.get(event.type)
             if (typed) yield* PubSub.publish(typed, event)
-            yield* Effect.forEach(routed, (route) => {
-              if (route.types !== undefined && !route.types.has(event.type)) return Effect.void
+            const routes = [...(routedByType.get(event.type) ?? []), ...routedWildcard]
+            yield* Effect.forEach(routes, (route) => {
               if (
                 route.location !== undefined &&
                 event.location !== undefined &&
