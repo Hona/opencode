@@ -16,7 +16,12 @@ const admitted: Array<{
   sessionID: string
   messageID: string
   text: string
+  displayText: string
+  agent: string
+  model: { providerID: string; modelID: string; variant?: string }
+  comments: unknown[]
 }> = []
+const confirmed: unknown[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
 const sentShellDirectories: string[] = []
@@ -35,6 +40,8 @@ const syncedServers: string[] = []
 const admittedServers: string[] = []
 const promptCaptures: Array<{ scope?: unknown; target?: unknown }> = []
 let serverSessionSyncs = 0
+let restoredPrompts = 0
+let clearEchoCalls = 0
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -44,6 +51,8 @@ let createSessionGate: Promise<void> | undefined
 let createWorktreeGate: Promise<void> | undefined
 let worktreeFailure: Error | undefined
 let locationFailure: Error | undefined
+let promptFailure: Error | undefined
+let clearEchoResult = true
 let worktreeCreates = 0
 let activeSDK = "server-a"
 let activeServerSync = "server-a"
@@ -71,7 +80,7 @@ const prompt = {
     set: () => undefined,
   },
   reset: () => undefined,
-  set: () => undefined,
+  set: () => restoredPrompts++,
   context: {
     add: () => undefined,
     remove: () => undefined,
@@ -113,7 +122,16 @@ const clientFor = (directory: string) => {
           sessionRequestOrder.push("prompt")
           sentPrompts.push(sessionDirectories[(input as { sessionID: string }).sessionID] ?? directory)
           promptInputs.push(input)
-          return { data: undefined }
+          if (promptFailure) throw promptFailure
+          const prompt = input as { sessionID: string; id: string; text: string }
+          return {
+            id: prompt.id,
+            sessionID: prompt.sessionID,
+            timeCreated: 1,
+            type: "user" as const,
+            delivery: "steer" as const,
+            payload: { text: prompt.text },
+          }
         },
         switchAgent: async (input: { sessionID: string; agent: string }) => {
           sessionRequestOrder.push("agent")
@@ -246,11 +264,21 @@ beforeAll(async () => {
               sessionID: string
               messageID: string
               text: string
+              displayText: string
+              agent: string
+              model: { providerID: string; modelID: string; variant?: string }
+              comments: unknown[]
             }) => {
               admittedServers.push(server)
               admitted.push(value)
             },
-            clearEcho: () => undefined,
+            confirm: (value: unknown) => {
+              confirmed.push(value)
+            },
+            clearEcho: () => {
+              clearEchoCalls++
+              return clearEchoResult
+            },
           },
         },
         set: () => undefined,
@@ -311,6 +339,7 @@ beforeAll(async () => {
 beforeEach(() => {
   createdSessions.length = 0
   admitted.length = 0
+  confirmed.length = 0
   promotedDrafts.length = 0
   updatedDrafts.length = 0
   sentCommands.length = 0
@@ -322,6 +351,8 @@ beforeEach(() => {
   syncedServers.length = 0
   admittedServers.length = 0
   promptCaptures.length = 0
+  restoredPrompts = 0
+  clearEchoCalls = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -339,6 +370,8 @@ beforeEach(() => {
   createWorktreeGate = undefined
   worktreeFailure = undefined
   locationFailure = undefined
+  promptFailure = undefined
+  clearEchoResult = true
   worktreeCreates = 0
   for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
@@ -448,8 +481,14 @@ describe("prompt submit worktree selection", () => {
     await Bun.sleep(0)
 
     expect(admitted).toHaveLength(1)
-    expect(admitted[0]).toMatchObject({ sessionID: "session-1", text: "ls" })
+    expect(admitted[0]).toMatchObject({
+      sessionID: "session-1",
+      text: "ls",
+      agent: "agent",
+      model: { providerID: "provider", modelID: "model", variant: "high" },
+    })
     expect(admitted[0]?.messageID).toStartWith("msg_")
+    expect(confirmed).toMatchObject([{ id: admitted[0]?.messageID, sessionID: "session-1" }])
     expect(sentPrompts).toEqual(["/repo/main"])
     expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
     expect(switchedModels).toEqual([
@@ -466,6 +505,22 @@ describe("prompt submit worktree selection", () => {
       agents: [],
     })
     expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
+  })
+
+  test("keeps a confirmed echo when the prompt response is lost", async () => {
+    params = { id: "session-1" }
+    promptFailure = new Error("connection lost")
+    clearEchoResult = false
+    const submit = makeSubmit({
+      info: () => ({ id: "session-1", agent: "agent", model: { id: "model", providerID: "provider" } }),
+    })
+
+    await submit.handleSubmit(event)
+    await settle()
+
+    expect(admitted).toHaveLength(1)
+    expect(clearEchoCalls).toBe(1)
+    expect(restoredPrompts).toBe(0)
   })
 
   test("submits slash commands through the current session API", async () => {

@@ -3,7 +3,7 @@ import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
-import { batch, startTransition, type Accessor } from "solid-js"
+import { startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -109,6 +109,14 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   })
 
   setBusy()
+  input.sync.session.inbox.echo({
+    directory: input.draft.sessionDirectory,
+    sessionID: input.draft.sessionID,
+    messageID,
+    agent: input.draft.agent,
+    model: { ...input.draft.model, variant: input.draft.variant },
+    ...request,
+  })
 
   try {
     const session = input.session()
@@ -130,29 +138,23 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       })
     }
 
-    input.sync.session.inbox.echo({
-      directory: input.draft.sessionDirectory,
-      sessionID: input.draft.sessionID,
-      messageID,
-      ...request,
-    })
-    await input.api.prompt({
+    const admitted = await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
       text: request.text,
       files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
       agents: request.agents,
     })
+    input.sync.session.inbox.confirm(admitted)
     return true
   } catch (err) {
-    batch(() => {
-      setIdle()
-      input.sync.session.inbox.clearEcho({
-        directory: input.draft.sessionDirectory,
-        sessionID: input.draft.sessionID,
-        messageID,
-      })
+    const failed = input.sync.session.inbox.clearEcho({
+      directory: input.draft.sessionDirectory,
+      sessionID: input.draft.sessionID,
+      messageID,
     })
+    if (!failed) return true
+    setIdle()
     throw err
   }
 }

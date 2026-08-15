@@ -29,6 +29,8 @@ describe("buildPromptRequest", () => {
 
     expect(result.text).toContain("hello @src/foo.ts @planner")
     expect(result.text).toContain("check this")
+    expect(result.displayText).toBe("hello @src/foo.ts @planner")
+    expect(result.comments).toMatchObject([{ path: "src/bar.ts", comment: "check this" }])
     expect(result.agents).toEqual([{ name: "planner", mention: { start: 16, end: 24, text: "@planner" } }])
     expect(result.files.some((file) => file.uri.startsWith("file:///repo/src/foo.ts"))).toBe(true)
     expect(result.files.find((file) => file.uri.startsWith("file:///repo/src/foo.ts"))?.mention).toEqual({

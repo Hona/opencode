@@ -1,4 +1,10 @@
-import type { OpenCodeEvent, SessionInboxItem, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type {
+  OpenCodeEvent,
+  SessionInboxInfo,
+  SessionInboxItem,
+  SessionInfo,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
@@ -30,12 +36,7 @@ export function createV2SessionReducer() {
     const append = (message: SessionMessageInfo) =>
       result(source.some((item) => item.id === message.id) ? [...source] : [...source, message], [message.id])
     const replace = (message: SessionMessageInfo) =>
-      result(
-        source.some((item) => item.id === message.id)
-          ? source.map((item) => (item.id === message.id ? message : item))
-          : [...source, message],
-        [message.id],
-      )
+      result([...source.filter((item) => item.id !== message.id), message], [message.id])
 
     switch (event.type) {
       case "session.inbox.enqueued":
@@ -487,6 +488,9 @@ export function createV2SessionReducer() {
 
   return {
     reduce,
+    confirm(item: SessionInboxInfo) {
+      pending.set(key(item.sessionID, item.id), item)
+    },
     clear(sessionID: string) {
       for (const id of pending.keys()) {
         if (id.startsWith(`${sessionID}:`)) pending.delete(id)

@@ -6,10 +6,13 @@ const event = (input: object) => input as OpenCodeEvent
 const base = { created: 1, location: { directory: "/repo" }, durable: { aggregateID: "ses_1", seq: 1, version: 1 } }
 
 describe("v2 session reducer", () => {
-  test("replaces a same-ID local echo with the durable inbox payload", () => {
+  test("moves a repeated inbox payload to the current event position", () => {
     const reducer = createV2SessionReducer()
     const result = reducer.reduce(
-      [{ id: "msg_user", type: "user", text: "local", time: { created: 0 } }],
+      [
+        { id: "msg_user", type: "user", text: "local", time: { created: 0 } },
+        { id: "msg_agent", type: "agent-switched", agent: "review", time: { created: 1 } },
+      ],
       event({
         ...base,
         id: "evt_admitted",
@@ -22,7 +25,10 @@ describe("v2 session reducer", () => {
       }),
     )
 
-    expect(result?.messages).toEqual([{ id: "msg_user", type: "user", text: "durable", time: { created: 1 } }])
+    expect(result?.messages).toEqual([
+      { id: "msg_agent", type: "agent-switched", agent: "review", time: { created: 1 } },
+      { id: "msg_user", type: "user", text: "durable", time: { created: 1 } },
+    ])
     expect(result?.touched).toEqual(["msg_user"])
   })
 

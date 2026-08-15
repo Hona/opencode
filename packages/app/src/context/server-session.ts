@@ -18,6 +18,7 @@ import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/s
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
+import { createCommentMetadata, formatCommentNote, type PromptComment } from "@/utils/comment-note"
 
 type MessageApi = ServerApi["message"]
 
@@ -53,8 +54,12 @@ export type PromptEcho = {
   sessionID: string
   messageID: string
   text: string
+  displayText: string
+  agent: string
+  model: { providerID: string; modelID: string; variant?: string }
   files?: { uri: string; mime: string; name?: string; mention?: { start: number; end: number; text: string } }[]
   agents?: { name: string; mention?: { start: number; end: number; text: string } }[]
+  comments: PromptComment[]
 }
 
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
@@ -170,7 +175,27 @@ export function createServerSession(
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
+  const echoes = new Map<string, Map<string, "sending" | "admitted">>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
+  const markEcho = (sessionID: string, messageID: string) => {
+    const messages = echoes.get(sessionID) ?? new Map<string, "sending" | "admitted">()
+    messages.set(messageID, "sending")
+    echoes.set(sessionID, messages)
+  }
+  const confirmEcho = (sessionID: string, messageID: string) => {
+    const messages = echoes.get(sessionID)
+    if (!messages?.has(messageID)) return false
+    messages.set(messageID, "admitted")
+    return true
+  }
+  const releaseEcho = (sessionID: string, messageID: string) => {
+    const messages = echoes.get(sessionID)
+    const state = messages?.get(messageID)
+    if (!messages || !state) return
+    messages.delete(messageID)
+    if (messages.size === 0) echoes.delete(sessionID)
+    return state
+  }
   const deleteMessageParts = (
     cache: { part: Record<string, Part[] | undefined>; part_text_accum_delta: Record<string, string | undefined> },
     messageID: string,
@@ -211,6 +236,7 @@ export function createServerSession(
         ...inflight.keys(),
         ...inflightTodo.keys(),
         ...messageLoads.keys(),
+        ...echoes.keys(),
         ...Object.entries(data.permission)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
@@ -356,6 +382,7 @@ export function createServerSession(
     sessionIDs.forEach((sessionID) => {
       messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
       generations.delete(sessionID)
+      echoes.delete(sessionID)
       requests.delete(sessionID)
       inflight.delete(sessionID)
       inflightTodo.delete(sessionID)
@@ -390,6 +417,7 @@ export function createServerSession(
       ...inflight.keys(),
       ...inflightTodo.keys(),
       ...messageLoads.keys(),
+      ...echoes.keys(),
       ...Object.entries(data.permission)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
@@ -522,6 +550,7 @@ export function createServerSession(
     preserveUnfetched: boolean | ((message: Message) => boolean),
     cleanupOrphans: boolean,
   ) => {
+    page.source?.forEach((message) => releaseEcho(sessionID, message.id))
     const source = page.source
       ? (() => {
           const incoming = new Map(page.source.map((message) => [message.id, message]))
@@ -567,7 +596,10 @@ export function createServerSession(
       touched: touchedMessages,
       retained: load?.retainedMessages,
       removed: load?.removedMessages,
-      preserveUnfetched,
+      preserveUnfetched: (message) =>
+        echoes.get(sessionID)?.has(message.id) === true ||
+        preserveUnfetched === true ||
+        (typeof preserveUnfetched === "function" && preserveUnfetched(message)),
       compare: compareMessages,
     })
     batch(() => {
@@ -797,6 +829,33 @@ export function createServerSession(
       .catch(() => {})
   }
 
+  const removeEcho = (sessionID: string, messageID: string) => {
+    if (!releaseEcho(sessionID, messageID)) return false
+    pendingRevision.set(sessionID, (pendingRevision.get(sessionID) ?? 0) + 1)
+    const load = messageLoads.get(sessionID)
+    load?.touchedMessages.add(messageID)
+    load?.removedMessages.add(messageID)
+    load?.clearedMessageParts.add(messageID)
+    batch(() => {
+      setData("pending", sessionID, (items) => items?.filter((item) => item.id !== messageID))
+      setData("input", sessionID, (items) => items?.filter((id) => id !== messageID))
+      setData("message", sessionID, (messages) => messages?.filter((message) => message.id !== messageID))
+      setData(produce((draft) => deleteMessageParts(draft, messageID)))
+    })
+    return true
+  }
+
+  const confirmInbox = (item: SessionInboxInfo) => {
+    if (!confirmEcho(item.sessionID, item.id)) return false
+    v2.confirm(item)
+    pendingRevision.set(item.sessionID, (pendingRevision.get(item.sessionID) ?? 0) + 1)
+    const current = data.pending[item.sessionID] ?? []
+    const index = current.findIndex((entry) => entry.id === item.id)
+    if (index < 0) setData("pending", item.sessionID, [...current, item])
+    if (index >= 0) setData("pending", item.sessionID, index, reconcile(item))
+    return true
+  }
+
   const applyV2 = (event: OpenCodeEvent) => {
     if (event.type === "form.created") {
       formRevision.set(event.data.form.sessionID, (formRevision.get(event.data.form.sessionID) ?? 0) + 1)
@@ -820,6 +879,9 @@ export function createServerSession(
     }
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
+    if (event.type === "session.inbox.enqueued" || event.type === "session.inbox.delivered")
+      releaseEcho(sessionID, event.data.inboxID)
+    if (event.type === "session.inbox.cancelled") removeEcho(sessionID, event.data.inboxID)
     if (
       event.type === "session.inbox.enqueued" ||
       event.type === "session.inbox.delivery.changed" ||
@@ -831,11 +893,10 @@ export function createServerSession(
       pendingRevision.set(sessionID, (pendingRevision.get(sessionID) ?? 0) + 1)
     if (event.type === "session.inbox.enqueued") {
       const current = data.pending[sessionID] ?? []
-      if (!current.some((item) => item.id === event.data.inboxID))
-        setData("pending", sessionID, [
-          ...current,
-          { id: event.data.inboxID, sessionID, timeCreated: event.created, ...event.data.item },
-        ])
+      const item = { id: event.data.inboxID, sessionID, timeCreated: event.created, ...event.data.item }
+      const index = current.findIndex((entry) => entry.id === event.data.inboxID)
+      if (index < 0) setData("pending", sessionID, [...current, item])
+      if (index >= 0) setData("pending", sessionID, index, reconcile(item))
       if (event.data.item.type !== "compaction" && !data.input[sessionID]?.includes(event.data.inboxID))
         setData("input", sessionID, [...(data.input[sessionID] ?? []), event.data.inboxID])
     }
@@ -1247,6 +1308,7 @@ export function createServerSession(
         const pendingStable = (pendingRevision.get(sessionID) ?? 0) === pendingAt
         const formStable = (formRevision.get(sessionID) ?? 0) === formAt
         if (pendingStable) {
+          result.pending.forEach(v2.confirm)
           setData("pending", sessionID, reconcile(result.pending))
           setData(
             "input",
@@ -1279,44 +1341,71 @@ export function createServerSession(
     fresh(sessionID: string, ttl: number) {
       return Date.now() - (meta.at[sessionID] ?? 0) <= ttl
     },
-    // Local echo of prompt admission: the synthesized event enters through the same applyV2 door
-    // as the durable server event, which later deduplicates against it by inbox ID.
     inbox: {
       echo(input: PromptEcho) {
-        applyV2({
-          id: input.messageID.replace(/^msg_/, "evt_"),
-          created: Date.now(),
-          type: "session.inbox.enqueued",
-          durable: { aggregateID: input.sessionID, seq: 0, version: 1 },
-          data: {
-            sessionID: input.sessionID,
-            inboxID: input.messageID,
-            item: {
-              type: "user",
-              delivery: "steer",
-              payload: {
-                text: input.text,
-                files: input.files?.map((file) => ({
-                  data: "",
-                  mime: file.mime,
-                  source: { type: "uri", uri: file.uri },
-                  name: file.name,
-                  mention: file.mention,
-                })),
-                agents: input.agents,
-              },
+        const created = Date.now()
+        const files = input.files?.map((file) => ({
+          data: "",
+          mime: file.mime,
+          source: { type: "uri" as const, uri: file.uri },
+          name: file.name,
+          mention: file.mention,
+        }))
+        const item: SessionInboxInfo = {
+          id: input.messageID,
+          sessionID: input.sessionID,
+          timeCreated: created,
+          type: "user",
+          delivery: "steer",
+          payload: { text: input.text, files, agents: input.agents },
+        }
+        const projected = normalizeSessionMessages(input.sessionID, [
+          { id: `${input.messageID}:agent`, type: "agent-switched", agent: input.agent, time: { created } },
+          {
+            id: `${input.messageID}:model`,
+            type: "model-switched",
+            model: {
+              id: input.model.modelID,
+              providerID: input.model.providerID,
+              variant: input.model.variant,
             },
+            time: { created },
           },
+          {
+            id: input.messageID,
+            type: "user",
+            text: input.displayText,
+            files,
+            agents: input.agents,
+            time: { created },
+          },
+        ])
+        const message = projected.messages[0]!
+        const comments: Part[] = input.comments.map((comment, index) => ({
+          id: `${input.messageID}:comment:${index}`,
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          type: "text",
+          text: formatCommentNote(comment),
+          synthetic: true,
+          metadata: createCommentMetadata(comment),
+        }))
+        const parts = [...(projected.parts.get(input.messageID) ?? []), ...comments].sort((a, b) => cmp(a.id, b.id))
+        removedMessages.get(input.sessionID)?.delete(input.messageID)
+        markEcho(input.sessionID, input.messageID)
+        pendingRevision.set(input.sessionID, (pendingRevision.get(input.sessionID) ?? 0) + 1)
+        batch(() => {
+          setData("pending", input.sessionID, (items = []) => [...items.filter((entry) => entry.id !== item.id), item])
+          if (!data.input[input.sessionID]?.includes(input.messageID))
+            setData("input", input.sessionID, [...(data.input[input.sessionID] ?? []), input.messageID])
+          setData("message", input.sessionID, (messages = []) => merge(messages, [message]).sort(compareMessages))
+          setData("part", input.messageID, parts)
         })
       },
+      confirm: confirmInbox,
       clearEcho(input: { sessionID: string; messageID: string }) {
-        applyV2({
-          id: input.messageID.replace(/^msg_/, "evt_"),
-          created: Date.now(),
-          type: "session.inbox.cancelled",
-          durable: { aggregateID: input.sessionID, seq: 0, version: 1 },
-          data: { sessionID: input.sessionID, inboxID: input.messageID },
-        })
+        if (echoes.get(input.sessionID)?.get(input.messageID) !== "sending") return false
+        return removeEcho(input.sessionID, input.messageID)
       },
     },
     async todo(sessionID: string, request?: { force?: boolean }) {

@@ -2,13 +2,15 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
-import { formatCommentNote } from "@/utils/comment-note"
+import { formatCommentNote, type PromptComment } from "@/utils/comment-note"
 
-// The canonical prompt request: the same value feeds the local inbox echo and the HTTP prompt call.
+// Network fields feed both boundaries; display fields keep desktop-only rendering details in the local echo.
 type PromptRequest = {
   text: string
+  displayText: string
   files: { uri: string; mime: string; name?: string; mention?: { start: number; end: number; text: string } }[]
   agents: { name: string; mention?: { start: number; end: number; text: string } }[]
+  comments: PromptComment[]
 }
 
 type ContextFile = {
@@ -70,7 +72,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
   }))
 
   const used = new Set(files.map((file) => file.uri))
-  const notes: string[] = []
+  const comments: PromptComment[] = []
   const context = input.context.flatMap((item) => {
     const path = absolute(input.sessionDirectory, item.path)
     const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
@@ -81,7 +83,13 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     const file = { uri, mime: "text/plain", name: getFilename(item.path) }
     if (!comment) return [file]
 
-    notes.push(formatCommentNote({ path: item.path, selection: item.selection, comment }))
+    comments.push({
+      path: item.path,
+      selection: item.selection,
+      comment,
+      preview: item.preview,
+      origin: item.commentOrigin,
+    })
     const mentions = parseCommentMentions(comment).flatMap((path) => {
       const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
       if (used.has(uri)) return []
@@ -98,8 +106,10 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
   }))
 
   return {
-    text: [...(input.text.trim() ? [input.text] : []), ...notes].join("\n"),
+    text: [...(input.text.trim() ? [input.text] : []), ...comments.map(formatCommentNote)].join("\n"),
+    displayText: input.text,
     files: [...files, ...context, ...images],
     agents,
+    comments,
   }
 }

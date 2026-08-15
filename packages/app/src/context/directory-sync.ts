@@ -1,5 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInboxInfo, SessionInfo } from "@opencode-ai/client/promise"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
@@ -86,8 +86,11 @@ export const createDirSyncContext = (
         echo(input: PromptEcho & { directory?: string }) {
           serverSync.session.inbox.echo(input)
         },
+        confirm(input: SessionInboxInfo) {
+          return serverSync.session.inbox.confirm(input)
+        },
         clearEcho(input: { directory?: string; sessionID: string; messageID: string }) {
-          serverSync.session.inbox.clearEcho(input)
+          return serverSync.session.inbox.clearEcho(input)
         },
       },
       async sync(sessionID: string, options?: { force?: boolean }) {

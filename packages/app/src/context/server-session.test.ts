@@ -185,6 +185,16 @@ const textPart = (messageID: string, input: Partial<TextPart> = {}): TextPart =>
   id: `${messageID}:text:${input.id === "pending" ? 1 : 0}`,
 })
 
+const promptEcho = (messageID: string, text = "hello") => ({
+  sessionID: "child",
+  messageID,
+  text,
+  displayText: text,
+  agent: "build",
+  model: { providerID: "provider", modelID: "model" },
+  comments: [],
+})
+
 const response = (data: MessageResponse["data"] = [], cursor?: string): MessageResponse => ({
   data,
   response: { headers: new Headers(cursor ? { "x-next-cursor": cursor } : undefined) },
@@ -738,7 +748,7 @@ describe("server session", () => {
         [singleResponse(user)],
       )
       const store = createServerSession(client)
-      store.inbox.echo({ sessionID: "child", messageID: user.id, text: "text" })
+      store.inbox.echo(promptEcho(user.id, "text"))
 
       await store.sync("child")
 
@@ -1036,25 +1046,6 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toBeUndefined()
   })
 
-  test("preserves a prompt re-admitted after removal during a refresh", async () => {
-    const pending = deferredResponse()
-    const message = userMessage("message")
-    const stale = textPart(message.id, { text: "stale" })
-    const store = createServerSession(
-      messageClient(response([{ info: message, parts: [] }]), pending.promise, response()),
-    )
-    await store.sync("child")
-    const refreshing = store.sync("child", { force: true })
-
-    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
-    store.inbox.echo({ sessionID: "child", messageID: message.id, text: "again" })
-    pending.resolve(response([{ info: message, parts: [stale] }]))
-    await refreshing
-
-    expect(store.data.message.child?.map((item) => item.id)).toEqual([message.id])
-    expect(store.data.part[message.id]).toMatchObject([{ type: "text", text: "again" }])
-  })
-
   test("drops stale event content omitted by a complete initial page", async () => {
     const stale = userMessage("stale")
     const store = createServerSession(messageClient(response()))
@@ -1076,33 +1067,71 @@ describe("server session", () => {
     expect(store.data.message.child).toEqual([live, fetched])
   })
 
-  test("echoes an admitted prompt through the current event projection", () => {
+  test("echoes a prompt without changing durable message order", () => {
     const store = setup({ child: session("child") }).store
 
     store.inbox.echo({
-      sessionID: "child",
-      messageID: "msg_prompt",
-      text: "hello",
+      ...promptEcho("msg_prompt"),
+      text: "hello\nThe user made the following comment regarding line 4 of src/foo.ts: check this",
       files: [{ uri: "file:///repo/src/foo.ts", mime: "text/plain", name: "foo.ts" }],
       agents: [{ name: "explore" }],
+      comments: [
+        {
+          path: "src/foo.ts",
+          selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+          comment: "check this",
+          preview: "const value = 1",
+          origin: "review",
+        },
+      ],
     })
 
     expect(store.data.pending.child).toMatchObject([{ id: "msg_prompt", type: "user", delivery: "steer" }])
     expect(store.data.input.child).toEqual(["msg_prompt"])
-    expect(store.data.session_message.child).toMatchObject([
-      { id: "msg_prompt", type: "user", text: "hello", agents: [{ name: "explore" }] },
-    ])
+    expect(store.data.session_message.child).toBeUndefined()
     expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
     expect(store.data.part.msg_prompt).toMatchObject([
       { id: "msg_prompt:agent:0", type: "agent", name: "explore" },
+      {
+        id: "msg_prompt:comment:0",
+        type: "text",
+        synthetic: true,
+        metadata: {
+          opencodeComment: {
+            path: "src/foo.ts",
+            selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+            comment: "check this",
+            preview: "const value = 1",
+            origin: "review",
+          },
+        },
+      },
       { id: "msg_prompt:file:0", type: "file", filename: "foo.ts" },
       { id: "msg_prompt:text:0", type: "text", text: "hello" },
     ])
   })
 
+  test("preserves a local echo while message history omits pending input", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
+
+    await store.sync("child")
+
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
+    expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
+  })
+
   test("deduplicates the durable admission event against its local echo", () => {
     const store = setup({ child: session("child") }).store
-    store.inbox.echo({ sessionID: "child", messageID: "msg_prompt", text: "hello" })
+    store.inbox.echo(promptEcho("msg_prompt"))
 
     store.applyV2({
       id: "evt_prompt",
@@ -1123,9 +1152,17 @@ describe("server session", () => {
     expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
   })
 
-  test("promotes an echoed prompt without duplicating its message", () => {
+  test("uses the prompt response when the admission event was missed", () => {
     const store = setup({ child: session("child") }).store
-    store.inbox.echo({ sessionID: "child", messageID: "msg_prompt", text: "hello" })
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 2,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
 
     store.applyV2({
       id: "evt_delivered",
@@ -1137,19 +1174,106 @@ describe("server session", () => {
 
     expect(store.data.pending.child).toEqual([])
     expect(store.data.input.child).toEqual([])
+    expect(store.data.session_message.child).toMatchObject([{ id: "msg_prompt", type: "user", text: "hello" }])
     expect(store.data.message.child?.filter((message) => message.id === "msg_prompt")).toHaveLength(1)
     expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
   })
 
+  test("keeps a durable admission when the HTTP request later fails", () => {
+    const store = setup({ child: session("child") }).store
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.applyV2({
+      id: "evt_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.inbox.clearEcho({ sessionID: "child", messageID: "msg_prompt" })).toBe(false)
+    expect(store.data.pending.child).toHaveLength(1)
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
+  })
+
+  test("places durable admission after delayed selection events", () => {
+    const store = setup({ child: session("child") }).store
+    store.remember(session("child"))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.applyV2({
+      id: "evt_agent",
+      created: 1,
+      type: "session.agent.selected",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: { sessionID: "child", agent: "review" },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_model",
+      created: 2,
+      type: "session.model.selected",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      data: { sessionID: "child", model: { id: "new-model", providerID: "new-provider" } },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_prompt",
+      created: 3,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 3, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.data.session_message.child?.map((message) => message.type)).toEqual([
+      "agent-switched",
+      "model-switched",
+      "user",
+    ])
+    expect(store.data.message.child?.find((message) => message.id === "msg_prompt")).toMatchObject({
+      agent: "review",
+      model: { providerID: "new-provider", modelID: "new-model" },
+    })
+  })
+
   test("removes an echoed prompt when submission fails", () => {
     const store = setup({ child: session("child") }).store
-    store.inbox.echo({ sessionID: "child", messageID: "msg_prompt", text: "hello" })
+    store.inbox.echo(promptEcho("msg_prompt"))
 
-    store.inbox.clearEcho({ sessionID: "child", messageID: "msg_prompt" })
+    expect(store.inbox.clearEcho({ sessionID: "child", messageID: "msg_prompt" })).toBe(true)
 
     expect(store.data.pending.child).toEqual([])
     expect(store.data.input.child).toEqual([])
-    expect(store.data.session_message.child).toEqual([])
+    expect(store.data.session_message.child).toBeUndefined()
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
+  })
+
+  test("removes a response-confirmed echo when the server cancels it", () => {
+    const store = setup({ child: session("child") }).store
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
+
+    store.applyV2({
+      id: "evt_cancelled",
+      created: 2,
+      type: "session.inbox.cancelled",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      data: { sessionID: "child", inboxID: "msg_prompt" },
+    } as OpenCodeEvent)
+
+    expect(store.data.pending.child).toEqual([])
     expect(store.data.message.child).toEqual([])
     expect(store.data.part.msg_prompt).toBeUndefined()
   })
@@ -1370,27 +1494,6 @@ describe("server session", () => {
 
     expect(store.data.message.child).toEqual([])
     expect(store.data.part[message.id]).toBeUndefined()
-  })
-
-  test("preserves re-admitted prompts across message retries", async () => {
-    const failed = Promise.withResolvers<MessageResponse>()
-    const retried = Promise.withResolvers<MessageResponse>()
-    const message = userMessage("message")
-    const stale = textPart(message.id, { id: "stale", text: "stale" })
-    const client = messageClient(response([{ info: message, parts: [stale] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retry: retryImmediately })
-    await store.sync("child")
-    const loading = store.sync("child", { force: true })
-
-    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
-    store.inbox.echo({ sessionID: "child", messageID: message.id, text: "again" })
-    failed.reject(new Error("failed to fetch"))
-    await client.requested(3)
-    retried.resolve(response([{ info: message, parts: [stale] }]))
-    await loading
-
-    expect(store.data.message.child?.map((item) => item.id)).toEqual([message.id])
-    expect(store.data.part[message.id]).toMatchObject([{ type: "text", text: "again" }])
   })
 
   test("accepts part omission from a successful retry after an earlier delta", async () => {
@@ -1781,7 +1884,7 @@ describe("server session", () => {
   test("preserves pinned session content under server-wide cache pressure", () => {
     const ctx = setup({})
     ctx.store.pin("active")
-    ctx.store.inbox.echo({ sessionID: "active", messageID: "message", text: "keep" })
+    ctx.store.inbox.echo({ ...promptEcho("message", "keep"), sessionID: "active" })
 
     for (let index = 0; index < 50; index++) {
       ctx.store.remember(session(`session-${index}`))

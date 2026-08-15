@@ -23,6 +23,18 @@ function selection(selection: unknown) {
   } satisfies FileSelection
 }
 
+export function createCommentMetadata(input: PromptComment) {
+  return {
+    opencodeComment: {
+      path: input.path,
+      selection: input.selection,
+      comment: input.comment,
+      preview: input.preview,
+      origin: input.origin,
+    },
+  }
+}
+
 export function readCommentMetadata(value: unknown) {
   if (!value || typeof value !== "object") return
   const meta = (value as { opencodeComment?: unknown }).opencodeComment
