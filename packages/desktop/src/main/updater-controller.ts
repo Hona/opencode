@@ -44,25 +44,39 @@ export function createUpdaterController(input: {
     if (!input.enabled) return Promise.resolve(state)
     const platform = input.platform
     if (!platform) return Promise.resolve(state)
-    if (state.status === "ready" || state.status === "installing") return Promise.resolve(state)
+    if (state.status === "installing") return Promise.resolve(state)
     if (pending) return pending
 
+    // With a staged update the check runs silently: no visible transitions, so
+    // the install affordance stays available while a newer version restages.
+    const staged = state.status === "ready" ? state.version : undefined
     pending = (async () => {
-      transition({ status: "checking" })
+      if (!staged) transition({ status: "checking" })
       const version = await platform.checkForUpdate()
       if (!version || version === input.currentVersion) {
+        if (staged) return state
         await input.persistence.clear()
         return transition({ status: "up-to-date" })
       }
+      if (version === staged) return state
 
-      transition({ status: "downloading", version })
+      if (!staged) transition({ status: "downloading", version })
       await platform.stageUpdate()
       await input.persistence.set({ version })
-      return transition({ status: "ready", version })
+      // An install may have started while this stage was in flight; keep its
+      // status and hand it the newer version instead of flickering to ready.
+      return transition({ status: installing ? "installing" : "ready", version })
     })()
-      .catch((error) =>
-        transition({ status: "error", message: error instanceof Error ? error.message : String(error) }),
-      )
+      .catch((error) => {
+        if (staged) {
+          input.log?.("updater refresh failed, keeping staged update", {
+            staged,
+            message: error instanceof Error ? error.message : String(error),
+          })
+          return state
+        }
+        return transition({ status: "error", message: error instanceof Error ? error.message : String(error) })
+      })
       .finally(() => {
         pending = undefined
       })
@@ -74,8 +88,14 @@ export function createUpdaterController(input: {
     if (state.status !== "ready") return Promise.reject(new Error("Update is not ready to install"))
 
     const version = startInstalling(state.version)
-    installing = restartWithUpdate(version)
+    installing = restartWithLatest(version)
     return installing
+  }
+
+  // A click during a silent refresh waits for the newer download, then installs it.
+  const restartWithLatest = async (version: string) => {
+    const refreshed = pending ? await pending : undefined
+    return restartWithUpdate(refreshed?.status === "installing" ? refreshed.version : version)
   }
 
   const startInstalling = (version: string) => {

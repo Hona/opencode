@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { createUpdaterController, type UpdaterPlatform, type UpdaterReadyRecord } from "./updater-controller"
 
-function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord }) {
+function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord; latest?: () => string }) {
   const calls: string[] = []
   const platform: UpdaterPlatform = {
     async checkForUpdate() {
       calls.push("check")
-      return "2.0.0"
+      return input?.latest?.() ?? "2.0.0"
     },
     async stageUpdate() {
       calls.push("download")
@@ -122,6 +122,128 @@ describe("updater controller", () => {
 
     await expect(failed.install()).rejects.toThrow("install failed")
     expect(failed.getState()).toEqual({ status: "ready", version: "2.0.0" })
+  })
+
+  test("re-checks silently while ready and keeps the staged update when no newer version exists", async () => {
+    const app = setup()
+    await app.controller.start()
+    const states: ReturnType<typeof app.controller.getState>[] = []
+    app.controller.subscribe((state) => states.push(state))
+
+    await app.controller.check()
+
+    expect(app.calls).toEqual(["check", "download", "check"])
+    expect(states.map((state) => state.status)).toEqual(["ready"])
+    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(app.getReady()).toEqual({ version: "2.0.0" })
+  })
+
+  test("restages a newer version found while ready without hiding the staged update", async () => {
+    let latest = "2.0.0"
+    const app = setup({ latest: () => latest })
+    await app.controller.start()
+    const states: ReturnType<typeof app.controller.getState>[] = []
+    app.controller.subscribe((state) => states.push(state))
+
+    latest = "3.0.0"
+    await app.controller.check()
+
+    expect(app.calls).toEqual(["check", "download", "check", "download"])
+    expect(states.map((state) => state.status)).toEqual(["ready", "ready"])
+    expect(app.controller.getState()).toEqual({ status: "ready", version: "3.0.0" })
+    expect(app.getReady()).toEqual({ version: "3.0.0" })
+  })
+
+  test("keeps the staged update installable when a silent re-check fails", async () => {
+    let checks = 0
+    let ready: UpdaterReadyRecord | undefined
+    const controller = createUpdaterController({
+      enabled: true,
+      currentVersion: "1.0.0",
+      platform: {
+        async checkForUpdate() {
+          checks++
+          if (checks === 1) return "2.0.0"
+          throw new Error("offline")
+        },
+        stageUpdate: async () => {},
+        installAndRestart: () => new Promise<never>(() => {}),
+      },
+      lifecycle: { prepareToRestart: async () => {} },
+      persistence: {
+        get: () => ready,
+        set: (value) => {
+          ready = value
+        },
+        clear: () => {
+          ready = undefined
+        },
+      },
+    })
+    await controller.start()
+    const states: ReturnType<typeof controller.getState>[] = []
+    controller.subscribe((state) => states.push(state))
+
+    await controller.check()
+
+    expect(checks).toBe(2)
+    expect(states.map((state) => state.status)).toEqual(["ready"])
+    expect(controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(ready).toEqual({ version: "2.0.0" })
+  })
+
+  test("install during a silent refresh waits for the download, then installs the newer version", async () => {
+    const installs: string[] = []
+    let latest = "2.0.0"
+    let deferStage = false
+    let releaseStage = () => {}
+    let ready: UpdaterReadyRecord | undefined
+    const controller = createUpdaterController({
+      enabled: true,
+      currentVersion: "1.0.0",
+      platform: {
+        checkForUpdate: async () => latest,
+        stageUpdate() {
+          if (!deferStage) return Promise.resolve()
+          return new Promise<void>((resolve) => {
+            releaseStage = resolve
+          })
+        },
+        installAndRestart() {
+          installs.push(ready?.version ?? "none")
+          return new Promise<never>(() => {})
+        },
+      },
+      lifecycle: { prepareToRestart: async () => {} },
+      persistence: {
+        get: () => ready,
+        set: (value) => {
+          ready = value
+        },
+        clear: () => {
+          ready = undefined
+        },
+      },
+    })
+    await controller.start()
+    expect(controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+
+    latest = "3.0.0"
+    deferStage = true
+    const refresh = controller.check()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+
+    void controller.install()
+    expect(controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(installs).toEqual([])
+
+    releaseStage()
+    await refresh
+    expect(controller.getState()).toEqual({ status: "installing", version: "3.0.0" })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(installs).toEqual(["3.0.0"])
+    expect(ready).toEqual({ version: "3.0.0" })
   })
 
   test("allows a state subscriber to retry after installation fails", async () => {
