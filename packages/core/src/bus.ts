@@ -173,7 +173,8 @@ interface Options {
 }
 
 type RoutedSubscription = {
-  readonly types: ReadonlySet<string>
+  readonly types?: ReadonlySet<string>
+  readonly location?: Location.Ref
   readonly pubsub: PubSub.PubSub<Event.Payload>
 }
 
@@ -209,13 +210,13 @@ export function configured(options?: Options) {
             return created
           })
 
-        const streamRouted = (definitions: readonly Event.Definition[]) =>
+        const streamRouted = (types?: ReadonlySet<string>, location?: Location.Ref) =>
           Stream.unwrap(
             Effect.acquireRelease(
               Effect.gen(function* () {
                 const pubsub = yield* PubSub.unbounded<Event.Payload>()
                 const subscription = yield* PubSub.subscribe(pubsub)
-                const route = { types: new Set(definitions.map((definition) => definition.type)), pubsub }
+                const route = { types, location, pubsub }
                 routed.add(route)
                 return { route, subscription }
               }),
@@ -464,9 +465,17 @@ export function configured(options?: Options) {
             )
             const typed = pubsub.typed.get(event.type)
             if (typed) yield* PubSub.publish(typed, event)
-            yield* Effect.forEach(routed, (route) =>
-              route.types.has(event.type) ? PubSub.publish(route.pubsub, event) : Effect.void,
-            )
+            yield* Effect.forEach(routed, (route) => {
+              if (route.types !== undefined && !route.types.has(event.type)) return Effect.void
+              if (
+                route.location !== undefined &&
+                event.location !== undefined &&
+                (route.location.directory !== event.location.directory ||
+                  route.location.workspaceID !== event.location.workspaceID)
+              )
+                return Effect.void
+              return PubSub.publish(route.pubsub, event)
+            })
             yield* PubSub.publish(pubsub.live, event)
           })
         }
@@ -692,25 +701,10 @@ export function configured(options?: Options) {
             .pipe(Effect.orDie)
         }
 
-        const local = <A extends Event.Payload>(stream: Stream.Stream<A>) =>
-          Stream.unwrap(
-            Effect.serviceOption(Location.Service).pipe(
-              Effect.map((location) =>
-                Option.match(location, {
-                  onNone: () => stream,
-                  onSome: (location) =>
-                    stream.pipe(
-                      Stream.filter(
-                        (event) =>
-                          !event.location ||
-                          (event.location.directory === location.directory &&
-                            event.location.workspaceID === location.workspaceID),
-                      ),
-                    ),
-                }),
-              ),
-            ),
-          )
+        const locationRef = (location: Location.Ref): Location.Ref => ({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+        })
 
         function subscribe(): Stream.Stream<Event.Payload>
         function subscribe<D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
@@ -720,12 +714,40 @@ export function configured(options?: Options) {
         function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
           if (input === undefined) return streamLive()
           if (isDefinition(input)) {
-            return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
+            return Stream.unwrap(
+              Effect.serviceOption(Location.Service).pipe(
+                Effect.flatMap((location) =>
+                  Option.match(location, {
+                    onNone: () => getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))),
+                    onSome: (location) => Effect.succeed(streamRouted(new Set([input.type]), locationRef(location))),
+                  }),
+                ),
+              ),
+            )
           }
-          return local(streamRouted(input))
+          return Stream.unwrap(
+            Effect.serviceOption(Location.Service).pipe(
+              Effect.map((location) =>
+                streamRouted(
+                  new Set(input.map((definition) => definition.type)),
+                  Option.match(location, { onNone: () => undefined, onSome: locationRef }),
+                ),
+              ),
+            ),
+          )
         }
 
-        const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
+        const streamLive = (): Stream.Stream<Event.Payload> =>
+          Stream.unwrap(
+            Effect.serviceOption(Location.Service).pipe(
+              Effect.map((location) =>
+                Option.match(location, {
+                  onNone: () => Stream.fromPubSub(pubsub.live),
+                  onSome: (location) => streamRouted(undefined, locationRef(location)),
+                }),
+              ),
+            ),
+          )
 
         const readAfter = (
           aggregateID: string,
