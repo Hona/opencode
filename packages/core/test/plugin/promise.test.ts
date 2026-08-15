@@ -65,6 +65,43 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.effect("closes active event iterators with the plugin scope", () =>
+    Effect.gen(function* () {
+      let begin: (() => void) | undefined
+      let released = false
+      const started = new Promise<void>((resolve) => (begin = resolve))
+      const host = testHost({
+        event: {
+          subscribe: () =>
+            Stream.unwrap(
+              Effect.sync(() => {
+                begin?.()
+                return Stream.never
+              }),
+            ).pipe(Stream.ensuring(Effect.sync(() => (released = true)))),
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-event-lifecycle",
+          setup: async (ctx) => {
+            void ctx.event
+              .subscribe("config.updated")
+              [Symbol.asyncIterator]()
+              .next()
+              .catch(() => undefined)
+            await started
+          },
+        }),
+      )
+        .effect(host)
+        .pipe(Effect.scoped)
+
+      expect(released).toBe(true)
+    }),
+  )
+
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown

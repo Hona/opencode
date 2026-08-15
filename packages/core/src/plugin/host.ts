@@ -64,14 +64,17 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     if (selection === undefined)
       return bus.subscribe(EventManifest.ServerDefinitions).pipe(Stream.provideService(Location.Service, location))
     const types = typeof selection === "string" ? [selection] : selection
-    const first = EventManifest.Server.get(types[0])
-    if (first === undefined) return Stream.die(new Error(`Unknown plugin event type: ${types[0]}`))
     const definitions = types
-      .slice(1)
       .map((type) => EventManifest.Server.get(type))
       .filter((definition) => definition !== undefined)
+    if (definitions.length !== types.length) {
+      const unknown = types.find((type) => !EventManifest.Server.has(type))
+      return Stream.die(new Error(`Unknown plugin event type: ${unknown ?? "unknown"}`))
+    }
+    const first = definitions[0]
+    if (first === undefined) return Stream.die(new Error("Plugin event selection cannot be empty"))
     return bus
-      .subscribe([first, ...definitions])
+      .subscribe([first, ...definitions.slice(1)])
       .pipe(Stream.filter(EventManifest.isServer), Stream.provideService(Location.Service, location))
   }
 
