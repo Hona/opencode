@@ -180,7 +180,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     event: {
-      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: () => bus.subscribe(EventManifest.ServerDefinitions),
     },
     integration: {
       list: () => response(integration.list()),

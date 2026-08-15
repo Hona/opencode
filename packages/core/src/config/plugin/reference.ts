@@ -10,11 +10,13 @@ import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location.js"
+import { Bus } from "../../bus.js"
 
 export const Plugin = define({
   id: "opencode.config.reference",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
     const loaded = { entries: yield* config.entries() }
@@ -49,8 +51,7 @@ export const Plugin = define({
       }
       for (const [name, source] of entries) draft.add(name, source)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* bus.subscribe(Config.Event.Updated).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

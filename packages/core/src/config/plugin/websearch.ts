@@ -3,19 +3,20 @@ export * as ConfigWebSearchPlugin from "./websearch.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
+import { Bus } from "../../bus.js"
 
 export const Plugin = define({
   id: "opencode.config.websearch",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.websearch.transform((websearch) => {
       const selection = Config.latest(loaded.entries, "websearch")
       if (selection === false) websearch.default.set(false)
       if (selection) websearch.default.set(selection.provider)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* bus.subscribe(Config.Event.Updated).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

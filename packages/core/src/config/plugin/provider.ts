@@ -6,11 +6,13 @@ import { Money } from "@opencode-ai/schema/money"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Provider } from "../../provider.js"
+import { Bus } from "../../bus.js"
 
 export const Plugin = define({
   id: "opencode.config.provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.integration.transform((integrations) => {
       for (const [id, provider] of configuredProviders(loaded.entries)) {
@@ -96,8 +98,7 @@ export const Plugin = define({
         }
       }
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* bus.subscribe(Config.Event.Updated).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

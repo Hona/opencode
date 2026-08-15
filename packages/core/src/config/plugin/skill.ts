@@ -13,6 +13,7 @@ import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { SkillFile } from "./skill-file.js"
+import { Bus } from "../../bus.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
 
@@ -20,6 +21,7 @@ export const Plugin = define({
   id: "opencode.config.skill",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
@@ -180,8 +182,7 @@ export const Plugin = define({
     yield* ctx.skill.transform((draft) => {
       for (const skill of loaded.skills) draft.add(skill)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* bus.subscribe(Config.Event.Updated).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

@@ -9,6 +9,7 @@ import { Command } from "../../command.js"
 import { Config } from "../../config.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
+import { Bus } from "../../bus.js"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
 
@@ -16,6 +17,7 @@ export const Plugin = define({
   id: "opencode.config.command",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), (entry) => {
@@ -43,7 +45,7 @@ export const Plugin = define({
           Effect.map(config.entries(), (entries) => isCommandSource(entries, update.path)),
         ),
       )
-    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    const configUpdates = bus.subscribe(Config.Event.Updated)
     yield* Stream.merge(sourceChanges, configUpdates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),

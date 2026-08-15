@@ -172,6 +172,11 @@ interface Options {
   readonly persist?: boolean
 }
 
+type RoutedSubscription = {
+  readonly types: ReadonlySet<string>
+  readonly pubsub: PubSub.PubSub<Event.Payload>
+}
+
 export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
@@ -187,6 +192,7 @@ export function configured(options?: Options) {
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
           typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
         }
+        const routed = new Set<RoutedSubscription>()
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
         const durableLocks = KeyedMutex.makeUnsafe<string>()
@@ -203,6 +209,24 @@ export function configured(options?: Options) {
             return created
           })
 
+        const streamRouted = (definitions: readonly Event.Definition[]) =>
+          Stream.unwrap(
+            Effect.acquireRelease(
+              Effect.gen(function* () {
+                const pubsub = yield* PubSub.unbounded<Event.Payload>()
+                const subscription = yield* PubSub.subscribe(pubsub)
+                const route = { types: new Set(definitions.map((definition) => definition.type)), pubsub }
+                routed.add(route)
+                return { route, subscription }
+              }),
+              ({ route }) =>
+                Effect.sync(() => routed.delete(route)).pipe(
+                  Effect.andThen(PubSub.shutdown(route.pubsub)),
+                  Effect.asVoid,
+                ),
+            ).pipe(Effect.map(({ subscription }) => Stream.fromSubscription(subscription))),
+          )
+
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             yield* PubSub.shutdown(pubsub.live)
@@ -212,6 +236,7 @@ export function configured(options?: Options) {
               { discard: true },
             )
             yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
+            yield* Effect.forEach(routed, (route) => PubSub.shutdown(route.pubsub), { discard: true })
           }),
         )
 
@@ -439,6 +464,9 @@ export function configured(options?: Options) {
             )
             const typed = pubsub.typed.get(event.type)
             if (typed) yield* PubSub.publish(typed, event)
+            yield* Effect.forEach(routed, (route) =>
+              route.types.has(event.type) ? PubSub.publish(route.pubsub, event) : Effect.void,
+            )
             yield* PubSub.publish(pubsub.live, event)
           })
         }
@@ -694,8 +722,7 @@ export function configured(options?: Options) {
           if (isDefinition(input)) {
             return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
           }
-          const types = new Set(input.map((definition) => definition.type))
-          return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+          return local(streamRouted(input))
         }
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))

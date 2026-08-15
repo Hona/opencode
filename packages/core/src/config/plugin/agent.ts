@@ -17,6 +17,7 @@ import type { LocationMutation } from "../../location-mutation.js"
 import type { ReadTool } from "../../tool/plugin/read.js"
 import type { EditTool } from "../../tool/plugin/edit.js"
 import { AbsolutePath } from "../../schema.js"
+import { Bus } from "../../bus.js"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -50,6 +51,7 @@ export const Plugin = define({
   id: "opencode.config.agent",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const load = Effect.fn("ConfigAgentPlugin.load")(function* () {
@@ -82,7 +84,7 @@ export const Plugin = define({
       .pipe(
         Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
       )
-    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    const configUpdates = bus.subscribe(Config.Event.Updated)
     yield* Stream.merge(sourceChanges, configUpdates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),
