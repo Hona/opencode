@@ -399,7 +399,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.part.msg_a).toBeUndefined()
   })
 
-  test("upserts and prunes message parts", () => {
+  test("upserts and prunes message parts in event order", () => {
     const sessionID = "ses_1"
     const messageID = "msg_1"
     const [store, setStore] = createStore(
@@ -416,7 +416,7 @@ describe("applyDirectoryEvent", () => {
       directory: "/tmp",
       loadLsp() {},
     })
-    expect(store.part[messageID]?.map((x) => x.id)).toEqual(["prt_1", "prt_2", "prt_3"])
+    expect(store.part[messageID]?.map((x) => x.id)).toEqual(["prt_1", "prt_3", "prt_2"])
 
     applyDirectoryEvent({
       event: {
