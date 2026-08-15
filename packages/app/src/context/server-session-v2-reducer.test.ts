@@ -6,6 +6,26 @@ const event = (input: object) => input as OpenCodeEvent
 const base = { created: 1, location: { directory: "/repo" }, durable: { aggregateID: "ses_1", seq: 1, version: 1 } }
 
 describe("v2 session reducer", () => {
+  test("replaces a same-ID local echo with the durable inbox payload", () => {
+    const reducer = createV2SessionReducer()
+    const result = reducer.reduce(
+      [{ id: "msg_user", type: "user", text: "local", time: { created: 0 } }],
+      event({
+        ...base,
+        id: "evt_admitted",
+        type: "session.inbox.enqueued",
+        data: {
+          sessionID: "ses_1",
+          inboxID: "msg_user",
+          item: { type: "user", delivery: "steer", payload: { text: "durable" } },
+        },
+      }),
+    )
+
+    expect(result?.messages).toEqual([{ id: "msg_user", type: "user", text: "durable", time: { created: 1 } }])
+    expect(result?.touched).toEqual(["msg_user"])
+  })
+
   test("projects promoted input and streaming assistant content", () => {
     const reducer = createV2SessionReducer()
     let messages: SessionMessageInfo[] = []

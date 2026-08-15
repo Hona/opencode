@@ -28,31 +28,6 @@ const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
 
-function projectMessageSource(message: Message): SessionMessageInfo[] {
-  if (message.role === "user") {
-    return [
-      { id: `${message.id}:agent`, type: "agent-switched", agent: message.agent, time: message.time },
-      {
-        id: `${message.id}:model`,
-        type: "model-switched",
-        model: { id: message.model.modelID, providerID: message.model.providerID, variant: message.model.variant },
-        time: message.time,
-      },
-      { id: message.id, type: "user", text: "", time: message.time },
-    ]
-  }
-  return [
-    {
-      id: message.id,
-      type: "assistant",
-      agent: message.agent ?? message.mode,
-      model: { id: message.modelID, providerID: message.providerID, variant: message.variant },
-      content: [],
-      time: message.time,
-    },
-  ]
-}
-
 function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
   const boundary = source.find(
     (message) =>
@@ -62,13 +37,6 @@ function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
       (message.type === "synthetic" && message.description?.trim()),
   )
   return boundary?.type === "assistant"
-}
-
-type OptimisticItem = {
-  message: Message
-  parts: Part[]
-  confirmedParts?: Part[]
-  confirmedMessage?: boolean
 }
 
 type MessagePage = {
@@ -81,6 +49,14 @@ type MessagePage = {
   complete: boolean
 }
 
+export type PromptEcho = {
+  sessionID: string
+  messageID: string
+  text: string
+  files?: { uri: string; mime: string; name?: string; mention?: { start: number; end: number; text: string } }[]
+  agents?: { name: string; mention?: { start: number; end: number; text: string } }[]
+}
+
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
   touchedMessages: Set<string>
@@ -90,7 +66,6 @@ type MessageLoadState = {
   deltaParts: Map<string, Set<string>>
   carriedDeltaParts: Map<string, Set<string>>
   removedParts: Map<string, Set<string>>
-  optimisticParts: Map<string, Set<string>>
   orphanParents: Set<string>
   clearedMessageParts: Set<string>
   touchedSource: Set<string>
@@ -100,34 +75,6 @@ type MessageLoadBaseline = Pick<
   MessageLoadState,
   "touchedMessages" | "retainedMessages" | "touchedParts" | "clearedMessageParts"
 >
-
-function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
-  if (items.length === 0) return { ...page, observed: [] as { messageID: string; parts: Part[] }[] }
-  const session = [...page.session]
-  const part = new Map(page.part.map((item) => [item.id, item.part]))
-  const observed: { messageID: string; parts: Part[] }[] = []
-  for (const item of items) {
-    const result = Binary.search(session, messageKey(item.message), messageKey)
-    const found = result.found
-    if (!found) session.splice(result.index, 0, item.message)
-    const current = part.get(item.message.id)
-    const confirmed = found ? item.parts.filter((part) => current?.some((value) => value.id === part.id)) : []
-    if (found) observed.push({ messageID: item.message.id, parts: confirmed })
-    part.set(
-      item.message.id,
-      merge(
-        found ? (current ?? []) : merge(item.confirmedParts ?? [], current ?? []),
-        item.parts.filter((part) => !confirmed.includes(part)),
-      ),
-    )
-  }
-  return {
-    ...page,
-    session,
-    part: [...part.entries()].sort((a, b) => cmp(a[0], b[0])).map(([id, parts]) => ({ id, part: parts })),
-    observed,
-  }
-}
 
 function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
   const pending = map.get(key)
@@ -213,7 +160,6 @@ export function createServerSession(
   const requests = new Map<string, Promise<SessionInfo>>()
   const inflight = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
-  const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const v2 = createV2SessionReducer()
   const pendingRevision = new Map<string, number>()
   const formRevision = new Map<string, number>()
@@ -254,18 +200,6 @@ export function createServerSession(
     at: {} as Record<string, number | undefined>,
   })
 
-  const indexProjectedMessage = (message: Message) => {
-    const current = data.session_message[message.sessionID] ?? []
-    if (current.some((item) => item.id === message.id)) return
-    const projected = projectMessageSource(message)
-    const projectedIDs = new Set(projected.map((item) => item.id))
-    setData(
-      "session_message",
-      message.sessionID,
-      reconcile([...current.filter((item) => !projectedIDs.has(item.id)), ...projected]),
-    )
-  }
-
   const remember = (session: SessionInfo) => {
     setData("info", session.id, reconcile(session))
     infoSeen.delete(session.id)
@@ -277,7 +211,6 @@ export function createServerSession(
         ...inflight.keys(),
         ...inflightTodo.keys(),
         ...messageLoads.keys(),
-        ...optimistic.keys(),
         ...Object.entries(data.permission)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
@@ -356,65 +289,6 @@ export function createServerSession(
     return { session, root }
   }
 
-  const clearOptimistic = (sessionID: string, messageID?: string) => {
-    if (!messageID) {
-      optimistic.delete(sessionID)
-      return
-    }
-    const items = optimistic.get(sessionID)
-    if (!items) return
-    items.delete(messageID)
-    if (items.size === 0) optimistic.delete(sessionID)
-  }
-
-  const clearOptimisticPart = (sessionID: string, messageID: string, partID: string) => {
-    const items = optimistic.get(sessionID)
-    const item = items?.get(messageID)
-    if (!items || !item) return
-    const parts = item.parts.filter((part) => part.id !== partID)
-    const confirmedParts = item.confirmedParts?.filter((part) => part.id !== partID)
-    if (parts.length === 0) {
-      clearOptimistic(sessionID, messageID)
-      return
-    }
-    items.set(messageID, { ...item, parts, confirmedParts, confirmedMessage: true })
-  }
-
-  const confirmOptimisticPart = (sessionID: string, messageID: string, part: Part) => {
-    const items = optimistic.get(sessionID)
-    const item = items?.get(messageID)
-    if (!items || !item) return
-    const parts = item.parts.filter((value) => value.id !== part.id)
-    if (parts.length === 0) {
-      clearOptimistic(sessionID, messageID)
-      return
-    }
-    items.set(messageID, {
-      ...item,
-      parts,
-      confirmedParts: merge(item.confirmedParts ?? [], [part]),
-      confirmedMessage: true,
-    })
-  }
-
-  const confirmOptimistic = (sessionID: string, messageID: string, confirmedParts: Part[]) => {
-    const items = optimistic.get(sessionID)
-    const item = items?.get(messageID)
-    if (!items || !item) return
-    const confirmed = new Set(confirmedParts.map((part) => part.id))
-    const parts = item.parts.filter((part) => !confirmed.has(part.id))
-    if (parts.length === 0) {
-      clearOptimistic(sessionID, messageID)
-      return
-    }
-    items.set(messageID, {
-      ...item,
-      parts,
-      confirmedParts: merge(item.confirmedParts ?? [], confirmedParts),
-      confirmedMessage: true,
-    })
-  }
-
   const trackPartChange = (sessionID: string, messageID: string, partID: string) => {
     const load = messageLoads.get(sessionID)
     if (!load) return
@@ -452,14 +326,6 @@ export function createServerSession(
       const messages = data.message[sessionID]
       if (messages?.some((message) => message.id === messageID)) load.retainedMessages.add(messageID)
     }
-    for (const [messageID, parts] of load.optimisticParts) {
-      load.removedMessages.delete(messageID)
-      load.clearedMessageParts.add(messageID)
-      load.touchedMessages.add(messageID)
-      const touched = load.touchedParts.get(messageID) ?? new Set<string>()
-      parts.forEach((partID) => touched.add(partID))
-      load.touchedParts.set(messageID, touched)
-    }
     baseline?.touchedMessages.forEach((messageID) => load.touchedMessages.add(messageID))
     baseline?.retainedMessages.forEach((messageID) => load.retainedMessages.add(messageID))
     baseline?.clearedMessageParts.forEach((messageID) => load.clearedMessageParts.add(messageID))
@@ -490,7 +356,6 @@ export function createServerSession(
     sessionIDs.forEach((sessionID) => {
       messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
       generations.delete(sessionID)
-      clearOptimistic(sessionID)
       requests.delete(sessionID)
       inflight.delete(sessionID)
       inflightTodo.delete(sessionID)
@@ -525,7 +390,6 @@ export function createServerSession(
       ...inflight.keys(),
       ...inflightTodo.keys(),
       ...messageLoads.keys(),
-      ...optimistic.keys(),
       ...Object.entries(data.permission)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
@@ -663,20 +527,29 @@ export function createServerSession(
           const incoming = new Map(page.source.map((message) => [message.id, message]))
           const existing = data.session_message[sessionID] ?? []
           const boundary = Math.min(...page.source.map((message) => message.time.created))
+          const inbox = new Set(data.input[sessionID] ?? [])
           const current = existing.filter(
             (message) =>
               !incoming.has(message.id) &&
+              !inbox.has(message.id) &&
               (page.sourceMode === "older" ||
                 load?.touchedSource.has(message.id) ||
                 (!page.complete && message.time.created < boundary)),
           )
+          // message.list never returns admitted-but-undelivered inbox entries; keep them after the
+          // fetched history until a delivered or cancelled event resolves them.
+          const admitted = existing.filter((message) => !incoming.has(message.id) && inbox.has(message.id))
+          const combined =
+            page.sourceMode === "older"
+              ? [...page.source, ...current, ...admitted]
+              : [...current, ...page.source, ...admitted]
           const live = new Map(existing.map((message) => [message.id, message]))
-          return (page.sourceMode === "older" ? [...page.source, ...current] : [...current, ...page.source]).map(
-            (message) => (load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message),
+          return combined.map((message) =>
+            load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message,
           )
         })()
       : undefined
-    const projected =
+    const merged =
       page.projectSource && source
         ? (() => {
             const normalized = normalizeSessionMessages(sessionID, source)
@@ -689,10 +562,6 @@ export function createServerSession(
             }
           })()
         : page
-    const merged = mergeOptimisticPage(projected, [...(optimistic.get(sessionID)?.values() ?? [])])
-    merged.observed.forEach((item) => {
-      if (!load?.clearedMessageParts.has(item.messageID)) confirmOptimistic(sessionID, item.messageID, item.parts)
-    })
     const touchedMessages = new Set([...(load?.touchedMessages ?? []), ...(removedMessages.get(sessionID) ?? [])])
     const messages = reconcileFetched(merged.session, data.message[sessionID] ?? [], {
       touched: touchedMessages,
@@ -730,7 +599,6 @@ export function createServerSession(
       deltaParts: new Map(),
       carriedDeltaParts: new Map(),
       removedParts: new Map(),
-      optimisticParts: new Map(),
       orphanParents: new Set(),
       clearedMessageParts: new Set(),
       touchedSource: new Set(),
@@ -751,11 +619,7 @@ export function createServerSession(
         const users = new Set([
           ...page.session.filter((message) => message.role === "user").map((message) => message.id),
           ...(data.message[sessionID] ?? [])
-            .filter((message) => {
-              if (message.role !== "user") return false
-              const item = optimistic.get(sessionID)?.get(message.id)
-              return load.touchedMessages.has(message.id) && (!item || item.confirmedMessage === true)
-            })
+            .filter((message) => message.role === "user" && load.touchedMessages.has(message.id))
             .map((message) => message.id),
         ])
         const parentIDs = [
@@ -1108,16 +972,9 @@ export function createServerSession(
       }
       case "message.updated": {
         const info = (event.properties as { info: Message }).info
-        indexProjectedMessage(info)
         const load = messageLoads.get(info.sessionID)
         load?.touchedMessages.add(info.id)
         load?.removedMessages.delete(info.id)
-        const items = optimistic.get(info.sessionID)
-        const item = items?.get(info.id)
-        if (items && item) {
-          if (item.parts.length === 0) clearOptimistic(info.sessionID, info.id)
-          if (item.parts.length > 0) items.set(info.id, { ...item, confirmedMessage: true })
-        }
         const orphans = orphanParts.get(info.sessionID)
         orphans?.delete(info.id)
         if (orphans?.size === 0) orphanParts.delete(info.sessionID)
@@ -1130,13 +987,18 @@ export function createServerSession(
           return
         }
         const result = Binary.search(messages, messageKey(info), messageKey)
-        if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
-        if (!result.found)
-          setData("message", info.sessionID, (value = []) => {
-            const next = value.slice()
-            next.splice(result.index, 0, info)
-            return next
-          })
+        if (result.found) {
+          setData("message", info.sessionID, result.index, reconcile(info))
+          return
+        }
+        // Delivery rewrites time.created, changing the sort key; reposition instead of duplicating.
+        setData("message", info.sessionID, (value = []) => {
+          const next = value.slice()
+          const moved = next.findIndex((message) => message.id === info.id)
+          if (moved >= 0) next.splice(moved, 1)
+          next.splice(moved >= 0 && moved < result.index ? result.index - 1 : result.index, 0, info)
+          return next
+        })
         return
       }
       case "message.removed": {
@@ -1151,13 +1013,11 @@ export function createServerSession(
         load?.deltaParts.delete(props.messageID)
         load?.carriedDeltaParts.delete(props.messageID)
         load?.removedParts.delete(props.messageID)
-        load?.optimisticParts.delete(props.messageID)
         pendingParts.get(props.sessionID)?.delete(props.messageID)
         if (pendingParts.get(props.sessionID)?.size === 0) pendingParts.delete(props.sessionID)
         const removedMessagesForSession = removedMessages.get(props.sessionID) ?? new Set<string>()
         removedMessagesForSession.add(props.messageID)
         removedMessages.set(props.sessionID, removedMessagesForSession)
-        clearOptimistic(props.sessionID, props.messageID)
         setData(
           produce((draft) => {
             const messages = draft.message[props.sessionID]
@@ -1203,12 +1063,8 @@ export function createServerSession(
         pending?.delete(part.id)
         if (pending?.size === 0) pendingParts.get(part.sessionID)?.delete(part.messageID)
         if (pendingParts.get(part.sessionID)?.size === 0) pendingParts.delete(part.sessionID)
-        const optimistic = load?.optimisticParts.get(part.messageID)
-        optimistic?.delete(part.id)
-        if (optimistic?.size === 0) load?.optimisticParts.delete(part.messageID)
         deltaBases.delete(part.id)
         trackPartChange(part.sessionID, part.messageID, part.id)
-        confirmOptimisticPart(part.sessionID, part.messageID, part)
         setData(
           "part_text_accum_delta",
           produce((draft) => void delete draft[part.id]),
@@ -1247,12 +1103,8 @@ export function createServerSession(
           const parts = load.removedParts.get(props.messageID) ?? new Set<string>()
           parts.add(props.partID)
           load.removedParts.set(props.messageID, parts)
-          const optimistic = load.optimisticParts.get(props.messageID)
-          optimistic?.delete(props.partID)
-          if (optimistic?.size === 0) load.optimisticParts.delete(props.messageID)
         }
         trackPartChange(props.sessionID, props.messageID, props.partID)
-        clearOptimisticPart(props.sessionID, props.messageID, props.partID)
         setData(
           produce((draft) => {
             delete draft.part_text_accum_delta[props.partID]
@@ -1427,68 +1279,44 @@ export function createServerSession(
     fresh(sessionID: string, ttl: number) {
       return Date.now() - (meta.at[sessionID] ?? 0) <= ttl
     },
-    optimistic: {
-      add(input: { sessionID: string; message: Message; parts: Part[] }) {
-        const parts = input.parts
-          .filter((part) => !!part?.id && !SKIP_PARTS.has(part.type))
-          .sort((a, b) => cmp(a.id, b.id))
-        const load = messageLoads.get(input.sessionID)
-        if (load?.clearedMessageParts.has(input.message.id)) {
-          const touched = load.touchedParts.get(input.message.id) ?? new Set<string>()
-          parts.forEach((part) => touched.add(part.id))
-          load.touchedParts.set(input.message.id, touched)
-        }
-        if (load) {
-          load.removedMessages.delete(input.message.id)
-          load.optimisticParts.set(input.message.id, new Set(parts.map((part) => part.id)))
-        }
-        const items = optimistic.get(input.sessionID)
-        const removedMessagesForSession = removedMessages.get(input.sessionID)
-        removedMessagesForSession?.delete(input.message.id)
-        if (removedMessagesForSession?.size === 0) removedMessages.delete(input.sessionID)
-        if (items) items.set(input.message.id, { ...input, parts, confirmedParts: [] })
-        if (!items)
-          optimistic.set(input.sessionID, new Map([[input.message.id, { ...input, parts, confirmedParts: [] }]]))
-        indexProjectedMessage(input.message)
-        setData("message", input.sessionID, (messages = []) => merge(messages, [input.message]).sort(compareMessages))
-        setData(
-          "part_text_accum_delta",
-          produce((draft) => {
-            for (const part of [...(data.part[input.message.id] ?? []), ...parts]) {
-              delete draft[part.id]
-              deltaBases.delete(part.id)
-            }
-          }),
-        )
-        setData("part", input.message.id, parts)
+    // Local echo of prompt admission: the synthesized event enters through the same applyV2 door
+    // as the durable server event, which later deduplicates against it by inbox ID.
+    inbox: {
+      echo(input: PromptEcho) {
+        applyV2({
+          id: input.messageID.replace(/^msg_/, "evt_"),
+          created: Date.now(),
+          type: "session.inbox.enqueued",
+          durable: { aggregateID: input.sessionID, seq: 0, version: 1 },
+          data: {
+            sessionID: input.sessionID,
+            inboxID: input.messageID,
+            item: {
+              type: "user",
+              delivery: "steer",
+              payload: {
+                text: input.text,
+                files: input.files?.map((file) => ({
+                  data: "",
+                  mime: file.mime,
+                  source: { type: "uri", uri: file.uri },
+                  name: file.name,
+                  mention: file.mention,
+                })),
+                agents: input.agents,
+              },
+            },
+          },
+        })
       },
-      remove(input: { sessionID: string; messageID: string }) {
-        const item = optimistic.get(input.sessionID)?.get(input.messageID)
-        if (!item) return
-        messageLoads.get(input.sessionID)?.optimisticParts.delete(input.messageID)
-        clearOptimistic(input.sessionID, input.messageID)
-        if (item.confirmedMessage) {
-          const partIDs = new Set(item.parts.map((part) => part.id))
-          setData(
-            produce((draft) => {
-              for (const part of item.parts) {
-                delete draft.part_text_accum_delta[part.id]
-                deltaBases.delete(part.id)
-              }
-              const parts = draft.part[input.messageID]
-              if (!parts) return
-              draft.part[input.messageID] = parts.filter((part) => !partIDs.has(part.id))
-              if (draft.part[input.messageID]?.length === 0) delete draft.part[input.messageID]
-            }),
-          )
-          return
-        }
-        const projectedIDs = new Set(projectMessageSource(item.message).map((message) => message.id))
-        setData("session_message", input.sessionID, (messages) =>
-          messages?.filter((message) => !projectedIDs.has(message.id)),
-        )
-        setData("message", input.sessionID, (messages) => messages?.filter((message) => message.id !== input.messageID))
-        setData(produce((draft) => deleteMessageParts(draft, input.messageID)))
+      clearEcho(input: { sessionID: string; messageID: string }) {
+        applyV2({
+          id: input.messageID.replace(/^msg_/, "evt_"),
+          created: Date.now(),
+          type: "session.inbox.cancelled",
+          durable: { aggregateID: input.sessionID, seq: 0, version: 1 },
+          data: { sessionID: input.sessionID, inboxID: input.messageID },
+        })
       },
     },
     async todo(sessionID: string, request?: { force?: boolean }) {

@@ -11,14 +11,11 @@ type SessionCreateInput = {
   model?: { id: string; providerID: string; variant?: string }
   location?: { directory: string }
 }
-const optimistic: Array<{
+const admitted: Array<{
   directory?: string
-  sessionID?: string
-  message: {
-    agent: string
-    model: { providerID: string; modelID: string }
-    variant?: string
-  }
+  sessionID: string
+  messageID: string
+  text: string
 }> = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
@@ -35,7 +32,7 @@ const switchedModels: Array<{
 const sessionRequestOrder: string[] = []
 const updatedDrafts: Array<{ draftID: string; worktree?: string }> = []
 const syncedServers: string[] = []
-const optimisticServers: string[] = []
+const admittedServers: string[] = []
 const promptCaptures: Array<{ scope?: unknown; target?: unknown }> = []
 let serverSessionSyncs = 0
 
@@ -243,16 +240,17 @@ beforeAll(async () => {
       return {
         data: { command: commands, project: "project" },
         session: {
-          optimistic: {
-            add: (value: {
+          inbox: {
+            echo: (value: {
               directory?: string
-              sessionID?: string
-              message: { agent: string; model: { providerID: string; modelID: string; variant?: string } }
+              sessionID: string
+              messageID: string
+              text: string
             }) => {
-              optimisticServers.push(server)
-              optimistic.push(value)
+              admittedServers.push(server)
+              admitted.push(value)
             },
-            remove: () => undefined,
+            clearEcho: () => undefined,
           },
         },
         set: () => undefined,
@@ -312,7 +310,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   createdSessions.length = 0
-  optimistic.length = 0
+  admitted.length = 0
   promotedDrafts.length = 0
   updatedDrafts.length = 0
   sentCommands.length = 0
@@ -322,7 +320,7 @@ beforeEach(() => {
   switchedModels.length = 0
   sessionRequestOrder.length = 0
   syncedServers.length = 0
-  optimisticServers.length = 0
+  admittedServers.length = 0
   promptCaptures.length = 0
   params = {}
   search = {}
@@ -429,7 +427,7 @@ describe("prompt submit worktree selection", () => {
     expect(updatedDrafts).toEqual([{ draftID: "draft-1", worktree: undefined }])
     expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server-a", sessionId: "session-1" }])
     expect(syncedServers.every((server) => server === "server-a")).toBe(true)
-    expect(optimisticServers).toEqual(["server-a"])
+    expect(admittedServers).toEqual(["server-a"])
     expect(promptCaptures.at(-1)?.target).toEqual({ server: "project-server-a", scope: ServerScope.local })
     expect(submitted).toBe(0)
   })
@@ -449,13 +447,9 @@ describe("prompt submit worktree selection", () => {
     await submit.handleSubmit(event)
     await Bun.sleep(0)
 
-    expect(optimistic).toHaveLength(1)
-    expect(optimistic[0]).toMatchObject({
-      message: {
-        agent: "agent",
-        model: { providerID: "provider", modelID: "model", variant: "high" },
-      },
-    })
+    expect(admitted).toHaveLength(1)
+    expect(admitted[0]).toMatchObject({ sessionID: "session-1", text: "ls" })
+    expect(admitted[0]?.messageID).toStartWith("msg_")
     expect(sentPrompts).toEqual(["/repo/main"])
     expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
     expect(switchedModels).toEqual([
