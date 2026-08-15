@@ -82,6 +82,7 @@ export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () 
 }
 
 type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<ServerEventMap>>
+type ServerLocationEventEmitter = ReturnType<typeof createGlobalEmitter<{ [directory: string]: ServerEvent }>>
 export type ServerConnectionStatus = "connecting" | "connected" | "reconnecting"
 type ServerSDKBase = {
   server: ServerConnection.Any
@@ -96,6 +97,9 @@ type ServerSDKBase = {
   event: {
     on: ServerEventEmitter["on"]
     listen: ServerEventEmitter["listen"]
+    location: {
+      on: ServerLocationEventEmitter["on"]
+    }
   }
 }
 
@@ -116,6 +120,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
   const eventApi = createApiForServer({ server: server.http, fetch: eventFetch })
   const emitter = createGlobalEmitter<ServerEventMap>()
+  const locations = createGlobalEmitter<{ [directory: string]: ServerEvent }>()
 
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
@@ -141,7 +146,11 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     last = Date.now()
     const output = coalesceServerEvents(events)
     batch(() => {
-      output.forEach((event) => emitter.emit(event.type, event))
+      output.forEach((event) => {
+        emitter.emit(event.type, event)
+        const directory = event.current?.location?.directory
+        if (directory) locations.emit(directory, event)
+      })
     })
 
     buffer.length = 0
@@ -302,6 +311,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     queue = []
     buffer = []
     emitter.clear()
+    locations.clear()
   })
 
   const api = createApiForServer({ server: server.http, fetch: platform.fetch })
@@ -319,6 +329,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
+      location: {
+        on: locations.on.bind(locations),
+      },
     },
   }
 }
@@ -354,8 +367,7 @@ export type DirectorySDK = {
 function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): DirectorySDK {
   const emitter = createGlobalEmitter<SDKEventMap>()
 
-  const unsub = serverSDK.event.listen(({ details: event }) => {
-    if (event.current?.location?.directory !== directory) return
+  const unsub = serverSDK.event.location.on(directory, (event) => {
     emitter.emit(event.type, event)
   })
   onCleanup(unsub)
