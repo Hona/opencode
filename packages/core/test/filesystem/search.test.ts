@@ -1,10 +1,12 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import fuzzysort from "fuzzysort"
+import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Protected } from "@opencode-ai/core/filesystem/protected"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
@@ -12,8 +14,60 @@ import { Location } from "@opencode-ai/core/location"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Database } from "@opencode-ai/core/database/database"
+import { Bus } from "@opencode-ai/core/bus"
+import { Global } from "@opencode-ai/util/global"
+import { tempGlobalLayer } from "../fixture/global"
+import { tmpdir } from "../fixture/tmpdir"
 
 describe("FileSystemSearch", () => {
+  test("shares a ripgrep inventory for one physical scan root", async () => {
+    const root = await tmpdir()
+    const alias = root.path + "-alias"
+    await fs.symlink(root.path, alias, process.platform === "win32" ? "junction" : "dir")
+    let scans = 0
+    const scanned = Effect.runSync(Deferred.make<void>())
+    const ripgrep = Layer.succeed(
+      Ripgrep.Service,
+      Ripgrep.Service.of({
+        find: (input) =>
+          Effect.gen(function* () {
+            scans++
+            const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
+            if (input.onEntry) yield* input.onEntry(entry)
+            yield* Deferred.succeed(scanned, undefined)
+            return [entry]
+          }),
+        glob: () => Effect.succeed([]),
+        grep: () => Effect.succeed([]),
+      }),
+    )
+    const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+      [Global.node, tempGlobalLayer],
+      [Ripgrep.node, ripgrep],
+    ])
+
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const first = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(root.path) }))
+          const second = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(alias) }))
+          yield* Deferred.await(scanned)
+          const find = FileSystemSearch.Service.use((search) => search.find({ query: "index", type: "file" }))
+
+          expect(yield* find.pipe(Effect.provideContext(first))).toHaveLength(1)
+          expect(yield* find.pipe(Effect.provideContext(second))).toHaveLength(1)
+          expect(scans).toBe(1)
+        }).pipe(Effect.provide(layer), Effect.scoped),
+      )
+    } finally {
+      await fs.rm(alias, { recursive: true, force: true })
+      await root[Symbol.asyncDispose]()
+    }
+  })
+
   test("bounds a home scan even when home is detected as a repository", async () => {
     let observed: Ripgrep.FindInput | undefined
     const home = AbsolutePath.make(os.homedir())

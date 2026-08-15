@@ -1,8 +1,8 @@
 export * as FileSystemSearch from "./search.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Duration, Effect, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Duration, Effect, Layer, RcMap, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem.js"
@@ -10,6 +10,7 @@ import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
 import { Protected } from "./protected.js"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -24,10 +25,42 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
 type Prepared = ReturnType<typeof fuzzysort.prepare>
+type InventoryKey = {
+  readonly projectID: string
+  readonly workspaceID: string | null
+  readonly directory: string
+  readonly limit: number
+  readonly home: boolean
+}
+type Inventory = {
+  index: ReturnType<typeof emptyIndex>
+  initialized: boolean
+  settledAt: number
+  refreshing: boolean
+}
+
+class Inventories extends Context.Service<Inventories, RcMap.RcMap<InventoryKey, Inventory>>()(
+  "@opencode/FileSystem/Search/Inventories",
+) {}
 
 function emptyIndex() {
   return { files: new Map<string, Prepared>(), directories: new Map<string, Prepared>() }
 }
+
+const inventoriesLayer = Layer.effect(
+  Inventories,
+  RcMap.make({
+    lookup: () =>
+      Effect.succeed<Inventory>({
+        index: emptyIndex(),
+        initialized: false,
+        settledAt: Number.NEGATIVE_INFINITY,
+        refreshing: false,
+      }),
+  }),
+)
+
+const inventoriesNode = makeGlobalNode({ service: Inventories, layer: inventoriesLayer, deps: [] })
 
 function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInput) {
   const items =
@@ -55,21 +88,26 @@ export const ripgrepLayer = Layer.effect(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
+    const inventories = yield* Inventories
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
-    let index = emptyIndex()
-    let initialized = false
-    let settledAt = Number.NEGATIVE_INFINITY
-    let refreshing = false
+    const limit = location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000
+    const inventory = yield* RcMap.get(inventories, {
+      projectID: location.project.id,
+      workspaceID: location.workspaceID ?? null,
+      directory: location.workspaceID === undefined ? FSUtil.resolve(location.directory) : location.directory,
+      limit,
+      home,
+    })
     const scan = Effect.gen(function* () {
       const next = emptyIndex()
-      const previous = index
-      if (!initialized) index = next
+      const previous = inventory.index
+      if (!inventory.initialized) inventory.index = next
       yield* ripgrep.find({
         cwd: location.directory,
         pattern: "*",
-        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        limit,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
@@ -82,20 +120,20 @@ export const ripgrepLayer = Layer.effect(
             })
           }),
       })
-      index = next
-      initialized = true
+      inventory.index = next
+      inventory.initialized = true
     }).pipe(
       Effect.orDie,
       Effect.ensuring(
         Effect.sync(() => {
-          settledAt = clock.currentTimeMillisUnsafe()
-          refreshing = false
+          inventory.settledAt = clock.currentTimeMillisUnsafe()
+          inventory.refreshing = false
         }),
       ),
     )
     const refresh = Effect.sync(() => {
-      if (refreshing || clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return
-      refreshing = true
+      if (inventory.refreshing || clock.currentTimeMillisUnsafe() < inventory.settledAt + REFRESH_INTERVAL) return
+      inventory.refreshing = true
       return scan
     }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(scope)) : Effect.void)))
     yield* refresh
@@ -103,7 +141,7 @@ export const ripgrepLayer = Layer.effect(
       find: (input) =>
         Effect.gen(function* () {
           yield* refresh
-          return search(index, input)
+          return search(inventory.index, input)
         }),
     })
   }),
@@ -189,7 +227,11 @@ export const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Ripgrep.node, inventoriesNode],
+  })
 }
 
 export const node = configured()
