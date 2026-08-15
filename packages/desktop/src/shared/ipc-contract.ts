@@ -75,6 +75,7 @@ export const Ipc = {
     state: "updater-state",
   },
   wsl: {
+    awaitInitialization: "wsl-servers-await-initialization",
     subscribe: "wsl-servers-subscribe",
     unsubscribe: "wsl-servers-unsubscribe",
     getState: "wsl-servers-get-state",
@@ -194,6 +195,7 @@ export type IpcInvoke = {
   [Ipc.updater.check]: { args: []; result: UpdaterState }
   [Ipc.updater.install]: { args: []; result: void }
 
+  [Ipc.wsl.awaitInitialization]: { args: []; result: void }
   [Ipc.wsl.subscribe]: { args: []; result: void }
   [Ipc.wsl.unsubscribe]: { args: []; result: void }
   [Ipc.wsl.getState]: { args: []; result: WslServersState }

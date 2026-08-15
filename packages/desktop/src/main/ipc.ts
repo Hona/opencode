@@ -167,6 +167,10 @@ export function registerUpdaterIpcHandlers(updater: UpdaterIpc) {
   handle(Ipc.updater.install, () => updater.install())
 }
 
+export function registerWslInitialization(ready: Promise<void>) {
+  handle(Ipc.wsl.awaitInitialization, () => ready)
+}
+
 export function registerWslIpcHandlers(wsl: WslIpc) {
   handle(Ipc.wsl.subscribe, (event) => wsl.subscribe(event.sender))
   handle(Ipc.wsl.unsubscribe, (event) => wsl.unsubscribe(event.sender.id))

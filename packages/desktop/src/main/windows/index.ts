@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
 import { join } from "node:path"
 import { app, BrowserWindow } from "electron"
+import { writeLog } from "../native/logging"
 import { removeStoreFile, getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import {
@@ -99,6 +100,7 @@ export function createMainWindow(id: string = randomUUID()) {
     if (revealed || win.isDestroyed()) return
     revealed = true
     win.show()
+    writeLog("window", "main window visible", { window: id })
   }
   win.once("ready-to-show", reveal)
   if (process.platform === "linux") win.webContents.once("did-finish-load", reveal)
