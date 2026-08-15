@@ -88,9 +88,7 @@ export function fromPromise(plugin: Plugin) {
         const eventIterators = new Set<AsyncIterator<PromiseEvent>>()
         yield* Effect.addFinalizer(() =>
           Effect.promise(async () => {
-            await Promise.all(
-              Array.from(eventIterators, (iterator) => (iterator.return ? iterator.return() : undefined)),
-            )
+            await Promise.all(Array.from(eventIterators, (iterator) => Promise.resolve(iterator.return?.())))
           }),
         )
 

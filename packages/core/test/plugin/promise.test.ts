@@ -86,11 +86,8 @@ describe("fromPromise", () => {
         define({
           id: "promise-event-lifecycle",
           setup: async (ctx) => {
-            void ctx.event
-              .subscribe("config.updated")
-              [Symbol.asyncIterator]()
-              .next()
-              .catch(() => undefined)
+            const iterator = ctx.event.subscribe("config.updated")[Symbol.asyncIterator]()
+            void iterator.next().catch(() => undefined)
             await started
           },
         }),
