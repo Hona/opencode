@@ -18,7 +18,6 @@ function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord; la
   }
   let ready = input?.ready
   const controller = createUpdaterController({
-    enabled: true,
     currentVersion: input?.currentVersion ?? "1.0.0",
     platform,
     lifecycle: {
@@ -108,7 +107,6 @@ describe("updater controller", () => {
     await app.controller.start()
     const error = new Error("install failed")
     const failed = createUpdaterController({
-      enabled: true,
       currentVersion: "1.0.0",
       platform: {
         checkForUpdate: async () => "2.0.0",
@@ -158,7 +156,6 @@ describe("updater controller", () => {
     let checks = 0
     let ready: UpdaterReadyRecord | undefined
     const controller = createUpdaterController({
-      enabled: true,
       currentVersion: "1.0.0",
       platform: {
         async checkForUpdate() {
@@ -199,7 +196,6 @@ describe("updater controller", () => {
     let releaseStage = () => {}
     let ready: UpdaterReadyRecord | undefined
     const controller = createUpdaterController({
-      enabled: true,
       currentVersion: "1.0.0",
       platform: {
         checkForUpdate: async () => latest,
@@ -251,7 +247,6 @@ describe("updater controller", () => {
     let sawInstalling = false
     let retry: Promise<void> | undefined
     const failed = createUpdaterController({
-      enabled: true,
       currentVersion: "1.0.0",
       platform: {
         checkForUpdate: async () => "2.0.0",
