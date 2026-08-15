@@ -22,21 +22,13 @@ function blobUrl(id: string, blob: Blob) {
 }
 
 async function blobID(blob: Blob) {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
-  if (!crypto.subtle) return insecureContextID(bytes)
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+  const bytes = crypto.subtle
+    ? new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))
+    : crypto.getRandomValues(new Uint8Array(16))
+  const id = Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
   return id
-}
-
-// crypto.subtle only exists in secure contexts, so over plain HTTP on a
-// non-localhost origin we hash with FNV-1a instead. Equal blobs must still
-// produce equal IDs so the store deduplicates and drafts resolve on reload.
-function insecureContextID(bytes: Uint8Array) {
-  const fnv1a = (seed: number) =>
-    (bytes.reduce((hash, byte) => Math.imul(hash ^ byte, 0x01000193), seed) >>> 0).toString(16).padStart(8, "0")
-  return fnv1a(0x811c9dc5) + fnv1a(0x01000193)
 }
 
 export async function createBlobReference(blob: Blob): Promise<BlobReference> {
