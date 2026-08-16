@@ -424,6 +424,82 @@
   }
 }
 
+[data-component="execute-tool"] {
+  width: 100%;
+
+  [data-slot="execute-tool-icon"],
+  [data-slot="execute-call-indicator"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="execute-tool-failure"],
+  [data-slot="execute-call-failure"] {
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="execute-calls"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-inline-start: 24px;
+  }
+
+  [data-slot="execute-call"] {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    font-family: var(--font-family-sans);
+    font-size: 13px;
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-call-indicator"] {
+    align-self: center;
+
+    [data-component="spinner"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  [data-status="error"] [data-slot="execute-call-indicator"],
+  [data-status="error"] [data-slot="execute-call-tool"] {
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="execute-call-tool"] {
+    flex-shrink: 0;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="execute-call-input"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-error"] {
+    margin: 2px 0 0;
+    padding-inline-start: 48px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    line-height: var(--line-height-large);
+    color: var(--v2-state-fg-danger);
+  }
+}
+
 [data-component="edit-trigger"],
 [data-component="write-trigger"] {
   display: flex;
@@ -715,6 +791,7 @@
 [data-component="reasoning-part"],
 [data-component="tool-output"],
 [data-component="bash-output"],
+[data-slot="execute-error"],
 [data-component="edit-content"],
 [data-component="write-content"],
 [data-component="todos"],

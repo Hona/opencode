@@ -65,6 +65,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import { executeCalls, executeCallSummary } from "./execute-tool"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -546,6 +547,11 @@ export function getToolInfo(
         icon: "console",
         title: i18n.t("ui.tool.shell"),
         subtitle: input.command,
+      }
+    case "execute":
+      return {
+        icon: "console",
+        title: i18n.t("ui.tool.execute"),
       }
     case "edit":
       return {
@@ -2103,6 +2109,88 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
+
+ToolRegistry.register({
+  name: "execute",
+  render(props) {
+    const i18n = useI18n()
+    const pending = createMemo(
+      () => props.status === "pending" || props.status === "streaming" || props.status === "running",
+    )
+    const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+    const failed = createMemo(() => calls().filter((call) => call.status === "error").length)
+    const runtimeError = createMemo(() => props.metadata.error === true)
+    const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
+    const subtitle = createMemo(() => {
+      if (runtimeError()) return i18n.t("ui.toolErrorCard.failed")
+      if (failed() > 0) return i18n.plural("ui.tool.execute.failedCall", failed())
+      return undefined
+    })
+
+    return (
+      <div data-component="execute-tool" data-error={runtimeError() || failed() > 0 ? "true" : undefined}>
+        <BasicTool
+          icon="console"
+          status={pending() ? "running" : props.status}
+          hideDetails={props.hideDetails}
+          trigger={
+            <div data-slot="basic-tool-tool-info-structured">
+              <span data-slot="execute-tool-icon">
+                <Icon name="console" size="small" />
+              </span>
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="basic-tool-tool-title">
+                  <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                </span>
+                <Show when={subtitle()}>{(value) => <span data-slot="execute-tool-failure">{value()}</span>}</Show>
+              </div>
+            </div>
+          }
+        />
+        <Show when={!props.hideDetails && calls().length > 0}>
+          <div data-slot="execute-calls" role="list">
+            <Index each={calls()}>
+              {(call) => {
+                const summary = createMemo(() => executeCallSummary(call()))
+                return (
+                  <div data-slot="execute-call" data-status={call().status} role="listitem" dir="ltr">
+                    <span data-slot="execute-call-indicator">
+                      <Switch>
+                        <Match when={call().status === "running"}>
+                          <Spinner />
+                        </Match>
+                        <Match when={call().status === "completed"}>
+                          <Icon name="check" size="small" />
+                        </Match>
+                        <Match when={call().status === "error"}>
+                          <Icon name="close-small" size="small" />
+                        </Match>
+                      </Switch>
+                    </span>
+                    <span data-slot="execute-call-tool">
+                      <TextShimmer text={call().tool} active={call().status === "running"} />
+                    </span>
+                    <Show when={call().status === "error"}>
+                      <span data-slot="execute-call-failure">{i18n.t("ui.toolErrorCard.failed")}</span>
+                    </Show>
+                    <Show when={summary()}>{(value) => <span data-slot="execute-call-input">{value()}</span>}</Show>
+                  </div>
+                )
+              }}
+            </Index>
+          </div>
+        </Show>
+        <Show when={!props.hideDetails && runtimeError() && output()}>
+          {(value) => (
+            <pre data-slot="execute-error" dir="ltr">
+              {value()}
+            </pre>
+          )}
+        </Show>
+      </div>
+    )
+  },
+})
 
 ToolRegistry.register({
   name: "shell",
