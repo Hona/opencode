@@ -2000,12 +2000,10 @@ ToolRegistry.register({
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
-    const background = createMemo(
-      () =>
-        props.input.background === true ||
-        props.metadata.background === true ||
-        (props.status === "completed" && props.metadata.status === "running"),
-    )
+    const background = createMemo(() => {
+      if (props.tool === "task") return props.metadata.background === true
+      return props.status === "completed" && props.metadata.status === "running"
+    })
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
@@ -2017,7 +2015,6 @@ ToolRegistry.register({
     })
     const running = createMemo(() => {
       if (props.status === "pending" || props.status === "running") return true
-      if (!background()) return false
       const id = childSessionId()
       if (!id) return false
       return (data.store.session_status[id]?.type ?? "idle") !== "idle"

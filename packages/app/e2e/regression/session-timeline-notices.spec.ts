@@ -4,7 +4,12 @@ import { event, session, sessionID, setupTimeline } from "../performance/timelin
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
-const assistant = (completed: boolean, tool = false, childID?: string): SessionMessageAssistant => ({
+const assistant = (
+  completed: boolean,
+  tool = false,
+  childID?: string,
+  background = false,
+): SessionMessageAssistant => ({
   id: "msg_assistant",
   type: "assistant",
   agent: "build",
@@ -17,7 +22,7 @@ const assistant = (completed: boolean, tool = false, childID?: string): SessionM
           name: "subagent",
           state: {
             status: "running",
-            input: { description: "Inspect code" },
+            input: { description: "Inspect code", ...(background ? { background: true } : {}) },
             metadata: { status: "running", ...(childID ? { sessionID: childID } : {}) },
           },
           time: { created: 2 },
@@ -82,6 +87,11 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   )
   await page.keyboard.press("Control+b")
   await request
+})
+
+test("waits for completion before labeling requested background work", async ({ page }) => {
+  await setupTimeline(page, { currentMessages: [user, assistant(false, true, undefined, true)] })
+  await expect(page.locator('[data-component="task-tool-card"]')).not.toContainText("(background)")
 })
 
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
@@ -193,4 +203,5 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
 
   await timeline.send(event("session.status", { sessionID: backgroundID, status: { type: "idle" } }))
   await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
+  await expect(backgroundCard).toContainText("Background task (background)")
 })
