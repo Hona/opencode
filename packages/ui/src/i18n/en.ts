@@ -159,8 +159,6 @@ const source = {
   "ui.tool.websearch.provider": "{{provider}} Web Search",
   "ui.tool.shell": "Shell",
   "ui.tool.execute": "Execute",
-  "ui.tool.execute.failedCall.one": "{{count}} failed call",
-  "ui.tool.execute.failedCall.other": "{{count}} failed calls",
   "ui.tool.patch": "Patch",
   "ui.tool.questions": "Questions",
   "ui.tool.questions.numbered": "Questions {{number}}",

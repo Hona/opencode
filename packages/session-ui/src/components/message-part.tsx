@@ -65,7 +65,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
-import { executeCalls, executeCallSummary } from "./execute-tool"
+import { executeFailed } from "./execute-tool"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -552,6 +552,7 @@ export function getToolInfo(
       return {
         icon: "console",
         title: i18n.t("ui.tool.execute"),
+        subtitle: input.code,
       }
     case "edit":
       return {
@@ -1580,6 +1581,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  const toolError = createMemo(() => {
+    const state = part().state
+    if (state.status === "error" && "error" in state && typeof state.error === "string") return state.error
+    if (part().tool !== "execute") return undefined
+    if (partMetadata().error !== true && !executeFailed(partMetadata().toolCalls)) return undefined
+    const output = "output" in state ? state.output : undefined
+    if (typeof output === "string" && output) return output
+    return i18n.t("ui.toolErrorCard.failed")
+  })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
@@ -1589,7 +1599,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={part().id}>
         <Switch>
-          <Match when={part().state.status === "error" && (part().state as any).error}>
+          <Match when={toolError()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
               if (part().tool === "question" && cleaned.includes("dismissed this question")) {
@@ -2114,80 +2124,70 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
-    const pending = createMemo(
-      () => props.status === "pending" || props.status === "streaming" || props.status === "running",
-    )
-    const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
-    const failed = createMemo(() => calls().filter((call) => call.status === "error").length)
-    const runtimeError = createMemo(() => props.metadata.error === true)
-    const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
-    const subtitle = createMemo(() => {
-      if (runtimeError()) return i18n.t("ui.toolErrorCard.failed")
-      if (failed() > 0) return i18n.plural("ui.tool.execute.failedCall", failed())
-      return undefined
+    const pending = () => props.status === "pending" || props.status === "streaming" || props.status === "running"
+    const sawPending = pending()
+    const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
+    const text = createMemo(() => {
+      const output = stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+      return `${code()}${output ? "\n\n" + output : ""}`
     })
+    const [copied, setCopied] = createSignal(false)
+
+    const handleCopy = async () => {
+      if (!text()) return
+      if (await writeClipboard(text())) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    }
 
     return (
-      <div data-component="execute-tool" data-error={runtimeError() || failed() > 0 ? "true" : undefined}>
-        <BasicTool
-          icon="console"
-          status={pending() ? "running" : props.status}
-          hideDetails={props.hideDetails}
-          trigger={
-            <div data-slot="basic-tool-tool-info-structured">
-              <span data-slot="execute-tool-icon">
-                <Icon name="console" size="small" />
+      <BasicTool
+        {...props}
+        icon="console"
+        allowOpenWhilePending
+        trigger={(open) => (
+          <div data-slot="basic-tool-tool-info-structured">
+            <span data-slot="execute-tool-icon">
+              <Icon name="console" size="small" />
+            </span>
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
               </span>
-              <div data-slot="basic-tool-tool-info-main">
-                <span data-slot="basic-tool-tool-title">
-                  <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
-                </span>
-                <Show when={subtitle()}>{(value) => <span data-slot="execute-tool-failure">{value()}</span>}</Show>
-              </div>
+              <Show when={!open() && code()}>
+                <ShellSubmessage text={code()} animate={sawPending} />
+              </Show>
             </div>
-          }
-        />
-        <Show when={!props.hideDetails && calls().length > 0}>
-          <div data-slot="execute-calls" role="list">
-            <Index each={calls()}>
-              {(call) => {
-                const summary = createMemo(() => executeCallSummary(call()))
-                return (
-                  <div data-slot="execute-call" data-status={call().status} role="listitem" dir="ltr">
-                    <span data-slot="execute-call-indicator">
-                      <Switch>
-                        <Match when={call().status === "running"}>
-                          <Spinner />
-                        </Match>
-                        <Match when={call().status === "completed"}>
-                          <Icon name="check" size="small" />
-                        </Match>
-                        <Match when={call().status === "error"}>
-                          <Icon name="close-small" size="small" />
-                        </Match>
-                      </Switch>
-                    </span>
-                    <span data-slot="execute-call-tool">
-                      <TextShimmer text={call().tool} active={call().status === "running"} />
-                    </span>
-                    <Show when={call().status === "error"}>
-                      <span data-slot="execute-call-failure">{i18n.t("ui.toolErrorCard.failed")}</span>
-                    </Show>
-                    <Show when={summary()}>{(value) => <span data-slot="execute-call-input">{value()}</span>}</Show>
-                  </div>
-                )
-              }}
-            </Index>
           </div>
-        </Show>
-        <Show when={!props.hideDetails && runtimeError() && output()}>
-          {(value) => (
-            <pre data-slot="execute-error" dir="ltr">
-              {value()}
+        )}
+      >
+        <div data-component="bash-output" dir="ltr">
+          <div data-slot="bash-copy">
+            <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+              <IconButtonV2
+                icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+                size="normal"
+                variant="ghost-muted"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </TooltipV2>
+          </div>
+          <div
+            data-slot="bash-scroll"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
+            <pre data-slot="bash-pre">
+              <code>{text()}</code>
             </pre>
-          )}
-        </Show>
-      </div>
+          </div>
+        </div>
+      </BasicTool>
     )
   },
 })
