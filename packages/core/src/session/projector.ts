@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, gt, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, or, placeholder, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -26,6 +26,46 @@ const messageSelection = {
   type: SessionMessageTable.type,
   data: SessionMessageTable.data,
 }
+
+function prepareMessageReads(db: DatabaseService) {
+  return {
+    currentAssistant: db
+      .select(messageSelection)
+      .from(SessionMessageTable)
+      .where(
+        and(eq(SessionMessageTable.session_id, placeholder("sessionID")), eq(SessionMessageTable.type, "assistant")),
+      )
+      .orderBy(desc(SessionMessageTable.seq))
+      .limit(1)
+      .prepare(),
+    assistant: db
+      .select(messageSelection)
+      .from(SessionMessageTable)
+      .where(
+        and(
+          eq(SessionMessageTable.id, placeholder("messageID")),
+          eq(SessionMessageTable.session_id, placeholder("sessionID")),
+          eq(SessionMessageTable.type, "assistant"),
+        ),
+      )
+      .prepare(),
+    shell: db
+      .select(messageSelection)
+      .from(SessionMessageTable)
+      .where(
+        and(
+          eq(SessionMessageTable.session_id, placeholder("sessionID")),
+          eq(SessionMessageTable.type, "shell"),
+          eq(sql<string>`json_extract(${SessionMessageTable.data}, '$.callID')`, placeholder("callID")),
+        ),
+      )
+      .orderBy(desc(SessionMessageTable.seq))
+      .limit(1)
+      .prepare(),
+  }
+}
+
+type MessageReads = ReturnType<typeof prepareMessageReads>
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -115,7 +155,7 @@ function applyUsage(
     .pipe(Effect.orDie)
 }
 
-function run(db: DatabaseService, event: SessionEvent.Event) {
+function run(db: DatabaseService, reads: MessageReads, event: SessionEvent.Event) {
   return Effect.gen(function* () {
     const updateMessage = (message: SessionMessage.Message) => {
       if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
@@ -138,16 +178,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       editCurrentAssistant(edit) {
         return Effect.gen(function* () {
           // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
-          const row = yield* db
-            .select(messageSelection)
-            .from(SessionMessageTable)
-            .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
+          const row = yield* reads.currentAssistant.get({ sessionID: event.data.sessionID }).pipe(Effect.orDie)
           if (!row) return
           const message = decodeAssistant({ ...row.data, id: row.id, type: row.type })
           if (message.time.completed) return
@@ -157,18 +188,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       },
       editAssistant(messageID, edit) {
         return Effect.gen(function* () {
-          const row = yield* db
-            .select(messageSelection)
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.id, messageID),
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "assistant"),
-              ),
-            )
-            .get()
-            .pipe(Effect.orDie)
+          const row = yield* reads.assistant.get({ messageID, sessionID: event.data.sessionID }).pipe(Effect.orDie)
           if (!row) return
           const message = decodeAssistant({ ...row.data, id: row.id, type: row.type })
           edit(castDraft(message))
@@ -177,20 +197,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       },
       editCurrentShell(callID, edit) {
         return Effect.gen(function* () {
-          const row = yield* db
-            .select(messageSelection)
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "shell"),
-                eq(sql<string>`json_extract(${SessionMessageTable.data}, '$.callID')`, callID),
-              ),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
+          const row = yield* reads.shell.get({ callID, sessionID: event.data.sessionID }).pipe(Effect.orDie)
           if (!row) return
           const message = decodeShell({ ...row.data, id: row.id, type: row.type })
           edit(castDraft(message))
@@ -225,6 +232,8 @@ const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const { db } = yield* Database.Service
+    const reads = prepareMessageReads(db)
+    const projectMessage = (event: SessionEvent.Event) => run(db, reads, event)
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db
@@ -346,7 +355,7 @@ const layer = Layer.effectDiscard(
         .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
-        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+        .pipe(Effect.orDie, Effect.andThen(projectMessage(event))),
     )
     yield* events.project(SessionEvent.ModelSwitched, (event) =>
       Effect.gen(function* () {
@@ -356,7 +365,7 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* run(db, event)
+        yield* projectMessage(event)
       }),
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
@@ -370,7 +379,7 @@ const layer = Layer.effectDiscard(
           timeCreated: event.data.timestamp,
           promotedSeq: event.durable.seq,
         })
-        yield* run(db, event)
+        yield* projectMessage(event)
       }),
     )
     yield* events.project(SessionEvent.PromptAdmitted, (event) =>
@@ -386,25 +395,25 @@ const layer = Layer.effectDiscard(
         })
       }),
     )
-    yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
-    yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
-    yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
-    yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Progress, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.ContextUpdated, projectMessage)
+    yield* events.project(SessionEvent.Synthetic, projectMessage)
+    yield* events.project(SessionEvent.Shell.Started, projectMessage)
+    yield* events.project(SessionEvent.Shell.Ended, projectMessage)
+    yield* events.project(SessionEvent.Step.Started, projectMessage)
+    yield* events.project(SessionEvent.Step.Ended, projectMessage)
+    yield* events.project(SessionEvent.Step.Failed, projectMessage)
+    yield* events.project(SessionEvent.Text.Started, projectMessage)
+    yield* events.project(SessionEvent.Text.Ended, projectMessage)
+    yield* events.project(SessionEvent.Tool.Input.Started, projectMessage)
+    yield* events.project(SessionEvent.Tool.Input.Ended, projectMessage)
+    yield* events.project(SessionEvent.Tool.Called, projectMessage)
+    yield* events.project(SessionEvent.Tool.Progress, projectMessage)
+    yield* events.project(SessionEvent.Tool.Success, projectMessage)
+    yield* events.project(SessionEvent.Tool.Failed, projectMessage)
+    yield* events.project(SessionEvent.Reasoning.Started, projectMessage)
+    yield* events.project(SessionEvent.Reasoning.Ended, projectMessage)
+    // yield* events.project(SessionEvent.Retried, projectMessage)
+    yield* events.project(SessionEvent.Compaction.Ended, projectMessage)
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
       db
         .update(SessionTable)
