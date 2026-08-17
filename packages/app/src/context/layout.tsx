@@ -247,7 +247,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     const [store, setStore, _, ready] = persisted(
-      { ...Persist.global("layout"), migrate },
+      { ...Persist.global("layout"), previousKey: "layout.v6", migrate },
       createStore({
         sidebar: {
           opened: false,

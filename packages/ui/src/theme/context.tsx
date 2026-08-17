@@ -84,6 +84,11 @@ const names: Record<string, string> = {
 }
 const oc2Theme = oc2ThemeJson as DesktopTheme
 
+function resolveStoredTheme(id: string | null | undefined, registered?: Record<string, DesktopTheme>) {
+  if (id === "oc-2" || (id && (knownThemes().has(id) || registered?.[id]))) return id
+  return "oc-2"
+}
+
 function read(key: string) {
   if (typeof localStorage !== "object") return null
   try {
@@ -173,7 +178,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     defaultTheme?: string
     onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
-    const themeId = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme ?? "oc-2"
+    const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
+    const themeId = resolveStoredTheme(rawTheme)
+    if (rawTheme && rawTheme !== themeId) {
+      write(STORAGE_KEYS.THEME_ID, themeId)
+      clear()
+    }
     const colorScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
     const mode = colorScheme === "system" ? getSystemMode() : colorScheme
     const [store, setStore] = createStore({
@@ -229,8 +239,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
-        const next = e.newValue
-        if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
+        const next = resolveStoredTheme(e.newValue, store.themes)
+        if (next !== e.newValue) {
+          write(STORAGE_KEYS.THEME_ID, next)
+          clear()
+        }
         setStore("themeId", next)
         if (next === "oc-2") {
           clear()
@@ -257,8 +270,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
       makeEventListener(mediaQuery, "change", onMedia)
 
-      const savedTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme ?? "oc-2"
+      const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
+      const savedTheme = resolveStoredTheme(rawTheme, store.themes)
       const savedScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
+      if (rawTheme && rawTheme !== savedTheme) {
+        write(STORAGE_KEYS.THEME_ID, savedTheme)
+        clear()
+      }
       if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
       if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)
       setStore("mode", savedScheme === "system" ? getSystemMode() : savedScheme)

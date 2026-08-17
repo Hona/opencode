@@ -10,6 +10,7 @@ import type {
   SessionStructuredError,
 } from "@opencode-ai/client/promise"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -264,9 +265,15 @@ export function validateTimelineEvent(input: unknown): OpenCodeEvent {
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
+  const messages = input.map((message): TimelineMessage => {
+    const decoded = Schema.decodeUnknownSync(SessionMessage.Info)(message)
+    if (decoded.type !== "user" && decoded.type !== "assistant")
+      throw new Error(`Unsupported timeline message type: ${decoded.type}`)
+    return message
+  })
   const messageIDs = new Set<string>()
   let parentID: string | undefined
-  input.forEach((message) => {
+  messages.forEach((message) => {
     if (messageIDs.has(message.id)) throw new Error(`Timeline fixture has duplicate message ID: ${message.id}`)
     messageIDs.add(message.id)
     if (message.type === "user") parentID = message.id
@@ -281,7 +288,7 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
       })
     }
   })
-  return [...input]
+  return messages
 }
 
 export async function waitForVisualSettle(page: Page, selectors: string[], stableFrames = 3) {

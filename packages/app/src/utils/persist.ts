@@ -19,6 +19,7 @@ type PersistTarget = {
   storage?: string
   scope?: "window"
   workspaceStorageAliases?: string[]
+  previousKey?: string
   key: string
   migrate?: (value: unknown) => unknown
 }
@@ -231,23 +232,24 @@ function readCurrent(input: {
 
 function relocateStoredValue(input: {
   current: SyncStorage
-  sources: SyncStorage[]
+  sources: { storage: SyncStorage; key?: string }[]
   key: string
   defaults: unknown
   migrate?: (value: unknown) => unknown
 }) {
-  for (const store of input.sources) {
-    const raw = store.getItem(input.key)
+  for (const source of input.sources) {
+    const key = source.key ?? input.key
+    const raw = source.storage.getItem(key)
     if (raw === null) continue
 
     const next = normalize(input.defaults, raw, input.migrate)
     if (next === undefined) {
-      store.removeItem(input.key)
+      source.storage.removeItem(key)
       continue
     }
     input.current.setItem(input.key, next)
     if (input.current.getItem(input.key) !== next) return null
-    store.removeItem(input.key)
+    source.storage.removeItem(key)
     return next
   }
   return null
@@ -286,22 +288,23 @@ function toAsyncStorage(storage: SyncStorage | AsyncStorage): AsyncStorage {
 
 async function relocateStoredValueAsync(input: {
   current: AsyncStorage
-  sources: AsyncStorage[]
+  sources: { storage: AsyncStorage; key?: string }[]
   key: string
   defaults: unknown
   migrate?: (value: unknown) => unknown
 }) {
-  for (const store of input.sources) {
-    const raw = await store.getItem(input.key)
+  for (const source of input.sources) {
+    const key = source.key ?? input.key
+    const raw = await source.storage.getItem(key)
     if (raw === null) continue
 
     const next = normalize(input.defaults, raw, input.migrate)
     if (next === undefined) {
-      await removeAsync(store, input.key)
+      await removeAsync(source.storage, key)
       continue
     }
     await input.current.setItem(input.key, next)
-    await store.removeItem(input.key)
+    await source.storage.removeItem(key)
     return next
   }
   return null
@@ -556,7 +559,10 @@ export function persisted<T>(
   const storage = (() => {
     if (!isDesktop && !draft) {
       const current = currentStorage as SyncStorage
-      const sources = workspaceAliases.map(localStorageWithPrefix)
+      const sources = [
+        ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
+        ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
+      ]
 
       const api: SyncStorage = {
         getItem: (key) => {
@@ -589,12 +595,16 @@ export function persisted<T>(
           ? localStorageWithPrefix(config.storage)
           : localStorageDirect()
       : undefined
+    const previousStorage = config.previousKey ? (isDesktop ? platform.storage?.() : localStorageDirect()) : undefined
     const relocationSources = [
-      previousDraftStorage,
-      ...workspaceAliases.map((name) => (isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name))),
+      previousDraftStorage ? { storage: previousDraftStorage } : undefined,
+      ...workspaceAliases.map((name) => ({
+        storage: isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name),
+      })),
+      previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
     ]
-      .filter((x) => !!x)
-      .map(toAsyncStorage)
+      .filter((source): source is { storage: SyncStorage | AsyncStorage; key?: string } => !!source?.storage)
+      .map((source) => ({ ...source, storage: toAsyncStorage(source.storage) }))
     let draftLatest: string | undefined
 
     const api: AsyncStorage = {

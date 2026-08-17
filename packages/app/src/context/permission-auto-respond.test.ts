@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { autoRespondsPermission, isDirectoryAutoAccepting, sessionAutoAccept } from "./permission-auto-respond"
+import {
+  autoRespondsPermission,
+  isDirectoryAutoAccepting,
+  relocateAutoAccept,
+  sessionAutoAccept,
+} from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -116,4 +121,14 @@ describe("isDirectoryAutoAccepting", () => {
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
+})
+
+test("relocates bare session settings when the directory becomes known", () => {
+  const directory = "/tmp/project"
+  expect(relocateAutoAccept({ root: true }, [{ id: "root" }], directory)).toEqual({
+    [`${base64Encode(directory)}/root`]: true,
+  })
+  expect(
+    relocateAutoAccept({ root: true, [`${base64Encode(directory)}/root`]: false }, [{ id: "root" }], directory),
+  ).toEqual({ [`${base64Encode(directory)}/root`]: false })
 })

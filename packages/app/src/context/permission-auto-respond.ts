@@ -18,6 +18,26 @@ export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, di
   return autoAccept[key] ?? false
 }
 
+export function relocateAutoAccept(
+  autoAccept: Record<string, boolean>,
+  sessions: readonly { id: string }[],
+  directory: string,
+) {
+  const moves = sessions.flatMap((session) => {
+    const value = autoAccept[session.id]
+    if (value === undefined) return []
+    return [{ source: session.id, target: acceptKey(session.id, directory), value }]
+  })
+  if (moves.length === 0) return autoAccept
+
+  const next = { ...autoAccept }
+  for (const move of moves) {
+    if (next[move.target] === undefined) next[move.target] = move.value
+    delete next[move.source]
+  }
+  return next
+}
+
 function sessionLineage(session: { id: string; parentID?: string }[], sessionID: string) {
   const parent = session.reduce((acc, item) => {
     if (item.parentID) acc.set(item.id, item.parentID)

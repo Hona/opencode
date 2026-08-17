@@ -28,6 +28,17 @@ describe("timeline fixture validation", () => {
         data: { sessionID: "ses_timeline_stability", status: { type: "retry", attempt: 1 } },
       }),
     ).toThrow()
+    expect(() => validateTimelineMessages([{ ...userMessage(), id: "invalid" } as never])).toThrow()
+    expect(() => validateTimelineMessages([{ ...userMessage(), time: { created: "invalid" } } as never])).toThrow()
+    expect(() =>
+      validateTimelineMessages([
+        userMessage(),
+        {
+          ...assistantMessage(),
+          content: [{ type: "tool", id: "call_invalid", name: "bash", state: { status: "completed" } }],
+        } as never,
+      ]),
+    ).toThrow()
   })
 
   test("rejects duplicate IDs and orphan assistants", () => {

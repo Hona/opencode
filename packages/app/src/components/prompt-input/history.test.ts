@@ -8,6 +8,7 @@ import {
   promptLength,
   type PromptHistoryComment,
 } from "./history"
+import { upgradeHistoryState } from "./history-store"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -93,6 +94,12 @@ describe("prompt-input history", () => {
     if (!up.handled) throw new Error("expected handled")
     expect(up.entry.prompt[0]?.type === "text" ? up.entry.prompt[0].content : "").toBe("with comment")
     expect(up.entry.comments).toEqual([comment("c1")])
+  })
+
+  test("upgrades stored prompt arrays once at the persistence boundary", () => {
+    expect(upgradeHistoryState({ entries: [text("stored")] })).toEqual({
+      entries: [{ prompt: text("stored"), comments: [] }],
+    })
   })
 
   test("helpers clone prompt and count text content length", () => {
