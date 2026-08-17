@@ -1,6 +1,6 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
-import { Cache, Effect, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -17,11 +17,7 @@ function eventFrame(event: unknown) {
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const frames = yield* Cache.make<object, Uint8Array>({
-      capacity: subscriberCapacity * 2,
-      timeToLive: "1 minute",
-      lookup: (event) => Effect.sync(() => eventFrame(event)),
-    })
+    const frames = new WeakMap<object, Uint8Array>()
     return handlers.handleRaw("event.subscribe", () =>
       Effect.gen(function* () {
         const connected = {
@@ -35,7 +31,15 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
             const live = yield* EventV2.allBounded(events, subscriberCapacity)
             return Stream.make(connected).pipe(Stream.concat(live))
           }),
-        ).pipe(Stream.mapEffect((event) => Cache.get(frames, event)))
+        ).pipe(
+          Stream.map((event) => {
+            const frame = frames.get(event)
+            if (frame) return frame
+            const encoded = eventFrame(event)
+            frames.set(event, encoded)
+            return encoded
+          }),
+        )
         const heartbeats = Stream.tick("15 seconds").pipe(Stream.map(() => heartbeat))
         return HttpServerResponse.stream(output.pipe(Stream.merge(heartbeats, { haltStrategy: "left" })), {
           contentType: "text/event-stream",
