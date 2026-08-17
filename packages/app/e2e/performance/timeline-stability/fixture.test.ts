@@ -17,17 +17,15 @@ describe("timeline fixture validation", () => {
   test("rejects malformed SDK values at runtime", () => {
     expect(() =>
       assistantMessage([], {
-        error: { name: "APIError", data: { message: "failed" } } as never,
+        error: { type: "APIError", message: 1 } as never,
       }),
     ).toThrow()
     expect(() =>
       validateTimelineEvent({
-        directory: "C:/OpenCode/TimelineStability",
-        payload: {
-          id: "evt_invalid_status",
-          type: "session.status",
-          properties: { sessionID: "ses_timeline_stability", status: { type: "retry", attempt: 1 } },
-        },
+        id: "evt_invalid_status",
+        created: 1,
+        type: "session.status",
+        data: { sessionID: "ses_timeline_stability", status: { type: "retry", attempt: 1 } },
       }),
     ).toThrow()
   })
@@ -42,8 +40,8 @@ describe("timeline fixture validation", () => {
   test("assigns deterministic event IDs", () => {
     const first = event("session.status", { sessionID: "ses_timeline_stability", status: { type: "busy" } })
     const second = event("session.status", { sessionID: "ses_timeline_stability", status: { type: "idle" } })
-    expect(first.payload.id).toMatch(/^evt_timeline_\d{4}$/)
-    expect(Number(second.payload.id.slice(-4))).toBe(Number(first.payload.id.slice(-4)) + 1)
+    expect(first.id).toMatch(/^evt_timeline_\d{4}$/)
+    expect(Number(second.id.slice(-4))).toBe(Number(first.id.slice(-4)) + 1)
   })
 })
 

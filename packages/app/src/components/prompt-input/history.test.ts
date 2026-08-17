@@ -3,7 +3,6 @@ import type { Prompt } from "@/context/prompt"
 import {
   canNavigateHistoryAtCursor,
   clonePromptParts,
-  normalizePromptHistoryEntry,
   navigatePromptHistory,
   prependHistoryEntry,
   promptLength,
@@ -13,6 +12,7 @@ import {
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 const text = (value: string): Prompt => [{ type: "text", content: value, start: 0, end: value.length }]
+const entry = (value: string) => ({ prompt: text(value), comments: [] })
 const comment = (id: string, value = "note"): PromptHistoryComment => ({
   id,
   path: "src/a.ts",
@@ -42,7 +42,7 @@ describe("prompt-input history", () => {
   })
 
   test("navigatePromptHistory restores saved prompt when moving down from newest", () => {
-    const entries = [text("third"), text("second"), text("first")]
+    const entries = [entry("third"), entry("second"), entry("first")]
     const up = navigatePromptHistory({
       direction: "up",
       entries,
@@ -93,12 +93,6 @@ describe("prompt-input history", () => {
     if (!up.handled) throw new Error("expected handled")
     expect(up.entry.prompt[0]?.type === "text" ? up.entry.prompt[0].content : "").toBe("with comment")
     expect(up.entry.comments).toEqual([comment("c1")])
-  })
-
-  test("normalizePromptHistoryEntry supports legacy prompt arrays", () => {
-    const entry = normalizePromptHistoryEntry(text("legacy"))
-    expect(entry.prompt[0]?.type === "text" ? entry.prompt[0].content : "").toBe("legacy")
-    expect(entry.comments).toEqual([])
   })
 
   test("helpers clone prompt and count text content length", () => {

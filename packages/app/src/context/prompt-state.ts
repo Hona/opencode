@@ -171,8 +171,7 @@ function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
 
 function promptTarget(serverScope: ServerScope, scope: PromptScope) {
   if ("draftID" in scope) return Persist.prompt(Persist.draft(scope.draftID, "prompt"))
-  const legacy = `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2`
-  return Persist.prompt(Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt", [legacy]))
+  return Persist.prompt(Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt"))
 }
 
 function promptStore(initial?: InitialPrompt): PromptStore {

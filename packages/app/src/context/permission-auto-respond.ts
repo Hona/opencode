@@ -10,8 +10,7 @@ export function directoryAcceptKey(directory: string) {
 }
 
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
-  const key = acceptKey(sessionID, directory)
-  return autoAccept[key] ?? autoAccept[sessionID]
+  return autoAccept[acceptKey(sessionID, directory)]
 }
 
 export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {

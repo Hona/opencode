@@ -16,6 +16,25 @@ export type PromptInputHistory = {
 
 type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
 
+function normalizeHistoryState(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("entries" in value)) return value
+  const entries = value.entries
+  if (!Array.isArray(entries)) return value
+  return {
+    ...value,
+    entries: entries.filter(
+      (entry): entry is PromptHistoryStoredEntry =>
+        !!entry &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        "prompt" in entry &&
+        Array.isArray(entry.prompt) &&
+        "comments" in entry &&
+        Array.isArray(entry.comments),
+    ),
+  }
+}
+
 function createPromptInputHistoryStore(
   normal: Store<PromptHistoryState>,
   setNormal: SetStoreFunction<PromptHistoryState>,
@@ -42,11 +61,11 @@ export function createPromptInputHistory(): PromptInputHistory {
 
 export function createPersistedPromptInputHistory() {
   const [normal, setNormal, normalInit] = persisted(
-    Persist.prompt(Persist.global("prompt-history", ["prompt-history.v1"])),
+    { ...Persist.prompt(Persist.global("prompt-history")), migrate: normalizeHistoryState },
     createStore<PromptHistoryState>({ entries: [] }),
   )
   const [shell, setShell, shellInit] = persisted(
-    Persist.prompt(Persist.global("prompt-history-shell", ["prompt-history-shell.v1"])),
+    { ...Persist.prompt(Persist.global("prompt-history-shell")), migrate: normalizeHistoryState },
     createStore<PromptHistoryState>({ entries: [] }),
   )
   const history = createPromptInputHistoryStore(normal, setNormal, shell, setShell)

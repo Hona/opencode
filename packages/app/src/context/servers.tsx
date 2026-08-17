@@ -273,7 +273,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
   }) => {
     const [store, setStore, _] = persisted(
       {
-        ...Persist.global("server", ["server.v3"]),
+        ...Persist.global("server"),
         migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
       },
       createStore({

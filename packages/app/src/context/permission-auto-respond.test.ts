@@ -25,12 +25,6 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
   })
 
-  test("uses a parent session's legacy auto-accept key", () => {
-    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
-
-    expect(autoRespondsPermission({ root: true }, sessions, permission("child"), "/tmp/project")).toBe(true)
-  })
-
   test("defaults to requiring approval when no lineage override exists", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" }), session({ id: "other" })]
     const autoAccept = {

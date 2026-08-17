@@ -5,6 +5,7 @@ import type { Platform } from "@/context/platform"
 import { createPromptReady, createPromptSession } from "@/context/prompt-state"
 import { ServerScope } from "@/utils/server-scope"
 import { createDraftStore } from "@/utils/draft-store"
+import { Persist } from "@/utils/persist"
 
 let read: ((value: string | null) => void) | undefined
 
@@ -63,9 +64,40 @@ describe("prompt persistence", () => {
       })
     })
   })
+
+  test("relocates a current prompt into the draft store", async () => {
+    const documents = new Map<string, string>()
+    const store = createDraftStore({
+      get: async (key) => documents.get(key) ?? null,
+      set: async (key, value) => void documents.set(key, value),
+      remove: async (key) => void documents.delete(key),
+      putBlob: async () => "blob",
+      getBlob: async () => null,
+    })
+    const target = Persist.draft("draft-relocate", "prompt")
+    const key = `${target.storage}:${target.key}`
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        prompt: [{ type: "text", content: "relocated draft", start: 0, end: 15 }],
+        cursor: 15,
+        context: { items: [] },
+      }),
+    )
+
+    const session = createPromptSession(ServerScope.local, { draftID: "draft-relocate" }, undefined, {
+      ...platform,
+      draftStore: store,
+    })
+    await session.ready.promise
+
+    expect(session.current()[0]).toMatchObject({ type: "text", content: "relocated draft" })
+    expect(documents.get(key)).toContain("relocated draft")
+    expect(localStorage.getItem(key)).toBeNull()
+  })
 })
 
-test("moves legacy image data URLs into blobs and hydrates object URLs", async () => {
+test("moves image data URLs into blobs and hydrates object URLs", async () => {
   const documents = new Map<string, string>()
   const blobs = new Map<string, Blob>()
   const store = createDraftStore({

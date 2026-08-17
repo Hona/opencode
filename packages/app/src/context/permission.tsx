@@ -57,7 +57,7 @@ type PermissionEvent = Parameters<Parameters<ServerSDK["event"]["listen"]>[0]>[0
 export function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }) {
   const [store, setStore, _, ready] = persisted(
     {
-      ...Persist.serverGlobal(input.sdk.scope, "permission", ["permission.v3"]),
+      ...Persist.serverGlobal(input.sdk.scope, "permission"),
       migrate(value) {
         if (!value || typeof value !== "object" || Array.isArray(value)) return value
 

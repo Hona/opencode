@@ -11,6 +11,7 @@ import {
   partUpdated,
   session,
   sessionID,
+  renderedPartID,
   setupTimeline,
   textPart,
   toolPart,
@@ -27,7 +28,7 @@ test("adds a task child-session link without replacing the task row", async ({ p
     cpuRate: 4,
   })
   const regions = defineVisualRegions({
-    task: { selector: `[data-timeline-part-id="${taskID}"] [data-slot="collapsible-trigger"]` },
+    task: { selector: `[data-timeline-part-id="${renderedPartID(taskID)}"] [data-slot="collapsible-trigger"]` },
   })
   await startVisualProbe(page, regions)
   await timeline.send(
@@ -71,8 +72,14 @@ test("changes generic tool arguments without replacing the row", async ({ page }
     cpuRate: 4,
   })
   const regions = defineVisualRegions({
-    tool: { selector: `[data-timeline-part-id="${toolID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    tool: {
+      selector: `[data-timeline-part-id="${renderedPartID(toolID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
+    following: {
+      selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
+      closest: '[data-timeline-row="AssistantPart"]',
+    },
   })
   await startVisualProbe(page, regions)
   await timeline.send(
