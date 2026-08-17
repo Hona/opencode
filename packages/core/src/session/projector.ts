@@ -18,8 +18,14 @@ import { castDraft } from "immer"
 
 type DatabaseService = Database.Interface["db"]
 
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+const decodeAssistant = Schema.decodeUnknownSync(SessionMessage.Assistant)
+const decodeShell = Schema.decodeUnknownSync(SessionMessage.Shell)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+const messageSelection = {
+  id: SessionMessageTable.id,
+  type: SessionMessageTable.type,
+  data: SessionMessageTable.data,
+}
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -111,8 +117,6 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Message) => {
       if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
@@ -135,7 +139,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
         return Effect.gen(function* () {
           // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
           const row = yield* db
-            .select()
+            .select(messageSelection)
             .from(SessionMessageTable)
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
@@ -145,8 +149,8 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
-          if (message.type !== "assistant" || message.time.completed) return
+          const message = decodeAssistant({ ...row.data, id: row.id, type: row.type })
+          if (message.time.completed) return
           edit(castDraft(message))
           yield* updateMessage(message)
         })
@@ -154,7 +158,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       editAssistant(messageID, edit) {
         return Effect.gen(function* () {
           const row = yield* db
-            .select()
+            .select(messageSelection)
             .from(SessionMessageTable)
             .where(
               and(
@@ -166,25 +170,29 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
-          if (message.type !== "assistant") return
+          const message = decodeAssistant({ ...row.data, id: row.id, type: row.type })
           edit(castDraft(message))
           yield* updateMessage(message)
         })
       },
       editCurrentShell(callID, edit) {
         return Effect.gen(function* () {
-          const rows = yield* db
-            .select()
+          const row = yield* db
+            .select(messageSelection)
             .from(SessionMessageTable)
-            .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "shell"),
+                eq(sql<string>`json_extract(${SessionMessageTable.data}, '$.callID')`, callID),
+              ),
+            )
             .orderBy(desc(SessionMessageTable.seq))
-            .all()
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          const message = rows
-            .map(decodeRow)
-            .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
-          if (!message) return
+          if (!row) return
+          const message = decodeShell({ ...row.data, id: row.id, type: row.type })
           edit(castDraft(message))
           yield* updateMessage(message)
         })
