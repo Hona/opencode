@@ -121,6 +121,7 @@ describe("Git trees", () => {
         await initRepo(root.path)
         await fs.mkdir(path.join(root.path, "scope"))
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "one\n")
+        await fs.writeFile(path.join(root.path, "scope", "removed.txt"), "remove\n")
         await fs.writeFile(path.join(root.path, "outside.txt"), "outside\n")
         await $`git add .`.cwd(root.path).quiet()
         await $`git commit -m initial`.cwd(root.path).quiet()
@@ -136,17 +137,20 @@ describe("Git trees", () => {
       yield* Effect.promise(async () => {
         await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "two\n")
         await fs.writeFile(path.join(root.path, "scope", "added.txt"), "added\n")
+        await fs.rm(path.join(root.path, "scope", "removed.txt"))
         await fs.writeFile(path.join(root.path, "outside.txt"), "changed outside\n")
       })
       const after = yield* git.tree.capture({ repository, base: before, scopes: [RelativePath.make("scope")] })
 
       expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
         RelativePath.make("scope/added.txt"),
+        RelativePath.make("scope/removed.txt"),
         RelativePath.make("scope/tracked.txt"),
       ])
       const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
       expect(diffs.map((item) => [item.path, item.status])).toEqual([
         [RelativePath.make("scope/added.txt"), "added"],
+        [RelativePath.make("scope/removed.txt"), "deleted"],
         [RelativePath.make("scope/tracked.txt"), "modified"],
       ])
 

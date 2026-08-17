@@ -441,19 +441,18 @@ const layer = Layer.effect(
       },
       env: Record<string, string>,
     ) {
-      const list = (args: string[]) =>
-        repositoryOperation("refresh", input.repository, args, { env }).pipe(
-          Effect.map((result) => result.text.split("\0").filter(Boolean)),
-        )
-      const [tracked, untracked] = yield* Effect.all(
-        [
-          list(["diff-files", "--name-only", "-z", "--", input.scope]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", input.scope]),
-        ],
-        { concurrency: 2 },
-      )
-      const candidates = Array.from(new Set([...tracked, ...untracked]))
+      const entries = (yield* repositoryOperation(
+        "refresh",
+        input.repository,
+        ["ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-t", "-z", "--", input.scope],
+        { env },
+      )).text
+        .split("\0")
+        .filter(Boolean)
+        .map((entry) => ({ tag: entry[0], path: entry.slice(2) }))
+      const candidates = Array.from(new Set(entries.map((entry) => entry.path)))
       if (!candidates.length) return false
+      const untracked = entries.filter((entry) => entry.tag === "?").map((entry) => entry.path)
       const ignored = input.ignores
         ? new Set(
             (yield* repositoryOperation("refresh", input.ignores, ["check-ignore", "--no-index", "--stdin", "-z"], {
