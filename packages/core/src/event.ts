@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream, SynchronizedRef } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -172,7 +172,7 @@ export const layerWith = (options?: LayerOptions) =>
     Service,
     Effect.gen(function* () {
       const pubsub = {
-        all: yield* PubSub.unbounded<Payload>(),
+        all: yield* SynchronizedRef.make<PubSub.PubSub<Payload> | undefined>(undefined),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
@@ -190,6 +190,16 @@ export const layerWith = (options?: LayerOptions) =>
           return created
         })
 
+      const allEvents = () =>
+        SynchronizedRef.modifyEffect(
+          pubsub.all,
+          Effect.fnUntraced(function* (current) {
+            if (current) return [current, current] as const
+            const created = yield* PubSub.unbounded<Payload>()
+            return [created, created] as const
+          }),
+        )
+
       const resolveLocation = Effect.fnUntraced(function* (location: Location.Ref | undefined) {
         if (location) return location
         const service = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
@@ -199,7 +209,8 @@ export const layerWith = (options?: LayerOptions) =>
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          yield* PubSub.shutdown(pubsub.all)
+          const all = yield* SynchronizedRef.get(pubsub.all)
+          if (all) yield* PubSub.shutdown(all)
           yield* Effect.forEach(
             pubsub.durable.values(),
             (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
@@ -419,7 +430,8 @@ export const layerWith = (options?: LayerOptions) =>
           )
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
-          yield* PubSub.publish(pubsub.all, event)
+          const all = yield* SynchronizedRef.get(pubsub.all)
+          if (all) yield* PubSub.publish(all, event)
         })
       }
 
@@ -538,7 +550,7 @@ export const layerWith = (options?: LayerOptions) =>
           Stream.map((event) => event as Payload<D>),
         )
 
-      const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
+      const streamAll = (): Stream.Stream<Payload> => Stream.unwrap(allEvents().pipe(Effect.map(Stream.fromPubSub)))
 
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
