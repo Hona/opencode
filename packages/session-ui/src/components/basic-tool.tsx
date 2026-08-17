@@ -3,10 +3,11 @@ import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
-import type { IconProps } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 
 export type TriggerTitle = {
+  icon?: IconProps["name"]
   title: string
   titleClass?: string
   subtitle?: string
@@ -195,6 +196,13 @@ export function BasicTool(props: BasicToolProps) {
             <Match when={isTriggerTitle(props.trigger) && props.trigger}>
               {(title) => (
                 <div data-slot="basic-tool-tool-info-structured">
+                  <Show when={title().icon}>
+                    {(icon) => (
+                      <span data-slot="basic-tool-tool-indicator">
+                        <Icon name={icon()} size="small" />
+                      </span>
+                    )}
+                  </Show>
                   <div data-slot="basic-tool-tool-info-main">
                     <span
                       data-slot="basic-tool-tool-title"
@@ -333,6 +341,7 @@ export function GenericTool(props: {
       icon="mcp"
       status={props.status}
       trigger={{
+        icon: "mcp",
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),
         args: args(props.input),
