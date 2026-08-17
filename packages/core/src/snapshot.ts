@@ -112,6 +112,7 @@ const layer = Layer.effect(
           worktree,
           gitDirectory,
           commonDirectory: gitDirectory,
+          alternateObjectDirectories: [AbsolutePath.make(path.join(source.commonDirectory, "objects"))],
         })
       return yield* git.repo
         .create({

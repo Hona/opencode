@@ -11,6 +11,7 @@ import { makeGlobalNode } from "./effect/app-node"
 import { File } from "./file"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { which } from "./util/which"
+import { EffectFlock } from "./util/effect-flock"
 
 const gitExecutable = which("git") ?? "git"
 
@@ -18,6 +19,7 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
   gitDirectory: AbsolutePath,
   commonDirectory: AbsolutePath,
+  alternateObjectDirectories: Schema.optional(Schema.Array(AbsolutePath)),
 }) {}
 
 export const ChangeSet = Schema.String.pipe(Schema.brand("Git.ChangeSet"))
@@ -174,9 +176,27 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
+    const flock = yield* EffectFlock.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const locked = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) =>
       locks.withLock(repository.gitDirectory)(effect)
+
+    const lockedObjects = (repository: Repository, effect: Effect.Effect<TreeID, OperationError>) =>
+      locked(
+        repository,
+        flock.withLock(effect, `git-objects:${repository.gitDirectory}`).pipe(
+          Effect.mapError((cause) =>
+            cause instanceof OperationError
+              ? cause
+              : new OperationError({
+                  operation: "write_tree",
+                  directory: repository.gitDirectory,
+                  message: cause._tag === "LockTimeoutError" ? `Timed out waiting for ${cause.key}` : cause.detail,
+                  cause,
+                }),
+          ),
+        ),
+      )
 
     const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
       const dotgit = yield* fs.up({ targets: [".git"], start: input }).pipe(
@@ -324,7 +344,13 @@ const layer = Layer.effect(
       args: string[],
       options?: { stdin?: string; env?: Record<string, string> },
     ) {
-      const env = { GIT_OPTIONAL_LOCKS: "0", ...options?.env }
+      const env = {
+        GIT_OPTIONAL_LOCKS: "0",
+        ...(repository.alternateObjectDirectories?.length
+          ? { GIT_ALTERNATE_OBJECT_DIRECTORIES: repository.alternateObjectDirectories.join(path.delimiter) }
+          : {}),
+        ...options?.env,
+      }
       const result = yield* proc
         .run(
           ChildProcess.make(gitExecutable, repositoryArgs(repository, args), {
@@ -374,6 +400,9 @@ const layer = Layer.effect(
         worktree: input.worktree,
         gitDirectory: input.gitDirectory,
         commonDirectory: input.gitDirectory,
+        alternateObjectDirectories: input.seed
+          ? [AbsolutePath.make(path.join(input.seed.commonDirectory, "objects"))]
+          : undefined,
       })
       yield* repositoryOperation("create", repository, ["init"])
       yield* Effect.forEach(
@@ -390,34 +419,6 @@ const layer = Layer.effect(
         ([key, value]) => repositoryOperation("create", repository, ["config", key, value]),
         { discard: true },
       )
-      if (!input.seed) return repository
-      yield* fs.ensureDir(path.join(input.gitDirectory, "objects", "info")).pipe(
-        Effect.mapError(
-          (cause) =>
-            new OperationError({
-              operation: "create",
-              directory: input.gitDirectory,
-              message: "Failed to configure shared Git objects",
-              cause,
-            }),
-        ),
-      )
-      yield* fs
-        .writeFileString(
-          path.join(input.gitDirectory, "objects", "info", "alternates"),
-          path.join(input.seed.commonDirectory, "objects") + "\n",
-        )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new OperationError({
-                operation: "create",
-                directory: input.gitDirectory,
-                message: "Failed to configure shared Git objects",
-                cause,
-              }),
-          ),
-        )
       return repository
     })
 
@@ -435,7 +436,7 @@ const layer = Layer.effect(
           }),
       )
 
-    const refresh = Effect.fnUntraced(function* (
+    const inspect = Effect.fnUntraced(function* (
       input: {
         repository: Repository
         scope: RelativePath
@@ -454,7 +455,7 @@ const layer = Layer.effect(
         .filter(Boolean)
         .map((entry) => ({ tag: entry[0], path: entry.slice(2) }))
       const candidates = Array.from(new Set(entries.map((entry) => entry.path)))
-      if (!candidates.length) return false
+      if (!candidates.length) return
       const untracked = entries.filter((entry) => entry.tag === "?").map((entry) => entry.path)
       const ignored = input.ignores
         ? new Set(
@@ -484,21 +485,28 @@ const layer = Layer.effect(
       )
       const stage = candidates.filter((item) => allowed.has(item) && !skipped.has(RelativePath.make(item)))
       const remove = [...ignored, ...skipped]
-      if (remove.length)
+      return { remove, stage }
+    })
+
+    const applyIndexChanges = Effect.fnUntraced(function* (
+      repository: Repository,
+      changes: { readonly remove: readonly string[]; readonly stage: readonly string[] },
+      env: Record<string, string>,
+    ) {
+      if (changes.remove.length)
         yield* repositoryOperation(
           "refresh",
-          input.repository,
+          repository,
           ["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"],
-          { env, stdin: remove.join("\0") + "\0" },
+          { env, stdin: changes.remove.join("\0") + "\0" },
         )
-      if (stage.length)
+      if (changes.stage.length)
         yield* repositoryOperation(
           "refresh",
-          input.repository,
+          repository,
           ["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
-          { env, stdin: stage.join("\0") + "\0" },
+          { env, stdin: changes.stage.join("\0") + "\0" },
         )
-      return true
     })
 
     const ignored = Effect.fn("Git.index.ignored")(function* (input: {
@@ -566,9 +574,19 @@ const layer = Layer.effect(
         withTemporaryIndex(input.repository, "capture", (env) =>
           Effect.gen(function* () {
             yield* repositoryOperation("refresh", input.repository, ["read-tree", input.base], { env })
-            const changed = yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }, env))
-            if (!changed.some(Boolean)) return input.base
-            return yield* writeTree(input.repository, env)
+            const changes = (yield* Effect.forEach(input.scopes, (scope) => inspect({ ...input, scope }, env))).filter(
+              (value): value is NonNullable<typeof value> => value !== undefined,
+            )
+            if (!changes.length) return input.base
+            return yield* lockedObjects(
+              input.repository,
+              Effect.gen(function* () {
+                yield* Effect.forEach(changes, (change) => applyIndexChanges(input.repository, change, env), {
+                  discard: true,
+                })
+                return yield* writeTree(input.repository, env)
+              }),
+            )
           }),
         ),
     )
@@ -982,7 +1000,11 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, AppProcess.node] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer: layer,
+  deps: [FSUtil.node, AppProcess.node, EffectFlock.node],
+})
 
 interface Result {
   readonly exitCode: number

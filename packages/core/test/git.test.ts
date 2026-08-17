@@ -179,7 +179,8 @@ describe("Git trees", () => {
           const git = yield* Git.Service
           const source = yield* git.repo.discover(AbsolutePath.make(root.path))
           if (!source) throw new Error("Repository not found")
-          const storage = AbsolutePath.make(path.join(root.path, ".snapshot"))
+          const storage = AbsolutePath.make(`${root.path}-snapshot`)
+          yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(storage, { recursive: true, force: true })))
           const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
           const base = yield* git.tree.head(source)
           yield* Effect.promise(() => fs.writeFile(path.join(storage, "index.lock"), ""))
