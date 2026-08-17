@@ -20,7 +20,7 @@ const crcTable = Array.from({ length: 256 }, (_, value) =>
   Array.from({ length: 8 }).reduce<number>((crc) => ((crc & 1) !== 0 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1), value),
 )
 
-await Bun.write(new URL("../src/v2/components/session-progress-indicator-v2-3x.png", import.meta.url), apng(3))
+await Bun.write(new URL("../src/v2/components/session-progress-indicator-v2-1x.png", import.meta.url), apng(1))
 
 function apng(scale: number) {
   const frameSize = size * scale
@@ -73,9 +73,9 @@ function pixels(scale: number, frame: number) {
     draw(
       pixels,
       stride,
-      (1.5 + (index % 5) * 3) * scale,
-      (1.5 + Math.floor(index / 5) * 3) * scale,
-      2 * scale,
+      (1 + (index % 5) * 3) * scale,
+      (1 + Math.floor(index / 5) * 3) * scale,
+      3 * scale,
       value + (poses[next][index] - value) * mix,
     )
   })
