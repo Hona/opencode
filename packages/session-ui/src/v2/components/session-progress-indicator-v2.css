@@ -4,10 +4,6 @@
   color: var(--v2-icon-icon-muted, #808080);
 }
 
-[data-component="session-progress-indicator-v2"] [data-frame-mask] {
-  mask-type: alpha;
-}
-
 [data-component="session-progress-indicator-v2"] [data-reduced-motion] {
   display: none;
   fill: currentColor;

@@ -117,7 +117,7 @@ function Controls(props: { mode: () => "legacy" | "atlas"; setMode: (mode: "lega
           Fill
         </button>
       </div>
-      <strong>{fps()} FPS</strong>
+      <strong>{fps()} page FPS</strong>
       <span>{slow()} slow frames / 0.5s</span>
       <span>{count().toLocaleString()} indicators</span>
       <span>{(props.mode() === "legacy" ? count() * 25 : 0).toLocaleString()} animation tracks</span>
