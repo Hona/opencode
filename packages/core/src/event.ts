@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream, SynchronizedRef } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, placeholder } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -180,6 +180,16 @@ export const layerWith = (options?: LayerOptions) =>
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
+      const sequenceByAggregate = db
+        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, placeholder("aggregateID")))
+        .prepare()
+      const positionByEventID = db
+        .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
+        .from(EventTable)
+        .where(eq(EventTable.id, placeholder("eventID")))
+        .prepare()
 
       const getOrCreate = (definition: Definition) =>
         Effect.gen(function* () {
@@ -258,12 +268,7 @@ export const layerWith = (options?: LayerOptions) =>
                     .transaction(
                       () =>
                         Effect.gen(function* () {
-                          const row = yield* db
-                            .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
-                            .from(EventSequenceTable)
-                            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-                            .get()
-                            .pipe(Effect.orDie)
+                          const row = yield* sequenceByAggregate.get({ aggregateID }).pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
                           const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
                             string,
@@ -318,12 +323,7 @@ export const layerWith = (options?: LayerOptions) =>
                               }),
                             )
                           }
-                          const stored = yield* db
-                            .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
-                            .from(EventTable)
-                            .where(eq(EventTable.id, event.id))
-                            .get()
-                            .pipe(Effect.orDie)
+                          const stored = yield* positionByEventID.get({ eventID: event.id }).pipe(Effect.orDie)
                           if (stored)
                             yield* Effect.die(
                               new InvalidDurableEventError({
