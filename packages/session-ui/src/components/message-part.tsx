@@ -2131,17 +2131,8 @@ ToolRegistry.register({
 
 ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
 
-function ConsoleTool(props: {
-  part: ToolProps
-  title: string
-  preview?: string
-  copy: string
-  active: boolean
-  icon?: IconProps["name"]
-  children: JSX.Element
-}) {
+function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
   const i18n = useI18n()
-  const sawPending = props.active
   const [copied, setCopied] = createSignal(false)
 
   const copy = async () => {
@@ -2152,56 +2143,31 @@ function ConsoleTool(props: {
   }
 
   return (
-    <BasicTool
-      {...props.part}
-      icon="console"
-      allowOpenWhilePending
-      trigger={(open) => (
-        <div data-slot="basic-tool-tool-info-structured">
-          <Show when={props.icon}>
-            {(icon) => (
-              <span data-slot="basic-tool-tool-indicator">
-                <Icon name={icon()} size="small" />
-              </span>
-            )}
-          </Show>
-          <div data-slot="basic-tool-tool-info-main">
-            <span data-slot="basic-tool-tool-title">
-              <TextShimmer text={props.title} active={props.active} />
-            </span>
-            <Show when={open() ? undefined : props.preview}>
-              {(preview) => <ShellSubmessage text={preview()} animate={sawPending} />}
-            </Show>
-          </div>
-        </div>
-      )}
-    >
-      <div data-component="bash-output" dir="ltr">
-        <div data-slot="bash-copy">
-          <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-            <IconButtonV2
-              icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
-              size="normal"
-              variant="ghost-muted"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={copy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-            />
-          </TooltipV2>
-        </div>
-        <div
-          data-slot="bash-scroll"
-          data-scrollable
-          tabIndex={0}
-          role="region"
-          aria-label={i18n.t("ui.scrollView.ariaLabel")}
-        >
-          <pre data-slot="bash-pre">
-            <code>{props.children}</code>
-          </pre>
-        </div>
+    <div data-component="bash-output" dir="ltr">
+      <div data-slot="bash-copy">
+        <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+          <IconButtonV2
+            icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+            size="normal"
+            variant="ghost-muted"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={copy}
+            aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+          />
+        </TooltipV2>
       </div>
-    </BasicTool>
+      <div
+        data-slot="bash-scroll"
+        data-scrollable
+        tabIndex={0}
+        role="region"
+        aria-label={i18n.t("ui.scrollView.ariaLabel")}
+      >
+        <pre data-slot="bash-pre">
+          <code>{props.children}</code>
+        </pre>
+      </div>
+    </div>
   )
 }
 
@@ -2215,17 +2181,30 @@ ToolRegistry.register({
       const output = stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
       return `${code()}${output ? "\n\n" + output : ""}`
     })
+    const sawPending = pending()
     return (
-      <ConsoleTool
-        part={props}
+      <BasicTool
+        {...props}
         icon="console"
-        title={i18n.t("ui.tool.execute")}
-        preview={code()}
-        copy={text()}
-        active={pending()}
+        allowOpenWhilePending
+        trigger={(open) => (
+          <div data-slot="basic-tool-tool-info-structured">
+            <span data-slot="basic-tool-tool-indicator">
+              <Icon name="console" size="small" />
+            </span>
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+              </span>
+              <Show when={!open() && code()}>
+                <ShellSubmessage text={code()} animate={sawPending} />
+              </Show>
+            </div>
+          </div>
+        )}
       >
-        {text()}
-      </ConsoleTool>
+        <ConsoleOutput copy={text()}>{text()}</ConsoleOutput>
+      </BasicTool>
     )
   },
 })
@@ -2236,24 +2215,37 @@ ToolRegistry.register({
     const i18n = useI18n()
     const pending = () =>
       props.status === "pending" || props.status === "running" || props.metadata.status === "running"
+    const sawPending = pending()
     const command = () => props.input.command ?? props.metadata.command ?? ""
     const text = createMemo(() => {
       const out = stripAnsi(props.output || props.metadata.output || "").replace(/\r\n?/g, "\n")
       return `${command()}${out ? "\n\n" + out : ""}`
     })
     return (
-      <ConsoleTool
-        part={props}
-        title={i18n.t("ui.tool.shell")}
-        preview={props.input.command}
-        copy={command()}
-        active={pending()}
+      <BasicTool
+        {...props}
+        icon="console"
+        allowOpenWhilePending
+        trigger={(open) => (
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+              </span>
+              <Show when={!open() && props.input.command}>
+                <ShellSubmessage text={props.input.command} animate={sawPending} />
+              </Show>
+            </div>
+          </div>
+        )}
       >
-        <span data-slot="bash-prompt" aria-hidden="true">
-          {"$ "}
-        </span>
-        {text()}
-      </ConsoleTool>
+        <ConsoleOutput copy={command()}>
+          <span data-slot="bash-prompt" aria-hidden="true">
+            {"$ "}
+          </span>
+          {text()}
+        </ConsoleOutput>
+      </BasicTool>
     )
   },
 })
