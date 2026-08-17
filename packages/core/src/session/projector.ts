@@ -14,6 +14,7 @@ import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
+import { castDraft } from "immer"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -130,7 +131,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
     }
     const appendMessage = (message: SessionMessage.Message) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
-      getCurrentAssistant() {
+      editCurrentAssistant(edit) {
         return Effect.gen(function* () {
           // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
           const row = yield* db
@@ -145,10 +146,12 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .pipe(Effect.orDie)
           if (!row) return
           const message = decodeRow(row)
-          return message.type === "assistant" && !message.time.completed ? message : undefined
+          if (message.type !== "assistant" || message.time.completed) return
+          edit(castDraft(message))
+          yield* updateMessage(message)
         })
       },
-      getAssistant(messageID) {
+      editAssistant(messageID, edit) {
         return Effect.gen(function* () {
           const row = yield* db
             .select()
@@ -164,10 +167,12 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .pipe(Effect.orDie)
           if (!row) return
           const message = decodeRow(row)
-          return message.type === "assistant" ? message : undefined
+          if (message.type !== "assistant") return
+          edit(castDraft(message))
+          yield* updateMessage(message)
         })
       },
-      getCurrentShell(callID) {
+      editCurrentShell(callID, edit) {
         return Effect.gen(function* () {
           const rows = yield* db
             .select()
@@ -176,13 +181,14 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .orderBy(desc(SessionMessageTable.seq))
             .all()
             .pipe(Effect.orDie)
-          return rows
+          const message = rows
             .map(decodeRow)
             .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
+          if (!message) return
+          edit(castDraft(message))
+          yield* updateMessage(message)
         })
       },
-      updateAssistant: updateMessage,
-      updateShell: updateMessage,
       appendMessage,
     }
     yield* SessionMessageUpdater.update(adapter, event)
