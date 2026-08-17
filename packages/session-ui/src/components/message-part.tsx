@@ -65,30 +65,8 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
-
-async function writeClipboard(text: string): Promise<boolean> {
-  const body = typeof document === "undefined" ? undefined : document.body
-  if (body) {
-    const textarea = document.createElement("textarea")
-    textarea.value = text
-    textarea.setAttribute("readonly", "")
-    textarea.style.position = "fixed"
-    textarea.style.opacity = "0"
-    textarea.style.pointerEvents = "none"
-    body.appendChild(textarea)
-    textarea.select()
-    const copied = document.execCommand("copy")
-    body.removeChild(textarea)
-    if (copied) return true
-  }
-
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-  if (!clipboard?.writeText) return false
-  return clipboard.writeText(text).then(
-    () => true,
-    () => false,
-  )
-}
+import { ConsoleOutput } from "./console-output"
+import { writeClipboard } from "./write-clipboard"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -2130,46 +2108,6 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
-
-function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
-  const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!props.copy) return
-    if (!(await writeClipboard(props.copy))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div data-component="bash-output" dir="ltr">
-      <div data-slot="bash-copy">
-        <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-          <IconButtonV2
-            icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
-            size="normal"
-            variant="ghost-muted"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={copy}
-            aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-          />
-        </TooltipV2>
-      </div>
-      <div
-        data-slot="bash-scroll"
-        data-scrollable
-        tabIndex={0}
-        role="region"
-        aria-label={i18n.t("ui.scrollView.ariaLabel")}
-      >
-        <pre data-slot="bash-pre">
-          <code>{props.children}</code>
-        </pre>
-      </div>
-    </div>
-  )
-}
 
 ToolRegistry.register({
   name: "execute",

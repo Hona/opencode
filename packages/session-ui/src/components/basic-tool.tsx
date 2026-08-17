@@ -1,10 +1,12 @@
 import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
+import stripAnsi from "strip-ansi"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { ConsoleOutput } from "./console-output"
 
 export type TriggerTitle = {
   icon?: IconProps["name"]
@@ -333,13 +335,26 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  output?: string
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const i18n = useI18n()
+  const text = () => {
+    const input = JSON.stringify(props.input ?? {}, null, 2)
+    const output = stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+    return `${input}${output ? "\n\n" + output : ""}`
+  }
 
   return (
     <BasicTool
       icon="mcp"
       status={props.status}
+      defaultOpen={props.defaultOpen}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      allowOpenWhilePending
       trigger={{
         icon: "mcp",
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
@@ -347,6 +362,8 @@ export function GenericTool(props: {
         args: args(props.input),
       }}
       hideDetails={props.hideDetails}
-    />
+    >
+      <ConsoleOutput copy={text()}>{text()}</ConsoleOutput>
+    </BasicTool>
   )
 }
