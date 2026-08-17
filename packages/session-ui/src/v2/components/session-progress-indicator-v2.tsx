@@ -1,18 +1,11 @@
-import { For, splitProps, type ComponentProps } from "solid-js"
+import { createUniqueId, splitProps, type ComponentProps } from "solid-js"
 import "./session-progress-indicator-v2.css"
 
-const grid = 5
-const dot = 2
-const gap = 1
-const origin = 1.5
-const dots = Array.from({ length: grid * grid }, (_, index) => ({
-  index,
-  x: origin + (index % grid) * (dot + gap),
-  y: origin + Math.floor(index / grid) * (dot + gap),
-}))
+const frames = new URL("./session-progress-indicator-v2-3x.png", import.meta.url).href
 
 export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
   const [local, rest] = splitProps(props, ["class", "classList", "width", "height"])
+  const mask = `session-progress-indicator-${createUniqueId()}`
   return (
     <svg
       {...rest}
@@ -26,7 +19,13 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
       data-component="session-progress-indicator-v2"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <For each={dots}>{(cell) => <rect data-dot={cell.index} x={cell.x} y={cell.y} width={dot} height={dot} />}</For>
+      <defs>
+        <mask id={mask} data-frame-mask maskUnits="userSpaceOnUse" x={0} y={0} width={16} height={16}>
+          <image href={frames} x={0} y={0} width={16} height={16} />
+        </mask>
+      </defs>
+      <rect data-frame-content x={0} y={0} width={16} height={16} fill="currentColor" mask={`url(#${mask})`} />
+      <rect data-reduced-motion x={7.5} y={7.5} width={2} height={2} />
     </svg>
   )
 }
