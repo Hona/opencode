@@ -453,7 +453,7 @@ const layer = Layer.effect(
         { concurrency: 2 },
       )
       const candidates = Array.from(new Set([...tracked, ...untracked]))
-      if (!candidates.length) return { skipped: [] }
+      if (!candidates.length) return
       const ignored = input.ignores
         ? new Set(
             (yield* repositoryOperation("refresh", input.ignores, ["check-ignore", "--no-index", "--stdin", "-z"], {
@@ -463,22 +463,24 @@ const layer = Layer.effect(
               .filter(Boolean),
           )
         : new Set<string>()
-      const allowed = candidates.filter((item) => !ignored.has(item))
+      const allowed = new Set(candidates.filter((item) => !ignored.has(item)))
       const maximum = input.maximumUntrackedFileBytes
-      const skipped = maximum
-        ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(item)),
-            (item) =>
-              fs.stat(path.join(input.repository.worktree, item)).pipe(
-                Effect.map((info) =>
-                  info.type === "File" && Number(info.size) > maximum ? RelativePath.make(item) : undefined,
+      const skipped = new Set(
+        maximum
+          ? (yield* Effect.forEach(
+              untracked.filter((item) => allowed.has(item)),
+              (item) =>
+                fs.stat(path.join(input.repository.worktree, item)).pipe(
+                  Effect.map((info) =>
+                    info.type === "File" && Number(info.size) > maximum ? RelativePath.make(item) : undefined,
+                  ),
+                  Effect.catch(() => Effect.succeed(undefined)),
                 ),
-                Effect.catch(() => Effect.succeed(undefined)),
-              ),
-            { concurrency: 8 },
-          )).filter((item): item is RelativePath => item !== undefined)
-        : []
-      const stage = allowed.filter((item) => !skipped.includes(RelativePath.make(item)))
+              { concurrency: 8 },
+            )).filter((item): item is RelativePath => item !== undefined)
+          : [],
+      )
+      const stage = candidates.filter((item) => allowed.has(item) && !skipped.has(RelativePath.make(item)))
       const remove = [...ignored, ...skipped]
       if (remove.length)
         yield* repositoryOperation(
@@ -494,7 +496,6 @@ const layer = Layer.effect(
           ["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
           { env, stdin: stage.join("\0") + "\0" },
         )
-      return { skipped }
     })
 
     const ignored = Effect.fn("Git.index.ignored")(function* (input: {
