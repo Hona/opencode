@@ -453,7 +453,7 @@ const layer = Layer.effect(
         { concurrency: 2 },
       )
       const candidates = Array.from(new Set([...tracked, ...untracked]))
-      if (!candidates.length) return
+      if (!candidates.length) return false
       const ignored = input.ignores
         ? new Set(
             (yield* repositoryOperation("refresh", input.ignores, ["check-ignore", "--no-index", "--stdin", "-z"], {
@@ -496,6 +496,7 @@ const layer = Layer.effect(
           ["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
           { env, stdin: stage.join("\0") + "\0" },
         )
+      return true
     })
 
     const ignored = Effect.fn("Git.index.ignored")(function* (input: {
@@ -559,7 +560,8 @@ const layer = Layer.effect(
         withTemporaryIndex(input.repository, "capture", (env) =>
           Effect.gen(function* () {
             yield* repositoryOperation("refresh", input.repository, ["read-tree", input.base], { env })
-            yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }, env), { discard: true })
+            const changed = yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }, env))
+            if (!changed.some(Boolean)) return input.base
             return yield* writeTree(input.repository, env)
           }),
         ),
