@@ -11,7 +11,7 @@ Derived from Figma \`_sessionProgressIndicator\` with 8-frame rotation.
 - Accepts standard SVG props.
 
 ### Behavior
-- A shared, pre-rendered alpha animation preserves the smooth opacity changes between 8 key poses (1.2s loop).
+- A shared, pre-rendered alpha mask preserves the smooth opacity changes between 8 key poses (1.2s loop).
 - Center dot stays at full opacity throughout the cycle.
 
 ### Accessibility

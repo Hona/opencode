@@ -4,9 +4,9 @@ import { createSignal, onCleanup, Show } from "solid-js"
 
 const search = new URLSearchParams(location.search)
 const requestedCount = search.has("count") ? Number(search.get("count")) : undefined
-const initialMode = search.get("mode") === "legacy" ? "legacy" : "atlas"
+const initialMode = search.get("mode") === "legacy" ? "legacy" : "mask"
 const benchmark = search.has("benchmark")
-const [mode, setMode] = createSignal<"legacy" | "atlas">(initialMode)
+const [mode, setMode] = createSignal<"legacy" | "mask">(initialMode)
 const measure = () => ({
   columns: Math.max(1, Math.floor((innerWidth + 4) / 20)),
   rows: Math.max(1, Math.floor((innerHeight + 4) / 20)),
@@ -14,8 +14,15 @@ const measure = () => ({
 const [grid, setGrid] = createSignal(measure())
 const capacity = () => grid().columns * grid().rows
 const count = () => requestedCount ?? capacity()
-const columns = () => Math.min(grid().columns, count())
-const rows = () => Math.ceil(count() / columns())
+const columns = () => (requestedCount === 200 ? 20 : requestedCount === 800 ? 40 : grid().columns)
+const rows = () => (requestedCount === 200 ? 10 : requestedCount === 800 ? 20 : grid().rows)
+const size = () => {
+  if (requestedCount === 200)
+    return Math.max(16, Math.min(32, (innerWidth / columns()) * 0.6, (innerHeight / rows()) * 0.6))
+  if (requestedCount === 800)
+    return Math.max(16, Math.min(24, (innerWidth / columns()) * 0.7, (innerHeight / rows()) * 0.7))
+  return 16
+}
 addEventListener("resize", () => setGrid(measure()))
 const opacity = [0.2, 0.5, 0.75, 1]
 const poses = [
@@ -42,9 +49,9 @@ const legacyKeyframes = dots
   )
   .join("\n")
 
-function LegacyIndicator() {
+function LegacyIndicator(props: { size: number }) {
   return (
-    <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden="true" data-legacy-indicator>
+    <svg width={props.size} height={props.size} viewBox="0 0 16 16" aria-hidden="true" data-legacy-indicator>
       {dots.map((dot) => (
         <rect
           x={dot.x}
@@ -59,7 +66,7 @@ function LegacyIndicator() {
   )
 }
 
-function Controls(props: { mode: () => "legacy" | "atlas"; setMode: (mode: "legacy" | "atlas") => void }) {
+function Controls(props: { mode: () => "legacy" | "mask"; setMode: (mode: "legacy" | "mask") => void }) {
   const [fps, setFps] = createSignal(0)
   const [slow, setSlow] = createSignal(0)
   let frame = 0
@@ -83,7 +90,7 @@ function Controls(props: { mode: () => "legacy" | "atlas"; setMode: (mode: "lega
   frame = requestAnimationFrame(update)
   onCleanup(() => cancelAnimationFrame(frame))
 
-  const select = (mode: "legacy" | "atlas") => {
+  const select = (mode: "legacy" | "mask") => {
     props.setMode(mode)
     const url = new URL(location.href)
     url.searchParams.set("mode", mode)
@@ -102,8 +109,8 @@ function Controls(props: { mode: () => "legacy" | "atlas"; setMode: (mode: "lega
         <button data-active={props.mode() === "legacy"} onClick={() => select("legacy")}>
           Old
         </button>
-        <button data-active={props.mode() === "atlas"} onClick={() => select("atlas")}>
-          Atlas
+        <button data-active={props.mode() === "mask"} onClick={() => select("mask")}>
+          Baked Mask
         </button>
       </div>
       <div id="count-switcher">
@@ -139,7 +146,6 @@ render(
           width: 100%;
           height: 100%;
           color: #808080;
-          gap: 4px;
           place-items: center;
           place-content: center;
         }
@@ -183,12 +189,17 @@ render(
         id="grid"
         data-mode={mode()}
         style={{
-          "grid-template-columns": `repeat(${columns()}, 16px)`,
-          "grid-template-rows": `repeat(${rows()}, 16px)`,
+          gap: requestedCount === undefined ? "4px" : "0",
+          "grid-template-columns": `repeat(${columns()}, ${requestedCount === undefined ? "16px" : "1fr"})`,
+          "grid-template-rows": `repeat(${rows()}, ${requestedCount === undefined ? "16px" : "1fr"})`,
         }}
       >
         {Array.from({ length: count() }, () =>
-          mode() === "legacy" ? <LegacyIndicator /> : <SessionProgressIndicatorV2 />,
+          mode() === "legacy" ? (
+            <LegacyIndicator size={size()} />
+          ) : (
+            <SessionProgressIndicatorV2 width={size()} height={size()} />
+          ),
         )}
       </main>
     </>
