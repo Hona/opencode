@@ -424,16 +424,6 @@
   }
 }
 
-[data-slot="execute-tool-icon"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  color: var(--v2-text-text-faint);
-}
-
 [data-component="edit-trigger"],
 [data-component="write-trigger"] {
   display: flex;
