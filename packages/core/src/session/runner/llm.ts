@@ -218,6 +218,7 @@ const layer = Layer.effect(
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
+        location: session.location,
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),

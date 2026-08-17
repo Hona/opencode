@@ -190,6 +190,13 @@ export const layerWith = (options?: LayerOptions) =>
           return created
         })
 
+      const resolveLocation = Effect.fnUntraced(function* (location: Location.Ref | undefined) {
+        if (location) return location
+        const service = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+        if (!service) return
+        return { directory: service.directory, workspaceID: service.workspaceID }
+      })
+
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           yield* PubSub.shutdown(pubsub.all)
@@ -418,12 +425,7 @@ export const layerWith = (options?: LayerOptions) =>
 
       function publish<D extends Definition>(definition: D, data: Data<D>, options?: PublishOptions) {
         return Effect.gen(function* () {
-          const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
-          const location =
-            options?.location ??
-            (serviceLocation
-              ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-              : undefined)
+          const location = yield* resolveLocation(options?.location)
           return yield* publishEvent(
             definition,
             {
