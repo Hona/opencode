@@ -27,8 +27,8 @@ export type UserMessage = {
   sessionID: string
   role: "user"
   time: { created: number }
-  agent?: string
-  model?: { providerID: string; modelID: string }
+  agent: string
+  model: { providerID: string; modelID: string }
   summary?: { title?: string; diffs: PresentationFileDiff[] }
 }
 
@@ -40,7 +40,7 @@ export type AssistantMessage = {
   time: { created: number; completed?: number }
   providerID: string
   modelID: string
-  agent?: string
+  agent: string
   error?: MessageError
 }
 
