@@ -633,6 +633,7 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
+    // TODO: Restore turn diffs when the V2 transcript exposes snapshot diffs.
     return []
   }
   const activeReviewFile = () => {
