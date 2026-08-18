@@ -93,4 +93,16 @@ describe("extractPromptFromMessage", () => {
       { type: "file", content: "src/client.ts", path: "src/client.ts" },
     ])
   })
+
+  test("uses model text when presentation metadata is incomplete", () => {
+    const message = {
+      id: "msg_1",
+      type: "user",
+      text: "model text",
+      metadata: { displayText: "partial display text" },
+      time: { created: 1 },
+    } satisfies SessionMessageUser
+
+    expect(extractPromptFromMessage(message)[0]).toMatchObject({ type: "text", content: "model text" })
+  })
 })

@@ -815,16 +815,22 @@ function MessageTimelineView(
       if (group.type !== "part") return
       return group.ref.partID
     })
+    const content = createMemo(() => {
+      const current = message()
+      const id = contentID()
+      if (current?.type !== "assistant" || !id) return
+      return Timeline.resolveContent(current, id)
+    })
     const defaultOpen = createMemo(() => {
       const group = row().group
       const current = message()
       if (group.type !== "part" || current?.type !== "assistant") return
-      const content = Timeline.resolveContent(current, group.ref.partID)
-      if (!content) return
+      const item = content()
+      if (!item) return
       return currentPartDefaultOpen(
         sessionID()!,
         current,
-        content,
+        item,
         group.ref.partID,
         props.data.shellToolPartsExpanded(),
         props.data.editToolPartsExpanded(),
@@ -836,20 +842,24 @@ function MessageTimelineView(
     return (
       <Show when={message()?.type === "assistant" ? (message() as SessionMessageAssistant) : undefined}>
         {(message) => (
-          <CurrentAssistantContent
-            sessionID={sessionID()!}
-            parentID={row().userMessageID}
-            message={message()}
-            content={Timeline.resolveContent(message(), id)!}
-            contentID={id}
-            showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-            turnDurationMs={turnDurationMs(row().userMessageID)}
-            useV2Actions
-            defaultOpen={defaultOpen()}
-            toolOpen={toolOpen[row().group.key] ?? defaultOpen()}
-            onToolOpenChange={(open) => setToolOpen(row().group.key, open)}
-            onContentRendered={onSizeChange}
-          />
+          <Show when={content()}>
+            {(content) => (
+              <CurrentAssistantContent
+                sessionID={sessionID()!}
+                parentID={row().userMessageID}
+                message={message()}
+                content={content()}
+                contentID={id}
+                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
+                turnDurationMs={turnDurationMs(row().userMessageID)}
+                useV2Actions
+                defaultOpen={defaultOpen()}
+                toolOpen={toolOpen[row().group.key] ?? defaultOpen()}
+                onToolOpenChange={(open) => setToolOpen(row().group.key, open)}
+                onContentRendered={onSizeChange}
+              />
+            )}
+          </Show>
         )}
       </Show>
     )
@@ -1005,7 +1015,9 @@ function MessageTimelineView(
       case "Retry": {
         const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
         const status = createMemo(() => {
-          const retry = (assistantMessagesByParent().get(retryRow().userMessageID) ?? emptyAssistantMessages).at(-1)?.retry
+          const retry = (assistantMessagesByParent().get(retryRow().userMessageID) ?? emptyAssistantMessages).at(
+            -1,
+          )?.retry
           if (!retry) return sessionStatus()
           return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
         })

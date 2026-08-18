@@ -32,6 +32,22 @@ describe("session message presentation", () => {
         text: { value: "@src/client.ts", start: 8, end: 22 },
       },
     })
+
+    const plainMention = {
+      ...message,
+      text: "inspect src/client.ts",
+      files: [
+        {
+          ...message.files[0],
+          name: "client.ts",
+          mention: { text: "src/client.ts", start: 8, end: 21 },
+        },
+      ],
+    } satisfies SessionMessageUser
+    expect(presentUserParts("ses_1", plainMention)[1]).toMatchObject({
+      type: "file",
+      source: { type: "file", path: "src/client.ts" },
+    })
   })
 
   test("projects current assistant content for existing DOM tools", () => {

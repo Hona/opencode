@@ -73,7 +73,7 @@ export function presentUserParts(sessionID: string, message: SessionMessageUser)
           ? {
               type: "file",
               text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
-              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : (file.name ?? file.mention.text),
+              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : file.mention.text,
             }
           : undefined,
       }),
