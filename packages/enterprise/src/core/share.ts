@@ -1,14 +1,25 @@
-import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { iife } from "@opencode-ai/core/util/iife"
 import z from "zod"
 import { Storage } from "./storage"
+import {
+  ShareData,
+  type ShareFileDiff,
+  type ShareMessage,
+  type ShareModel,
+  type SharePart,
+  type ShareSession,
+} from "./share-data"
 
 function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => Result) {
   return (input: z.infer<T>) => cb(schema.parse(input))
 }
 
 export namespace Share {
-  export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
+  export type Session = ShareSession
+  export type Message = ShareMessage
+  export type Part = SharePart
+  export type SessionDiff = ShareFileDiff
+  export type Model = ShareModel
 
   export const Info = z.object({
     id: z.string(),
@@ -17,38 +28,13 @@ export namespace Share {
   })
   export type Info = z.infer<typeof Info>
 
-  export const Data = z.discriminatedUnion("type", [
-    z.object({
-      type: z.literal("session"),
-      data: z.custom<Session>(),
-    }),
-    z.object({
-      type: z.literal("message"),
-      data: z.custom<Message>(),
-    }),
-    z.object({
-      type: z.literal("part"),
-      data: z.custom<Part>(),
-    }),
-    z.object({
-      type: z.literal("session_diff"),
-      data: z.custom<SessionDiff[]>(),
-    }),
-    z.object({
-      type: z.literal("model"),
-      data: z.custom<Model[]>(),
-    }),
-  ])
-  export type Data = z.infer<typeof Data>
+  export const Data = ShareData
+  export type Data = ShareData
 
-  type Snapshot = {
-    data: Data[]
-  }
-
-  type Compaction = {
-    event?: string
-    data: Data[]
-  }
+  const Snapshot = z.object({ data: ShareData.array() })
+  type Snapshot = z.infer<typeof Snapshot>
+  const Compaction = z.object({ event: z.string().optional(), data: ShareData.array() })
+  type Compaction = z.infer<typeof Compaction>
 
   function key(item: Data) {
     switch (item.type) {
@@ -78,7 +64,8 @@ export namespace Share {
   }
 
   async function readSnapshot(shareID: string) {
-    return (await Storage.read<Snapshot>(["share_snapshot", shareID]))?.data
+    const value = await Storage.read<unknown>(["share_snapshot", shareID])
+    return value === undefined ? undefined : Snapshot.parse(value).data
   }
 
   async function writeSnapshot(shareID: string, data: Data[]) {
@@ -86,10 +73,8 @@ export namespace Share {
   }
 
   async function legacy(shareID: string) {
-    const compaction: Compaction = (await Storage.read<Compaction>(["share_compaction", shareID])) ?? {
-      data: [],
-      event: undefined,
-    }
+    const stored = await Storage.read<unknown>(["share_compaction", shareID])
+    const compaction: Compaction = stored === undefined ? { data: [], event: undefined } : Compaction.parse(stored)
     const list = await Storage.list({
       prefix: ["share_event", shareID],
       before: compaction.event,
@@ -101,9 +86,12 @@ export namespace Share {
 
     const next = merge(
       compaction.data,
-      await Promise.all(list.map(async (event) => await Storage.read<Data[]>(event))).then((x) =>
-        x.flatMap((item) => item ?? []),
-      ),
+      await Promise.all(
+        list.map(async (event) => {
+          const value = await Storage.read<unknown>(event)
+          return value === undefined ? [] : ShareData.array().parse(value)
+        }),
+      ).then((items) => items.flat()),
     )
 
     await Promise.all([
@@ -130,7 +118,8 @@ export namespace Share {
   })
 
   export async function get(id: string) {
-    return Storage.read<Info>(["share", id])
+    const value = await Storage.read<unknown>(["share", id])
+    return value === undefined ? undefined : Info.parse(value)
   }
 
   export const remove = fn(Info.pick({ id: true, secret: true }), async (body) => {
@@ -191,13 +180,14 @@ export namespace Share {
                 await Storage.write(["share_data", input.share.id, "session"], item.data)
                 break
               case "message": {
-                const data = item.data as Message
-                await Storage.write(["share_data", input.share.id, "message", data.id], item.data)
+                await Storage.write(["share_data", input.share.id, "message", item.data.id], item.data)
                 break
               }
               case "part": {
-                const data = item.data as Part
-                await Storage.write(["share_data", input.share.id, "part", data.messageID, data.id], item.data)
+                await Storage.write(
+                  ["share_data", input.share.id, "part", item.data.messageID, item.data.id],
+                  item.data,
+                )
                 break
               }
               case "session_diff":
