@@ -1,3 +1,4 @@
+// TODO: Delete this contract when Session UI renders current Client messages directly.
 export type PresentationFileDiff = {
   file?: string
   patch?: string
