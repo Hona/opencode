@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createSignal } from "solid-js"
-import { Field } from "../field/field"
+import { Field } from "@opencode-ai/ui/field"
 import { InlineInput } from "./inline-input"
 
 const docs = `### Overview

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Card, CardActions, CardDescription, CardTitle } from "./card"
-import { Button } from "../actions/button/button"
+import { Button } from "@opencode-ai/ui/button"
 
 const docs = `### Overview
 Surface container for grouping related content and actions.

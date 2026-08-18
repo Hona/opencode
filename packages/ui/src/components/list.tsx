@@ -3,8 +3,8 @@ import { createEffect, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
-import { Icon, type IconProps } from "../icons/icon/icon"
-import { IconButton } from "../actions/icon-button/icon-button"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "./text-field"
 
 function findByKey(container: HTMLElement, key: string) {

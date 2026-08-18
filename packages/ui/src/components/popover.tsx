@@ -3,7 +3,7 @@ import { ComponentProps, JSXElement, ParentProps, Show, createEffect, splitProps
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
-import { IconButton } from "../actions/icon-button/icon-button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 
 export interface PopoverProps<T extends ValidComponent = "div">
   extends ParentProps,

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import * as mod from "./dropdown-menu"
-import { Button } from "../actions/button/button"
+import { Button } from "@opencode-ai/ui/button"
 
 const docs = `### Overview
 Dropdown menu built on Kobalte with composable items, groups, and submenus.
