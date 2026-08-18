@@ -1750,10 +1750,9 @@ export default function Page() {
       >
         <Tabs.Trigger
           value="session"
+          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           classList={{
             "!w-1/2 !max-w-none": true,
-            "[&>[data-slot=tabs-v2-trigger]]:w-full": true,
-            "[&>[data-slot=tabs-v2-trigger]]:!py-2": compact,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
           onClick={() => setStore("mobileTab", "session")}
@@ -1762,10 +1761,9 @@ export default function Page() {
         </Tabs.Trigger>
         <Tabs.Trigger
           value="changes"
+          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           classList={{
             "!w-1/2 !max-w-none !border-r-0": true,
-            "[&>[data-slot=tabs-v2-trigger]]:w-full": true,
-            "[&>[data-slot=tabs-v2-trigger]]:!py-2": compact,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
           onClick={() => setStore("mobileTab", "changes")}

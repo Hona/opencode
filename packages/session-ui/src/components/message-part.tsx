@@ -1504,7 +1504,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
     >
       <Accordion.Item value={value()}>
         <StickyAccordionHeader>
-          <Accordion.Trigger hideChevron>
+          <Accordion.Trigger>
             <div data-slot="apply-patch-trigger-content">
               <div data-slot="apply-patch-file-info">
                 <FileIcon node={{ path: props.path, type: "file" }} />
@@ -2489,7 +2489,7 @@ ToolRegistry.register({
                       return (
                         <Accordion.Item value={file.filePath} data-type={file.type}>
                           <StickyAccordionHeader>
-                            <Accordion.Trigger hideChevron>
+                            <Accordion.Trigger>
                               <div data-slot="apply-patch-trigger-content">
                                 <div data-slot="apply-patch-file-info">
                                   <FileIcon node={{ path: file.relativePath, type: "file" }} />
@@ -2656,18 +2656,14 @@ ToolRegistry.register({
           <div data-component="todos">
             <For each={todos()}>
               {(todo: Todo) => (
-                <Checkbox
-                  readOnly
-                  checked={todo.status === "completed"}
-                  label={
-                    <span
-                      data-slot="message-part-todo-content"
-                      data-completed={todo.status === "completed" ? "completed" : undefined}
-                    >
-                      {todo.content}
-                    </span>
-                  }
-                />
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <span
+                    data-slot="message-part-todo-content"
+                    data-completed={todo.status === "completed" ? "completed" : undefined}
+                  >
+                    {todo.content}
+                  </span>
+                </Checkbox>
               )}
             </For>
           </div>

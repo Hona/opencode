@@ -6,9 +6,11 @@
 @import "./base.css" layer(base);
 @import "katex/dist/katex.min.css" layer(base);
 
+@import "../data-display/accordion/accordion.css" layer(components);
 @import "../components/animated-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/card.css" layer(components);
+@import "../forms/checkbox/checkbox.css" layer(components);
 @import "../components/collapsible.css" layer(components);
 @import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
@@ -17,6 +19,7 @@
 @import "../components/provider-icon.css" layer(components);
 @import "../components/dock-surface.css" layer(components);
 @import "../components/image-preview.css" layer(components);
+@import "../forms/inline-input/inline-input.css" layer(components);
 @import "../components/text-field.css" layer(components);
 @import "../components/list.css" layer(components);
 @import "../components/logo.css" layer(components);
@@ -26,6 +29,7 @@
 @import "../components/spinner.css" layer(components);
 @import "../components/scroll-view.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
+@import "../navigation/tabs/tabs.css" layer(components);
 @import "../components/tag.css" layer(components);
 @import "../components/text-reveal.css" layer(components);
 @import "../components/text-strikethrough.css" layer(components);

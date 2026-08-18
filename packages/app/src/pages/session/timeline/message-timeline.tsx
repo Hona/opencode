@@ -17,6 +17,7 @@ import { MessageDivider, SessionShellMessage, type UserActions } from "@opencode
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Menu } from "@opencode-ai/ui/menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
@@ -1222,7 +1223,7 @@ function MessageTimelineView(
                         </h1>
                       }
                     >
-                      <input
+                      <InlineInput
                         ref={(el) => {
                           titleRef = el
                         }}
@@ -1232,6 +1233,7 @@ function MessageTimelineView(
                         disabled={props.pending.rename()}
                         class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
                         style={{
+                          "--inline-input-shadow": "none",
                           "text-align": "start",
                         }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}

@@ -267,7 +267,7 @@ export function SessionSidePanel(props: {
                         activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
                         preventActivation: (event) =>
                           event.target instanceof Element &&
-                          (!!event.target.closest('[data-slot="tabs-v2-close-button"]') ||
+                          (!!event.target.closest('[data-slot="tabs-trigger-close-button"]') ||
                             !!event.target.closest(".session-review-v2-open-in-app-slot")),
                       }),
                     ]}
@@ -310,28 +310,34 @@ export function SessionSidePanel(props: {
                             </Tabs.Trigger>
                           </Show>
                           <Show when={contextOpen()}>
-                            <Tabs.Trigger value="context" onMiddleClick={() => tabs().close("context")}>
+                            <Tabs.Trigger
+                              value="context"
+                              onMiddleClick={() => tabs().close("context")}
+                              closeButton={
+                                <Tooltip
+                                  value={
+                                    <>
+                                      {language.t("common.closeTab")}
+                                      <Show when={closeTabKeybind().length > 0}>
+                                        <Keybind keys={closeTabKeybind()} variant="neutral" />
+                                      </Show>
+                                    </>
+                                  }
+                                  placement="bottom"
+                                  gutter={10}
+                                >
+                                  <Tabs.CloseButton
+                                    onClick={() => tabs().close("context")}
+                                    aria-label={language.t("common.closeTab")}
+                                  />
+                                </Tooltip>
+                              }
+                              hideCloseButton
+                            >
                               <div class="flex items-center gap-2">
                                 <SessionContextUsage variant="indicator" />
                                 <div>{language.t("session.tab.context")}</div>
                               </div>
-                              <Tooltip
-                                value={
-                                  <>
-                                    {language.t("common.closeTab")}
-                                    <Show when={closeTabKeybind().length > 0}>
-                                      <Keybind keys={closeTabKeybind()} variant="neutral" />
-                                    </Show>
-                                  </>
-                                }
-                                placement="bottom"
-                                gutter={10}
-                              >
-                                <Tabs.CloseButton
-                                  onClick={() => tabs().close("context")}
-                                  aria-label={language.t("common.closeTab")}
-                                />
-                              </Tooltip>
                             </Tabs.Trigger>
                           </Show>
                           <For each={panelTabs()}>
@@ -351,28 +357,31 @@ export function SessionSidePanel(props: {
                                 <Tabs.Trigger
                                   value={SESSION_OPEN_FILE_TAB}
                                   onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+                                  closeButton={
+                                    <Tooltip
+                                      value={
+                                        <>
+                                          {language.t("common.closeTab")}
+                                          <Show when={closeTabKeybind().length > 0}>
+                                            <Keybind keys={closeTabKeybind()} variant="neutral" />
+                                          </Show>
+                                        </>
+                                      }
+                                      placement="bottom"
+                                      gutter={10}
+                                    >
+                                      <Tabs.CloseButton
+                                        onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+                                        aria-label={language.t("common.closeTab")}
+                                      />
+                                    </Tooltip>
+                                  }
+                                  hideCloseButton
                                 >
                                   <div class="flex items-center gap-1.5 italic">
                                     <Icon name="open-file" size="small" />
                                     <span>{language.t("command.file.open")}</span>
                                   </div>
-                                  <Tooltip
-                                    value={
-                                      <>
-                                        {language.t("common.closeTab")}
-                                        <Show when={closeTabKeybind().length > 0}>
-                                          <Keybind keys={closeTabKeybind()} variant="neutral" />
-                                        </Show>
-                                      </>
-                                    }
-                                    placement="bottom"
-                                    gutter={10}
-                                  >
-                                    <Tabs.CloseButton
-                                      onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
-                                      aria-label={language.t("common.closeTab")}
-                                    />
-                                  </Tooltip>
                                 </Tabs.Trigger>
                               </Show>
                             )}
@@ -487,17 +496,17 @@ export function SessionSidePanel(props: {
                   classList={{ "border-l border-border-weaker-base": reviewOpen() }}
                 >
                   <Tabs
-                    variant="pill"
+                    variant="surface"
                     value={fileTreeTab()}
                     onChange={setFileTreeTabValue}
                     class="h-full"
                     data-scope="filetree"
                   >
                     <Tabs.List>
-                      <Tabs.Trigger value="changes" class="flex-1 [&>[data-slot=tabs-v2-trigger]]:w-full">
+                      <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                         {language.t("session.review.filesChanged", { count: props.reviewCount })}
                       </Tabs.Trigger>
-                      <Tabs.Trigger value="all" class="flex-1 [&>[data-slot=tabs-v2-trigger]]:w-full">
+                      <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         {language.t("session.files.all")}
                       </Tabs.Trigger>
                     </Tabs.List>

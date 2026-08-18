@@ -1,20 +1,17 @@
 // @ts-nocheck
-import { createSignal } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Checkbox } from "./checkbox"
 
 const docs = `### Overview
-Binary and tri-state checkbox using Kobalte Checkbox.
+Checkbox control for multi-select or agreement inputs.
 
 ### API
-- Forwards Kobalte Checkbox props (\`checked\`, \`defaultChecked\`, \`onChange\`, \`indeterminate\`, \`name\`, \`required\`, \`validationState\`, \`disabled\`, etc.).
-- Adds \`label\`, optional \`description\`, and \`hideLabel\`.
-
-### Behavior
-- Controlled or uncontrolled via \`checked\` / \`defaultChecked\`.
-- Indeterminate is driven by the \`indeterminate\` prop (pass a reactive boolean, e.g. \`indeterminate={flag()}\`).
+- Uses Kobalte Checkbox props.
+- Optional: \`hideLabel\`, \`description\`, \`icon\`.
+- Children render as the label.
 
 ### Theming/tokens
-- Uses \`data-slot="checkbox-v2"\` and slot attributes aligned with radio item layout.
+- Uses \`data-component="checkbox"\` and related slots.
 `
 
 export default {
@@ -22,71 +19,28 @@ export default {
   id: "ui-checkbox",
   component: Checkbox,
   tags: ["autodocs"],
-  parameters: {
-    docs: {
-      description: {
-        component: docs,
-      },
-    },
-  },
+  parameters: { docs: { description: { component: docs } } },
 }
 
-export const Basic = {
-  render: () => (
-    <Checkbox defaultChecked={false} name="terms" label="Accept terms" description="You must accept to continue." />
-  ),
-}
-
-export const Controlled = {
-  render: () => {
-    const [checked, setChecked] = createSignal(false)
-    return (
-      <div style={{ display: "grid", gap: "12px" }}>
-        <Checkbox
-          name="controlled"
-          checked={checked()}
-          onChange={setChecked}
-          label="Controlled checkbox"
-          description="Toggled from Storybook state."
-        />
-        <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
-          Checked: {String(checked())}
-        </div>
-      </div>
-    )
-  },
-}
-
-export const Indeterminate = {
-  render: () => {
-    const [indeterminate, setIndeterminate] = createSignal(true)
-    const [checked, setChecked] = createSignal(false)
-    return (
-      <Checkbox
-        name="indeterminate-demo"
-        checked={checked()}
-        indeterminate={indeterminate()}
-        onChange={(v) => {
-          setChecked(v)
-          if (v) setIndeterminate(false)
-        }}
-        label="Select all"
-        description="Starts indeterminate; checking clears mixed state."
-      />
-    )
-  },
-}
+export const Basic = { render: () => <Checkbox defaultChecked>Checkbox</Checkbox> }
 
 export const States = {
   render: () => (
-    <div style={{ display: "grid", gap: "20px" }}>
-      <Checkbox name="s1" label="Default" description="Helper text." />
-      <Checkbox name="s2" defaultChecked label="Checked" />
-      <Checkbox name="s3" indeterminate label="Indeterminate" />
-      <Checkbox name="s4" disabled label="Disabled" />
-      <Checkbox name="s5" disabled defaultChecked label="Checked disabled" />
-      <Checkbox name="s6" disabled indeterminate label="Indeterminate disabled" />
-      <Checkbox name="s7" label="Invalid" description="Must be checked." required validationState="invalid" />
+    <div style={{ display: "grid", gap: "12px" }}>
+      <Checkbox defaultChecked>Checked</Checkbox>
+      <Checkbox>Unchecked</Checkbox>
+      <Checkbox disabled>Disabled</Checkbox>
+      <Checkbox description="Helper text">With description</Checkbox>
     </div>
   ),
 }
+
+export const CustomIcon = {
+  render: () => (
+    <Checkbox icon={<Icon name="check" size="small" />} defaultChecked>
+      Custom icon
+    </Checkbox>
+  ),
+}
+
+export const HiddenLabel = { render: () => <Checkbox hideLabel>Hidden label</Checkbox> }

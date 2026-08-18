@@ -86,13 +86,13 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
     reducedMotion: true,
   })
   const part = page.locator(`[data-timeline-part-id="${patchID}"]`)
-  const card = part.locator('[data-component="accordion-v2"][data-scope="apply-patch"]')
+  const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
   const row = page.locator("[data-timeline-key]", { has: part })
   await expect(card).toBeVisible()
   await timeline.settle()
 
   const geometry = await row.evaluate((element) => {
-    const card = element.querySelector<HTMLElement>('[data-component="accordion-v2"][data-scope="apply-patch"]')
+    const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
     if (!card) throw new Error("Patch card is unavailable")
     const rowRect = element.getBoundingClientRect()
     const cardRect = card.getBoundingClientRect()

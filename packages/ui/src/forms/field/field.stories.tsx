@@ -6,7 +6,7 @@ import { TextInput } from "@opencode-ai/ui/text-input"
 import { Textarea } from "@opencode-ai/ui/textarea"
 
 const docs = `### Overview
-Composable field layout for TextInput, Textarea, and InlineInput v2.
+Composable field layout for TextInput, Textarea, and InlineInput.
 
 ### Usage
 \`\`\`tsx
@@ -97,7 +97,7 @@ export const InlineInputExample = {
       <Field>
         <Field.Label>Label</Field.Label>
         <Field.Prefix>Prefix</Field.Prefix>
-        <InlineInput prefix="USD" placeholder="0.00" numeric showCopyButton />
+        <InlineInput placeholder="0.00" width="100%" />
         <Field.Suffix>Suffix</Field.Suffix>
       </Field>
     </div>

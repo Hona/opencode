@@ -209,7 +209,7 @@
     transition: transform 0.15s ease;
   }
 
-  [data-component="accordion-v2-item"][data-expanded] [data-slot="session-turn-diff-chevron"] {
+  [data-slot="accordion-item"][data-expanded] [data-slot="session-turn-diff-chevron"] {
     transform: rotate(0deg);
   }
 

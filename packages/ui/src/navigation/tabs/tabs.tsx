@@ -1,150 +1,188 @@
 import { Content, List, Root, Trigger } from "@kobalte/core/tabs"
-import { Show, splitProps, type JSX } from "solid-js"
-import type { ComponentProps, ParentProps, Component } from "solid-js"
+import { createContext, Show, splitProps, useContext, type JSX } from "solid-js"
+import type { Component, ComponentProps, ParentProps } from "solid-js"
 import { useI18n } from "../../context/i18n"
-import "./tabs.css"
+import "./tabs-current.css"
+
+export type TabsVariant = "panel" | "underline" | "surface" | "line" | "pill" | "settings"
 
 export interface TabsProps extends ComponentProps<typeof Root> {
-  variant?: "normal" | "pill" | "settings"
+  variant?: TabsVariant
   orientation?: "horizontal" | "vertical"
 }
 export interface TabsListProps extends ComponentProps<typeof List> {}
 export interface TabsTriggerProps extends ComponentProps<typeof Trigger> {
+  classes?: { button?: string }
+  closeButton?: JSX.Element
+  hideCloseButton?: boolean
   onMiddleClick?: () => void
-  /** Optional subtext shown beside the primary content (muted style) */
   subtext?: JSX.Element | string
 }
-export interface TabsCloseButtonProps extends ComponentProps<"div"> {}
+export interface TabsCloseButtonProps extends ComponentProps<"button"> {}
 export interface TabsContentProps extends ComponentProps<typeof Content> {}
 
+const TabsContext = createContext<{ current: () => boolean }>({ current: () => false })
+
 function TabsRoot(props: TabsProps) {
-  const [split, rest] = splitProps(props, ["class", "classList", "variant", "orientation"])
+  const [local, rest] = splitProps(props, ["class", "classList", "variant", "orientation", "children"])
+  const variant = () => local.variant ?? "panel"
+  const current = () => variant() === "line" || variant() === "pill" || variant() === "settings"
+  const dataVariant = () => {
+    if (variant() === "panel" || variant() === "line") return "normal"
+    if (variant() === "underline") return "alt"
+    if (variant() === "surface") return "pill"
+    return variant()
+  }
   return (
-    <Root
-      {...rest}
-      orientation={split.orientation}
-      data-component="tabs-v2"
-      data-variant={split.variant || "normal"}
-      data-orientation={split.orientation || "horizontal"}
-      classList={{
-        ...split.classList,
-        [split.class ?? ""]: !!split.class,
-      }}
-    />
+    <TabsContext.Provider value={{ current }}>
+      <Root
+        {...rest}
+        orientation={local.orientation}
+        data-component={current() ? "tabs-v2" : "tabs"}
+        data-variant={dataVariant()}
+        data-orientation={local.orientation || "horizontal"}
+        classList={{
+          ...local.classList,
+          [local.class ?? ""]: !!local.class,
+        }}
+      >
+        {local.children}
+      </Root>
+    </TabsContext.Provider>
   )
 }
 
 function TabsList(props: TabsListProps) {
-  const [split, rest] = splitProps(props, ["class", "classList"])
+  const ctx = useContext(TabsContext)
+  const [local, rest] = splitProps(props, ["class", "classList"])
   return (
     <List
       {...rest}
-      data-slot="tabs-v2-list"
+      data-slot={ctx.current() ? "tabs-v2-list" : "tabs-list"}
       classList={{
-        ...split.classList,
-        [split.class ?? ""]: !!split.class,
+        ...local.classList,
+        [local.class ?? ""]: !!local.class,
       }}
     />
   )
 }
 
 function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
-  const [split, rest] = splitProps(props, ["class", "classList", "children", "onMiddleClick", "subtext"])
+  const ctx = useContext(TabsContext)
+  const [local, rest] = splitProps(props, [
+    "class",
+    "classList",
+    "classes",
+    "children",
+    "closeButton",
+    "hideCloseButton",
+    "onMiddleClick",
+    "subtext",
+    "dir",
+  ])
+  const wrapperSlot = () => (ctx.current() ? "tabs-v2-trigger-wrapper" : "tabs-trigger-wrapper")
+  const triggerSlot = () => (ctx.current() ? "tabs-v2-trigger" : "tabs-trigger")
+  const closeSlot = () => (ctx.current() ? "tabs-v2-trigger-close-button" : "tabs-trigger-close-button")
   return (
     <div
-      data-slot="tabs-v2-trigger-wrapper"
+      data-slot={wrapperSlot()}
       data-value={props.value}
       classList={{
-        ...split.classList,
-        [split.class ?? ""]: !!split.class,
+        ...local.classList,
+        [local.class ?? ""]: !!local.class,
       }}
-      onMouseDown={(e) => {
-        if (e.button === 1 && split.onMiddleClick) {
-          e.preventDefault()
-        }
+      onMouseDown={(event) => {
+        if (event.button !== 1 || !local.onMiddleClick) return
+        event.preventDefault()
       }}
-      onAuxClick={(e) => {
-        if (e.button === 1 && split.onMiddleClick) {
-          e.preventDefault()
-          split.onMiddleClick()
-        }
+      onAuxClick={(event) => {
+        if (event.button !== 1 || !local.onMiddleClick) return
+        event.preventDefault()
+        local.onMiddleClick()
       }}
     >
-      <Trigger {...rest} dir="auto" data-slot="tabs-v2-trigger" data-value={props.value}>
-        <span class="inline-flex items-center gap-2" data-slot="tabs-v2-trigger-content">
-          {split.children}
-          <Show when={split.subtext}>
-            {(subtext) => (
-              <span data-slot="tabs-v2-subtext" class="ms-2 text-xs text-text-weak">
-                {subtext()}
-              </span>
-            )}
-          </Show>
-        </span>
+      <Trigger
+        {...rest}
+        dir={local.dir ?? "auto"}
+        data-slot={triggerSlot()}
+        data-value={props.value}
+        classList={{ [local.classes?.button ?? ""]: !!local.classes?.button }}
+      >
+        <Show when={ctx.current()} fallback={local.children}>
+          <span class="inline-flex items-center gap-2" data-slot="tabs-v2-trigger-content">
+            {local.children}
+            <Show when={local.subtext}>
+              {(subtext) => (
+                <span data-slot="tabs-v2-subtext" class="ms-2 text-xs text-text-weak">
+                  {subtext()}
+                </span>
+              )}
+            </Show>
+          </span>
+        </Show>
       </Trigger>
+      <Show when={local.closeButton}>
+        {(closeButton) => (
+          <div data-slot={closeSlot()} data-hidden={local.hideCloseButton ? "" : undefined}>
+            {closeButton()}
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
 
 function TabsCloseButton(props: TabsCloseButtonProps) {
   const i18n = useI18n()
-  const [local, rest] = splitProps(props, ["class", "classList", "onClick", "onKeyDown"])
+  const [local, rest] = splitProps(props, ["class", "classList", "onClick", "onPointerDown", "aria-label"])
   return (
-    <div
-      role="button"
-      tabindex={0}
-      aria-label={i18n.t("ui.tabs.close")}
-      data-slot="tabs-v2-close-button"
+    <button
+      type="button"
       {...rest}
+      aria-label={local["aria-label"] ?? i18n.t("ui.tabs.close")}
+      data-slot="tabs-close-button"
       classList={{
         [local.class ?? ""]: !!local.class,
         ...local.classList,
       }}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (typeof local.onClick === "function") {
-          local.onClick(e)
-        }
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        if (typeof local.onPointerDown === "function") local.onPointerDown(event)
       }}
-      onKeyDown={(event) => {
-        if (typeof local.onKeyDown === "function") local.onKeyDown(event)
-        if (event.defaultPrevented) return
-        if (event.key !== "Enter" && event.key !== " ") return
+      onClick={(event) => {
         event.preventDefault()
-        event.currentTarget.click()
-      }}
-      onMouseDown={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
+        event.stopPropagation()
+        if (typeof local.onClick === "function") local.onClick(event)
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M10.8889 3.11108L3.11108 10.8889" stroke="currentColor" stroke-linejoin="round" />
         <path d="M3.11108 3.11108L10.8889 10.8889" stroke="currentColor" stroke-linejoin="round" />
       </svg>
-    </div>
+    </button>
   )
 }
 
 function TabsContent(props: ParentProps<TabsContentProps>) {
-  const [split, rest] = splitProps(props, ["class", "classList", "children"])
+  const ctx = useContext(TabsContext)
+  const [local, rest] = splitProps(props, ["class", "classList", "children"])
   return (
     <Content
       {...rest}
-      data-slot="tabs-v2-content"
+      data-slot={ctx.current() ? "tabs-v2-content" : "tabs-content"}
       classList={{
-        ...split.classList,
-        [split.class ?? ""]: !!split.class,
+        ...local.classList,
+        [local.class ?? ""]: !!local.class,
       }}
     >
-      {split.children}
+      {local.children}
     </Content>
   )
 }
 
 const TabsSectionTitle: Component<ParentProps> = (props) => {
-  return <div data-slot="tabs-v2-section-title">{props.children}</div>
+  const ctx = useContext(TabsContext)
+  return <div data-slot={ctx.current() ? "tabs-v2-section-title" : "tabs-section-title"}>{props.children}</div>
 }
 
 export const Tabs = Object.assign(TabsRoot, {

@@ -1,4 +1,3 @@
-import { Show } from "solid-js"
 import { Tabs, type TabsProps } from "./tabs"
 
 const docs = `
@@ -25,7 +24,7 @@ export default {
   argTypes: {
     variant: {
       control: "select",
-      options: ["normal", "pill", "settings"],
+      options: ["panel", "underline", "surface", "line", "pill", "settings"],
     },
     orientation: {
       control: "select",
@@ -90,7 +89,7 @@ export const Settings = {
 
 export const Normal = {
   args: {
-    variant: "normal",
+    variant: "line",
     orientation: "horizontal",
     defaultValue: "first",
   },
@@ -121,9 +120,11 @@ export const Pill = {
       <Tabs.List>
         <Tabs.Trigger value="first">First</Tabs.Trigger>
         <Tabs.Trigger value="second">Second</Tabs.Trigger>
-        <Tabs.Trigger value="third">
+        <Tabs.Trigger
+          value="third"
+          closeButton={<Tabs.CloseButton onClick={() => console.log("Close tab-3")} />}
+        >
           Closable
-          <Tabs.CloseButton onClick={() => console.log("Close tab-3")} />
         </Tabs.Trigger>
       </Tabs.List>
       <Tabs.Content value="first">
@@ -141,18 +142,18 @@ export const Pill = {
 
 export const Closable = {
   args: {
-    variant: "normal",
+    variant: "panel",
     orientation: "horizontal",
     defaultValue: "tab-1",
   },
   render: (props: TabsProps) => (
     <Tabs {...props}>
       <Tabs.List>
-        <Tabs.Trigger value="tab-1">
+        <Tabs.Trigger
+          value="tab-1"
+          closeButton={<Tabs.CloseButton onClick={() => console.log("Close tab-1")} />}
+        >
           Tab 1
-          <Show when={true}>
-            <Tabs.CloseButton onClick={() => console.log("Close tab-1")} />
-          </Show>
         </Tabs.Trigger>
         <Tabs.Trigger value="tab-2">Tab 2</Tabs.Trigger>
       </Tabs.List>

@@ -1,20 +1,28 @@
 // @ts-nocheck
+import { createEffect, createSignal } from "solid-js"
 import { Accordion } from "./accordion"
 
 const docs = `### Overview
-Compound accordion built on Kobalte's \`Accordion\` primitive. The trigger automatically renders a chevron that rotates open.
+Accordion for collapsible content sections with optional multi-open behavior.
+
+Use one trigger per item; keep content concise.
 
 ### API
-- \`Accordion\` — root; forwards Kobalte props (\`multiple\`, \`collapsible\`, \`value\`, \`defaultValue\`, \`onChange\`, etc.).
-- \`Accordion.Item\` — one expandable row; requires a unique \`value: string\`.
-- \`Accordion.Header\` — wraps the trigger; preserves heading semantics.
-- \`Accordion.Trigger\` — auto-renders a trailing chevron; pass \`hideChevron\` to opt out.
-- \`Accordion.Content\` — body shown when the item is expanded; height-animated.
+- Root supports Kobalte Accordion props: \`value\`, \`multiple\`, \`collapsible\`, \`onChange\`.
+- Compose with \`Accordion.Item\`, \`Header\`, \`Trigger\`, \`Content\`.
+
+### Variants and states
+- Single or multiple open items.
+- Collapsible or fixed-open behavior.
 
 ### Behavior
-- Single-select by default (\`collapsible\` allows closing the active item). Use \`multiple\` to let several items open at once.
-- Open/closed state is reflected on items, triggers, and content via \`data-expanded\` / \`data-closed\`.
-- Content height animates using Kobalte's \`--kb-collapsible-content-height\` variable.
+- Controlled via \`value\`/\`onChange\` when provided.
+
+### Accessibility
+- Uses Kobalte Accordion keyboard and ARIA behavior.
+
+### Theming/tokens
+- Uses \`data-component="accordion"\` and slot data attributes.
 `
 
 export default {
@@ -22,156 +30,76 @@ export default {
   id: "ui-accordion",
   component: Accordion,
   tags: ["autodocs"],
-  parameters: {
-    frameBackground: "#f5f5f5",
-    docs: {
-      description: {
-        component: docs,
-      },
-    },
-  },
+  parameters: { docs: { description: { component: docs } } },
 }
 
-const frame = { width: "346px", "font-family": "var(--v2-font-family-sans)", "font-size": "13px" } as const
-
 export const Basic = {
-  render: () => (
-    <div style={frame}>
-      <Accordion collapsible defaultValue={["item-1"]}>
-        <Accordion.Item value="item-1">
-          <Accordion.Header>
-            <Accordion.Trigger>Is it accessible?</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>
-            Yes. It follows the WAI-ARIA Accordion pattern and ships with full keyboard support.
-          </Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="item-2">
-          <Accordion.Header>
-            <Accordion.Trigger>Is it styled?</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Yeah</Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="item-3">
-          <Accordion.Header>
-            <Accordion.Trigger>Is it animated?</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Yes. Height animates via Kobalte's collapsible height variable.</Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
-    </div>
-  ),
+  args: { collapsible: true, multiple: false, value: "first" },
+  argTypes: {
+    collapsible: { control: "boolean" },
+    multiple: { control: "boolean" },
+    value: { control: "select", options: ["first", "second", "none"], mapping: { none: undefined } },
+  },
+  render: (props) => {
+    const [value, setValue] = createSignal(props.value)
+    createEffect(() => setValue(props.value))
+    const current = () => {
+      if (props.multiple) return Array.isArray(value()) ? value() : value() ? [value()] : []
+      return Array.isArray(value()) ? value()[0] : value()
+    }
+    return (
+      <div style={{ display: "grid", gap: "8px", width: "420px" }}>
+        <Accordion collapsible={props.collapsible} multiple={props.multiple} value={current()} onChange={setValue}>
+          <Accordion.Item value="first">
+            <Accordion.Header>
+              <Accordion.Trigger>First</Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>Accordion content.</div>
+            </Accordion.Content>
+          </Accordion.Item>
+          <Accordion.Item value="second">
+            <Accordion.Header>
+              <Accordion.Trigger>Second</Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>More content.</div>
+            </Accordion.Content>
+          </Accordion.Item>
+        </Accordion>
+      </div>
+    )
+  },
 }
 
 export const Multiple = {
   render: () => (
-    <div style={frame}>
-      <Accordion multiple defaultValue={["a", "c"]}>
-        <Accordion.Item value="a">
-          <Accordion.Header>
-            <Accordion.Trigger>Section A</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Multiple items can be open at once.</Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="b">
-          <Accordion.Header>
-            <Accordion.Trigger>Section B</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Open me too.</Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="c">
-          <Accordion.Header>
-            <Accordion.Trigger>Section C</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Already open by default.</Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
-    </div>
+    <Accordion multiple value={["first", "second"]}>
+      <Accordion.Item value="first">
+        <Accordion.Header>
+          <Accordion.Trigger>First</Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content>Accordion content.</Accordion.Content>
+      </Accordion.Item>
+      <Accordion.Item value="second">
+        <Accordion.Header>
+          <Accordion.Trigger>Second</Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content>More content.</Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
   ),
 }
 
-export const Disabled = {
+export const NonCollapsible = {
   render: () => (
-    <div style={frame}>
-      <Accordion collapsible>
-        <Accordion.Item value="one">
-          <Accordion.Header>
-            <Accordion.Trigger>Enabled item</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Body content.</Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="two" disabled>
-          <Accordion.Header>
-            <Accordion.Trigger>Disabled item</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>You can't open this one.</Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="three">
-          <Accordion.Header>
-            <Accordion.Trigger>Another enabled item</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Body content.</Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
-    </div>
-  ),
-}
-
-export const LongContent = {
-  render: () => (
-    <div style={frame}>
-      <Accordion collapsible defaultValue={["long"]}>
-        <Accordion.Item value="long">
-          <Accordion.Header>
-            <Accordion.Trigger>What's inside?</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>
-            <div style={{ display: "grid", gap: "8px" }}>
-              <p style={{ margin: 0 }}>
-                Accordions are useful for compressing dense content into scannable sections. They preserve heading
-                semantics and announce open/closed state to screen readers.
-              </p>
-              <p style={{ margin: 0 }}>
-                The body can hold arbitrary content — paragraphs, lists, even nested components.
-              </p>
-              <ul style={{ margin: 0, "padding-left": "16px" }}>
-                <li>Keyboard navigable</li>
-                <li>Animated</li>
-                <li>Themeable via CSS variables</li>
-              </ul>
-            </div>
-          </Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="short">
-          <Accordion.Header>
-            <Accordion.Trigger>One more</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Short body.</Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
-    </div>
-  ),
-}
-
-export const NoChevron = {
-  render: () => (
-    <div style={frame}>
-      <Accordion collapsible>
-        <Accordion.Item value="x">
-          <Accordion.Header>
-            <Accordion.Trigger hideChevron>Trigger without chevron</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>
-            Pass <code>hideChevron</code> on the trigger.
-          </Accordion.Content>
-        </Accordion.Item>
-        <Accordion.Item value="y">
-          <Accordion.Header>
-            <Accordion.Trigger>Default trigger</Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>Chevron renders by default.</Accordion.Content>
-        </Accordion.Item>
-      </Accordion>
-    </div>
+    <Accordion value="first">
+      <Accordion.Item value="first">
+        <Accordion.Header>
+          <Accordion.Trigger>First</Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content>Accordion content.</Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
   ),
 }

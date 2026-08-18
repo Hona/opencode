@@ -64,23 +64,23 @@
   }
 
   [data-slot="session-review-accordion-item"][data-selected]
-    [data-slot="accordion-v2-header"]
-    [data-component="accordion-v2-trigger"] {
+    [data-slot="accordion-header"]
+    [data-slot="accordion-trigger"] {
     background-color: var(--surface-base-active);
   }
 
-  [data-component="accordion-v2-item"] {
-    [data-component="accordion-v2-content"] {
+  [data-slot="accordion-item"] {
+    [data-slot="accordion-content"] {
       display: none;
     }
     &[data-expanded] {
-      [data-component="accordion-v2-content"] {
+      [data-slot="accordion-content"] {
         display: block;
       }
     }
   }
 
-  [data-component="accordion-v2-content"] {
+  [data-slot="accordion-content"] {
     -webkit-user-select: text;
     user-select: text;
   }
@@ -155,7 +155,7 @@
     }
   }
 
-  [data-component="accordion-v2-trigger"]:hover [data-slot="session-review-view-button"] {
+  [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
     opacity: 1;
   }
 
@@ -174,7 +174,7 @@
     transition: transform 0.15s ease;
   }
 
-  [data-component="accordion-v2-item"][data-expanded] [data-slot="session-review-diff-chevron"] {
+  [data-slot="accordion-item"][data-expanded] [data-slot="session-review-diff-chevron"] {
     transform: rotate(0deg);
   }
 

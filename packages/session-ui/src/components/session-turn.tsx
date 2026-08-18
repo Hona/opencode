@@ -478,7 +478,7 @@ export function SessionTurn(
                           return (
                             <Accordion.Item value={diff.file}>
                               <StickyAccordionHeader>
-                                <Accordion.Trigger hideChevron>
+                                <Accordion.Trigger>
                                   <div data-slot="session-turn-diff-trigger">
                                     <span data-slot="session-turn-diff-path">
                                       <Show when={diff.file.includes("/")}>

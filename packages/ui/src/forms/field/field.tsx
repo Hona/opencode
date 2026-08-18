@@ -40,7 +40,7 @@ function useField() {
 const CONTROL_SELECTOR = [
   "[data-slot='text-input-v2-input']",
   "[data-slot='textarea-v2-textarea']",
-  "[data-slot='inline-input-v2-input']",
+  "[data-component='inline-input']",
 ].join(", ")
 
 export interface FieldProps extends ComponentProps<"div"> {
@@ -86,7 +86,7 @@ function FieldRoot(props: ParentProps<FieldProps>) {
     if (!control) return
 
     const shell = control.closest(
-      "[data-component='text-input-v2'], [data-component='textarea-v2'], [data-component='inline-input-v2']",
+      "[data-component='text-input-v2'], [data-component='textarea-v2'], [data-component='inline-input']",
     ) as HTMLElement | null
 
     control.id = controlId

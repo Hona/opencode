@@ -131,6 +131,10 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
               focus()
             }}
             onMiddleClick={close}
+            closeButton={
+              <Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={language.t("terminal.close")} />
+            }
+            hideCloseButton
           >
             <span
               class="truncate"
@@ -140,7 +144,6 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
             >
               {label()}
             </span>
-            <Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={language.t("terminal.close")} />
           </Tabs.Trigger>
           <Show when={store.editing}>
             <div class="absolute inset-0 flex items-center bg-v2-background-bg-layer-01 z-10 pointer-events-auto rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)] px-2">

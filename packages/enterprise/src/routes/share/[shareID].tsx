@@ -366,12 +366,13 @@ export default function () {
                               <Match when={diffs().length > 0}>
                                 <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
                                   <Tabs.List>
-                                    <Tabs.Trigger value="session" class="w-1/2 [&>[data-slot=tabs-v2-trigger]]:w-full">
+                                    <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
                                       Session
                                     </Tabs.Trigger>
                                     <Tabs.Trigger
                                       value="review"
-                                      class="w-1/2 !border-r-0 [&>[data-slot=tabs-v2-trigger]]:w-full"
+                                      class="w-1/2 !border-r-0"
+                                      classes={{ button: "w-full" }}
                                     >
                                       {diffs().length} Files Changed
                                     </Tabs.Trigger>

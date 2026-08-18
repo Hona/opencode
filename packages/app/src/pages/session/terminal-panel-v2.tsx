@@ -231,7 +231,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
                 preventActivation: (event) =>
                   event.target instanceof Element &&
-                  !!event.target.closest('[data-slot="tabs-v2-close-button"], input, [contenteditable="true"]'),
+                  !!event.target.closest('[data-slot="tabs-trigger-close-button"], input, [contenteditable="true"]'),
               }),
             ]}
             modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => tabList ?? null })]}
@@ -250,7 +250,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
           >
             <div class="flex flex-col h-full">
               <Tabs
-                variant="normal"
+                variant="panel"
                 value={terminal.active()}
                 onChange={(id) => terminal.open(id)}
                 class="!h-[52px] !flex-none"

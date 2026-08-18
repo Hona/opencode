@@ -41,26 +41,29 @@ export function SortableTabV2(props: {
           value={props.tab}
           onMiddleClick={() => props.onTabClose(props.tab)}
           onDblClick={() => props.onTabDoubleClick?.(props.tab)}
+          closeButton={
+            <Tooltip
+              value={
+                <>
+                  {language.t("common.closeTab")}
+                  <Show when={closeTabKeybind().length > 0}>
+                    <Keybind keys={closeTabKeybind()} variant="neutral" />
+                  </Show>
+                </>
+              }
+              placement="bottom"
+              gutter={10}
+            >
+              <Tabs.CloseButton
+                class="h-5 w-5"
+                onClick={() => props.onTabClose(props.tab)}
+                aria-label={language.t("common.closeTab")}
+              />
+            </Tooltip>
+          }
+          hideCloseButton
         >
           <Show when={content()}>{(value) => value()}</Show>
-          <Tooltip
-            value={
-              <>
-                {language.t("common.closeTab")}
-                <Show when={closeTabKeybind().length > 0}>
-                  <Keybind keys={closeTabKeybind()} variant="neutral" />
-                </Show>
-              </>
-            }
-            placement="bottom"
-            gutter={10}
-          >
-            <Tabs.CloseButton
-              class="h-5 w-5"
-              onClick={() => props.onTabClose(props.tab)}
-              aria-label={language.t("common.closeTab")}
-            />
-          </Tooltip>
         </Tabs.Trigger>
       </div>
     </div>
