@@ -1,11 +1,11 @@
-import { Dialog } from "@opencode-ai/ui/dialog"
+import { Dialog, DialogBody } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createMemo, createSignal, lazy, Match, Show, Switch } from "solid-js"
-import { formatKeybind } from "@/context/command"
+import { formatKeybindParts } from "@/context/command"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -102,86 +102,88 @@ function DialogSelectFileLegacy(props: { filesOnly: () => boolean; onOpenFile?: 
   }
 
   return (
-    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
-      <List
-        class="px-3"
-        search={{
-          placeholder: props.filesOnly()
-            ? palette.language.t("session.header.searchFiles")
-            : palette.language.t("palette.search.placeholder"),
-          autofocus: true,
-          hideIcon: true,
-        }}
-        emptyMessage={palette.language.t("palette.empty")}
-        loadingMessage={palette.language.t("common.loading")}
-        items={items}
-        key={(item) => item.id}
-        filterKeys={["title", "description", "category"]}
-        skipFilter={(item) => item.type === "file"}
-        groupBy={grouped() ? (item) => item.category : () => ""}
-        onMove={(item: CommandPaletteEntry | undefined) => palette.highlight(item)}
-        onSelect={(item: CommandPaletteEntry | undefined) => palette.select(item)}
-      >
-        {(item) => (
-          <Switch
-            fallback={
-              <div class="w-full flex items-center justify-between rounded-md pl-1">
-                <div class="flex items-center gap-x-3 grow min-w-0">
-                  <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(item.path ?? "")}
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(item.path ?? "")}</span>
+    <Dialog class="pt-3 pb-0 !max-h-[480px]">
+      <DialogBody>
+        <List
+          class="px-3"
+          search={{
+            placeholder: props.filesOnly()
+              ? palette.language.t("session.header.searchFiles")
+              : palette.language.t("palette.search.placeholder"),
+            autofocus: true,
+            hideIcon: true,
+          }}
+          emptyMessage={palette.language.t("palette.empty")}
+          loadingMessage={palette.language.t("common.loading")}
+          items={items}
+          key={(item) => item.id}
+          filterKeys={["title", "description", "category"]}
+          skipFilter={(item) => item.type === "file"}
+          groupBy={grouped() ? (item) => item.category : () => ""}
+          onMove={(item: CommandPaletteEntry | undefined) => palette.highlight(item)}
+          onSelect={(item: CommandPaletteEntry | undefined) => palette.select(item)}
+        >
+          {(item) => (
+            <Switch
+              fallback={
+                <div class="w-full flex items-center justify-between rounded-md pl-1">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(item.path ?? "")}
+                      </span>
+                      <span class="text-text-strong whitespace-nowrap">{getFilename(item.path ?? "")}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            }
-          >
-            <Match when={item.type === "command"}>
-              <div class="w-full flex items-center justify-between gap-4">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
-                  <Show when={item.description}>
-                    <span class="text-14-regular text-text-weak truncate">{item.description}</span>
-                  </Show>
-                </div>
-                <Show when={item.keybind}>
-                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "", palette.language.t)}</Keybind>
-                </Show>
-              </div>
-            </Match>
-            <Match when={item.type === "session"}>
-              <div class="w-full flex items-center justify-between rounded-md pl-1">
-                <div class="flex items-center gap-x-3 grow min-w-0">
-                  <Icon name="bubble-5" size="small" class="shrink-0 text-icon-weak" />
+              }
+            >
+              <Match when={item.type === "command"}>
+                <div class="w-full flex items-center justify-between gap-4">
                   <div class="flex items-center gap-2 min-w-0">
-                    <span
-                      class="text-14-regular text-text-strong truncate"
-                      classList={{ "opacity-70": !!item.archived }}
-                    >
-                      {item.title}
-                    </span>
+                    <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
                     <Show when={item.description}>
-                      <span
-                        class="text-14-regular text-text-weak truncate"
-                        classList={{ "opacity-70": !!item.archived }}
-                      >
-                        {item.description}
-                      </span>
+                      <span class="text-14-regular text-text-weak truncate">{item.description}</span>
                     </Show>
                   </div>
+                  <Show when={item.keybind}>
+                    <Keybind class="rounded-[4px]" keys={formatKeybindParts(item.keybind ?? "", palette.language.t)} />
+                  </Show>
                 </div>
-                <Show when={item.updated}>
-                  <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
-                    {getRelativeTime(new Date(item.updated!).toISOString(), palette.language.t)}
-                  </span>
-                </Show>
-              </div>
-            </Match>
-          </Switch>
-        )}
-      </List>
+              </Match>
+              <Match when={item.type === "session"}>
+                <div class="w-full flex items-center justify-between rounded-md pl-1">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <Icon name="bubble-5" size="small" class="shrink-0 text-icon-weak" />
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span
+                        class="text-14-regular text-text-strong truncate"
+                        classList={{ "opacity-70": !!item.archived }}
+                      >
+                        {item.title}
+                      </span>
+                      <Show when={item.description}>
+                        <span
+                          class="text-14-regular text-text-weak truncate"
+                          classList={{ "opacity-70": !!item.archived }}
+                        >
+                          {item.description}
+                        </span>
+                      </Show>
+                    </div>
+                  </div>
+                  <Show when={item.updated}>
+                    <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
+                      {getRelativeTime(new Date(item.updated!).toISOString(), palette.language.t)}
+                    </span>
+                  </Show>
+                </div>
+              </Match>
+            </Switch>
+          )}
+        </List>
+      </DialogBody>
     </Dialog>
   )
 }

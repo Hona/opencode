@@ -39,7 +39,7 @@ import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -51,10 +51,7 @@ import { CommentCardV2 } from "../v2/components/comment-card-v2"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@opencode-ai/ui/button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -208,39 +205,21 @@ function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
     icon: "check" | "copy" | "reset"
     label: JSX.Element
-    useV2?: boolean
   },
 ) {
   const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
   return (
-    <Show
-      when={props.useV2}
-      fallback={
-        <Tooltip value={props.label} placement="top" gutter={4}>
-          <IconButton
-            icon={props.icon}
-            size="normal"
-            variant="ghost"
-            disabled={props.disabled}
-            onMouseDown={props.onMouseDown}
-            onClick={props.onClick}
-            aria-label={props["aria-label"]}
-          />
-        </Tooltip>
-      }
-    >
-      <TooltipV2 value={props.label} placement="top" gutter={4}>
-        <IconButtonV2
-          icon={<IconV2 name={icon()} size="small" />}
-          size="normal"
-          variant="ghost-muted"
-          disabled={props.disabled}
-          onMouseDown={props.onMouseDown}
-          onClick={props.onClick}
-          aria-label={props["aria-label"]}
-        />
-      </TooltipV2>
-    </Show>
+    <Tooltip value={props.label} placement="top" gutter={4}>
+      <IconButton
+        icon={<Icon name={icon()} size="small" />}
+        size="normal"
+        variant="ghost-muted"
+        disabled={props.disabled}
+        onMouseDown={props.onMouseDown}
+        onClick={props.onClick}
+        aria-label={props["aria-label"]}
+      />
+    </Tooltip>
   )
 }
 
@@ -363,7 +342,6 @@ function displayDirectory(path: string | undefined) {
   return relativizeProjectPath(getDirectory(path), data.directory)
 }
 
-import type { IconProps } from "@opencode-ai/ui/icon"
 import { normalize, resolveFileDiff } from "./session-diff"
 
 export type ToolInfo = {
@@ -1191,9 +1169,9 @@ function UserMessageComments(props: { comments: UserMessageComment[]; bounded: b
         )}
       </For>
       <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
-        <ButtonV2 size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
+        <Button size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
           {i18n.t("ui.common.showMore")}
-        </ButtonV2>
+        </Button>
       </Show>
     </div>
   )
@@ -1383,7 +1361,6 @@ export function UserMessageDisplay(props: {
             <MessageActionButton
               icon="reset"
               label={i18n.t("ui.message.revertMessage")}
-              useV2={props.useV2Actions}
               disabled={!!busy()}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
@@ -1397,7 +1374,6 @@ export function UserMessageDisplay(props: {
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              useV2={props.useV2Actions}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
                 event.stopPropagation()
@@ -1528,7 +1504,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
     >
       <Accordion.Item value={value()}>
         <StickyAccordionHeader>
-          <Accordion.Trigger>
+          <Accordion.Trigger hideChevron>
             <div data-slot="apply-patch-trigger-content">
               <div data-slot="apply-patch-file-info">
                 <FileIcon node={{ path: props.path, type: "file" }} />
@@ -1781,7 +1757,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              useV2={props.useV2Actions}
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleCopy}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
@@ -2144,16 +2119,16 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
   return (
     <div data-component="bash-output" dir="ltr">
       <div data-slot="bash-copy">
-        <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-          <IconButtonV2
-            icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+        <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+          <IconButton
+            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"
             variant="ghost-muted"
             onMouseDown={(event) => event.preventDefault()}
             onClick={copy}
             aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
           />
-        </TooltipV2>
+        </Tooltip>
       </div>
       <div
         data-slot="bash-scroll"
@@ -2514,7 +2489,7 @@ ToolRegistry.register({
                       return (
                         <Accordion.Item value={file.filePath} data-type={file.type}>
                           <StickyAccordionHeader>
-                            <Accordion.Trigger>
+                            <Accordion.Trigger hideChevron>
                               <div data-slot="apply-patch-trigger-content">
                                 <div data-slot="apply-patch-file-info">
                                   <FileIcon node={{ path: file.relativePath, type: "file" }} />
@@ -2681,14 +2656,18 @@ ToolRegistry.register({
           <div data-component="todos">
             <For each={todos()}>
               {(todo: Todo) => (
-                <Checkbox readOnly checked={todo.status === "completed"}>
-                  <span
-                    data-slot="message-part-todo-content"
-                    data-completed={todo.status === "completed" ? "completed" : undefined}
-                  >
-                    {todo.content}
-                  </span>
-                </Checkbox>
+                <Checkbox
+                  readOnly
+                  checked={todo.status === "completed"}
+                  label={
+                    <span
+                      data-slot="message-part-todo-content"
+                      data-completed={todo.status === "completed" ? "completed" : undefined}
+                    >
+                      {todo.content}
+                    </span>
+                  }
+                />
               )}
             </For>
           </div>

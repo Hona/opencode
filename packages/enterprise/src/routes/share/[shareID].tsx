@@ -10,6 +10,7 @@ import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } fro
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { iife } from "@opencode-ai/core/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
@@ -283,14 +284,14 @@ export default function () {
                                 as={"a"}
                                 href="https://github.com/anomalyco/opencode"
                                 target="_blank"
-                                icon="github"
+                                icon={<Icon name="github" />}
                                 variant="ghost"
                               />
                               <IconButton
                                 as={"a"}
                                 href="https://opencode.ai/discord"
                                 target="_blank"
-                                icon="discord"
+                                icon={<Icon name="discord" />}
                                 variant="ghost"
                               />
                             </div>
@@ -365,13 +366,12 @@ export default function () {
                               <Match when={diffs().length > 0}>
                                 <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
                                   <Tabs.List>
-                                    <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
+                                    <Tabs.Trigger value="session" class="w-1/2 [&>[data-slot=tabs-v2-trigger]]:w-full">
                                       Session
                                     </Tabs.Trigger>
                                     <Tabs.Trigger
                                       value="review"
-                                      class="w-1/2 !border-r-0"
-                                      classes={{ button: "w-full" }}
+                                      class="w-1/2 !border-r-0 [&>[data-slot=tabs-v2-trigger]]:w-full"
                                     >
                                       {diffs().length} Files Changed
                                     </Tabs.Trigger>

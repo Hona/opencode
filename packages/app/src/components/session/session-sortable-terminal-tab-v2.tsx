@@ -2,9 +2,8 @@ import type { JSX } from "solid-js"
 import { Show, createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSortable } from "@dnd-kit/solid/sortable"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Menu } from "@opencode-ai/ui/menu"
 import { isDefaultTitle as isDefaultTerminalTitle } from "@/context/terminal-title"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
@@ -116,8 +115,8 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
 
   return (
     <div ref={sortable.ref} class="h-full flex items-center outline-none focus:outline-none focus-visible:outline-none">
-      <MenuV2.Context>
-        <MenuV2.Context.Trigger class="relative" as="div">
+      <Menu.Context>
+        <Menu.Context.Trigger class="relative" as="div">
           <Tabs.Trigger
             value={props.terminal.id}
             onMouseDown={(e) => {
@@ -131,19 +130,6 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
               if (e.detail > 0) return
               focus()
             }}
-            closeButton={
-              <IconButton
-                icon="close-small"
-                variant="ghost"
-                class="h-5 w-5"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  close()
-                }}
-                aria-label={language.t("terminal.close")}
-              />
-            }
-            hideCloseButton
             onMiddleClick={close}
           >
             <span
@@ -154,6 +140,7 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
             >
               {label()}
             </span>
+            <Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={language.t("terminal.close")} />
           </Tabs.Trigger>
           <Show when={store.editing}>
             <div class="absolute inset-0 flex items-center bg-v2-background-bg-layer-01 z-10 pointer-events-auto rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)] px-2">
@@ -169,9 +156,9 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
               />
             </div>
           </Show>
-        </MenuV2.Context.Trigger>
-        <MenuV2.Context.Portal>
-          <MenuV2.Context.Content
+        </Menu.Context.Trigger>
+        <Menu.Context.Portal>
+          <Menu.Context.Content
             onCloseAutoFocus={(e) => {
               if (!editRequested) return
               e.preventDefault()
@@ -179,11 +166,11 @@ export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number
               requestAnimationFrame(() => edit())
             }}
           >
-            <MenuV2.Item onSelect={() => (editRequested = true)}>{language.t("common.rename")}</MenuV2.Item>
-            <MenuV2.Item onSelect={close}>{language.t("common.close")}</MenuV2.Item>
-          </MenuV2.Context.Content>
-        </MenuV2.Context.Portal>
-      </MenuV2.Context>
+            <Menu.Item onSelect={() => (editRequested = true)}>{language.t("common.rename")}</Menu.Item>
+            <Menu.Item onSelect={close}>{language.t("common.close")}</Menu.Item>
+          </Menu.Context.Content>
+        </Menu.Context.Portal>
+      </Menu.Context>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Accordion } from "./accordion"
+import { Accordion } from "../data-display/accordion/accordion"
 import { ParentProps } from "solid-js"
 
 export function StickyAccordionHeader(

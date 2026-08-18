@@ -46,11 +46,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
       <Tabs
         aria-label={language.t("status.popover.ariaLabel")}
-        class="tabs bg-background-strong rounded-xl overflow-hidden"
-        data-component="tabs"
-        data-active="mcp"
+        class="bg-background-strong rounded-xl overflow-hidden"
         defaultValue="mcp"
-        variant="alt"
+        variant="normal"
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">

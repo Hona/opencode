@@ -1,7 +1,7 @@
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { RadioGroup } from "@opencode-ai/ui/radio-group"
+import { SegmentedControl, SegmentedControlItem } from "@opencode-ai/ui/segmented-control"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -345,16 +345,24 @@ export const SessionReview = (props: SessionReviewProps) => {
         </div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
-            <RadioGroup
-              options={["unified", "split"] as const}
-              current={diffStyle()}
-              size="small"
-              value={(style) => style}
-              label={(style) =>
-                i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
-              }
-              onSelect={(style) => style && props.onDiffStyleChange?.(style)}
-            />
+            <SegmentedControl
+              class="session-review-diff-style"
+              value={diffStyle()}
+              onChange={(style) => {
+                if (style !== "unified" && style !== "split") return
+                props.onDiffStyleChange?.(style)
+              }}
+            >
+              <For each={["unified", "split"] as const}>
+                {(style) => (
+                  <SegmentedControlItem value={style}>
+                    {i18n.t(
+                      style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split",
+                    )}
+                  </SegmentedControlItem>
+                )}
+              </For>
+            </SegmentedControl>
           </Show>
           <Show when={hasDiffs()}>
             <Button
@@ -511,7 +519,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                         data-selected={props.focusedFile === file ? "" : undefined}
                       >
                         <StickyAccordionHeader>
-                          <Accordion.Trigger disabled={!diffCanRender()} class="cursor-default">
+                          <Accordion.Trigger hideChevron disabled={!diffCanRender()} class="cursor-default">
                             <div data-slot="session-review-trigger-content">
                               <div data-slot="session-review-file-info">
                                 <FileIcon node={{ path: file, type: "file" }} />
@@ -602,7 +610,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <div data-slot="session-review-large-diff-actions">
                                       <Button
                                         size="normal"
-                                        variant="secondary"
+                                        variant="neutral"
                                         onClick={() => setStore("force", file, true)}
                                       >
                                         {i18n.t("ui.sessionReview.largeDiff.renderAnyway")}

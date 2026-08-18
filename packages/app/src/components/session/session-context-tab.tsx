@@ -58,7 +58,7 @@ function RawMessage(props: {
   return (
     <Accordion.Item value={props.message.id}>
       <StickyAccordionHeader>
-        <Accordion.Trigger>
+        <Accordion.Trigger hideChevron>
           <div class="flex items-center justify-between gap-2 w-full">
             <div class="min-w-0 truncate">
               {props.message.type} <span class="text-text-base">• {props.message.id}</span>

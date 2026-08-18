@@ -1,5 +1,6 @@
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -159,7 +160,7 @@ export function ServerConnectionList(props: {
                   <DropdownMenu>
                     <DropdownMenu.Trigger
                       as={IconButton}
-                      icon="dot-grid"
+                      icon={<Icon name="dot-grid" />}
                       variant="ghost"
                       class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
                       onClick={(e: MouseEvent) => e.stopPropagation()}
@@ -208,7 +209,7 @@ export function ServerConnectionList(props: {
 
       <div class="shrink-0 pb-5">
         <Button
-          variant="secondary"
+          variant="neutral"
           icon="plus-small"
           size="large"
           onClick={props.onAdd}
@@ -244,7 +245,7 @@ export function ServerConnectionForm(props: { form: ServerConnectionFormControll
       />
       <div class="shrink-0 pb-5">
         <Button
-          variant="primary"
+          variant="contrast"
           size="large"
           onClick={props.form.submit}
           disabled={props.form.state.busy()}

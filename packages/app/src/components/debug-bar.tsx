@@ -3,7 +3,6 @@ import { batch, createEffect, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 
@@ -104,9 +103,9 @@ function Cell(props: {
 
   if (props.inline) {
     return (
-      <TooltipV2 value={props.tip} placement="top">
+      <Tooltip value={props.tip} placement="top">
         {content()}
-      </TooltipV2>
+      </Tooltip>
     )
   }
 
@@ -153,9 +152,9 @@ function ToggleCell(props: {
 
   if (props.inline) {
     return (
-      <TooltipV2 value={props.tip} placement="top">
+      <Tooltip value={props.tip} placement="top">
         {content()}
-      </TooltipV2>
+      </Tooltip>
     )
   }
 

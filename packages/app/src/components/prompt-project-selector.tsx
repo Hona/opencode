@@ -11,8 +11,7 @@ import {
 import { createStore } from "solid-js/store"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
@@ -536,7 +535,7 @@ function ProjectItem(props: {
       />
       <DropdownMenu.ItemLabel class="min-w-0 truncate leading-5">{displayName(props.project)}</DropdownMenu.ItemLabel>
       <DropdownMenu.ItemIndicator style={{ width: "14px", height: "14px", right: "12px" }}>
-        <IconV2 name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+        <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
       </DropdownMenu.ItemIndicator>
     </DropdownMenu.RadioItem>
   )

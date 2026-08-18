@@ -30,10 +30,9 @@ import { createStore } from "solid-js/store"
 import type { SessionReviewLineComment } from "@opencode-ai/session-ui/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Button } from "@opencode-ai/ui/button"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { showToast } from "@/utils/toast"
@@ -195,9 +194,9 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
               </div>
             )}
           </Show>
-          <ButtonV2 variant="neutral" size="normal" icon="xmark-small" onClick={closeTab}>
+          <Button variant="neutral" size="normal" icon="xmark-small" onClick={closeTab}>
             {language.t("session.error.notFound.closeTab")}
-          </ButtonV2>
+          </Button>
         </div>
       </div>
     )
@@ -1039,12 +1038,11 @@ export default function Page() {
 
     return (
       <Select
+        appearance="inline"
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}
         onSelect={(option) => option && controller.layout.view().review.setMode(option)}
-        variant="ghost"
-        size="small"
         valueClass="text-14-medium"
       />
     )
@@ -1056,7 +1054,7 @@ export default function Page() {
     }
 
     return (
-      <SelectV2
+      <Select
         appearance="inline"
         options={changesOptions()}
         current={reviewMode()}
@@ -1754,9 +1752,10 @@ export default function Page() {
           value="session"
           classList={{
             "!w-1/2 !max-w-none": true,
+            "[&>[data-slot=tabs-v2-trigger]]:w-full": true,
+            "[&>[data-slot=tabs-v2-trigger]]:!py-2": compact,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           onClick={() => setStore("mobileTab", "session")}
         >
           {language.t("session.tab.session")}
@@ -1765,9 +1764,10 @@ export default function Page() {
           value="changes"
           classList={{
             "!w-1/2 !max-w-none !border-r-0": true,
+            "[&>[data-slot=tabs-v2-trigger]]:w-full": true,
+            "[&>[data-slot=tabs-v2-trigger]]:!py-2": compact,
             "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent": bottom,
           }}
-          classes={{ button: compact ? "w-full !py-2" : "w-full" }}
           onClick={() => setStore("mobileTab", "changes")}
         >
           {hasReview()

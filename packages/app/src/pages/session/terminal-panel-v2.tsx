@@ -10,8 +10,9 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Keybind } from "@opencode-ai/ui/keybind"
 
 import { SortableTerminalTabV2 } from "@/components/session/session-sortable-terminal-tab-v2"
 import { Terminal } from "@/components/terminal"
@@ -230,7 +231,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
                 preventActivation: (event) =>
                   event.target instanceof Element &&
-                  !!event.target.closest('[data-slot="tabs-trigger-close-button"], input, [contenteditable="true"]'),
+                  !!event.target.closest('[data-slot="tabs-v2-close-button"], input, [contenteditable="true"]'),
               }),
             ]}
             modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => tabList ?? null })]}
@@ -266,12 +267,12 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                     {(pty, index) => <SortableTerminalTabV2 terminal={pty} index={index()} onClose={close} />}
                   </For>
                   <div class="h-full flex items-center justify-center">
-                    <TooltipV2
+                    <Tooltip
                       value={
                         <>
                           {language.t("command.terminal.new")}
                           <Show when={newTerminalKeybind().length > 0}>
-                            <KeybindV2 keys={newTerminalKeybind()} variant="neutral" />
+                            <Keybind keys={newTerminalKeybind()} variant="neutral" />
                           </Show>
                         </>
                       }
@@ -279,13 +280,12 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                       class="flex items-center"
                     >
                       <IconButton
-                        icon="plus-small"
+                        icon={<Icon name="plus-small" size="large" />}
                         variant="ghost"
-                        iconSize="large"
                         onClick={() => terminal.new({ focus: true })}
                         aria-label={language.t("command.terminal.new")}
                       />
-                    </TooltipV2>
+                    </Tooltip>
                   </div>
                 </Tabs.List>
               </Tabs>

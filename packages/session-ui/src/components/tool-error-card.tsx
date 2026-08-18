@@ -141,7 +141,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                   gutter={4}
                 >
                   <IconButton
-                    icon={copied() ? "check" : "copy"}
+                    icon={<Icon name={copied() ? "check" : "copy"} />}
                     size="normal"
                     variant="ghost"
                     onMouseDown={(e) => e.preventDefault()}

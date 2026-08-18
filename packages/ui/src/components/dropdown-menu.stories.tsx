@@ -1,6 +1,6 @@
 // @ts-nocheck
 import * as mod from "./dropdown-menu"
-import { Button } from "./button"
+import { Button } from "../actions/button/button"
 
 const docs = `### Overview
 Dropdown menu built on Kobalte with composable items, groups, and submenus.
@@ -42,7 +42,7 @@ export default {
 export const Basic = {
   render: () => (
     <mod.DropdownMenu defaultOpen>
-      <mod.DropdownMenu.Trigger as={Button} variant="secondary" size="small">
+      <mod.DropdownMenu.Trigger as={Button} variant="neutral" size="small">
         Open menu
       </mod.DropdownMenu.Trigger>
       <mod.DropdownMenu.Portal>
@@ -78,7 +78,7 @@ export const Basic = {
 export const CheckboxRadio = {
   render: () => (
     <mod.DropdownMenu defaultOpen>
-      <mod.DropdownMenu.Trigger as={Button} variant="secondary" size="small">
+      <mod.DropdownMenu.Trigger as={Button} variant="neutral" size="small">
         Open menu
       </mod.DropdownMenu.Trigger>
       <mod.DropdownMenu.Portal>

@@ -1,6 +1,6 @@
 @import "@opencode-ai/ui/styles/tailwind";
 @import "@opencode-ai/session-ui/styles";
-@import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "@opencode-ai/ui/styles/tokens";
 @import "tw-animate-css";
 
 @font-face {
@@ -93,7 +93,7 @@
     gap: 0.75rem; /* gap-3 */
   }
 
-  [data-component="getting-started-actions"] > [data-component="button"] {
+  [data-component="getting-started-actions"] > [data-component="button-v2"] {
     width: 100%;
   }
 
@@ -103,7 +103,7 @@
       align-items: center;
     }
 
-    [data-component="getting-started-actions"] > [data-component="button"] {
+    [data-component="getting-started-actions"] > [data-component="button-v2"] {
       width: auto;
     }
   }

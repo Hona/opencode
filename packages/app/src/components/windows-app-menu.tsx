@@ -1,8 +1,7 @@
 import { For, Show, type JSX } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 
 import { useCommand } from "@/context/command"
 import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
@@ -53,10 +52,10 @@ export function WindowsAppMenu(props: {
         class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1"
       >
         <DropdownMenu.Trigger
-          as={IconButtonV2}
+          as={IconButton}
           variant="ghost-muted"
           size="large"
-          icon={<IconV2 name="menu" />}
+          icon={<Icon name="menu" />}
           aria-label={language.t("desktop.menu.ariaLabel")}
           onPointerDown={rememberFocus}
           onKeyDown={rememberFocus}
