@@ -200,7 +200,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   await expect(backgroundCard).toContainText("Background task (background)")
   await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
   await expect(
-    page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer-v2"]'),
+    page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
   ).toHaveAttribute("data-active", "true")
 
   await timeline.transport.send({

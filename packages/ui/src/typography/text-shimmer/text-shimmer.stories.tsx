@@ -15,7 +15,7 @@ Animated shimmer effect for loading text placeholders.
 - Uses \`aria-label\` with the full text.
 
 ### Theming
-- Uses \`data-component="text-shimmer-v2"\` and CSS custom properties for timing and colors.
+- Uses \`data-component="text-shimmer"\` and CSS custom properties for timing and colors.
 `
 
 export default {

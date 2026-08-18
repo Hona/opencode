@@ -41,20 +41,20 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
   return (
     <Dynamic
       component={props.as ?? "span"}
-      data-component="text-shimmer-v2"
+      data-component="text-shimmer"
       data-active={active() ? "true" : "false"}
       class={props.class}
       aria-label={text()}
       style={{
-        "--_swap": `${swap}ms`,
-        "--_index": `${offset()}`,
+        "--text-shimmer-swap": `${swap}ms`,
+        "--text-shimmer-index": `${offset()}`,
       }}
     >
-      <span data-slot="text-shimmer-v2-char">
-        <span data-slot="text-shimmer-v2-base" aria-hidden="true">
+      <span data-slot="text-shimmer-char">
+        <span data-slot="text-shimmer-char-base" aria-hidden="true">
           {text()}
         </span>
-        <span data-slot="text-shimmer-v2-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
+        <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
           {text()}
         </span>
       </span>
