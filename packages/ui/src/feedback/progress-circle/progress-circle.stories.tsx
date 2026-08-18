@@ -11,6 +11,7 @@ export default {
   },
   argTypes: {
     percentage: { control: { type: "range", min: 0, max: 100, step: 1 } },
+    appearance: { control: "select", options: ["compact", "indicator"] },
   },
 }
 
@@ -31,5 +32,21 @@ export const Sizes = {
       <ProgressCircle percentage={60} />
       <ProgressCircle percentage={60} size={20} strokeWidth={2} />
     </div>
+  ),
+}
+
+export const Indicator = {
+  render: () => (
+    <ProgressCircle
+      appearance="indicator"
+      percentage={60}
+      size={16}
+      strokeWidth={2}
+      style={{
+        "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
+        "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
+        "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
+      }}
+    />
   ),
 }
