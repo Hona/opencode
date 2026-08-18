@@ -470,7 +470,6 @@
       "version": "1.18.15",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
-        "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/session-ui": "workspace:*",
         "@opencode-ai/ui": "workspace:*",

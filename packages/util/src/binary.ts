@@ -12,4 +12,19 @@ export namespace Binary {
     }
     return { found: false, index: left }
   }
+
+  export function insert<T>(array: T[], item: T, compare: (item: T) => string) {
+    const id = compare(item)
+    let left = 0
+    let right = array.length
+
+    while (left < right) {
+      const middle = Math.floor((left + right) / 2)
+      if (compare(array[middle]) < id) left = middle + 1
+      else right = middle
+    }
+
+    array.splice(left, 0, item)
+    return array
+  }
 }

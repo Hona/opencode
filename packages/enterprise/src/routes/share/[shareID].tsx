@@ -1,4 +1,4 @@
-import type { SessionStatus } from "@opencode-ai/client/promise"
+import { Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/session-ui/session-turn"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
@@ -11,6 +11,9 @@ import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { iife } from "@opencode-ai/core/util/iife"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import NotFound from "../[...404]"
@@ -30,7 +33,7 @@ const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   })),
 )
 
-class SessionDataMissingError extends Error {
+class SessionDataMissingError extends NamedError {
   public override readonly name = "SessionDataMissingError"
 
   constructor(
@@ -41,10 +44,11 @@ class SessionDataMissingError extends Error {
   }
 
   static isInstance(input: unknown): input is SessionDataMissingError {
-    return (
-      input instanceof SessionDataMissingError ||
-      (!!input && typeof input === "object" && "name" in input && input.name === "SessionDataMissingError")
-    )
+    return NamedError.hasName(input, "SessionDataMissingError")
+  }
+
+  schema(): never {
+    throw new Error("SessionDataMissingError does not expose a schema")
   }
 
   toObject() {
@@ -60,7 +64,7 @@ const getData = query(async (shareID) => {
   const result: {
     sessionID: string
     shareID: string
-    session: Share.Session[]
+    session: Session[]
     session_diff: {
       [sessionID: string]: Share.SessionDiff[]
     }
@@ -68,13 +72,13 @@ const getData = query(async (shareID) => {
       [sessionID: string]: SessionStatus
     }
     message: {
-      [sessionID: string]: Share.Message[]
+      [sessionID: string]: Message[]
     }
     part: {
-      [messageID: string]: Share.Part[]
+      [messageID: string]: Part[]
     }
     model: {
-      [sessionID: string]: Share.Model[]
+      [sessionID: string]: Model[]
     }
   } = {
     sessionID: share.sessionID,
@@ -113,9 +117,8 @@ const getData = query(async (shareID) => {
         break
     }
   }
-  if (!result.session.some((session) => session.id === share.sessionID)) {
-    throw new SessionDataMissingError({ sessionID: share.sessionID })
-  }
+  const match = Binary.search(result.session, share.sessionID, (s) => s.id)
+  if (!match.found) throw new SessionDataMissingError({ sessionID: share.sessionID })
   return result
 }, "getShareData")
 
@@ -153,11 +156,9 @@ export default function () {
       <Meta name="robots" content="noindex, nofollow" />
       <Show when={data()}>
         {(data) => {
-          const info = createMemo(() => {
-            const session = data().session.find((item) => item.id === data().sessionID)
-            if (!session) throw new Error(`Session ${data().sessionID} not found`)
-            return session
-          })
+          const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
+          if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
+          const info = createMemo(() => data().session[match().index])
           const title = createMemo(() => withTimestampedFallback(info()))
           const ogImage = createMemo(() => {
             const models = new Set<string>()
@@ -192,7 +193,7 @@ export default function () {
               <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
                   <DataProvider data={data()} directory={info().directory}>
-                    {(() => {
+                    {iife(() => {
                       const [store, setStore] = createStore({
                         messageId: undefined as string | undefined,
                       })
@@ -207,7 +208,7 @@ export default function () {
                       const activeMessage = createMemo(
                         () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
                       )
-                      function setActiveMessage(message: { id: string } | undefined) {
+                      function setActiveMessage(message: UserMessage | undefined) {
                         if (message) {
                           setStore("messageId", message.id)
                         } else {
@@ -403,7 +404,7 @@ export default function () {
                           </div>
                         </div>
                       )
-                    })()}
+                    })}
                   </DataProvider>
                 </FileComponentProvider>
               </ClientOnlyWorkerPoolProvider>

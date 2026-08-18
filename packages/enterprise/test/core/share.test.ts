@@ -267,11 +267,8 @@ describe.concurrent("core.share", () => {
     const share = await Share.create({ sessionID })
 
     const data: Share.Data[] = [
-      {
-        type: "session",
-        data: { id: sessionID, directory: "/tmp", version: "1", time: { created: 0, updated: 0 } },
-      },
-      { type: "message", data: { id: "msg1", sessionID, role: "user", time: { created: 0 } } },
+      { type: "session", data: { id: sessionID, status: "running" } as any },
+      { type: "message", data: { id: "msg1", sessionID } as any },
       {
         type: "part",
         data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
