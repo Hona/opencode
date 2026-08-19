@@ -8,11 +8,11 @@ Use in settings panels or forms.
 
 ### API
 - Uses Kobalte Switch props (\`checked\`, \`defaultChecked\`, \`onChange\`).
-- Optional: \`hideLabel\`.
+- Optional: \`appearance\`, \`hideLabel\`, and \`description\`.
 - Children render as the label.
 
 ### Variants and states
-- Checked/unchecked, disabled states.
+- Standard and compact appearances; checked/unchecked and disabled states.
 
 ### Behavior
 - Controlled or uncontrolled usage via Kobalte props.
@@ -44,6 +44,19 @@ export default {
 }
 
 export const Basic = {}
+
+export const Appearances = {
+  render: () => (
+    <div style={{ display: "grid", gap: "12px" }}>
+      <Switch appearance="standard" defaultChecked>
+        Standard
+      </Switch>
+      <Switch appearance="compact" defaultChecked>
+        Compact
+      </Switch>
+    </div>
+  ),
+}
 
 export const States = {
   render: () => (

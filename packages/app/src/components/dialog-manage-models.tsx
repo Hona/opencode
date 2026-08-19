@@ -71,6 +71,7 @@ export const DialogManageModels: Component = () => {
                   value={language.t("dialog.model.manage.provider.toggle", { provider: provider.name })}
                 >
                   <Switch
+                    appearance="standard"
                     class="-mr-1"
                     checked={providerVisible(provider.id)}
                     onChange={(checked) => setProviderVisibility(provider.id, checked)}
@@ -102,6 +103,7 @@ export const DialogManageModels: Component = () => {
               <span>{i.name}</span>
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
+                  appearance="standard"
                   checked={!!local.model.visible({ modelID: i.id, providerID: i.provider.id })}
                   onChange={(checked) => {
                     local.model.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
