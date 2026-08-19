@@ -11,6 +11,7 @@ Composable menu primitive built on Kobalte's \`DropdownMenu\` and \`ContextMenu\
 ### API
 - \`Menu\` / \`Menu.Trigger\` / \`Menu.Portal\` / \`Menu.Content\` — dropdown root + popper plumbing.
 - \`Menu.Context\` namespace mirrors the same shape for right-click menus.
+- \`appearance\`: \`compact\` (default) or \`standard\`.
 - \`Menu.Item\` — supports a freeform \`children\` slot (avatar, icon, text — whatever) plus \`shortcut\` and \`badge\` props.
 - \`Menu.CheckboxItem\` / \`Menu.RadioItem\` — same item shape; auto-render a check indicator that turns blue when selected.
 - \`Menu.Sub\` / \`Menu.SubTrigger\` / \`Menu.SubContent\` — nested submenus; \`SubTrigger\` auto-renders the trailing chevron.
@@ -51,6 +52,31 @@ export const Basic = {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
+  ),
+}
+
+export const Appearances = {
+  render: () => (
+    <div style={{ display: "flex", gap: "16px" }}>
+      <Menu appearance="standard" gutter={6} defaultOpen>
+        <Menu.Trigger as={Button}>Standard</Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item>New file</Menu.Item>
+            <Menu.Item>Open file</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+      <Menu appearance="compact" gutter={6} defaultOpen>
+        <Menu.Trigger as={Button}>Compact</Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item>New file</Menu.Item>
+            <Menu.Item>Open file</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </div>
   ),
 }
 

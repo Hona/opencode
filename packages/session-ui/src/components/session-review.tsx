@@ -1,6 +1,6 @@
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Menu } from "@opencode-ai/ui/menu"
 import { SegmentedControl, SegmentedControlItem } from "@opencode-ai/ui/segmented-control"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -127,8 +127,8 @@ function ReviewCommentMenu(props: {
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <DropdownMenu gutter={4} placement="bottom-end">
-        <DropdownMenu.Trigger
+      <Menu appearance="standard" gutter={4} placement="bottom-end">
+        <Menu.Trigger
           as={IconButton}
           icon="dot-grid"
           variant="ghost"
@@ -136,17 +136,13 @@ function ReviewCommentMenu(props: {
           class="size-6 rounded-md"
           aria-label={props.labels.moreLabel}
         />
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={props.onEdit}>
-              <DropdownMenu.ItemLabel>{props.labels.editLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={props.onDelete}>
-              <DropdownMenu.ItemLabel>{props.labels.deleteLabel}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.labels.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }

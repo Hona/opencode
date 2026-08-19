@@ -1,5 +1,5 @@
-import { For, Show, type JSX } from "solid-js"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { For, type JSX } from "solid-js"
+import { Menu } from "@opencode-ai/ui/menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 
@@ -46,12 +46,12 @@ export function WindowsAppMenu(props: {
   }
 
   return (
-    <DropdownMenu gutter={4} modal={false} placement="bottom-start">
+    <Menu appearance="standard" gutter={4} modal={false} placement="bottom-start">
       <div
         data-component="desktop-icon-button"
         class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1"
       >
-        <DropdownMenu.Trigger
+        <Menu.Trigger
           as={IconButton}
           variant="ghost-muted"
           size="large"
@@ -61,17 +61,17 @@ export function WindowsAppMenu(props: {
           onKeyDown={rememberFocus}
         />
       </div>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content class="desktop-app-menu">
-          <DropdownMenu.Group>
-            <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
+      <Menu.Portal>
+        <Menu.Content class="desktop-app-menu">
+          <Menu.Group>
+            <Menu.GroupLabel class="desktop-app-menu-heading">OpenCode</Menu.GroupLabel>
             <For each={DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows"))}>
               {(menu) => (
                 <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
                   <For each={menu.items?.filter((entry) => desktopMenuVisible(entry, "windows"))}>
                     {(entry) => {
                       // Static menu data: an early return keeps the union narrowing a Show fallback would lose.
-                      if (entry.type === "separator") return <DropdownMenu.Separator />
+                      if (entry.type === "separator") return <Menu.Separator />
                       return (
                         <DesktopMenuItem
                           label={entry.labelKey ? language.t(entry.labelKey) : ""}
@@ -85,36 +85,28 @@ export function WindowsAppMenu(props: {
                 </DesktopMenuSubmenu>
               )}
             </For>
-          </DropdownMenu.Group>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
+          </Menu.Group>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 
 function DesktopMenuSubmenu(props: { label: string; children: JSX.Element }) {
   return (
-    <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger>
-        <span data-slot="dropdown-menu-item-label">{props.label}</span>
-        <span data-slot="desktop-app-menu-chevron">
-          <Icon name="chevron-right" size="small" />
-        </span>
-      </DropdownMenu.SubTrigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.SubContent class="desktop-app-menu">{props.children}</DropdownMenu.SubContent>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Sub>
+    <Menu.Sub>
+      <Menu.SubTrigger>{props.label}</Menu.SubTrigger>
+      <Menu.Portal>
+        <Menu.SubContent class="desktop-app-menu desktop-app-menu-sub">{props.children}</Menu.SubContent>
+      </Menu.Portal>
+    </Menu.Sub>
   )
 }
 
 function DesktopMenuItem(props: { label: string; keybind?: string; disabled?: boolean; onSelect: () => void }) {
   return (
-    <DropdownMenu.Item disabled={props.disabled} onSelect={props.onSelect}>
-      <DropdownMenu.ItemLabel>{props.label}</DropdownMenu.ItemLabel>
-      <Show when={props.keybind}>
-        <span data-slot="desktop-app-menu-keybind">{props.keybind}</span>
-      </Show>
-    </DropdownMenu.Item>
+    <Menu.Item disabled={props.disabled} onSelect={props.onSelect} shortcut={props.keybind}>
+      {props.label}
+    </Menu.Item>
   )
 }

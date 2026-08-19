@@ -1,6 +1,16 @@
 import { DropdownMenu } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
-import { Show, splitProps, type Component, type ComponentProps, type JSX, type ParentProps } from "solid-js"
+import {
+  createContext,
+  Show,
+  splitProps,
+  useContext,
+  type Accessor,
+  type Component,
+  type ComponentProps,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import "./menu.css"
 
 const ChevronRight: Component = () => (
@@ -29,6 +39,18 @@ const CheckMark: Component = () => (
   </svg>
 )
 
+export type MenuAppearance = "standard" | "compact"
+
+const MenuAppearanceContext = createContext<{ appearance: Accessor<MenuAppearance> }>({
+  appearance: (): MenuAppearance => "compact",
+})
+
+function useMenuContext() {
+  const ctx = useContext(MenuAppearanceContext)
+  if (!ctx) throw new Error("Menu components must be used inside Menu or Menu.Context")
+  return ctx
+}
+
 function ItemBody(
   props: ParentProps<{
     shortcut?: JSX.Element | string
@@ -52,9 +74,15 @@ export interface MenuItemProps extends ComponentProps<typeof DropdownMenu.Item> 
 }
 
 function MenuItem(props: ParentProps<MenuItemProps>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
   return (
-    <DropdownMenu.Item {...r} data-component="menu-v2-item" classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}>
+    <DropdownMenu.Item
+      {...r}
+      data-component="menu-v2-item"
+      data-appearance={ctx.appearance()}
+      classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
+    >
       <ItemBody shortcut={s.shortcut} badge={s.badge}>
         {s.children}
       </ItemBody>
@@ -68,11 +96,13 @@ export interface MenuCheckboxItemProps extends ComponentProps<typeof DropdownMen
 }
 
 function MenuCheckboxItem(props: ParentProps<MenuCheckboxItemProps>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
   return (
     <DropdownMenu.CheckboxItem
       {...r}
       data-component="menu-v2-item"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     >
       <ItemBody
@@ -96,11 +126,13 @@ export interface MenuRadioItemProps extends ComponentProps<typeof DropdownMenu.R
 }
 
 function MenuRadioItem(props: ParentProps<MenuRadioItemProps>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
   return (
     <DropdownMenu.RadioItem
       {...r}
       data-component="menu-v2-item"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     >
       <ItemBody
@@ -124,11 +156,13 @@ export interface MenuSubTriggerProps extends ComponentProps<typeof DropdownMenu.
 }
 
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
   return (
     <DropdownMenu.SubTrigger
       {...r}
       data-component="menu-v2-item"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     >
       <ItemBody shortcut={s.shortcut} badge={s.badge} trailing={<ChevronRight />}>
@@ -139,63 +173,93 @@ function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
 }
 
 function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
   return (
     <DropdownMenu.SubContent
       {...r}
       data-component="menu-v2-content"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
 }
 
 function MenuGroupLabel(props: ComponentProps<typeof DropdownMenu.GroupLabel>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
   return (
     <DropdownMenu.GroupLabel
       {...r}
       data-slot="menu-v2-group-label"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
 }
 
 function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
   return (
     <DropdownMenu.Separator
       {...r}
       data-slot="menu-v2-separator"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
 }
 
 function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
   return (
     <DropdownMenu.Content
       {...r}
       data-component="menu-v2-content"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
 }
 
-function MenuRoot(props: ComponentProps<typeof DropdownMenu>) {
-  return <DropdownMenu {...props} />
+export interface MenuProps extends ComponentProps<typeof DropdownMenu> {
+  appearance?: MenuAppearance
 }
 
-function MenuContextRoot(props: ComponentProps<typeof ContextMenu>) {
-  return <ContextMenu {...props} />
+function MenuRoot(props: MenuProps) {
+  const [local, rest] = splitProps(props, ["appearance", "children"])
+  const appearance = () => local.appearance ?? "compact"
+  return (
+    <MenuAppearanceContext.Provider value={{ appearance }}>
+      <DropdownMenu {...rest}>{local.children}</DropdownMenu>
+    </MenuAppearanceContext.Provider>
+  )
+}
+
+export interface MenuContextProps extends ComponentProps<typeof ContextMenu> {
+  appearance?: MenuAppearance
+}
+
+function MenuContextRoot(props: MenuContextProps) {
+  const [local, rest] = splitProps(props, ["appearance", "children"])
+  const appearance = () => local.appearance ?? "compact"
+  return (
+    <MenuAppearanceContext.Provider value={{ appearance }}>
+      <ContextMenu {...rest}>{local.children}</ContextMenu>
+    </MenuAppearanceContext.Provider>
+  )
 }
 
 function MenuContextContent(props: ComponentProps<typeof ContextMenu.Content>) {
+  const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
   return (
     <ContextMenu.Content
       {...r}
       data-component="menu-v2-content"
+      data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
