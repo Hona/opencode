@@ -3,6 +3,11 @@ import type { V1Migration } from "@opencode-ai/core/database/v1-migration.bun"
 import type { SessionV1 } from "@opencode-ai/schema/session-v1"
 import type { Share } from "./share"
 
+type Entry<Type extends Share.Data["type"]> = Extract<Share.Data, { type: Type }>["data"]
+type LegacySession = Exclude<Entry<"session">, SessionInfo>
+type LegacyMessage = Entry<"message">
+type LegacyPart = Entry<"part">
+
 export async function readShareDocument(data: Share.Data[]) {
   const blob = parseShareBlob(data)
   if (blob.type === "current") {
@@ -11,6 +16,7 @@ export async function readShareDocument(data: Share.Data[]) {
       messages: blob.messages,
       diffs: currentDiffs(blob.diffs),
       models: blob.models,
+      version: "2",
       warnings: [],
     }
   }
@@ -23,38 +29,27 @@ export async function readShareDocument(data: Share.Data[]) {
   }
 }
 
-async function mapFromLegacySession(blob: {
-  session: Share.StoredSession
-  messages: Share.StoredMessage[]
-  parts: Share.StoredPart[]
-}) {
+async function mapFromLegacySession(blob: { session: LegacySession; messages: LegacyMessage[]; parts: LegacyPart[] }) {
   const [{ V1Migration }, { SessionV1 }, { Schema }] = await Promise.all([
     import("@opencode-ai/core/database/v1-migration.bun"),
     import("@opencode-ai/schema/session-v1"),
     import("effect"),
   ])
   const decodeSession = Schema.decodeUnknownSync(SessionV1.SessionInfo)
-  const decodeMessage = Schema.decodeUnknownSync(SessionV1.Info)
-  const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
   const session = decodeSession(blob.session)
-  const result = V1Migration.transformSession(
-    migrationInput(
-      session,
-      blob.messages.map((message) => decodeMessage(message)),
-      blob.parts.map((part) => decodePart(part)),
-    ),
-  )
+  const result = V1Migration.transformSession(migrationInput(session, blob.messages, blob.parts))
   return {
     session: currentSession(session, result),
     messages: currentMessages(result),
+    version: session.version,
     warnings: result.warnings,
   }
 }
 
 function migrationInput(
   session: typeof SessionV1.SessionInfo.Type,
-  messages: ReadonlyArray<typeof SessionV1.Info.Type>,
-  parts: ReadonlyArray<typeof SessionV1.Part.Type>,
+  messages: ReadonlyArray<LegacyMessage>,
+  parts: ReadonlyArray<LegacyPart>,
 ): V1Migration.TransformInput {
   const byMessage = new Map(messages.map((message) => [message.id, message] as const))
   return {
@@ -143,12 +138,12 @@ function currentSession(session: typeof SessionV1.SessionInfo.Type, result: V1Mi
 }
 
 function parseShareBlob(data: Share.Data[]) {
-  let session: Share.Session | undefined
+  let session: Entry<"session"> | undefined
   let current: Share.Messages | undefined
-  let diffs: Share.SessionDiff[] = []
-  let models: Share.Model[] = []
-  const messages: Share.StoredMessage[] = []
-  const parts: Share.StoredPart[] = []
+  let diffs: Entry<"session_diff"> = []
+  let models: Entry<"model"> = []
+  const messages: LegacyMessage[] = []
+  const parts: LegacyPart[] = []
 
   data.forEach((item) => {
     if (item.type === "session") session = item.data
@@ -184,7 +179,7 @@ function isCurrentMessage(input: unknown): input is SessionMessageInfo {
   return "created" in input.time && typeof input.time.created === "number"
 }
 
-function currentDiffs(diffs: Share.SessionDiff[]): FileDiffInfo[] {
+function currentDiffs(diffs: Entry<"session_diff">): FileDiffInfo[] {
   return diffs.map((diff) => ({
     file: diff.file,
     patch: diff.patch,
@@ -200,6 +195,6 @@ function currentDiffs(diffs: Share.SessionDiff[]): FileDiffInfo[] {
   }))
 }
 
-function completed(message: typeof SessionV1.Info.Type) {
+function completed(message: LegacyMessage) {
   return "completed" in message.time ? message.time.completed : undefined
 }

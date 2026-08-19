@@ -14,6 +14,9 @@ import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { iife } from "@opencode-ai/core/util/iife"
+import { Binary } from "@opencode-ai/util/binary"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import NotFound from "../[...404]"
@@ -33,18 +36,26 @@ const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   })),
 )
 
-class SessionDataMissingError extends Error {
+class SessionDataMissingError extends NamedError {
   public override readonly name = "SessionDataMissingError"
 
   constructor(
     public readonly data: { sessionID: string; message?: string },
     options?: ErrorOptions,
   ) {
-    super(data.message ?? `Session data is missing: ${data.sessionID}`, options)
+    super("SessionDataMissingError", options)
   }
 
   static isInstance(input: unknown): input is SessionDataMissingError {
-    return input instanceof Error && input.name === "SessionDataMissingError"
+    return NamedError.hasName(input, "SessionDataMissingError")
+  }
+
+  schema(): never {
+    throw new Error("SessionDataMissingError does not expose a schema")
+  }
+
+  toObject() {
+    return { name: this.name, data: this.data }
   }
 }
 
@@ -62,6 +73,7 @@ const getData = query(async (shareID) => {
     session_status: { [share.sessionID]: { type: "idle" as const } },
     messages: { [share.sessionID]: document.messages },
     model: { [share.sessionID]: document.models },
+    version: document.version,
   }
 }, "getShareData")
 
@@ -99,9 +111,10 @@ export default function () {
       <Meta name="robots" content="noindex, nofollow" />
       <Show when={data()}>
         {(data) => {
-          const info = createMemo(() => data().session.find((session) => session.id === data().sessionID))
-          if (!info()) throw new Error(`Session ${data().sessionID} not found`)
-          const title = createMemo(() => withTimestampedFallback(info()!))
+          const match = createMemo(() => Binary.search(data().session, data().sessionID, (session) => session.id))
+          if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
+          const info = createMemo(() => data().session[match().index])
+          const title = createMemo(() => withTimestampedFallback(info()))
           const ogImage = createMemo(() => {
             const models = new Set<string>()
             const messages = data().messages[data().sessionID] ?? []
@@ -122,7 +135,7 @@ export default function () {
             } else {
               modelParam = "unknown"
             }
-            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=v2&id=${data().shareID}`
+            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=v${data().version}&id=${data().shareID}`
           })
 
           return (
@@ -133,8 +146,8 @@ export default function () {
               <Meta name="twitter:image" content={ogImage()} />
               <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
-                  <DataProvider data={data()} directory={info()!.location.directory} sessionID={data().sessionID}>
-                    {(() => {
+                  <DataProvider data={data()} directory={info().location.directory} sessionID={data().sessionID}>
+                    {iife(() => {
                       const [store, setStore] = createStore({
                         messageId: undefined as string | undefined,
                       })
@@ -147,10 +160,6 @@ export default function () {
                       function setActiveMessage(message: Extract<SessionMessageInfo, { type: "user" }> | undefined) {
                         setStore("messageId", message?.id)
                       }
-                      const assistant = createMemo(() => messages().find((message) => message.type === "assistant"))
-                      const provider = createMemo(() => assistant()?.model.providerID)
-                      const modelID = createMemo(() => assistant()?.model.id)
-                      const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
                       const document = createMemo(
                         () =>
@@ -172,6 +181,12 @@ export default function () {
                         const end = relativeEnd < 0 ? messages().length : start + relativeEnd + 1
                         return { ...document(), messages: messages().slice(start, end) }
                       })
+                      const assistant = createMemo(() =>
+                        activeDocument().messages.find((message) => message.type === "assistant"),
+                      )
+                      const provider = createMemo(() => assistant()?.model.providerID)
+                      const modelID = createMemo(() => assistant()?.model.id)
+                      const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const [diffStyle, setDiffStyle] = createSignal<"unified" | "split">("unified")
 
                       const title = () => (
@@ -179,7 +194,7 @@ export default function () {
                           <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 sm:items-center sm:h-8 justify-start self-stretch">
                             <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base w-fit">
                               <Mark class="shrink-0 w-3 my-0.5" />
-                              <div class="text-12-mono text-text-base">v2</div>
+                              <div class="text-12-mono text-text-base">v{data().version}</div>
                             </div>
                             <div class="flex gap-4 items-center">
                               <div class="flex gap-2 items-center">
@@ -189,7 +204,7 @@ export default function () {
                                 <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                               </div>
                               <div class="text-12-regular text-text-weaker">
-                                {DateTime.fromMillis(info()!.time.created).toFormat("dd MMM yyyy, HH:mm")}
+                                {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
                               </div>
                             </div>
                           </div>
@@ -333,7 +348,7 @@ export default function () {
                           </div>
                         </div>
                       )
-                    })()}
+                    })}
                   </DataProvider>
                 </FileComponentProvider>
               </ClientOnlyWorkerPoolProvider>

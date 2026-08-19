@@ -33,7 +33,7 @@ describe("share document", () => {
     expect(result.warnings).toEqual([])
   })
 
-  test("migrates stored message and part blobs in memory", async () => {
+  test("maps a legacy Session without changing its blob", async () => {
     const sessionID = "ses_stored"
     const messageID = "msg_000000000001aaaaaaaaaaaaaa"
     const data = [
@@ -71,9 +71,11 @@ describe("share document", () => {
         },
       },
     ] satisfies Share.Data[]
+    const snapshot = structuredClone(data)
 
     const result = await readShareDocument(data)
 
+    expect(data).toEqual(snapshot)
     expect(result.session).toMatchObject({ id: sessionID, location: { directory: "/workspace" } })
     expect(result.messages).toEqual([
       {

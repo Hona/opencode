@@ -1,5 +1,5 @@
-import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
+import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import { iife } from "@opencode-ai/core/util/iife"
 import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import z from "zod"
 import { Storage } from "./storage"
@@ -8,24 +8,11 @@ function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => R
   return (input: z.infer<T>) => cb(schema.parse(input))
 }
 
-type Stored<T> = T extends string
-  ? T extends `${infer Value}`
-    ? Value
-    : string
-  : T extends readonly (infer Item)[]
-    ? Stored<Item>[]
-    : T extends object
-      ? { -readonly [Key in keyof T]: Stored<T[Key]> }
-      : T
+type LegacySession = Session
 
 export namespace Share {
-  export type SessionDiff = FileDiff.LegacyInfo & { file: string; patch: string }
-  export type Model = { id: string; name: string }
-  export type StoredSession = Stored<SessionV1.SessionInfo>
-  export type Session = StoredSession | SessionInfo
-  export type StoredMessage = Stored<SessionV1.Info>
-  export type StoredUserMessage = Stored<SessionV1.User>
-  export type StoredPart = Stored<SessionV1.Part>
+  export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
+  export type Session = LegacySession | SessionInfo
   export type Messages = { sessionID: string; messages: SessionMessageInfo[] }
 
   export const Info = z.object({
@@ -42,7 +29,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("message"),
-      data: z.custom<StoredMessage>(),
+      data: z.custom<Message>(),
     }),
     z.object({
       type: z.literal("messages"),
@@ -50,7 +37,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("part"),
-      data: z.custom<StoredPart>(),
+      data: z.custom<Part>(),
     }),
     z.object({
       type: z.literal("session_diff"),
@@ -87,7 +74,6 @@ export namespace Share {
       case "model":
         return "model"
     }
-    throw new Error(`Unknown share data: ${JSON.stringify(item)}`)
   }
 
   function merge(...items: Data[][]) {
@@ -107,10 +93,10 @@ export namespace Share {
   }
 
   async function writeSnapshot(shareID: string, data: Data[]) {
-    await Storage.write(["share_snapshot", shareID], { data } satisfies Snapshot)
+    await Storage.write<Snapshot>(["share_snapshot", shareID], { data })
   }
 
-  async function readEventSnapshot(shareID: string) {
+  async function legacy(shareID: string) {
     const compaction: Compaction = (await Storage.read<Compaction>(["share_compaction", shareID])) ?? {
       data: [],
       event: undefined,
@@ -189,14 +175,58 @@ export namespace Share {
       const share = await get(input.share.id)
       if (!share) throw new Errors.NotFound(input.share.id)
       if (share.secret !== input.share.secret) throw new Errors.InvalidSecret(input.share.id)
-      const data = (await readSnapshot(input.share.id)) ?? (await readEventSnapshot(input.share.id))
+      const data = (await readSnapshot(input.share.id)) ?? (await legacy(input.share.id))
       await writeSnapshot(input.share.id, merge(data, input.data))
     },
   )
 
   export async function data(shareID: string) {
-    return (await readSnapshot(shareID)) ?? readEventSnapshot(shareID)
+    return (await readSnapshot(shareID)) ?? legacy(shareID)
   }
+
+  export const syncOld = fn(
+    z.object({
+      share: Info.pick({ id: true, secret: true }),
+      data: Data.array(),
+    }),
+    async (input) => {
+      const share = await get(input.share.id)
+      if (!share) throw new Errors.NotFound(input.share.id)
+      if (share.secret !== input.share.secret) throw new Errors.InvalidSecret(input.share.id)
+      const promises = []
+      for (const item of input.data) {
+        promises.push(
+          iife(async () => {
+            switch (item.type) {
+              case "session":
+                await Storage.write(["share_data", input.share.id, "session"], item.data)
+                break
+              case "message": {
+                const data = item.data as Message
+                await Storage.write(["share_data", input.share.id, "message", data.id], item.data)
+                break
+              }
+              case "messages":
+                await Storage.write(["share_data", input.share.id, "messages", item.data.sessionID], item.data)
+                break
+              case "part": {
+                const data = item.data as Part
+                await Storage.write(["share_data", input.share.id, "part", data.messageID, data.id], item.data)
+                break
+              }
+              case "session_diff":
+                await Storage.write(["share_data", input.share.id, "session_diff"], item.data)
+                break
+              case "model":
+                await Storage.write(["share_data", input.share.id, "model"], item.data)
+                break
+            }
+          }),
+        )
+      }
+      await Promise.all(promises)
+    },
+  )
 
   export const Errors = {
     NotFound: class extends Error {

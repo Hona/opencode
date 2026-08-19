@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch"
+import { lazy } from "@opencode-ai/core/util/lazy"
 
 export namespace Storage {
   export interface Adapter {
@@ -82,17 +83,12 @@ export namespace Storage {
     return createAdapter(client, `https://${accountId}.r2.cloudflarestorage.com`, process.env.OPENCODE_STORAGE_BUCKET!)
   }
 
-  const adapter = (() => {
-    let value: Adapter | undefined
-    return () => {
-      if (value) return value
-      const type = process.env.OPENCODE_STORAGE_ADAPTER
-      if (type === "r2") value = r2()
-      if (type === "s3") value = s3()
-      if (!value) throw new Error("No storage adapter configured")
-      return value
-    }
-  })()
+  const adapter = lazy(() => {
+    const type = process.env.OPENCODE_STORAGE_ADAPTER
+    if (type === "r2") return r2()
+    if (type === "s3") return s3()
+    throw new Error("No storage adapter configured")
+  })
 
   function resolve(key: string[]) {
     return key.join("/") + ".json"
