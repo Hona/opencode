@@ -97,8 +97,10 @@ function runningTool(input: {
     state: {
       status: "running",
       input: input.args,
-      ...(input.output === undefined ? {} : { output: input.output }),
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...input.metadata,
+        ...(input.output === undefined ? {} : { output: input.output }),
+      },
     },
     time: { created: STORY_TIME + input.offset, ran: STORY_TIME + input.offset + 100 },
   }

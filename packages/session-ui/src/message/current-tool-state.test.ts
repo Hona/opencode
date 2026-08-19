@@ -37,7 +37,7 @@ describe("current tool state", () => {
       type: "tool",
       id: "tool_running",
       name: "shell",
-      state: { status: "running", input, output: "Running timeline tests...", metadata },
+      state: { status: "running", input, metadata },
       time,
     } satisfies SessionMessageAssistantTool
 

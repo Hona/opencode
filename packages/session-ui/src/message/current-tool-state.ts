@@ -15,7 +15,10 @@ export function currentToolMetadata(tool: SessionMessageAssistantTool): Record<s
 }
 
 export function currentToolOutput(tool: SessionMessageAssistantTool) {
-  if (tool.state.status === "running") return tool.state.output
+  if (tool.state.status === "running") {
+    const output = tool.state.metadata.output
+    return typeof output === "string" ? output : undefined
+  }
   if (!("content" in tool.state) || !tool.state.content) return undefined
   const text = tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
   return text || undefined

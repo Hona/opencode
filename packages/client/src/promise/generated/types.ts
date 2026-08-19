@@ -226,7 +226,6 @@ export type SessionMessageProviderState = { [x: string]: JsonValue }
 export type SessionMessageToolStateRunning = {
   status: "running"
   input: { [x: string]: JsonValue }
-  output?: string
   metadata: { [x: string]: JsonValue }
 }
 
@@ -2634,7 +2633,6 @@ export type SessionImportInput = {
                   | {
                       readonly status: "running"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly output?: string
                       readonly metadata: { readonly [x: string]: JsonValue }
                     }
                   | {
@@ -2902,7 +2900,6 @@ export type SessionImportInput = {
                   | {
                       readonly status: "running"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly output?: string
                       readonly metadata: { readonly [x: string]: JsonValue }
                     }
                   | {
@@ -3170,7 +3167,6 @@ export type SessionImportInput = {
                   | {
                       readonly status: "running"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly output?: string
                       readonly metadata: { readonly [x: string]: JsonValue }
                     }
                   | {

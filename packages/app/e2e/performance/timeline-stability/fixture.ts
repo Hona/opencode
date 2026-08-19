@@ -701,8 +701,10 @@ function messageContent(
       state: {
         status: "running",
         input: jsonRecord(state.input),
-        ...(state.output === undefined ? {} : { output: state.output }),
-        metadata: jsonRecord(state.metadata),
+        metadata: jsonRecord({
+          ...state.metadata,
+          ...(state.output === undefined ? {} : { output: state.output }),
+        }),
       },
     }
   if (state.status === "error")
