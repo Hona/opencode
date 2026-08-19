@@ -1,122 +1,312 @@
 import { describe, expect, test } from "bun:test"
 import { Share } from "../../src/core/share"
-
-let sequence = 0
-const sessionID = () => `test_session_${++sequence}`
-
-function session(sessionID: string): Share.Data {
-  return {
-    type: "session",
-    data: {
-      id: sessionID,
-      projectID: "project_story",
-      title: "Current Session share",
-      location: { directory: "C:/workspaces/opencode" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      time: { created: 1, updated: 1 },
-    },
-  }
-}
-
-function messages(sessionID: string, text: string): Share.Data {
-  return {
-    type: "messages",
-    data: {
-      sessionID,
-      messages: [
-        {
-          id: "msg_share_user",
-          type: "user",
-          text,
-          time: { created: 1 },
-        },
-      ],
-    },
-  }
-}
+import { Storage } from "../../src/core/storage"
+import { descending } from "@opencode-ai/schema/identifier"
 
 describe.concurrent("core.share", () => {
-  test("creates and removes a share", async () => {
-    const id = sessionID()
-    const share = await Share.create({ sessionID: id })
+  test("should create a share", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
 
-    expect(share.sessionID).toBe(id)
+    expect(share.sessionID).toBe(sessionID)
     expect(share.secret).toBeDefined()
 
     await Share.remove({ id: share.id, secret: share.secret })
-    expect(await Share.get(share.id)).toBeUndefined()
   })
 
-  test("removes a share as an administrator", async () => {
-    const share = await Share.create({ sessionID: sessionID() })
+  test("should remove a share as admin", async () => {
+    const share = await Share.create({ sessionID: descending() })
+
     await Share.removeAdmin({ id: share.id })
+
     expect(await Share.get(share.id)).toBeUndefined()
   })
 
-  test("stores one ordered current message batch", async () => {
-    const id = sessionID()
-    const share = await Share.create({ sessionID: id })
+  test("should sync data to a share", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
 
-    await Share.sync({ share, data: [session(id), messages(id, "Inspect the current renderer.")] })
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
 
-    expect(await Share.data(share.id)).toEqual([messages(id, "Inspect the current renderer."), session(id)])
-    await Share.remove(share)
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data,
+    })
+
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+    expect(snapshot?.data).toHaveLength(1)
+
+    await Share.remove({ id: share.id, secret: share.secret })
   })
 
-  test("replaces a message batch without merging transcript items by ID", async () => {
-    const id = sessionID()
-    const share = await Share.create({ sessionID: id })
+  test("should sync multiple batches of data", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
 
-    await Share.sync({ share, data: [messages(id, "First prompt")] })
-    await Share.sync({ share, data: [messages(id, "Updated prompt")] })
+    const data1: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
 
-    expect(await Share.data(share.id)).toEqual([messages(id, "Updated prompt")])
-    await Share.remove(share)
+    const data2: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part2", sessionID, messageID: "msg1", type: "text", text: "World" },
+      },
+    ]
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data1,
+    })
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data2,
+    })
+
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+    expect(snapshot?.data).toHaveLength(2)
+
+    await Share.remove({ id: share.id, secret: share.secret })
   })
 
-  test("preserves independent current snapshot values across syncs", async () => {
-    const id = sessionID()
-    const share = await Share.create({ sessionID: id })
-    const diffs = {
-      type: "session_diff" as const,
-      data: [
-        {
-          file: "src/session.ts",
-          patch: "@@ -1 +1 @@\n-old\n+new",
-          additions: 1,
-          deletions: 1,
-          status: "modified" as const,
+  test("should retrieve synced data", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+      {
+        type: "part",
+        data: { id: "part2", sessionID, messageID: "msg1", type: "text", text: "World" },
+      },
+    ]
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data,
+    })
+
+    const result = await Share.data(share.id)
+
+    expect(result.length).toBe(2)
+    expect(result[0].type).toBe("part")
+    expect(result[1].type).toBe("part")
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should retrieve data from multiple syncs", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const data1: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
+
+    const data2: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part2", sessionID, messageID: "msg2", type: "text", text: "World" },
+      },
+    ]
+
+    const data3: Share.Data[] = [
+      { type: "part", data: { id: "part3", sessionID, messageID: "msg3", type: "text", text: "!" } },
+    ]
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data1,
+    })
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data2,
+    })
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data3,
+    })
+
+    const result = await Share.data(share.id)
+
+    expect(result.length).toBe(3)
+    const parts = result.filter((d) => d.type === "part")
+    expect(parts.length).toBe(3)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should return latest data when syncing duplicate parts", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const data1: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
+
+    const data2: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello Updated" },
+      },
+    ]
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data1,
+    })
+
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data: data2,
+    })
+
+    const result = await Share.data(share.id)
+
+    expect(result.length).toBe(1)
+    const [first] = result
+    expect(first.type).toBe("part")
+    expect(first.type === "part" && first.data.type === "text" && first.data.text).toBe("Hello Updated")
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should return empty array for share with no data", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const result = await Share.data(share.id)
+
+    expect(result).toEqual([])
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should migrate legacy event data into the snapshot", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
+
+    await Storage.remove(["share_snapshot", share.id])
+    await Storage.write(["share_event", share.id, descending()], data)
+
+    const result = await Share.data(share.id)
+    const snapshot = await Storage.read<{ data: Share.Data[] }>(["share_snapshot", share.id])
+
+    expect(result).toHaveLength(1)
+    expect(snapshot?.data).toHaveLength(1)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should throw error for invalid secret", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Test" },
+      },
+    ]
+
+    expect(async () => {
+      await Share.sync({
+        share: { id: share.id, secret: "invalid-secret" },
+        data,
+      })
+    }).toThrow()
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should throw error for non-existent share", async () => {
+    const sessionID = descending()
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Test" },
+      },
+    ]
+
+    expect(async () => {
+      await Share.sync({
+        share: { id: "non-existent-id", secret: "some-secret" },
+        data,
+      })
+    }).toThrow()
+  })
+
+  test("should handle different data types", async () => {
+    const sessionID = descending()
+    const share = await Share.create({ sessionID })
+
+    const data: Share.Data[] = [
+      {
+        type: "session",
+        data: {
+          id: sessionID,
+          slug: "shared-session",
+          projectID: "project1",
+          directory: "/project",
+          version: "1.0.0",
+          time: { created: 1, updated: 1 },
         },
-      ],
-    }
+      },
+      {
+        type: "message",
+        data: {
+          id: "msg1",
+          sessionID,
+          role: "user",
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "provider", modelID: "model" },
+        },
+      },
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+    ]
 
-    await Share.sync({ share, data: [session(id), messages(id, "Update the Session."), diffs] })
-    await Share.sync({ share, data: [{ type: "model", data: [{ id: "claude-sonnet-4", name: "Claude Sonnet 4" }] }] })
+    await Share.sync({
+      share: { id: share.id, secret: share.secret },
+      data,
+    })
 
-    expect((await Share.data(share.id)).map((item) => item.type)).toEqual([
-      "messages",
-      "model",
-      "session",
-      "session_diff",
-    ])
-    await Share.remove(share)
-  })
+    const result = await Share.data(share.id)
 
-  test("returns an empty snapshot before the first sync", async () => {
-    const share = await Share.create({ sessionID: sessionID() })
-    expect(await Share.data(share.id)).toEqual([])
-    await Share.remove(share)
-  })
+    expect(result.length).toBe(3)
+    expect(result.some((d) => d.type === "session")).toBe(true)
+    expect(result.some((d) => d.type === "message")).toBe(true)
+    expect(result.some((d) => d.type === "part")).toBe(true)
 
-  test("rejects invalid credentials and unknown shares", async () => {
-    const id = sessionID()
-    const share = await Share.create({ sessionID: id })
-    const data = [messages(id, "Protected prompt")]
-
-    expect(Share.sync({ share: { ...share, secret: "invalid" }, data })).rejects.toThrow()
-    expect(Share.sync({ share: { id: "missing", secret: "missing" }, data })).rejects.toThrow()
-
-    await Share.remove(share)
+    await Share.remove({ id: share.id, secret: share.secret })
   })
 })

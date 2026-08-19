@@ -217,6 +217,13 @@ const EVENT_DELETE_BATCH_SIZE = 1_000
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
+const decodeStoredSession = Schema.decodeUnknownSync(SessionV1.SessionInfo)
+const decodeStoredMessage = Schema.decodeUnknownSync(SessionV1.Info)
+const decodeStoredPart = Schema.decodeUnknownSync(SessionV1.Part)
+const decodeCurrentSession = Schema.decodeUnknownSync(SessionSchema.Info)
+const encodeCurrentSession = Schema.encodeSync(SessionSchema.Info)
+const decodeCurrentMessage = Schema.decodeUnknownSync(SessionMessage.Info)
+const encodeCurrentMessage = Schema.encodeSync(SessionMessage.Info)
 let runtimeState: RuntimeState = { status: "idle" }
 
 export function transformSession(input: TransformInput): TransformResult {
@@ -477,6 +484,126 @@ export function transformSession(input: TransformInput): TransformResult {
     watermark: projected.length - 1,
     warnings,
   }
+}
+
+export function toSessionMessages(result: TransformResult): ReadonlyArray<typeof SessionMessage.Info.Encoded> {
+  return result.messages.map((row) =>
+    encodeCurrentMessage(
+      decodeCurrentMessage({
+        id: row.id,
+        type: row.type,
+        ...row.data,
+      }),
+    ),
+  )
+}
+
+export function transformSnapshot(input: {
+  session: unknown
+  messages: ReadonlyArray<unknown>
+  parts: ReadonlyArray<unknown>
+}) {
+  const session = decodeStoredSession(input.session)
+  const messages = input.messages.map((message) => decodeStoredMessage(message))
+  const parts = input.parts.map((part) => decodeStoredPart(part))
+  const byMessage = new Map(messages.map((message) => [message.id, message] as const))
+  const result = transformSession({
+    session: {
+      id: session.id,
+      project_id: session.projectID,
+      workspace_id: session.workspaceID ?? null,
+      parent_id: session.parentID ?? null,
+      fork_session_id: null,
+      fork_boundary: null,
+      slug: session.slug,
+      directory: session.directory,
+      path: session.path ?? null,
+      title: session.title ?? null,
+      version: session.version,
+      share_url: session.share?.url ?? null,
+      summary_additions: session.summary?.additions ?? null,
+      summary_deletions: session.summary?.deletions ?? null,
+      summary_files: session.summary?.files ?? null,
+      summary_diffs: session.summary?.diffs ? [...session.summary.diffs] : null,
+      metadata: session.metadata ?? null,
+      cost: session.cost ?? 0,
+      tokens_input: session.tokens?.input ?? 0,
+      tokens_output: session.tokens?.output ?? 0,
+      tokens_reasoning: session.tokens?.reasoning ?? 0,
+      tokens_cache_read: session.tokens?.cache.read ?? 0,
+      tokens_cache_write: session.tokens?.cache.write ?? 0,
+      revert: null,
+      permission: session.permission ?? null,
+      agent: session.agent ?? null,
+      model: session.model
+        ? {
+            id: session.model.id,
+            providerID: session.model.providerID,
+            ...(session.model.variant ? { variant: session.model.variant } : {}),
+          }
+        : null,
+      time_created: session.time.created,
+      time_updated: session.time.updated,
+      time_compacting: session.time.compacting ?? null,
+      time_archived: session.time.archived ?? null,
+      time_suspended: null,
+      resume_attempts: 0,
+    },
+    messages: messages.map((message) => ({
+      id: message.id,
+      session_id: message.sessionID,
+      time_created: message.time.created,
+      time_updated: completed(message) ?? message.time.created,
+      data: JSON.stringify(message),
+    })),
+    parts: parts.map((part) => {
+      const message = byMessage.get(part.messageID)
+      return {
+        id: part.id,
+        message_id: part.messageID,
+        session_id: part.sessionID,
+        time_created: message?.time.created ?? session.time.created,
+        time_updated: (message ? completed(message) : undefined) ?? message?.time.created ?? session.time.updated,
+        data: JSON.stringify(part),
+      }
+    }),
+  })
+
+  return {
+    session: encodeCurrentSession(
+      decodeCurrentSession({
+        id: session.id,
+        projectID: session.projectID,
+        ...(session.parentID ? { parentID: session.parentID } : {}),
+        ...(result.session.agent ? { agent: result.session.agent } : {}),
+        ...(result.session.model ? { model: result.session.model } : {}),
+        cost: result.session.cost ?? 0,
+        tokens: {
+          input: result.session.tokens_input ?? 0,
+          output: result.session.tokens_output ?? 0,
+          reasoning: result.session.tokens_reasoning ?? 0,
+          cache: {
+            read: result.session.tokens_cache_read ?? 0,
+            write: result.session.tokens_cache_write ?? 0,
+          },
+        },
+        title: session.title,
+        location: { directory: session.directory },
+        ...(session.path ? { subpath: session.path } : {}),
+        time: {
+          created: session.time.created,
+          updated: session.time.updated,
+          ...(session.time.archived ? { archived: session.time.archived } : {}),
+        },
+      }),
+    ),
+    messages: toSessionMessages(result),
+    warnings: result.warnings,
+  }
+}
+
+function completed(message: typeof SessionV1.Info.Type) {
+  return "completed" in message.time ? message.time.completed : undefined
 }
 
 export function status(): Effect.Effect<Status, never, Database.Service> {

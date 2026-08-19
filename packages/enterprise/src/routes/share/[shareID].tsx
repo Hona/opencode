@@ -1,5 +1,6 @@
 import { SessionTimeline } from "@opencode-ai/session-ui/timeline"
 import type { SessionDocument } from "@opencode-ai/session-ui/document"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
@@ -8,6 +9,7 @@ import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallbac
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, ErrorBoundary, Match, Show, Switch, type JSX } from "solid-js"
 import { Share } from "~/core/share"
+import { readShareDocument } from "~/core/share-document"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -50,57 +52,17 @@ const getData = query(async (shareID) => {
   "use server"
   const share = await Share.get(shareID)
   if (!share) throw new SessionDataMissingError({ sessionID: shareID })
-  const data = await Share.data(shareID)
-  const result: {
-    sessionID: string
-    shareID: string
-    session: Share.SessionRecord[]
-    session_diff: {
-      [sessionID: string]: Share.SessionDiff[]
-    }
-    session_status: {
-      [sessionID: string]: { type: "idle" }
-    }
-    messages: {
-      [sessionID: string]: Share.Message[]
-    }
-    model: {
-      [sessionID: string]: Share.Model[]
-    }
-  } = {
+  const document = await readShareDocument(await Share.data(shareID))
+  if (document.warnings.length) console.warn("Share blob migration warnings", document.warnings)
+  return {
     sessionID: share.sessionID,
     shareID,
-    session: [],
-    session_diff: {
-      [share.sessionID]: [],
-    },
-    session_status: {
-      [share.sessionID]: {
-        type: "idle",
-      },
-    },
-    messages: {},
-    model: {},
+    session: [document.session],
+    session_diff: { [share.sessionID]: document.diffs },
+    session_status: { [share.sessionID]: { type: "idle" as const } },
+    messages: { [share.sessionID]: document.messages },
+    model: { [share.sessionID]: document.models },
   }
-  for (const item of data) {
-    switch (item.type) {
-      case "session":
-        result.session.push(item.data)
-        break
-      case "session_diff":
-        result.session_diff[share.sessionID] = item.data
-        break
-      case "messages":
-        result.messages[item.data.sessionID] = item.data.messages
-        break
-      case "model":
-        result.model[share.sessionID] = item.data
-        break
-    }
-  }
-  if (!result.session.some((session) => session.id === share.sessionID))
-    throw new SessionDataMissingError({ sessionID: share.sessionID })
-  return result
 }, "getShareData")
 
 export default function () {
@@ -182,7 +144,7 @@ export default function () {
                       const activeMessage = createMemo(
                         () => userMessages().find((message) => message.id === store.messageId) ?? firstUserMessage(),
                       )
-                      function setActiveMessage(message: Extract<Share.Message, { type: "user" }> | undefined) {
+                      function setActiveMessage(message: Extract<SessionMessageInfo, { type: "user" }> | undefined) {
                         setStore("messageId", message?.id)
                       }
                       const assistant = createMemo(() => messages().find((message) => message.type === "assistant"))

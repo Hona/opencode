@@ -8,4 +8,8 @@ if (args.length !== 1) {
 }
 const shareID = args[0]
 
-await Promise.all([Storage.remove(["share", shareID]), Storage.remove(["share_snapshot", shareID])])
+await Storage.remove(["share", shareID])
+const list = await Storage.list({ prefix: ["share_data", shareID] })
+for (const item of list) {
+  await Storage.remove(item)
+}

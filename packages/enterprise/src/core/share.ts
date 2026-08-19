@@ -1,4 +1,6 @@
-import type { FileDiffInfo, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { SessionV1 } from "@opencode-ai/schema/session-v1"
+import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import z from "zod"
 import { Storage } from "./storage"
 
@@ -6,12 +8,25 @@ function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => R
   return (input: z.infer<T>) => cb(schema.parse(input))
 }
 
+type Stored<T> = T extends string
+  ? T extends `${infer Value}`
+    ? Value
+    : string
+  : T extends readonly (infer Item)[]
+    ? Stored<Item>[]
+    : T extends object
+      ? { -readonly [Key in keyof T]: Stored<T[Key]> }
+      : T
+
 export namespace Share {
-  export type SessionDiff = FileDiffInfo
+  export type SessionDiff = FileDiff.LegacyInfo & { file: string; patch: string }
   export type Model = { id: string; name: string }
-  export type SessionRecord = SessionInfo
-  export type Message = SessionMessageInfo
-  export type Messages = { sessionID: string; messages: Message[] }
+  export type StoredSession = Stored<SessionV1.SessionInfo>
+  export type Session = StoredSession | SessionInfo
+  export type StoredMessage = Stored<SessionV1.Info>
+  export type StoredUserMessage = Stored<SessionV1.User>
+  export type StoredPart = Stored<SessionV1.Part>
+  export type Messages = { sessionID: string; messages: SessionMessageInfo[] }
 
   export const Info = z.object({
     id: z.string(),
@@ -23,11 +38,19 @@ export namespace Share {
   export const Data = z.discriminatedUnion("type", [
     z.object({
       type: z.literal("session"),
-      data: z.custom<SessionRecord>(),
+      data: z.custom<Session>(),
+    }),
+    z.object({
+      type: z.literal("message"),
+      data: z.custom<StoredMessage>(),
     }),
     z.object({
       type: z.literal("messages"),
       data: z.custom<Messages>(),
+    }),
+    z.object({
+      type: z.literal("part"),
+      data: z.custom<StoredPart>(),
     }),
     z.object({
       type: z.literal("session_diff"),
@@ -44,12 +67,21 @@ export namespace Share {
     data: Data[]
   }
 
+  type Compaction = {
+    event?: string
+    data: Data[]
+  }
+
   function key(item: Data) {
     switch (item.type) {
       case "session":
         return "session"
+      case "message":
+        return `message/${item.data.id}`
       case "messages":
         return `messages/${item.data.sessionID}`
+      case "part":
+        return `part/${item.data.messageID}/${item.data.id}`
       case "session_diff":
         return "session_diff"
       case "model":
@@ -78,6 +110,37 @@ export namespace Share {
     await Storage.write(["share_snapshot", shareID], { data } satisfies Snapshot)
   }
 
+  async function readEventSnapshot(shareID: string) {
+    const compaction: Compaction = (await Storage.read<Compaction>(["share_compaction", shareID])) ?? {
+      data: [],
+      event: undefined,
+    }
+    const list = await Storage.list({
+      prefix: ["share_event", shareID],
+      before: compaction.event,
+    }).then((x) => x.toReversed())
+    if (list.length === 0) {
+      if (compaction.data.length > 0) await writeSnapshot(shareID, compaction.data)
+      return compaction.data
+    }
+
+    const next = merge(
+      compaction.data,
+      await Promise.all(list.map(async (event) => await Storage.read<Data[]>(event))).then((x) =>
+        x.flatMap((item) => item ?? []),
+      ),
+    )
+
+    await Promise.all([
+      Storage.write(["share_compaction", shareID], {
+        event: list.at(-1)?.at(-1),
+        data: next,
+      }),
+      writeSnapshot(shareID, next),
+    ])
+    return next
+  }
+
   export const create = fn(z.object({ sessionID: z.string() }), async (body) => {
     const isTest = process.env.NODE_ENV === "test" || body.sessionID.startsWith("test_")
     const info: Info = {
@@ -99,7 +162,16 @@ export namespace Share {
     const share = await get(body.id)
     if (!share) throw new Errors.NotFound(body.id)
     if (share.secret !== body.secret) throw new Errors.InvalidSecret(body.id)
-    await Promise.all([Storage.remove(["share", body.id]), Storage.remove(["share_snapshot", body.id])])
+    await Storage.remove(["share", body.id])
+    const groups = await Promise.all([
+      Storage.list({ prefix: ["share_snapshot", body.id] }),
+      Storage.list({ prefix: ["share_compaction", body.id] }),
+      Storage.list({ prefix: ["share_event", body.id] }),
+      Storage.list({ prefix: ["share_data", body.id] }),
+    ])
+    for (const item of groups.flat()) {
+      await Storage.remove(item)
+    }
   })
 
   export const removeAdmin = fn(Info.pick({ id: true }), async (body) => {
@@ -117,13 +189,13 @@ export namespace Share {
       const share = await get(input.share.id)
       if (!share) throw new Errors.NotFound(input.share.id)
       if (share.secret !== input.share.secret) throw new Errors.InvalidSecret(input.share.id)
-      const data = (await readSnapshot(input.share.id)) ?? []
+      const data = (await readSnapshot(input.share.id)) ?? (await readEventSnapshot(input.share.id))
       await writeSnapshot(input.share.id, merge(data, input.data))
     },
   )
 
   export async function data(shareID: string) {
-    return (await readSnapshot(shareID)) ?? []
+    return (await readSnapshot(shareID)) ?? readEventSnapshot(shareID)
   }
 
   export const Errors = {
