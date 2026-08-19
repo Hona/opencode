@@ -39,6 +39,32 @@
   }
 }
 
+[data-component="tooltip-v2"][data-appearance="standard"] {
+  display: block;
+  max-width: 320px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+  border-radius: var(--radius-sm);
+  background: var(--surface-float-base);
+  color: var(--text-invert-strong);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+  letter-spacing: var(--letter-spacing-normal);
+  font-variant-numeric: normal;
+  font-variation-settings: normal;
+  user-select: text;
+  animation: none;
+
+  &[data-closed]:not([data-force-open="true"]) {
+    opacity: 0;
+    animation: none;
+  }
+}
+
 @keyframes tooltipV2In {
   from {
     opacity: 0;

@@ -95,7 +95,7 @@ export function NewSessionStatus(props: { mount: HTMLElement | null; visible: bo
       {(mount) => (
         <Portal mount={mount}>
           <Show when={props.visible}>
-            <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+            <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
               <StatusPopoverV2 />
             </Tooltip>
           </Show>

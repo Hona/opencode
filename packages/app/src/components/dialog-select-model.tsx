@@ -79,6 +79,7 @@ const ModelList: Component<{
       }}
       itemWrapper={(item, node) => (
         <Tooltip
+          appearance="standard"
           class="w-full"
           placement="right-start"
           gutter={12}
@@ -191,7 +192,7 @@ export function ModelSelectorPopover(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <Tooltip placement="top" value={language.t("command.provider.connect")}>
+                <Tooltip appearance="standard" placement="top" value={language.t("command.provider.connect")}>
                   <IconButton
                     icon={<Icon name="plus-small" />}
                     variant="ghost"
@@ -200,7 +201,7 @@ export function ModelSelectorPopover(props: {
                     onClick={handleConnectProvider}
                   />
                 </Tooltip>
-                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
+                <Tooltip appearance="standard" placement="top" value={language.t("dialog.model.manage")}>
                   <IconButton
                     icon={<Icon name="sliders" />}
                     variant="ghost"

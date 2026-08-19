@@ -55,6 +55,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             key={(x) => `${x.provider.id}:${x.id}`}
             itemWrapper={(item, node) => (
               <Tooltip
+                appearance="standard"
                 class="w-full"
                 placement="right-start"
                 gutter={12}

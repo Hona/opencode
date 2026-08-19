@@ -136,6 +136,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
             <Show when={open()}>
               <div data-slot="tool-error-card-copy">
                 <Tooltip
+                  appearance="standard"
                   value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   placement="top"
                   gutter={4}

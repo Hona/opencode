@@ -67,6 +67,7 @@ export const DialogManageModels: Component = () => {
               <>
                 <span>{provider.name}</span>
                 <Tooltip
+                  appearance="standard"
                   placement="top"
                   value={language.t("dialog.model.manage.provider.toggle", { provider: provider.name })}
                 >

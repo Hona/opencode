@@ -101,16 +101,8 @@ function Cell(props: {
     </div>
   )
 
-  if (props.inline) {
-    return (
-      <Tooltip value={props.tip} placement="top">
-        {content()}
-      </Tooltip>
-    )
-  }
-
   return (
-    <Tooltip value={props.tip} placement="top">
+    <Tooltip appearance={props.inline ? "compact" : "standard"} value={props.tip} placement="top">
       {content()}
     </Tooltip>
   )
@@ -150,16 +142,8 @@ function ToggleCell(props: {
     </button>
   )
 
-  if (props.inline) {
-    return (
-      <Tooltip value={props.tip} placement="top">
-        {content()}
-      </Tooltip>
-    )
-  }
-
   return (
-    <Tooltip value={props.tip} placement="top">
+    <Tooltip appearance={props.inline ? "compact" : "standard"} value={props.tip} placement="top">
       {content()}
     </Tooltip>
   )

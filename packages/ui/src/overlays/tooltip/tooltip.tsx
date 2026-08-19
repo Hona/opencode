@@ -6,6 +6,7 @@ import "./tooltip.css"
 
 export interface TooltipProps extends ComponentProps<typeof Root> {
   value: JSX.Element
+  appearance?: "standard" | "compact"
   class?: string
   contentClass?: string
   contentStyle?: JSX.CSSProperties
@@ -22,6 +23,7 @@ export function Tooltip(props: TooltipProps) {
   })
   const [local, others] = splitProps(props, [
     "children",
+    "appearance",
     "class",
     "contentClass",
     "contentStyle",
@@ -127,6 +129,7 @@ export function Tooltip(props: TooltipProps) {
                 if (theme) el.setAttribute("data-theme", theme)
               }}
               data-component="tooltip-v2"
+              data-appearance={local.appearance ?? "compact"}
               data-placement={props.placement}
               data-force-open={local.forceOpen}
               class={local.contentClass}

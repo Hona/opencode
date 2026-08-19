@@ -529,7 +529,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
                                   <Show when={props.onViewFile && diffCanRender()}>
-                                    <Tooltip value={openFileLabel()} placement="top" gutter={4}>
+                                    <Tooltip appearance="standard" value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
                                         type="button"
