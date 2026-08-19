@@ -10,7 +10,6 @@ import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/d
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Tag } from "@opencode-ai/ui/tag"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Menu } from "@opencode-ai/ui/menu"
@@ -100,10 +99,10 @@ const ModelList: Component<{
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
           <Show when={isFree(i.provider.id, i.cost)}>
-            <Tag>{language.t("model.tag.free")}</Tag>
+            <Badge appearance="standard">{language.t("model.tag.free")}</Badge>
           </Show>
           <Show when={i.latest}>
-            <Tag>{language.t("model.tag.latest")}</Tag>
+            <Badge appearance="standard">{language.t("model.tag.latest")}</Badge>
           </Show>
         </div>
       )}

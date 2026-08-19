@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tag } from "@opencode-ai/ui/tag"
+import { Badge } from "@opencode-ai/ui/badge"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Component, Show } from "solid-js"
 import { useLocal } from "@/context/local"
@@ -79,9 +79,9 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             {(i) => (
               <div class="w-full flex items-center gap-x-2.5">
                 <span>{i.name}</span>
-                <Tag>{language.t("model.tag.free")}</Tag>
+                <Badge appearance="standard">{language.t("model.tag.free")}</Badge>
                 <Show when={i.latest}>
-                  <Tag>{language.t("model.tag.latest")}</Tag>
+                  <Badge appearance="standard">{language.t("model.tag.latest")}</Badge>
                 </Show>
               </div>
             )}
@@ -117,14 +117,14 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                         </div>
                       </Show>
                       <Show when={i.id === "opencode"}>
-                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                        <Badge appearance="standard">{language.t("dialog.provider.tag.recommended")}</Badge>
                       </Show>
                       <Show when={i.id === "opencode-go"}>
                         <>
                           <div class="text-14-regular text-text-weak">
                             {language.t("dialog.provider.opencodeGo.tagline")}
                           </div>
-                          <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                          <Badge appearance="standard">{language.t("dialog.provider.tag.recommended")}</Badge>
                         </>
                       </Show>
                       <Show when={i.id === "anthropic"}>
