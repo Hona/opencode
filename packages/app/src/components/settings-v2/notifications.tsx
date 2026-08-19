@@ -35,7 +35,6 @@ const SoundSetting: Component<{
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <Select
-        appearance="inline"
         data-action={config().action}
         options={soundOptions}
         current={props.channel.current()}

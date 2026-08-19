@@ -21,7 +21,6 @@ export const InlineServerSelect: Component<{
   return (
     <Show when={options().length > 1}>
       <Select
-        appearance="inline"
         data-action="settings-server-select"
         options={options()}
         current={current()}

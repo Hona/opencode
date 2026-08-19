@@ -84,7 +84,6 @@ export const SettingsAppearanceV2: Component = () => {
               description={language.t("settings.general.row.colorScheme.description")}
             >
               <Select
-                appearance="inline"
                 data-action="settings-color-scheme"
                 options={schemeOptions}
                 current={schemeOptions.find((option) => option === appearance.scheme.current())}
@@ -111,7 +110,6 @@ export const SettingsAppearanceV2: Component = () => {
               }
             >
               <Select
-                appearance="inline"
                 data-action="settings-theme"
                 options={appearance.theme.options()}
                 current={appearance.theme.current()}

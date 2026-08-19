@@ -46,7 +46,7 @@
   }
 }
 
-/* Trigger shell — aligned with text-input-v2 */
+/* Shared trigger structure for the inline control. */
 [data-component="select-v2"] {
   box-sizing: border-box;
   display: flex;
@@ -71,12 +71,6 @@
     background 85ms ease-out,
     outline-color 85ms ease-out,
     box-shadow 85ms ease-out;
-}
-
-[data-component="select-v2"][data-appearance="large"] {
-  height: 32px;
-  padding-block: 0;
-  padding-inline: 0 8px;
 }
 
 [data-component="select-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within):not(

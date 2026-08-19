@@ -101,7 +101,6 @@ const WorkspaceDestinationSetting: Component = () => {
       description={language.t("settings.workspaces.default.description")}
     >
       <Select
-        appearance="inline"
         options={options()}
         current={options().find((option) => option.value === settings.workspaces.defaultDestination())}
         value={(option) => option.value}
@@ -128,7 +127,6 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
       description={language.t("settings.general.row.shell.description")}
     >
       <Select
-        appearance="inline"
         data-action="settings-shell"
         options={options()}
         current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
@@ -157,7 +155,6 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
           description={language.t("settings.general.row.colorScheme.description")}
         >
           <Select
-            appearance="inline"
             data-action="settings-color-scheme"
             options={schemeOptions}
             current={schemeOptions.find((option) => option === props.controller.scheme.current())}
@@ -184,7 +181,6 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
           }
         >
           <Select
-            appearance="inline"
             data-action="settings-theme"
             options={props.controller.theme.options()}
             current={props.controller.theme.current()}
@@ -255,7 +251,6 @@ const SoundSetting: Component<{
   return (
     <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <Select
-        appearance="inline"
         data-action={config().action}
         options={soundOptions}
         current={props.channel.current()}
@@ -284,7 +279,6 @@ const LanguageSetting = () => {
       description={language.t("settings.general.row.language.description")}
     >
       <Select
-        appearance="inline"
         data-action="settings-language"
         options={options()}
         placement="bottom-end"

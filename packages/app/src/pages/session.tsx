@@ -1038,7 +1038,6 @@ export default function Page() {
 
     return (
       <Select
-        appearance="inline"
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}

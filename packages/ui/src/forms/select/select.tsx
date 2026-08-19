@@ -64,8 +64,6 @@ export type SelectProps<T> = Omit<
   groupBy?: (x: T) => string
   onSelect?: (value: T | null) => void
   onHighlight?: (value: T | undefined) => void | (() => void)
-  /** `base` / `large` match text-input-v2; `inline` is a compact settings-row trigger. */
-  appearance?: "base" | "large" | "inline"
   invalid?: boolean
   numeric?: boolean
   children?: (item: T) => JSX.Element
@@ -86,7 +84,6 @@ export function Select<T>(props: SelectProps<T>) {
     "onHighlight",
     "onOpenChange",
     "children",
-    "appearance",
     "invalid",
     "numeric",
     "disabled",
@@ -98,8 +95,6 @@ export function Select<T>(props: SelectProps<T>) {
     "slide",
     "fitViewport",
   ])
-
-  const inline = () => (local.appearance ?? "base") === "inline"
 
   const state: { key?: string; cleanup?: void | (() => void) } = {}
 
@@ -135,9 +130,9 @@ export function Select<T>(props: SelectProps<T>) {
       allowDuplicateSelectionEvents={false}
       disabled={local.disabled}
       data-component="select-v2-root"
-      placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
+      placement={local.placement ?? "bottom-end"}
       gutter={local.gutter ?? 4}
-      sameWidth={local.sameWidth ?? !inline()}
+      sameWidth={local.sameWidth ?? false}
       flip={local.flip ?? true}
       slide={local.slide ?? true}
       fitViewport={local.fitViewport ?? false}
@@ -187,7 +182,7 @@ export function Select<T>(props: SelectProps<T>) {
       <Trigger
         as="div"
         data-component="select-v2"
-        data-appearance={local.appearance ?? "base"}
+        data-appearance="inline"
         data-invalid={local.invalid ? "" : undefined}
         data-numeric={local.numeric ? "" : undefined}
         disabled={local.disabled}

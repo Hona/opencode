@@ -15,15 +15,14 @@ const cities: { city: string; region: Region }[] = [
 ]
 
 const docs = `### Overview
-Single-select built on Kobalte with a **TextInput v2** trigger surface and **Menu v2** list styling.
+Single-select built on Kobalte with an inline trigger and current menu styling.
 
 ### API
 - \`placeholder\`: Shown in the trigger when nothing is selected (same idea as text inputs).
 - \`options\`, \`current\`, \`onSelect\`: controlled selection (\`current\` is the selected option object).
 - \`value\` / \`label\`: accessors when options are not plain strings.
 - \`groupBy\`: groups options; section headers use menu group label styling.
-- \`appearance\`: \`base\` (28px), \`large\` (32px), or \`inline\` (compact settings-row trigger).
-- \`placement\`, \`gutter\`, \`sameWidth\`, \`flip\`, \`slide\`, \`fitViewport\`: forwarded to Kobalte popper (defaults match legacy \`Select\`: gutter 4, flip/slide on; inline uses \`bottom-end\` and \`sameWidth: false\`).
+- \`placement\`, \`gutter\`, \`sameWidth\`, \`flip\`, \`slide\`, \`fitViewport\`: forwarded to Kobalte popper.
 - \`invalid\`, \`disabled\`, \`numeric\`: match text input conventions.
 `
 
@@ -45,7 +44,6 @@ export default {
     placeholder: "Pick a fruit",
     invalid: false,
     disabled: false,
-    appearance: "base",
   },
   argTypes: {
     placeholder: {
@@ -56,10 +54,6 @@ export default {
     },
     disabled: {
       control: "boolean",
-    },
-    appearance: {
-      control: "select",
-      options: ["base", "large", "inline"],
     },
   },
 }
@@ -72,24 +66,6 @@ export const Playground = {
         placeholder={args.placeholder}
         invalid={args.invalid}
         disabled={args.disabled}
-        appearance={args.appearance}
-        options={fruits}
-        current={current()}
-        onSelect={(v) => setCurrent(v === null ? undefined : v)}
-      />
-    )
-  },
-}
-
-export const Large = {
-  render: (args) => {
-    const [current, setCurrent] = createSignal(undefined)
-    return (
-      <Select
-        placeholder={args.placeholder}
-        invalid={args.invalid}
-        disabled={args.disabled}
-        appearance="large"
         options={fruits}
         current={current()}
         onSelect={(v) => setCurrent(v === null ? undefined : v)}
@@ -106,7 +82,6 @@ export const Grouped = {
         placeholder={args.placeholder}
         invalid={args.invalid}
         disabled={args.disabled}
-        appearance={args.appearance}
         options={cities}
         current={current()}
         onSelect={(v) => setCurrent(v === null ? undefined : v)}
@@ -126,7 +101,6 @@ export const Invalid = {
         placeholder={args.placeholder}
         invalid
         disabled={args.disabled}
-        appearance={args.appearance}
         options={fruits}
         current={current()}
         onSelect={(v) => setCurrent(v === null ? undefined : v)}
@@ -141,7 +115,6 @@ export const Disabled = {
       placeholder={args.placeholder}
       invalid={args.invalid}
       disabled
-      appearance={args.appearance}
       options={fruits}
       current="Cherry"
       onSelect={() => {}}
@@ -162,7 +135,6 @@ export const WithField = {
             placeholder={args.placeholder}
             invalid={args.invalid}
             disabled={args.disabled}
-            appearance={args.appearance}
             options={fruits}
             current={current()}
             onSelect={(v) => setCurrent(v === null ? undefined : v)}
