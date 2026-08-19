@@ -24,3 +24,24 @@
     color: var(--v2-state-fg-danger);
   }
 }
+
+[data-component="diff-changes"][data-appearance="standard"] {
+  [data-slot="diff-changes-additions"],
+  [data-slot="diff-changes-deletions"] {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  [data-slot="diff-changes-additions"] {
+    color: var(--text-diff-add-base);
+  }
+
+  [data-slot="diff-changes-deletions"] {
+    color: var(--text-diff-delete-base);
+  }
+}

@@ -7,6 +7,7 @@ Pair with \`Diff\`/\`DiffSSR\` to contextualize a change set.
 
 ### API
 - Required: \`changes\` as { additions, deletions } or an array of those objects.
+- Optional: \`appearance\` is \`compact\` (default) or \`standard\`.
 
 ### Variants and states
 - Handles zero-change state (renders nothing).
@@ -42,6 +43,15 @@ export default {
 }
 
 export const Default = {}
+
+export const Appearances = {
+  render: () => (
+    <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
+      <DiffChanges appearance="standard" changes={changes} />
+      <DiffChanges appearance="compact" changes={changes} />
+    </div>
+  ),
+}
 
 export const MultipleFiles = {
   args: {

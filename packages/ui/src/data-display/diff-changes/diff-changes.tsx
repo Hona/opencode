@@ -3,6 +3,7 @@ import "./diff-changes.css"
 
 export function DiffChanges(props: {
   class?: string
+  appearance?: "standard" | "compact"
   changes: { additions: number; deletions: number } | { additions: number; deletions: number }[]
 }) {
   const additions = createMemo(() =>
@@ -19,7 +20,11 @@ export function DiffChanges(props: {
 
   return (
     <Show when={total() > 0}>
-      <div data-component="diff-changes" classList={{ [props.class ?? ""]: true }}>
+      <div
+        data-component="diff-changes"
+        data-appearance={props.appearance ?? "compact"}
+        classList={{ [props.class ?? ""]: true }}
+      >
         <span data-slot="diff-changes-additions">{`+${additions()}`}</span>
         <span data-slot="diff-changes-deletions">{`-${deletions()}`}</span>
       </div>

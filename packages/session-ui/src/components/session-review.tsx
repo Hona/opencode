@@ -552,7 +552,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                       <span data-slot="session-review-change" data-type="added">
                                         {i18n.t("ui.sessionReview.change.added")}
                                       </span>
-                                      <DiffChanges changes={diff()} />
+                                      <DiffChanges appearance="standard" changes={diff()} />
                                     </div>
                                   </Match>
                                   <Match when={isDeleted()}>
@@ -566,7 +566,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     </span>
                                   </Match>
                                   <Match when={true}>
-                                    <DiffChanges changes={diff()} />
+                                    <DiffChanges appearance="standard" changes={diff()} />
                                   </Match>
                                 </Switch>
                                 <Show when={diffCanRender()}>

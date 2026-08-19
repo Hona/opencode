@@ -241,7 +241,7 @@ function SessionSummaryPanel(props: {
               <Show when={diffs().length > 0} fallback={<span>{language.t("session.review.noChanges")}</span>}>
                 <span>{language.plural("ui.sessionTurn.diffs.changed", diffs().length)}</span>
                 <span class="text-v2-text-text-muted">·</span>
-                <DiffChanges changes={diffs()} />
+                <DiffChanges appearance="standard" changes={diffs()} />
               </Show>
             )}
           </Show>

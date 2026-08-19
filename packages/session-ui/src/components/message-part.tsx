@@ -2325,7 +2325,7 @@ ToolRegistry.register({
               </div>
               <div data-slot="message-part-actions">
                 <Show when={!pending() && props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff} />
+                  <DiffChanges appearance="standard" changes={props.metadata.filediff} />
                 </Show>
               </div>
             </div>
@@ -2336,7 +2336,7 @@ ToolRegistry.register({
               path={path()}
               actions={
                 <Show when={!pending() && props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff!} />
+                  <DiffChanges appearance="standard" changes={props.metadata.filediff!} />
                 </Show>
               }
             >
@@ -2518,7 +2518,10 @@ ToolRegistry.register({
                                       </span>
                                     </Match>
                                     <Match when={true}>
-                                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                                      <DiffChanges
+                                        appearance="standard"
+                                        changes={{ additions: file.additions, deletions: file.deletions }}
+                                      />
                                     </Match>
                                   </Switch>
                                   <Icon name="chevron-grabber-vertical" size="small" />
@@ -2574,7 +2577,10 @@ ToolRegistry.register({
                 </div>
                 <div data-slot="message-part-actions">
                   <Show when={!pending()}>
-                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                    <DiffChanges
+                      appearance="standard"
+                      changes={{ additions: single()!.additions, deletions: single()!.deletions }}
+                    />
                   </Show>
                 </div>
               </div>
@@ -2600,7 +2606,10 @@ ToolRegistry.register({
                     </span>
                   </Match>
                   <Match when={true}>
-                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                    <DiffChanges
+                      appearance="standard"
+                      changes={{ additions: single()!.additions, deletions: single()!.deletions }}
+                    />
                   </Match>
                 </Switch>
               }
