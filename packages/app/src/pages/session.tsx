@@ -1042,23 +1042,6 @@ export default function Page() {
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}
-        onSelect={(option) => option && controller.layout.view().review.setMode(option)}
-        valueClass="text-14-medium"
-      />
-    )
-  }
-
-  const changesTitleV2 = () => {
-    if (!canReview()) {
-      return null
-    }
-
-    return (
-      <Select
-        appearance="inline"
-        options={changesOptions()}
-        current={reviewMode()}
-        label={changesLabel}
         placement="bottom-start"
         gutter={6}
         onSelect={(option) => option && controller.layout.view().review.setMode(option)}
@@ -1159,7 +1142,7 @@ export default function Page() {
   // updates such as session switches.
   const reviewPanelV2Props = () => ({
     get title() {
-      return changesTitleV2()
+      return changesTitle()
     },
     get empty() {
       return reviewEmptyV2()
