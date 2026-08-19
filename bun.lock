@@ -482,6 +482,7 @@
         "@solidjs/router": "catalog:",
         "@solidjs/start": "catalog:",
         "aws4fetch": "^1.0.20",
+        "effect": "catalog:",
         "hono": "catalog:",
         "hono-openapi": "catalog:",
         "js-base64": "3.7.7",
