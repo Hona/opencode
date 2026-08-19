@@ -205,11 +205,12 @@ function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
     icon: "check" | "copy" | "reset"
     label: JSX.Element
+    useV2?: boolean
   },
 ) {
   const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
   return (
-    <Tooltip value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance={props.useV2 ? "compact" : "standard"} value={props.label} placement="top" gutter={4}>
       <IconButton
         icon={<Icon name={icon()} size="small" />}
         size="normal"
@@ -1361,6 +1362,7 @@ export function UserMessageDisplay(props: {
             <MessageActionButton
               icon="reset"
               label={i18n.t("ui.message.revertMessage")}
+              useV2={props.useV2Actions}
               disabled={!!busy()}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
@@ -1374,6 +1376,7 @@ export function UserMessageDisplay(props: {
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+              useV2={props.useV2Actions}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
                 event.stopPropagation()
@@ -1757,6 +1760,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              useV2={props.useV2Actions}
               onMouseDown={(event) => event.preventDefault()}
               onClick={handleCopy}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}

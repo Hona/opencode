@@ -130,7 +130,7 @@ function ReviewCommentMenu(props: {
       <Menu appearance="standard" gutter={4} placement="bottom-end">
         <Menu.Trigger
           as={IconButton}
-          icon="dot-grid"
+          icon={<Icon name="dot-grid" />}
           variant="ghost"
           size="small"
           class="size-6 rounded-md"

@@ -108,6 +108,7 @@ export function TextField(props: TextFieldProps) {
         </Show>
         <Show when={local.copyable}>
           <Tooltip
+            appearance="standard"
             value={label()}
             placement="top"
             gutter={4}
