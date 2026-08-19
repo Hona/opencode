@@ -3,20 +3,16 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
-import { Show, createMemo } from "solid-js"
+import { Match, Switch } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
-import { ContextToolGroup, Message, Part, type UserActions } from "../components/legacy-message-part"
-import { partDefaultOpen } from "../components/part-default-open"
-import type { FilePart, ToolPart } from "../presentation"
-import {
-  toLegacyAssistantContent,
-  toLegacyAssistantMessage,
-  toLegacyUserMessage,
-  toLegacyUserParts,
-} from "./legacy-message-values"
+import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
+import { CurrentContextToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
-export { MessageDivider, SessionShellMessage } from "../components/legacy-message-part"
+export { MessageDivider } from "./message-content"
+export { SessionShellMessage } from "../tools/tool-renderer"
+export { currentContentDefaultOpen } from "./current-tool-state"
 
 export function SessionUserMessage(props: {
   sessionID: string
@@ -26,108 +22,90 @@ export function SessionUserMessage(props: {
   historicalAgent: string
   historicalModel: SessionMessageAssistant["model"]
   actions?: SessionUserActions
-  useV2Actions?: boolean
 }) {
-  const message = createMemo(() =>
-    toLegacyUserMessage(props.sessionID, props.message, props.historicalAgent, props.historicalModel),
-  )
-  const parts = createMemo(() => toLegacyUserParts(props.sessionID, props.message, props.displayText, props.comments))
-  const actions = createMemo(() => {
-    if (!props.actions) return
-    return {
-      revert: props.actions.revert,
-      openAttachment: props.actions.openAttachment
-        ? (file: FilePart) => {
-            const attachment = (props.message.files ?? []).find(
-              (_, index) => file.id === `${props.message.id}:file:${index}`,
-            )
-            if (attachment) props.actions?.openAttachment?.(attachment)
-          }
-        : undefined,
-    } satisfies UserActions
-  })
   return (
-    <Message
-      message={message()}
-      parts={parts()}
+    <CurrentUserMessageDisplay
+      sessionID={props.sessionID}
+      message={props.message}
+      text={props.displayText ?? props.message.text}
       comments={props.comments}
-      actions={actions()}
-      useV2Actions={props.useV2Actions}
+      agent={props.historicalAgent}
+      model={props.historicalModel}
+      actions={props.actions}
     />
   )
 }
 
 export function SessionAssistantContent(props: {
-  sessionID: string
-  parentID: string
   message: SessionMessageAssistant
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
-  useV2Actions?: boolean
   defaultOpen?: boolean
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
 }) {
-  const message = createMemo(() => toLegacyAssistantMessage(props.sessionID, props.parentID, props.message))
-  const part = createMemo(() =>
-    toLegacyAssistantContent(props.sessionID, props.message, props.contentID, props.content),
-  )
   return (
-    <Show when={part()}>
-      {(part) => (
-        <Part
-          part={part()}
-          message={message()}
-          showAssistantCopyPartID={props.showAssistantCopyPartID}
-          turnDurationMs={props.turnDurationMs}
-          useV2Actions={props.useV2Actions}
-          defaultOpen={props.defaultOpen}
-          toolOpen={props.toolOpen}
-          onToolOpenChange={props.onToolOpenChange}
-          deferToolContent
-          virtualizeDiff={false}
-          onContentRendered={props.onContentRendered}
-        />
-      )}
-    </Show>
+    <Switch>
+      <Match when={props.content.type === "text" ? props.content : undefined}>
+        {(content) => (
+          <AssistantTextContent
+            id={props.contentID}
+            text={content().text}
+            message={props.message}
+            showCopy={props.showAssistantCopyPartID === props.contentID}
+            turnDurationMs={props.turnDurationMs}
+          />
+        )}
+      </Match>
+      <Match when={props.content.type === "reasoning" ? props.content : undefined}>
+        {(content) => (
+          <AssistantReasoningContent
+            id={props.contentID}
+            text={content().text}
+            streaming={typeof props.message.time.completed !== "number"}
+          />
+        )}
+      </Match>
+      <Match when={props.content.type === "tool" ? props.content : undefined}>
+        {(tool) => (
+          <ToolDisplay
+            id={props.contentID}
+            tool={tool().name}
+            input={currentToolInput(tool())}
+            metadata={currentToolMetadata(tool())}
+            output={currentToolOutput(tool())}
+            status={tool().state.status}
+            error={currentToolError(tool())}
+            defaultOpen={props.defaultOpen}
+            open={props.toolOpen}
+            onOpenChange={props.onToolOpenChange}
+            deferContent
+            virtualizeDiff={false}
+            onContentRendered={props.onContentRendered}
+          />
+        )}
+      </Match>
+    </Switch>
   )
 }
 
 export function SessionContextToolGroup(props: {
-  sessionID: string
-  tools: { message: SessionMessageAssistant; content: SessionMessageAssistantTool; contentID: string }[]
+  tools: SessionMessageAssistantTool[]
   open: boolean
   busy: boolean
   onOpenChange: (open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const parts = createMemo(() =>
-    props.tools.flatMap((item): ToolPart[] => {
-      const part = toLegacyAssistantContent(props.sessionID, item.message, item.contentID, item.content)
-      return part.type === "tool" ? [part] : []
-    }),
-  )
   return (
-    <ContextToolGroup
-      parts={parts()}
+    <CurrentContextToolGroup
+      tools={props.tools}
       open={props.open}
       busy={props.busy}
       onOpenChange={props.onOpenChange}
       onSizeChange={props.onSizeChange}
     />
   )
-}
-
-export function currentContentDefaultOpen(
-  sessionID: string,
-  message: SessionMessageAssistant,
-  content: SessionMessageAssistant["content"][number],
-  contentID: string,
-  shellExpanded: boolean,
-  editExpanded: boolean,
-) {
-  return partDefaultOpen(toLegacyAssistantContent(sessionID, message, contentID, content), shellExpanded, editExpanded)
 }

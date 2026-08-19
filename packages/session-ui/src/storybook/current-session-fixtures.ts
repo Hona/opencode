@@ -1,4 +1,6 @@
 import type {
+  FileDiffInfo,
+  FormInfo,
   JsonValue,
   ModelRef,
   PermissionRequest,
@@ -14,7 +16,7 @@ import type { SessionUserPresentation } from "../timeline/session-timeline"
 export const CURRENT_SESSION_ID = "session_current_story"
 export const STORY_TIME = 1_735_689_600_000
 
-const model = {
+export const STORY_MODEL = {
   id: "claude-sonnet-4",
   providerID: "anthropic",
   variant: "balanced",
@@ -26,7 +28,7 @@ function user(id: string, text: string, offset: number): SessionMessageUser {
     type: "user",
     text,
     time: { created: STORY_TIME + offset },
-    metadata: { agent: "build", model },
+    metadata: { agent: "build", model: STORY_MODEL },
   }
 }
 
@@ -43,7 +45,7 @@ function assistant(input: {
     id: input.id,
     type: "assistant",
     agent: input.agent ?? "build",
-    model,
+    model: STORY_MODEL,
     content: input.content,
     error: input.error,
     retry: input.retry,
@@ -85,6 +87,7 @@ function runningTool(input: {
   name: string
   offset: number
   args: Record<string, JsonValue>
+  output?: string
   metadata?: Record<string, JsonValue>
 }): SessionMessageAssistantTool {
   return {
@@ -94,10 +97,24 @@ function runningTool(input: {
     state: {
       status: "running",
       input: input.args,
+      ...(input.output === undefined ? {} : { output: input.output }),
       metadata: input.metadata ?? {},
     },
     time: { created: STORY_TIME + input.offset, ran: STORY_TIME + input.offset + 100 },
   }
+}
+
+function streamingTool(input: { id: string; name: string; offset: number; args: Record<string, JsonValue> }) {
+  return {
+    type: "tool",
+    id: input.id,
+    name: input.name,
+    state: {
+      status: "streaming",
+      input: JSON.stringify(input.args),
+    },
+    time: { created: STORY_TIME + input.offset },
+  } satisfies SessionMessageAssistantTool
 }
 
 function failedTool(input: {
@@ -185,57 +202,116 @@ export const streamingDocument = document(
   { type: "busy" },
 )
 
-export const editThenTestDocument = document([
-  user("msg_user_edit", "Change the status label and run the focused test.", 20_000),
-  assistant({
-    id: "msg_assistant_edit",
-    offset: 21_000,
-    completed: 27_000,
-    content: [
-      {
-        type: "reasoning",
-        text: "I will make the smallest edit, then run the test that covers this behavior.",
-        time: { created: STORY_TIME + 21_100, completed: STORY_TIME + 21_600 },
-      },
-      completedTool({
-        id: "tool_edit_status",
-        name: "edit",
-        offset: 22_000,
-        args: {
-          path: "src/status.ts",
-          oldString: 'export const status = "Working"',
-          newString: 'export const status = "Running checks"',
-        },
-        output: "Updated src/status.ts",
-        metadata: {
-          files: [
-            {
-              file: "src/status.ts",
-              before: 'export const status = "Working"\n',
-              after: 'export const status = "Running checks"\n',
-              additions: 1,
-              deletions: 1,
-            },
-          ],
-        },
-      }),
-      completedTool({
-        id: "tool_test_status",
-        name: "bash",
-        offset: 24_000,
-        args: { command: "bun test src/status.test.ts" },
-        output: "bun test v1.2.0\n\n1 pass\n0 fail\nRan 1 test across 1 file.",
-        metadata: { exit: 0 },
-      }),
-      {
-        type: "text",
-        text: "Updated the label and verified the focused test. **1 test passed.**",
-      },
-    ],
-  }),
-] satisfies SessionMessageInfo[])
+export const reviewDiffs = [
+  {
+    file: "packages/app/src/components/session-status.tsx",
+    patch:
+      "diff --git a/packages/app/src/components/session-status.tsx b/packages/app/src/components/session-status.tsx\nindex 8412c72..09d4938 100644\n--- a/packages/app/src/components/session-status.tsx\n+++ b/packages/app/src/components/session-status.tsx\n@@ -1,3 +1,3 @@\n export function SessionStatus() {\n-  return <span>Working</span>\n+  return <span>Running checks</span>\n }\n",
+    additions: 1,
+    deletions: 1,
+    status: "modified",
+  },
+  {
+    file: "packages/app/src/components/session-status.test.tsx",
+    patch:
+      'diff --git a/packages/app/src/components/session-status.test.tsx b/packages/app/src/components/session-status.test.tsx\nnew file mode 100644\nindex 0000000..0c19b30\n--- /dev/null\n+++ b/packages/app/src/components/session-status.test.tsx\n@@ -0,0 +1,5 @@\n+import { expect, test } from "bun:test"\n+\n+test("shows the active status", () => {\n+  expect("Running checks").toContain("checks")\n+})\n',
+    additions: 5,
+    deletions: 0,
+    status: "added",
+  },
+] satisfies FileDiffInfo[]
 
-export const shellStatesDocument = document(
+export const editThenTestDocument = {
+  ...document([
+    user("msg_user_edit", "Change the active status label and run the focused component test.", 20_000),
+    assistant({
+      id: "msg_assistant_inspect_status",
+      offset: 21_000,
+      completed: 22_000,
+      content: [
+        {
+          type: "reasoning",
+          text: "## Finding the current label\n\nI will inspect the component and its focused test before changing it.",
+          time: { created: STORY_TIME + 21_100, completed: STORY_TIME + 21_400 },
+        },
+        completedTool({
+          id: "tool_grep_status",
+          name: "grep",
+          offset: 21_500,
+          args: { pattern: "Working", path: "packages/app/src", include: "*.tsx" },
+          output: "packages/app/src/components/session-status.tsx:4:  return <span>Working</span>",
+          metadata: {},
+        }),
+        completedTool({
+          id: "tool_read_status",
+          name: "read",
+          offset: 21_700,
+          args: { path: "packages/app/src/components/session-status.tsx", offset: 1, limit: 80 },
+          output: "export function SessionStatus() {\n  return <span>Working</span>\n}",
+          metadata: { loaded: ["packages/app/src/components/session-status.tsx"] },
+        }),
+      ],
+    }),
+    assistant({
+      id: "msg_assistant_edit",
+      offset: 22_500,
+      completed: 24_000,
+      content: [
+        completedTool({
+          id: "tool_edit_status",
+          name: "edit",
+          offset: 22_600,
+          args: {
+            path: "packages/app/src/components/session-status.tsx",
+            oldString: "  return <span>Working</span>",
+            newString: "  return <span>Running checks</span>",
+          },
+          output: "Updated packages/app/src/components/session-status.tsx",
+          metadata: {
+            files: [
+              {
+                file: "packages/app/src/components/session-status.tsx",
+                patch: reviewDiffs[0].patch,
+                additions: 1,
+                deletions: 1,
+                status: "modified",
+              },
+            ],
+          },
+        }),
+      ],
+    }),
+    assistant({
+      id: "msg_assistant_test_status",
+      offset: 24_500,
+      completed: 26_500,
+      content: [
+        completedTool({
+          id: "tool_test_status",
+          name: "shell",
+          offset: 24_600,
+          args: { command: "bun test src/components/session-status.test.tsx" },
+          output: "bun test v1.2.0\n\n1 pass\n0 fail\nRan 1 test across 1 file.",
+          metadata: { exit: 0 },
+        }),
+      ],
+    }),
+    assistant({
+      id: "msg_assistant_status_result",
+      offset: 27_000,
+      completed: 28_000,
+      content: [
+        {
+          type: "text",
+          text: "Updated the active label to **Running checks** and verified the focused component test.\n\n- 1 test passed\n- 0 tests failed",
+        },
+      ],
+    }),
+  ] satisfies SessionMessageInfo[]),
+  diffs: reviewDiffs,
+} satisfies SessionDocument
+
+export const standaloneShellRunningDocument = document(
   [
     {
       id: "msg_shell_running",
@@ -251,24 +327,274 @@ export const shellStatesDocument = document(
       },
       time: { created: STORY_TIME + 30_000 },
     },
-    {
-      id: "msg_shell_failed",
-      type: "shell",
-      shellID: "shell_failed",
-      command: "bun test src/missing.test.ts",
-      status: "exited",
-      exit: 1,
-      output: {
-        output: "error: Test file not found: src/missing.test.ts",
-        cursor: 48,
-        size: 48,
-        truncated: false,
-      },
-      time: { created: STORY_TIME + 31_000, completed: STORY_TIME + 31_800 },
-    },
   ] satisfies SessionMessageInfo[],
   { type: "busy" },
 )
+
+export const standaloneShellCompletedDocument = document([
+  {
+    id: "msg_shell_completed",
+    type: "shell",
+    shellID: "shell_completed",
+    command: "git status --short",
+    status: "exited",
+    exit: 0,
+    output: {
+      output: " M packages/session-ui/src/timeline/session-timeline.tsx",
+      cursor: 59,
+      size: 59,
+      truncated: false,
+    },
+    time: { created: STORY_TIME + 31_000, completed: STORY_TIME + 31_800 },
+  },
+] satisfies SessionMessageInfo[])
+
+export const thinkingDocument = document(
+  [user("msg_user_thinking", "Find why the Session header shifts after the first streamed response.", 32_000)],
+  { type: "busy" },
+)
+
+export const fileChangeLoadingDocument = document(
+  [
+    user("msg_user_edit_loading", "Update the empty-state copy to explain the next action.", 33_000),
+    assistant({
+      id: "msg_assistant_edit_loading",
+      offset: 34_000,
+      content: [
+        streamingTool({
+          id: "tool_edit_loading",
+          name: "edit",
+          offset: 34_100,
+          args: {
+            path: "packages/app/src/components/empty-session.tsx",
+            oldString: "No messages yet",
+            newString: "Ask OpenCode to start working",
+          },
+        }),
+      ],
+    }),
+  ] satisfies SessionMessageInfo[],
+  { type: "busy" },
+)
+
+export const fileChangeRunningDocument = document(
+  [
+    user("msg_user_edit_running", "Update the empty-state copy to explain the next action.", 35_000),
+    assistant({
+      id: "msg_assistant_edit_running",
+      offset: 36_000,
+      content: [
+        runningTool({
+          id: "tool_edit_running",
+          name: "edit",
+          offset: 36_100,
+          args: {
+            path: "packages/app/src/components/empty-session.tsx",
+            oldString: "No messages yet",
+            newString: "Ask OpenCode to start working",
+          },
+        }),
+      ],
+    }),
+  ] satisfies SessionMessageInfo[],
+  { type: "busy" },
+)
+
+export const multiFilePatchDocument = document([
+  user("msg_user_patch", "Add a keyboard shortcut hint and cover it with a focused test.", 37_000),
+  assistant({
+    id: "msg_assistant_patch",
+    offset: 38_000,
+    completed: 41_000,
+    content: [
+      completedTool({
+        id: "tool_patch_shortcut",
+        name: "patch",
+        offset: 38_100,
+        args: { patchText: "Update the shortcut hint and add its focused test" },
+        output: "Applied patch to 2 files",
+        metadata: {
+          files: [
+            {
+              file: "packages/app/src/components/session-hint.tsx",
+              status: "modified",
+              patch:
+                'diff --git a/packages/app/src/components/session-hint.tsx b/packages/app/src/components/session-hint.tsx\nindex 414271a..114b7a2 100644\n--- a/packages/app/src/components/session-hint.tsx\n+++ b/packages/app/src/components/session-hint.tsx\n@@ -1 +1 @@\n-export const hint = "Open commands"\n+export const hint = "Open commands with Ctrl+P"\n',
+              additions: 1,
+              deletions: 1,
+            },
+            {
+              file: "packages/app/src/components/session-hint.test.ts",
+              status: "added",
+              patch:
+                'diff --git a/packages/app/src/components/session-hint.test.ts b/packages/app/src/components/session-hint.test.ts\nnew file mode 100644\nindex 0000000..d4fe351\n--- /dev/null\n+++ b/packages/app/src/components/session-hint.test.ts\n@@ -0,0 +1,5 @@\n+import { expect, test } from "bun:test"\n+\n+test("includes the shortcut", () => {\n+  expect("Open commands with Ctrl+P").toContain("Ctrl+P")\n+})\n',
+              additions: 5,
+              deletions: 0,
+            },
+          ],
+        },
+      }),
+    ],
+  }),
+  assistant({
+    id: "msg_assistant_patch_result",
+    offset: 41_500,
+    completed: 42_500,
+    content: [{ type: "text", text: "Added the shortcut hint and its focused test in two files." }],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const writeFileDocument = document([
+  user("msg_user_write", "Add a short contributor note for running the component stories.", 43_000),
+  assistant({
+    id: "msg_assistant_write",
+    offset: 44_000,
+    completed: 46_000,
+    content: [
+      completedTool({
+        id: "tool_write_storybook_note",
+        name: "write",
+        offset: 44_100,
+        args: {
+          path: "docs/component-workbench.md",
+          content:
+            "# Component workbench\n\nRun `bun run storybook` from `packages/storybook` to inspect Session workflows without a server.\n",
+        },
+        output: "Created docs/component-workbench.md",
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const terminalRunningDocument = document(
+  [
+    user("msg_user_terminal_running", "Run the focused Session UI tests.", 47_000),
+    assistant({
+      id: "msg_assistant_terminal_running",
+      offset: 48_000,
+      content: [
+        runningTool({
+          id: "tool_terminal_running",
+          name: "shell",
+          offset: 48_100,
+          args: { command: "bun test src/timeline" },
+          output: "bun test v1.2.0\nRunning timeline tests...",
+        }),
+      ],
+    }),
+  ] satisfies SessionMessageInfo[],
+  { type: "busy" },
+)
+
+export const terminalPassedDocument = document([
+  user("msg_user_terminal_passed", "Run the focused Session UI tests.", 49_000),
+  assistant({
+    id: "msg_assistant_terminal_passed",
+    offset: 50_000,
+    completed: 52_000,
+    content: [
+      completedTool({
+        id: "tool_terminal_passed",
+        name: "shell",
+        offset: 50_100,
+        args: { command: "bun test src/timeline" },
+        output: "12 pass\n0 fail\nRan 12 tests across 3 files.",
+        metadata: { exit: 0 },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const terminalFailedDocument = document([
+  user("msg_user_terminal_failed", "Run the focused Session UI tests.", 53_000),
+  assistant({
+    id: "msg_assistant_terminal_failed",
+    offset: 54_000,
+    completed: 56_000,
+    content: [
+      completedTool({
+        id: "tool_terminal_failed",
+        name: "shell",
+        offset: 54_100,
+        args: { command: "bun test src/timeline" },
+        output: "1 pass\n1 fail\nFailed: keeps the active tool disclosure open",
+        metadata: { exit: 1 },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const recoveryDocument = document([
+  user("msg_user_recovery", "Fix the failing active-tool disclosure test and verify the timeline package.", 57_000),
+  assistant({
+    id: "msg_assistant_recovery_failure",
+    offset: 58_000,
+    completed: 60_000,
+    content: [
+      completedTool({
+        id: "tool_recovery_failure",
+        name: "shell",
+        offset: 58_100,
+        args: { command: "bun test src/timeline/rows-current.test.ts" },
+        output: "1 pass\n1 fail\nExpected active disclosure to remain open.",
+        metadata: { exit: 1 },
+      }),
+      {
+        type: "text",
+        text: "The focused test reproduces the issue. The row key changes when the running tool receives its result.",
+      },
+    ],
+  }),
+  assistant({
+    id: "msg_assistant_recovery_edit",
+    offset: 60_500,
+    completed: 63_000,
+    content: [
+      completedTool({
+        id: "tool_recovery_edit",
+        name: "edit",
+        offset: 60_600,
+        args: {
+          path: "packages/session-ui/src/timeline/timeline-row.ts",
+          oldString: "return `${row.group.key}:${row.status}`",
+          newString: "return row.group.key",
+        },
+        output: "Updated packages/session-ui/src/timeline/timeline-row.ts",
+        metadata: {
+          files: [
+            {
+              file: "packages/session-ui/src/timeline/timeline-row.ts",
+              patch:
+                "diff --git a/packages/session-ui/src/timeline/timeline-row.ts b/packages/session-ui/src/timeline/timeline-row.ts\nindex ac4ed80..4f0ecb1 100644\n--- a/packages/session-ui/src/timeline/timeline-row.ts\n+++ b/packages/session-ui/src/timeline/timeline-row.ts\n@@ -1 +1 @@\n-export const key = (row) => `${row.group.key}:${row.status}`\n+export const key = (row) => row.group.key\n",
+              additions: 1,
+              deletions: 1,
+              status: "modified",
+            },
+          ],
+        },
+      }),
+      completedTool({
+        id: "tool_recovery_pass",
+        name: "shell",
+        offset: 62_000,
+        args: { command: "bun test src/timeline" },
+        output: "14 pass\n0 fail\nRan 14 tests across 3 files.",
+        metadata: { exit: 0 },
+      }),
+    ],
+  }),
+  assistant({
+    id: "msg_assistant_recovery_result",
+    offset: 63_500,
+    completed: 64_500,
+    content: [
+      {
+        type: "text",
+        text: "Kept the disclosure keyed to the stable tool group. The focused failure now passes, and all 14 timeline tests are green.",
+      },
+    ],
+  }),
+] satisfies SessionMessageInfo[])
 
 export const requestHistoryDocument = document([
   user("msg_user_requests", "Ask before changing the release target.", 40_000),
@@ -298,7 +624,7 @@ export const requestHistoryDocument = document([
       }),
       failedTool({
         id: "tool_permission_release",
-        name: "bash",
+        name: "shell",
         offset: 43_000,
         args: { command: "npm publish --tag canary" },
         message: "Permission was denied for npm publish --tag canary",
@@ -306,6 +632,218 @@ export const requestHistoryDocument = document([
     ],
   }),
 ] satisfies SessionMessageInfo[])
+
+export const inspectAndExplainDocument = document([
+  user(
+    "msg_user_research",
+    "Review how the Session timeline keeps tool rows stable while streaming. Do not change code.",
+    65_000,
+  ),
+  assistant({
+    id: "msg_assistant_research_context",
+    offset: 66_000,
+    completed: 69_000,
+    content: [
+      {
+        type: "reasoning",
+        text: "## Tracing row identity\n\nI will follow the projection from current messages to rendered row keys.",
+        time: { created: STORY_TIME + 66_100, completed: STORY_TIME + 66_400 },
+      },
+      completedTool({
+        id: "tool_research_glob",
+        name: "glob",
+        offset: 66_500,
+        args: { pattern: "src/timeline/**/*.{ts,tsx}", path: "packages/session-ui" },
+        output:
+          "packages/session-ui/src/timeline/projection.ts\npackages/session-ui/src/timeline/session-timeline.tsx\npackages/session-ui/src/timeline/timeline-row.ts",
+      }),
+      completedTool({
+        id: "tool_research_grep",
+        name: "grep",
+        offset: 67_000,
+        args: { pattern: "TimelineRow.key", path: "packages/session-ui/src/timeline", include: "*.ts*" },
+        output:
+          "packages/session-ui/src/timeline/projection.ts:39\npackages/session-ui/src/timeline/session-timeline.tsx:332",
+      }),
+      completedTool({
+        id: "tool_research_read",
+        name: "read",
+        offset: 67_500,
+        args: { path: "packages/session-ui/src/timeline/projection.ts", offset: 309, limit: 125 },
+        output:
+          "export function reuseTimelineRows(previous, rows) {\n  // Preserve matching row objects and context keys.\n}",
+        metadata: { loaded: ["packages/session-ui/src/timeline/projection.ts"] },
+      }),
+    ],
+  }),
+  assistant({
+    id: "msg_assistant_research_result",
+    offset: 69_500,
+    completed: 71_000,
+    content: [
+      {
+        type: "text",
+        text: "The projection owns row identity in one pass. It reuses matching row objects, preserves context-group keys when older history attaches, and renders by those stable keys. Streaming updates therefore replace content without remounting unrelated rows.",
+      },
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const webResearchDocument = document([
+  user("msg_user_web_research", "Check the current accessibility guidance for status updates in live regions.", 72_000),
+  assistant({
+    id: "msg_assistant_web_research",
+    offset: 73_000,
+    completed: 76_000,
+    content: [
+      completedTool({
+        id: "tool_web_search",
+        name: "websearch",
+        offset: 73_100,
+        args: { query: "WAI ARIA live region status message guidance" },
+        output: "WAI-ARIA Authoring Practices and MDN live region guidance",
+        metadata: { provider: "exa" },
+      }),
+      completedTool({
+        id: "tool_web_fetch",
+        name: "webfetch",
+        offset: 74_000,
+        args: { url: "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html" },
+        output: "Status messages should be programmatically determinable without receiving focus.",
+      }),
+    ],
+  }),
+  assistant({
+    id: "msg_assistant_web_result",
+    offset: 76_500,
+    completed: 77_500,
+    content: [
+      {
+        type: "text",
+        text: "Use a status role for concise progress updates that should be announced without moving focus. Avoid putting the complete streaming transcript in one assertive live region.",
+      },
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const skillWorkflowDocument = document([
+  {
+    id: "msg_agent_switched_review",
+    type: "agent-switched",
+    agent: "review",
+    previous: "build",
+    time: { created: STORY_TIME + 78_000 },
+  },
+  {
+    id: "msg_skill_loaded_rtl",
+    type: "skill",
+    skill: "rtl-aware-development",
+    name: "RTL-aware development",
+    text: "Verify direction independently from language.",
+    time: { created: STORY_TIME + 78_500 },
+  },
+  user("msg_user_skill", "Review the mixed-direction file row before I merge it.", 79_000),
+  assistant({
+    id: "msg_assistant_skill",
+    offset: 80_000,
+    completed: 82_000,
+    agent: "review",
+    content: [
+      completedTool({
+        id: "tool_skill_rtl",
+        name: "skill",
+        offset: 80_100,
+        args: { name: "rtl-aware-development" },
+        output: "Loaded RTL-aware development guidance",
+        metadata: { name: "rtl-aware-development" },
+      }),
+      {
+        type: "text",
+        text: "The row keeps the surrounding interface in RTL while isolating `packages/app/src/session.tsx` as LTR code. Focus order remains semantic.",
+      },
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const permissionPendingDocument = document(
+  [
+    user("msg_user_permission_pending", "Publish the verified preview build to the canary channel.", 83_000),
+    assistant({
+      id: "msg_assistant_permission_pending",
+      offset: 84_000,
+      content: [
+        runningTool({
+          id: "tool_permission_pending",
+          name: "shell",
+          offset: 84_100,
+          args: { command: "npm publish --tag canary" },
+        }),
+      ],
+    }),
+  ] satisfies SessionMessageInfo[],
+  { type: "busy" },
+)
+
+export const questionPendingDocument = document(
+  [
+    user("msg_user_question_pending", "Add the Session panel, but ask which layout to use first.", 85_000),
+    assistant({
+      id: "msg_assistant_question_pending",
+      offset: 86_000,
+      content: [
+        runningTool({
+          id: "tool_question_pending",
+          name: "question",
+          offset: 86_100,
+          args: {
+            questions: [
+              {
+                header: "Layout",
+                question: "Which Session layout should I implement?",
+                options: [
+                  { label: "Focused", description: "Keep the conversation at a comfortable reading width" },
+                  { label: "Wide", description: "Keep the review panel visible beside the conversation" },
+                ],
+              },
+            ],
+          },
+        }),
+      ],
+    }),
+  ] satisfies SessionMessageInfo[],
+  { type: "busy" },
+)
+
+export const activeQuestionRequest = {
+  id: "form_session_layout",
+  sessionID: CURRENT_SESSION_ID,
+  title: "Session layout",
+  metadata: { kind: "question" },
+  fields: [
+    {
+      key: "layout",
+      type: "string",
+      title: "Layout",
+      description: "Which Session layout should I implement?",
+      options: [
+        { value: "focused", label: "Focused", description: "Keep the conversation at a comfortable reading width" },
+        { value: "wide", label: "Wide", description: "Keep the review panel visible beside the conversation" },
+      ],
+      custom: true,
+    },
+    {
+      key: "details",
+      type: "multiselect",
+      title: "Include",
+      description: "Which supporting surfaces should remain visible?",
+      options: [
+        { value: "files", label: "Changed files" },
+        { value: "terminal", label: "Terminal" },
+        { value: "tasks", label: "Background tasks" },
+      ],
+    },
+  ],
+} satisfies FormInfo
 
 export const retryDocument = document(
   [
@@ -362,15 +900,23 @@ export const subagentDocument = document(
           id: "tool_subagent_review",
           name: "subagent",
           offset: 71_500,
-          args: { agent: "review", description: "Review current Session fixtures" },
+          args: {
+            agent: "review",
+            description: "Review current Session fixtures",
+            prompt: "Check the current Session fixtures for protocol accuracy and report findings.",
+          },
           output: "The fixtures use fixed current protocol messages and nested tool states.",
           metadata: { sessionID: "session_child_review", status: "completed" },
         }),
         runningTool({
           id: "tool_subagent_tests",
-          name: "task",
+          name: "subagent",
           offset: 73_000,
-          args: { subagent_type: "test", description: "Check the Storybook scenarios" },
+          args: {
+            agent: "test",
+            description: "Check the Storybook scenarios",
+            prompt: "Run the focused Storybook scenario checks and report any failures.",
+          },
           metadata: { sessionId: "session_child_tests" },
         }),
       ],
@@ -452,7 +998,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
             id: `tool_read_large_${String(index + 1).padStart(2, "0")}`,
             name: "read",
             offset: offset + 1_500,
-            args: { filePath: `src/feature-${index + 1}.ts`, offset: 1, limit: 80 },
+            args: { path: `src/feature-${index + 1}.ts`, offset: 1, limit: 80 },
             output: `export const feature${index + 1} = true`,
             metadata: { loaded: [`src/feature-${index + 1}.ts`] },
           }),
@@ -490,62 +1036,11 @@ export const largeCompletedDocument = {
   ],
 } satisfies SessionDocument
 
-export const appSurfaceDocument = document([
-  user("msg_user_surface", "Update the command label, run the test, and show the execution result.", 200_000),
-  assistant({
-    id: "msg_assistant_surface",
-    offset: 201_000,
-    completed: 208_000,
-    content: [
-      completedTool({
-        id: "tool_surface_edit",
-        name: "edit",
-        offset: 202_000,
-        args: {
-          path: "src/commands.ts",
-          oldString: 'label: "Run"',
-          newString: 'label: "Run checks"',
-        },
-        output: "Updated src/commands.ts",
-        metadata: {
-          files: [
-            {
-              file: "src/commands.ts",
-              before: 'export const command = { label: "Run" }\n',
-              after: 'export const command = { label: "Run checks" }\n',
-              additions: 1,
-              deletions: 1,
-            },
-          ],
-        },
-      }),
-      completedTool({
-        id: "tool_surface_shell",
-        name: "bash",
-        offset: 204_000,
-        args: { command: "bun test src/commands.test.ts" },
-        output: "2 pass\n0 fail\nCompleted in 184ms",
-        metadata: { exit: 0 },
-      }),
-      {
-        type: "text",
-        text: "## Execution result\n\nThe label is now **Run checks** and both command tests pass.",
-      },
-    ],
-  }),
-] satisfies SessionMessageInfo[])
-
 export const activePermissionRequest = {
   id: "permission_publish_canary",
   sessionID: CURRENT_SESSION_ID,
-  action: "bash",
+  action: "shell",
   resources: ["npm publish --tag canary"],
   save: ["npm publish *"],
-  source: { type: "tool", messageID: "msg_assistant_requests", id: "tool_permission_release" },
+  source: { type: "tool", messageID: "msg_assistant_permission_pending", id: "tool_permission_pending" },
 } satisfies PermissionRequest
-
-export const activeQuestion = {
-  header: "Release target",
-  question: "Which release target should the next execution use?",
-  options: ["Canary", "Stable"],
-} satisfies { header: string; question: string; options: string[] }

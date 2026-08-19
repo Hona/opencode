@@ -81,6 +81,7 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
+import { SessionPanelFrame, SessionRouteFrame } from "@/pages/session/session-frame"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
@@ -262,27 +263,6 @@ function MarkSessionNotificationsViewed(props: { sessionID?: () => string | unde
     notification.session.markViewed(sessionID)
   })
   return null
-}
-
-function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
-  return (
-    <div class="relative size-full overflow-hidden flex flex-col" classList={{ "p-2": props.padded }}>
-      {props.children}
-    </div>
-  )
-}
-
-function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
-  return (
-    <div
-      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
-      classList={{
-        "shadow-[var(--v2-elevation-raised)]": props.raised,
-      }}
-    >
-      {props.children}
-    </div>
-  )
 }
 
 export default function Page() {

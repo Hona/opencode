@@ -12,16 +12,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
-import { Card } from "@opencode-ai/ui/card"
-import {
-  currentContentDefaultOpen,
-  MessageDivider,
-  SessionAssistantContent,
-  SessionContextToolGroup,
-  SessionShellMessage,
-  SessionUserMessage,
-  type SessionUserActions,
-} from "@opencode-ai/session-ui/message"
+import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -30,10 +21,7 @@ import { Menu } from "@opencode-ai/ui/menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { Button } from "@opencode-ai/ui/button"
-import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type { Project } from "@/types"
 import { getFilename } from "@opencode-ai/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
@@ -44,20 +32,16 @@ import { useData } from "@/context/server"
 import { useWorkspaceLocation } from "@/context/location"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { Timeline, TimelineRow, type TimelineRowMap } from "@opencode-ai/session-ui/timeline/projection"
+import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
+import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
 import { filterVirtualIndexes } from "./virtual-items"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/utils/workspace"
 import { SessionWorkspaceMenu } from "@/components/session-workspace-menu"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser } from "@opencode-ai/client/promise"
 import { parseCommentNote, readPromptPresentation } from "@/utils/comment-note"
-
-const emptyAssistantMessages: SessionMessageAssistant[] = []
-
-type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
-type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
 const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
@@ -91,19 +75,6 @@ const markBoundaryGesture = (input: {
   ) {
     input.onMarkScrollGesture(input.root)
   }
-}
-
-function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
-  const language = useLanguage()
-
-  return (
-    <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
-      <Show when={!props.showReasoningSummaries}>
-        <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
-      </Show>
-    </div>
-  )
 }
 
 function WorkspaceMoveAction(props: {
@@ -333,7 +304,7 @@ function MessageTimelineView(
     const value = projectID
       ? data.project.get(projectID)
       : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
-    if (!value) return
+    if (!value) return undefined
     return { ...value, worktree: value.canonical, worktrees: [] }
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
@@ -358,50 +329,11 @@ function MessageTimelineView(
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
   const activeMessageID = projection.activeMessageID
-  const assistantMessagesByParent = projection.assistantMessagesByParent
-  const lastAssistantGroupKey = projection.lastAssistantGroupKey
   const messageByID = projection.messageByID
   const messageLastRowIndex = projection.messageLastRowIndex
   const messageRowIndex = projection.messageRowIndex
   const timelineRowByKey = projection.rowByKey
   const timelineRows = projection.rows
-  const sessionMessageByID = projection.sessionMessageByID
-  const noticeContent = (message: SessionMessageInfo) => {
-    if (message.type === "agent-switched")
-      return {
-        label: language.t("ui.tool.agent.default"),
-        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
-      }
-    if (message.type === "model-switched")
-      return {
-        label: language.t("command.category.model"),
-        data: `${message.model.providerID}/${message.model.id}`,
-      }
-    if (message.type === "location-switched")
-      return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
-    if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
-    if (message.type === "system") return { label: message.description ?? message.text }
-    if (message.type === "compaction") return { label: language.t("ui.messagePart.compaction"), data: message.status }
-    if (message.type !== "synthetic") return
-    if (message.description === "Continuing after restart") return { label: message.description }
-    const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
-    const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
-    if (source === "subagent" || source === "shell") {
-      const agent = typeof message.metadata?.agent === "string" ? message.metadata.agent : undefined
-      const actor = source === "shell" ? language.t("ui.tool.shell") : (agent ?? language.t("ui.tool.agent.default"))
-      const label = language.t(
-        state === "error"
-          ? "session.timeline.notice.failed"
-          : state === "cancelled"
-            ? "session.timeline.notice.cancelled"
-            : "session.timeline.notice.finished",
-        { actor },
-      )
-      return { label, data: message.description }
-    }
-    return { label: message.description ?? message.text }
-  }
-
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
   let prependLoading = false
@@ -550,7 +482,7 @@ function MessageTimelineView(
   const virtualItemByKey = createMemo(
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
-  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
+  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
@@ -740,322 +672,33 @@ function MessageTimelineView(
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
-  const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
-
-  const turnDurationMs = (userMessageID: string) => {
-    const message = messageByID().get(userMessageID)
-    if (message?.type !== "user") return
-    const end = (assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
-      (max, item) => {
-        const completed = item.time.completed
-        if (typeof completed !== "number") return max
-        if (max === undefined) return completed
-        return Math.max(max, completed)
-      },
-      undefined,
-    )
-    if (typeof end !== "number") return
-    if (end < message.time.created) return
-    return end - message.time.created
-  }
-
-  const assistantCopyPartID = (userMessageID: string) => {
-    if (workingTurn(userMessageID)) return null
-    const messages = assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (!message) continue
-
-      const contents = Timeline.contentEntries(message)
-      for (let j = contents.length - 1; j >= 0; j--) {
-        const entry = contents[j]
-        if (entry?.content.type !== "text" || !entry.content.text.trim()) continue
-        return entry.id
+  const rowRenderer = createSessionTimelineRowRenderer({
+    sessionID: () => sessionID()!,
+    status: sessionStatus,
+    projection,
+    presentation: (message) => {
+      const value = readPromptPresentation(message.metadata)
+      const parsed = value ? undefined : parseCommentNote(message.text)
+      return {
+        displayText: value?.displayText,
+        comments: value?.comments ?? (parsed ? [parsed] : []),
       }
-    }
-  }
-
-  const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>, onSizeChange?: () => void) => {
-    if (row().group.type === "context") {
-      const tools = createMemo(() => {
-        const group = row().group
-        if (group.type !== "context") return []
-        return group.refs.flatMap((ref) => {
-          const message = messageByID().get(ref.messageID)
-          const content = Timeline.resolveContent(message, ref.partID)
-          return message?.type === "assistant" && content?.type === "tool"
-            ? [{ message, content, contentID: ref.partID }]
-            : []
-        })
-      })
-      const contextOpenKey = () => `context:${row().group.key}`
-      const open = createMemo(() => {
-        return toolOpen[contextOpenKey()] === true
-      })
-
-      return (
-        <SessionContextToolGroup
-          sessionID={sessionID()!}
-          tools={tools()}
-          open={open()}
-          onOpenChange={(value) => setToolOpen(contextOpenKey(), value)}
-          busy={
-            workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-          }
-          onSizeChange={onSizeChange}
-        />
-      )
-    }
-
-    const message = createMemo(() => {
-      const group = row().group
-      if (group.type !== "part") return
-      return messageByID().get(group.ref.messageID)
-    })
-    const contentID = createMemo(() => {
-      const group = row().group
-      if (group.type !== "part") return
-      return group.ref.partID
-    })
-    const content = createMemo(() => {
-      const current = message()
-      const id = contentID()
-      if (current?.type !== "assistant" || !id) return
-      return Timeline.resolveContent(current, id)
-    })
-    const defaultOpen = createMemo(() => {
-      const group = row().group
-      const current = message()
-      if (group.type !== "part" || current?.type !== "assistant") return
-      const item = content()
-      if (!item) return
-      return currentContentDefaultOpen(
-        sessionID()!,
-        current,
-        item,
-        group.ref.partID,
-        props.data.shellToolPartsExpanded(),
-        props.data.editToolPartsExpanded(),
-      )
-    })
-    const id = contentID()
-    if (!id) return
-
-    return (
-      <Show when={message()?.type === "assistant" ? (message() as SessionMessageAssistant) : undefined}>
-        {(message) => (
-          <Show when={content()}>
-            {(content) => (
-              <SessionAssistantContent
-                sessionID={sessionID()!}
-                parentID={row().userMessageID}
-                message={message()}
-                content={content()}
-                contentID={id}
-                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-                turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions
-                defaultOpen={defaultOpen()}
-                toolOpen={toolOpen[row().group.key] ?? defaultOpen()}
-                onToolOpenChange={(open) => setToolOpen(row().group.key, open)}
-                onContentRendered={onSizeChange}
-              />
-            )}
-          </Show>
-        )}
-      </Show>
-    )
-  }
-
-  function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
-    const previousAssistantPart = () => {
-      const row = input.row
-      return row._tag === "AssistantPart" && row.previousAssistantPart
-    }
-
-    return (
-      <div
-        id={input.row._tag === "UserMessage" ? props.anchor(input.row.userMessageID) : undefined}
-        data-message-id={input.row.userMessageID}
-        data-timeline-row={input.row._tag}
-        classList={{
-          "min-w-0 w-full max-w-full": true,
-          "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-          "md:mx-auto": props.centered,
-          "pt-3": previousAssistantPart(),
-        }}
-      >
-        <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
-          {input.children}
-        </div>
-      </div>
-    )
-  }
-
-  const renderTimelineRow = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
-    switch (row()._tag) {
-      case "TurnGap":
-        return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
-      case "UserMessage": {
-        const userMessageRow = row as Accessor<TimelineRowByTag<"UserMessage">>
-        const message = createMemo(() => {
-          const m = messageByID().get(userMessageRow().userMessageID)
-          if (m?.type === "user") return m
-        })
-        const presentation = createMemo(() => {
-          const current = message()
-          if (!current) return
-          const value = readPromptPresentation(current.metadata)
-          const parsed = value ? undefined : parseCommentNote(current.text)
-          return {
-            displayText: value?.displayText,
-            comments: value?.comments ?? (parsed ? [parsed] : []),
-          }
-        })
-        const context = createMemo(() => projection.userContextByID().get(userMessageRow().userMessageID))
-        return (
-          <TimelineRowFrame row={userMessageRow()}>
-            <Show when={message()}>
-              {(message) => (
-                <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-                  <div data-slot="session-turn-message-content" aria-live="off">
-                    <SessionUserMessage
-                      sessionID={sessionID()!}
-                      message={message()}
-                      displayText={presentation()?.displayText}
-                      historicalAgent={context()?.agent ?? ""}
-                      historicalModel={context()?.model ?? { id: "", providerID: "" }}
-                      actions={props.actions}
-                      useV2Actions
-                      comments={presentation()?.comments}
-                    />
-                  </div>
-                </div>
-              )}
-            </Show>
-          </TimelineRowFrame>
-        )
-      }
-      case "Shell": {
-        const shellRow = row as Accessor<TimelineRowByTag<"Shell">>
-        const message = createMemo(() => {
-          const current = sessionMessageByID().get(shellRow().messageID)
-          return current?.type === "shell" ? current : undefined
-        })
-        return (
-          <TimelineRowFrame row={shellRow()}>
-            <Show when={message()}>
-              {(message) => (
-                <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-                  <SessionShellMessage
-                    message={message()}
-                    defaultOpen={props.data.shellToolPartsExpanded()}
-                    open={toolOpen[message().id]}
-                    onOpenChange={(open) => setToolOpen(message().id, open)}
-                  />
-                </div>
-              )}
-            </Show>
-          </TimelineRowFrame>
-        )
-      }
-      case "Notice": {
-        const noticeRow = row as Accessor<TimelineRowByTag<"Notice">>
-        const content = createMemo(() => {
-          const message = sessionMessageByID().get(noticeRow().messageID)
-          return message ? noticeContent(message) : undefined
-        })
-        return (
-          <TimelineRowFrame row={noticeRow()}>
-            <Show when={content()}>
-              {(content) => (
-                <div
-                  data-slot="session-timeline-notice"
-                  class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${turnPadding()}`}
-                >
-                  <span class="text-13-medium">{content().label}</span>
-                  <Show when={content().data}>{(data) => <span> · {data()}</span>}</Show>
-                </div>
-              )}
-            </Show>
-          </TimelineRowFrame>
-        )
-      }
-      case "TurnDivider": {
-        const turnDividerRow = row as Accessor<TimelineRowByTag<"TurnDivider">>
-        return (
-          <TimelineRowFrame row={turnDividerRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <div data-slot="session-turn-compaction">
-                <MessageDivider label={language.t("ui.message.interrupted")} />
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "AssistantPart": {
-        const assistantPartRow = row as Accessor<TimelineRowByTag<"AssistantPart">>
-        return (
-          <TimelineRowFrame row={assistantPartRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <div
-                data-slot="session-turn-assistant-content"
-                aria-hidden={workingTurn(assistantPartRow().userMessageID)}
-              >
-                {renderAssistantPartGroup(assistantPartRow, onSizeChange)}
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Thinking": {
-        const thinkingRow = row as Accessor<TimelineRowByTag<"Thinking">>
-        return (
-          <TimelineRowFrame row={thinkingRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <TimelineThinkingRow
-                reasoningHeading={thinkingRow().reasoningHeading}
-                showReasoningSummaries={props.data.showReasoningSummaries()}
-              />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Retry": {
-        const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
-        const status = createMemo(() => {
-          const retry = (assistantMessagesByParent().get(retryRow().userMessageID) ?? emptyAssistantMessages).at(
-            -1,
-          )?.retry
-          if (!retry) return sessionStatus()
-          return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
-        })
-        return (
-          <TimelineRowFrame row={retryRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <SessionRetry status={status()} show={activeMessageID() === retryRow().userMessageID} />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Error": {
-        const errorRow = row as Accessor<TimelineRowByTag<"Error">>
-        return (
-          <TimelineRowFrame row={errorRow()}>
-            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
-              <Card variant="error" class="error-card">
-                {errorRow().text}
-              </Card>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-    }
-  }
+    },
+    actions: props.actions,
+    showReasoningSummaries: props.data.showReasoningSummaries,
+    shellToolDefaultOpen: props.data.shellToolPartsExpanded,
+    editToolDefaultOpen: props.data.editToolPartsExpanded,
+    disclosure: {
+      value: (key) => toolOpen[key],
+      set: (key, open) => setToolOpen(key, open),
+    },
+    centered: () => props.centered,
+    padding: turnPadding,
+    anchor: props.anchor,
+  })
 
   function TimelineRowView(props: { row: TimelineRow.TimelineRow; onSizeChange?: () => void }) {
-    return renderTimelineRow(() => props.row, props.onSizeChange)
+    return <rowRenderer.Row row={() => props.row} onSizeChange={props.onSizeChange} />
   }
 
   function VirtualTimelineRow(props: { rowKey: string }) {
@@ -1063,14 +706,15 @@ function MessageTimelineView(
     const initialItem = virtualItemByKey().get(props.rowKey)!
     const initialRow = timelineRowByKey().get(props.rowKey)!
     const item = createMemo(() => virtualItemByKey().get(props.rowKey) ?? initialItem)
-    const row = createMemo(() => timelineRowByKey().get(props.rowKey) ?? initialRow)
+    const row = createMemo(() => timelineRowByKey().get(props.rowKey) ?? timelineRows()[item().index] ?? initialRow)
     const tool = () => {
       const value = row()
-      if (value._tag !== "AssistantPart" || value.group.type !== "part") return
+      if (value._tag !== "AssistantPart" || value.group.type !== "part") return undefined
       const content = Timeline.resolveContent(messageByID().get(value.group.ref.messageID), value.group.ref.partID)
       if (content?.type === "tool") return content
+      return undefined
     }
-    const asyncFile = () => ["edit", "write", "apply_patch"].includes(tool()?.name ?? "")
+    const asyncFile = () => ["edit", "write", "patch"].includes(tool()?.name ?? "")
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
     let contentMeasureFrame: number | undefined
 

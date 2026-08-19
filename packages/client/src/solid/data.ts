@@ -719,6 +719,7 @@ export function createData(config: CreateDataInput) {
           )
           if (match?.state.status !== "running") return
           match.state.metadata = event.data.metadata
+          match.state.output = typeof event.data.metadata.output === "string" ? event.data.metadata.output : undefined
         })
         return
       case "session.tool.success":

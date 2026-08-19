@@ -4,16 +4,16 @@ import {
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
   compactionDocument,
-  editThenTestDocument,
   requestHistoryDocument,
   retryDocument,
-  shellStatesDocument,
+  revertDocument,
+  skillWorkflowDocument,
   streamingDocument,
-  subagentDocument,
+  thinkingDocument,
 } from "../storybook/current-session-fixtures"
 
 export default {
-  title: "Current Session/Timeline Rows",
+  title: "OpenCode/Conversation/Message states",
   id: "current-session-timeline-rows",
   component: SessionTimeline,
   parameters: {
@@ -21,53 +21,72 @@ export default {
     docs: {
       description: {
         component:
-          "Focused production row rendering through `SessionTimeline`. These narrow documents keep projection, current message adapters, tool rendering, and row framing in the test surface.",
+          "Focused current-message states rendered through the production timeline projection and message components.",
       },
     },
   },
 }
 
-export const StreamingAssistantRow = {
+export const AgentThinking = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Streaming assistant row"
-      description="One user root with current reasoning and text content."
+      title="Agent thinking"
+      description="The prompt is admitted and the active turn is waiting for its first visible content."
+      document={thinkingDocument}
+      width="560px"
+    />
+  ),
+}
+
+export const StreamingReasoningAndText = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Streaming reasoning and text"
+      description="The active turn contains a reasoning summary and a partial response."
       document={streamingDocument}
       width="560px"
     />
   ),
 }
 
-export const EditAndExecutionRows = {
+export const ProviderRetry = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Edit and execution rows"
-      description="A narrow current document renders the production edit, shell, and result rows."
-      document={editThenTestDocument}
-      width="620px"
-      editToolDefaultOpen
-      shellToolDefaultOpen
+      title="Provider retry"
+      description="A temporary provider limit keeps the turn active and explains the scheduled retry."
+      document={retryDocument}
+      width="520px"
     />
   ),
 }
 
-export const ShellRows = {
+export const CompactionAndContinuation = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Shell rows"
-      description="Running and failed standalone shell rows at a compact width."
-      document={shellStatesDocument}
-      width="560px"
-      shellToolDefaultOpen
+      title="Compaction and continuation"
+      description="The context summary separates earlier output from the continued response."
+      document={compactionDocument}
+      width="600px"
     />
   ),
 }
 
-export const QuestionAndErrorRows = {
+export const AgentAndSkillContext = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Question and permission error rows"
-      description="A completed answer and denied command use the real question and error tool renderers."
+      title="Agent and skill context"
+      description="A review agent and its loaded skill appear chronologically before the response."
+      document={skillWorkflowDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const AnsweredQuestionAndDeclinedCommand = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Answered question and declined command"
+      description="The chosen answer remains in history, and the declined command keeps its user-visible result."
       document={requestHistoryDocument}
       width="620px"
       shellToolDefaultOpen
@@ -75,44 +94,22 @@ export const QuestionAndErrorRows = {
   ),
 }
 
-export const RetryRow = {
+export const RevertBoundary = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Retry row"
-      description="The active retry status is projected from the latest current assistant message."
-      document={retryDocument}
-      width="520px"
+      title="Revert boundary"
+      description="The latest user message exposes the production revert action for choosing a rollback point."
+      document={revertDocument}
+      width="620px"
     />
   ),
 }
 
-export const CompactionRows = {
+export const PromptWithAttachments = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Compaction rows"
-      description="Output, compaction notice, and continued output remain in chronological order."
-      document={compactionDocument}
-      width="600px"
-    />
-  ),
-}
-
-export const SubagentRows = {
-  render: () => (
-    <CurrentSessionTimelineStory
-      title="Subagent rows"
-      description="Completed and active child Session tools use production task cards."
-      document={subagentDocument}
-      width="580px"
-    />
-  ),
-}
-
-export const AttachmentAndCommentRow = {
-  render: () => (
-    <CurrentSessionTimelineStory
-      title="Attachment and comment row"
-      description="One production user row contains files, an agent mention, and a line comment."
+      title="Prompt with attachments"
+      description="A user message combines text, two files, an agent mention, and a selected-line comment."
       document={attachmentsAndCommentsDocument}
       presentation={attachmentsAndCommentsPresentation}
       width="480px"
@@ -121,15 +118,14 @@ export const AttachmentAndCommentRow = {
 }
 
 export const MixedDirectionRtl = {
+  globals: { direction: "rtl" },
   render: () => (
-    <div dir="rtl">
-      <CurrentSessionTimelineStory
-        title="Mixed direction and RTL"
-        description="Forced RTL layout with Latin paths, current attachments, and line comments."
-        document={attachmentsAndCommentsDocument}
-        presentation={attachmentsAndCommentsPresentation}
-        width="480px"
-      />
-    </div>
+    <CurrentSessionTimelineStory
+      title="Mixed-direction prompt in RTL"
+      description="Forced RTL keeps file paths and code readable without changing the message order."
+      document={attachmentsAndCommentsDocument}
+      presentation={attachmentsAndCommentsPresentation}
+      width="480px"
+    />
   ),
 }

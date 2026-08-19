@@ -1,17 +1,17 @@
-import { SessionTurn } from "@opencode-ai/session-ui/session-turn"
+import { SessionTimeline } from "@opencode-ai/session-ui/timeline"
+import type { SessionDocument } from "@opencode-ai/session-ui/document"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, ErrorBoundary, Match, Show, Switch, type JSX } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Binary } from "@opencode-ai/util/binary"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import NotFound from "../[...404]"
@@ -54,18 +54,15 @@ const getData = query(async (shareID) => {
   const result: {
     sessionID: string
     shareID: string
-    session: Share.Session[]
+    session: Share.SessionRecord[]
     session_diff: {
       [sessionID: string]: Share.SessionDiff[]
     }
     session_status: {
       [sessionID: string]: { type: "idle" }
     }
-    message: {
-      [sessionID: string]: Share.StoredMessage[]
-    }
-    part: {
-      [messageID: string]: Share.StoredPart[]
+    messages: {
+      [sessionID: string]: Share.Message[]
     }
     model: {
       [sessionID: string]: Share.Model[]
@@ -82,8 +79,7 @@ const getData = query(async (shareID) => {
         type: "idle",
       },
     },
-    message: {},
-    part: {},
+    messages: {},
     model: {},
   }
   for (const item of data) {
@@ -94,21 +90,16 @@ const getData = query(async (shareID) => {
       case "session_diff":
         result.session_diff[share.sessionID] = item.data
         break
-      case "message":
-        result.message[item.data.sessionID] = result.message[item.data.sessionID] ?? []
-        result.message[item.data.sessionID].push(item.data)
-        break
-      case "part":
-        result.part[item.data.messageID] = result.part[item.data.messageID] ?? []
-        result.part[item.data.messageID].push(item.data)
+      case "messages":
+        result.messages[item.data.sessionID] = item.data.messages
         break
       case "model":
         result.model[share.sessionID] = item.data
         break
     }
   }
-  const match = Binary.search(result.session, share.sessionID, (s) => s.id)
-  if (!match.found) throw new SessionDataMissingError({ sessionID: share.sessionID })
+  if (!result.session.some((session) => session.id === share.sessionID))
+    throw new SessionDataMissingError({ sessionID: share.sessionID })
   return result
 }, "getShareData")
 
@@ -146,16 +137,15 @@ export default function () {
       <Meta name="robots" content="noindex, nofollow" />
       <Show when={data()}>
         {(data) => {
-          const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
-          if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
-          const info = createMemo(() => data().session[match().index])
-          const title = createMemo(() => withTimestampedFallback(info()))
+          const info = createMemo(() => data().session.find((session) => session.id === data().sessionID))
+          if (!info()) throw new Error(`Session ${data().sessionID} not found`)
+          const title = createMemo(() => withTimestampedFallback(info()!))
           const ogImage = createMemo(() => {
             const models = new Set<string>()
-            const messages = data().message[data().sessionID] ?? []
+            const messages = data().messages[data().sessionID] ?? []
             for (const msg of messages) {
-              if (msg.role === "assistant" && msg.modelID) {
-                models.add(msg.modelID)
+              if (msg.type === "assistant") {
+                models.add(msg.model.id)
               }
             }
             const modelIDs = Array.from(models)
@@ -170,8 +160,7 @@ export default function () {
             } else {
               modelParam = "unknown"
             }
-            const version = `v${info().version}`
-            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
+            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=v2&id=${data().shareID}`
           })
 
           return (
@@ -182,33 +171,45 @@ export default function () {
               <Meta name="twitter:image" content={ogImage()} />
               <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
-                  <DataProvider data={data()} directory={info().directory}>
+                  <DataProvider data={data()} directory={info()!.location.directory} sessionID={data().sessionID}>
                     {(() => {
                       const [store, setStore] = createStore({
                         messageId: undefined as string | undefined,
                       })
-                      const messages = createMemo(() =>
-                        data().sessionID
-                          ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
-                              (a, b) => a.time.created - b.time.created,
-                            )
-                          : [],
-                      )
-                      const firstUserMessage = createMemo(() => messages().at(0))
+                      const messages = createMemo(() => data().messages[data().sessionID] ?? [])
+                      const userMessages = createMemo(() => messages().filter((message) => message.type === "user"))
+                      const firstUserMessage = createMemo(() => userMessages().at(0))
                       const activeMessage = createMemo(
-                        () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
+                        () => userMessages().find((message) => message.id === store.messageId) ?? firstUserMessage(),
                       )
-                      function setActiveMessage(message: Share.StoredUserMessage | undefined) {
-                        if (message) {
-                          setStore("messageId", message.id)
-                        } else {
-                          setStore("messageId", undefined)
-                        }
+                      function setActiveMessage(message: Extract<Share.Message, { type: "user" }> | undefined) {
+                        setStore("messageId", message?.id)
                       }
-                      const provider = createMemo(() => activeMessage()?.model?.providerID)
-                      const modelID = createMemo(() => activeMessage()?.model?.modelID)
+                      const assistant = createMemo(() => messages().find((message) => message.type === "assistant"))
+                      const provider = createMemo(() => assistant()?.model.providerID)
+                      const modelID = createMemo(() => assistant()?.model.id)
                       const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
+                      const document = createMemo(
+                        () =>
+                          ({
+                            sessionID: data().sessionID,
+                            messages: messages(),
+                            status: { type: "idle" },
+                            diffs: diffs(),
+                          }) satisfies SessionDocument,
+                      )
+                      const activeDocument = createMemo(() => {
+                        const active = activeMessage()
+                        if (!active) return document()
+                        const start = messages().findIndex((message) => message.id === active.id)
+                        if (start < 0) return document()
+                        const relativeEnd = messages()
+                          .slice(start + 1)
+                          .findIndex((message) => message.type === "user" || message.type === "shell")
+                        const end = relativeEnd < 0 ? messages().length : start + relativeEnd + 1
+                        return { ...document(), messages: messages().slice(start, end) }
+                      })
                       const [diffStyle, setDiffStyle] = createSignal<"unified" | "split">("unified")
 
                       const title = () => (
@@ -216,7 +217,7 @@ export default function () {
                           <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 sm:items-center sm:h-8 justify-start self-stretch">
                             <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base w-fit">
                               <Mark class="shrink-0 w-3 my-0.5" />
-                              <div class="text-12-mono text-text-base">v{info().version}</div>
+                              <div class="text-12-mono text-text-base">v2</div>
                             </div>
                             <div class="flex gap-4 items-center">
                               <div class="flex gap-2 items-center">
@@ -226,7 +227,7 @@ export default function () {
                                 <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                               </div>
                               <div class="text-12-regular text-text-weaker">
-                                {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                                {DateTime.fromMillis(info()!.time.created).toFormat("dd MMM yyyy, HH:mm")}
                               </div>
                             </div>
                           </div>
@@ -237,20 +238,8 @@ export default function () {
                       const turns = () => (
                         <div class="relative mt-2 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
                           <div class="px-4 py-6">{title()}</div>
-                          <div class="flex flex-col gap-15 items-start justify-start mt-4">
-                            <For each={messages()}>
-                              {(message) => (
-                                <SessionTurn
-                                  sessionID={data().sessionID}
-                                  messageID={message.id}
-                                  classes={{
-                                    root: "min-w-0 w-full relative",
-                                    content: "flex flex-col justify-between !overflow-visible",
-                                    container: "px-4",
-                                  }}
-                                />
-                              )}
-                            </For>
+                          <div class="mt-4 flex items-start justify-start">
+                            <SessionTimeline document={document()} class="min-w-0 w-full" />
                           </div>
                           <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
                             <Logo class="w-58.5 opacity-12" />
@@ -306,34 +295,22 @@ export default function () {
                                   {title()}
                                 </div>
                                 <div class="flex items-start justify-start h-full min-h-0">
-                                  <Show when={messages().length > 1}>
+                                  <Show when={userMessages().length > 1}>
                                     <MessageNav
                                       class="sticky top-0 shrink-0 py-2 pl-4"
-                                      messages={messages()}
+                                      messages={userMessages()}
                                       current={activeMessage()}
                                       size="compact"
                                       onMessageSelect={setActiveMessage}
-                                      getLabel={(message) =>
-                                        data()
-                                          .part[message.id]?.find((part) => part.type === "text")
-                                          ?.text.trim()
-                                          .split("\n")[0]
-                                      }
+                                      getLabel={(message) => message.text.trim().split("\n")[0]}
                                     />
                                   </Show>
-                                  <SessionTurn
-                                    sessionID={data().sessionID}
-                                    messageID={store.messageId ?? firstUserMessage()!.id!}
-                                    classes={{
-                                      root: "grow",
-                                      content: "flex flex-col justify-between",
-                                      container: "w-full pb-20 px-6",
-                                    }}
-                                  >
+                                  <div class="flex min-w-0 grow flex-col justify-between">
+                                    <SessionTimeline document={activeDocument()} class="w-full px-6 pb-20" />
                                     <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
                                       <Logo class="w-58.5 opacity-12" />
                                     </div>
-                                  </SessionTurn>
+                                  </div>
                                 </div>
                               </div>
                               <Show when={diffs().length > 0}>

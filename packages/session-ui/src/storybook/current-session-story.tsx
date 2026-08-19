@@ -62,7 +62,6 @@ export function CurrentSessionTimelineStory(props: {
   description: string
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
-  note?: JSX.Element
   width?: string
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
@@ -83,7 +82,7 @@ export function CurrentSessionTimelineStory(props: {
   }
 
   return (
-    <section class="mx-auto flex w-full flex-col gap-4" style={{ "max-width": props.width ?? "840px" }}>
+    <section class="mx-auto flex w-full flex-col gap-4 p-6" style={{ "max-width": props.width ?? "840px" }}>
       <header class="flex items-start justify-between gap-4 border-b border-border-weak-base pb-3">
         <div class="min-w-0">
           <h1 class="text-16-medium text-text-strong">{props.title}</h1>
@@ -93,7 +92,6 @@ export function CurrentSessionTimelineStory(props: {
           Reset
         </Button>
       </header>
-      {props.note}
       <div class="min-h-24 overflow-hidden rounded-lg border border-border-weak-base bg-background-base py-4">
         <Show when={revision()} keyed>
           {(revision) => (
