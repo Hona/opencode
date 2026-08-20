@@ -67,7 +67,7 @@
       "@pierre/diffs": "1.2.10",
       "opentui-spinner": "0.0.7",
       "@solid-primitives/storage": "4.3.3",
-      "@tailwindcss/vite": "4.3.3",
+      "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-rc.2",
@@ -94,8 +94,8 @@
       "shiki": "4.2.0",
       "solid-list": "0.3.0",
       "string-width": "7.2.0",
-      "tailwindcss": "4.3.3",
-      "vite": "8.2.1",
+      "tailwindcss": "4.1.11",
+      "vite": "7.1.4",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
       "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
@@ -103,7 +103,7 @@
       "@sentry/vite-plugin": "4.6.0",
       "solid-js": "1.9.10",
       "solid-sonner": "0.3.1",
-      "vite-plugin-solid": "2.11.14",
+      "vite-plugin-solid": "2.11.10",
       "@lydell/node-pty": "1.2.0-beta.12"
     }
   },
