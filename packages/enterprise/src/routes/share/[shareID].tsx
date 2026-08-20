@@ -64,7 +64,6 @@ const getData = query(async (shareID) => {
   const share = await Share.get(shareID)
   if (!share) throw new SessionDataMissingError({ sessionID: shareID })
   const document = await readShareDocument(await Share.data(shareID))
-  if (document.warnings.length) console.warn("Share blob migration warnings", document.warnings)
   return {
     sessionID: share.sessionID,
     shareID,
@@ -184,8 +183,9 @@ export default function () {
                       const assistant = createMemo(() =>
                         activeDocument().messages.find((message) => message.type === "assistant"),
                       )
-                      const provider = createMemo(() => assistant()?.model.providerID)
-                      const modelID = createMemo(() => assistant()?.model.id)
+                      const selectedModel = createMemo(() => assistant()?.model ?? info().model)
+                      const provider = createMemo(() => selectedModel()?.providerID)
+                      const modelID = createMemo(() => selectedModel()?.id)
                       const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const [diffStyle, setDiffStyle] = createSignal<"unified" | "split">("unified")
 

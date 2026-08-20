@@ -8,12 +8,29 @@ function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => R
   return (input: z.infer<T>) => cb(schema.parse(input))
 }
 
+function currentMessage(input: unknown): input is SessionMessageInfo {
+  if (!input || typeof input !== "object") return false
+  if (!("id" in input) || typeof input.id !== "string") return false
+  if (!("type" in input) || typeof input.type !== "string") return false
+  return (
+    "time" in input &&
+    !!input.time &&
+    typeof input.time === "object" &&
+    "created" in input.time &&
+    typeof input.time.created === "number"
+  )
+}
+
 type LegacySession = Session
 
 export namespace Share {
   export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
   export type Session = LegacySession | SessionInfo
-  export type Messages = { sessionID: string; messages: SessionMessageInfo[] }
+  export const Messages = z.object({
+    sessionID: z.string(),
+    messages: z.array(z.custom<SessionMessageInfo>(currentMessage)),
+  })
+  export type Messages = z.infer<typeof Messages>
 
   export const Info = z.object({
     id: z.string(),
@@ -33,7 +50,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("messages"),
-      data: z.custom<Messages>(),
+      data: Messages,
     }),
     z.object({
       type: z.literal("part"),
