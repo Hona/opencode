@@ -50,6 +50,7 @@ export const Ipc = {
   },
   window: {
     getId: "get-window-id",
+    themeReady: "window-theme-ready",
     getFocused: "get-window-focused",
     getFullscreen: "get-window-fullscreen",
     fullscreenChanged: "window-fullscreen-changed",
@@ -179,6 +180,7 @@ export type IpcInvoke = {
   [Ipc.files.readClipboardImage]: { args: []; result: ClipboardImage | null }
 
   [Ipc.window.getId]: { args: []; result: string }
+  [Ipc.window.themeReady]: { args: []; result: void }
   [Ipc.window.getFocused]: { args: []; result: boolean }
   [Ipc.window.getFullscreen]: { args: []; result: boolean }
   [Ipc.window.setFocus]: { args: []; result: void }

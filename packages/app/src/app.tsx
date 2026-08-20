@@ -137,6 +137,7 @@ export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
+    onThemeApplied?: () => void
   }>,
 ) {
   return (
@@ -145,6 +146,7 @@ export function AppBaseProviders(
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
           void window.api?.setTitlebar?.({ mode, scheme })
+          props.onThemeApplied?.()
         }}
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>

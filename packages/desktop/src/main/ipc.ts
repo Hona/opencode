@@ -15,7 +15,14 @@ import { createFileCapabilities, openExternalURL, openLocalFileURL } from "./fil
 import { setForceFocus } from "./native/debug"
 import { runDesktopMenuAction } from "./native/menu-actions"
 import { createDesktopStorage } from "./storage"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getWindowID,
+  setPinchZoomEnabled,
+  setTitlebar,
+  setWindowThemeReady,
+  updateTitlebar,
+} from "./windows"
 import type { UpdaterIpc } from "./updater"
 import type { WslIpc } from "./wsl/ipc"
 
@@ -110,6 +117,12 @@ export function registerIpcHandlers(deps: Deps) {
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
     return id
+  })
+
+  handle(Ipc.window.themeReady, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error("Window not found")
+    setWindowThemeReady(win)
   })
 
   handle(Ipc.window.getFocused, (event) => {

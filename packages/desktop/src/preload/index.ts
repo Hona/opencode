@@ -107,6 +107,7 @@ const api: ElectronAPI = {
   draftBlobGet: (id) => invoke(Ipc.drafts.getBlob, id),
 
   getWindowID: () => invoke(Ipc.window.getId),
+  themeReady: () => invoke(Ipc.window.themeReady),
   onMenuCommand: (cb) => listen(Ipc.menu.command, cb),
   onDeepLink: (cb) => listen(Ipc.app.deepLink, cb),
 

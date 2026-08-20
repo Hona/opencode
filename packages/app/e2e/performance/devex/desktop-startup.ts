@@ -60,7 +60,9 @@ export async function runDesktopStartup(run: number, testInfo: TestInfo) {
     })
   try {
     const page = await desktop.open()
+    await startThemeObservation(page)
     await waitForHome(page, desktop.mark)
+    await requireStableTheme(page)
     return await desktop.result(run)
   } finally {
     await desktop.close(testInfo, run)
@@ -281,6 +283,57 @@ async function waitForHome(page: Page, mark: (name: Milestone) => void) {
   await expect(addProject).toHaveCount(1)
   await addProject.click({ trial: true })
   mark("homeReady")
+}
+
+type ThemeWindow = Window & {
+  __OPENCODE_THEME_STATES__?: string[]
+  __OPENCODE_THEME_OBSERVER__?: MutationObserver
+}
+
+async function startThemeObservation(page: Page) {
+  await page.addInitScript(installThemeObservation)
+  await page.evaluate(installThemeObservation)
+}
+
+async function requireStableTheme(page: Page) {
+  const states = await page.evaluate(() => {
+    const target = window as ThemeWindow
+    target.__OPENCODE_THEME_OBSERVER__?.disconnect()
+    return target.__OPENCODE_THEME_STATES__ ?? []
+  })
+  if (states.length !== 1) throw new Error(`Desktop theme changed during startup: ${states.join(" -> ")}`)
+}
+
+function installThemeObservation() {
+  const target = window as ThemeWindow
+  const observeRoot = () => {
+    const root = document.documentElement
+    if (!root) return false
+    const state = () => {
+      const theme = root.dataset.theme
+      const scheme = root.dataset.colorScheme
+      return theme && scheme ? `${theme}:${scheme}` : undefined
+    }
+    const initial = state()
+    target.__OPENCODE_THEME_STATES__ = initial ? [initial] : []
+    target.__OPENCODE_THEME_OBSERVER__ = new MutationObserver(() => {
+      const next = state()
+      if (!next) return
+      if (target.__OPENCODE_THEME_STATES__?.at(-1) !== next) target.__OPENCODE_THEME_STATES__?.push(next)
+    })
+    target.__OPENCODE_THEME_OBSERVER__.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-color-scheme"],
+    })
+    return true
+  }
+  if (observeRoot()) return
+  const documentObserver = new MutationObserver(() => {
+    if (!observeRoot()) return
+    documentObserver.disconnect()
+  })
+  target.__OPENCODE_THEME_OBSERVER__ = documentObserver
+  documentObserver.observe(document, { childList: true })
 }
 
 async function observeOutput(stream: NodeJS.ReadableStream, record: (line: string) => void) {
