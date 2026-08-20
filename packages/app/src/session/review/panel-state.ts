@@ -9,7 +9,7 @@ import { createStore } from "solid-js/store"
 import type { Platform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
 
-export function createReviewPanelV2State(platform?: Platform) {
+export function createReviewPanelState(platform?: Platform) {
   const [store, setStore, , ready] = persisted(
     Persist.global("review-panel-v2"),
     createStore({
@@ -40,4 +40,4 @@ export function createReviewPanelV2State(platform?: Platform) {
   }
 }
 
-export type ReviewPanelV2State = ReturnType<typeof createReviewPanelV2State>
+export type ReviewPanelState = ReturnType<typeof createReviewPanelState>

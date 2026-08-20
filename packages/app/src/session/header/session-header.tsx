@@ -8,7 +8,7 @@ import { useSessionLayout } from "@/session/session-layout"
 import { reviewTooltipKeybind } from "@/components/command-tooltip-keybind"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useTitlebarRightMount } from "@/components/titlebar"
-import { SessionHeaderV2Actions, type SessionHeaderV2ActionsState } from "./session-header-actions"
+import { SessionHeaderActions, type SessionHeaderActionsState } from "./session-header-actions"
 
 export function SessionHeader() {
   const command = useCommand()
@@ -19,7 +19,7 @@ export function SessionHeader() {
   const status = settings.visibility.status
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
-  const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
+  const actions = createMemo<SessionHeaderActionsState>(() => ({
     status: status() ? { label: language.t("status.popover.trigger"), content: () => <StatusPopoverV2 /> } : undefined,
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
@@ -34,7 +34,7 @@ export function SessionHeader() {
     <Show when={rightMount()} keyed>
       {(mount) => (
         <Portal mount={mount}>
-          <SessionHeaderV2Actions state={v2ActionsState()} />
+          <SessionHeaderActions state={actions()} />
         </Portal>
       )}
     </Show>

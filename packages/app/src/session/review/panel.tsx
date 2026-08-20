@@ -28,12 +28,12 @@ import {
   reviewDiffNeedsLoad,
   type RenderDiff,
 } from "@/session/review/review-diff-kinds"
-import type { ReviewPanelV2State } from "@/session/review/review-panel-v2-state"
-import { applyFileListKeyDown, SessionFileListV2 } from "@/session/files/session-file-list-v2"
+import type { ReviewPanelState } from "@/session/review/panel-state"
+import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
 
 type ReviewDiff = FileDiffInfo
 
-export type ReviewPanelV2Props = {
+export type ReviewPanelProps = {
   title?: JSX.Element
   empty?: JSX.Element
   diffs: ReviewDiff[]
@@ -44,7 +44,7 @@ export type ReviewPanelV2Props = {
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
   onDiffStyleChange?: (style: SessionReviewDiffStyle) => void
-  state: ReviewPanelV2State
+  state: ReviewPanelState
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
@@ -55,7 +55,7 @@ export type ReviewPanelV2Props = {
   fileList?: "tree" | "flat"
 }
 
-export function ReviewPanelV2(props: ReviewPanelV2Props) {
+export function ReviewPanel(props: ReviewPanelProps) {
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const readFile = async (path: string) =>
@@ -67,11 +67,11 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
         return undefined
       })
 
-  return <ReviewPanelV2View {...props} readFile={readFile} />
+  return <ReviewPanelView {...props} readFile={readFile} />
 }
 
-export function ReviewPanelV2View(
-  props: ReviewPanelV2Props & {
+export function ReviewPanelView(
+  props: ReviewPanelProps & {
     readFile?: (path: string) => Promise<{ type: "text"; content: string } | undefined>
   },
 ) {
@@ -127,7 +127,7 @@ export function ReviewPanelV2View(
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
-        <ReviewPanelV2Sidebar
+        <ReviewPanelSidebar
           title={props.title}
           state={props.state}
           diffsReady={props.diffsReady}
@@ -178,9 +178,9 @@ export function ReviewPanelV2View(
   )
 }
 
-function ReviewPanelV2Sidebar(props: {
+function ReviewPanelSidebar(props: {
   title?: JSX.Element
-  state: ReviewPanelV2State
+  state: ReviewPanelState
   diffsReady: boolean
   onSelectFile: (path: string) => void
   diffs: RenderDiff[]
@@ -247,7 +247,7 @@ function ReviewPanelV2Sidebar(props: {
                 />
               }
             >
-              <SessionFileListV2
+              <SessionFileList
                 files={props.filteredFiles}
                 kinds={props.kinds}
                 active={props.activeDiff}
@@ -260,7 +260,7 @@ function ReviewPanelV2Sidebar(props: {
             when={props.filteredFiles.length > 0}
             fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
           >
-            <SessionFileListV2
+            <SessionFileList
               files={props.filteredFiles}
               kinds={props.kinds}
               active={props.activeDiff}

@@ -22,8 +22,8 @@ const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
-import { SortableTabV2 } from "@/session/files/session-sortable-tab-v2"
-import { OpenInAppV2 } from "@/session/files/open-in-app-v2"
+import { SortableTab } from "@/session/files/tab"
+import { OpenInAppButton } from "@/session/files/open-in-app-button"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -346,7 +346,7 @@ export function SessionSidePanel(props: {
                               <Show
                                 when={tab === SESSION_OPEN_FILE_TAB}
                                 fallback={
-                                  <SortableTabV2
+                                  <SortableTab
                                     tab={tab}
                                     index={tabs().all().indexOf(tab)}
                                     temporary={temporaryTab() === tab}
@@ -415,7 +415,7 @@ export function SessionSidePanel(props: {
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <OpenInAppV2 directory={projectDirectory} />
+                          <OpenInAppButton directory={projectDirectory} />
                         </div>
                       </div>
 

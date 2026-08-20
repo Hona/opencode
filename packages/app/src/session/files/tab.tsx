@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { FileVisual } from "./session-sortable-tab"
 
-export function SortableTabV2(props: {
+export function SortableTab(props: {
   tab: string
   index: number
   temporary?: boolean

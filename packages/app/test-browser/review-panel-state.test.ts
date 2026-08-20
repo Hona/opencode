@@ -2,9 +2,9 @@ import { beforeAll, expect, mock, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
 import type { Platform } from "@/context/platform"
-import type { ReviewPanelV2State } from "@/session/review/review-panel-v2-state"
+import type { ReviewPanelState } from "@/session/review/panel-state"
 
-let createReviewPanelV2State: (platform?: Platform) => ReviewPanelV2State
+let createReviewPanelState: (platform?: Platform) => ReviewPanelState
 let read: ((value: string | null) => void) | undefined
 
 const storage: AsyncStorage = {
@@ -33,13 +33,13 @@ beforeAll(async () => {
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX: 480,
   }))
 
-  createReviewPanelV2State = (await import("@/session/review/review-panel-v2-state")).createReviewPanelV2State
+  createReviewPanelState = (await import("@/session/review/panel-state")).createReviewPanelState
 })
 
 test("enables sidebar motion only after custom width hydration", async () => {
   await new Promise<void>((resolve, reject) => {
     createRoot((dispose) => {
-      const state = createReviewPanelV2State(platform)
+      const state = createReviewPanelState(platform)
 
       try {
         expect(state.sidebarTransition()).toBeFalse()

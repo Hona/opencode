@@ -12,12 +12,30 @@ import {
   queuedPrompts,
   retryDocument,
   streamingDocument,
+  STORY_TIME,
   subagentDocument,
   terminalPassedDocument,
 } from "@opencode-ai/session-ui/storybook"
 import { SessionPreview } from "./story-model"
 
 const description = "opencode · modular-session-ui"
+const retryAfterInterruption = {
+  ...retryDocument,
+  messages: [
+    ...compactionDocument.messages,
+    ...retryDocument.messages.map((message, index) => {
+      const created = STORY_TIME + 70_000 + index * 1_000
+      if (message.type !== "assistant" || !message.retry) {
+        return { ...message, time: { ...message.time, created } }
+      }
+      return {
+        ...message,
+        time: { ...message.time, created },
+        retry: { ...message.retry, at: created },
+      }
+    }),
+  ],
+}
 const implementAndVerify = () => (
   <SessionPreview
     title="Update active Session status"
@@ -136,11 +154,7 @@ export const QuestionRequest = {
 
 export const RetryAndInterruption = {
   render: () => (
-    <SessionPreview
-      title="Recover the interrupted run"
-      description={description}
-      document={{ ...retryDocument, messages: [...compactionDocument.messages, ...retryDocument.messages] }}
-    />
+    <SessionPreview title="Recover the interrupted run" description={description} document={retryAfterInterruption} />
   ),
 }
 
@@ -151,6 +165,7 @@ export const ReviewPlusTerminal = {
       description={description}
       document={{ ...terminalPassedDocument, diffs: editThenTestDocument.diffs }}
       reviewOpened
+      terminal={{ title: "Terminal 1", lines: ["$ bun test", "27 pass", "0 fail"] }}
     />
   ),
 }

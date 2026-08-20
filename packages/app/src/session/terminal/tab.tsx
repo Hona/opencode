@@ -9,7 +9,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
 import { focusTerminalById } from "@/session/helpers"
 
-export function SortableTerminalTabV2(props: { terminal: LocalPTY; index: number; onClose?: () => void }): JSX.Element {
+export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
   const language = useLanguage()
   const sortable = useSortable({

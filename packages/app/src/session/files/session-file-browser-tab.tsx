@@ -11,7 +11,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/session/session-layout"
 import { SessionFileView } from "@/session/files/file-tabs"
-import { applyFileListKeyDown, SessionFileListV2 } from "@/session/files/session-file-list-v2"
+import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
 import { pathKey } from "@/utils/path-key"
 import { useServer } from "@/context/server"
 
@@ -141,7 +141,7 @@ export function SessionFileBrowserTab(props: {
                   </div>
                 }
               >
-                <SessionFileListV2
+                <SessionFileList
                   id={resultsID}
                   role="listbox"
                   optionID={optionID}

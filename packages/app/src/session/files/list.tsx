@@ -38,7 +38,7 @@ export function applyFileListKeyDown(
 // row data-slots on purpose so file-tree-v2.css styles both. data-highlighted has
 // no CSS of its own — it folds into data-selected below and only exists as the
 // scrollIntoView query hook.
-export function SessionFileListV2(props: {
+export function SessionFileList(props: {
   files: readonly string[]
   active?: string
   highlighted?: string

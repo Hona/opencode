@@ -1,6 +1,6 @@
 import type { ModelSelection } from "@/context/local"
 import { PromptInputV2Composer, type PromptInputV2ComposerController } from "@/components/prompt-input-v2"
-import { SessionHeaderV2Actions } from "@/session/header/session-header-actions"
+import { SessionHeaderActions } from "@/session/header/session-header-actions"
 import {
   SessionComposerRegion,
   type SessionComposerRegionViewController,
@@ -19,8 +19,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { ReviewPanelV2View } from "@/session/review/review-panel-v2"
-import { createReviewPanelV2State } from "@/session/review/review-panel-v2-state"
+import { ReviewPanelView } from "@/session/review/panel"
+import { createReviewPanelState } from "@/session/review/panel-state"
+import { TerminalSurface } from "@/session/terminal/surface"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
 const storyComposerModel = {
@@ -85,6 +86,7 @@ export type SessionPreviewProps = {
   reviewOpened?: boolean
   backgroundTasks?: { id: string; type: "shell" | "subagent"; label: string }[]
   child?: { parentID: string }
+  terminal?: { title: string; lines: string[] }
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -275,8 +277,14 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   />
                 </section>
                 <Show when={state.reviewOpened}>
-                  <aside id="review-panel" class="min-w-0 flex-1 border-l border-border-weak-base md:max-w-[52%]">
-                    <SessionReviewPane diffs={props.document.diffs} />
+                  <aside
+                    id="review-panel"
+                    class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
+                  >
+                    <div class="min-h-0 flex-1">
+                      <SessionReviewPane diffs={props.document.diffs} />
+                    </div>
+                    <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
                   </aside>
                 </Show>
               </div>
@@ -288,6 +296,32 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         </SessionPanelFrame>
       </SessionRouteFrame>
     </div>
+  )
+}
+
+function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
+  return (
+    <TerminalSurface
+      label={props.terminal.title}
+      opened
+      desktop
+      stacked
+      height="220px"
+      contentHeight="220px"
+      pane={220}
+      max={360}
+      resizing={false}
+      onResizeStart={() => undefined}
+      onResize={() => undefined}
+      onCollapse={() => undefined}
+    >
+      <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
+        {props.terminal.title}
+      </div>
+      <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
+        {props.terminal.lines.join("\n")}
+      </pre>
+    </TerminalSurface>
   )
 }
 
@@ -312,7 +346,7 @@ function SessionSurfaceHeader(props: {
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-2">
-        <SessionHeaderV2Actions
+        <SessionHeaderActions
           state={{
             reviewLabel: language.t("command.review.toggle"),
             reviewKeybind: [],
@@ -331,13 +365,13 @@ function SessionSurfaceHeader(props: {
 
 function SessionReviewPane(props: { diffs: SessionDocument["diffs"] }) {
   const language = useLanguage()
-  const review = createReviewPanelV2State()
+  const review = createReviewPanelState()
   const [state, setState] = createStore({
     active: props.diffs[0]?.file,
     diffStyle: "unified" as "unified" | "split",
   })
   return (
-    <ReviewPanelV2View
+    <ReviewPanelView
       title={language.t("ui.sessionReview.title.lastTurn")}
       empty={<SessionReviewEmptyChangesV2 />}
       diffs={props.diffs}

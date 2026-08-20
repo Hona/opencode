@@ -4,7 +4,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 
-export type SessionHeaderV2ActionsState = {
+export type SessionHeaderActionsState = {
   status?: { label: string; content: () => JSX.Element }
   reviewLabel: string
   reviewKeybind: string[]
@@ -13,7 +13,7 @@ export type SessionHeaderV2ActionsState = {
   onReviewToggle: () => void
 }
 
-export function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
+export function SessionHeaderActions(props: { state: SessionHeaderActionsState }) {
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.status}>
