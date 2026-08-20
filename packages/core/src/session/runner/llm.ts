@@ -34,6 +34,7 @@ import { toSessionError } from "../to-session-error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
+import { PluginSupervisor } from "../../plugin/supervisor.js"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -114,6 +115,7 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
     // Title generation starts once input is visible and must not delay model execution.
@@ -133,23 +135,37 @@ const layer = Layer.effect(
       let force = input.force
       let continuation = input.continuation
       const promotable = input.promotable ?? "input"
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
+      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable)))
         return { type: "complete" as const }
+      yield* plugins.flush
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID, promotable)) {
+        // Between-turn control items run under any drain scope: scope gates which user
+        // input may promote, not whether admitted housekeeping runs. Enqueue order still
+        // holds — a control item behind a queued prompt is not the next eligible item.
+        if (yield* runPendingCompaction(input.sessionID, "input")) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, promotable)) return { type: "moved" as const }
+        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
         if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
         const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
-        if (promotable === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
+    })
+
+    /** Work this drain may perform: scoped input, or a between-turn control item next in line. */
+    const eligible = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
+    ) {
+      if (yield* SessionInbox.has(db, sessionID, promotable)) return true
+      if (promotable === "input") return false
+      const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
+      return next?.type === "compaction" || next?.type === "move"
     })
 
     /**
@@ -326,6 +342,8 @@ const layer = Layer.effect(
             sessionID: session.id,
             assistantMessageID: yield* publisher.startAssistant(),
             finish: finish.finish,
+            rawFinish: finish.rawFinish,
+            providerState: finish.providerState,
             ...stepUsage(finish),
             ...end,
           })
@@ -644,6 +662,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    PluginSupervisor.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

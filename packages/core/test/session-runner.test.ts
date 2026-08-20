@@ -436,7 +436,6 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      wakeActive: coordinator.wakeActive,
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
@@ -3214,6 +3213,54 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("a steer-scoped drain runs a queued manual compaction next in line", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      // Admit without waking so the steer-scoped drain below is the first consumer.
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Control work is scope-independent between turns: the barrier is consumed
+      // even though the drain never promotes queued input.
+      expect(yield* SessionInbox.find(db, compaction.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      })
+    }),
+  )
+
+  it.effect("a steer-scoped drain leaves a compaction parked behind a queued prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      const compaction = yield* SessionInbox.admitCompaction(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      // Enqueue order holds: the queued prompt is next in line, so nothing runs.
+      expect(requests).toHaveLength(0)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+      expect(yield* SessionInbox.find(db, compaction.id)).toMatchObject({ id: compaction.id })
+    }),
+  )
+
   it.effect("promotes queued input after steering continuation ends", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -4161,13 +4208,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("persists raw finish reasons and provider state", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "stop", raw: "end_turn" },
+            providerMetadata: { openai: { responseId: "response-1", serviceTier: "priority" } },
+          },
+          LLMEvent.textStart({ id: "answer" }),
+          LLMEvent.textDelta({ id: "answer", text: "Complete" }),
+          LLMEvent.textEnd({ id: "answer" }),
+        ),
+      )
+
+      yield* runPrompt(session, "Keep provider finish details")
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "stop",
+          rawFinish: "end_turn",
+          providerState: { responseId: "response-1", serviceTier: "priority" },
+          content: [{ type: "text", text: "Complete" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("projects content-filter finishes as visible terminal failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* TestLLM.push(
         TestLLM.complete(
           {
-            reason: { normalized: "content-filter" },
+            reason: { normalized: "content-filter", raw: "SAFETY" },
+            providerMetadata: {
+              openai: {
+                responseId: "response-blocked",
+                refusal: { category: "safety", explanation: "Prompt blocked" },
+              },
+            },
             usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
           },
           LLMEvent.textStart({ id: "partial" }),
@@ -4182,7 +4265,12 @@ describe("SessionRunnerLLM", () => {
         { type: "user" },
         {
           type: "assistant",
-          finish: "error",
+          finish: "content-filter",
+          rawFinish: "SAFETY",
+          providerState: {
+            responseId: "response-blocked",
+            refusal: { category: "safety", explanation: "Prompt blocked" },
+          },
           error: { type: "provider.content-filter" },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
