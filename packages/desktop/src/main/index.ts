@@ -31,9 +31,12 @@ const main = Effect.gen(function* () {
   const logger = configureApplication()
   if (!acquireApplicationLock()) return
   preferApplicationEnvironment(logger)
+  loadProxyEnvironment(logger)
   const lifecycle = createApplicationLifecycle(logger)
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
   const wslReady = Promise.withResolvers<void>()
+  logger.log("starting v2 background service")
+  const backgroundTask = yield* Effect.promise(() => startBackgroundCli(logger)).pipe(Effect.forkChild)
 
   yield* Effect.promise(() => app.whenReady())
   yield* prepareDesktop(logger)
@@ -79,9 +82,7 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => startNetworkLogging())
 
   const loadingTask = yield* Effect.gen(function* () {
-    loadProxyEnvironment(logger)
-    logger.log("starting v2 background service")
-    const background = yield* Effect.promise(() => startBackgroundCli(logger))
+    const background = yield* Fiber.join(backgroundTask)
     yield* Deferred.succeed(serverReady, {
       url: background.url,
       username: background.username,

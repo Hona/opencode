@@ -7,6 +7,7 @@ import { promisify } from "node:util"
 import { app } from "electron"
 import { parseCliVersion } from "./cli-version"
 import { developmentResourcesRoot } from "../paths"
+import { developmentService } from "../../shared/development-service"
 
 const execFileAsync = promisify(execFile)
 type Logger = {
@@ -18,17 +19,13 @@ export async function startBackgroundCli(logger: Logger) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const developmentVersion = process.env.OPENCODE_VERSION ?? "local"
-  const cli = development
+  const source = development
+    ? developmentService({ cli: development, userData: app.getPath("userData"), version: developmentVersion })
+    : undefined
+  const cli = source
     ? {
         version: developmentVersion,
-        command: [
-          "bun",
-          "run",
-          "--cwd",
-          development,
-          `--define=OPENCODE_VERSION=${JSON.stringify(developmentVersion)}`,
-          "src/index.ts",
-        ],
+        command: source.command,
         binary: undefined,
       }
     : await resolveBundledCli(isolated, logger)
@@ -36,10 +33,10 @@ export async function startBackgroundCli(logger: Logger) {
   const service = await Service.ensure({
     file:
       isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-        ? join(app.getPath("userData"), "opencode", "service-local.json")
+        ? source?.file
         : undefined,
     version: cli.version,
-    command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
+    command: source ? cli.command : [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
     onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
   })
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")

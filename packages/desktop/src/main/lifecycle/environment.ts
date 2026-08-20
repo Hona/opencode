@@ -10,6 +10,7 @@ import { Effect } from "effect"
 import { CHANNEL, VERSION } from "../constants"
 import { initCrashReporter, initLogging, type DesktopLogger } from "../native/logging"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
+import { developmentUserData } from "../../shared/development-service"
 import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
@@ -38,7 +39,14 @@ export function configureApplication() {
   const testRoot = createTestRoot()
   app.setName(app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appID)
-  app.setPath("userData", testRoot ? join(testRoot, "desktop") : join(app.getPath("appData"), appID))
+  app.setPath(
+    "userData",
+    testRoot
+      ? join(testRoot, "desktop")
+      : app.isPackaged
+        ? join(app.getPath("appData"), appID)
+        : developmentUserData(),
+  )
   if (testRoot) app.setPath("sessionData", join(testRoot, "session"))
 
   initializeFirstLaunchOnboarding(app.getPath("userData"))

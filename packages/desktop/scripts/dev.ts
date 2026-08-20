@@ -1,9 +1,12 @@
 import { $ } from "bun"
 import { join } from "node:path"
+import { Service } from "@opencode-ai/client/service"
+import { developmentService, developmentUserData } from "../src/shared/development-service"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
 type DevOptions = { server: ServerSource; electron: string[] }
+const servicePrewarmDelay = 500
 
 async function main() {
   process.env.OPENCODE_CHANNEL = "local"
@@ -11,14 +14,30 @@ async function main() {
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
   const options = selectOptions()
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
+  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
+  setTimeout(() => prewarmServer(options.server), servicePrewarmDelay).unref()
   await prepareDesktop()
   await prepareServer(options.server)
   await startDesktop(options.electron)
 }
 
+function prewarmServer(source: ServerSource) {
+  if (source.type !== "build") return
+  const version = process.env.OPENCODE_VERSION
+  if (!version) throw new Error("Missing development version")
+  const userData = process.env.OPENCODE_DESKTOP_TEST_ROOT
+    ? join(process.env.OPENCODE_DESKTOP_TEST_ROOT, "desktop")
+    : developmentUserData()
+  void Service.ensure(
+    developmentService({ cli: join(import.meta.dirname, "../../cli"), userData, version }),
+  ).catch((error) => console.error("failed to prewarm desktop service", error))
+}
+
 async function prepareDesktop() {
-  await $`bun run install-electron`
-  await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
+  await Promise.all([
+    $`bun run install-electron`,
+    $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`,
+  ])
 }
 
 function selectOptions(): DevOptions {
@@ -46,7 +65,6 @@ async function prepareServer(source: ServerSource) {
 }
 
 async function startDesktop(args: string[]) {
-  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
   await $`electron-vite dev ${args}`
 }
 
