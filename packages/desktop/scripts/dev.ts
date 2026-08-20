@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import { join } from "node:path"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
