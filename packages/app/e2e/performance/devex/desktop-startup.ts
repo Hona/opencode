@@ -4,6 +4,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { startChromeTrace } from "../chrome-trace"
 
 const repository = resolve(import.meta.dirname, "../../../../..")
 const milestones = [
@@ -60,10 +61,15 @@ export async function runDesktopStartup(run: number, testInfo: TestInfo) {
     })
   try {
     const page = await desktop.open()
-    await startThemeObservation(page)
-    await waitForHome(page, desktop.mark)
-    await requireStableTheme(page)
-    return await desktop.result(run)
+    const stopTrace = await startChromeTrace(page, `desktop-startup-${run}`)
+    try {
+      await startThemeObservation(page)
+      await waitForHome(page, desktop.mark)
+      await requireStableTheme(page)
+      return await desktop.result(run)
+    } finally {
+      await stopTrace?.()
+    }
   } finally {
     await desktop.close(testInfo, run)
   }
@@ -91,7 +97,7 @@ export async function desktopBenchmarkContext(runs: number) {
     electronViteVersionRange: pkg.devDependencies["electron-vite"],
     gitCommit: revision.stdout.toString().trim(),
     gitDirty: status.stdout.length > 0,
-    trace: false,
+    trace: Boolean(process.env.OPENCODE_PERFORMANCE_TRACE_DIR),
   }
 }
 

@@ -24,6 +24,12 @@ Set `DESKTOP_STARTUP_RUNS` only for focused diagnostics:
 DESKTOP_STARTUP_RUNS=1 bun run bench:devex
 ```
 
+Set `OPENCODE_PERFORMANCE_TRACE_DIR` to capture the renderer's CDP trace from attachment through actionable Home:
+
+```sh
+DESKTOP_STARTUP_RUNS=1 OPENCODE_PERFORMANCE_TRACE_DIR=/tmp/opencode-desktop-traces bun run bench:devex
+```
+
 PowerShell:
 
 ```powershell
