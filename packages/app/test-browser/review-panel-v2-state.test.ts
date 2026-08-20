@@ -2,8 +2,9 @@ import { beforeAll, expect, mock, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
 import type { Platform } from "@/context/platform"
+import type { ReviewPanelV2State } from "@/session/review/review-panel-v2-state"
 
-let createReviewPanelV2State: typeof import("@/pages/session/v2/review-panel-v2-state").createReviewPanelV2State
+let createReviewPanelV2State: (platform?: Platform) => ReviewPanelV2State
 let read: ((value: string | null) => void) | undefined
 
 const storage: AsyncStorage = {
@@ -32,7 +33,7 @@ beforeAll(async () => {
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX: 480,
   }))
 
-  createReviewPanelV2State = (await import("@/pages/session/v2/review-panel-v2-state")).createReviewPanelV2State
+  createReviewPanelV2State = (await import("@/session/review/review-panel-v2-state")).createReviewPanelV2State
 })
 
 test("enables sidebar motion only after custom width hydration", async () => {
