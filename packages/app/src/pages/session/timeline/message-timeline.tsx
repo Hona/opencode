@@ -269,13 +269,15 @@ function MessageTimelineView(
   )
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
+  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
+  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: props.data.sessionKey,
     projection,
     showHeader,
-    shouldAnchorBottom: () => props.shouldAnchorBottom,
-    hasScrollGesture: () => props.hasScrollGesture,
+    shouldAnchorBottom,
+    hasScrollGesture,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,

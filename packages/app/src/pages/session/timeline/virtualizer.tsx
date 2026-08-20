@@ -93,40 +93,48 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
     if (!root) return
     const view = root.getBoundingClientRect()
-    const item = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+    const anchor = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
       .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-      .filter((entry) => entry.rect.bottom > view.top)
+      .filter((item) => item.rect.bottom > view.top && item.rect.top < view.bottom)
       .sort((a, b) => a.rect.top - b.rect.top)[0]
-    if (!item) return
-    prependAnchor = { key: item.element.dataset.timelineKey ?? "", offset: item.rect.top - view.top }
+    if (!anchor) return
+    if (!anchor.element.dataset.timelineKey) return
+    prependAnchor = { key: anchor.element.dataset.timelineKey, offset: anchor.rect.top - view.top }
   }
 
   const restorePrependAnchor = (done: boolean) => {
-    prependLoading = !done
+    if (done) prependLoading = false
     applyPrependAnchor()
   }
 
   const applyPrependAnchor = () => {
-    const anchor = prependAnchor
     const root = listRoot()
-    if (!anchor || !root) {
-      if (!prependLoading) clearPrependAnchor()
-      return
-    }
+    if (!root || !prependAnchor) return
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
-    prependAnchorFrame = requestAnimationFrame(() => {
+    let frames = 0
+    let stable = 0
+    const apply = () => {
       prependAnchorFrame = undefined
-      const element = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].find(
-        (item) => item.dataset.timelineKey === anchor.key,
-      )
-      if (!element) {
-        if (!prependLoading) clearPrependAnchor()
+      const anchor = prependAnchor
+      if (!anchor) return
+      const element = root.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
+      const delta = element
+        ? element.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.offset
+        : undefined
+      if (delta !== undefined && Math.abs(delta) > 0.5) {
+        root.scrollTop += delta
+        stable = 0
+      } else {
+        stable += 1
+      }
+      frames += 1
+      if (stable >= 30 || frames >= 180) {
+        if (!prependLoading) prependAnchor = undefined
         return
       }
-      const view = root.getBoundingClientRect()
-      root.scrollBy({ top: element.getBoundingClientRect().top - view.top - anchor.offset })
-      if (!prependLoading) clearPrependAnchor()
-    })
+      prependAnchorFrame = requestAnimationFrame(apply)
+    }
+    prependAnchorFrame = requestAnimationFrame(apply)
   }
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
