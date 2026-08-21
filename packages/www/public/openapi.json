@@ -8410,6 +8410,14 @@
             "required": true
           },
           {
+            "name": "x-opencode-ticket",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
             "name": "location",
             "in": "query",
             "schema": {
