@@ -178,4 +178,57 @@ describe("FileSystemSearch", () => {
     prepare.mockRestore()
     cleanup.mockRestore()
   })
+
+  test("invalidates a mixed target list while the initial scan is still running", async () => {
+    const first = Effect.runSync(Deferred.make<void>())
+    const release = Effect.runSync(Deferred.make<void>())
+    const complete = Effect.runSync(Deferred.make<void>())
+    const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+      [
+        Location.node,
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-partial")) }),
+          ),
+        ),
+      ],
+      [
+        Ripgrep.node,
+        Layer.succeed(
+          Ripgrep.Service,
+          Ripgrep.Service.of({
+            find: (input) =>
+              Effect.gen(function* () {
+                if (input.onEntry)
+                  yield* input.onEntry(
+                    FileSystem.Entry.make({ path: RelativePath.make("src/first.ts"), type: "file" }),
+                  )
+                yield* Deferred.succeed(first, undefined)
+                yield* Deferred.await(release)
+                if (input.onEntry)
+                  yield* input.onEntry(
+                    FileSystem.Entry.make({ path: RelativePath.make("src/second.ts"), type: "file" }),
+                  )
+                yield* Deferred.succeed(complete, undefined)
+                return []
+              }),
+            glob: () => Effect.succeed([]),
+            grep: () => Effect.succeed([]),
+          }),
+        ),
+      ],
+    ])
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* Deferred.await(first)
+        expect((yield* search.find({ query: "first" }))[0]?.path).toBe(RelativePath.make("src/first.ts"))
+        yield* Deferred.succeed(release, undefined)
+        yield* Deferred.await(complete)
+        expect((yield* search.find({ query: "second" }))[0]?.path).toBe(RelativePath.make("src/second.ts"))
+      }).pipe(Effect.provide(layer), Effect.scoped),
+    )
+  })
 })

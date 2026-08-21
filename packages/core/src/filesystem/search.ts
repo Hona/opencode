@@ -83,6 +83,7 @@ export const ripgrepLayer = Layer.effect(
             const file = previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path)
             next.files.set(entry.path, file)
             next.fileTargets.push(file)
+            next.combinedTargets = undefined
             const parts = entry.path.split("/")
             let prefix = ""
             for (const [offset, part] of parts.entries()) {
