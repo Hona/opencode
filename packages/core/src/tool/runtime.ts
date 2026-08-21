@@ -114,23 +114,23 @@ const standardFailure = (prefix: string, error: unknown) =>
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
-  if (!isStandardSchema(schema) && !Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
+  if (isStandardSchema(schema))
+    return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
+  if (!Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
   const cached = inputJsonSchemas.get(schema)
   if (cached) return structuredClone(cached)
-  const compiled = isStandardSchema(schema)
-    ? (schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema)
-    : toJsonSchema(schema)
+  const compiled = toJsonSchema(schema)
   inputJsonSchemas.set(schema, compiled)
   return structuredClone(compiled)
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (!isStandardSchema(schema) && !Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
+  if (isStandardSchema(schema))
+    return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
+  if (!Schema.isSchema(schema)) return schema as JsonSchema.JsonSchema
   const cached = outputJsonSchemas.get(schema)
   if (cached) return structuredClone(cached)
-  const compiled = isStandardSchema(schema)
-    ? (schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema)
-    : toJsonSchema(schema)
+  const compiled = toJsonSchema(schema)
   outputJsonSchemas.set(schema, compiled)
   return structuredClone(compiled)
 }

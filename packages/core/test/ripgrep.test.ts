@@ -112,15 +112,14 @@ describe("Ripgrep", () => {
           yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "one.txt"), "one\n"))
           yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "two.txt"), "two\n"))
           const observed: RelativePath[] = []
-          const files = yield* (yield* Ripgrep.Service).find({
+          const ripgrep = yield* Ripgrep.Service
+          yield* ripgrep.scan({
             cwd: tmp.path,
             pattern: "*",
             limit: 10,
-            collect: false,
             onEntry: (entry) => Effect.sync(() => observed.push(entry.path)),
           })
 
-          expect(files).toEqual([])
           expect(new Set(observed)).toEqual(new Set([RelativePath.make("one.txt"), RelativePath.make("two.txt")]))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),

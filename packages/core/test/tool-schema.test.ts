@@ -171,6 +171,31 @@ test("portable schema failures become tool failures", async () => {
   expect(error.toString()).toContain("Invalid tool input: expected a string")
 })
 
+test("portable schema definitions reflect current converter state", () => {
+  let type = "string"
+  const input = {
+    "~standard": {
+      version: 1,
+      vendor: "test",
+      validate: (value: unknown) => ({ value }),
+      jsonSchema: {
+        input: () => ({ type }),
+        output: () => ({ type }),
+      },
+    },
+  }
+  const tool: Info = {
+    name: "dynamic-portable",
+    description: "Dynamic portable schema",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({ type: "string" })
+  type = "number"
+  expect(definition(tool).inputSchema).toEqual({ type: "number" })
+})
+
 test("canonical results carry metadata with typed output", async () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })

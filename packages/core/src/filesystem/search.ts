@@ -72,12 +72,11 @@ export const ripgrepLayer = Layer.effect(
       const next = emptyIndex()
       const previous = index
       if (!initialized) index = next
-      yield* ripgrep.find({
+      yield* ripgrep.scan({
         cwd: location.directory,
         pattern: "*",
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
-        collect: false,
         onEntry: (entry) =>
           Effect.sync(() => {
             const file = previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path)

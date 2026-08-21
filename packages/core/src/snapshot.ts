@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { File } from "./file.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
@@ -100,7 +100,7 @@ const layer = Layer.effect(
         }),
       )
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
-    const repositoryFiber = yield* Effect.cached(
+    const [repositoryFiber, invalidateRepository] = yield* Effect.cachedInvalidateWithTTL(
       Effect.gen(function* () {
         const source = yield* git.repo.discover(location.project.directory)
         if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
@@ -120,8 +120,13 @@ const layer = Layer.effect(
         )
         return { source, worktree, snapshotRepository }
       }).pipe(Effect.forkIn(lifetime)),
+      Duration.infinity,
     )
-    const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
+    const repository = repositoryFiber.pipe(
+      Effect.uninterruptible,
+      Effect.flatMap(Fiber.join),
+      Effect.tapError(() => invalidateRepository),
+    )
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
       const relative = path.relative(worktree, location.directory)

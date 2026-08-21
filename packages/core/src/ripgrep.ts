@@ -58,7 +58,10 @@ export interface FindInput {
   readonly follow?: boolean
   readonly signal?: AbortSignal
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
-  readonly collect?: boolean
+}
+
+export interface ScanInput extends Omit<FindInput, "onEntry"> {
+  readonly onEntry: (entry: Entry) => Effect.Effect<void>
 }
 
 export interface GlobInput {
@@ -81,6 +84,7 @@ export interface GrepInput {
 
 export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
+  readonly scan: (input: ScanInput) => Effect.Effect<void, Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
 }
@@ -162,6 +166,40 @@ const layer = Layer.effect(
       )
     }
 
+    const find = (input: FindInput, collect = true) =>
+      run<Entry>({
+        cwd: input.cwd,
+        limit: input.limit,
+        signal: input.signal,
+        args: [
+          "--no-config",
+          "--files",
+          ...(input.hidden ? ["--hidden"] : []),
+          ...(input.follow ? ["--follow"] : []),
+          ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
+          ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
+          "--glob=!**/.git/**",
+          ".",
+        ],
+        parse: (line) => {
+          const relative = line
+            .replace(/^(?:\.[\\/])+/u, "")
+            .replace(/^[\\/]+/u, "")
+            .replaceAll("\\", "/")
+          return Effect.succeed(
+            Entry.make({
+              path: RelativePath.make(relative),
+              type: "file",
+            }),
+          )
+        },
+        onItem: input.onEntry,
+        collect,
+      }).pipe(
+        Effect.map((result) => result.items),
+        Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+      )
+
     return Service.of({
       glob: (input) =>
         run<string>({
@@ -195,39 +233,8 @@ const layer = Layer.effect(
           ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
-      find: (input) =>
-        run<Entry>({
-          cwd: input.cwd,
-          limit: input.limit,
-          signal: input.signal,
-          args: [
-            "--no-config",
-            "--files",
-            ...(input.hidden ? ["--hidden"] : []),
-            ...(input.follow ? ["--follow"] : []),
-            ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
-            ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
-            "--glob=!**/.git/**",
-            ".",
-          ],
-          parse: (line) => {
-            const relative = line
-              .replace(/^(?:\.[\\/])+/u, "")
-              .replace(/^[\\/]+/u, "")
-              .replaceAll("\\", "/")
-            return Effect.succeed(
-              Entry.make({
-                path: RelativePath.make(relative),
-                type: "file",
-              }),
-            )
-          },
-          onItem: input.onEntry,
-          collect: input.collect,
-        }).pipe(
-          Effect.map((result) => result.items),
-          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
-        ),
+      find,
+      scan: (input) => find(input, false).pipe(Effect.asVoid),
       grep: (input) =>
         run<RawMatchData>({
           ...input,

@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -184,6 +184,10 @@ describe("Git trees", () => {
         RelativePath.make("scope/tracked.txt"),
       ])
       expect(yield* git.tree.files({ repository, from: after, to: after })).toEqual([])
+      const missing = Git.TreeID.make("0000000000000000000000000000000000000000")
+      expect(
+        Exit.isFailure(yield* Effect.exit(git.tree.files({ repository, from: missing, to: missing }))),
+      ).toBeTrue()
       const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
       expect(diffs.map((item) => [item.file, item.status])).toEqual([
         [RelativePath.make("scope/C leading.txt"), "added"],

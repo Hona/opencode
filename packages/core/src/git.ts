@@ -11,7 +11,8 @@ import { File } from "./file.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { which } from "./util/which.js"
 
-const gitExecutable = which("git") ?? "git"
+const resolvedGit = which("git")
+const gitExecutable = resolvedGit ? path.resolve(resolvedGit) : "git"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -554,7 +555,6 @@ const layer = Layer.effect(
       from: TreeID
       to: TreeID
     }) {
-      if (input.from === input.to) return []
       return (yield* repositoryOperation("list_files", input.repository, [
         "diff",
         "--name-only",

@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Hash } from "@opencode-ai/util/hash"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -123,6 +124,49 @@ describe("Snapshot", () => {
             expect(yield* read(path.join(location, "added.txt"))).toBe("added\n")
             expect(yield* read(path.join(project, "outside.txt"))).toBe("changed outside\n")
           }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("retries lazy repository initialization after lock timeout", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          const flock = yield* EffectFlock.Service.pipe(Effect.provide(AppNodeBuilder.build(EffectFlock.node)))
+          let acquisitions = 0
+          const instrumented = EffectFlock.Service.of({
+            ...flock,
+            acquire: (key, directory, options) => {
+              acquisitions++
+              if (acquisitions === 1) return Effect.fail(new EffectFlock.LockTimeoutError({ key }))
+              return flock.acquire(key, directory, options)
+            },
+          })
+          const layer = AppNodeBuilder.build(Snapshot.node, [
+            [
+              Location.node,
+              Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) })),
+            ],
+            [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
+            [EffectFlock.node, Layer.succeed(EffectFlock.Service, instrumented)],
+          ])
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeUndefined()
+            expect(acquisitions).toBe(1)
+            yield* TestClock.adjust("5 seconds")
+            expect(yield* snapshot.capture()).toBeDefined()
+            expect(acquisitions).toBe(3)
+          }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
