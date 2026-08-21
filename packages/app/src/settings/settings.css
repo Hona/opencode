@@ -187,7 +187,7 @@
 }
 
 @media (max-width: 639px) {
-  .settings-v2[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  .settings[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
     > [data-slot="tabs-v2-list"] {
     width: 144px;
     min-width: 144px;
