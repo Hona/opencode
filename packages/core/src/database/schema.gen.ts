@@ -269,9 +269,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`session_v2_active_root_updated_idx\` ON \`session_v2\` (\`parent_id\`,\`time_updated\`) WHERE "session_v2"."parent_id" is null and "session_v2"."time_archived" is null;`,
-      )
-      yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )
     })

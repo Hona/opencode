@@ -263,19 +263,6 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("filters sessions by archived state", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const { db } = yield* Database.Service
-      const active = yield* session.create({ location, title: "active" })
-      const archived = yield* session.create({ location, title: "archived" })
-      yield* db.update(SessionTable).set({ time_archived: Date.now() }).where(eq(SessionTable.id, archived.id)).run()
-
-      expect((yield* session.list({ archived: false })).data.map((item) => item.id)).toEqual([active.id])
-      expect((yield* session.list({ archived: true })).data.map((item) => item.id)).toEqual([archived.id])
-    }),
-  )
-
   it.effect("orders sessions by their latest prompt", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

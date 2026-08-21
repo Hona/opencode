@@ -2347,7 +2347,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2359,7 +2358,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2371,7 +2369,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2383,7 +2380,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2395,31 +2391,17 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
     readonly cursor?: string | undefined
   }["parentID"]
-  readonly archived?: {
-    readonly workspace?: string | undefined
-    readonly limit?: number | undefined
-    readonly order?: "asc" | "desc" | undefined
-    readonly search?: string | undefined
-    readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
-    readonly directory?: string | undefined
-    readonly project?: string | undefined
-    readonly subpath?: string | undefined
-    readonly cursor?: string | undefined
-  }["archived"]
   readonly directory?: {
     readonly workspace?: string | undefined
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2431,7 +2413,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2443,7 +2424,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2455,7 +2435,6 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
-    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined

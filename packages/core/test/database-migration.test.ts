@@ -72,11 +72,6 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
         ).toEqual({ name: "session_pending" })
-        expect(
-          yield* db.get(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'session_v2_active_root_updated_idx'`,
-          ),
-        ).toEqual({ name: "session_v2_active_root_updated_idx" })
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: migrations.length })
       }),
     )

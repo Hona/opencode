@@ -10,7 +10,6 @@ export async function loadHomeSessionIndex(
       limit: number
       order: "desc"
       parentID: null
-      archived: false
       cursor?: string
     },
     options: { signal?: AbortSignal },
@@ -26,7 +25,6 @@ export async function loadHomeSessionIndex(
         limit: HOME_V2_SESSION_PAGE_LIMIT,
         order: "desc",
         parentID: null,
-        archived: false,
         ...(cursor ? { cursor } : {}),
       },
       { signal },

@@ -97,7 +97,6 @@ export type Endpoint5_0Input = {
   readonly order?: "asc" | "desc" | undefined
   readonly search?: string | undefined
   readonly parentID?: Session.ID | null | undefined
-  readonly archived?: boolean | undefined
   readonly directory?: AbsolutePath | undefined
   readonly project?: Project.ID | undefined
   readonly subpath?: RelativePath | undefined
