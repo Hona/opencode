@@ -385,7 +385,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(new Error(`Unknown tool call: ${id}`))
   }
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const publish = Effect.fnUntraced(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
