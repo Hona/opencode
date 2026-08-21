@@ -52,6 +52,10 @@ test("Effect tool schemas use exact optional keys and flatten compatible constra
     required: ["code"],
     additionalProperties: false,
   })
+  const first = definition(tool).inputSchema as { properties: object }
+  const second = definition(tool).inputSchema as { properties: object }
+  expect(first).not.toBe(second)
+  expect(first.properties).not.toBe(second.properties)
 })
 
 test("Effect tool schemas inline named child schemas", () => {
