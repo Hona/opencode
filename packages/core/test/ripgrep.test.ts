@@ -104,6 +104,29 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("streams find entries without retaining a result array", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "one.txt"), "one\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "two.txt"), "two\n"))
+          const observed: RelativePath[] = []
+          const files = yield* (yield* Ripgrep.Service).find({
+            cwd: tmp.path,
+            pattern: "*",
+            limit: 10,
+            collect: false,
+            onEntry: (entry) => Effect.sync(() => observed.push(entry.path)),
+          })
+
+          expect(files).toEqual([])
+          expect(new Set(observed)).toEqual(new Set([RelativePath.make("one.txt"), RelativePath.make("two.txt")]))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("excludes protected directory trees from catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
