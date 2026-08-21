@@ -42,6 +42,13 @@ const ParentIDFilter = Schema.Union([
   description: "Filter by parent session. Use null to return only root sessions.",
 })
 
+const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
+  }),
+)
+
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
@@ -52,6 +59,9 @@ const SessionsQueryFields = {
   }),
   search: Schema.optional(Schema.String),
   parentID: ParentIDFilter.pipe(Schema.optional),
+  archived: BooleanFromString.pipe(Schema.optional).annotate({
+    description: "Filter sessions by archived state.",
+  }),
 }
 
 const SessionsDirectoryQuery = Schema.Struct({
@@ -104,13 +114,6 @@ export type SessionsCursor = typeof SessionsCursor.Type
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
-
-const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
-  Schema.decodeTo(Schema.Boolean, {
-    decode: SchemaGetter.transform((value) => value === "true"),
-    encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
-  }),
-)
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",

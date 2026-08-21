@@ -66,6 +66,9 @@ export const SessionTable = sqliteTable(
     index("session_v2_project_idx").on(table.project_id),
     index("session_v2_workspace_idx").on(table.workspace_id),
     index("session_v2_parent_idx").on(table.parent_id),
+    index("session_v2_active_root_updated_idx")
+      .on(table.parent_id, table.time_updated)
+      .where(sql`${table.parent_id} is null and ${table.time_archived} is null`),
     index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),

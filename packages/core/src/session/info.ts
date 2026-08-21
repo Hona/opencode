@@ -13,7 +13,31 @@ import { Money } from "@opencode-ai/schema/money"
 
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
-export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
+export const infoColumns = {
+  id: SessionTable.id,
+  project_id: SessionTable.project_id,
+  workspace_id: SessionTable.workspace_id,
+  parent_id: SessionTable.parent_id,
+  fork_session_id: SessionTable.fork_session_id,
+  fork_boundary: SessionTable.fork_boundary,
+  title: SessionTable.title,
+  agent: SessionTable.agent,
+  model: SessionTable.model,
+  cost: SessionTable.cost,
+  tokens_input: SessionTable.tokens_input,
+  tokens_output: SessionTable.tokens_output,
+  tokens_reasoning: SessionTable.tokens_reasoning,
+  tokens_cache_read: SessionTable.tokens_cache_read,
+  tokens_cache_write: SessionTable.tokens_cache_write,
+  directory: SessionTable.directory,
+  path: SessionTable.path,
+  revert: SessionTable.revert,
+  time_created: SessionTable.time_created,
+  time_updated: SessionTable.time_updated,
+  time_archived: SessionTable.time_archived,
+}
+
+export function fromRow(row: Pick<typeof SessionTable.$inferSelect, keyof typeof infoColumns>): SessionSchema.Info {
   return SessionSchema.Info.make({
     id: SessionSchema.ID.make(row.id),
     projectID: Project.ID.make(row.project_id),

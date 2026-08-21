@@ -292,6 +292,7 @@ const Endpoint5_0 = (raw: RawClient["server.session"]) => (input?: Endpoint5_0In
         order: input?.["order"],
         search: input?.["search"],
         parentID: input?.["parentID"],
+        archived: input?.["archived"],
         directory: input?.["directory"],
         project: input?.["project"],
         subpath: input?.["subpath"],

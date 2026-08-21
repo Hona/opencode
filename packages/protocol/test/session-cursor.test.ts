@@ -9,6 +9,8 @@ describe("SessionsCursor", () => {
       workspace: undefined,
       search: "protocol",
       order: "desc" as const,
+      parentID: null,
+      archived: false,
       anchor: { id: Session.ID.make("ses_test"), time: 1, direction: "next" as const },
     }
     const cursor = SessionsCursor.make(input)

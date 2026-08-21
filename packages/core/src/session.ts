@@ -3,7 +3,7 @@ export * from "./session/schema.js"
 
 import { Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Workspace } from "./workspace.js"
 import { Model } from "./model.js"
@@ -23,7 +23,7 @@ import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import { upsertProject } from "./project/sql.js"
 import path from "path"
-import { fromRow } from "./session/info.js"
+import { fromRow, infoColumns } from "./session/info.js"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
@@ -71,6 +71,7 @@ const ListInputBase = {
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
   parentID: Schema.NullOr(SessionSchema.ID).pipe(Schema.optional),
+  archived: Schema.Boolean.pipe(Schema.optional),
   anchor: ListAnchor.pipe(Schema.optional),
 }
 
@@ -485,6 +486,8 @@ const layer = Layer.effect(
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
           )
+        if (input.archived !== undefined)
+          conditions.push(input.archived ? isNotNull(SessionTable.time_archived) : isNull(SessionTable.time_archived))
         if (input.anchor) {
           conditions.push(
             order === "asc"
@@ -499,7 +502,7 @@ const layer = Layer.effect(
           )
         }
         const query = db
-          .select()
+          .select(infoColumns)
           .from(SessionTable)
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(
