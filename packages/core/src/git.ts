@@ -318,6 +318,7 @@ const layer = Layer.effect(
             cwd: repository.worktree,
             env: options?.env,
             extendEnv: true,
+            stdin: "ignore",
           }),
           { stdin: options?.stdin },
         )
@@ -422,17 +423,20 @@ const layer = Layer.effect(
       ignores?: Repository
       maximumUntrackedFileBytes?: number
     }) {
-      const list = (args: string[]) =>
-        repositoryOperation("refresh", input.repository, args).pipe(
-          Effect.map((result) => result.text.split("\0").filter(Boolean)),
-        )
-      const [tracked, untracked] = yield* Effect.all(
-        [
-          list(["diff-files", "--name-only", "-z", "--", input.scope]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", input.scope]),
-        ],
-        { concurrency: 2 },
-      )
+      const entries = (yield* repositoryOperation("refresh", input.repository, [
+        "ls-files",
+        "--modified",
+        "--others",
+        "--exclude-standard",
+        "-t",
+        "-z",
+        "--",
+        input.scope,
+      ])).text
+        .split("\0")
+        .filter(Boolean)
+      const tracked = entries.filter((entry) => !entry.startsWith("? ")).map((entry) => entry.slice(2))
+      const untracked = entries.filter((entry) => entry.startsWith("? ")).map((entry) => entry.slice(2))
       const candidates = Array.from(new Set([...tracked, ...untracked]))
       if (!candidates.length) return { skipped: [] }
       const ignored = input.ignores
@@ -444,11 +448,11 @@ const layer = Layer.effect(
               .filter(Boolean),
           )
         : new Set<string>()
-      const allowed = candidates.filter((item) => !ignored.has(item))
+      const allowed = new Set(candidates.filter((item) => !ignored.has(item)))
       const maximum = input.maximumUntrackedFileBytes
       const skipped = maximum
         ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(item)),
+            untracked.filter((item) => allowed.has(item)),
             (item) =>
               fs.stat(path.join(input.repository.worktree, item)).pipe(
                 Effect.map((info) =>
@@ -459,7 +463,8 @@ const layer = Layer.effect(
             { concurrency: 8 },
           )).filter((item): item is RelativePath => item !== undefined)
         : []
-      const stage = allowed.filter((item) => !skipped.includes(RelativePath.make(item)))
+      const skippedSet = new Set(skipped)
+      const stage = Array.from(allowed).filter((item) => !skippedSet.has(RelativePath.make(item)))
       const remove = [...ignored, ...skipped]
       if (remove.length)
         yield* repositoryOperation(
@@ -542,6 +547,7 @@ const layer = Layer.effect(
       from: TreeID
       to: TreeID
     }) {
+      if (input.from === input.to) return []
       return (yield* repositoryOperation("list_files", input.repository, [
         "diff",
         "--name-only",
