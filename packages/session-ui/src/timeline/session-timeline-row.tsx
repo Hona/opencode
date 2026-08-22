@@ -109,7 +109,12 @@ export function createSessionTimelineRowRenderer(input: {
           return message?.type === "assistant" && content?.type === "tool" ? [content] : []
         })
       })
-      return <SessionPatchToolGroup tools={tools()} onSizeChange={onSizeChange} />
+      return (
+        <SessionPatchToolGroup
+          tools={tools()}
+          onSizeChange={onSizeChange}
+        />
+      )
     }
 
     const ref = createMemo(() => {
@@ -168,11 +173,7 @@ export function createSessionTimelineRowRenderer(input: {
     if (message.type === "system") {
       const prefix = "Instructions updated: "
       if (message.description?.startsWith(prefix)) {
-        const keys = message.description
-          .slice(prefix.length)
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
+        const keys = message.description.slice(prefix.length).split(",").map((s) => s.trim()).filter(Boolean)
         return {
           label: i18n.t("ui.sessionTimeline.notice.instructionsUpdated"),
           items: keys,
