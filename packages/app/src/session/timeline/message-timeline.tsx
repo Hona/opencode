@@ -53,12 +53,14 @@ export function BackgroundMoveHint(props: { keybind?: string[] }) {
   return (
     <div
       data-component="session-background-hint"
-      class="flex h-6 max-w-full items-center justify-center gap-[3px] overflow-hidden rounded-[4px] px-1.5 text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-muted"
+      class="flex h-6 max-w-full items-center justify-center gap-[3px] overflow-hidden text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
       aria-label={language.t("session.background.moveInline", { keybind: keybind() })}
     >
-      <span class="shrink-0 px-[3px]">{parts()[0].trim()}</span>
+      <span data-slot="session-background-hint-prefix" class="shrink-0">
+        {parts()[0].trim()}
+      </span>
       <Keybind keys={keys()} variant="neutral" />
-      <span class="min-w-0 truncate px-[3px]">{parts()[1].trim()}</span>
+      <span class="min-w-0 truncate">{parts()[1].trim()}</span>
     </div>
   )
 }
@@ -460,8 +462,15 @@ function MessageTimelineView(
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
       footer={
         <Show when={props.background.blocking().length > 0}>
-          <div class={`flex h-16 items-start pt-4 ${turnPadding()}`}>
-            <BackgroundMoveHint />
+          <div
+            classList={{
+              "min-w-0 w-full max-w-full": true,
+              "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
+            }}
+          >
+            <div class={`flex h-16 items-start pt-4 ${turnPadding()}`}>
+              <BackgroundMoveHint />
+            </div>
           </div>
         </Show>
       }

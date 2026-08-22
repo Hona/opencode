@@ -81,7 +81,16 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await expect(card).not.toContainText("(background)")
   await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
   await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
-  await expect(page.getByText(/move running work to the background/i)).toBeVisible()
+  const hint = page.locator('[data-component="session-background-hint"]')
+  const hintPrefix = hint.locator('[data-slot="session-background-hint-prefix"]')
+  await expect(hint).toBeVisible()
+  await expect
+    .poll(async () => {
+      const [cardBox, prefixBox] = await Promise.all([card.boundingBox(), hintPrefix.boundingBox()])
+      if (!cardBox || !prefixBox) return undefined
+      return Math.abs(cardBox.x - prefixBox.x)
+    })
+    .toBeLessThan(2)
 
   const request = page.waitForRequest(
     (request) =>
