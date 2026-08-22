@@ -109,12 +109,7 @@ export function createSessionTimelineRowRenderer(input: {
           return message?.type === "assistant" && content?.type === "tool" ? [content] : []
         })
       })
-      return (
-        <SessionPatchToolGroup
-          tools={tools()}
-          onSizeChange={onSizeChange}
-        />
-      )
+      return <SessionPatchToolGroup tools={tools()} onSizeChange={onSizeChange} />
     }
 
     const ref = createMemo(() => {
