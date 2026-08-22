@@ -116,7 +116,7 @@
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
 
-    &.clickable {
+    &.clickable:not(.webfetch-link) {
       cursor: pointer;
       text-decoration: underline;
       transition: color 0.15s ease;
@@ -326,7 +326,10 @@
   }
 }
 
-.webfetch-link {
+.webfetch-link,
+[data-slot="basic-tool-tool-subtitle"].webfetch-link,
+[data-slot="exa-tool-link"].webfetch-link,
+[data-component="tool-trigger"] [data-slot="basic-tool-tool-subtitle"].webfetch-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -338,7 +341,7 @@
   font-size: 13px;
   font-style: normal;
   font-weight: var(--font-weight-regular, 440);
-  line-height: var(--line-height-large);
+  line-height: 16px;
   letter-spacing: var(--letter-spacing-normal);
 
   &:visited,

@@ -87,7 +87,7 @@ export const WebFetch = {
             <span data-slot="basic-tool-tool-title">Webfetch</span>
             <a
               data-slot="basic-tool-tool-subtitle"
-              class="clickable webfetch-link"
+              class="webfetch-link"
               href="https://www.figma.com"
               target="_blank"
               rel="noopener noreferrer"
@@ -155,7 +155,7 @@ export const WebSearch = {
                     if (index() === 10) firstRevealedRef = el
                   }}
                   data-slot="exa-tool-link"
-                  class="clickable webfetch-link"
+                  class="webfetch-link"
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"

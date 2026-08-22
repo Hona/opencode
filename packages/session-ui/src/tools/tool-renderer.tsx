@@ -442,7 +442,7 @@ function ExaOutput(props: { output?: string }) {
                   if (index() === 10) firstRevealedRef = el
                 }}
                 data-slot="exa-tool-link"
-                class="clickable webfetch-link"
+                class="webfetch-link"
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -925,7 +925,7 @@ ToolRegistry.register({
               <Show when={!pending() && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
-                  class="clickable webfetch-link"
+                  class="webfetch-link"
                   href={url()}
                   target="_blank"
                   rel="noopener noreferrer"
