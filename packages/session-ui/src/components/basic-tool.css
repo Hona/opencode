@@ -75,7 +75,7 @@
 
   [data-slot="basic-tool-tool-info-main"] {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
     min-width: 0;
   }
@@ -83,7 +83,7 @@
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -108,7 +108,7 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -350,14 +350,11 @@
   }
 
   [data-slot="webfetch-link-text"] {
-    display: inline-block;
     text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: inherit;
-    padding-bottom: 2px;
-    margin-bottom: -2px;
   }
 
   .webfetch-link-icon {
