@@ -1296,6 +1296,7 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="code-lines"
+          rail={false}
           defer={props.deferContent !== false}
           trigger={
             <div data-component="edit-trigger">
@@ -1364,6 +1365,7 @@ ToolRegistry.register({
         <BasicTool
           {...props}
           icon="code-lines"
+          rail={false}
           defer={props.deferContent !== false}
           trigger={
             <div data-component="write-trigger">
@@ -1447,6 +1449,7 @@ ToolRegistry.register({
             <BasicTool
               {...props}
               icon="code-lines"
+              rail={false}
               defer={props.deferContent !== false}
               trigger={{
                 title: i18n.t("ui.tool.patch"),
@@ -1544,6 +1547,7 @@ ToolRegistry.register({
           <BasicTool
             {...props}
             icon="code-lines"
+            rail={false}
             defer={props.deferContent !== false}
             trigger={
               <div data-component="edit-trigger">
