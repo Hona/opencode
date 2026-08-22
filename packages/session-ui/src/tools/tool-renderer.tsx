@@ -414,6 +414,7 @@ function taskSession(
 function ExaOutput(props: { output?: string }) {
   const i18n = useI18n()
   const [showAll, setShowAll] = createSignal(false)
+  let firstRevealedRef: HTMLAnchorElement | undefined
   const links = createMemo(() => urls(props.output))
   const visibleLinks = createMemo(() => {
     const all = links()
@@ -422,13 +423,24 @@ function ExaOutput(props: { output?: string }) {
   })
   const remaining = createMemo(() => Math.max(0, links().length - 10))
 
+  const expand = (event: MouseEvent) => {
+    event.stopPropagation()
+    setShowAll(true)
+    requestAnimationFrame(() => {
+      firstRevealedRef?.focus()
+    })
+  }
+
   return (
     <Show when={links().length > 0}>
       <div data-component="exa-tool-output">
         <div data-slot="exa-tool-links">
           <For each={visibleLinks()}>
-            {(url) => (
+            {(url, index) => (
               <a
+                ref={(el) => {
+                  if (index() === 10) firstRevealedRef = el
+                }}
                 data-slot="exa-tool-link"
                 class="clickable webfetch-link"
                 href={url}
@@ -442,15 +454,8 @@ function ExaOutput(props: { output?: string }) {
             )}
           </For>
           <Show when={!showAll() && remaining() > 0}>
-            <button
-              type="button"
-              data-slot="exa-tool-more"
-              onClick={(event) => {
-                event.stopPropagation()
-                setShowAll(true)
-              }}
-            >
-              {i18n.t("ui.common.moreCount", { count: remaining() })}
+            <button type="button" data-slot="exa-tool-more" onClick={expand}>
+              {i18n.plural("ui.common.moreCount", remaining())}
             </button>
           </Show>
         </div>

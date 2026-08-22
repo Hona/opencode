@@ -569,12 +569,12 @@
 }
 
 [data-component="exa-tool-output"] {
-  width: 100%;
   display: flex;
-  margin-left: 12px;
-  padding-left: 16px;
+  min-width: 0;
+  margin-inline-start: 12px;
+  padding-inline-start: 16px;
   padding-bottom: 12px;
-  border-left: 0.5px solid var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
+  border-inline-start: 0.5px solid var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
   font-family: var(--font-family-sans);
   font-size: 13px;
   line-height: 16px;

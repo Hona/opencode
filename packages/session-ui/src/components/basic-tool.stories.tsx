@@ -124,8 +124,17 @@ const mockSearchUrls = [
 export const WebSearch = {
   render: () => {
     const [showAll, setShowAll] = createSignal(false)
+    let firstRevealedRef: HTMLAnchorElement | undefined
     const visibleLinks = () => (showAll() ? mockSearchUrls : mockSearchUrls.slice(0, 10))
     const remaining = () => Math.max(0, mockSearchUrls.length - 10)
+
+    const expand = (event: MouseEvent) => {
+      event.stopPropagation()
+      setShowAll(true)
+      requestAnimationFrame(() => {
+        firstRevealedRef?.focus()
+      })
+    }
 
     return (
       <BasicTool
@@ -140,8 +149,11 @@ export const WebSearch = {
         <div data-component="exa-tool-output">
           <div data-slot="exa-tool-links">
             <For each={visibleLinks()}>
-              {(url) => (
+              {(url, index) => (
                 <a
+                  ref={(el) => {
+                    if (index() === 10) firstRevealedRef = el
+                  }}
                   data-slot="exa-tool-link"
                   class="clickable webfetch-link"
                   href={url}
@@ -155,14 +167,7 @@ export const WebSearch = {
               )}
             </For>
             <Show when={!showAll() && remaining() > 0}>
-              <button
-                type="button"
-                data-slot="exa-tool-more"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setShowAll(true)
-                }}
-              >
+              <button type="button" data-slot="exa-tool-more" onClick={expand}>
                 +{remaining()} more
               </button>
             </Show>
