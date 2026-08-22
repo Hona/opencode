@@ -188,6 +188,7 @@ const source = {
   "ui.common.next": "Next",
   "ui.common.submit": "Submit",
   "ui.common.showMore": "Show more",
+  "ui.common.moreCount": "+{{count}} more",
 
   "ui.permission.deny": "Deny",
   "ui.permission.allowAlways": "Allow always",

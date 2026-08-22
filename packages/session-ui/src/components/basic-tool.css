@@ -152,6 +152,7 @@
       gap: 8px;
       color: var(--v2-text-text-accent);
       text-decoration: none;
+      max-width: 100%;
 
       &:visited,
       &:active {
