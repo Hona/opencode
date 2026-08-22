@@ -22,7 +22,7 @@ test("V2 text uses safe line-height tokens", async () => {
       const source = await Bun.file(file).text()
       const relative = file.slice(packages.length + 1)
 
-      if (file.endsWith(".tsx") && /text-\[13px\]/.test(source) && /leading-(?:none|\[13px\])/.test(source)) {
+      if (file.endsWith(".tsx")) {
         const parsed = createSourceFile(file, source, ScriptTarget.Latest, true, ScriptKind.TSX)
         const visit = (node: Node) => {
           if (isJsxOpeningElement(node) || isJsxSelfClosingElement(node)) {
@@ -35,8 +35,6 @@ test("V2 text uses safe line-height tokens", async () => {
         visit(parsed)
       }
       if (!file.endsWith(".css")) continue
-      if (!/font-size:\s*13px;/.test(source)) continue
-      if (!/line-height:\s*(?:1|100%|13px);/.test(source)) continue
 
       for (const match of source.matchAll(cssBlock)) {
         if (!/font-size:\s*13px;/.test(match[2])) continue
