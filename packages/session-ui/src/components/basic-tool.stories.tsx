@@ -147,9 +147,6 @@ export const WebSearch = {
         }}
       >
         <div data-component="exa-tool-output">
-          <div data-slot="exa-tool-rail">
-            <div data-slot="exa-tool-rail-line" />
-          </div>
           <div data-slot="exa-tool-links">
             <For each={visibleLinks()}>
               {(url, index) => (
