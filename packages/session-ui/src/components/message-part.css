@@ -326,7 +326,7 @@
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -683,10 +683,7 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding-top: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-  padding-left: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1244,6 +1241,10 @@
 
   > [data-component="collapsible"] > [data-slot="collapsible-content"] {
     border: none;
+    border-inline-start: none;
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    padding-bottom: 0;
     background: transparent;
   }
 
