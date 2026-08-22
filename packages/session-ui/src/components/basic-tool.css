@@ -78,12 +78,13 @@
     align-items: baseline;
     gap: 8px;
     min-width: 0;
+    overflow: hidden;
   }
 
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 13px;
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -108,7 +109,7 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 13px;
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -338,10 +339,10 @@
   max-width: 100%;
   font-family: var(--font-family-sans);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: inherit;
   font-style: normal;
   font-weight: var(--font-weight-regular, 440);
-  line-height: var(--line-height-large);
+  line-height: inherit;
   letter-spacing: var(--letter-spacing-normal);
 
   &:visited,
