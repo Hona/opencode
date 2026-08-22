@@ -272,6 +272,14 @@
       width: 0.5px;
       background-color: var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
     }
+
+    &:has([data-slot="exa-tool-more"]) {
+      padding-bottom: 4px;
+
+      &::before {
+        bottom: 25px;
+      }
+    }
   }
 }
 
