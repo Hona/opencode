@@ -1,6 +1,7 @@
 import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   inspectAndExplainDocument,
+  loadedFileDocument,
   skillWorkflowDocument,
   subagentDocument,
   webResearchDocument,
@@ -48,9 +49,20 @@ export const UseASpecializedSkill = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Use a specialized skill"
-      description="The selected review agent loads RTL guidance and applies it to a mixed-direction file row."
+      description="The assistant loads RTL guidance and applies it to a mixed-direction file row."
       document={skillWorkflowDocument}
       width="760px"
+    />
+  ),
+}
+
+export const LoadedInstructionFile = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Loaded instruction file"
+      description="A read call reports the instruction file it loaded using the same compact presentation."
+      document={loadedFileDocument}
+      width="600px"
     />
   ),
 }
