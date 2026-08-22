@@ -83,14 +83,23 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
   const hint = page.locator('[data-component="session-background-hint"]')
   const hintPrefix = hint.locator('[data-slot="session-background-hint-prefix"]')
+  const thinking = page.locator('[data-slot="session-turn-thinking"]')
   await expect(hint).toBeVisible()
   await expect
     .poll(async () => {
-      const [cardBox, prefixBox] = await Promise.all([card.boundingBox(), hintPrefix.boundingBox()])
-      if (!cardBox || !prefixBox) return undefined
-      return Math.abs(cardBox.x - prefixBox.x)
+      const [cardBox, hintBox, prefixBox, thinkingBox] = await Promise.all([
+        card.boundingBox(),
+        hint.boundingBox(),
+        hintPrefix.boundingBox(),
+        thinking.boundingBox(),
+      ])
+      if (!cardBox || !hintBox || !prefixBox || !thinkingBox) return undefined
+      return {
+        aligned: Math.abs(cardBox.x - prefixBox.x) < 2,
+        ordered: cardBox.y < hintBox.y && hintBox.y < thinkingBox.y,
+      }
     })
-    .toBeLessThan(2)
+    .toEqual({ aligned: true, ordered: true })
 
   const request = page.waitForRequest(
     (request) =>

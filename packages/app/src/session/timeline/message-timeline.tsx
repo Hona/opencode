@@ -18,7 +18,7 @@ import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline } from "@opencode-ai/session-ui/timeline/projection"
+import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
@@ -37,7 +37,7 @@ type BackgroundTask = {
 }
 
 type SessionBackground = {
-  blocking: Accessor<{ type: "shell" | "subagent"; id?: string; label?: string }[]>
+  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
   tasks: Accessor<BackgroundTask[]>
   move: () => Promise<void>
 }
@@ -450,6 +450,18 @@ function MessageTimelineView(
     padding: turnPadding,
     anchor: props.anchor,
   })
+  const backgroundHintPartID = createMemo(() => {
+    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+    const row = projection
+      .rows()
+      .findLast(
+        (row) => row._tag === "AssistantPart" && row.group.type === "part" && blocking.has(row.group.ref.partID),
+      )
+    if (row?._tag !== "AssistantPart" || row.group.type !== "part") return
+    return row.group.ref.partID
+  })
+  const backgroundHint = (row: TimelineRow.TimelineRow) =>
+    row._tag === "AssistantPart" && row.group.type === "part" && row.group.ref.partID === backgroundHintPartID()
 
   return (
     <VirtualizedTimeline
@@ -459,21 +471,23 @@ function MessageTimelineView(
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
         return content?.type === "tool" && ["edit", "write", "patch"].includes(content.name)
       }}
-      renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
-      footer={
-        <Show when={props.background.blocking().length > 0}>
-          <div
-            classList={{
-              "min-w-0 w-full max-w-full": true,
-              "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
-            }}
-          >
-            <div class={`flex h-16 items-start pt-4 ${turnPadding()}`}>
-              <BackgroundMoveHint />
+      renderRow={(row, onSizeChange) => (
+        <>
+          <rowRenderer.Row row={row} onSizeChange={onSizeChange} />
+          <Show when={backgroundHint(row())}>
+            <div
+              classList={{
+                "min-w-0 w-full max-w-full": true,
+                "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": props.centered,
+              }}
+            >
+              <div class={`flex h-10 items-start pt-4 ${turnPadding()}`}>
+                <BackgroundMoveHint />
+              </div>
             </div>
-          </div>
-        </Show>
-      }
+          </Show>
+        </>
+      )}
       header={
         <div
           data-session-title

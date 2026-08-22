@@ -63,6 +63,7 @@ export function createSessionRequestModel() {
       return [
         {
           type: part.name as "shell" | "subagent",
+          partID: part.id,
           id: typeof value === "string" ? value : undefined,
           label: typeof label === "string" ? label : undefined,
         },
