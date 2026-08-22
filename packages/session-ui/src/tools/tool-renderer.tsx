@@ -434,6 +434,9 @@ function ExaOutput(props: { output?: string }) {
   return (
     <Show when={links().length > 0}>
       <div data-component="exa-tool-output">
+        <div data-slot="exa-tool-rail">
+          <div data-slot="exa-tool-rail-line" />
+        </div>
         <div data-slot="exa-tool-links">
           <For each={visibleLinks()}>
             {(url, index) => (
