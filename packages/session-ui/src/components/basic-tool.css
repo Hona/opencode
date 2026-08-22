@@ -261,7 +261,6 @@
     position: relative;
     margin-inline-start: 12px;
     padding-inline-start: 16px;
-    padding-bottom: 12px;
 
     &::before {
       content: "";
@@ -271,14 +270,6 @@
       bottom: 12px;
       width: 0.5px;
       background-color: var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
-    }
-
-    &:has([data-slot="exa-tool-more"]) {
-      padding-bottom: 4px;
-
-      &::before {
-        bottom: 25px;
-      }
     }
   }
 }
