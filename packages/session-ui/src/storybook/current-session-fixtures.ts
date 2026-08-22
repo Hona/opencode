@@ -745,17 +745,25 @@ export const webResearchDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
-export const skillWorkflowDocument = document([
-  user("msg_user_skill", "Load the RTL-aware development skill and review the mixed-direction file row.", 79_000),
+export const loadedResourcesDocument = document([
+  user("msg_user_skill", "Read the project instructions, load the RTL-aware skill, and review the file row.", 79_000),
   assistant({
     id: "msg_assistant_skill",
     offset: 80_000,
     completed: 82_000,
     content: [
       completedTool({
+        id: "tool_loaded_file",
+        name: "read",
+        offset: 80_100,
+        args: { path: "C:/workspaces/opencode/packages/cli/AGENTS.md" },
+        output: "Project instructions loaded.",
+        metadata: { loaded: ["C:/workspaces/opencode/packages/cli/AGENTS.md"] },
+      }),
+      completedTool({
         id: "tool_skill_rtl",
         name: "skill",
-        offset: 80_100,
+        offset: 80_200,
         args: { name: "rtl-aware-development" },
         output: "Loaded RTL-aware development guidance",
         metadata: { name: "rtl-aware-development" },
@@ -810,25 +818,6 @@ export const instructionsUpdatedMultipleDocument = document([
     description: "Instructions updated: api/v2-demo, api/session",
     time: { created: STORY_TIME + 89_000 },
   },
-] satisfies SessionMessageInfo[])
-
-export const loadedFileDocument = document([
-  user("msg_user_loaded_file", "Read the project instructions before continuing.", 86_000),
-  assistant({
-    id: "msg_assistant_loaded_file",
-    offset: 87_000,
-    completed: 88_000,
-    content: [
-      completedTool({
-        id: "tool_loaded_file",
-        name: "read",
-        offset: 87_100,
-        args: { path: "C:/workspaces/opencode/packages/cli/AGENTS.md" },
-        output: "Project instructions loaded.",
-        metadata: { loaded: ["C:/workspaces/opencode/packages/cli/AGENTS.md"] },
-      }),
-    ],
-  }),
 ] satisfies SessionMessageInfo[])
 
 export const permissionPendingDocument = document(
