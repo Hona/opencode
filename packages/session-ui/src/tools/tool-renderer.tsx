@@ -898,7 +898,7 @@ ToolRegistry.register({
               <Show when={!pending() && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
-                  class="clickable subagent-link webfetch-link"
+                  class="clickable webfetch-link"
                   href={url()}
                   target="_blank"
                   rel="noopener noreferrer"
