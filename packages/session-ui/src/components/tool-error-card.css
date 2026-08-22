@@ -23,6 +23,10 @@
       margin-inline-start: 0;
       padding-inline-start: 0;
       padding-bottom: 0;
+
+      &::before {
+        display: none;
+      }
     }
   }
 

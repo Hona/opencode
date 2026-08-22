@@ -1231,6 +1231,10 @@
     padding-inline-start: 0;
     padding-bottom: 0;
     background: transparent;
+
+    &::before {
+      display: none;
+    }
   }
 
   > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
