@@ -75,10 +75,9 @@
 
   [data-slot="basic-tool-tool-info-main"] {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     min-width: 0;
-    overflow: hidden;
   }
 
   [data-slot="basic-tool-tool-title"] {
@@ -335,13 +334,14 @@
   gap: 8px;
   color: var(--v2-text-text-accent);
   text-decoration: none;
+  overflow: visible;
   max-width: 100%;
   font-family: var(--font-family-sans);
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   font-style: normal;
   font-weight: var(--font-weight-regular, 440);
-  line-height: 16px;
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 
   &:visited,
@@ -350,10 +350,14 @@
   }
 
   [data-slot="webfetch-link-text"] {
+    display: inline-block;
     text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: inherit;
+    padding-bottom: 2px;
+    margin-bottom: -2px;
   }
 
   .webfetch-link-icon {
