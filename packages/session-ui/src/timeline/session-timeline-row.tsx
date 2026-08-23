@@ -23,7 +23,7 @@ import {
 } from "../message/current-message"
 import { SessionCompactionMessage } from "../message/message-content"
 import { SessionRetry } from "../components/session-retry"
-import { createReactiveTimelineProjection, Timeline, TimelineRow } from "./projection"
+import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage } from "./projection"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
@@ -319,6 +319,11 @@ export function createSessionTimelineRowRenderer(input: {
         const value = message()
         return value?.type === "compaction" ? value : undefined
       })
+      const compactionError = createMemo(() => {
+        const value = compaction()
+        if (value?.status !== "failed") return ""
+        return unwrapErrorMessage(value.error.message)
+      })
       const moved = createMemo(() => {
         const value = message()
         return value?.type === "location-switched" ? value : undefined
@@ -333,7 +338,7 @@ export function createSessionTimelineRowRenderer(input: {
             {(message) => (
               <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
                 <div data-slot="session-turn-compaction">
-                  <SessionCompactionMessage message={message()} />
+                  <SessionCompactionMessage message={message()} error={compactionError()} />
                 </div>
               </div>
             )}
