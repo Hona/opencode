@@ -474,6 +474,46 @@ test("service registration replaces a stale owner with the bound address", async
   }
 })
 
+test("a late dynamic-port contender retains a compatible incumbent", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-late-contender-"))
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const password = "incumbent"
+  using incumbent = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid }),
+  })
+  const info = {
+    id: "incumbent",
+    version: OPENCODE_VERSION,
+    url: `http://127.0.0.1:${incumbent.port}`,
+    pid: process.pid,
+    password,
+  }
+  await fs.mkdir(path.dirname(registration), { recursive: true })
+  await fs.writeFile(registration, JSON.stringify(info))
+  const shutdowns: string[] = []
+
+  try {
+    const cleanup = await Effect.runPromise(
+      ServiceRegistration.register({
+        address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: await availablePort() },
+        password: "contender",
+        id: "contender",
+        file: registration,
+        shutdown: Effect.sync(() => shutdowns.push("contender")),
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+    )
+
+    expect(shutdowns).toEqual(["contender"])
+    expect(await Bun.file(registration).json()).toEqual(info)
+    await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await Bun.file(registration).json()).toEqual(info)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("a failed service stays registered and owns the selected port until stopped", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-failed-"))
   const port = await availablePort()
