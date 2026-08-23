@@ -88,9 +88,9 @@ function Cell(props: {
         </div>
         <div
           classList={{
-            "uppercase font-bold tabular-nums": true,
-            "text-[11px] leading-v2-tight": !!props.inline,
-            "text-[13px] leading-v2-compact sm:text-[14px]": !props.inline,
+            "uppercase leading-none font-bold tabular-nums": true,
+            "text-[11px]": !!props.inline,
+            "text-[13px] sm:text-[14px]": !props.inline,
             "text-text-on-critical-base": !!props.bad,
             "opacity-70": !!props.dim,
           }}
