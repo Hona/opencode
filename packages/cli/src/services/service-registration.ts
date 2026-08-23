@@ -35,21 +35,6 @@ export const register = Effect.fnUntraced(function* (options: {
     found.url === info.url &&
     found.pid === info.pid &&
     found.password === info.password
-  const incumbent = yield* current.pipe(
-    Effect.flatMap((found) => Service.incumbent({ file: options.file, url: found.url, version: OPENCODE_VERSION })),
-    Effect.catch(() => Effect.succeed(undefined)),
-  )
-  if (incumbent !== undefined) {
-    yield* Effect.logInfo("managed service incumbent retained; shutting down contender", {
-      serviceID: options.id,
-      servicePID: process.pid,
-      registration: options.file,
-      incumbentURL: incumbent.endpoint.url,
-      incumbentState: incumbent.state,
-    })
-    yield* options.shutdown
-    return Effect.void
-  }
   yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
   yield* current.pipe(
     Effect.catchCause((cause) =>

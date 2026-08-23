@@ -18,7 +18,7 @@ import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform, type DesktopWindowState } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
-import { initializationData } from "./startup/initialization"
+import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
@@ -38,7 +38,7 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
 
 function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; windowState: DesktopWindowState }) {
   const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
-  const [sidecar] = createResource(() => props.api.awaitInitialization())
+  const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const router = (routerProps: BaseRouterProps) => (
@@ -59,11 +59,8 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
           displayName: language.t("desktop.server.local"),
           type: "sidecar",
           variant: "base",
-          http: {
-            url: data.url,
-            username: data.username ?? undefined,
-            password: data.password ?? undefined,
-          },
+          http: sidecarHttp(data),
+          resolve: createSidecarResolver({ api: props.api, update: setSidecar }),
         })
       }
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))

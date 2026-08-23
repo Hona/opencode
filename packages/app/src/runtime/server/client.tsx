@@ -75,8 +75,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   const api = createApiForServer({ server: server.http, fetch: platform.fetch })
   const pty = createPtyClient(api, { url: server.http.url })
   const events = createOpenCodeEventSource()
+  const resolve = server.type === "sidecar" && server.variant === "base" ? server.resolve : undefined
 
   const connection = createClientConnection(api, {
+    reconnect: resolve
+      ? async (signal) => createApiForServer({ server: await resolve(signal), fetch: platform.fetch })
+      : undefined,
     flushInterval: 16,
     pageLifecycle: true,
     onEvent(event) {
@@ -85,7 +89,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     log: {
       info(message, data) {
         if (message !== "event stream disconnected") return
-        console.info("[global-sdk] event stream disconnected", { url: server.http.url, ...data })
+        console.info("[global-sdk] event stream disconnected", { url: server.http.url, managed: !!resolve, ...data })
       },
     },
   })

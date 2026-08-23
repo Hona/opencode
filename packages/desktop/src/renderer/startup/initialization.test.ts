@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { initializationData } from "./initialization"
+import { createSidecarResolver, initializationData } from "./initialization"
 
 describe("desktop renderer initialization", () => {
   test("throws the original initialization error before rendering server providers", () => {
@@ -44,5 +44,34 @@ describe("desktop renderer initialization", () => {
     if (!(caught instanceof Error)) return
     expect(caught.message).toBe("")
     expect((caught as Error & { localServerStartup?: boolean }).localServerStartup).toBe(true)
+  })
+
+  test("refreshes the managed sidecar endpoint", async () => {
+    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const updates: (typeof sidecar)[] = []
+    const resolve = createSidecarResolver({
+      api: { awaitInitialization: async () => sidecar },
+      update: (next) => updates.push(next),
+    })
+
+    expect(await resolve(new AbortController().signal)).toEqual(sidecar)
+    expect(updates).toEqual([sidecar])
+  })
+
+  test("does not publish a sidecar resolved after cancellation", async () => {
+    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const pending = Promise.withResolvers<typeof sidecar>()
+    const updates: (typeof sidecar)[] = []
+    const resolve = createSidecarResolver({
+      api: { awaitInitialization: () => pending.promise },
+      update: (next) => updates.push(next),
+    })
+    const abort = new AbortController()
+    const result = resolve(abort.signal)
+    abort.abort()
+    pending.resolve(sidecar)
+
+    await expect(result).rejects.toBe(abort.signal.reason)
+    expect(updates).toEqual([])
   })
 })
