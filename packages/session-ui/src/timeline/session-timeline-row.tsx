@@ -21,6 +21,7 @@ import {
   SessionUserMessage,
   currentContentDefaultOpen,
 } from "../message/current-message"
+import { SessionCompactionMessage } from "../message/message-content"
 import { SessionRetry } from "../components/session-retry"
 import { createReactiveTimelineProjection, Timeline, TimelineRow } from "./projection"
 
@@ -203,7 +204,6 @@ export function createSessionTimelineRowRenderer(input: {
       }
       return { label: message.description ?? message.text }
     }
-    if (message.type === "compaction") return { label: i18n.t("ui.messagePart.compaction"), data: message.status }
     if (message.type !== "synthetic") return undefined
     if (message.description === "Continuing after restart") return { label: message.description }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
@@ -315,6 +315,10 @@ export function createSessionTimelineRowRenderer(input: {
         return value
       }
       const message = createMemo(() => input.projection.messageByID().get(current().messageID))
+      const compaction = createMemo(() => {
+        const value = message()
+        return value?.type === "compaction" ? value : undefined
+      })
       const moved = createMemo(() => {
         const value = message()
         return value?.type === "location-switched" ? value : undefined
@@ -325,6 +329,15 @@ export function createSessionTimelineRowRenderer(input: {
       })
       return (
         <Frame row={current()}>
+          <Show when={compaction()}>
+            {(message) => (
+              <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+                <div data-slot="session-turn-compaction">
+                  <SessionCompactionMessage message={message()} />
+                </div>
+              </div>
+            )}
+          </Show>
           <Show
             when={moved()}
             fallback={

@@ -16,6 +16,7 @@ import type {
   PromptAgentAttachment,
   PromptFileAttachment,
   SessionMessageAssistant,
+  SessionMessageCompaction,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
 import type { SessionUserActions, SessionUserComment } from "../actions"
@@ -379,6 +380,35 @@ export function MessageDivider(props: { label: string }) {
         </span>
         <span data-slot="compaction-part-line" />
       </div>
+    </div>
+  )
+}
+
+export function SessionCompactionMessage(props: { message: SessionMessageCompaction }) {
+  const i18n = useI18n()
+  const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
+  const label = () => {
+    if (props.message.status === "running") return i18n.t("ui.messagePart.compaction.running")
+    if (props.message.status === "completed") return i18n.t("ui.messagePart.compaction")
+    if (cancelled()) return i18n.t("ui.messagePart.compaction.cancelled")
+    return i18n.t("ui.messagePart.compaction.failed")
+  }
+  const content = () => {
+    if (props.message.status !== "failed") return props.message.summary
+    if (cancelled()) return ""
+    return props.message.error.message
+  }
+
+  return (
+    <div data-component="session-compaction-message">
+      <MessageDivider label={label()} />
+      <Show when={content().trim()}>
+        {(text) => (
+          <div data-slot="compaction-part-content">
+            <PacedMarkdown text={text()} cacheKey={props.message.id} streaming={props.message.status === "running"} />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
