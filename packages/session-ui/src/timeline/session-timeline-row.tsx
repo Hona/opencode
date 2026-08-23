@@ -233,7 +233,7 @@ export function createSessionTimelineRowRenderer(input: {
       data-timeline-row={props.row._tag}
       classList={{
         "min-w-0 w-full max-w-full": true,
-        "md:max-w-200 2xl:max-w-[1000px] md:mx-auto": input.centered?.(),
+        "md:max-w-[1000px] md:mx-auto": input.centered?.(),
         "pt-3": props.row._tag === "AssistantPart" && props.row.previousAssistantPart,
       }}
     >
@@ -458,6 +458,7 @@ export function createSessionTimelineRowRenderer(input: {
         if (value._tag !== "Thinking") throw new Error("Expected a thinking timeline row")
         return value
       }
+      const animateHeading = createMemo<boolean>((previous) => previous ?? !current().reasoningHeading)
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
@@ -480,8 +481,8 @@ export function createSessionTimelineRowRenderer(input: {
                             <TextReveal
                               text={current().reasoningHeading}
                               class="session-turn-thinking-heading"
-                              travel={25}
-                              duration={700}
+                              travel={animateHeading() ? 25 : 0}
+                              duration={animateHeading() ? 700 : 0}
                             />
                           </span>
                         </Show>

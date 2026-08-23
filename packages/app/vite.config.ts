@@ -25,11 +25,13 @@ export default defineConfig({
     desktopPlugin,
     VitePWA({
       strategies: "generateSW",
+      registerType: "prompt",
       injectRegister: false,
       manifest: false,
       workbox: {
         cleanupOutdatedCaches: true,
-        clientsClaim: true,
+        clientsClaim: false,
+        skipWaiting: false,
         inlineWorkboxRuntime: true,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
@@ -41,6 +43,7 @@ export default defineConfig({
           "web-app-manifest*",
           "assets/index-*.{js,css}",
           "assets/session-*.js",
+          "assets/IBMPlexMono-Text-*.woff2",
           "assets/Inter.ttf",
           "assets/JetBrainsMonoNerdFontMono-Regular.woff2",
         ],

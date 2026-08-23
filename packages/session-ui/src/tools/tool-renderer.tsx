@@ -33,7 +33,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "../components/tool-count-summary"
 import { ToolStatusTitle } from "../components/tool-status-title"
-import { patchFileGroups } from "../components/apply-patch-file"
+import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type { SessionMessageAssistantTool, SessionMessageShell } from "@opencode-ai/client/promise"
@@ -1182,7 +1182,7 @@ ToolRegistry.register({
   },
 })
 
-function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
+function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "shell" }) {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
 
@@ -1194,7 +1194,7 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
   }
 
   return (
-    <div data-component="bash-output" dir="ltr">
+    <div data-component="bash-output" data-variant={props.variant} dir="ltr">
       <div data-slot="bash-copy">
         <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
           <IconButton
@@ -1273,10 +1273,7 @@ ToolRegistry.register({
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const text = createMemo(() => {
-      const out = stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
-      return `${command()}${out ? "\n\n" + out : ""}`
-    })
+    const output = createMemo(() => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n"))
     return (
       <BasicTool
         {...props}
@@ -1288,10 +1285,7 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer
-                  text={i18n.t("ui.tool.shell")}
-                  active={pending()}
-                />
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
               <Show when={!open()}>
                 <Show
@@ -1309,11 +1303,9 @@ ToolRegistry.register({
           </div>
         )}
       >
-        <ConsoleOutput copy={command()}>
-          <span data-slot="bash-prompt" aria-hidden="true">
-            {"$ "}
-          </span>
-          {text()}
+        <ConsoleOutput copy={command()} variant="shell">
+          <span data-slot="bash-command">{command()}</span>
+          <Show when={output()}>{(value) => <span data-slot="bash-result">{value()}</span>}</Show>
         </ConsoleOutput>
       </BasicTool>
     )
@@ -1357,11 +1349,7 @@ ToolRegistry.register({
     const diff = createMemo(() => {
       const files = props.metadata.files
       if (!Array.isArray(files)) return undefined
-      const value = files.find(
-        (file) => !!file && typeof file === "object" && "file" in file && typeof file.file === "string",
-      )
-      if (!value || typeof value !== "object") return undefined
-      return value
+      return files.find(changedFileDiff)
     })
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, inputPath()))
     const path = createMemo(() => {

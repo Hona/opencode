@@ -188,13 +188,11 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("omits unsupported semantic service tiers", () =>
+  it.effect("passes through provider-defined service tiers", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { serviceTier: "unsupported" } }),
-      )
+      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier: "scale" } }))
 
-      expect(prepared.body).not.toHaveProperty("service_tier")
+      expect(prepared.body.service_tier).toBe("scale")
     }),
   )
 
@@ -1273,7 +1271,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "input_file",
           filename: "report.pdf",
-          file_data: "JVBERi0xLjQ=",
+          file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
         },
       ])
     }),
@@ -1300,7 +1298,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "report.pdf", file_data: base64 },
+        { type: "input_file", filename: "report.pdf", file_data: dataUrl },
       ])
     }),
   )
@@ -1333,7 +1331,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "input_file",
           filename: "report.pdf",
-          file_data: "JVBERi0xLjQ=",
+          file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
         },
       ])
     }),
@@ -1358,7 +1356,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_file", filename: "file", file_data: "AAECAw==" },
+        { type: "input_file", filename: "file", file_data: "data:audio/mpeg;base64,AAECAw==" },
       ])
     }),
   )
@@ -2652,6 +2650,47 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("decodes computer_call as provider-executed tool-call + tool-result", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "computer_call",
+        id: "computer_1",
+        call_id: "call_1",
+        status: "completed",
+        action: { type: "click", x: 100, y: 200 },
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "tool-call" || event.type === "tool-result")).toEqual([
+        {
+          type: "tool-call",
+          id: "computer_1",
+          name: "computer_use",
+          input: { type: "click", x: 100, y: 200 },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: "computer_1" } },
+        },
+        {
+          type: "tool-result",
+          id: "computer_1",
+          name: "computer_use",
+          result: { type: "json", value: item },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: "computer_1" } },
+        },
+      ])
+    }),
+  )
+
   it.effect("decodes image generation output as image content", () =>
     Effect.gen(function* () {
       const item = {
@@ -2765,7 +2804,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "report.pdf",
-              file_data: "JVBERi0xLjQ=",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
             },
           ],
         },
@@ -2796,7 +2835,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "report.pdf",
-              file_data: "JVBERi0xLjQ=",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
             },
           ],
         },
@@ -2821,7 +2860,7 @@ describe("OpenAI Responses route", () => {
             {
               type: "input_file",
               filename: "file",
-              file_data: "AAECAw==",
+              file_data: "data:application/x-tar;base64,AAECAw==",
             },
           ],
         },
