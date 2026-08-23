@@ -33,6 +33,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const runFork = Effect.runForkWith(yield* Effect.context())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
+  const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
   const service = yield* Effect.tryPromise(() =>
@@ -41,7 +42,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
           ? path.join(app.getPath("userData"), "opencode", "service-local.json")
           : undefined,
-      version: mode === "initial" ? cli.version : undefined,
+      version,
       command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
@@ -52,7 +53,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
     username: service.auth.username,
-    version: mode === "initial" ? cli.version : undefined,
+    version,
     ...endpoint(url.origin),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
