@@ -1,6 +1,7 @@
 import { app } from "electron"
-import { Context, Effect, Exit, FileSystem, Layer, Path } from "effect"
+import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { ServerReadyData } from "../../shared/ipc-contract"
+import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages, DesktopCli } from "./desktop-cli"
 
 export * as BackgroundService from "./background-service"
@@ -15,14 +16,13 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const result = yield* connect("initial").pipe(Effect.exit)
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
-    return Service.of({
-      connection: Exit.isSuccess(result)
-        ? Effect.succeed(result.value)
-        : Effect.failCause(result.cause).pipe(Effect.orDie),
-      reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
-    })
+    return Service.of(
+      yield* BackgroundServiceState.make({
+        initial: connect("initial").pipe(Effect.provide(context)),
+        reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
+      }),
+    )
   }),
 )
 
