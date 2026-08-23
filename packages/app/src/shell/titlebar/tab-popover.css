@@ -88,7 +88,7 @@
   [data-slot="server"] {
     font-weight: 440;
     font-size: 13px;
-    line-height: var(--v2-line-height-compact);
+    line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
     overflow: hidden;
