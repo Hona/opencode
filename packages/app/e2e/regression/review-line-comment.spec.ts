@@ -55,6 +55,9 @@ test("shows a comment button when a diff line is hovered", async ({ page }) => {
   await line.dispatchEvent("pointermove", { pointerType: "mouse", bubbles: true, composed: true })
   await expect(comment).toBeVisible()
   await expect(comment).toHaveCSS("pointer-events", "auto")
+  await comment.dispatchEvent("click")
+  await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
 })
 
 test("stages a submitted line comment in the prompt context", async ({ page }) => {
