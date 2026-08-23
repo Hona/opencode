@@ -16,16 +16,21 @@ export function sidecarHttp(data: SidecarData) {
 }
 
 export function createSidecarResolver(input: {
-  api: Pick<ElectronAPI, "awaitInitialization">
+  api: Pick<ElectronAPI, "reconnectService">
+  current: () => SidecarData | undefined
   update: (data: SidecarData) => void
 }) {
   return async (signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
-    const next = await input.api.awaitInitialization()
+    const next = await input.api.reconnectService()
     if (signal.aborted) throw signal.reason
-    input.update(next)
+    if (!sameSidecar(input.current(), next)) input.update(next)
     return sidecarHttp(next)
   }
+}
+
+function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
+  return current?.url === next.url && current.username === next.username && current.password === next.password
 }
 
 function markLocalServerStartup(error: unknown) {

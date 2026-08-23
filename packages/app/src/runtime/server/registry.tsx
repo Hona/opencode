@@ -210,7 +210,7 @@ export namespace ServerConnection {
     http: HttpBase
   } & (
     | // Regular desktop server
-    { variant: "base"; resolve?: (signal: AbortSignal) => Promise<HttpBase> }
+    { variant: "base"; reconnect?: (signal: AbortSignal) => Promise<HttpBase> }
     // WSL server (windows only)
     | {
         variant: "wsl"

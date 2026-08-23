@@ -98,7 +98,7 @@ function DesktopWindow(props: {
           type: "sidecar",
           variant: "base",
           http: sidecarHttp(data),
-          resolve: createSidecarResolver({ api: props.api, update: setSidecar }),
+          reconnect: createSidecarResolver({ api: props.api, current: sidecar, update: setSidecar }),
         })
       }
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
