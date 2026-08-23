@@ -362,7 +362,7 @@ export function createSessionTimelineRowRenderer(input: {
                           {(item) => (
                             <bdi
                               dir="auto"
-                              class="min-w-0 truncate text-[13px] font-[440] leading-none tracking-[-0.04px] text-v2-text-text-faint"
+                              class="-my-0.5 min-w-0 truncate py-0.5 text-[13px] font-[440] leading-none tracking-[-0.04px] text-v2-text-text-faint"
                             >
                               {item}
                             </bdi>
@@ -392,7 +392,11 @@ export function createSessionTimelineRowRenderer(input: {
                     {i18n.t("ui.sessionTimeline.notice.movedTo")}
                   </bdi>
                 </Tooltip>{" "}
-                <bdi data-slot="session-timeline-notice-value" dir="ltr" class="min-w-0 truncate font-[440]">
+                <bdi
+                  data-slot="session-timeline-notice-value"
+                  dir="ltr"
+                  class="-my-0.5 min-w-0 truncate py-0.5 font-[440]"
+                >
                   {message().location.directory}
                 </bdi>
               </div>

@@ -111,7 +111,7 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
                 class="flex h-7 min-w-0 items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-none tracking-[-0.04px]"
               >
                 <span class="shrink-0 text-v2-text-text-base">{taskType(task)}</span>
-                <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{task.label}</span>
+                <span class="-my-0.5 min-w-0 flex-1 truncate py-0.5 text-v2-text-text-faint">{task.label}</span>
               </div>
             )}
           </For>

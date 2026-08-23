@@ -1358,6 +1358,9 @@
 
   [data-slot="tool-loaded-value"] {
     min-width: 0;
+    /* Expand the clip edge around Inter ink while keeping the 13px row contribution unchanged. */
+    padding-block: 2px;
+    margin-block: -2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

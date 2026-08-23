@@ -132,6 +132,8 @@ test("renders the moved location notice in its compact timeline style", async ({
   await expect(value).toHaveCSS("font-size", "13px")
   await expect(value).toHaveCSS("font-weight", "440")
   await expect(value).toHaveCSS("line-height", "13px")
+  await expect(value).toHaveCSS("padding-top", "2px")
+  await expect(value).toHaveCSS("margin-top", "-2px")
   await expect(value).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("text-overflow", "ellipsis")
   await expect(value).toHaveCSS("white-space", "nowrap")

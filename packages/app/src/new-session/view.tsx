@@ -142,7 +142,7 @@ function ProviderTip() {
             class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
             onClick={openProviders}
           >
-            <span class="truncate">{language.t("home.providerTip")}</span>
+            <span class="-my-0.5 truncate py-0.5">{language.t("home.providerTip")}</span>
             <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
               <Icon name="chevron-down" size="small" class="-rotate-90" />
             </span>

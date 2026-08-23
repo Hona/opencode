@@ -91,6 +91,8 @@
     line-height: 1;
     letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
+    padding-block: 2px;
+    margin-block: -2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

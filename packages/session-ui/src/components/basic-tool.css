@@ -182,6 +182,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 530;
+    /* The fixed trigger absorbs this safe line box without changing row geometry. */
     line-height: var(--v2-line-height-compact, 16px);
     letter-spacing: -0.04px;
   }

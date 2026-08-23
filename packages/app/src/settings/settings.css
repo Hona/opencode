@@ -786,9 +786,12 @@
   font-weight: 530;
   line-height: 1;
   letter-spacing: -0.04px;
+  padding: 0;
+  /* Preserve row height while moving the clip edge beyond Inter descenders. */
+  padding-block: 2px;
+  margin-block: -2px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0;
   text-align: left;
   cursor: default;
 }
