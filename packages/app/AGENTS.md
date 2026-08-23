@@ -19,12 +19,6 @@
 
 - Always prefer `createStore` over multiple `createSignal` calls
 
-## Typography Clipping
-
-- Inter glyph ink extends outside solid line boxes such as `13px / 13px`. Text or an ancestor using `overflow: hidden`, `overflow: clip`, or truncation can cut off descenders such as `g`, `j`, `p`, `q`, and `y`.
-- Preserve outer layout geometry when fixing clipping. For intrinsic-height text, expand the clipping element's paint area with equal block padding and negative block margin. Increase line height only when the containing control already has a fixed height.
-- Test descenders at supported device scale factors. Do not compensate with transforms or one-sided offsets.
-
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.
