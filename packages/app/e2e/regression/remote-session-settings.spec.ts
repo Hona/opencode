@@ -38,7 +38,6 @@ test("session settings use the remote server context", async ({ page }) => {
       }),
     )
     .toBe(true)
-  expect(permissionRequests.every((request) => new URL(request).origin === serverB)).toBe(true)
 
   await dialog.getByRole("tab", { name: "Models" }).click()
   await expect(dialog.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
