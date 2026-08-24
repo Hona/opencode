@@ -13,7 +13,7 @@ const retryDelayMs = 1000
 // settings store, so it applies to every session, tab, and server at once.
 export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data }) {
   const enabled = useSettings().permissions.autoApprove
-  const state = { disposed: false, responded: new Set<string>() }
+  const state = { disposed: false, generation: 0, responded: new Set<string>() }
 
   const unsubscribe = input.sdk.event.on("permission.asked", (event) => {
     if (enabled()) approve(event.data)
@@ -28,48 +28,86 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // on, so sweep on every connect while the setting is on.
   createEffect(() => {
     if (!enabled() || input.sdk.connection.status() !== "connected") return
-    void sweep()
+    const generation = ++state.generation
+    void sweepWithRetry(generation, 0)
   })
 
+  // An incomplete sweep leaves pending requests hidden with no later trigger
+  // to recover them, so retry it a bounded number of times. A newer sweep
+  // supersedes scheduled retries.
+  async function sweepWithRetry(generation: number, attempt: number) {
+    const complete = await sweep()
+    if (complete || attempt >= retryLimit) return
+    setTimeout(() => {
+      if (state.disposed || !enabled() || generation !== state.generation) return
+      void sweepWithRetry(generation, attempt + 1)
+    }, retryDelayMs * (attempt + 1))
+  }
+
   async function sweep() {
-    for (const location of await activeSessionLocations()) {
-      input.sdk.api.permission.request
-        .list({ location: { directory: location.directory, workspace: location.workspaceID } })
-        .then((pending) => {
-          if (state.disposed || !enabled()) return
-          pending.data.forEach((request) => approve(request))
-        })
-        .catch(() => undefined)
+    const inventory = await sweepLocations()
+    const listed = await Promise.all(
+      inventory.locations.map((location) =>
+        input.sdk.api.permission.request
+          .list({ location: { directory: location.directory, workspace: location.workspaceID } })
+          .then((pending) => {
+            if (!state.disposed) pending.data.forEach((request) => approve(request))
+            return true
+          })
+          .catch(() => false),
+      ),
+    )
+    return inventory.complete && listed.every(Boolean)
+  }
+
+  // Active sessions are the primary inventory: session.active is server-wide,
+  // so it covers sessions no tab has loaded, and a request blocking a tool
+  // call always belongs to one (Permission.assert clears its entry when the
+  // awaiting fiber dies). Locally known sessions are swept too because the
+  // external session.permission.create API can park a request on an idle
+  // session. A detached request on a session this client never loaded is the
+  // one case that stays uncovered.
+  async function sweepLocations() {
+    const active = await input.sdk.api.session.active().catch(() => undefined)
+    const ids = Object.keys(active ?? {})
+    const synced = await Promise.all(
+      ids
+        .filter((id) => !input.data.session.get(id))
+        .map((id) =>
+          input.data.session.sync(id).then(
+            () => true,
+            () => false,
+          ),
+        ),
+    )
+    const locations = [
+      ...ids.flatMap((id) => {
+        const location = input.data.session.get(id)?.location
+        return location ? [location] : []
+      }),
+      ...input.data.session.list().map((session) => session.location),
+    ]
+    return {
+      locations: [
+        ...new Map(locations.map((item) => [`${item.directory}\u0000${item.workspaceID ?? ""}`, item])).values(),
+      ],
+      complete: active !== undefined && synced.every(Boolean),
     }
   }
 
-  // Pending requests only exist inside active executions (Permission.assert
-  // clears its entry when the awaiting fiber dies), and session.active is
-  // server-wide, so this inventory covers sessions no tab has loaded.
-  async function activeSessionLocations() {
-    const active = await input.sdk.api.session.active().catch(() => ({}))
-    const ids = Object.keys(active)
-    await Promise.all(
-      ids.filter((id) => !input.data.session.get(id)).map((id) => input.data.session.sync(id).catch(() => undefined)),
-    )
-    const locations = ids.flatMap((id) => {
-      const location = input.data.session.get(id)?.location
-      return location ? [location] : []
-    })
-    return [...new Map(locations.map((item) => [`${item.directory}\u0000${item.workspaceID ?? ""}`, item])).values()]
-  }
-
   function approve(permission: PermissionRequest, attempt = 0) {
-    if (state.disposed || state.responded.has(permission.id)) return
+    // enabled() guards the retry timer path: the user may disable the setting
+    // between a failed reply and its scheduled retry.
+    if (state.disposed || !enabled() || state.responded.has(permission.id)) return
     remember(permission.id)
     input.sdk.api.permission
       .reply({ sessionID: permission.sessionID, requestID: permission.id, reply: "once" })
       .catch(() => {
         // A reply failure leaves the request pending but invisible (the UI
         // hides prompts while auto-approve is on), so retry a bounded number
-        // of times. Sweeps on reconnect or re-enable retry it after that.
+        // of times. Later sweeps retry it after that.
         state.responded.delete(permission.id)
-        if (state.disposed || !enabled() || attempt >= retryLimit) return
+        if (state.disposed || attempt >= retryLimit) return
         setTimeout(() => approve(permission, attempt + 1), retryDelayMs * (attempt + 1))
       })
   }

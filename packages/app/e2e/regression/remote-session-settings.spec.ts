@@ -162,9 +162,10 @@ test("auto-accept sweeps again after a reconnect", async ({ page }) => {
   const permissionRequests: string[] = []
   const permissionResponses: PermissionResponse[] = []
   const pendingA: MockPermission[] = []
+  const listFailures: Record<string, number> = {}
   await installSseTransport(page, { server: serverB })
   const transport = await installSseTransport(page, { server: serverA, retry: 20 })
-  await mockServers(page, permissionRequests, permissionResponses, { [serverA]: pendingA })
+  await mockServers(page, permissionRequests, permissionResponses, { [serverA]: pendingA }, listFailures)
   await configureServers(page, [{ type: "session", server: serverA, sessionId: sessionA.id }])
 
   await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
@@ -186,8 +187,11 @@ test("auto-accept sweeps again after a reconnect", async ({ page }) => {
   await page.keyboard.press("Escape")
 
   // This request is asked while the client is disconnected, so it is never
-  // delivered as an event and only a reconnect sweep can find it.
+  // delivered as an event and only a reconnect sweep can find it. The first
+  // listing after the reconnect fails, so only the bounded sweep retry can
+  // deliver the reply.
   pendingA.push(pendingPermission("permission-offline-a", sessionA.id))
+  listFailures[serverA] = 1
   await transport.disconnect()
   await transport.waitForConnection({ after: first.id })
 
@@ -240,6 +244,7 @@ async function mockServers(
   permissionRequests: string[],
   permissionResponses: PermissionResponse[] = [],
   pendingPermissions: Record<string, MockPermission[]> = {},
+  listFailures: Record<string, number> = {},
 ) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
@@ -276,6 +281,11 @@ async function mockServers(
     if (url.pathname === "/api/agent") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/permission/request") {
       permissionRequests.push(url.toString())
+      const failures = listFailures[url.origin] ?? 0
+      if (failures > 0) {
+        listFailures[url.origin] = failures - 1
+        return json(route, { name: "Internal" }, 500)
+      }
       return json(route, { location: { directory }, data: pendingPermissions[url.origin] ?? [] })
     }
     if (["/api/command", "/api/reference", "/api/question/request"].includes(url.pathname))
