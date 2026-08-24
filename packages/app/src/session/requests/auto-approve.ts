@@ -32,6 +32,17 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     void sweepWithRetry(generation, 0)
   })
 
+  // Approves pending requests that reach the local store, which is how a
+  // previously unknown idle session's requests surface when its view opens
+  // and syncs them. Store changes cannot re-trigger the network sweep: it
+  // deliberately reads them after an await, outside Solid tracking.
+  createEffect(() => {
+    if (!enabled()) return
+    for (const session of input.data.session.list()) {
+      for (const request of input.data.session.permission.list(session.id) ?? []) approve(request)
+    }
+  })
+
   // An incomplete sweep leaves pending requests hidden with no later trigger
   // to recover them, so retry it a bounded number of times. A newer sweep
   // supersedes scheduled retries.
@@ -70,15 +81,18 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   async function sweepLocations() {
     const active = await input.sdk.api.session.active().catch(() => undefined)
     const ids = Object.keys(active ?? {})
+    // Resync every active session rather than trusting cached info: another
+    // client may have moved one while this client was disconnected, and the
+    // cached location would list permissions from the old location. A failed
+    // resync falls back to the cached location and marks the sweep incomplete.
     const synced = await Promise.all(
-      ids
-        .filter((id) => !input.data.session.get(id))
-        .map((id) =>
-          input.data.session.sync(id).then(
-            () => true,
-            () => false,
-          ),
-        ),
+      ids.map((id) => {
+        input.data.session.invalidate(id)
+        return input.data.session.sync(id).then(
+          () => true,
+          () => false,
+        )
+      }),
     )
     const locations = [
       ...ids.flatMap((id) => {
