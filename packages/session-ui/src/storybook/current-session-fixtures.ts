@@ -681,6 +681,7 @@ export const inspectAndExplainDocument = document([
         args: { pattern: "src/timeline/**/*.{ts,tsx}", path: "packages/session-ui" },
         output:
           "packages/session-ui/src/timeline/projection.ts\npackages/session-ui/src/timeline/session-timeline.tsx\npackages/session-ui/src/timeline/timeline-row.ts",
+        metadata: { count: 3 },
       }),
       completedTool({
         id: "tool_research_grep",
@@ -689,6 +690,7 @@ export const inspectAndExplainDocument = document([
         args: { pattern: "TimelineRow.key", path: "packages/session-ui/src/timeline", include: "*.ts*" },
         output:
           "packages/session-ui/src/timeline/projection.ts:39\npackages/session-ui/src/timeline/session-timeline.tsx:332",
+        metadata: { matches: 2 },
       }),
       completedTool({
         id: "tool_research_read",
