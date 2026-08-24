@@ -13,9 +13,14 @@ const sessionB = session("ses_server_b", directoryB, "Server B session")
 
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
   await installSseTransport(page, { server: serverA })
   await installSseTransport(page, { server: serverB })
-  await mockServers(page, permissionRequests)
+  // Server A has no tab and is never visited: a pending request there proves
+  // one toggle sweeps every connected server, not just the focused one.
+  await mockServers(page, permissionRequests, permissionResponses, {
+    [serverA]: [pendingPermission("permission-pending-a", sessionA.id)],
+  })
   await configureServers(page)
 
   await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
@@ -38,6 +43,17 @@ test("session settings use the remote server context", async ({ page }) => {
       }),
     )
     .toBe(true)
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverA,
+        directory: undefined,
+        sessionID: sessionA.id,
+        permissionID: "permission-pending-a",
+        body: { reply: "once" },
+      },
+    ])
 
   await dialog.getByRole("tab", { name: "Models" }).click()
   await expect(dialog.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
@@ -142,12 +158,71 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     ])
 })
 
+test("auto-accept sweeps again after a reconnect", async ({ page }) => {
+  const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
+  const pendingA: MockPermission[] = []
+  await installSseTransport(page, { server: serverB })
+  const transport = await installSseTransport(page, { server: serverA, retry: 20 })
+  await mockServers(page, permissionRequests, permissionResponses, { [serverA]: pendingA })
+  await configureServers(page, [{ type: "session", server: serverA, sessionId: sessionA.id }])
+
+  await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
+  await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
+  const first = await transport.waitForConnection()
+
+  await page.keyboard.press("Control+,")
+  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+  await expect
+    .poll(() =>
+      permissionRequests.some((request) => {
+        const url = new URL(request)
+        return url.origin === serverA && url.searchParams.get("location[directory]") === directoryA
+      }),
+    )
+    .toBe(true)
+  await page.keyboard.press("Escape")
+
+  // This request is asked while the client is disconnected, so it is never
+  // delivered as an event and only a reconnect sweep can find it.
+  pendingA.push(pendingPermission("permission-offline-a", sessionA.id))
+  await transport.disconnect()
+  await transport.waitForConnection({ after: first.id })
+
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverA,
+        directory: undefined,
+        sessionID: sessionA.id,
+        permissionID: "permission-offline-a",
+        body: { reply: "once" },
+      },
+    ])
+})
+
 type PermissionResponse = {
   origin: string
   directory?: string
   sessionID: string
   permissionID: string
   body: unknown
+}
+
+type MockPermission = {
+  id: string
+  sessionID: string
+  action: string
+  resources: string[]
+  metadata: Record<string, unknown>
+  save: unknown[]
+}
+
+function pendingPermission(id: string, sessionID: string): MockPermission {
+  return { id, sessionID, action: "shell", resources: ["git status"], metadata: {}, save: [] }
 }
 
 async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
@@ -160,7 +235,12 @@ async function configureServers(page: Page, tabs: { type: "session"; server: str
   )
 }
 
-async function mockServers(page: Page, permissionRequests: string[], permissionResponses: PermissionResponse[] = []) {
+async function mockServers(
+  page: Page,
+  permissionRequests: string[],
+  permissionResponses: PermissionResponse[] = [],
+  pendingPermissions: Record<string, MockPermission[]> = {},
+) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -196,7 +276,7 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     if (url.pathname === "/api/agent") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/permission/request") {
       permissionRequests.push(url.toString())
-      return json(route, { location: { directory }, data: [] })
+      return json(route, { location: { directory }, data: pendingPermissions[url.origin] ?? [] })
     }
     if (["/api/command", "/api/reference", "/api/question/request"].includes(url.pathname))
       return json(route, { location: { directory }, data: [] })
@@ -218,7 +298,8 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory })
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
-    if (url.pathname === "/api/session/active") return json(route, { data: {} })
+    if (url.pathname === "/api/session/active")
+      return json(route, { data: Object.fromEntries(sessions.map((session) => [session.id, { type: "running" }])) })
     const currentSessionInfo = sessions.find((session) => url.pathname === `/api/session/${session.id}`)
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
     if (sessions.some((session) => url.pathname === `/api/session/${session.id}/message`))
