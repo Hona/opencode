@@ -72,6 +72,80 @@ test("revalidates after an event overtakes an active session read", async () => 
   }
 })
 
+test("reorders queued user inbox items without moving unrelated or optimistic rows", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const pending = [
+    { id: "msg_first", type: "user", payload: { text: "First" }, delivery: "queue" },
+    { id: "msg_control", type: "compaction", payload: {}, delivery: "queue" },
+    { id: "msg_steer", type: "user", payload: { text: "Steer" }, delivery: "steer" },
+    { id: "msg_synthetic", type: "synthetic", payload: { text: "Synthetic" }, delivery: "queue" },
+    { id: "msg_second", type: "user", payload: { text: "Second" }, delivery: "queue" },
+  ].map((item, index) => ({ ...item, sessionID: "ses_refresh", timeCreated: index }))
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.url.endsWith("/inbox")) return Response.json({ data: pending })
+      if (request.url.endsWith("/prompt"))
+        return Response.json({
+          data: {
+            id: "msg_optimistic",
+            sessionID: "ses_refresh",
+            type: "user",
+            data: { text: "Optimistic" },
+            delivery: "queue",
+            timeCreated: 5,
+          },
+        })
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.pending.sync("ses_refresh")
+    const optimistic = setup.data.session.prompt({
+      sessionID: "ses_refresh",
+      id: "msg_optimistic",
+      text: "Optimistic",
+      delivery: "queue",
+    })
+    const reordered: OpenCodeEvent = {
+      id: "evt_reordered",
+      created: 6,
+      type: "session.inbox.reordered",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh", inboxIDs: ["msg_second", "msg_first"] },
+    }
+    listeners.forEach((listener) => listener({ name: reordered.type, details: reordered }))
+
+    expect(setup.data.session.pending.list("ses_refresh").map((item) => item.id)).toEqual([
+      "msg_second",
+      "msg_control",
+      "msg_steer",
+      "msg_synthetic",
+      "msg_first",
+      "msg_optimistic",
+    ])
+    await optimistic
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("reports optimistic sessions as creating until the request settles", async () => {
   const release = Promise.withResolvers<void>()
   const api = OpenCode.make({

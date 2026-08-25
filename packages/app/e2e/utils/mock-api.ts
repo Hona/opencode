@@ -208,6 +208,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionInboxReorder", "/api/session/:sessionID/inbox/reorder", {
+      params: SessionParams,
+      payload: Schema.Struct({ inboxIDs: Schema.Array(Schema.String) }),
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("sessionPermission", "/api/session/:sessionID/permission", {
       params: SessionParams,
       success: Json,
