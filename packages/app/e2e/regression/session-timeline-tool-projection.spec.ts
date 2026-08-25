@@ -64,6 +64,44 @@ test("transitions shell and question through running error outcomes", async ({ p
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText(/dismissed/i)
 })
 
+test("keeps failed grouped patches and surviving patches in distinct timeline rows", async ({ page }) => {
+  const failed = "prt_grouped_patch_failed"
+  const surviving = "prt_grouped_patch_surviving"
+  const timeline = await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage(
+        [
+          toolPart(failed, "patch", "running", { patchText: "Update src/failed.ts" }),
+          toolPart(surviving, "patch", "running", { patchText: "Update src/surviving.ts" }),
+        ],
+        { completed: false },
+      ),
+    ],
+  })
+
+  await expect(page.locator(`[data-timeline-part-ids="${failed},${surviving}"]`)).toBeVisible()
+  await timeline.send(
+    partUpdated(
+      toolPart(failed, "patch", "error", { patchText: "Update src/failed.ts" }, { error: "Patch failed visibly" }),
+    ),
+  )
+
+  const failedRow = page.locator(`[data-timeline-key$=":${failed}"]`)
+  const survivingRow = page.locator(`[data-timeline-key$=":${surviving}"]`)
+  await expect(failedRow).toHaveCount(1)
+  await expect(survivingRow).toHaveCount(1)
+  await expect(failedRow.getByText("Patch failed visibly")).toBeVisible()
+  await expect(survivingRow.locator(`[data-timeline-part-id="${surviving}"]`)).toBeVisible()
+  await expect
+    .poll(async () => {
+      const previous = await failedRow.boundingBox()
+      const next = await survivingRow.boundingBox()
+      return previous && next ? next.y - (previous.y + previous.height) : Number.NEGATIVE_INFINITY
+    })
+    .toBeGreaterThanOrEqual(-0.5)
+})
+
 test("labels all web search provider variants", async ({ page }) => {
   const parts = [
     toolPart(

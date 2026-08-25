@@ -337,7 +337,6 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type === "part") return
     const key = TimelineRow.key(row)
     if (byKey.has(key) && !reserved.has(key)) reserved.set(key, index)
   })

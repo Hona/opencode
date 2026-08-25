@@ -24,6 +24,17 @@ const patch = (key: string, partIDs: string[], userMessageID = "user-1") =>
     previousAssistantPart: false,
   })
 
+const part = (key: string, partID: string) =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: {
+      key,
+      type: "part",
+      ref: { messageID: "assistant-1", partID },
+    } satisfies PartGroup,
+    previousAssistantPart: false,
+  })
+
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
@@ -62,6 +73,20 @@ describe("reuseTimelineRows", () => {
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:a", ["a"]), context("context:b", ["b"])],
       expected: ["assistant-part:context:a", "assistant-part:context:b"],
+      reused: [],
+    },
+    {
+      name: "reserves an old file group key for its newly standalone first member",
+      previous: [patch("part:a", ["a", "b"])],
+      rows: [part("part:a", "a"), patch("part:b", ["b"])],
+      expected: ["assistant-part:part:a", "assistant-part:part:b"],
+      reused: [],
+    },
+    {
+      name: "reserves an old file group key for a later standalone member",
+      previous: [patch("part:a", ["a", "b"])],
+      rows: [patch("part:b", ["b"]), part("part:a", "a")],
+      expected: ["assistant-part:part:b", "assistant-part:part:a"],
       reused: [],
     },
     {
