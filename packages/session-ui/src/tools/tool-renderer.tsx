@@ -1302,29 +1302,34 @@ ToolRegistry.register({
     const [streamed, setStreamed] = createSignal("")
     createEffect(() => {
       const id = props.metadata.shellID
-      if (typeof id !== "string" || !pending() || !data.shellOutput) return
+      const shellOutput = data.shellOutput
+      if (typeof id !== "string" || !pending() || !shellOutput) return
+      const directory = data.directory
       let cursor = 0
       let loading = false
+      let disposed = false
       const load = async () => {
         if (loading) return
         loading = true
-        const response = await data
-          .shellOutput?.({ id, location: { directory: data.directory }, cursor })
-          .catch(() => undefined)
+        const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
+        if (disposed) return
         if (response?.data.output) setStreamed((output) => output + response.data.output)
         if (response) cursor = response.data.cursor
         loading = false
       }
       void load()
       const interval = setInterval(() => void load(), 1_000)
-      onCleanup(() => clearInterval(interval))
+      onCleanup(() => {
+        disposed = true
+        clearInterval(interval)
+      })
     })
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi(props.output ?? streamed()).replace(/\r\n?/g, "\n"))
+    const output = createMemo(() => stripAnsi((pending() && streamed()) || props.output || "").replace(/\r\n?/g, "\n"))
     return (
       <BasicTool
         {...props}
