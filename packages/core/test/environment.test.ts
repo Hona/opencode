@@ -1,12 +1,15 @@
 import fs from "node:fs/promises"
+import path from "node:path"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { filesystem } from "@opencode-ai/util/effect/app-node-platform"
 import { EnvironmentUnavailable } from "../src/environment/unavailable"
 import {
   execDefaults,
+  Environment,
   Failed,
   makeFiles,
   makeLocalDriver,
@@ -16,7 +19,94 @@ import {
 } from "../src/environment/index"
 import { tmpdir } from "./fixture/tmpdir"
 import { environmentConformance } from "./lib/environment-conformance"
-import { it } from "./lib/effect"
+import { it, testEffect } from "./lib/effect"
+import { hostEnvironmentLayer } from "./fixture/environment"
+
+const captureIt = testEffect(Layer.mergeAll(hostEnvironmentLayer, LayerNode.compile(filesystem)))
+
+describe("capture", () => {
+  for (const completion of ["exit", "kill", "failed kill"] as const) {
+    captureIt.live(`uses the selected spawner and waits for captured output on ${completion}`, () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const environment = yield* Environment.Service
+              const fs = yield* FileSystem.FileSystem
+              const writing = yield* Deferred.make<void>()
+              const ended = yield* Deferred.make<void>()
+              const release = yield* Deferred.make<void>()
+              const spawns: ChildProcess.Command[] = []
+              const spawner = ChildProcessSpawner.make((command) => {
+                spawns.push(command)
+                return environment.spawner.spawn(command).pipe(
+                  Effect.map((handle) =>
+                    ChildProcessSpawner.makeHandle({
+                      ...handle,
+                      kill: (options) =>
+                        completion === "failed kill"
+                          ? Effect.fail(
+                              PlatformError.systemError({
+                                _tag: "NotFound",
+                                module: "ChildProcess",
+                                method: "kill",
+                                description: "Process already exited",
+                              }),
+                            )
+                          : handle.kill(options),
+                      all: handle.all.pipe(
+                        Stream.tap(() => Deferred.succeed(writing, undefined)),
+                        Stream.concat(
+                          Stream.fromEffect(
+                            Deferred.succeed(ended, undefined).pipe(
+                              Effect.andThen(Deferred.await(release)),
+                              Effect.as(Buffer.from("tail")),
+                            ),
+                          ),
+                        ),
+                      ),
+                    }),
+                  ),
+                )
+              })
+              const command = ChildProcess.make(
+                "node",
+                [
+                  "-e",
+                  completion === "kill"
+                    ? 'process.stdout.write("stdout"); process.stderr.write("stderr"); setInterval(() => {}, 60000)'
+                    : 'process.stdout.write("stdout"); process.stderr.write("stderr")',
+                ],
+                { stdin: "ignore" },
+              )
+              const handle = yield* Environment.capture(command, path.join(tmp.path, "output")).pipe(
+                Effect.provideService(Environment.Service, { ...environment, spawner }),
+              )
+              yield* Deferred.await(writing)
+              if (completion === "failed kill") yield* Deferred.await(ended)
+              const completed = yield* (completion === "exit" ? handle.exitCode : handle.kill()).pipe(
+                Effect.asVoid,
+                Effect.exit,
+                Effect.forkScoped({ startImmediately: true }),
+              )
+              yield* Deferred.await(ended)
+              expect(completed.pollUnsafe()).toBeUndefined()
+              yield* Deferred.succeed(release, undefined)
+              expect(Exit.isFailure(yield* Fiber.join(completed))).toBe(completion === "failed kill")
+              expect(spawns).toEqual([command])
+              const output = yield* fs.readFileString(path.join(tmp.path, "output"))
+              expect(output).toContain("stdout")
+              expect(output).toContain("stderr")
+              expect(output).toEndWith("tail")
+              expect(yield* handle.all.pipe(Stream.runCollect)).toEqual([])
+            }),
+          ),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    )
+  }
+})
 
 describe("typeFollowing", () => {
   it.effect("follows symlinks without changing stat semantics", () =>

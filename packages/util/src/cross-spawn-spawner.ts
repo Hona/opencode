@@ -302,8 +302,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   ) {
     yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
     if (outputFile === undefined) return yield* launchProcess(command, opts)
-    // Both streams share one OS file offset. Descendants can inherit the file without
-    // keeping a parent-side pipe open, and the parent closes its descriptor after spawn.
+    // stdout and stderr share one opened output file, so inherited handles cannot delay EOF on a parent pipe.
     return yield* Effect.acquireUseRelease(
       Effect.tryPromise({
         try: () => open(outputFile, "w"),

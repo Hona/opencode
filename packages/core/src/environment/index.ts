@@ -15,7 +15,7 @@ export {
 export { execDefaults } from "./exec-defaults.js"
 export { makeLocalDriver } from "./local.js"
 export { makeMemoryDriver, type MemoryDriver } from "./memory.js"
-export { type Interface, node, Service } from "./environment.js"
+export { capture, type Interface, node, Service } from "./environment.js"
 
 import type { Driver } from "./driver.js"
 import { execDefaults } from "./exec-defaults.js"
