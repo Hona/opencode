@@ -195,7 +195,7 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures stdout via .all when no stderr",
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
+        const handle = yield* js('process.stdout.write("hello from stdout")')
         const all = yield* decodeByteStream(handle.all)
         expect(all).toBe("hello from stdout")
       }),
@@ -229,6 +229,60 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("process control", () => {
+    fx.live(
+      "file capture completes while a detached descendant retains stdio",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        if (!CrossSpawnSpawner.supportsFileOutput(spawner)) throw new Error("Expected native file output")
+        const handle = yield* spawner.spawnToFile(
+          js(
+            [
+              'const { spawn } = require("node:child_process")',
+              'const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], { detached: true, stdio: "inherit" })',
+              "child.unref()",
+              'console.log("parent finished")',
+              "process.exit(0)",
+            ].join("\n"),
+            { stdin: "ignore" },
+          ),
+          path.join(tmp.path, "output"),
+        )
+        const code = yield* handle.exitCode.pipe(Effect.timeoutOption("2 seconds"))
+        expect(code.valueOrUndefined).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(yield* handle.isRunning).toBe(false)
+        expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "output")).text())).toBe("parent finished\n")
+      }),
+      { timeout: 10_000 },
+    )
+
+    fx.live(
+      "file capture preserves large output and both stream tails at exit",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        if (!CrossSpawnSpawner.supportsFileOutput(spawner)) throw new Error("Expected native file output")
+        const handle = yield* spawner.spawnToFile(
+          js(
+            'process.stdout.write("x".repeat(8 * 1024 * 1024)); process.stderr.write("stderr-tail"); process.stdout.write("stdout-tail"); process.exit(7)',
+            { stdin: "ignore" },
+          ),
+          path.join(tmp.path, "output"),
+        )
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(7))
+        expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "output")).text())).toBe(
+          "x".repeat(8 * 1024 * 1024) + "stderr-tailstdout-tail",
+        )
+      }),
+      { timeout: 10_000 },
+    )
+
     fx.effect(
       "kills a running process",
       Effect.gen(function* () {

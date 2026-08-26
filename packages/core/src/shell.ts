@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { AppProcess } from "@opencode-ai/util/process"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "./bus.js"
@@ -39,6 +40,7 @@ type Active = {
   info: Info
   file: string
   size: number
+  nativeOutput: boolean
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -126,7 +128,7 @@ const layer = () =>
       const exitOrder: string[] = []
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
-      const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
+      const { mkdir, unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
       const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
       yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
 
@@ -191,9 +193,16 @@ const layer = () =>
         const session = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
-        if (cursor >= session.size) return { output: "", cursor: session.size, size: session.size, truncated: false }
+        const size = session.nativeOutput
+          ? yield* Effect.promise(() =>
+              stat(session.file)
+                .then((info) => info.size)
+                .catch(() => 0),
+            )
+          : session.size
+        if (cursor >= size) return { output: "", cursor: size, size, truncated: false }
         const start = Math.max(0, cursor)
-        const length = Math.min(limit, session.size - start)
+        const length = Math.min(limit, size - start)
         const buffer = Buffer.alloc(length)
         const bytesRead = yield* Effect.promise(
           () =>
@@ -212,7 +221,7 @@ const layer = () =>
         return {
           output: buffer.subarray(0, bytesRead).toString("utf8"),
           cursor: start + bytesRead,
-          size: session.size,
+          size,
           truncated: false,
         }
       })
@@ -255,65 +264,68 @@ const layer = () =>
           time: { started: Date.now() },
         }
 
-        // Spawn through the Environment and stream combined output to the file. The handle is scope-bound, so
+        // Spawn through the Environment and capture combined output to the file. The handle is scope-bound, so
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered session.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner
-                .spawn(
-                  ChildProcess.make(invocation.shell, args, {
-                    cwd: invocation.cwd,
-                    env: invocation.env,
-                    stdin: "ignore",
-                    detached: process.platform !== "win32",
-                    forceKillAfter: Duration.seconds(3),
-                  }),
-                )
-                .pipe(
-                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
-                )
+              const command = ChildProcess.make(invocation.shell, args, {
+                cwd: invocation.cwd,
+                env: invocation.env,
+                stdin: "ignore",
+                detached: process.platform !== "win32",
+                forceKillAfter: Duration.seconds(3),
+              })
+              const spawner = environment.spawner
+              const nativeOutput = CrossSpawnSpawner.supportsFileOutput(spawner)
+              const handle = yield* (nativeOutput ? spawner.spawnToFile(command, file) : spawner.spawn(command)).pipe(
+                Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
+              )
               const session: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid
                 }),
                 file,
                 size: 0,
+                nativeOutput,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               sessions.set(id, session)
 
-              const stream = createWriteStream(file)
-              const outputDone = Latch.makeUnsafe()
-              const pump = handle.all.pipe(
-                Stream.runForEach((chunk: Uint8Array) =>
-                  Effect.sync(() => {
-                    stream.write(chunk)
-                    session.size += chunk.length
-                  }),
-                ),
-              )
-              runFork(
-                Effect.gen(function* () {
-                  yield* pump.pipe(Effect.catch(() => Effect.void))
-                  yield* Effect.promise(
-                    () =>
-                      new Promise<void>((resolve) => {
-                        stream.end(() => resolve())
-                      }),
-                  )
-                  yield* outputDone.open
-                }).pipe(Effect.catch(() => outputDone.open)),
-              )
-              yield* Effect.promise(
-                () =>
-                  new Promise<void>((resolve) => {
-                    stream.once("open", () => resolve())
-                    stream.once("error", () => resolve())
-                  }),
-              )
+              const outputDone = Latch.makeUnsafe(nativeOutput)
+              // Workspace drivers without native file output retain their streaming transport.
+              if (!nativeOutput) {
+                const stream = createWriteStream(file)
+                const pump = handle.all.pipe(
+                  Stream.runForEach((chunk: Uint8Array) =>
+                    Effect.sync(() => {
+                      stream.write(chunk)
+                      session.size += chunk.length
+                    }),
+                  ),
+                )
+                runFork(
+                  Effect.gen(function* () {
+                    yield* pump.pipe(Effect.catch(() => Effect.void))
+                    yield* Effect.promise(
+                      () =>
+                        new Promise<void>((resolve) => {
+                          stream.end(() => resolve())
+                        }),
+                    )
+                    yield* outputDone.open
+                  }).pipe(Effect.catch(() => outputDone.open)),
+                )
+                yield* Effect.promise(
+                  () =>
+                    new Promise<void>((resolve) => {
+                      stream.once("open", () => resolve())
+                      stream.once("error", () => resolve())
+                    }),
+                )
+              }
 
               const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
                 Effect.gen(function* () {

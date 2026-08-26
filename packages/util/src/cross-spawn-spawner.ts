@@ -17,6 +17,7 @@ import {
 // ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
+import { open } from "node:fs/promises"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
@@ -90,6 +91,17 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
+export type FileOutputSpawner = ChildProcessSpawner["Service"] & {
+  readonly spawnToFile: (
+    command: ChildProcess.StandardCommand,
+    file: string,
+  ) => Effect.Effect<ChildProcessHandle, PlatformError.PlatformError, Scope.Scope>
+}
+
+export function supportsFileOutput(spawner: ChildProcessSpawner["Service"]): spawner is FileOutputSpawner {
+  return "spawnToFile" in spawner && typeof spawner.spawnToFile === "function"
+}
+
 const makeCrossSpawnSpawner = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -144,7 +156,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     sout: ChildProcess.StdoutConfig,
     serr: ChildProcess.StderrConfig,
     extra: ReadonlyArray<{ fd: number; config: ChildProcess.AdditionalFdConfig }>,
-  ): NodeChildProcess.StdioOptions => {
+  ): Exclude<NodeChildProcess.StdioOptions, string> => {
     const pipe = (x: NodeChildProcess.IOType | undefined) =>
       process.platform === "win32" && x === "pipe" ? "overlapped" : x
     const arr: Array<NodeChildProcess.IOType | undefined> = [
@@ -152,11 +164,11 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       pipe(output(sout.stream)),
       pipe(output(serr.stream)),
     ]
-    if (extra.length === 0) return arr as NodeChildProcess.StdioOptions
+    if (extra.length === 0) return arr
     const max = extra.reduce((acc, x) => Math.max(acc, x.fd), 2)
     for (let i = 3; i <= max; i++) arr[i] = "ignore"
     for (const x of extra) arr[x.fd] = pipe("pipe")
-    return arr as NodeChildProcess.StdioOptions
+    return arr
   }
 
   const setupFds = Effect.fnUntraced(function* (
@@ -285,10 +297,25 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const spawn = Effect.fnUntraced(function* (
     command: ChildProcess.StandardCommand,
-    opts: NodeChildProcess.SpawnOptions,
+    opts: NodeChildProcess.SpawnOptions & { stdio: Exclude<NodeChildProcess.StdioOptions, string> },
+    outputFile?: string,
   ) {
     yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
-    return yield* launchProcess(command, opts)
+    if (outputFile === undefined) return yield* launchProcess(command, opts)
+    // Both streams share one OS file offset. Descendants can inherit the file without
+    // keeping a parent-side pipe open, and the parent closes its descriptor after spawn.
+    return yield* Effect.acquireUseRelease(
+      Effect.tryPromise({
+        try: () => open(outputFile, "w"),
+        catch: (cause) => toPlatformError("openOutput", toError(cause), command),
+      }),
+      (file) =>
+        launchProcess(command, {
+          ...opts,
+          stdio: opts.stdio.map((value, index) => (index === 1 || index === 2 ? file.fd : value)),
+        }),
+      (file) => Effect.promise(() => file.close()),
+    )
   })
 
   const killGroup = (
@@ -362,8 +389,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const spawnCommand: (
     command: ChildProcess.Command,
+    outputFile?: string,
   ) => Effect.Effect<ChildProcessHandle, PlatformError.PlatformError, Scope.Scope> = Effect.fnUntraced(
-    function* (command) {
+    function* (command, outputFile) {
       switch (command._tag) {
         case "StandardCommand": {
           const sin = stdin(command.options)
@@ -373,14 +401,18 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           const dir = yield* cwd(command.options)
 
           const [proc, signal] = yield* Effect.acquireRelease(
-            spawn(command, {
-              cwd: dir,
-              env: env(command.options),
-              stdio: stdios(sin, sout, serr, extra),
-              detached: command.options.detached ?? process.platform !== "win32",
-              shell: command.options.shell,
-              windowsHide: process.platform === "win32",
-            }),
+            spawn(
+              command,
+              {
+                cwd: dir,
+                env: env(command.options),
+                stdio: stdios(sin, sout, serr, extra),
+                detached: command.options.detached ?? process.platform !== "win32",
+                shell: command.options.shell,
+                windowsHide: process.platform === "win32",
+              },
+              outputFile,
+            ),
             Effect.fnUntraced(function* ([proc, signal]) {
               const done = yield* Deferred.isDone(signal)
               const kill = timeout(proc, command, command.options)
@@ -496,7 +528,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     },
   )
 
-  return make(spawnCommand)
+  return Object.assign(make(spawnCommand), {
+    spawnToFile: (command: ChildProcess.StandardCommand, file: string) => spawnCommand(command, file),
+  }) satisfies FileOutputSpawner
 })
 
 const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
