@@ -2,7 +2,7 @@ export * as PowerShellPool from "./powershell.js"
 
 import { Cause, Deferred, Duration, Effect, Exit, Option, Queue, Schema, Scope, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { script } from "./powershell-worker.js"
+import script from "./powershell-worker.ps1" with { type: "text" }
 import type { Environment } from "../environment/index.js"
 
 const IDLE_TIMEOUT = 30_000

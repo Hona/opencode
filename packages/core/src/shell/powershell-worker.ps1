@@ -1,4 +1,3 @@
-export const script = String.raw`
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -97,4 +96,3 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
     [Console]::Out.Flush()
   }
 }
-`

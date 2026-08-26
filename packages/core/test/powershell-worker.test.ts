@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { spawn, spawnSync } from "node:child_process"
 import os from "node:os"
 import { createInterface } from "node:readline"
-import { script } from "@opencode-ai/core/shell/powershell-worker"
+
+const script = await Bun.file(new URL("../src/shell/powershell-worker.ps1", import.meta.url)).text()
 
 const shells = ["pwsh", ...(process.platform === "win32" ? ["powershell"] : [])].filter(
   (shell) => spawnSync(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "exit 0"]).status === 0,
