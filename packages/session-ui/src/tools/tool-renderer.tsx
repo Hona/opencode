@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   Match,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -1294,15 +1295,36 @@ ToolRegistry.register({
   name: "shell",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
     const streaming = () => props.status === "streaming"
     const pending = () => streaming() || props.status === "running" || props.metadata.status === "running"
     const sawStreaming = streaming()
+    const [streamed, setStreamed] = createSignal("")
+    createEffect(() => {
+      const id = props.metadata.shellID
+      if (typeof id !== "string" || !pending() || !data.shellOutput) return
+      let cursor = 0
+      let loading = false
+      const load = async () => {
+        if (loading) return
+        loading = true
+        const response = await data
+          .shellOutput?.({ id, location: { directory: data.directory }, cursor })
+          .catch(() => undefined)
+        if (response?.data.output) setStreamed((output) => output + response.data.output)
+        if (response) cursor = response.data.cursor
+        loading = false
+      }
+      void load()
+      const interval = setInterval(() => void load(), 1_000)
+      onCleanup(() => clearInterval(interval))
+    })
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n"))
+    const output = createMemo(() => stripAnsi(props.output ?? streamed()).replace(/\r\n?/g, "\n"))
     return (
       <BasicTool
         {...props}
