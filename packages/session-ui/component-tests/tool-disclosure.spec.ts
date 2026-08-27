@@ -8,7 +8,10 @@ for (const open of [true, false]) {
       const group = root.locator('[data-component="collapsed-tool-group"]')
       await group.getByRole("button", { name: "Used Shell, Patch", exact: true }).click()
       const shell = group.locator('[data-timeline-part-id="tool_shell_existing"] [data-slot="collapsible-trigger"]')
-      const patch = group.locator('[data-timeline-part-id="tool_patch_existing"]')
+    await group.locator('[data-timeline-part-id="tool_patch_existing"]').evaluate((element) => {
+      element.setAttribute("data-disclosure-probe", "existing")
+    })
+    const patch = group.locator('[data-disclosure-probe="existing"]')
       const first = patch.locator('[data-scope="apply-patch"] button').filter({ hasText: "a.ts" })
       const second = patch.locator('[data-scope="apply-patch"] button').filter({ hasText: "b.ts" })
       const diff = patch.locator('[data-type="update"]').filter({ hasText: "b.ts" }).locator('[data-component="file"]')

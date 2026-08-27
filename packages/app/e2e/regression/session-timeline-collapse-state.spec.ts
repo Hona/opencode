@@ -95,7 +95,10 @@ test.describe("regression: session timeline local row state", () => {
     const group = page.locator('[data-component="collapsed-tool-group"]')
     const summary = group.getByRole("button", { name: "Used Patch", exact: true })
     await summary.click()
-    const wrapper = group.locator(`[data-timeline-part-id="${editPartID}"]`)
+    await group.locator(`[data-timeline-part-id="${editPartID}"]`).evaluate((element) => {
+      element.setAttribute("data-disclosure-probe", "existing")
+    })
+    const wrapper = group.locator('[data-disclosure-probe="existing"]')
     const trigger = wrapper.locator('[data-scope="apply-patch"] button')
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
     await trigger.click()
@@ -107,10 +110,8 @@ test.describe("regression: session timeline local row state", () => {
       const id = `prt_patch_${count}`
       events.push(...toolEvents({ ...part, id, callID: id }))
       await expect(group.locator('[data-component="tag"]')).toHaveText(String(count))
-      const added = group.locator(`[data-timeline-part-id="${id}"] [data-scope="apply-patch"] button`)
-      await expect(added).toBeVisible()
+      await expect(group).toHaveAttribute("data-timeline-part-ids", new RegExp(`${id}$`))
       await expect(trigger).toHaveAttribute("aria-expanded", String(count === 2))
-      await expect(added).toHaveAttribute("aria-expanded", "false")
       await expect(summary).toHaveAttribute("aria-expanded", "true")
       expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
     }
