@@ -1,6 +1,11 @@
 import { fileURLToPath } from "node:url"
 import { expect, story } from "../../storybook/playwright/story"
 
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=",
+  "base64",
+)
+
 const fixture = `/@fs/${fileURLToPath(new URL("./markdown.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
 
 story.beforeEach(async ({ mount }) => {
@@ -117,4 +122,123 @@ story("replaces completed DOM before live rendering and retains streamed code co
   await expect(markdown.locator('pre, [data-slot="markdown-copy-button"]')).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
+})
+
+for (const streaming of [false, true]) {
+  story(
+    `loads local images in ${streaming ? "streaming" : "cached"} Markdown and releases their URLs`,
+    async ({ page }) => {
+      const requests: string[] = []
+      await page.route("**/api/fs/read/**", async (route) => {
+        expect(route.request().headers().authorization).toBe(
+          `Basic ${Buffer.from("opencode:fixture").toString("base64")}`,
+        )
+        requests.push(route.request().url())
+        await route.fulfill({ contentType: "image/png", body: png })
+      })
+      await page.evaluate(
+        async ({ fixture, streaming }) => {
+          const { mountMarkdown } = await import(fixture)
+          await mountMarkdown({
+            text: "![Chart](C:/tmp/chart%20one.png)\n\n![Again](C:/tmp/chart%20one.png)",
+            streaming,
+            cached: !streaming,
+            images: true,
+          })
+        },
+        { fixture, streaming },
+      )
+      const harness = page.getByTestId("markdown-fixture")
+      const image = harness.getByRole("img", { name: "Chart", exact: true })
+      await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1)
+      await expect(harness.getByRole("img", { name: "Again", exact: true })).toHaveAttribute("src", /^blob:/)
+      expect(requests).toHaveLength(1)
+      expect(new URL(requests[0]).searchParams.get("location[directory]")).toBe("C:/tmp/")
+      const url = await image.getAttribute("src")
+      await harness.getByLabel("Streaming").uncheck()
+      await expect(harness.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
+      await expect(image).toHaveAttribute("src", url!)
+      await harness.getByLabel("Markdown text").fill("![Replacement](./images/next.png)")
+      await expect
+        .poll(() =>
+          harness.getByRole("img", { name: "Replacement" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+        )
+        .toBe(1)
+      expect(requests).toHaveLength(2)
+      expect(
+        await page.evaluate(
+          (url) =>
+            fetch(url!).then(
+              () => false,
+              () => true,
+            ),
+          url,
+        ),
+      ).toBe(true)
+      const next = await harness.getByRole("img", { name: "Replacement" }).getAttribute("src")
+      await harness.getByRole("button", { name: "Toggle Markdown" }).click()
+      await expect(harness.getByRole("img")).toHaveCount(0)
+      expect(
+        await page.evaluate(
+          (url) =>
+            fetch(url!).then(
+              () => false,
+              () => true,
+            ),
+          next,
+        ),
+      ).toBe(true)
+    },
+  )
+}
+
+story("keeps remote images browser-owned and rejects unsafe image sources", async ({ page }) => {
+  await page.route("https://images.example/chart.png", (route) =>
+    route.fulfill({ contentType: "image/png", body: png }),
+  )
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      images: true,
+      text: '<img alt="Remote" src="https://images.example/chart.png"><img alt="Unsafe" src="javascript:alert(1)" onerror="alert(2)" data-local-image="/tmp/forged.png">',
+    })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  await expect
+    .poll(() => harness.getByRole("img", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(1)
+  await expect(harness.getByRole("img", { name: "Remote" })).toHaveAttribute("src", "https://images.example/chart.png")
+  await expect(harness.locator("[onerror], [src^='javascript:'], [data-local-image]")).toHaveCount(0)
+})
+
+story("loads file URLs and leaves unreadable images as alt text", async ({ page }) => {
+  const requested = new Set<string>()
+  await page.route("**/api/fs/read/**", async (route) => {
+    const url = new URL(route.request().url())
+    requested.add(url.pathname)
+    await route.fulfill(
+      url.pathname.endsWith("missing.png")
+        ? { status: 404, body: "Not found" }
+        : { contentType: "image/png", body: png },
+    )
+  })
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      images: true,
+      text: "![Available](file:///C:/tmp/chart%25.png)\n\n![Unavailable](file:///tmp/missing.png)",
+    })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  await expect
+    .poll(() =>
+      harness
+        .getByRole("img", { name: "Available", exact: true })
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBe(1)
+  await expect.poll(() => [...requested].sort()).toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png"])
+  await expect(harness.getByRole("img", { name: "Unavailable" })).not.toHaveAttribute("src")
+  await harness.getByLabel("Markdown text").fill("Still usable")
+  await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })
