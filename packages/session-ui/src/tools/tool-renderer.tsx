@@ -1452,7 +1452,12 @@ ToolRegistry.register({
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi(streamed() || props.output || "").replace(/\r\n?/g, "\n"))
+    const output = createMemo(() =>
+      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+        /\r\n?/g,
+        "\n",
+      ),
+    )
     return (
       <BasicTool
         {...props}

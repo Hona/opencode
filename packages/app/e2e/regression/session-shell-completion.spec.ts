@@ -127,3 +127,65 @@ for (const grouped of [false, true]) {
     })
   }
 }
+
+test("shows the authoritative foreground result after streaming shell output", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    settings: { shellToolPartsExpanded: true },
+    sessionMessages: [
+      { id: "msg_user", type: "user", text: "Run the check.", time: { created: 1 } },
+      {
+        id: "msg_foreground",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_foreground",
+            name: "shell",
+            state: { status: "running", input: { command: shell.command }, metadata: { shellID: shell.id } },
+            time: { created: 2 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ],
+  })
+  await page.route("**/api/shell/*/output?*", (route) =>
+    route.fulfill({
+      json: {
+        location: { directory },
+        data: {
+          output: Number(new URL(route.request().url()).searchParams.get("cursor")) === 0 ? "Checking project\n" : "",
+          cursor: 17,
+          size: 17,
+          truncated: false,
+        },
+      },
+    }),
+  )
+  await page.reload()
+  await timeline.transport.waitForConnection()
+  const card = page.locator('[data-timeline-part-id="call_foreground"]')
+  const shimmer = card.locator('[data-component="text-shimmer"]')
+  await expect(shimmer).toHaveAttribute("data-active", "true")
+  await expect(card.locator('[data-slot="bash-result"]')).toHaveText("Checking project")
+  await timeline.transport.send({
+    id: "evt_foreground_complete",
+    created: 3,
+    type: "session.tool.success",
+    durable: { aggregateID: sessionID, seq: 0, version: 2 },
+    data: {
+      sessionID,
+      assistantMessageID: "msg_foreground",
+      id: "call_foreground",
+      executed: true,
+      content: [{ type: "text", text: "Checking project\nCheck finished\nCommand exited with code 0." }],
+      metadata: { status: "completed", exit: 0 },
+    },
+  })
+  await expect(shimmer).toHaveAttribute("data-active", "false")
+  await expect(card.locator('[data-slot="bash-result"]')).toHaveText(
+    "Checking project\nCheck finished\nCommand exited with code 0.",
+  )
+})
