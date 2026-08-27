@@ -1278,8 +1278,8 @@ describe("ShellTool", () => {
   )
 
   for (const mode of ["silent", "writing", "timeout"] as const)
-    it.live(
-      `settles a shell with a ${mode} detached descendant retaining stdio`,
+    (isWindows ? it.live : it.live.skip)(
+      `settles a Windows shell with a ${mode} detached descendant retaining stdio`,
       () =>
         Effect.acquireUseRelease(
           Effect.promise(() => tmpdir()),

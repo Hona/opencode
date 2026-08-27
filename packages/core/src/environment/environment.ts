@@ -1,6 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Fiber, FileSystem, Layer, Stream } from "effect"
+import { Context, Effect, Fiber, FileSystem, Layer, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner, makeHandle } from "effect/unstable/process/ChildProcessSpawner"
 import type { Files } from "./files.js"
@@ -27,10 +27,13 @@ export const capture = Effect.fn("Environment.capture")(function* (
 
   const fs = yield* FileSystem.FileSystem
   const file = yield* fs.open(output, { flag: "w" })
+  const scope = yield* Scope.Scope
+  // Acquire the writer scope first so process-group cleanup runs while its pipes are still being drained.
+  const outputScope = yield* Scope.fork(scope)
   const handle = yield* spawner.spawn(command)
   const writer = yield* handle.all.pipe(
     Stream.runForEach((chunk) => file.writeAll(chunk)),
-    Effect.forkScoped,
+    Effect.forkIn(outputScope),
   )
   const complete = <A, E>(operation: Effect.Effect<A, E>) =>
     Effect.all([Effect.exit(operation), Fiber.join(writer)], { concurrency: "unbounded" }).pipe(

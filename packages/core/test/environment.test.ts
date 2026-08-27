@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, PlatformError, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, PlatformError, Ref, Schedule, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -25,6 +25,63 @@ import { hostEnvironmentLayer } from "./fixture/environment"
 const captureIt = testEffect(Layer.mergeAll(hostEnvironmentLayer, LayerNode.compile(filesystem)))
 
 describe("capture", () => {
+  ;(process.platform === "win32" ? captureIt.live.skip : captureIt.live)(
+    "cancellation kills a SIGTERM-ignoring child in the same process group",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem
+              const group = yield* Ref.make<number | undefined>(undefined)
+              yield* Effect.addFinalizer(() =>
+                Ref.get(group).pipe(
+                  Effect.flatMap((pid) =>
+                    pid === undefined
+                      ? Effect.void
+                      : Effect.try(() => process.kill(-pid, "SIGKILL")).pipe(Effect.ignore),
+                  ),
+                ),
+              )
+              const pidfile = path.join(tmp.path, "child.pid")
+              const childCode = `process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(${JSON.stringify(pidfile)}, String(process.pid)); setInterval(() => {}, 1000); setTimeout(() => process.exit(0), 15000)`
+              const child = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const handle = yield* Environment.capture(
+                    ChildProcess.make(
+                      "node",
+                      [
+                        "-e",
+                        `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(childCode)}], { stdio: "inherit" }); setInterval(() => {}, 1000)`,
+                      ],
+                      { stdin: "ignore", detached: true, forceKillAfter: 100 },
+                    ),
+                    path.join(tmp.path, "output"),
+                  )
+                  yield* Ref.set(group, Number(handle.pid))
+                  const pid = yield* fs.readFileString(pidfile).pipe(
+                    Effect.orElseSucceed(() => ""),
+                    Effect.repeat({ until: (pid) => pid.length > 0, schedule: Schedule.spaced("10 millis") }),
+                    Effect.timeout("5 seconds"),
+                  )
+                  return Number(pid)
+                }),
+              )
+              const gone = yield* Effect.try(() => process.kill(child, 0)).pipe(
+                Effect.as(false),
+                Effect.orElseSucceed(() => true),
+                Effect.repeat({ until: (gone) => gone, schedule: Schedule.spaced("10 millis") }),
+                Effect.timeoutOption("2 seconds"),
+              )
+              expect(gone.valueOrUndefined).toBe(true)
+            }),
+          ),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    { timeout: 10_000 },
+  )
+
   for (const completion of ["exit", "kill", "failed kill"] as const) {
     captureIt.live(`uses the selected spawner and waits for captured output on ${completion}`, () =>
       Effect.acquireUseRelease(

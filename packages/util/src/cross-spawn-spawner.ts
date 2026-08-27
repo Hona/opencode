@@ -91,6 +91,7 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
+/** Native capture through append-only output handles. The output path must not exist. */
 export type FileOutputSpawner = ChildProcessSpawner["Service"] & {
   readonly spawnToFile: (
     command: ChildProcess.StandardCommand,
@@ -302,10 +303,11 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   ) {
     yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
     if (outputFile === undefined) return yield* launchProcess(command, opts)
-    // stdout and stderr share one opened output file, so inherited handles cannot delay EOF on a parent pipe.
+    // On Windows, append mode grants FILE_APPEND_DATA without FILE_WRITE_DATA:
+    // inherited stdout/stderr can append, but cannot overwrite or truncate the capture.
     return yield* Effect.acquireUseRelease(
       Effect.tryPromise({
-        try: () => open(outputFile, "w"),
+        try: () => open(outputFile, "ax"),
         catch: (cause) => toPlatformError("openOutput", toError(cause), command),
       }),
       (file) =>
@@ -527,7 +529,10 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     },
   )
 
-  return Object.assign(make(spawnCommand), {
+  const spawner = make(spawnCommand)
+  // POSIX O_APPEND still permits truncation; keep its existing pipe semantics.
+  if (process.platform !== "win32") return spawner
+  return Object.assign(spawner, {
     spawnToFile: (command: ChildProcess.StandardCommand, file: string) => spawnCommand(command, file),
   }) satisfies FileOutputSpawner
 })
