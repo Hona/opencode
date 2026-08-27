@@ -91,16 +91,12 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
-/** Native capture through append-only output handles. The output path must not exist. */
-export type FileOutputSpawner = ChildProcessSpawner["Service"] & {
-  readonly spawnToFile: (
+export type Spawner = ChildProcessSpawner["Service"] & {
+  /** Optional native redirection through append-only handles. The output path must not exist. */
+  readonly spawnToFile?: (
     command: ChildProcess.StandardCommand,
     file: string,
   ) => Effect.Effect<ChildProcessHandle, PlatformError.PlatformError, Scope.Scope>
-}
-
-export function supportsFileOutput(spawner: ChildProcessSpawner["Service"]): spawner is FileOutputSpawner {
-  return "spawnToFile" in spawner && typeof spawner.spawnToFile === "function"
 }
 
 const makeCrossSpawnSpawner = Effect.gen(function* () {
@@ -534,7 +530,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   if (process.platform !== "win32") return spawner
   return Object.assign(spawner, {
     spawnToFile: (command: ChildProcess.StandardCommand, file: string) => spawnCommand(command, file),
-  }) satisfies FileOutputSpawner
+  }) satisfies Spawner
 })
 
 const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(

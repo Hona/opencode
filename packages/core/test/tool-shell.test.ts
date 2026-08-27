@@ -1276,57 +1276,47 @@ describe("ShellTool", () => {
       ),
     { timeout: 15_000 },
   )
-
-  for (const mode of ["silent", "writing", "timeout"] as const)
-    (isWindows ? it.live : it.live.skip)(
-      `settles a Windows shell with a ${mode} detached descendant retaining stdio`,
-      () =>
-        Effect.acquireUseRelease(
-          Effect.promise(() => tmpdir()),
-          (tmp) => {
-            reset()
-            return withSession(tmp.path, () =>
-              Effect.gen(function* () {
-                yield* Effect.promise(() =>
-                  Bun.write(
-                    path.join(tmp.path, "parent.cjs"),
-                    [
-                      'const { spawn } = require("node:child_process")',
-                      `const child = spawn(process.execPath, ["-e", ${JSON.stringify(
-                        mode === "writing"
-                          ? 'setInterval(() => process.stdout.write("child output\\n"), 20); setTimeout(() => process.exit(0), 15000)'
-                          : "setTimeout(() => {}, 15000)",
-                      )}], { detached: true, stdio: "inherit", cwd: require("node:os").tmpdir() })`,
-                      'require("node:fs").writeFileSync("child.pid", String(child.pid))',
-                      "child.unref()",
-                      'console.log("parent finished")',
-                      mode === "timeout" ? "setTimeout(() => {}, 60000)" : "process.exit(0)",
-                    ].join("\n"),
-                  ),
-                )
-                const shell = yield* Shell.Service
-                yield* Effect.addFinalizer(() =>
-                  Effect.gen(function* () {
-                    const pid = yield* Effect.promise(() =>
-                      Bun.file(path.join(tmp.path, "child.pid"))
-                        .text()
-                        .catch(() => undefined),
-                    )
-                    if (pid) yield* Effect.try(() => process.kill(Number(pid))).pipe(Effect.ignore)
-                  }),
-                )
-                const info = yield* shell.create({ command: "node parent.cjs", timeout: 4_000 })
-                const result = yield* shell.wait(info.id).pipe(Effect.timeoutOption("6 seconds"))
-                expect(result.valueOrUndefined?.status).toBe(mode === "timeout" ? "timeout" : "exited")
-                if (mode !== "timeout") expect(result.valueOrUndefined?.exit).toBe(0)
-                expect((yield* shell.output(info.id)).output).toContain("parent finished")
-              }),
+  ;(isWindows ? it.live : it.live.skip)(
+    "captures append-only output without waiting for inherited handles",
+    () =>
+      Effect.gen(function* () {
+        const global = yield* Global.Service
+        reset()
+        yield* withSession(global.tmp, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const expected = "x".repeat(1024 * 1024) + "TAILZ|protected"
+            const pidfile = path.join(global.tmp, "child.pid")
+            yield* Effect.promise(() =>
+              Bun.write(
+                path.join(global.tmp, "parent.cjs"),
+                [
+                  'const fs = require("node:fs")',
+                  'const child = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 15000)"], { detached: true, stdio: "inherit", cwd: require("node:os").tmpdir() })',
+                  'fs.writeFileSync("child.pid", String(child.pid)); child.unref()',
+                  'fs.writeSync(1, "x".repeat(1024 * 1024)); fs.writeSync(2, "TAIL")',
+                  'fs.writeSync(1, Buffer.from("Z"), 0, 1, 0)',
+                  'try { fs.ftruncateSync(1, 0) } catch { fs.writeSync(1, "|protected") }',
+                ].join("\n"),
+              ),
             )
-          },
-          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-        ),
-      { timeout: 15_000 },
-    )
+            yield* Effect.addFinalizer(() =>
+              Effect.tryPromise(() => Bun.file(pidfile).text()).pipe(
+                Effect.flatMap((pid) => Effect.try(() => process.kill(Number(pid)))),
+                Effect.ignore,
+              ),
+            )
+            const info = yield* shell.create({ command: "node parent.cjs", timeout: 4000 })
+            const result = yield* shell.wait(info.id).pipe(Effect.timeoutOption("6 seconds"))
+            expect(result.valueOrUndefined).toMatchObject({ status: "exited", exit: 0 })
+            expect((yield* shell.output(info.id, { limit: expected.length + 1 })).output).toBe(expected)
+            const pid = Number(yield* Effect.promise(() => Bun.file(pidfile).text()))
+            expect(() => process.kill(pid, 0)).not.toThrow()
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
 
   it.live("returns the shell id for a background command", () =>
     Effect.acquireUseRelease(
