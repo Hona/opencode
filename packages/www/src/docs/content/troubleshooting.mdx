@@ -156,17 +156,13 @@ On Linux and macOS, send `SIGUSR1`:
 kill -USR1 <server-pid>
 ```
 
-On Windows, signal the process's native auto-reset event from PowerShell:
+On Windows, signal the process's native auto-reset event from PowerShell. Replace `12345` with the server PID:
 
 ```powershell
-$serverPID = 12345 # Replace with the server PID.
-$event = [System.Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-$serverPID")
-try {
-  [void]$event.Set()
-} finally {
-  $event.Dispose()
-}
+pwsh -NoProfile -Command '[Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-12345").Set()'
 ```
+
+This starts a short-lived PowerShell process. Windows closes its event handle automatically when that process exits.
 
 The Windows event works for detached background servers without a console. The sender must be in the same Windows
 session and have permission to modify the event. `Ctrl+Break` and `process.kill()` are not substitutes for this event.

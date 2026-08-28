@@ -156,17 +156,13 @@ ps -o pid,ppid,rss,vsz,lstart,etime,cmd -p <pid>,<pid>
 kill -USR1 <server-pid>
 ```
 
-   On Windows, use the `pid` returned by `opencode2 api get /api/health` after checking `opencode2 service status`, then signal the native event from PowerShell:
+   On Windows, use the `pid` returned by `opencode2 api get /api/health` after checking `opencode2 service status`, then signal the native event from PowerShell. Replace `12345` with that PID:
 
 ```powershell
-$serverPID = 12345 # Replace with the server PID.
-$event = [System.Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-$serverPID")
-try {
-  [void]$event.Set()
-} finally {
-  $event.Dispose()
-}
+pwsh -NoProfile -Command '[Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-12345").Set()'
 ```
+
+   Windows closes the event handle when this short-lived PowerShell process exits.
 
    The event works without a console, including for `serve --service`. The sender must be in the same Windows session with access to the event. Do not use `Ctrl+Break`, `SIGBREAK`, or `process.kill` to target a detached Windows server. Repeated signals can coalesce; wait for the completion log rather than treating the signal as an acknowledgment.
 
