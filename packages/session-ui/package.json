@@ -72,7 +72,7 @@
     "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
-    "dompurify": "3.3.1",
+    "dompurify": "3.4.14",
     "marked": "catalog:",
     "mermaid": "11.16.1",
     "motion": "12.34.5",
