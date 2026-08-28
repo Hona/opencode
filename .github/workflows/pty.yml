@@ -1,0 +1,85 @@
+name: pty
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/pty.yml
+      - package.json
+      - bun.lock
+      - packages/cli/package.json
+      - packages/core/package.json
+      - packages/core/script/fix-node-pty.ts
+      - packages/desktop/package.json
+      - packages/desktop/electron*.ts
+      - packages/desktop/scripts/**
+  pull_request:
+    paths:
+      - .github/workflows/pty.yml
+      - package.json
+      - bun.lock
+      - packages/cli/package.json
+      - packages/core/package.json
+      - packages/core/script/fix-node-pty.ts
+      - packages/desktop/package.json
+      - packages/desktop/electron*.ts
+      - packages/desktop/scripts/**
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }} native PTY
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          architecture: ${{ matrix.arch }}
+      - name: Install isolated native dependencies
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'require("node:assert/strict").equal(process.arch, process.env.EXPECTED_ARCH)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $root = Get-Content package.json -Raw | ConvertFrom-Json
+          $desktop = Get-Content packages/desktop/package.json -Raw | ConvertFrom-Json
+          $package = node --input-type=module -e 'import { getCurrentCli } from "./packages/desktop/scripts/target.ts"; const target = getCurrentCli(); console.log(`@lydell/node-pty-${target.os}-${target.cpu}`)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $deps = Join-Path $env:RUNNER_TEMP pty-smoke
+          npm install --prefix $deps --no-audit --no-fund --package-lock=false "@lydell/node-pty@$($root.workspaces.catalog.'@lydell/node-pty')" "${package}@$($desktop.optionalDependencies.$package)" "electron@$($desktop.devDependencies.electron)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node "$deps/node_modules/electron/install.js"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "PTY_SMOKE_DEPS=$deps" >> $env:GITHUB_ENV
+          "PTY_SMOKE_PACKAGE=$package" >> $env:GITHUB_ENV
+      - name: Verify Node native loading
+        working-directory: packages/desktop
+        run: node scripts/pty-smoke.mjs $env:PTY_SMOKE_DEPS $env:PTY_SMOKE_PACKAGE '${{ matrix.arch }}'
+      - name: Verify Electron native loading
+        working-directory: packages/desktop
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: |
+          & "$env:PTY_SMOKE_DEPS/node_modules/electron/dist/electron.exe" scripts/pty-smoke.mjs $env:PTY_SMOKE_DEPS $env:PTY_SMOKE_PACKAGE '${{ matrix.arch }}'
