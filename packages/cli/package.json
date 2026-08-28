@@ -14,13 +14,6 @@
     "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
-  "imports": {
-    "#heap-event": {
-      "bun": "./src/heap-event.bun.ts",
-      "node": "./src/heap-event.node.ts",
-      "default": "./src/heap-event.node.ts"
-    }
-  },
   "scripts": {
     "build": "bun run script/build.ts",
     "build:node": "bun run script/build-node.ts",

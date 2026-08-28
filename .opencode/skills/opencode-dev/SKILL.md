@@ -141,7 +141,11 @@ grep 'role=server' ~/.local/share/opencode/log/opencode-local.log
 
 ## Heap snapshots
 
-The CLI uses one heap-snapshot writer in `packages/cli/src/heap.ts`, triggered by `SIGUSR1` on Unix or a native named event on Windows. Use it to capture the installed `opencode2` server without restarting it or attaching an inspector. Snapshots pause JavaScript execution and may contain credentials, prompts, and file contents; keep them private.
+Run `opencode2 debug heap-dump` on Windows, Linux, or macOS to capture the installed background server without restarting it or attaching an inspector. The command discovers an existing server, requests an authenticated dump, waits for completion, and prints the saved path. It never starts or replaces a server. Snapshots pause JavaScript execution and may contain credentials, prompts, and file contents; keep them private.
+
+The CLI's Unix-only `SIGUSR1` listener in `packages/cli/src/heap.ts` remains available and shares the writer in `packages/util/src/heap-snapshot.ts` with the server API. OS signal-triggered snapshots are unsupported on Windows; use the command instead.
+
+For the Unix signal alternative:
 
 1. Find the processes and inspect their roles and memory:
 
@@ -155,16 +159,6 @@ ps -o pid,ppid,rss,vsz,lstart,etime,cmd -p <pid>,<pid>
 ```bash
 kill -USR1 <server-pid>
 ```
-
-   On Windows, use the `pid` returned by `opencode2 api get /api/health` after checking `opencode2 service status`, then signal the native event from PowerShell. Replace `12345` with that PID:
-
-```powershell
-pwsh -NoProfile -Command '[Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-12345").Set()'
-```
-
-   Windows closes the event handle when this short-lived PowerShell process exits.
-
-   The event works without a console, including for `serve --service`. The sender must be in the same Windows session with access to the event. Do not use `Ctrl+Break`, `SIGBREAK`, or `process.kill` to target a detached Windows server. Repeated signals can coalesce; wait for the completion log rather than treating the signal as an acknowledgment.
 
 3. Wait for `heap snapshot written` in the channel's log before opening the file. Snapshots are written to the same log directory as `heap-<pid>-<timestamp>.heapsnapshot`; writing a large heap can take several seconds and the file is incomplete until the completion message appears:
 
