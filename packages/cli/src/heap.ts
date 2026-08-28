@@ -1,19 +1,34 @@
 import { Global } from "@opencode-ai/util/global"
-import { Effect, Queue } from "effect"
+import { Effect, Queue, Schedule } from "effect"
 import path from "node:path"
 
 export const listen = Effect.gen(function* () {
   const global = yield* Global.Service
-  if (process.platform === "win32") return
   const signals = yield* Queue.dropping<void>(1)
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const handler = () => Queue.offerUnsafe(signals, undefined)
-      process.on("SIGUSR1", handler)
-      return handler
-    }),
-    (handler) => Effect.sync(() => process.off("SIGUSR1", handler)),
-  )
+  const handler = () => Queue.offerUnsafe(signals, undefined)
+  if (process.platform === "win32") {
+    // Detached Windows servers have no console for CTRL_BREAK_EVENT/SIGBREAK.
+    yield* Effect.gen(function* () {
+      const { createEvent } = yield* Effect.promise(() => import("#heap-event"))
+      const event = yield* Effect.acquireRelease(
+        Effect.try(() => createEvent(`Local\\opencode-heap-${process.pid}`)),
+        (event) => Effect.sync(() => event.close()),
+      )
+      // A zero-timeout native wait avoids blocking JS or allocating a worker VM.
+      yield* Effect.try(() => event.poll()).pipe(
+        Effect.tap((signaled) => (signaled ? Effect.sync(handler) : Effect.void)),
+        Effect.repeat(Schedule.spaced("250 millis")),
+        Effect.catchCause((cause) => Effect.logWarning("heap snapshot event listener failed", { cause })),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    }).pipe(Effect.catchCause((cause) => Effect.logWarning("heap snapshot event listener failed", { cause })))
+  }
+  if (process.platform !== "win32") {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => process.on("SIGUSR1", handler)),
+      () => Effect.sync(() => process.off("SIGUSR1", handler)),
+    )
+  }
   yield* Queue.take(signals).pipe(
     Effect.andThen(
       Effect.suspend(() => {

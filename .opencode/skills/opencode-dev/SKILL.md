@@ -141,7 +141,7 @@ grep 'role=server' ~/.local/share/opencode/log/opencode-local.log
 
 ## Heap snapshots
 
-The CLI installs a `SIGUSR1` listener on non-Windows processes in `packages/cli/src/heap.ts`. Use it to capture the installed `opencode2` server without restarting it or attaching an inspector.
+The CLI uses one heap-snapshot writer in `packages/cli/src/heap.ts`, triggered by `SIGUSR1` on Unix or a native named event on Windows. Use it to capture the installed `opencode2` server without restarting it or attaching an inspector. Snapshots pause JavaScript execution and may contain credentials, prompts, and file contents; keep them private.
 
 1. Find the processes and inspect their roles and memory:
 
@@ -155,6 +155,20 @@ ps -o pid,ppid,rss,vsz,lstart,etime,cmd -p <pid>,<pid>
 ```bash
 kill -USR1 <server-pid>
 ```
+
+   On Windows, use the `pid` returned by `opencode2 api get /api/health` after checking `opencode2 service status`, then signal the native event from PowerShell:
+
+```powershell
+$serverPID = 12345 # Replace with the server PID.
+$event = [System.Threading.EventWaitHandle]::OpenExisting("Local\opencode-heap-$serverPID")
+try {
+  [void]$event.Set()
+} finally {
+  $event.Dispose()
+}
+```
+
+   The event works without a console, including for `serve --service`. The sender must be in the same Windows session with access to the event. Do not use `Ctrl+Break`, `SIGBREAK`, or `process.kill` to target a detached Windows server. Repeated signals can coalesce; wait for the completion log rather than treating the signal as an acknowledgment.
 
 3. Wait for `heap snapshot written` in the channel's log before opening the file. Snapshots are written to the same log directory as `heap-<pid>-<timestamp>.heapsnapshot`; writing a large heap can take several seconds and the file is incomplete until the completion message appears:
 
