@@ -1,5 +1,7 @@
 # Manual app performance suite
 
+**Headline session-switch result:** use the [full original-before/current comparison](./tab-switch-full-comparison.md). The affected restored tabs improve from approximately 520-530 ms to 64-71 ms against the original real-data baseline. Intermediate pass-to-pass measurements are supporting diagnostics, not the headline user-experience comparison.
+
 The app's high-volume performance diagnostics live under `packages/app/e2e/performance` and are excluded from normal local and CI Playwright discovery. The benchmark config builds the app and serves the production bundle before running scenarios serially.
 
 The `devex` category is the explicit exception to the production-build rule. It measures development commands from submission through a user-visible ready state and has its own Playwright configuration.
@@ -65,7 +67,7 @@ The fixture requires every benchmark to call `report()`, automatically names and
 BENCHMARK {"name":"...","context":{"project":"chromium","platform":"darwin"},"metrics":{...}}
 ```
 
-Every observed page also emits `BENCHMARK_PAGE` with the same run ID, navigation history, and optional trace path before the final status-bearing `BENCHMARK` record. Chrome traces are browser-wide page-lifetime diagnostics; scenario metrics use narrower explicitly named observation windows.
+Every observed page also emits `BENCHMARK_PAGE` with the same run ID, navigation history, optional trace path, and trace scope before the final status-bearing `BENCHMARK` record. Chrome traces are browser-wide; the default window is page lifetime. Tab-switch traces begin after scenario setup and include explicit interaction markers. Scenario metrics use their own narrower observation windows.
 
 This follows the stack's own guidance: [Electron recommends repeated Chrome DevTools and Chrome Tracing measurement](https://www.electronjs.org/docs/latest/tutorial/performance), [Chrome DevTools recommends Performance recordings for runtime work](https://developer.chrome.com/docs/devtools/performance), and [Playwright uses traces for test debugging rather than renderer profiling](https://playwright.dev/docs/trace-viewer).
 
@@ -81,12 +83,61 @@ Committed smoke and regression tests continue to own correctness coverage for pa
 
 Tab-switch timing starts at `mousedown`, when mouse-selected tabs actually navigate, with a `click` fallback for keyboard activation. The probe excludes hidden/transparent content and intersects answers with their virtual-row clip and viewport. The tab workload requires the destination's final answer to be visible with Markdown ready. These results are not directly comparable to older click-start, geometry-only measurements. `stableObservedMs` includes confirmation across three correct samples; `firstCorrectObservedMs` is the first sample meeting all content and geometry checks. Neither is a compositor presentation timestamp.
 
-Each tab scenario reports one sample, including its raw observations. Use Playwright's `--repeat-each=5` for repeated measurements. Cached scenarios warm the destination at the same panel width before leaving it; a separate resized scenario validates reuse after opening the review pane changes that width.
+Each tab scenario reports one sample, including its raw observations. Use Playwright's `--repeat-each=20` for a baseline distribution. Warm scenarios prepare the destination at the same panel width before leaving it; a separate resized scenario validates reuse after opening the review pane changes that width.
+
+The tab-switch workload uses two equally long sessions: 200 user/assistant exchanges (400 messages) per tab. Every answer includes headings, emphasis, links, a blockquote, task and nested lists, an eight-row table, and four highlighted code fences (TSX, JSON, SQL, Bash), alongside the stress fixture's reasoning and tools. The mock API deliberately returns all 400 messages in one response so every scenario measures a long loaded history, not a short paginated tail. The viewport is fixed at 1440 x 900. Results include the fixture version, Markdown and serialized-message byte counts, and message-request count. These numbers are not directly comparable to the earlier 12-exchange source / 72-exchange destination fixture.
+
+Cold means the destination transcript has never rendered in that fresh browser context. Warm means its complex answer was rendered and ready before switching away and back. Both use the app's normal restored-tab data prefetch, which completes before measurement; neither includes app startup, the source session's Markdown engine initialization, or a cold backend fetch. The suite asserts no message fetch during either measured switch. Setup waits for mounted Markdown to finish and for the review-pane width transition to complete. Service workers are blocked to exclude the web build's background asset precache from this renderer benchmark. Screenshots are attached after measurement for the first repetition; Playwright video and trace recording are disabled for this workload, while opt-in Chrome profiling remains available. For a baseline distribution, use `--repeat-each=20 --retries=0`, keep profiling disabled, and report the median and p95 of `firstCorrectObservedMs` separately from the three-observation `stableObservedMs`.
 
 ```sh
 bunx playwright test --config e2e/performance/playwright.config.ts \
-  timeline/session-tab-switch-benchmark.spec.ts --repeat-each=5
+  timeline/session-tab-switch-benchmark.spec.ts --repeat-each=20 --retries=0
 ```
+
+The [2026-08-28 tab-switch baseline](./tab-switch-baseline.md) records the long-session workload, machine, measurement definitions, and results for comparison.
+
+The [optimization comparison](./tab-switch-optimization.md) records the paired baseline/candidate results, source-mapped CPU findings, memory measurements, and retained tradeoffs.
+
+The [second-pass report](./tab-switch-round2.md) records the follow-up changes, the event-driven cold reveal, and separate cache-disabled and cache-enabled comparisons. Do not compare absolute timings from different transports or machine-load periods as if they were one experiment.
+
+**The tab-switch fixture is not an end-to-end cold-data benchmark.** It prefetches destination messages and returns full history. The [real local-data investigation](./tab-switch-real-data.md) reproduced 360-568 ms first-open delays with normal pagination and identified a client-side history-readiness gate. It includes the fix, real-API comparisons, anonymized Mermaid evidence, and the limits of the measurement.
+
+The [per-pass real-session diagnostics](./tab-switch-real-fast.md) separate cold direct routes, actual Home-row opening, and normally prefetched but unvisited titlebar tabs. They record implementation-stage measurements and the memory tradeoff. For the complete user-visible gain, use the [full original-before/current comparison](./tab-switch-full-comparison.md). These entry paths must not be combined into one "cold tab" number.
+
+For a repeatable tab-switch summary, run from `packages/app`:
+
+```sh
+bun run bench:tabs
+```
+
+This runs only the tab-switch benchmark against the production build with 20 serial repetitions and no retries. It prints the median (mean of the two middle values for even sample counts) and nearest-rank p95 for `firstCorrectObservedMs` and `stableObservedMs` per scenario. Only records whose benchmark and Playwright statuses are passed and whose two metrics are finite enter the summary. Test and record statuses, missing records, and excluded samples are reported separately.
+
+Complete original `BENCHMARK` JSON records, including samples, context, and failed records, are saved as `tab-switch-benchmark.jsonl` in Playwright's configured output directory (default: `e2e/test-results/performance`). Standard Playwright flags can override defaults when appended:
+
+```sh
+bun run bench:tabs --repeat-each=3 --output=e2e/test-results/tabs-smoke
+```
+
+Set `OPENCODE_PERFORMANCE_MEMORY=1` for an opt-in renderer-main-isolate heap and DOM sample after mounted content is ready and an explicit GC completes. Probe DOM references are released before collection. This is not total desktop memory; do not mix these diagnostic runs with unprofiled latency samples. Set `OPENCODE_PERFORMANCE_TRACE_DIR` for a separate Chrome trace of each tab interaction, starting after preparation, with `session-switch:start`, `session-switch:ready`, and `session-switch:stable` markers.
+
+### Cache-Enabled HTTP Fixture
+
+The default tab harness uses Playwright routing for API responses. Playwright routing disables the browser HTTP cache, including for unrelated SVG assets. To measure with HTTP caching enabled, the same API handlers and tab data can run on a real loopback HTTP endpoint:
+
+```sh
+bun run build
+bun e2e/performance/tab-switch-server.ts --port 4639 --dist dist
+```
+
+With that fixture running, run the benchmark in a separate terminal from `packages/app`:
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL = "http://127.0.0.1:4639"
+$env:OPENCODE_PERFORMANCE_HTTP_FIXTURE = "1"
+bun run bench:tabs
+```
+
+Use `--dist` to select a frozen production bundle when comparing revisions. An explicit `PLAYWRIGHT_BASE_URL` means the benchmark does not rebuild or start another preview. The fixture gives hashed assets immutable cache headers; it serves the deterministic read workload, not the live OpenCode service. Each test still gets a fresh browser context, and source-session setup still occurs before the measured switch. API responses use `no-store`, service workers remain blocked, and no destination Markdown is rendered before a cold switch. Records identify the transport as `http` or `playwright-route`; keep these series separate. Unset `OPENCODE_PERFORMANCE_HTTP_FIXTURE` when returning to the default routed harness.
 
 ## Retained renderer memory
 

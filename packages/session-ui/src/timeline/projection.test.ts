@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
+import type {
+  ModelRef,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
+import { createStore } from "solid-js/store"
+import { createTimelineProjection, reuseTimelineRows, Timeline, TimelineRow, type PartGroup } from "./projection"
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
@@ -37,6 +43,111 @@ const part = (key: string, partID: string) =>
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
+
+describe("Timeline.resolveContent", () => {
+  const assistant = (content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
+    id: "assistant",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content,
+    time: { created: 0 },
+  })
+  const tool = (id: string): SessionMessageAssistantTool => ({
+    id,
+    type: "tool",
+    name: "read",
+    state: { status: "running", input: {}, metadata: {} },
+    time: { created: 0 },
+  })
+
+  test("matches contentEntries for interleaved tools, text, reasoning, and blank parts", () => {
+    const message = assistant([
+      { type: "text", text: "" },
+      { type: "reasoning", text: "", time: { created: 0 } },
+      tool("first-tool"),
+      { type: "text", text: "answer" },
+      { type: "reasoning", text: "thought", time: { created: 0 } },
+      tool("last-tool"),
+      { type: "text", text: " " },
+      { type: "reasoning", text: " ", time: { created: 0 } },
+    ])
+
+    Timeline.contentEntries(message).forEach((entry) => {
+      expect(Timeline.resolveContent(message, entry.id)).toBe(entry.content)
+    })
+    expect(Timeline.resolveContent(message, "missing")).toBeUndefined()
+  })
+
+  test("returns the first exact reference when tool IDs duplicate or match a text ID", () => {
+    const message = assistant([{ type: "text", text: "answer" }])
+    const id = Timeline.contentEntries(message)[0].id
+    message.content.push(tool(id), tool("duplicate"), tool("duplicate"))
+
+    const entries = Timeline.contentEntries(message)
+    entries.forEach((entry) => {
+      expect(Timeline.resolveContent(message, entry.id)).toBe(entries.find((item) => item.id === entry.id)?.content)
+    })
+
+    message.content.unshift(tool(id))
+    expect(Timeline.resolveContent(message, id)).toBe(message.content[0])
+  })
+
+  test("does not read later parts after a match", () => {
+    let reads = 0
+    const message = assistant([
+      tool("first"),
+      {
+        get type() {
+          reads += 1
+          return "text" as const
+        },
+        text: "later",
+      },
+    ])
+    const entry = Timeline.contentEntries(message)[0]
+    reads = 0
+
+    expect(Timeline.resolveContent(message, entry.id)).toBe(entry.content)
+    expect(reads).toBe(0)
+  })
+
+  test("returns undefined for absent, non-assistant, and empty messages", () => {
+    expect(Timeline.resolveContent(undefined, "missing")).toBeUndefined()
+    expect(
+      Timeline.resolveContent({ id: "user", type: "user", text: "prompt", time: { created: 0 } }, "missing"),
+    ).toBeUndefined()
+    expect(Timeline.resolveContent(assistant([]), "missing")).toBeUndefined()
+  })
+
+  test("resolves current Solid store references after nested changes, replacements, and appends", () => {
+    const [store, setStore] = createStore({
+      message: assistant([
+        { type: "text", text: "original" },
+        { type: "reasoning", text: "thought", time: { created: 0 } },
+        tool("original-tool"),
+      ]),
+    })
+    const entries = Timeline.contentEntries(store.message)
+    setStore("message", "content", 0, { type: "text", text: "updated" })
+    expect(Timeline.resolveContent(store.message, entries[0].id)).toBe(entries[0].content)
+    expect(Timeline.resolveContent(store.message, entries[0].id)).toMatchObject({ text: "updated" })
+
+    setStore("message", "content", 2, { type: "tool", id: "renamed-tool" })
+    expect(Timeline.resolveContent(store.message, entries[2].id)).toBeUndefined()
+    Timeline.contentEntries(store.message).forEach((entry) => {
+      expect(Timeline.resolveContent(store.message, entry.id)).toBe(entry.content)
+    })
+
+    setStore("message", "content", () => [{ type: "text" as const, text: "replacement" }, tool("replacement-tool")])
+    expect(Timeline.resolveContent(store.message, entries[0].id)).not.toBe(entries[0].content)
+    expect(Timeline.resolveContent(store.message, entries[1].id)).toBeUndefined()
+    setStore("message", "content", store.message.content.length, { type: "reasoning", text: "appended" })
+    Timeline.contentEntries(store.message).forEach((entry) => {
+      expect(Timeline.resolveContent(store.message, entry.id)).toBe(entry.content)
+    })
+  })
+})
 
 describe("reuseTimelineRows", () => {
   test.each([
