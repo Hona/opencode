@@ -6,6 +6,9 @@ import { MarkdownProvider } from "../src/context/markdown"
 import { OpenCode } from "@opencode-ai/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 
+export { sanitizeMarkdown } from "../src/components/markdown-cache"
+export { renderMermaidSvg } from "../src/components/markdown-mermaid"
+
 export async function mountMarkdown(options: {
   text: string
   streaming?: boolean

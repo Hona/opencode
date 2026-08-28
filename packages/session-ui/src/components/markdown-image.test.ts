@@ -4,7 +4,10 @@ import { localImagePath } from "./markdown-image"
 test.each([
   ["C:/tmp/chart.png", "C:/tmp/chart.png"],
   ["C:\\tmp\\chart.png", "C:/tmp/chart.png"],
+  ["D:/charts/chart.png", "D:/charts/chart.png"],
+  ["Z:\\charts\\chart.png", "Z:/charts/chart.png"],
   ["file:///C:/tmp/chart%20one.png", "C:/tmp/chart one.png"],
+  ["file:///d:/charts/chart%20one.png", "d:/charts/chart one.png"],
   ["file:///tmp/chart.png", "/tmp/chart.png"],
   ["file://localhost/tmp/chart.png", "/tmp/chart.png"],
   ["/tmp/chart.png", "/tmp/chart.png"],

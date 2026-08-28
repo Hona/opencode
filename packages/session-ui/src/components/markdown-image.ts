@@ -47,8 +47,11 @@ export function createMarkdownImages(read: ReadMarkdownImage) {
         if (!existing) {
           entries.set(path, entry)
           entry.result = read(path, entry.controller.signal)
-            .then((blob) => {
+            .then(async (blob) => {
               if (!blob || entry.controller.signal.aborted) return
+              // SVG documents must not inherit the app origin if opened outside the image element.
+              if (blob.type === "image/svg+xml")
+                return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
               entry.url = URL.createObjectURL(blob)
               return entry.url
             })
