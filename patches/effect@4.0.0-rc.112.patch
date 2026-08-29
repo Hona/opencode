@@ -1,5 +1,5 @@
 diff --git a/dist/RcMap.js b/dist/RcMap.js
-index 6e9a9ad04ec2c0fef0852cc0e6b3b1dba530a6f4..4e7feb00b0d0484b96f0543ce5e47b63a7ca8632 100644
+index 6e9a9ad04ec2c0fef0852cc0e6b3b1dba530a6f4..ba5a15d9585438528ff3d6f549d22ac6e831a049 100644
 --- a/dist/RcMap.js
 +++ b/dist/RcMap.js
 @@ -254,10 +254,14 @@ const release = (self, key, entry) => Effect.withFiber(fiber => {
