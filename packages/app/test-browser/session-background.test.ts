@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSessionBackground } from "./background"
+import { createSessionBackground } from "@/session/requests/background"
 
 const tool = (
   id: string,
