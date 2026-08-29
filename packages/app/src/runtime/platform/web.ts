@@ -52,7 +52,7 @@ export function createWebPlatform(version: string) {
   }
 }
 
-export function getCurrentServerUrl() {
+function getCurrentServerUrl() {
   if (location.hostname.includes("opencode.ai")) return "http://localhost:49374"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
