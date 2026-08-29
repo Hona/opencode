@@ -104,6 +104,10 @@ bun run bench:tabs
 
 This runs only the tab-switch benchmark against the production build with 20 serial repetitions and no retries. It prints the median (mean of the two middle values for even sample counts) and nearest-rank p95 for `firstCorrectObservedMs` and `stableObservedMs` per scenario. Only records whose benchmark and Playwright statuses are passed and whose two metrics are finite enter the summary. Test and record statuses, missing records, and excluded samples are reported separately.
 
+For fresh entry paths, run `bun run bench:entry` from `packages/app`. It uses the same production, serial-repetition, and reporting defaults. The cases open an empty draft from the actual Home button, create a draft with the titlebar plus from an active session, and open a cold paginated session from Home. Draft readiness requires a focused editable composer, the expected model, project control, and new tab; typing and absence of backend mutations are checked afterward. Session readiness requires the latest group, ready answer Markdown, and bottom anchoring. These cases are separate from prefetched tab remounts.
+
+For milestone charts, rerun frozen builds with one workload and counterbalanced serial order. Do not connect historical medians from different transports, preparation, or machine-load periods. Show samples or ranges, name the checkpoints accurately, and distinguish experimental build snapshots from Git commits.
+
 Complete original `BENCHMARK` JSON records, including samples, context, and failed records, are saved as `tab-switch-benchmark.jsonl` in Playwright's configured output directory (default: `e2e/test-results/performance`). Standard Playwright flags can override defaults when appended:
 
 ```sh
@@ -154,7 +158,7 @@ bunx playwright test --config e2e/performance/playwright.config.ts \
 
 The emitted JSON is a standard Chrome trace and can be loaded directly into the Chrome DevTools Performance panel. `devtools-tracing` can optionally inspect it from the command line without adding package scripts or dependencies:
 
-Trace capture mirrors [Puppeteer's official tracing defaults and lifecycle](https://pptr.dev/api/puppeteer.tracing), using Chrome's `ReturnAsStream` transfer mode and failing when Chromium reports trace data loss.
+Trace capture follows [Puppeteer's tracing lifecycle](https://pptr.dev/api/puppeteer.tracing), using Chrome's `ReturnAsStream` transfer mode and failing when Chromium reports trace data loss. V8 CPU sample stacks support attribution through the frozen build's source maps. Set `OPENCODE_PERFORMANCE_STACK_TRACE=1` only when per-event timeline stacks are needed; they add substantial overhead. Keep profiled runs separate from latency distributions, including when comparing the stack-capture modes.
 
 ```sh
 bunx devtools-tracing stats <trace-path-from-BENCHMARK_PAGE>

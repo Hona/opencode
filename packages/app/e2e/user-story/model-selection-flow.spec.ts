@@ -7,6 +7,10 @@ import { expectAppVisible } from "../utils/waits"
 const directory = "C:/OpenCode/NewProject"
 
 test("creates a session in a new project and selects its model", async ({ page }) => {
+  // An empty draft must remain usable when the file viewer is unavailable.
+  await page.route(/(?:\/_assets\/file-(?!icon-)[^/]+\.js|\/session-ui\/src\/components\/file\.tsx)(?:\?|$)/, (route) =>
+    route.abort(),
+  )
   await mockOpenCodeServer(page, {
     directory,
     project: {
