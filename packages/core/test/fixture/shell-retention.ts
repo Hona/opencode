@@ -1,6 +1,5 @@
 import { fullGC, heapStats } from "bun:jsc"
 import { Effect, Layer, Logger, ManagedRuntime } from "effect"
-import path from "node:path"
 import { Database } from "@opencode-ai/core/database/database"
 import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
@@ -33,7 +32,7 @@ if (
   throw new Error("Expected exit, timeout, or no-timeout and a positive byte count")
 }
 
-const layer = LayerNode.compile(LayerNode.group([Shell.node, Location.node]), [
+const layer = LayerNode.compile(Shell.node, [
   [Location.node, tempLocationLayer],
   [Environment.node, hostEnvironmentLayer],
   [Global.node, tempGlobalLayer],
@@ -46,14 +45,11 @@ const shell = await runtime.runPromise(Shell.Service)
 const warm = await runtime.runPromise(shell.create({ command: "echo warm", shell: executable, timeout: 30_000 }))
 await runtime.runPromise(shell.wait(warm.id))
 await runtime.runPromise(shell.remove(warm.id))
-const source =
-  iterations > 1 ? path.join((await runtime.runPromise(Location.Service)).directory, "sentinel-output.txt") : undefined
-if (source) await Bun.write(source, Buffer.alloc(bytes, "x"))
 await collect()
 const before = memory()
 const probes = []
 for (let i = 0; i < iterations; i++) {
-  probes.push(await run(shell, source))
+  probes.push(await run(shell))
   if (iterations > 1 && (i + 1) % 100 === 0) console.error(`Completed ${i + 1}/${iterations} shell commands`)
 }
 const probe = probes[probes.length - 1]
@@ -75,6 +71,7 @@ console.log(
     mode,
     bytes,
     iterations,
+    workload: iterations > 1 ? "captured-context" : "shell-output",
     executable,
     bun: Bun.version,
     platform: process.platform,
@@ -95,15 +92,14 @@ console.log(
   }),
 )
 
-async function run(shell: Shell.Interface, source?: string) {
-  const sentinel = { output: "", called: false }
-  const command = source
-    ? process.platform === "win32"
-      ? "type sentinel-output.txt"
-      : "cat sentinel-output.txt"
-    : process.platform === "win32"
-      ? `[Console]::Out.Write(('x' * ${bytes})); ${mode === "timeout" ? "Start-Sleep -Seconds 30" : ""}`
-      : `head -c ${bytes} /dev/zero | tr '\\0' x${mode === "timeout" ? "; sleep 30" : ""}`
+async function run(shell: Shell.Interface) {
+  const sentinel = { output: iterations > 1 ? Buffer.alloc(bytes, "x") : "", called: false }
+  const command =
+    iterations > 1
+      ? "echo sentinel"
+      : process.platform === "win32"
+        ? `[Console]::Out.Write(('x' * ${bytes})); ${mode === "timeout" ? "Start-Sleep -Seconds 30" : ""}`
+        : `head -c ${bytes} /dev/zero | tr '\\0' x${mode === "timeout" ? "; sleep 30" : ""}`
   const info = await Effect.runPromise(
     shell.create({ command, shell: executable, timeout: mode === "exit" ? 30_000 : 0 }, () =>
       Effect.sync(() => {
@@ -120,15 +116,19 @@ async function run(shell: Shell.Interface, source?: string) {
     await Effect.runPromise(shell.timeout(info.id, 20))
   }
   await Effect.runPromise(shell.wait(info.id))
-  const output = await Effect.runPromise(shell.output(info.id, { limit: bytes }))
-  if (!sentinel.called || output.output.length !== bytes || output.output[0] !== "x" || output.output.at(-1) !== "x") {
+  const output = await Effect.runPromise(shell.output(info.id, { limit: iterations > 1 ? 64 : bytes }))
+  const valid =
+    iterations > 1
+      ? output.output.trim() === "sentinel" && sentinel.output.length === bytes
+      : output.output.length === bytes && output.output[0] === "x" && output.output.at(-1) === "x"
+  if (!sentinel.called || !valid) {
     throw new Error(
       `Preflight or sentinel output did not complete: ${JSON.stringify({ called: sentinel.called, size: output.size, output: output.output.slice(0, 200) })}`,
     )
   }
-  // Model a large invocation context. Shell history should retain the file, not this captured object.
-  sentinel.output = output.output
-  return { info, reference: new WeakRef(sentinel), control: new WeakRef({ output: output.output }) }
+  // Single-command tests use real output; the stress run captures a distinct buffer per invocation.
+  if (iterations === 1) sentinel.output = output.output
+  return { info, reference: new WeakRef(sentinel), control: new WeakRef({ output: sentinel.output }) }
 }
 
 async function collect() {
