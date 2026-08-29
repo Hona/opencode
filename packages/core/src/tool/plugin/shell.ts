@@ -1,7 +1,7 @@
 export * as ShellTool from "./shell.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
@@ -19,7 +19,7 @@ export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 
 const BACKGROUND_INSTRUCTION =
-  "You will be notified automatically when the command finishes. Avoid sleep commands or polling for completion; if you need the output before then, read the file directly."
+  "You will be notified automatically when the command finishes. The notification will include the command's output. DO NOT run sleep commands or poll the output file to check for completion. You can read from the file when its current output would be useful, such as when inspecting logs from a background server. Otherwise, continue with other work or end your response."
 const OS =
   process.platform === "darwin"
     ? "macOS"
@@ -102,7 +102,7 @@ const backgroundResult = (shellID: string, file: string) => ({
 
 export const Plugin = {
   id: "opencode.tool.shell",
-  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
@@ -280,7 +280,8 @@ export const Plugin = {
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
               const job = yield* runtime.job.start({
-                id: context.id,
+                // CodeMode children share a tool-call ID, but each shell must own its job.
+                id: info.id,
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -295,7 +296,7 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
 
@@ -304,7 +305,7 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
               if (result?.info.status === "error")

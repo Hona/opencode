@@ -11,8 +11,9 @@ import {
   InvalidProviderOutputError,
   InvalidRequestError,
   RateLimitError,
+  UnknownProviderError,
 } from "@opencode-ai/ai"
-import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
@@ -43,9 +44,8 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { PromptCacheDiagnostics } from "@opencode-ai/core/session/prompt-cache-diagnostics"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -119,6 +119,7 @@ const defaultSystem = SessionSystemPrompt.make([])
 const replacementModel = testModel("replacement")
 const compactModel = testModel("compact", { context: 4_000, output: 50 })
 const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const unknownContextModel = testModel("unknown-context", { context: 0, output: 32_000 })
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
 const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
@@ -552,6 +553,7 @@ const setup = Effect.gen(function* () {
     admit,
     resume,
     context: session.context(sessionID),
+    hooks,
     messages: session.messages({ sessionID }),
     inbox: session.inbox(sessionID),
     runPrompt: Effect.fnUntraced(function* (text: string) {
@@ -581,6 +583,18 @@ const scenario = (
       return yield* body(s)
     }),
   )
+
+// Subscribe before resuming; model requests can arrive before retry backoff is scheduled.
+const subscribeRetries = (s: Scenario) =>
+  Effect.gen(function* () {
+    const scheduled = yield* Queue.unbounded<SessionMessage.ID>()
+    yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runForEach((event) => Queue.offer(scheduled, event.data.assistantMessageID)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    return scheduled
+  })
 
 const providerUnavailable = () =>
   new AIError({
@@ -848,18 +862,19 @@ function* verifyEphemeralDeltas(s: Scenario, kind: FragmentKind) {
 function* verifyPartialFlushOnFailure(s: Scenario, kind: FragmentKind) {
   const prompt = `Fail after ${kind}`
   const fixture = fragmentFixture(kind, fragmentID(kind, "partial"), ["Partial"])
-  const failure = providerUnavailable()
+  // A non-retryable failure keeps the step terminal so the flushed fragments settle durably.
+  const failure = invalidRequest()
   yield* s.admit(prompt)
   yield* s.llm.push(TestLLM.failAfter(failure, ...fixture.partialEvents))
 
   expect(yield* s.resume.pipe(Effect.flip)).toBe(failure)
   expect(yield* s.context).toMatchObject([
     Expected.user(prompt),
-    Expected.assistant({ finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } }, [
+    Expected.assistant({ finish: "error", error: { type: "provider.invalid-request", message: "Invalid request" } }, [
       kind === "tool input"
         ? Expected.failedTool(
             { id: fragmentID(kind, "partial") },
-            { error: { type: "provider.transport", message: "Provider unavailable" } },
+            { error: { type: "provider.invalid-request", message: "Invalid request" } },
           )
         : fixture.expectedContent,
     ]),
@@ -1642,12 +1657,19 @@ describe("SessionRunnerLLM", () => {
     s.systemBaseline = "Changed context"
     yield* s.runPrompt("Second")
 
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(s.requests[0]),
-        PromptCacheDiagnostics.snapshot(s.requests[1]),
-      ),
-    ).toEqual({ status: "append-only", previousMessages: 1, currentMessages: 3 })
+    for (const field of [
+      "model",
+      "generation",
+      "providerOptions",
+      "http",
+      "toolChoice",
+      "cache",
+      "tools",
+      "system",
+    ] as const)
+      expect(s.requests[1][field]).toEqual(s.requests[0][field])
+    expect(s.requests[0].messages).toHaveLength(1)
+    expect(s.requests[1].messages.slice(0, 1)).toEqual([...s.requests[0].messages])
     expect(s.requests.map((request) => request.system.map((part) => part.text))).toEqual([
       [defaultSystem, "Initial context"],
       [defaultSystem, "Initial context"],
@@ -1749,22 +1771,6 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
     expect((yield* s.messages)[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
-  })
-
-  scenario("uses only the agent prompt and initial instructions as system parts", function* (s) {
-    const agent = yield* Agent.Service
-    yield* agent.transform((editor) =>
-      editor.update(Agent.ID.make("build"), (agent) => {
-        agent.system = "Build agent instructions"
-        agent.mode = "primary"
-      }),
-    )
-    yield* s.admit("First")
-
-    yield* s.llm.push(TestLLM.text("Done", "text-no-system"))
-    yield* s.resume
-
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
   })
 
   scenario("uses an explicitly selected non-build agent system", function* (s) {
@@ -2150,6 +2156,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("delivers steered manual compaction when the model has no context limit", function* (s) {
+    s.currentModel = unknownContextModel
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-unknown-history"))
     yield* s.runPrompt("Earlier question")
 
@@ -2497,7 +2504,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("recovers from provider context overflow without a configured context limit", function* (s) {
     yield* setupOverflowRecovery(s)
-    s.currentModel = model
+    s.currentModel = unknownContextModel
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("## Objective\n- Recover unknown limit", "text-summary-unknown-limit"),
@@ -2893,6 +2900,54 @@ describe("SessionRunnerLLM", () => {
         type: "reasoning",
         text: "Encrypted thought",
         providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+      },
+    ])
+  })
+
+  scenario("keeps one durable reasoning part when reasoning closes after text", function* (s) {
+    yield* s.admit("Think and answer")
+
+    const details = [{ type: "reasoning.text", text: "thinking", signature: "signed", index: 0 }]
+    yield* s.llm.push(
+      TestLLM.stop(
+        LLMEvent.reasoningStart({ id: "reasoning-0" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-0", text: "thinking" }),
+        LLMEvent.textStart({ id: "text-0" }),
+        LLMEvent.textDelta({ id: "text-0", text: "Hello" }),
+        LLMEvent.textDelta({ id: "text-0", text: " world" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-0",
+          providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+        }),
+        LLMEvent.textEnd({ id: "text-0" }),
+      ),
+    )
+    yield* s.resume
+    yield* replaySessionProjection(sessionID)
+
+    const assistant = requireAssistant(yield* s.context)
+    expect(assistant.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Think and answer"),
+      Expected.assistant({}, [
+        {
+          type: "reasoning",
+          text: "thinking",
+          state: { reasoningField: "reasoning", reasoningDetails: details },
+        },
+        { type: "text", text: "Hello world" },
+      ]),
+    ])
+
+    yield* s.admit("Continue")
+    yield* s.llm.push([])
+    yield* s.resume
+
+    expect(s.requests[1]?.messages[1]?.content.filter((part) => part.type === "reasoning")).toEqual([
+      {
+        type: "reasoning",
+        text: "thinking",
+        providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
       },
     ])
   })
@@ -3805,11 +3860,18 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("interrupts runner continuation when permission approval is declined", function* (s) {
+  scenario("interrupts runner continuation on a decline after settling an ordinary tool error", function* (s) {
     const registry = yield* Tool.Service
     yield* transformTools(
       registry,
       {
+        failed: {
+          name: "failed",
+          description: "Fail normally before the declined call",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () => Effect.fail(new Tool.Error({ message: "Ordinary tool failure" })),
+        },
         declined: {
           name: "declined",
           description: "Fail because the user declined approval",
@@ -3822,7 +3884,12 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Call declined")
 
-    yield* s.llm.push(TestLLM.tool("call-declined", "declined", {}))
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "call-failed", name: "failed", input: {} }),
+        LLMEvent.toolCall({ id: "call-declined", name: "declined", input: {} }),
+      ),
+    )
 
     const exit = yield* s.resume.pipe(Effect.exit)
 
@@ -3832,6 +3899,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       Expected.user("Call declined"),
       Expected.assistant({}, [
+        Expected.failedTool({ id: "call-failed" }, { error: { message: "Ordinary tool failure" } }),
         Expected.failedTool(
           { id: "call-declined" },
           { error: { type: "aborted", message: "The user declined this tool call" } },
@@ -3942,7 +4010,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("awaits started local tools before surfacing provider stream failure", function* (s) {
     yield* s.admit("Settle before failing")
-    const failure = providerUnavailable()
+    // Non-retryable so the step settles terminally instead of continuing after tool output.
+    const failure = invalidRequest()
     const tools = yield* s.blockTools()
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -4287,8 +4356,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(providerUnavailable()))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("1599 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("801 millis")
@@ -4306,16 +4376,83 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
   })
 
+  scenario("allows session retry hooks to veto a proposed retry", function* (s) {
+    const failure = providerUnavailable()
+    let observed: PluginHooks.Domains["session"]["retry"] | undefined
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        observed = event
+        event.decision = { retry: false }
+      }),
+    )
+    yield* s.llm.push(Stream.fail(failure))
+
+    expect(yield* s.runPrompt("Do not retry transport").pipe(Effect.flip)).toBe(failure)
+    expect(s.requests).toHaveLength(1)
+    expect(observed).toMatchObject({
+      sessionID,
+      agent: "build",
+      model: { providerID: "fake", id: "fake-model" },
+      error: { type: "provider.transport", message: "Provider unavailable" },
+      attempt: 2,
+      decision: { retry: false },
+    })
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+  })
+
+  scenario("allows session retry hooks to retry a terminal provider failure", function* (s) {
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        expect(event.decision).toEqual({ retry: false })
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.admit("Retry invalid request")
+    yield* s.llm.push(Stream.fail(invalidRequest()), TestLLM.text("Recovered", "forced-retry-success"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Retry invalid request"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
+  scenario("uses the final session retry hook delay", function* (s) {
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        event.decision = { retry: true, delay: 10_000 }
+      }),
+    )
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        expect(event.decision).toEqual({ retry: true, delay: 10_000 })
+        event.decision = { retry: true, delay: 5_000 }
+      }),
+    )
+    yield* s.admit("Use custom retry delay")
+    yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Recovered", "hook-delay-success"))
+    const scheduled = yield* subscribeRetries(s)
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("4999 millis")
+    expect(s.requests).toHaveLength(1)
+    yield* TestClock.adjust("1 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    const assistant = requireAssistant(yield* s.context)
+    expect(assistant.retry).toBeUndefined()
+  })
+
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {
     yield* s.admit("Interrupt retry backoff")
     yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Must not run", "unused-retry"))
-    const scheduled = yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
-      Stream.filter((event) => event.data.sessionID === sessionID),
-      Stream.runHead,
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Fiber.join(scheduled)
+    yield* Queue.take(scheduled)
     yield* s.session.interrupt(sessionID)
     const exit = yield* Fiber.await(run)
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
@@ -4355,8 +4492,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(incompleteStream()))
     yield* s.llm.push(TestLLM.text("Recovered", "incomplete-stream-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4376,8 +4514,9 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* s.llm.push(TestLLM.text("Recovered", "unknown-finish-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4394,8 +4533,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(rateLimited(5_000)))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-after-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("4999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")
@@ -4408,8 +4548,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(rateLimited(3_600_000)))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-cap-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("899999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")
@@ -4430,8 +4571,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text(" continuation", "continued-text"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4479,8 +4621,9 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* s.llm.push(TestLLM.text(" continuation", "unknown-continuation"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4492,6 +4635,76 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.text("Partial")]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+    ])
+  })
+
+  scenario("continues after a mid-stream rate limit honoring retry-after", function* (s) {
+    yield* s.admit("Continue after rate limit")
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        rateLimited(5_000),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "rate-limited-partial" }),
+        LLMEvent.textDelta({ id: "rate-limited-partial", text: "Partial" }),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text(" continuation", "rate-limit-continuation"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("4999 millis")
+    expect(s.requests).toHaveLength(1)
+    yield* TestClock.adjust("1 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "Partial" }],
+    })
+    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
+    })
+    expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Continue after rate limit"),
+      Expected.assistant({ finish: "error", error: { type: "provider.rate-limit" } }, [Expected.text("Partial")]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+    ])
+  })
+
+  scenario("continues after an unrecognized mid-stream provider failure", function* (s) {
+    const failure = new AIError({ reason: new UnknownProviderError({ message: "Provider returned error" }) })
+    yield* s.admit("Continue after unknown failure")
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        failure,
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "unknown-failure-partial" }),
+        LLMEvent.textDelta({ id: "unknown-failure-partial", text: "Partial" }),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text(" continuation", "unknown-failure-continuation"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("2400 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
+    })
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Continue after unknown failure"),
+      Expected.assistant({ finish: "error", error: { type: "provider.unknown" } }, [Expected.text("Partial")]),
       { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
       Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
     ])
@@ -4509,8 +4722,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "reasoning-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4551,8 +4765,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4587,9 +4802,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "tool-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4623,9 +4838,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "tool-defect-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4646,12 +4861,7 @@ describe("SessionRunnerLLM", () => {
   scenario(
     "shares retry accounting and assistant identity across transparent retries and partial continuations",
     function* (s) {
-      const scheduled = yield* Queue.unbounded<SessionMessage.ID>()
-      yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.runForEach((event) => Queue.offer(scheduled, event.data.assistantMessageID)),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      const scheduled = yield* subscribeRetries(s)
       yield* s.admit("Mix retry paths")
       const failure = incompleteStream()
       const partial = TestLLM.failAfter(
@@ -4693,11 +4903,11 @@ describe("SessionRunnerLLM", () => {
       ),
     )
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
+    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+      yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
-      yield* s.llm.wait(index + 2)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
     expect(s.requests).toHaveLength(5)
@@ -4711,11 +4921,11 @@ describe("SessionRunnerLLM", () => {
     const failure = providerUnavailable()
     yield* s.llm.always(Stream.fail(failure))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
+    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+      yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
-      yield* s.llm.wait(index + 2)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
     expect(s.requests).toHaveLength(5)
@@ -4760,8 +4970,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(failure))
     yield* s.llm.push(TestLLM.tool("call-after-retry", "echo", { text: "recovered" }), TestLLM.stop())
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -5156,6 +5367,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("preserves the provider failure when tool output persistence also fails", function* (s) {
+    let injected = false
+    yield* s.bus.project(SessionEvent.Tool.Success, (event) => {
+      if (event.data.id !== "call-store-provider-error") return Effect.void
+      return Effect.sync(() => {
+        injected = true
+      }).pipe(Effect.andThen(Effect.die("tool output persistence failed")))
+    })
     yield* s.admit("Storage fails while provider fails")
     yield* s.llm.push([
       LLMEvent.stepStart({ index: 0 }),
@@ -5167,6 +5385,7 @@ describe("SessionRunnerLLM", () => {
       _tag: "Failure",
     })
 
+    expect(injected).toBe(true)
     expect(requireAssistant(yield* s.context)).toMatchObject({
       error: { type: "provider.unknown", message: "Provider unavailable" },
     })
@@ -5254,7 +5473,8 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("durably fails a hosted tool left unresolved by a raw provider stream failure", function* (s) {
-    const failure = providerUnavailable()
+    // Non-retryable so the step settles terminally instead of continuing after tool output.
+    const failure = invalidRequest()
     yield* s.llm.push(
       Stream.concat(
         Stream.fromIterable([LLMEvent.stepStart({ index: 0 }), hostedCall("call-hosted-raw-failure", "effect")]),
@@ -5278,7 +5498,7 @@ describe("SessionRunnerLLM", () => {
     yield* replaySessionProjection(sessionID)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail hosted tool on raw failure"),
-      Expected.assistant({ finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } }, [
+      Expected.assistant({ finish: "error", error: { type: "provider.invalid-request", message: "Invalid request" } }, [
         Expected.failedTool({ id: "call-hosted-raw-failure" }, {}),
       ]),
     ])

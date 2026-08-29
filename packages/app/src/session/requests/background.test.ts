@@ -61,7 +61,7 @@ const notification = (id: string, metadata: Record<string, string>) => ({
 })
 
 describe("createSessionBackground", () => {
-  test("excludes completed history by child ID and shell part ID, before or after the tool", () => {
+  test("excludes completed children and shells using either shell or tool-call IDs", () => {
     createRoot((dispose) => {
       const background = createSessionBackground({
         sessionID: () => "root",
@@ -70,9 +70,13 @@ describe("createSessionBackground", () => {
           assistant("assistant", [
             tool("before-part", "subagent", { status: "running", sessionID: "before-child" }),
             tool("shell-part", "shell", { status: "running", shellID: "process" }),
+            tool("shell-call", "shell", { status: "running", shellID: "shell-id" }),
+            tool("legacy-call", "shell", { status: "running", shellID: "legacy-shell" }),
             tool("child-part", "subagent", { status: "running", sessionID: "child" }, { agent: "explore" }),
           ]),
           notification("shell-done", { source: "shell", jobID: "shell-part" }),
+          notification("shell-id-done", { source: "shell", shellID: "shell-id" }),
+          notification("legacy-done", { source: "shell", jobID: "legacy-shell" }),
         ],
         sessions: () => [],
         status: () => "idle",

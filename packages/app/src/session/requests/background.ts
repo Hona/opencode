@@ -21,8 +21,10 @@ export function createSessionBackground(input: {
       if (message.type === "synthetic") {
         if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
           completed.add(message.metadata.childID)
-        if (message.metadata?.source === "shell" && typeof message.metadata.jobID === "string")
-          completed.add(message.metadata.jobID)
+        if (message.metadata?.source === "shell") {
+          if (typeof message.metadata.shellID === "string") completed.add(message.metadata.shellID)
+          if (typeof message.metadata.jobID === "string") completed.add(message.metadata.jobID)
+        }
         return latest
       }
       if (message.type !== "assistant") return latest
@@ -57,9 +59,11 @@ export function createSessionBackground(input: {
     }, undefined)
 
     return {
-      // Notifications can follow their tools; shell job IDs refer to the tool part, not the shell process.
+      // Completion notices can identify the shell or its original tool call.
       subagents: subagents.filter((task) => !completed.has(task.id)),
-      shells: shells.filter((item) => !completed.has(item.partID)).map((item) => item.task),
+      shells: shells
+        .filter((item) => !completed.has(item.partID) && !completed.has(item.task.id))
+        .map((item) => item.task),
       blocking:
         assistant?.content.flatMap((part) => {
           if (part.type !== "tool" || part.state.status !== "running") return []
