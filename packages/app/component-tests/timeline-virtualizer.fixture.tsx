@@ -58,24 +58,6 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
       canRenderImmediately: () => input.immediate ?? false,
     })
 
-    const snapshot = () => {
-      const mounted = [...content.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-      return {
-        mountedRows: mounted.length,
-        pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
-        viewportHeight: viewport.clientHeight,
-        observedHeight: Number(host.dataset.observedHeight),
-        scrollTop: viewport.scrollTop,
-        scrolls: Number(host.dataset.scrolls),
-        visibility: content.style.visibility,
-        geometry: mounted.map((element) => ({
-          key: element.dataset.timelineKey,
-          clipHeight: element.offsetHeight,
-          measuredHeight: element.querySelector<HTMLElement>("[data-index]")!.offsetHeight,
-        })),
-      }
-    }
-
     const resize = new ResizeObserver((entries) => {
       host.dataset.observedHeight = String(entries[0].borderBoxSize[0].blockSize)
       host.dataset.viewportResizes = String(Number(host.dataset.viewportResizes) + 1)
@@ -83,7 +65,16 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
     const reveal = new MutationObserver(() => {
       if (content.style.visibility === "hidden" || host.dataset.firstReveal) return
       // Capture the first reveal, not a later frame after geometry has recovered.
-      host.dataset.firstReveal = JSON.stringify(snapshot())
+      const mounted = [...content.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+      host.dataset.firstReveal = JSON.stringify({
+        rows: mounted.map((element) => Number(element.firstElementChild!.getAttribute("data-index"))),
+        pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
+        viewportHeight: viewport.clientHeight,
+        scrollTop: viewport.scrollTop,
+        clipped: mounted
+          .filter((element) => element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1)
+          .map((element) => element.dataset.timelineKey),
+      })
     })
     onCleanup(() => {
       resize.disconnect()
@@ -109,7 +100,6 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
             setState("ready", true)
             parent.prepend(viewport)
             container.style.removeProperty("display")
-            host.dataset.reconnected = JSON.stringify(snapshot())
           }}
         >
           Reconnect ready rows

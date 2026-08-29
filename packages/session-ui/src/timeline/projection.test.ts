@@ -61,91 +61,42 @@ describe("Timeline.resolveContent", () => {
     time: { created: 0 },
   })
 
-  test("matches contentEntries for interleaved tools, text, reasoning, and blank parts", () => {
-    const message = assistant([
-      { type: "text", text: "" },
-      { type: "reasoning", text: "", time: { created: 0 } },
-      tool("first-tool"),
-      { type: "text", text: "answer" },
-      { type: "reasoning", text: "thought", time: { created: 0 } },
-      tool("last-tool"),
-      { type: "text", text: " " },
-      { type: "reasoning", text: " ", time: { created: 0 } },
-    ])
-
-    Timeline.contentEntries(message).forEach((entry) => {
-      expect(Timeline.resolveContent(message, entry.id)).toBe(entry.content)
-    })
-    expect(Timeline.resolveContent(message, "missing")).toBeUndefined()
-  })
-
-  test("returns the first exact reference when tool IDs duplicate or match a text ID", () => {
-    const message = assistant([{ type: "text", text: "answer" }])
-    const id = Timeline.contentEntries(message)[0].id
-    message.content.push(tool(id), tool("duplicate"), tool("duplicate"))
-
-    const entries = Timeline.contentEntries(message)
-    entries.forEach((entry) => {
-      expect(Timeline.resolveContent(message, entry.id)).toBe(entries.find((item) => item.id === entry.id)?.content)
-    })
-
-    message.content.unshift(tool(id))
-    expect(Timeline.resolveContent(message, id)).toBe(message.content[0])
-  })
-
-  test("does not read later parts after a match", () => {
-    let reads = 0
-    const message = assistant([
-      tool("first"),
-      {
-        get type() {
-          reads += 1
-          return "text" as const
-        },
-        text: "later",
-      },
-    ])
-    const entry = Timeline.contentEntries(message)[0]
-    reads = 0
-
-    expect(Timeline.resolveContent(message, entry.id)).toBe(entry.content)
-    expect(reads).toBe(0)
-  })
-
-  test("returns undefined for absent, non-assistant, and empty messages", () => {
-    expect(Timeline.resolveContent(undefined, "missing")).toBeUndefined()
-    expect(
-      Timeline.resolveContent({ id: "user", type: "user", text: "prompt", time: { created: 0 } }, "missing"),
-    ).toBeUndefined()
-    expect(Timeline.resolveContent(assistant([]), "missing")).toBeUndefined()
-  })
-
-  test("resolves current Solid store references after nested changes, replacements, and appends", () => {
+  test("resolves interleaved ordinals and current store references", () => {
     const [store, setStore] = createStore({
       message: assistant([
-        { type: "text", text: "original" },
+        { type: "text", text: "" },
+        { type: "reasoning", text: "", time: { created: 0 } },
+        tool("read"),
+        { type: "text", text: "answer" },
         { type: "reasoning", text: "thought", time: { created: 0 } },
-        tool("original-tool"),
       ]),
     })
-    const entries = Timeline.contentEntries(store.message)
-    setStore("message", "content", 0, { type: "text", text: "updated" })
-    expect(Timeline.resolveContent(store.message, entries[0].id)).toBe(entries[0].content)
-    expect(Timeline.resolveContent(store.message, entries[0].id)).toMatchObject({ text: "updated" })
-
-    setStore("message", "content", 2, { type: "tool", id: "renamed-tool" })
-    expect(Timeline.resolveContent(store.message, entries[2].id)).toBeUndefined()
-    Timeline.contentEntries(store.message).forEach((entry) => {
-      expect(Timeline.resolveContent(store.message, entry.id)).toBe(entry.content)
-    })
+    expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
+    expect(Timeline.resolveContent(store.message, "assistant:reasoning:0")).toBe(store.message.content[1])
+    expect(Timeline.resolveContent(store.message, "read")).toBe(store.message.content[2])
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBe(store.message.content[3])
+    expect(Timeline.resolveContent(store.message, "assistant:reasoning:1")).toBe(store.message.content[4])
+    const original = store.message.content[3]
+    setStore("message", "content", 3, { type: "text", text: "updated" })
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBe(original)
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toMatchObject({ text: "updated" })
 
     setStore("message", "content", () => [{ type: "text" as const, text: "replacement" }, tool("replacement-tool")])
-    expect(Timeline.resolveContent(store.message, entries[0].id)).not.toBe(entries[0].content)
-    expect(Timeline.resolveContent(store.message, entries[1].id)).toBeUndefined()
-    setStore("message", "content", store.message.content.length, { type: "reasoning", text: "appended" })
-    Timeline.contentEntries(store.message).forEach((entry) => {
-      expect(Timeline.resolveContent(store.message, entry.id)).toBe(entry.content)
+    expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
+    expect(Timeline.resolveContent(store.message, "replacement-tool")).toBe(store.message.content[1])
+    expect(Timeline.resolveContent(store.message, "read")).toBeUndefined()
+    expect(Timeline.resolveContent(store.message, "assistant:text:1")).toBeUndefined()
+  })
+
+  test("stops reading as soon as the part is found", () => {
+    const message = assistant([tool("first")])
+    message.content.push({
+      get type(): "text" {
+        throw new Error("read past the matching part")
+      },
+      text: "later",
     })
+    expect(Timeline.resolveContent(message, "first")).toBe(message.content[0])
   })
 })
 

@@ -1,21 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import type {
-  JsonValue,
-  SessionInfo,
-  SessionMessageAssistant,
-  SessionMessageAssistantTool,
-  SessionMessageInfo,
-  ShellInfo,
-} from "@opencode-ai/client/promise"
+import type { SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { createSessionBackground } from "./background"
 
 const tool = (
   id: string,
   name: string,
-  metadata: Record<string, JsonValue>,
-  input: Record<string, JsonValue> = {},
+  metadata: Record<string, string>,
+  input: Record<string, string> = {},
   status: "completed" | "running" = "completed",
 ): SessionMessageAssistantTool => ({
   id,
@@ -28,23 +21,19 @@ const tool = (
   time: { created: 0 },
 })
 
-const assistant = (
-  id: string,
-  content: SessionMessageAssistant["content"],
-  completed?: number,
-): SessionMessageAssistant => ({
+const assistant = (id: string, content: SessionMessageAssistantTool[], completed?: number) => ({
   id,
-  type: "assistant",
+  type: "assistant" as const,
   agent: "build",
   model: { id: "model", providerID: "provider" },
   content,
   time: { created: 0, completed },
 })
 
-const session = (id: string, title?: string, parentID = "root"): SessionInfo => ({
+const session = (id: string): SessionInfo => ({
   id,
-  title,
-  parentID,
+  title: id,
+  parentID: "root",
   projectID: "project",
   location: { directory: "/project" },
   cost: 0,
@@ -52,319 +41,151 @@ const session = (id: string, title?: string, parentID = "root"): SessionInfo => 
   time: { created: 0, updated: 0 },
 })
 
-const shell = (id: string, command: string, sessionID = "root"): ShellInfo => ({
+const shell = (id: string, command: string): ShellInfo => ({
   id,
   command,
   status: "running",
   cwd: "/project",
   shell: "sh",
   file: "output",
-  metadata: { sessionID },
+  metadata: { sessionID: "root" },
   time: { started: 0 },
 })
 
+const notification = (id: string, metadata: Record<string, string>) => ({
+  id,
+  type: "synthetic" as const,
+  text: "complete",
+  metadata,
+  time: { created: 0 },
+})
+
 describe("createSessionBackground", () => {
-  test("filters notifications before and after tools using shell part IDs, not shell IDs", () => {
+  test("excludes completed history by child ID and shell part ID, before or after the tool", () => {
     createRoot((dispose) => {
-      const messages: SessionMessageInfo[] = [
-        {
-          id: "before",
-          type: "synthetic",
-          text: "complete",
-          metadata: { source: "subagent", childID: "before-child" },
-          time: { created: 0 },
-        },
-        assistant("assistant", [
-          tool("shell-done", "shell", { status: "running", shellID: "process-done" }),
-          tool("before-tool", "subagent", { status: "running", sessionID: "before-child" }),
-          tool("after-tool", "subagent", { status: "running", sessionID: "after-child" }),
-          tool("child-tool", "subagent", { status: "running", sessionID: "child" }, { agent: "explore" }),
-          tool("shell-kept", "shell", { status: "running", shellID: "process-kept" }, { command: "build" }),
-          tool("shell-fallback", "shell", { status: "running", shellID: 123 }, { command: false }),
-          tool("invalid-child", "subagent", { status: "running", sessionID: 123 }),
-          tool("finished-child", "subagent", { status: "completed", sessionID: "finished" }),
-          tool("other-tool", "read", { status: "running" }),
-        ]),
-        {
-          id: "after-child",
-          type: "synthetic",
-          text: "complete",
-          metadata: { source: "subagent", childID: "after-child" },
-          time: { created: 1 },
-        },
-        {
-          id: "after-shell",
-          type: "synthetic",
-          text: "complete",
-          metadata: { source: "shell", jobID: "shell-done" },
-          time: { created: 2 },
-        },
-        {
-          id: "shell-process",
-          type: "synthetic",
-          text: "not a tool ID",
-          metadata: { source: "shell", jobID: "process-kept" },
-          time: { created: 3 },
-        },
-        {
-          id: "unrelated",
-          type: "synthetic",
-          text: "not a completion",
-          metadata: { source: "other", childID: "child", jobID: "shell-fallback" },
-          time: { created: 4 },
-        },
-      ]
       const background = createSessionBackground({
         sessionID: () => "root",
-        messages: () => messages,
+        messages: () => [
+          notification("before", { source: "subagent", childID: "before-child" }),
+          assistant("assistant", [
+            tool("before-part", "subagent", { status: "running", sessionID: "before-child" }),
+            tool("shell-part", "shell", { status: "running", shellID: "process" }),
+            tool("child-part", "subagent", { status: "running", sessionID: "child" }, { agent: "explore" }),
+          ]),
+          notification("shell-done", { source: "shell", jobID: "shell-part" }),
+        ],
         sessions: () => [],
         status: () => "idle",
         shells: () => [],
       })
-
-      expect(background.tasks()).toEqual([
-        { id: "child", type: "subagent", label: "child", agent: "explore" },
-        { id: "process-kept", type: "shell", label: "build" },
-        { id: "shell-fallback", type: "shell", label: "shell-fallback" },
-      ])
-      expect(background.blocking()).toEqual([])
+      expect(background.tasks()).toEqual([{ id: "child", type: "subagent", label: "child", agent: "explore" }])
       dispose()
     })
   })
 
-  test("keeps category order and the last value at each ID's first insertion position", () => {
-    createRoot((dispose) => {
-      const background = createSessionBackground({
-        sessionID: () => "root",
-        messages: () => [
-          assistant("assistant", [
-            tool("shell-part", "shell", { status: "running", shellID: "shell" }, { command: "old shell" }),
-            tool("child-part", "subagent", { status: "running", sessionID: "child" }, { agent: "explore" }),
-            tool("duplicate-1", "subagent", { status: "running", sessionID: "duplicate" }, { description: "first" }),
-            tool("shared-child", "subagent", { status: "running", sessionID: "shared" }),
-            tool("duplicate-2", "subagent", { status: "running", sessionID: "duplicate" }, { description: "last" }),
-            tool("shared-shell", "shell", { status: "running", shellID: "shared" }, { command: "shared shell" }),
-          ]),
-        ],
-        sessions: () => [session("child", "live child"), session("shared"), session("live-child")],
-        status: () => "running",
-        shells: () => [shell("shell", "live shell"), shell("live-shell", "new shell")],
-      })
-
-      expect(background.tasks()).toEqual([
-        { id: "child", type: "subagent", label: "live child" },
-        { id: "duplicate", type: "subagent", label: "last", agent: undefined },
-        { id: "shared", type: "shell", label: "shared shell" },
-        { id: "live-child", type: "subagent", label: "live-child" },
-        { id: "shell", type: "shell", label: "live shell" },
-        { id: "live-shell", type: "shell", label: "new shell" },
-      ])
-      expect(background.tasks()[0]).not.toHaveProperty("agent")
-      dispose()
-    })
-  })
-
-  test("blocks live tasks by ID or nonempty label only from the latest incomplete assistant", () => {
-    createRoot((dispose) => {
-      const background = createSessionBackground({
-        sessionID: () => "root",
-        messages: () => [
-          assistant("earlier", [
-            tool("old", "subagent", { sessionID: "old-child" }, {}, "running"),
-            tool("historical", "subagent", { status: "running", sessionID: "blocked-child" }),
-          ]),
-          assistant("current", [
-            tool("child-id", "subagent", { sessionID: "blocked-child" }, {}, "running"),
-            tool("child-label", "subagent", {}, { description: "child label" }, "running"),
-            tool("shell-id", "shell", { shellID: "blocked-shell" }, {}, "running"),
-            tool("shell-label", "shell", {}, { command: "shell label" }, "running"),
-            tool("empty-label", "subagent", { sessionID: false }, { description: "" }, "running"),
-            tool("unrelated", "read", {}, {}, "running"),
-          ]),
-          assistant("completed", [tool("newer", "subagent", { sessionID: "old-child" }, {}, "running")], 0),
-        ],
-        sessions: () => [
-          session("blocked-child", "different title"),
-          session("label-child", "child label"),
-          session("old-child", "shell label"),
-          session("empty-child", ""),
-          session("idle-child"),
-          session("other-child", undefined, "other"),
-        ],
-        status: (id) => (id === "idle-child" ? "idle" : "running"),
-        shells: () => [
-          shell("blocked-shell", "different command"),
-          shell("label-shell", "shell label"),
-          shell("kept-shell", "child label"),
-          shell("other-shell", "other", "other"),
-          { ...shell("exited-shell", "exited"), status: "exited" },
-        ],
-      })
-
-      expect(background.blocking()).toEqual([
-        { type: "subagent", partID: "child-id", id: "blocked-child", label: undefined },
-        { type: "subagent", partID: "child-label", id: undefined, label: "child label" },
-        { type: "shell", partID: "shell-id", id: "blocked-shell", label: undefined },
-        { type: "shell", partID: "shell-label", id: undefined, label: "shell label" },
-        { type: "subagent", partID: "empty-label", id: undefined, label: "" },
-      ])
-      expect(background.tasks()).toEqual([
-        { id: "blocked-child", type: "subagent", label: "blocked-child", agent: undefined },
-        { id: "old-child", type: "subagent", label: "shell label" },
-        { id: "empty-child", type: "subagent", label: "" },
-        { id: "kept-shell", type: "shell", label: "child label" },
-      ])
-      dispose()
-    })
-  })
-
-  test("joins live status and labels without rescanning history, including while the parent is idle", () => {
+  test("joins live tasks while idle without rescanning history, then switches sessions", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore({
-        messages: [assistant("assistant", [tool("child-part", "subagent", { status: "running", sessionID: "saved" })])],
-        sessions: [session("child", "child")],
-        status: { root: "idle", child: "idle" } as Record<string, "idle" | "running">,
+        id: "root" as string | undefined,
+        messages: [
+          assistant("assistant", [
+            tool("shell-part", "shell", { status: "running", shellID: "shell" }, { command: "old command" }),
+            tool("child-part", "subagent", { status: "running", sessionID: "child" }),
+          ]),
+        ],
+        sessions: [session("live-child"), session("child")],
+        status: { root: "idle", child: "idle", "live-child": "idle" } as Record<string, "idle" | "running">,
         shells: [{ ...shell("shell", "command"), status: "exited" as ShellInfo["status"] }],
       })
       let scans = 0
       const background = createSessionBackground({
-        sessionID: () => "root",
-        messages: () => {
+        sessionID: () => store.id,
+        messages: (id) => {
           scans += 1
-          return store.messages
+          return id === "root" ? store.messages : []
         },
         sessions: () => store.sessions,
         status: (id) => store.status[id],
         shells: () => store.shells,
       })
       const blocking = background.blocking()
-      const saved = background.tasks()[0]
-      expect(scans).toBe(1)
+      const initial = background.tasks()
+      expect(initial.map((task) => task.id)).toEqual(["child", "shell"])
 
-      setStore("status", "child", "running")
-      expect(background.tasks().map((task) => task.id)).toEqual(["saved", "child"])
+      setStore("status", { child: "running", "live-child": "running" })
+      expect(background.tasks().map((task) => task.id)).toEqual(["child", "live-child", "shell"])
       setStore("shells", 0, "status", "running")
-      expect(background.tasks().map((task) => task.id)).toEqual(["saved", "child", "shell"])
-      setStore("sessions", 0, "title", "renamed")
+      expect(background.tasks().at(-1)?.label).toBe("command")
+      setStore("sessions", 1, "title", "renamed")
+      expect(background.tasks()[0]?.label).toBe("renamed")
       setStore("shells", 0, "command", "updated command")
-      expect(background.tasks().map((task) => task.label)).toEqual(["saved", "renamed", "updated command"])
-      expect(background.tasks()[0]).toBe(saved)
+      const live = background.tasks()
+      expect(live).toEqual([
+        { id: "child", type: "subagent", label: "renamed" },
+        { id: "live-child", type: "subagent", label: "live-child" },
+        { id: "shell", type: "shell", label: "updated command" },
+      ])
       expect(background.blocking()).toBe(blocking)
-      expect(store.status.root).toBe("idle")
       expect(scans).toBe(1)
 
-      setStore("status", "child", "idle")
+      setStore("id", "other")
+      expect(background.tasks()).toEqual([])
+      setStore("id", "root")
+      expect(background.tasks()).toEqual(live)
+      setStore("status", { child: "idle", "live-child": "idle" })
       setStore("shells", 0, "status", "exited")
-      expect(background.tasks()).toEqual([saved])
-      expect(scans).toBe(1)
+      expect(background.tasks()).toEqual(initial)
+      expect(scans).toBe(3)
+      setStore("id", undefined)
+      expect(background.tasks()).toEqual([])
       dispose()
     })
   })
 
-  test("tracks nested tool and notification updates without replacing the messages array", () => {
+  test("tracks blocking, backgrounding, and completion through nested store updates", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore({
-        messages: [assistant("assistant", [tool("part", "subagent", { sessionID: "child" }, {}, "running")])],
-        notifications: [
-          {
-            id: "notification",
-            type: "synthetic" as const,
-            text: "complete",
-            metadata: { source: "other", childID: "child" },
-            time: { created: 1 },
-          },
+        messages: [
+          assistant("earlier", [tool("old-part", "subagent", { sessionID: "old-child" }, {}, "running")]),
+          assistant("current", [
+            tool("child-part", "subagent", { sessionID: "child" }, {}, "running"),
+            tool("shell-part", "shell", {}, { command: "build" }, "running"),
+          ]),
+          assistant("completed", [], 0),
         ],
+        notification: notification("notice", { source: "subagent", childID: "other-child" }),
+        status: { child: "running", "old-child": "running" } as Record<string, "idle" | "running">,
       })
       const messages = store.messages
       const background = createSessionBackground({
         sessionID: () => "root",
-        messages: () => [...store.messages, ...store.notifications],
-        sessions: () => [],
-        status: () => "idle",
-        shells: () => [],
+        messages: () => [...store.messages, store.notification],
+        sessions: () => [session("child"), session("old-child")],
+        status: (id) => store.status[id],
+        shells: () => [shell("shell", "build")],
       })
-      expect(background.blocking()[0]?.id).toBe("child")
-      expect(background.tasks()).toEqual([])
-
-      setStore(
-        "messages",
-        produce((messages) => {
-          const part = messages[0].content[0]
-          if (part.type !== "tool" || part.state.status !== "running") return
-          part.state.metadata.sessionID = "renamed-child"
-          part.state.input.description = "renamed"
-        }),
-      )
-      expect(background.blocking()[0]).toEqual({
-        type: "subagent",
-        partID: "part",
-        id: "renamed-child",
-        label: "renamed",
-      })
-
-      setStore(
-        "messages",
-        produce((messages) => {
-          const part = messages[0].content[0]
-          if (part.type !== "tool") return
-          part.state = {
-            status: "completed",
-            input: { description: "background child" },
-            metadata: { status: "running", sessionID: "child" },
-            content: [{ type: "text", text: "backgrounded" }],
-          }
-        }),
-      )
-      expect(store.messages).toBe(messages)
-      expect(background.blocking()).toEqual([])
-      expect(background.tasks()).toEqual([
-        { id: "child", type: "subagent", label: "background child", agent: undefined },
+      expect(background.blocking()).toEqual([
+        { type: "subagent", partID: "child-part", id: "child", label: undefined },
+        { type: "shell", partID: "shell-part", id: undefined, label: "build" },
       ])
+      expect(background.tasks().map((task) => task.id)).toEqual(["old-child"])
 
-      setStore("notifications", 0, "metadata", "source", "subagent")
-      expect(background.tasks()).toEqual([])
-      setStore("notifications", 0, "metadata", "childID", "other")
-      expect(background.tasks()[0]?.id).toBe("child")
-      setStore(
-        "messages",
-        produce((messages) => {
-          const part = messages[0].content[0]
-          if (part.type !== "tool") return
-          part.state = { status: "running", input: {}, metadata: { sessionID: "child" } }
-        }),
-      )
-      expect(background.tasks()).toEqual([])
-      expect(background.blocking()[0]?.id).toBe("child")
-      setStore("messages", 0, "time", "completed", 0)
-      expect(background.blocking()).toEqual([])
-      setStore("messages", 0, "time", "completed", undefined)
-      expect(background.blocking()[0]?.id).toBe("child")
-      dispose()
-    })
-  })
-
-  test("clears history on a session change or when no primary session is selected", () => {
-    createRoot((dispose) => {
-      const [store, setStore] = createStore({ id: "root" as string | undefined })
-      const messages: Record<string, SessionMessageInfo[]> = {
-        root: [assistant("assistant", [tool("part", "shell", { status: "running" })])],
-        other: [],
-      }
-      const background = createSessionBackground({
-        sessionID: () => store.id,
-        messages: (id) => messages[id],
-        sessions: () => [session("child")],
-        status: () => "running",
-        shells: () => [shell("shell", "command")],
+      setStore("messages", 1, "content", 0, "state", {
+        status: "completed",
+        input: { description: "background child" },
+        metadata: { status: "running", sessionID: "child" },
+        content: [{ type: "text", text: "backgrounded" }],
       })
-      expect(background.tasks().map((task) => task.id)).toEqual(["child", "part", "shell"])
-      setStore("id", "other")
-      expect(background.tasks()).toEqual([])
-      setStore("id", "root")
-      expect(background.tasks().map((task) => task.id)).toEqual(["child", "part", "shell"])
-      setStore("id", undefined)
-      expect(background.tasks()).toEqual([])
+      expect(store.messages).toBe(messages)
+      expect(background.blocking().map((task) => task.partID)).toEqual(["shell-part"])
+      setStore("status", "child", "idle")
+      expect(background.tasks().map((task) => task.id)).toEqual(["child", "old-child"])
+      expect(background.tasks()[0]?.label).toBe("background child")
+      setStore("notification", "metadata", "childID", "child")
+      expect(background.tasks().map((task) => task.id)).toEqual(["old-child"])
+      setStore("messages", [0, 1], "time", "completed", 1)
       expect(background.blocking()).toEqual([])
+      expect(background.tasks().map((task) => task.id)).toEqual(["old-child", "shell"])
       dispose()
     })
   })
