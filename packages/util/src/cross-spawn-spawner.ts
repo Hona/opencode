@@ -272,7 +272,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         const drain = setTimeout(() => {
           proc.stdout?.push(null)
           proc.stderr?.push(null)
-        }, 1000)
+        }, 200)
         drain.unref()
         proc.once("close", () => clearTimeout(drain))
       })
