@@ -1,7 +1,5 @@
 # Manual app performance suite
 
-**Headline session-switch result:** use the [full original-before/current comparison](./tab-switch-full-comparison.md). The affected restored tabs improve from approximately 520-530 ms to 64-71 ms against the original real-data baseline. Intermediate pass-to-pass measurements are supporting diagnostics, not the headline user-experience comparison.
-
 The app's high-volume performance diagnostics live under `packages/app/e2e/performance` and are excluded from normal local and CI Playwright discovery. The benchmark config builds the app and serves the production bundle before running scenarios serially.
 
 The `devex` category is the explicit exception to the production-build rule. It measures development commands from submission through a user-visible ready state and has its own Playwright configuration.
@@ -94,15 +92,9 @@ bunx playwright test --config e2e/performance/playwright.config.ts \
   timeline/session-tab-switch-benchmark.spec.ts --repeat-each=20 --retries=0
 ```
 
-The [2026-08-28 tab-switch baseline](./tab-switch-baseline.md) records the long-session workload, machine, measurement definitions, and results for comparison.
+**The tab-switch fixture is not an end-to-end cold-data benchmark.** It prefetches destination messages and returns full history. Measure cold API navigation, Home-row opening, and prefetched-but-unvisited tabs separately with normal pagination. Do not combine these entry paths or compare different transports and machine-load periods as one experiment.
 
-The [optimization comparison](./tab-switch-optimization.md) records the paired baseline/candidate results, source-mapped CPU findings, memory measurements, and retained tradeoffs.
-
-The [second-pass report](./tab-switch-round2.md) records the follow-up changes, the event-driven cold reveal, and separate cache-disabled and cache-enabled comparisons. Do not compare absolute timings from different transports or machine-load periods as if they were one experiment.
-
-**The tab-switch fixture is not an end-to-end cold-data benchmark.** It prefetches destination messages and returns full history. The [real local-data investigation](./tab-switch-real-data.md) reproduced 360-568 ms first-open delays with normal pagination and identified a client-side history-readiness gate. It includes the fix, real-API comparisons, anonymized Mermaid evidence, and the limits of the measurement.
-
-The [per-pass real-session diagnostics](./tab-switch-real-fast.md) separate cold direct routes, actual Home-row opening, and normally prefetched but unvisited titlebar tabs. They record implementation-stage measurements and the memory tradeoff. For the complete user-visible gain, use the [full original-before/current comparison](./tab-switch-full-comparison.md). These entry paths must not be combined into one "cold tab" number.
+Keep one-off reports, recorded results, and traces outside git, in the ignored `e2e/performance/results/` directory or an external artifact directory. Preserve raw observations locally and publish anonymized summaries and charts in the PR description, not as committed experiment files.
 
 For a repeatable tab-switch summary, run from `packages/app`:
 
