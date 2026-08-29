@@ -266,6 +266,15 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
+        if (process.platform !== "win32") return
+        // Descendants can keep Windows stdio open after exit. Bound the EOF wait;
+        // the output pump still drains buffered chunks and flushes its file.
+        const drain = setTimeout(() => {
+          proc.stdout?.push(null)
+          proc.stderr?.push(null)
+        }, 1000)
+        drain.unref()
+        proc.once("close", () => clearTimeout(drain))
       })
       proc.on("close", (...args) => {
         if (end) return
