@@ -267,12 +267,14 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       proc.on("exit", (...args) => {
         exit = args
         if (process.platform !== "win32") return
-        // Descendants can keep Windows stdio open after exit. Bound the EOF wait;
-        // the output pump still drains buffered chunks and flushes its file.
+        // Particularly on Windows, some shell calls will cause detached descendants. Inherited stdio can hang the call.
+        // Almost every ecosystem has tried to fix this; there's no single "good" answer here.
+        // Calls that trigger this are e.g. dotnet build with warmed MSBuild processes, agent-browser, etc.
+        // One shared deadline covers stdout and stderr, then the output pump finishes its file.
         const drain = setTimeout(() => {
           proc.stdout?.push(null)
           proc.stderr?.push(null)
-        }, 200)
+        }, 1000)
         drain.unref()
         proc.once("close", () => clearTimeout(drain))
       })
