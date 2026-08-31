@@ -245,7 +245,7 @@ describe("cross-spawn spawner", () => {
       }),
     )
 
-    fx.effect(
+    fx.live(
       "forceKillAfter escalates for stubborn processes",
       Effect.gen(function* () {
         if (process.platform === "win32") return
