@@ -16,6 +16,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
+  // Let Chromium select within the focused editor without restoring the menu's saved focus.
+  if (entry.action === "edit.selectAll") return []
   return [{ action: entry.action, keybind: parseKeybind(entry.accelerator.windows) }]
 })
 
