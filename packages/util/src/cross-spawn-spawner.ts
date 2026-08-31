@@ -86,6 +86,7 @@ const toPlatformError = (
 }
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
+type Spawned = readonly [process: NodeChildProcess.ChildProcess, closed: ExitSignal, exited: ExitSignal]
 
 const makeCrossSpawnSpawner = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
@@ -237,21 +238,26 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     err: ChildProcess.StderrConfig,
     stopOutput: Deferred.Deferred<void>,
   ) => {
-    let stdout = proc.stdout
-      ? NodeStream.fromReadable({
-          evaluate: () => proc.stdout!,
-          onError: (cause) => toPlatformError("fromReadable(stdout)", toError(cause), command),
-        })
-      : Stream.empty
-    let stderr = proc.stderr
-      ? NodeStream.fromReadable({
-          evaluate: () => proc.stderr!,
-          onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command),
-        })
-      : Stream.empty
+    const capture = (readable: NodeChildProcess.ChildProcess["stdout"], name: string) => {
+      if (!readable) return Stream.empty
+      return NodeStream.fromReadable({
+        evaluate: () => readable,
+        onError: (cause) => toPlatformError(`fromReadable(${name})`, toError(cause), command),
+        closeOnDone: false,
+      }).pipe(
+        Stream.interruptWhen(Deferred.await(stopOutput)),
+        Stream.ensuring(
+          Effect.gen(function* () {
+            // Only the capture deadline transfers the reader back to the process scope.
+            if (yield* Deferred.isDone(stopOutput)) return
+            readable.destroy()
+          }),
+        ),
+      )
+    }
 
-    stdout = Stream.interruptWhen(stdout, Deferred.await(stopOutput))
-    stderr = Stream.interruptWhen(stderr, Deferred.await(stopOutput))
+    let stdout = capture(proc.stdout, "stdout")
+    let stderr = capture(proc.stderr, "stderr")
     if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream)
     if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream)
 
@@ -259,12 +265,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   }
 
   const launchProcess = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
-    Effect.callback<
-      readonly [NodeChildProcess.ChildProcess, ExitSignal, Deferred.Deferred<void>],
-      PlatformError.PlatformError
-    >((resume) => {
-      const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const stopOutput = Deferred.makeUnsafe<void>()
+    Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
+      const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
+      const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -273,26 +276,16 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
-        // Particularly on Windows, some shell calls will cause detached descendants. Inherited stdio can hang the call.
-        // Almost every ecosystem has tried to fix this; there's no single "good" answer here.
-        // Calls that trigger this are e.g. dotnet build with warmed MSBuild processes, agent-browser, etc.
-        // One shared deadline covers stdout and stderr, then the output pump finishes its file.
-        const drain = setTimeout(() => {
-          // A plain close does not wake Effect's pending readable pull.
-          Deferred.doneUnsafe(stopOutput, Exit.void)
-          proc.stdout?.destroy()
-          proc.stderr?.destroy()
-        }, 1000)
-        drain.unref()
-        proc.once("close", () => clearTimeout(drain))
+        Deferred.doneUnsafe(exited, Exit.succeed(args))
       })
       proc.on("close", (...args) => {
         if (end) return
         end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        Deferred.doneUnsafe(exited, Exit.succeed(exit ?? args))
+        Deferred.doneUnsafe(closed, Exit.succeed(exit ?? args))
       })
       proc.on("spawn", () => {
-        resume(Effect.succeed([proc, signal, stopOutput]))
+        resume(Effect.succeed([proc, closed, exited]))
       })
       return Effect.sync(() => {
         proc.kill("SIGTERM")
@@ -304,8 +297,36 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     opts: NodeChildProcess.SpawnOptions,
   ) {
     yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
-    return yield* launchProcess(command, opts)
+    const [proc, closed, exited] = yield* launchProcess(command, opts)
+    const stopOutput = yield* Deferred.make<void>()
+    // Register before process release so the deadline remains active during termination.
+    yield* Effect.forkScoped(
+      Effect.gen(function* () {
+        yield* Deferred.await(exited)
+        // Particularly on Windows, some shell calls will cause detached descendants. Inherited stdio can hang the call.
+        // Almost every ecosystem has tried to fix this; there's no single "good" answer here.
+        // Calls that trigger this are e.g. dotnet build with warmed MSBuild processes, agent-browser, etc.
+        // One shared deadline covers stdout and stderr, then the output pump finishes its file.
+        if ((yield* Effect.timeoutOption(Deferred.await(closed), 1000))._tag === "Some") return
+        yield* Deferred.succeed(stopOutput, undefined)
+        discard(proc.stdout)
+        discard(proc.stderr)
+      }),
+    )
+    return [proc, closed, exited, stopOutput] as const
   })
+
+  const discard = (readable: NodeChildProcess.ChildProcess["stdout"]) => {
+    if (!readable) return
+    // read() also drains while a backpressured Effect adapter still has a readable listener.
+    const drain = () => {
+      while (readable.read() !== null) {}
+    }
+    readable.on("readable", drain)
+    readable.once("error", () => {})
+    readable.once("close", () => readable.off("readable", drain))
+    drain()
+  }
 
   const killGroup = (
     command: ChildProcess.StandardCommand,
@@ -342,48 +363,24 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   const stop = (
     command: ChildProcess.StandardCommand,
     proc: NodeChildProcess.ChildProcess,
-    exit: ExitSignal,
+    closed: ExitSignal,
+    stopOutput: Deferred.Deferred<void>,
     opts: ChildProcess.KillOptions | undefined,
   ) => {
-    let group = false
-    const send = (signal: NodeJS.Signals) =>
-      killGroup(command, proc, signal).pipe(
-        Effect.as(true),
-        Effect.catch(() => Effect.as(killOne(command, proc, signal), false)),
+    const terminate = (signal: NodeJS.Signals) =>
+      Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)).pipe(
+        Effect.andThen(
+          signal === "SIGKILL"
+            ? Effect.raceFirst(Deferred.await(closed), Deferred.await(stopOutput))
+            : Deferred.await(closed),
+        ),
+        Effect.asVoid,
       )
-    const attempt = Effect.gen(function* () {
-      group = yield* send(opts?.killSignal ?? "SIGTERM")
-      // Closing captured pipes does not mean a POSIX process group has stopped.
-      if (process.platform !== "win32" && group && opts?.forceKillAfter !== undefined) {
-        while (
-          yield* Effect.try({ try: () => process.kill(-proc.pid!, 0), catch: toError }).pipe(
-            Effect.catch((error) =>
-              Predicate.hasProperty(error, "code") && error.code === "ESRCH"
-                ? Effect.succeed(false)
-                : Effect.fail(toPlatformError("kill", error, command)),
-            ),
-          )
-        ) {
-          yield* Effect.sleep(50)
-        }
-      }
-      yield* Deferred.await(exit)
-    })
+    const attempt = terminate(opts?.killSignal ?? "SIGTERM")
     if (opts?.forceKillAfter === undefined) return attempt
     return Effect.timeoutOrElse(attempt, {
       duration: opts.forceKillAfter,
-      // Do not poll after SIGKILL: unreaped zombies can still appear in the group.
-      orElse: () =>
-        (group && process.platform !== "win32"
-          ? killGroup(command, proc, "SIGKILL").pipe(
-              Effect.catch((error) =>
-                Predicate.hasProperty(error.reason.cause, "code") && error.reason.cause.code === "ESRCH"
-                  ? Effect.void
-                  : Effect.fail(error),
-              ),
-            )
-          : send("SIGKILL")
-        ).pipe(Effect.andThen(Deferred.await(exit)), Effect.asVoid),
+      orElse: () => terminate("SIGKILL"),
     })
   }
 
@@ -415,7 +412,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           const extra = fds(command.options)
           const dir = yield* cwd(command.options)
 
-          const [proc, signal, stopOutput] = yield* Effect.acquireRelease(
+          const [proc, closed, exited, stopOutput] = yield* Effect.acquireRelease(
             spawn(command, {
               cwd: dir,
               env: env(command.options),
@@ -424,17 +421,36 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
             }),
-            Effect.fnUntraced(function* ([proc, signal]) {
-              const done = yield* Deferred.isDone(signal)
-              if (done) {
-                const [code] = yield* Deferred.await(signal)
-                if (process.platform === "win32") return yield* Effect.void
-                if (code === 0 || Predicate.isNull(code)) return yield* Effect.void
-              }
-              return yield* Effect.ignore(stop(command, proc, signal, command.options))
-            }),
+            Effect.fnUntraced(
+              function* ([proc, closed, exited, stopOutput]) {
+                const done = (yield* Deferred.isDone(closed)) || (yield* Deferred.isDone(stopOutput))
+                if (done) {
+                  const [code] = yield* Deferred.await(exited)
+                  if (process.platform === "win32") return
+                  if (code === 0 || Predicate.isNull(code)) return
+                  if (command.options.forceKillAfter === undefined) {
+                    return yield* Effect.ignore(killGroup(command, proc, command.options.killSignal ?? "SIGTERM"))
+                  }
+                }
+                yield* Effect.ignore(stop(command, proc, closed, stopOutput, command.options))
+              },
+              (effect, [proc, , , stopOutput]) =>
+                effect.pipe(
+                  Effect.ensuring(
+                    Effect.gen(function* () {
+                      yield* Deferred.succeed(stopOutput, undefined)
+                      proc.stdout?.destroy()
+                      proc.stderr?.destroy()
+                    }),
+                  ),
+                ),
+            ),
           )
 
+          const completion = Effect.raceFirst(
+            Deferred.await(closed),
+            Deferred.await(stopOutput).pipe(Effect.andThen(Deferred.await(exited))),
+          )
           const fd = yield* setupFds(command, proc, extra)
           const out = setupOutput(command, proc, sout, serr, stopOutput)
           let ref = true
@@ -446,8 +462,10 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
             all: out.all,
             getInputFd: fd.getInputFd,
             getOutputFd: fd.getOutputFd,
-            isRunning: Effect.map(Deferred.isDone(signal), (done) => !done),
-            exitCode: Effect.flatMap(Deferred.await(signal), ([code, signal]) => {
+            isRunning: Effect.gen(function* () {
+              return !(yield* Deferred.isDone(closed)) && !(yield* Deferred.isDone(stopOutput))
+            }),
+            exitCode: Effect.flatMap(completion, ([code, signal]) => {
               if (Predicate.isNotNull(code)) return Effect.succeed(ExitCode(code))
               return Effect.fail(
                 toPlatformError(
@@ -457,7 +475,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                 ),
               )
             }),
-            kill: (opts?: ChildProcess.KillOptions) => stop(command, proc, signal, opts),
+            kill: (opts?: ChildProcess.KillOptions) => stop(command, proc, closed, stopOutput, opts),
             unref: Effect.sync(() => {
               if (ref) {
                 proc.unref()
