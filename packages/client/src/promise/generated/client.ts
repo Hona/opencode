@@ -173,6 +173,8 @@ import type {
   PermissionReplyOutput,
   FileReadInput,
   FileReadOutput,
+  FileWriteInput,
+  FileWriteOutput,
   FileListInput,
   FileListOutput,
   FileFindInput,
@@ -1540,6 +1542,19 @@ export function make(options: ClientOptions) {
             declaredStatuses: [401, 400],
             empty: false,
             binary: true,
+          },
+          requestOptions,
+        ),
+      write: (input: FileWriteInput, requestOptions?: RequestOptions) =>
+        request<FileWriteOutput>(
+          {
+            method: "POST",
+            path: `/api/fs/write`,
+            query: { location: input["location"] },
+            body: { path: input["path"], content: input["content"], expected: input["expected"] },
+            successStatus: 200,
+            declaredStatuses: [409, 400, 401],
+            empty: false,
           },
           requestOptions,
         ),
