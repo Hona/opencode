@@ -307,7 +307,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         // Almost every ecosystem has tried to fix this; there's no single "good" answer here.
         // Calls that trigger this are e.g. dotnet build with warmed MSBuild processes, agent-browser, etc.
         // One shared deadline covers stdout and stderr, then the output pump finishes its file.
-        if ((yield* Effect.timeoutOption(Deferred.await(closed), 1000))._tag === "Some") return
+        if ((yield* Effect.timeoutOption(Deferred.await(closed), "1 second"))._tag === "Some") return
         yield* Deferred.succeed(stopOutput, undefined)
         discard(proc.stdout)
         discard(proc.stderr)
@@ -317,7 +317,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   })
 
   const discard = (readable: NodeChildProcess.ChildProcess["stdout"]) => {
-    if (!readable) return
+    if (!readable || readable.destroyed) return
     // read() also drains while a backpressured Effect adapter still has a readable listener.
     const drain = () => {
       while (readable.read() !== null) {}
