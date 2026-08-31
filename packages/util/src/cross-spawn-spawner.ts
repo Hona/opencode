@@ -235,6 +235,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     proc: NodeChildProcess.ChildProcess,
     out: ChildProcess.StdoutConfig,
     err: ChildProcess.StderrConfig,
+    stopOutput: Deferred.Deferred<void>,
   ) => {
     let stdout = proc.stdout
       ? NodeStream.fromReadable({
@@ -249,6 +250,10 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         })
       : Stream.empty
 
+    if (process.platform === "win32") {
+      stdout = Stream.interruptWhen(stdout, Deferred.await(stopOutput))
+      stderr = Stream.interruptWhen(stderr, Deferred.await(stopOutput))
+    }
     if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream)
     if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream)
 
@@ -256,8 +261,12 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   }
 
   const launchProcess = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
-    Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
+    Effect.callback<
+      readonly [NodeChildProcess.ChildProcess, ExitSignal, Deferred.Deferred<void>],
+      PlatformError.PlatformError
+    >((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
+      const stopOutput = Deferred.makeUnsafe<void>()
       const proc = launch(command.command, command.args, opts)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -266,14 +275,16 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
-        if (process.platform !== "win32") return
+        if (process.platform !== "win32") return // POSIX stop() needs stream closure for kill escalation.
         // Particularly on Windows, some shell calls will cause detached descendants. Inherited stdio can hang the call.
         // Almost every ecosystem has tried to fix this; there's no single "good" answer here.
         // Calls that trigger this are e.g. dotnet build with warmed MSBuild processes, agent-browser, etc.
         // One shared deadline covers stdout and stderr, then the output pump finishes its file.
         const drain = setTimeout(() => {
-          proc.stdout?.push(null)
-          proc.stderr?.push(null)
+          // A plain close does not wake Effect's pending readable pull.
+          Deferred.doneUnsafe(stopOutput, Exit.void)
+          proc.stdout?.destroy()
+          proc.stderr?.destroy()
         }, 1000)
         drain.unref()
         proc.once("close", () => clearTimeout(drain))
@@ -284,7 +295,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
       })
       proc.on("spawn", () => {
-        resume(Effect.succeed([proc, signal]))
+        resume(Effect.succeed([proc, signal, stopOutput]))
       })
       return Effect.sync(() => {
         proc.kill("SIGTERM")
@@ -396,7 +407,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           const extra = fds(command.options)
           const dir = yield* cwd(command.options)
 
-          const [proc, signal] = yield* Effect.acquireRelease(
+          const [proc, signal, stopOutput] = yield* Effect.acquireRelease(
             spawn(command, {
               cwd: dir,
               env: env(command.options),
@@ -419,7 +430,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           )
 
           const fd = yield* setupFds(command, proc, extra)
-          const out = setupOutput(command, proc, sout, serr)
+          const out = setupOutput(command, proc, sout, serr, stopOutput)
           let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
