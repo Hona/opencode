@@ -92,7 +92,9 @@ async function mount(revision: number) {
     const root = host.querySelector("diffs-container")?.shadowRoot
     const edit = root?.querySelector('[data-line="11"][data-line-type="change-addition"]')
     if (!root || !edit?.textContent?.includes(`status: ${200 + revision}`)) return
-    const bounds = edit.getBoundingClientRect()
+    const range = document.createRange()
+    range.selectNodeContents(edit)
+    const bounds = range.getBoundingClientRect()
     if (bounds.top < host.getBoundingClientRect().top || bounds.bottom > host.getBoundingClientRect().bottom) return
     finish({
       readyMs: performance.now() - start,
