@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { access } from "node:fs/promises"
+import { stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -46,6 +46,7 @@ export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOpti
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (raw === "latest") return "prod"
   return "dev"
 })()
 
@@ -89,16 +90,16 @@ const getBase = (appId: string): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["opencode-cli*"],
+      filter: ["opencode-cli", "opencode-cli.exe"],
     },
   ],
   afterPack: async (context) => {
-    await access(
-      path.join(
-        context.packager.getResourcesDir(context.appOutDir),
-        context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
-      ),
+    const cli = path.join(
+      context.packager.getResourcesDir(context.appOutDir),
+      context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
     )
+    const file = await stat(cli)
+    if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
   },
   mac: {
     category: "public.app-category.developer-tools",
