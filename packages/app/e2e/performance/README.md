@@ -148,6 +148,8 @@ bunx playwright test --config e2e/performance/playwright.config.ts \
 
 `PROVIDER_MEMORY_MODELS` defaults to 1,200 and `PROVIDER_MEMORY_SWITCHES` defaults to 10. Each sample records Chromium's `Runtime.getHeapUsage` and `Memory.getDOMCounters` after an explicit garbage collection. This measures retained state, not allocation peaks or normal GC timing. It does not include worker heaps, the Electron main/GPU processes, or the OpenCode server, and must not be reported as total desktop RAM. Use identical model counts and navigation sequences for before/after comparisons.
 
+`location-catalog-benchmark.spec.ts` restores one session tab per workspace for 5, 15, and 30 distinct directories. The mock serves every directory as its own location with the same 1,200-model catalog plus 8 agents with system prompts, 24 commands, and 12 skills with SKILL.md content. The scenario visits every tab, switches back to the first tab, closes every tab, pushes a `credential.switched` event, reopens one workspace from Home, and reconnects the event stream. Each phase records catalog requests by path and directory; the retained heap is sampled after an explicit GC between phases, so the visit and revisit timings are Playwright-observed diagnostics rather than clean latency samples. `LOCATION_CATALOG_DIRECTORIES` (default `5,15,30`) and `LOCATION_CATALOG_MODELS` (default 1,200) adjust the workload.
+
 ## Chrome traces
 
 Set `OPENCODE_PERFORMANCE_TRACE_DIR` to emit a standard Chrome DevTools trace for every benchmark page automatically:

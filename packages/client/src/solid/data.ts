@@ -171,17 +171,20 @@ function createSync() {
       const active = state.get(key)
       return active !== undefined && active !== true
     },
+    // Reports whether the key held loaded or in-flight state, so event handlers can refresh
+    // only data a consumer has actually loaded.
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
         if (active !== undefined && active !== true) active.invalidated = true
-        return
+        return active !== undefined
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
         if (active !== true) active.invalidated = true
       })
+      return true
     },
   }
 }
@@ -215,6 +218,7 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  const holds = new Map<string, number>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -1156,13 +1160,14 @@ export function createData(config: CreateDataInput) {
         return
     }
 
+    // Event-driven refreshes reload only catalogs a consumer has loaded or is loading. Released
+    // locations keep light metadata; their catalogs reload when a consumer next syncs them.
     if (event.type === "credential.updated" || event.type === "credential.switched") {
       Object.keys(store.location).forEach((key) => {
         const ref = JSON.parse(key) as [string, string | null]
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         if (event.type === "credential.updated") {
-          result.location.integration.invalidate(location)
-          void result.location.integration.sync(location)
+          if (result.location.integration.invalidate(location)) void result.location.integration.sync(location)
           return
         }
         setStore("location", key, (data) => ({
@@ -1179,9 +1184,8 @@ export function createData(config: CreateDataInput) {
             }
           }),
         }))
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
       })
       return
     }
@@ -1190,21 +1194,17 @@ export function createData(config: CreateDataInput) {
     const location = event.location
     switch (event.type) {
       case "catalog.updated":
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
         break
       case "agent.updated":
-        result.location.agent.invalidate(location)
-        void result.location.agent.sync(location)
+        if (result.location.agent.invalidate(location)) void result.location.agent.sync(location)
         break
       case "command.updated":
-        result.location.command.invalidate(location)
-        void result.location.command.sync(location)
+        if (result.location.command.invalidate(location)) void result.location.command.sync(location)
         break
       case "skill.updated":
-        result.location.skill.invalidate(location)
-        void result.location.skill.sync(location)
+        if (result.location.skill.invalidate(location)) void result.location.skill.sync(location)
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
@@ -1245,14 +1245,9 @@ export function createData(config: CreateDataInput) {
         void result.location.reference.sync()
         break
       case "integration.updated":
-        result.location.integration.invalidate(location)
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        void Promise.all([
-          result.location.integration.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-        ])
+        if (result.location.integration.invalidate(location)) void result.location.integration.sync(location)
+        if (result.location.model.invalidate(location)) void result.location.model.sync(location)
+        if (result.location.provider.invalidate(location)) void result.location.provider.sync(location)
         break
       case "config.updated":
       case "websearch.updated":
@@ -1261,12 +1256,10 @@ export function createData(config: CreateDataInput) {
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
       // so the mcp list syncs here rather than off integration.updated.
       case "mcp.status.changed":
-        result.location.mcp.server.invalidate(location)
-        void result.location.mcp.server.sync(location)
+        if (result.location.mcp.server.invalidate(location)) void result.location.mcp.server.sync(location)
         break
       case "mcp.resources.changed":
-        result.location.mcp.resource.invalidate(location)
-        void result.location.mcp.resource.sync(location)
+        if (result.location.mcp.resource.invalidate(location)) void result.location.mcp.resource.sync(location)
         break
     }
   }
@@ -1840,6 +1833,50 @@ export function createData(config: CreateDataInput) {
         result.location.skill.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
+      },
+      // Catalogs stay resident while a consumer holds the location. Releasing the last hold drops
+      // the loaded catalogs and their sync state so the next consumer reloads them. Light metadata
+      // (info, vcs, running shells) and the default location stay resident.
+      retain(ref: LocationRef) {
+        const key = locationKey(ref)
+        holds.set(key, (holds.get(key) ?? 0) + 1)
+        let released = false
+        return () => {
+          if (released) return
+          released = true
+          const next = (holds.get(key) ?? 1) - 1
+          if (next > 0) {
+            holds.set(key, next)
+            return
+          }
+          holds.delete(key)
+          // Route swaps and draft promotion release and re-acquire within one update, so the drop
+          // waits for the current task; a new hold by then keeps the catalogs.
+          queueMicrotask(() => {
+            if (holds.has(key) || key === locationKey(defaultLocation())) return
+            result.location.agent.invalidate(ref)
+            result.location.command.invalidate(ref)
+            result.location.integration.invalidate(ref)
+            result.location.mcp.server.invalidate(ref)
+            result.location.mcp.resource.invalidate(ref)
+            result.location.model.invalidate(ref)
+            result.location.provider.invalidate(ref)
+            result.location.reference.invalidate(ref)
+            result.location.skill.invalidate(ref)
+            if (!store.location[key]) return
+            setStore("location", key, {
+              agent: undefined,
+              command: undefined,
+              integration: undefined,
+              mcpServer: undefined,
+              mcpResource: undefined,
+              model: undefined,
+              provider: undefined,
+              reference: undefined,
+              skill: undefined,
+            })
+          })
+        }
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
