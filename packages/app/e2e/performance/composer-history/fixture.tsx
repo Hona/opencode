@@ -49,9 +49,7 @@ const db = await new Promise<IDBDatabase>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result)
   request.onerror = () => reject(request.error)
 })
-const ids = [
-  ...new Set(normal.flatMap((entry) => entry.prompt.flatMap((part) => (part.blob ? [part.blob.id] : [])))),
-]
+const ids = [...new Set(normal.flatMap((entry) => entry.prompt.flatMap((part) => (part.blob ? [part.blob.id] : []))))]
 const screenshots: { id: string; blob: Blob }[] = []
 for (const id of ids) {
   const canvas = document.createElement("canvas")
@@ -112,7 +110,10 @@ const workload = {
   imageReferences: shape === "text" ? 0 : 50,
   uniqueImages: ids.length,
   storedImageBytes: screenshots.reduce((sum, item) => sum + item.blob.size, 0),
-  documentBytes: [normal, shell].reduce((sum, entries) => sum + new TextEncoder().encode(JSON.stringify({ entries })).length, 0),
+  documentBytes: [normal, shell].reduce(
+    (sum, entries) => sum + new TextEncoder().encode(JSON.stringify({ entries })).length,
+    0,
+  ),
   screenshotDimensions: [1440, 900],
 }
 let started = 0
