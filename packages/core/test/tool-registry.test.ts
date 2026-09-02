@@ -658,6 +658,44 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("reuses the Code Mode catalog across snapshots until the registry or ruleset changes", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make(), constant: constant("text") }, { namespace: "acme" })
+
+      const first = yield* service.snapshot()
+      const second = yield* service.snapshot([])
+      expect(second.codeModeCatalog).toBe(first.codeModeCatalog)
+      expect(codeModeListings(first.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.constant", "acme.echo"])
+
+      // A ruleset that hides a tool yields its own catalog; the unfiltered one stays cached.
+      const denied = yield* service.snapshot([{ action: "acme_constant", resource: "*", effect: "deny" }])
+      expect(denied.codeModeCatalog).not.toBe(first.codeModeCatalog)
+      expect(codeModeListings(denied.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.echo"])
+      expect((yield* service.snapshot()).codeModeCatalog).toBe(first.codeModeCatalog)
+
+      // Registry changes replace the state and therefore the catalog.
+      const scope = yield* Scope.make()
+      yield* service.transform((draft) => draft.add({ ...make(), name: "extra" })).pipe(Scope.provide(scope))
+      const extended = yield* service.snapshot()
+      expect(extended.codeModeCatalog).not.toBe(first.codeModeCatalog)
+      expect(codeModeListings(extended.codeModeCatalog!).map((tool) => tool.path)).toEqual([
+        "acme.constant",
+        "acme.echo",
+        "extra",
+      ])
+      expect((yield* service.snapshot()).codeModeCatalog).toBe(extended.codeModeCatalog)
+
+      yield* Scope.close(scope, Exit.void)
+      const restored = yield* service.snapshot()
+      expect(restored.codeModeCatalog).not.toBe(extended.codeModeCatalog)
+      expect(codeModeListings(restored.codeModeCatalog!).map((tool) => tool.path)).toEqual([
+        "acme.constant",
+        "acme.echo",
+      ])
+    }),
+  )
+
   it.effect("keeps execute available without Code Mode tools unless explicitly denied", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

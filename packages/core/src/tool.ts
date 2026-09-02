@@ -209,20 +209,37 @@ const layer = Layer.effect(
         ),
     })
 
+    // Every LLM step snapshots the registry, and rendering the Code Mode catalog is O(tools)
+    // (a TypeScript signature and search entry per tool). The catalog is a pure function of
+    // the registry generation and the permission ruleset, so it is rendered once per pair;
+    // `State` replaces its data object on every rebuild, which expires the entry.
+    const catalogs = new WeakMap<Data, Map<string, CodeModeCatalog.Inventory>>()
+    const catalog = (data: Data, rules: Permission.Ruleset, inventory: CodeModeTool.Inventory) => {
+      const key = JSON.stringify(rules)
+      const entries = catalogs.get(data) ?? new Map<string, CodeModeCatalog.Inventory>()
+      catalogs.set(data, entries)
+      const cached = entries.get(key)
+      if (cached) return cached
+      const rendered = CodeModeTool.catalog(inventory)
+      entries.set(key, rendered)
+      return rendered
+    }
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       snapshot: Effect.fn("Tool.snapshot")((permissions) =>
         Effect.sync(() => {
+          const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          for (const [name, tool] of state.get().tools) {
+          for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const namespaces = state.get().namespaces
+          const namespaces = data.namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
@@ -232,7 +249,7 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
-          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
+          const codeModeCatalog = codeModeEnabled ? catalog(data, rules, codeModeInventory) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
