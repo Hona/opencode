@@ -2,14 +2,15 @@ import { createEffect, untrack } from "solid-js"
 import type { Data } from "@opencode-ai/client/solid"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
+import { useCurrentRoute } from "@/shell/state/layout"
 import { useTabs, type Tab } from "./tabs"
 
-// Release heavy transcript and inbox data once no titlebar tab can show a session family. The
-// session route always has a tab, so a tab leaving the store is the last UI surface closing.
+// Release heavy data only after both the tabs and displayed route leave a session family.
 // Metadata, family, status, permissions, and forms stay for Home rows and tab attention, and
 // the client keeps unacknowledged submissions until they settle.
 export function createTabResidency(input: {
   tabs: () => readonly Tab[]
+  current: () => { server: ServerConnection.Key; sessionId: string } | undefined
   session: (server: ServerConnection.Key) => Pick<Data["session"], "root" | "evict"> | undefined
 }) {
   let previous = new Map<ServerConnection.Key, Set<string>>()
@@ -21,6 +22,14 @@ export function createTabResidency(input: {
       ids.add(tab.sessionId)
       if (tab.routeSessionId) ids.add(tab.routeSessionId)
       current.set(tab.server, ids)
+    }
+    // A tab may point at requested child metadata while the router still displays its source.
+    // This effect observes useLocation through useCurrentRoute only after a transition commits.
+    const route = input.current()
+    if (route) {
+      const ids = current.get(route.server) ?? new Set<string>()
+      ids.add(route.sessionId)
+      current.set(route.server, ids)
     }
     const closed = [...previous].flatMap(([server, ids]) =>
       [...ids].filter((id) => !current.get(server)?.has(id)).map((id) => ({ server, id })),
@@ -43,8 +52,13 @@ export function createTabResidency(input: {
 export function TabResidency() {
   const tabs = useTabs()
   const global = useGlobal()
+  const route = useCurrentRoute()
   createTabResidency({
     tabs: () => tabs.store,
+    current: () => {
+      const current = route()
+      return current.type === "session" ? current : undefined
+    },
     session: (server) => {
       const conn = global.servers.list().find((item) => ServerConnection.key(item) === server)
       return conn ? global.ensureServerCtx(conn).data.session : undefined

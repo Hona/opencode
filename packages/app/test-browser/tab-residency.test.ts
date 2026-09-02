@@ -14,18 +14,21 @@ function root(id: string): string {
   return parent ? root(parent) : id
 }
 
-function setup(initial: Tab[], known = [server, other]) {
+function setup(initial: Tab[], known = [server, other], current?: { server: ServerConnection.Key; sessionId: string }) {
   return createRoot((dispose) => {
     const [tabs, setTabs] = createStore<Tab[]>(initial)
+    const [view, setView] = createStore({ current })
     const evicted: { server: ServerConnection.Key; id: string }[] = []
     createTabResidency({
       tabs: () => tabs,
+      current: () => view.current,
       session: (key) =>
         known.includes(key) ? { root, evict: (id: string) => void evicted.push({ server: key, id }) } : undefined,
     })
     return {
       dispose,
       evicted,
+      display: (current: typeof view.current) => setView("current", current),
       remove: (predicate: (tab: Tab) => boolean) =>
         setTabs(
           produce((list) => {
@@ -49,6 +52,29 @@ function session(sessionId: string, key = server, routeSessionId?: string): Tab 
 }
 
 describe("tab residency", () => {
+  test("keeps the displayed family when a copied fork link requests another routed child", () => {
+    const scope = setup([session("fork", server, "child")], [server], { server, sessionId: "child" })
+    try {
+      scope.route("fork", "uncached")
+      expect(scope.evicted).toEqual([])
+      scope.display({ server, sessionId: "uncached" })
+      expect(scope.evicted).toEqual([{ server, id: "root" }])
+    } finally {
+      scope.dispose()
+    }
+  })
+
+  test("a displayed session without a tab is released only after navigation to Home", () => {
+    const scope = setup([], [server], { server, sessionId: "child" })
+    try {
+      expect(scope.evicted).toEqual([])
+      scope.display(undefined)
+      expect(scope.evicted).toEqual([{ server, id: "root" }])
+    } finally {
+      scope.dispose()
+    }
+  })
+
   test("releases a family when its last tab closes and leaves other families alone", () => {
     const scope = setup([session("a"), session("b"), session("a", other)])
     try {
