@@ -162,7 +162,7 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
-for (const channel of ["dev", "beta"] as const) {
+for (const channel of ["dev", "beta", "prod"] as const) {
   test(`bundles the CLI outside the ${channel} app archive`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel
@@ -181,14 +181,3 @@ for (const channel of ["dev", "beta"] as const) {
     ])
   })
 }
-
-test("does not bundle the CLI in prod builds", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
-  const module = await import("./electron-builder.config.ts?no-cli-resource=prod")
-  const config = module.default as Configuration
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(config.extraResources).toEqual([])
-})

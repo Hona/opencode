@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { access } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -84,16 +85,21 @@ const getBase = (appId: string): Configuration => ({
     "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
     "!**/node_modules/js-yaml/bin{,/**/*}",
   ],
-  extraResources:
-    channel !== "prod"
-      ? [
-          {
-            from: "resources/",
-            to: "",
-            filter: ["opencode-cli*"],
-          },
-        ]
-      : [],
+  extraResources: [
+    {
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli*"],
+    },
+  ],
+  afterPack: async (context) => {
+    await access(
+      path.join(
+        context.packager.getResourcesDir(context.appOutDir),
+        context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
+      ),
+    )
+  },
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,
