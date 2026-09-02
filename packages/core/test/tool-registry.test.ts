@@ -714,9 +714,7 @@ describe("Tool", () => {
       for (let index = 0; index < 40; index++) {
         // Agent-only source changes need not rebuild Tool state.
         permissions = [{ action: "acme_*", resource: `project-${index}`, effect: "deny" }]
-        const reload = yield* agents.reload().pipe(Effect.forkChild({ startImmediately: true }))
-        yield* TestClock.adjust("500 millis")
-        yield* Fiber.join(reload)
+        yield* agents.reload()
         const agent = yield* agents.get(identity.agent)
         if (!agent) throw new Error("Missing fixture agent")
         const equivalent = yield* service.snapshot(agent.permissions)
@@ -773,9 +771,7 @@ describe("Tool", () => {
       ]) {
         source = changed.tool
         namespace = changed.namespace
-        const reload = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-        yield* TestClock.adjust("500 millis")
-        yield* Fiber.join(reload)
+        yield* service.reload()
         const current = yield* service.snapshot()
         const fresh = CodeModeTool.catalog({
           tools: new Map([[`${source.options?.namespace}_echo`, source]]),
@@ -824,9 +820,7 @@ describe("Tool", () => {
       const first = yield* service.snapshot()
       expect(JSON.stringify(first.codeModeCatalog)).toContain("value: string")
       type = "number"
-      const reload = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* service.reload()
       const second = yield* service.snapshot()
       expect(JSON.stringify(second.codeModeCatalog)).toContain("value: number")
       expect(JSON.stringify(first.codeModeCatalog)).toContain("value: string")
