@@ -61,6 +61,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   :root { color-scheme: light; --font-family-mono: monospace; --font-size-small: 13px;
     --color-background-stronger: white; --v2-background-bg-accent: #007acc; --v2-text-text-accent: #005a9e; }
   body { margin: 16px; } #root { height: 760px; overflow: auto; overflow-anchor: none; }
+  [data-slot="file-header"] { height: 40px; line-height: 40px; font: 13px system-ui; padding: 0 12px; }
 </style>`)
 
 type Measurement = {
@@ -107,13 +108,19 @@ async function mount(revision: number) {
     })
   }
   const unsubscribe = pool.subscribeToStatChanges(check)
-  dispose = render(() => <File mode="diff" fileDiff={active!.fileDiff}
-    onRendered={() => { firstReady ||= performance.now(); check() }}
-    onPostRender={(_, __, phase) => {
-      if (phase === "unmount") return
-      rendered = performance.now()
-      queueMicrotask(check)
-    }} />, host)
+  // Production surfaces place a header or earlier content above the diff inside a `[role="log"]` scroll content
+  // element. An empty diff element at scroll offset 0 makes Pierre's virtualizer anchor its bottom edge and scroll
+  // the host by the full content height once the first rows render.
+  dispose = render(() => <div role="log">
+    <div data-slot="file-header">{input.file}</div>
+    <File mode="diff" fileDiff={active!.fileDiff}
+      onRendered={() => { firstReady ||= performance.now(); check() }}
+      onPostRender={(_, __, phase) => {
+        if (phase === "unmount") return
+        rendered = performance.now()
+        queueMicrotask(check)
+      }} />
+  </div>, host)
   const value = await result
   unsubscribe()
   return value
