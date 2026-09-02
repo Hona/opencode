@@ -26,6 +26,7 @@ import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreen } from "./screen"
+import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
@@ -85,6 +86,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
             </div>
           </div>
         </div>
+        <PreparingComposer pending={props.pending} />
       </DataProvider>
     </SessionStatePanel>
   )

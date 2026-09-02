@@ -9,12 +9,17 @@ const projectID = "proj_workspace_pending"
 const draftID = "draft_workspace_pending"
 const otherID = "ses_workspace_pending_other"
 const text = "Create the workspace, then explain the pending session."
+const followUp = "Then explain the setup scripts.\nInclude the install command."
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sessionPath = `/server/${base64Encode(server)}/session/`
 const draftPath = `/new-session?draftId=${draftID}`
 const headers = { "access-control-allow-origin": "*" }
 
-test.use({ serviceWorkers: "block", viewport: { width: 1280, height: 900 } })
+test.use({
+  serviceWorkers: "block",
+  viewport: { width: 1280, height: 900 },
+  permissions: ["clipboard-read", "clipboard-write"],
+})
 
 for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
@@ -24,6 +29,14 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     const mock = await openDraft(page)
     const pending = await submitPending(page, mock)
+    const editor = page.locator('[data-component="composer-editor"]')
+    await draftFollowUp(page)
+    await expect(page.locator('[data-action="composer-submit"]')).toBeDisabled()
+    await editor.press("Enter")
+    await editor.press("ControlOrMeta+Enter")
+    await page.locator('[data-component="composer"]').dispatchEvent("submit")
+    await expect(editor).toHaveText(followUp)
+    await expect(editor).toBeInViewport()
 
     expect(mock.worktreeRequests).toEqual([expect.objectContaining({ from: directory })])
     await expect(pending.message).toBeInViewport()
@@ -74,6 +87,7 @@ for (const viewport of [
       await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
       await expect(pending.shimmer).toHaveAttribute("data-active", "true")
       await expect(pending.title).toHaveText("New session")
+      await expect(editor).toHaveText(followUp)
       expect(mock.calls).toEqual(["worktree"])
 
       await page.locator(`[data-titlebar-tab-link][href="${sessionPath}${otherID}"]`).click()
@@ -108,6 +122,16 @@ for (const viewport of [
     await expect(pending.message).toHaveCount(1)
     await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
     await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
+    await expect(editor).toHaveText(followUp)
+    await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+    expect(mock.prompts).toHaveLength(1)
+    await page.locator('[data-action="composer-submit"]').click()
+    await expect
+      .poll(() => mock.prompts)
+      .toEqual([
+        { sessionID: pending.sessionID, body: expect.objectContaining({ id: pending.messageID, text }) },
+        { sessionID: pending.sessionID, body: expect.objectContaining({ text: followUp }) },
+      ])
   })
 }
 
@@ -116,12 +140,14 @@ for (const direction of ["ltr", "rtl"]) {
     const mock = await openDraft(page)
     await page.locator("html").evaluate((element, direction) => element.setAttribute("dir", direction), direction)
     const pending = await submitPending(page, mock)
+    await draftFollowUp(page)
+    await page.locator('[data-component="composer-editor"]').press("ControlOrMeta+Home")
     const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
     const before = await title.boundingBox()
     const messageBefore = await pending.message.boundingBox()
     // Observe painted frames during the handoff, without using frame counts to wait for readiness.
     const observation = await page.evaluateHandle(() => {
-      const frames: { title: string | null; message: boolean; spinner: boolean }[] = []
+      const frames: { title: string | null; message: boolean; spinner: boolean; draft: string | null }[] = []
       let frame = 0
       const sample = () => {
         const title = document.querySelector<HTMLElement>("[data-session-title] h1")
@@ -129,10 +155,12 @@ for (const direction of ["ltr", "rtl"]) {
         const spinner = document.querySelector(
           '[data-titlebar-tab-slot][data-active="true"] [data-component="session-progress-indicator-v2"]',
         )
+        const editor = document.querySelector('[data-component="composer-editor"]')
         frames.push({
           title: title?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }) ? title.textContent : null,
           message: !!message?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }),
           spinner: !!spinner?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }),
+          draft: editor?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }) ? editor.textContent : null,
         })
         frame = requestAnimationFrame(sample)
       }
@@ -151,13 +179,18 @@ for (const direction of ["ltr", "rtl"]) {
     await expect(pending.shimmer).toHaveCount(0)
     await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
     await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+    await expect(page.locator('[data-component="composer-editor"]')).toHaveText(followUp)
+    await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
     const frames = await observation.evaluate((observation) => observation.stop())
     await observation.dispose()
     expect(frames.length).toBeGreaterThan(0)
     expect(
       frames.filter(
         (frame) =>
-          !frame.message || !frame.spinner || !["New session", "Created workspace session"].includes(frame.title ?? ""),
+          !frame.message ||
+          !frame.spinner ||
+          frame.draft !== followUp ||
+          !["New session", "Created workspace session"].includes(frame.title ?? ""),
       ),
     ).toEqual([])
     const after = await title.boundingBox()
@@ -165,9 +198,52 @@ for (const direction of ["ltr", "rtl"]) {
     expect(after?.y).toBe(before?.y)
     expect(after?.height).toBe(before?.height)
     expect(messageAfter).toEqual(messageBefore)
+    await page.locator('[data-component="composer-editor"]').pressSequentially("Also: ")
+    await expect(page.locator('[data-component="composer-editor"]')).toHaveText(`Also: ${followUp}`)
     expect(mock.calls).toEqual(["worktree", "session", "prompt"])
   })
 }
+
+for (const failure of ["worktree", "session"]) {
+  test(`preserves both inputs when ${failure} creation fails`, async ({ page }) => {
+    const mock = await openDraft(page, { failSessionCreate: failure === "session" })
+    const pending = await submitPending(page, mock)
+    await draftFollowUp(page)
+
+    mock.worktree.resolve(
+      failure === "worktree"
+        ? { status: 500, json: { message: "Worktree creation failed" } }
+        : { status: 200, json: { directory: workspace } },
+    )
+
+    await expect(page).toHaveURL(draftPath)
+    await expect(page.locator('[data-component="composer-editor"]')).toHaveText(`${text}\n\n${followUp}`)
+    await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+    await expect(pending.shimmer).toHaveCount(0)
+    expect(mock.prompts).toEqual([])
+  })
+}
+
+test("preserves both inputs when the initial prompt cannot be sent", async ({ page }) => {
+  const mock = await openDraft(page)
+  const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
+  await page.route(`**/api/session/${pending.sessionID}/prompt`, (route) =>
+    route.fulfill({
+      status: 500,
+      json: { message: "Prompt admission failed" },
+      headers,
+    }),
+  )
+
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-editor"]')).toHaveText(`${text}\n\n${followUp}`)
+  await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+  await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt", "prompt"])
+  expect(mock.prompts).toEqual([])
+})
 
 test("restores the original draft when worktree creation fails", async ({ page }) => {
   const mock = await openDraft(page)
@@ -219,6 +295,7 @@ test("retains the draft and reuses the created workspace after session creation 
 test("restores the draft after closing and revisiting a pending session that fails", async ({ page }) => {
   const mock = await openDraft(page)
   const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
   const tab = page.locator(`[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"]`)
 
   await page.locator("[data-titlebar-tab-slot]").filter({ has: tab }).locator('[data-slot="tab-close"] button').click()
@@ -239,13 +316,14 @@ test("restores the draft after closing and revisiting a pending session that fai
   await expect(pending.shimmer).toBeVisible()
   await expect(pending.shimmer).toContainText("Creating worktree")
   await expect(pending.shimmer).toHaveAttribute("data-active", "true")
+  await expect(page.locator('[data-component="composer-editor"]')).toHaveText(followUp)
   expect(mock.calls).toEqual(["worktree"])
 
   mock.worktree.resolve({ status: 500, json: { message: "Worktree creation failed after revisiting the session" } })
 
   await expect(page).toHaveURL(draftPath)
   await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
-  await expect(page.locator('[data-component="composer-editor"]')).toHaveText(text)
+  await expect(page.locator('[data-component="composer-editor"]')).toHaveText(`${text}\n\n${followUp}`)
   await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
   await expect(page.getByRole("button", { name: "New workspace", exact: true })).toBeVisible()
   await expect(page.locator(`[data-titlebar-tab-link][href="${draftPath}"]`)).toHaveCount(1)
@@ -256,6 +334,17 @@ test("restores the draft after closing and revisiting a pending session that fai
   expect(mock.creates).toEqual([])
   expect(mock.prompts).toEqual([])
 })
+
+async function draftFollowUp(page: Page) {
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.pressSequentially("!")
+  await expect(editor).toHaveText("!")
+  await expect(editor).toHaveAttribute("dir", "auto")
+  await editor.fill("")
+  await page.evaluate((text) => navigator.clipboard.writeText(text), followUp)
+  await editor.press("ControlOrMeta+V")
+  await expect(editor).toHaveText(followUp)
+}
 
 async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) {
   const worktree = Promise.withResolvers<{ status: number; json: { directory?: string; message?: string } }>()
@@ -329,6 +418,24 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
       headers,
     })
   })
+  await page.route("**/api/agent?**", (route) =>
+    route.fulfill({
+      json: {
+        location: { directory: new URL(route.request().url()).searchParams.get("location[directory]") ?? directory },
+        data: [
+          {
+            id: "build",
+            name: "Build",
+            mode: "primary",
+            hidden: false,
+            request: { settings: {}, headers: {}, body: {} },
+            permissions: [],
+          },
+        ],
+      },
+      headers,
+    }),
+  )
   await page.addInitScript(
     ({ directory, draftID, otherID, server }) => {
       localStorage.setItem(
@@ -370,7 +477,8 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   const title = preparing.getByRole("heading", { level: 1 })
   await expect(preparing).toBeVisible()
   await expect(title).toHaveText("New session")
-  await expect(page.locator('[data-component="composer-editor"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(page.locator('[data-action="composer-submit"]')).toBeDisabled()
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)
   await expect(message).toHaveCount(1)
   await expect(message.locator('[data-slot="user-message-text"]')).toHaveText(text)
