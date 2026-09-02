@@ -64,7 +64,8 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
         }}
       >
         <div data-component="session-preparing" class="min-h-0 flex-1 overflow-y-auto">
-          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pt-5 pb-5 md:px-5">
+          <SessionIdentityHeader sessionID={props.sessionID} />
+          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pb-5 md:px-5">
             <SessionUserMessage
               sessionID={props.sessionID}
               message={props.pending.message}

@@ -28,18 +28,32 @@ for (const viewport of [
     expect(mock.worktreeRequests).toEqual([expect.objectContaining({ from: directory })])
     await expect(pending.message).toBeInViewport()
     await expect(pending.shimmer).toBeInViewport()
+    await expect(pending.title).toBeInViewport()
+    const spinner = page.locator(
+      viewport.name === "mobile"
+        ? '[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'
+        : `[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"] [data-component="session-progress-indicator-v2"]`,
+    )
+    await expect(spinner).toBeVisible()
     await testInfo.attach("creating-worktree", {
       body: await page.screenshot({ path: testInfo.outputPath(`pending-${viewport.name}.png`) }),
       contentType: "image/png",
     })
 
     if (viewport.name === "mobile") {
+      await page.locator('[data-slot="mobile-tabs-trigger"]').click()
+      const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
+      const tab = drawer.locator(`[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"]`)
+      await expect(tab.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+      await tab.click()
+      await expect(drawer).toBeHidden()
       await page.locator("html").evaluate((element) => {
-        element.dir = "rtl"
+        element.setAttribute("dir", "rtl")
       })
       await expect(page.locator("html")).toHaveAttribute("dir", "rtl")
       await expect(pending.message).toBeInViewport()
       await expect(pending.shimmer).toBeInViewport()
+      await expect(pending.title).toBeInViewport()
       await expect(page.locator('[data-component="session-preparing"]')).toHaveCSS("direction", "rtl")
       expect(
         await page
@@ -53,11 +67,13 @@ for (const viewport of [
       await expect(page).toHaveURL(`${sessionPath}${otherID}`)
       await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
       await expect(pending.shimmer).toBeHidden()
+      await expect(spinner).toBeVisible()
 
       await page.locator(`[data-titlebar-tab-link][href="${sessionPath}${pending.sessionID}"]`).click()
       await expect(page).toHaveURL(pending.url)
       await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
       await expect(pending.shimmer).toHaveAttribute("data-active", "true")
+      await expect(pending.title).toHaveText("New session")
       expect(mock.calls).toEqual(["worktree"])
 
       await page.locator(`[data-titlebar-tab-link][href="${sessionPath}${otherID}"]`).click()
@@ -88,9 +104,68 @@ for (const viewport of [
 
     await expect(page).toHaveURL(pending.url)
     await expect(pending.shimmer).toHaveCount(0)
+    await expect(spinner).toHaveCount(1)
     await expect(pending.message).toHaveCount(1)
     await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
     await expect(pending.message).toHaveAttribute("data-timeline-part-id", `${pending.messageID}:text:0`)
+  })
+}
+
+for (const direction of ["ltr", "rtl"]) {
+  test(`keeps the title and message stable through worktree creation in ${direction}`, async ({ page }) => {
+    const mock = await openDraft(page)
+    await page.locator("html").evaluate((element, direction) => element.setAttribute("dir", direction), direction)
+    const pending = await submitPending(page, mock)
+    const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
+    const before = await title.boundingBox()
+    const messageBefore = await pending.message.boundingBox()
+    // Observe painted frames during the handoff, without using frame counts to wait for readiness.
+    const observation = await page.evaluateHandle(() => {
+      const frames: { title: string | null; message: boolean; spinner: boolean }[] = []
+      let frame = 0
+      const sample = () => {
+        const title = document.querySelector<HTMLElement>("[data-session-title] h1")
+        const message = document.querySelector<HTMLElement>('[data-component="user-message"]')
+        const spinner = document.querySelector(
+          '[data-titlebar-tab-slot][data-active="true"] [data-component="session-progress-indicator-v2"]',
+        )
+        frames.push({
+          title: title?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }) ? title.textContent : null,
+          message: !!message?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }),
+          spinner: !!spinner?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }),
+        })
+        frame = requestAnimationFrame(sample)
+      }
+      sample()
+      return {
+        stop: () => {
+          cancelAnimationFrame(frame)
+          return frames
+        },
+      }
+    })
+
+    mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+    await expect(title).toHaveText("Created workspace session")
+    await expect(pending.shimmer).toHaveCount(0)
+    await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
+    await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+    const frames = await observation.evaluate((observation) => observation.stop())
+    await observation.dispose()
+    expect(frames.length).toBeGreaterThan(0)
+    expect(
+      frames.filter(
+        (frame) =>
+          !frame.message || !frame.spinner || !["New session", "Created workspace session"].includes(frame.title ?? ""),
+      ),
+    ).toEqual([])
+    const after = await title.boundingBox()
+    const messageAfter = await pending.message.boundingBox()
+    expect(after?.y).toBe(before?.y)
+    expect(after?.height).toBe(before?.height)
+    expect(messageAfter).toEqual(messageBefore)
+    expect(mock.calls).toEqual(["worktree", "session", "prompt"])
   })
 }
 
@@ -292,7 +367,10 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   const preparing = page.locator('[data-component="session-preparing"]')
   const message = page.locator('[data-component="user-message"]')
   const shimmer = preparing.getByRole("status").locator('[data-component="text-shimmer"]')
+  const title = preparing.getByRole("heading", { level: 1 })
   await expect(preparing).toBeVisible()
+  await expect(title).toHaveText("New session")
+  await expect(page.locator('[data-component="composer-editor"]')).toHaveCount(0)
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)
   await expect(message).toHaveCount(1)
   await expect(message.locator('[data-slot="user-message-text"]')).toHaveText(text)
@@ -304,5 +382,5 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDra
   await expect.poll(() => mock.calls).toEqual(["worktree"])
   expect(mock.creates).toEqual([])
   expect(mock.prompts).toEqual([])
-  return { url, sessionID, messageID, message, shimmer }
+  return { url, sessionID, messageID, message, shimmer, title }
 }
