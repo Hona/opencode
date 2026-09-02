@@ -66,6 +66,18 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
     const sizes: { cols: number; rows: number }[] = []
     const removals: string[] = []
     try {
+      if (process.env.TERMINAL_DRAW_PROBE) {
+        await page.addInitScript(() => {
+          const fill = CanvasRenderingContext2D.prototype.fillText
+          CanvasRenderingContext2D.prototype.fillText = function (...args: Parameters<typeof fill>) {
+            if (this.canvas instanceof HTMLCanvasElement && this.canvas.closest('[data-component="terminal"]')) {
+              window.terminalProbe.draws++
+              if (!this.canvas.checkVisibility()) window.terminalProbe.hiddenDraws++
+            }
+            Reflect.apply(fill, this, args)
+          }
+        })
+      }
       const location = { directory: dir, project: { id: "proj_terminal_benchmark", directory: dir } }
       const data = {
         id: ptyID,
@@ -146,17 +158,24 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         },
         { server, sessionID },
       )
-      await page.goto(`${href}${process.env.TERMINAL_DRAW_PROBE && scenario !== "full-scrollback-teardown" ? "?terminalDrawProbe" : ""}`)
+      await page.goto(
+        `${href}${process.env.TERMINAL_DRAW_PROBE && scenario !== "full-scrollback-teardown" ? "?terminalDrawProbe" : ""}`,
+      )
       await expectSessionTitle(page, title)
       await page.keyboard.press("Control+Backquote")
       await waitForText(page, "TERMINAL_FIXTURE_READY")
       const terminal = page.locator('[data-component="terminal"]')
       await expect(terminal).toBeVisible()
       await page.evaluate(() => document.fonts.ready.then(() => undefined))
-      await expect.poll(async () => {
-        const size = await page.evaluate(() => ({ cols: window.terminalProbe.term!.cols, rows: window.terminalProbe.term!.rows }))
-        return sizes.at(-1)?.cols === size.cols && sizes.at(-1)?.rows === size.rows
-      }).toBe(true)
+      await expect
+        .poll(async () => {
+          const size = await page.evaluate(() => ({
+            cols: window.terminalProbe.term!.cols,
+            rows: window.terminalProbe.term!.rows,
+          }))
+          return sizes.at(-1)?.cols === size.cols && sizes.at(-1)?.rows === size.rows
+        })
+        .toBe(true)
       if (scenario === "hidden-output") {
         await page.keyboard.press("Control+Backquote")
         await expect(terminal).toBeHidden()
@@ -186,7 +205,12 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
           scrollback: window.terminalProbe.term!.getScrollbackLength(),
           cols: window.terminalProbe.term!.cols,
           rows: window.terminalProbe.term!.rows,
-          firstRecord: Number(window.terminalProbe.term!.buffer.normal.getLine(0)?.translateToString(true).match(/-(\d{5})\.test\.ts/)?.[1]),
+          firstRecord: Number(
+            window.terminalProbe
+              .term!.buffer.normal.getLine(0)
+              ?.translateToString(true)
+              .match(/-(\d{5})\.test\.ts/)?.[1],
+          ),
         }),
         start,
       )
@@ -227,7 +251,10 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
           start,
         )
         const cpuAfter = await cdp.send("Performance.getMetrics")
-        interaction.teardownCpuMs = (cpuAfter.metrics.find((x) => x.name === "TaskDuration")!.value - cpuBefore.metrics.find((x) => x.name === "TaskDuration")!.value) * 1000
+        interaction.teardownCpuMs =
+          (cpuAfter.metrics.find((x) => x.name === "TaskDuration")!.value -
+            cpuBefore.metrics.find((x) => x.name === "TaskDuration")!.value) *
+          1000
         const snapshot = await page.evaluate(() => window.terminalProbe.serialized[0].value)
         expect(Array.from(snapshot.matchAll(/-(\d{5})\.test\.ts/g), (match) => Number(match[1]))).toEqual(
           Array.from({ length: 12_000 - produced.firstRecord }, (_, index) => produced.firstRecord + index),
@@ -271,6 +298,9 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         const columns = await page.evaluate(() => window.terminalProbe.term!.cols)
         await page.setViewportSize({ width: 1100, height: 800 })
         await expect.poll(() => page.evaluate(() => window.terminalProbe.term!.cols)).not.toBe(columns)
+        await expect
+          .poll(async () => sizes.at(-1)?.cols === (await page.evaluate(() => window.terminalProbe.term!.cols)))
+          .toBe(true)
         expect(closed).toBe(0)
       }
       if (process.env.TERMINAL_SCREENSHOTS && scenario !== "full-scrollback-teardown") {
@@ -280,10 +310,24 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
       }
     } finally {
       listener.dispose()
-      pty.kill()
-      await exited
-      await writeFile(path.join(process.env.TERMINAL_ARTIFACTS ?? tmpdir(), `${process.env.TERMINAL_BUNDLE}-${scenario}-${info.repeatEachIndex}.native.log`), output)
-      await rm(dir, { recursive: true, force: true })
+      try {
+        await benchmarkDiagnostics(page).stop()
+        // Stop fixture request handlers before killing their native resource. The
+        // app debounces PTY resize requests independently of the canvas resize.
+        await page.unrouteAll({ behavior: "wait" })
+        await page.close()
+      } finally {
+        pty.kill()
+        await exited
+        await writeFile(
+          path.join(
+            process.env.TERMINAL_ARTIFACTS ?? tmpdir(),
+            `${process.env.TERMINAL_BUNDLE}-${scenario}-${info.repeatEachIndex}.native.log`,
+          ),
+          output,
+        )
+        await rm(dir, { recursive: true, force: true })
+      }
     }
   })
 }
