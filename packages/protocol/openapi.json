@@ -177,6 +177,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Resolve the requested location or the server default location.",
@@ -15799,6 +15809,26 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "LocationNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["LocationNotFoundError"]
+          },
+          "directory": {
+            "type": "string"
+          },
+          "workspaceID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "directory", "message"],
         "additionalProperties": false
       },
       "Mcp.LocalConfigEncoded": {

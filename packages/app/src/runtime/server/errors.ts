@@ -1,3 +1,5 @@
+import type { LocationRef } from "@opencode-ai/client/promise"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -59,6 +61,17 @@ export function isSessionNotFoundError(error: unknown, sessionID: string) {
   if (typeof unwrapped !== "object" || unwrapped === null) return false
   const value = unwrapped as Record<string, unknown>
   return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+}
+
+export function isLocationNotFoundError(error: unknown, location: LocationRef) {
+  const unwrapped = unwrapNamedError(error)
+  if (typeof unwrapped !== "object" || unwrapped === null) return false
+  const value = unwrapped as Record<string, unknown>
+  return (
+    value._tag === "LocationNotFoundError" &&
+    value.directory === location.directory &&
+    value.workspaceID === location.workspaceID
+  )
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {

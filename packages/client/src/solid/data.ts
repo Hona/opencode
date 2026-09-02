@@ -217,6 +217,7 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  const sessionReads = new Set<Map<string, OpenCodeEventMap["session.moved"]["data"]>>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -657,6 +658,12 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.moved": {
+        // Family reads can include children that are not cached yet.
+        for (const moves of sessionReads)
+          moves.set(event.data.sessionID, {
+            ...event.data,
+            projectID: event.data.projectID ?? moves.get(event.data.sessionID)?.projectID,
+          })
         const current = store.session.info[event.data.sessionID]
         if (current) {
           const previous = {
@@ -1511,28 +1518,44 @@ export function createData(config: CreateDataInput) {
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
-          const [info, children] = await Promise.all([
-            api().session.get({ sessionID }),
-            options?.children
-              ? api()
-                  .session.list({ parentID: sessionID, order: "desc" })
-                  .then((response) => response.data)
-              : [],
-          ])
-          const sessions = [info, ...children]
-          batch(() => {
-            setStore(
-              "session",
-              "info",
-              produce((draft) => {
-                for (const session of sessions) draft[session.id] = session
-              }),
-            )
-            for (const session of sessions) {
-              sync.complete(`session:${session.id}`)
-              registerSession(session.id)
-            }
-          })
+          const moves = new Map<string, OpenCodeEventMap["session.moved"]["data"]>()
+          sessionReads.add(moves)
+          try {
+            const [info, children] = await Promise.all([
+              api().session.get({ sessionID }),
+              options?.children
+                ? api()
+                    .session.list({ parentID: sessionID, order: "desc" })
+                    .then((response) => response.data)
+                : [],
+            ])
+            const sessions = [info, ...children]
+            batch(() => {
+              setStore(
+                "session",
+                "info",
+                produce((draft) => {
+                  for (const session of sessions) {
+                    const moved = moves.get(session.id)
+                    draft[session.id] = moved
+                      ? {
+                          ...session,
+                          location: moved.location,
+                          projectID: moved.projectID ?? session.projectID,
+                          subpath: moved.subpath,
+                        }
+                      : session
+                  }
+                }),
+              )
+              for (const session of sessions) {
+                sync.complete(`session:${session.id}`)
+                registerSession(session.id)
+              }
+            })
+          } finally {
+            sessionReads.delete(moves)
+          }
         })
       },
       invalidate(sessionID: string) {

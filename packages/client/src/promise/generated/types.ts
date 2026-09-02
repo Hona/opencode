@@ -2349,6 +2349,15 @@ export type InvalidRequestError = {
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
 
+export type LocationNotFoundError = {
+  readonly _tag: "LocationNotFoundError"
+  readonly directory: string
+  readonly workspaceID?: string
+  readonly message: string
+}
+export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
+
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
   readonly agentID: string

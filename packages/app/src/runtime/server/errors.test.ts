@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionNotFoundError } from "@opencode-ai/client/promise"
+import type { LocationNotFoundError, SessionNotFoundError } from "@opencode-ai/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+import {
+  formatServerError,
+  isLocationNotFoundError,
+  isSessionNotFoundError,
+  parseReadableConfigInvalidError,
+} from "./errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -31,6 +36,40 @@ function useLanguageMock() {
 }
 
 const language = useLanguageMock()
+
+describe("isLocationNotFoundError", () => {
+  const location = { directory: "/projects/missing" }
+  const body = {
+    _tag: "LocationNotFoundError",
+    directory: location.directory,
+    message: "Missing directory",
+  } satisfies LocationNotFoundError
+
+  test("requires a confirmed missing local directory for this location", () => {
+    expect(isLocationNotFoundError(new Error("Missing directory", { cause: { body, status: 404 } }), location)).toBe(
+      true,
+    )
+    expect(isLocationNotFoundError(new Error("Missing directory", { cause: body }), location)).toBe(true)
+    expect(isLocationNotFoundError(body, location)).toBe(true)
+    expect(isLocationNotFoundError(body, { directory: "/projects/other" })).toBe(false)
+    expect(isLocationNotFoundError(body, { ...location, workspaceID: "wrk_remote" })).toBe(false)
+    expect(isLocationNotFoundError({ ...body, workspaceID: "wrk_remote" }, location)).toBe(false)
+  })
+
+  test("does not classify connection, configuration, or generic HTTP failures as missing", () => {
+    for (const error of [
+      new TypeError("Failed to fetch"),
+      new DOMException("Aborted", "AbortError"),
+      new Error("Not Found", { cause: { status: 404, body: "Not Found" } }),
+      new Error("Internal Server Error", { cause: { status: 500, body: "" } }),
+      { _tag: "ConfigInvalidError", directory: location.directory },
+      { _tag: "LocationNotFoundError" },
+      undefined,
+    ]) {
+      expect(isLocationNotFoundError(error, location)).toBe(false)
+    }
+  })
+})
 
 describe("parseReadableConfigInvalidError", () => {
   test("formats issues with file path", () => {

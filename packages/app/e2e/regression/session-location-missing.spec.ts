@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { LocationNotFoundError, OpenCodeEvent } from "@opencode-ai/client/promise"
 import { fixture } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 
@@ -11,6 +11,8 @@ test("keeps history visible and recovers the composer by choosing another direct
   const session = { id: sessionID, projectID: fixture.project.id, directory, title: "Missing location" }
   const events: OpenCodeEvent[] = []
   const moves: unknown[] = []
+  let missing = false
+  let refreshes = 0
   await mockOpenCodeServer(page, {
     directory: destination,
     project: { ...fixture.project, worktree: destination },
@@ -23,13 +25,26 @@ test("keeps history visible and recovers the composer by choosing another direct
     }),
   })
   await page.route("**/api/**", (route) => {
-    if (new URL(route.request().url()).searchParams.get("location[directory]") !== directory) return route.fallback()
-    return route.fulfill({ status: 500, body: "", headers: { "access-control-allow-origin": "*" } })
+    const url = new URL(route.request().url())
+    if (missing && url.pathname === `/api/session/${sessionID}`) {
+      refreshes++
+      if (refreshes === 1)
+        return route.fulfill({ status: 503, body: "", headers: { "access-control-allow-origin": "*" } })
+    }
+    if (url.pathname !== "/api/location" || url.searchParams.get("location[directory]") !== directory)
+      return route.fallback()
+    missing = true
+    return route.fulfill({
+      status: 404,
+      json: { _tag: "LocationNotFoundError", directory, message: "Missing directory" } satisfies LocationNotFoundError,
+      headers: { "access-control-allow-origin": "*" },
+    })
   })
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
   await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
   await expect(page.getByRole("status")).toContainText("Session location unavailable")
   await expect(page.getByRole("status")).toContainText(directory)
+  expect(refreshes).toBe(2)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
   const choose = page.getByRole("button", { name: "Choose directory", exact: true })
   await expect(choose).toBeEnabled()
@@ -116,8 +131,16 @@ for (const create of [false, true]) {
     await page.route("**/api/**", async (route) => {
       const url = new URL(route.request().url())
       const headers = { "access-control-allow-origin": "*" }
-      if (url.searchParams.get("location[directory]") === directory)
-        return route.fulfill({ status: 500, body: "", headers })
+      if (url.pathname === "/api/location" && url.searchParams.get("location[directory]") === directory)
+        return route.fulfill({
+          status: 404,
+          json: {
+            _tag: "LocationNotFoundError",
+            directory,
+            message: "Missing directory",
+          } satisfies LocationNotFoundError,
+          headers,
+        })
       if (url.pathname === `/api/worktree/${fixture.project.id}`) {
         if (route.request().method() === "GET") {
           listingRequested.resolve()

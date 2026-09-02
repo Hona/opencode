@@ -130,6 +130,178 @@ test("preserves a live session rename across concurrent session and family reads
   }
 })
 
+for (const cached of [false, true]) {
+  test(`preserves a move during a ${cached ? "cached" : "uncached"} session read only until the next read`, async () => {
+    const gate = Promise.withResolvers<void>()
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const stale: SessionInfo = { ...session(0), subpath: "old", location: { directory: "/old", workspaceID: "old" } }
+    const authoritative: SessionInfo = {
+      ...session(0),
+      projectID: "authoritative",
+      location: { directory: "/authoritative" },
+      subpath: "new",
+    }
+    let requests = 0
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        if (!request.url.endsWith(`/api/session/${stale.id}`)) throw new Error(`Unexpected request: ${request.url}`)
+        requests++
+        if (requests > 1) return Response.json({ data: authoritative })
+        await gate.promise
+        return Response.json({ data: stale })
+      },
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+      }),
+      dispose,
+    }))
+
+    try {
+      if (cached) setup.data.session.remember(stale)
+      setup.data.session.invalidate(stale.id)
+      const initial = setup.data.session.sync(stale.id)
+      await wait(() => requests === 1)
+      const event: OpenCodeEvent = {
+        id: "evt_moved",
+        created: 1,
+        type: "session.moved",
+        durable: { aggregateID: stale.id, seq: 1, version: 1 },
+        data: { sessionID: stale.id, location: { directory: "/moved" } },
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      if (cached) {
+        expect(setup.data.session.get(stale.id)?.location.directory).toBe("/moved")
+        expect(setup.data.session.get(stale.id)?.projectID).toBe(stale.projectID)
+        expect(setup.data.session.get(stale.id)?.subpath).toBeUndefined()
+      }
+      gate.resolve()
+      await initial
+
+      expect(setup.data.session.get(stale.id)).toEqual({
+        ...stale,
+        location: { directory: "/moved" },
+        subpath: undefined,
+      })
+      setup.data.session.invalidate(stale.id)
+      await setup.data.session.sync(stale.id)
+      expect(setup.data.session.get(stale.id)).toEqual(authoritative)
+      expect(requests).toBe(2)
+    } finally {
+      gate.resolve()
+      setup.dispose()
+    }
+  })
+}
+
+for (const first of ["family", "ordinary"] as const) {
+  test(`preserves the latest parent and child moves across concurrent reads when ${first} finishes first`, async () => {
+    const gates = { family: Promise.withResolvers<void>(), ordinary: Promise.withResolvers<void>() }
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const parent = { ...session(0), subpath: "old-parent" }
+    const child = { ...session(0), id: "ses_child", parentID: parent.id, subpath: "old-child" }
+    let requests = 0
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const url = new URL(request.url)
+        requests++
+        if (url.pathname === `/api/session/${child.id}`) {
+          await gates.ordinary.promise
+          return Response.json({ data: child })
+        }
+        if (url.pathname === `/api/session/${parent.id}`) {
+          await gates.family.promise
+          return Response.json({ data: parent })
+        }
+        if (url.pathname === "/api/session" && url.searchParams.get("parentID") === parent.id) {
+          await gates.family.promise
+          return Response.json({ data: [child], cursor: {} })
+        }
+        throw new Error(`Unexpected request: ${request.url}`)
+      },
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+      }),
+      dispose,
+    }))
+
+    try {
+      const reads = {
+        family: setup.data.session.sync(parent.id, { children: true }),
+        ordinary: setup.data.session.sync(child.id),
+      }
+      await wait(() => requests === 3)
+      for (const seq of [1, 2]) {
+        for (const info of [parent, child]) {
+          const event: OpenCodeEvent = {
+            id: `evt_moved_${info.id}_${seq}`,
+            created: seq,
+            type: "session.moved",
+            durable: { aggregateID: info.id, seq, version: 1 },
+            data: {
+              sessionID: info.id,
+              location: { directory: `/moved/${info.id}/${seq}` },
+              ...(seq === 1 ? { projectID: `project_${info.id}`, subpath: "intermediate" } : {}),
+            },
+          }
+          listeners.forEach((listener) => listener({ name: event.type, details: event }))
+        }
+      }
+      gates[first].resolve()
+      await reads[first]
+      expect(setup.data.session.get(child.id)).toEqual({
+        ...child,
+        location: { directory: `/moved/${child.id}/2` },
+        projectID: `project_${child.id}`,
+        subpath: undefined,
+      })
+      gates.family.resolve()
+      gates.ordinary.resolve()
+      await Promise.all(Object.values(reads))
+
+      for (const info of [parent, child]) {
+        expect(setup.data.session.get(info.id)).toEqual({
+          ...info,
+          location: { directory: `/moved/${info.id}/2` },
+          projectID: `project_${info.id}`,
+          subpath: undefined,
+        })
+        setup.data.session.invalidate(info.id)
+        await setup.data.session.sync(info.id)
+        expect(setup.data.session.get(info.id)).toEqual(info)
+      }
+      expect(requests).toBe(5)
+    } finally {
+      gates.family.resolve()
+      gates.ordinary.resolve()
+      setup.dispose()
+    }
+  })
+}
+
 test("updates authoritative cached project metadata from live events", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const original: Project = {
