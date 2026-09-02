@@ -90,7 +90,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
                 type: "tool",
                 id: "read",
                 name: "read",
-                state: { status: "completed", input: {}, content: [], metadata: {} },
+                state: { status: "completed", input: {}, content: [{ type: "text", text: "read" }], metadata: {} },
                 time: { created: 1 },
               },
               { type: "text", text: "" },
@@ -179,20 +179,35 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         })
         change((message) => {
           if (message.content[3].type === "tool")
-            message.content[3].state = { status: "completed", input: {}, metadata: {}, content: [] }
+            message.content[3].state = {
+              status: "completed",
+              input: {},
+              metadata: {},
+              content: [{ type: "text", text: "ok" }],
+            }
         })
         setState("shell", true)
         verify()
         change((message) => {
           if (message.content[4].type === "tool")
-            message.content[4].state = { status: "completed", input: {}, metadata: {}, content: [] }
+            message.content[4].state = {
+              status: "completed",
+              input: {},
+              metadata: {},
+              content: [{ type: "text", text: "answered" }],
+            }
         })
         change((message) => {
           message.content.push({
             type: "tool",
             id: "edit",
             name: "edit",
-            state: { status: "completed", input: {}, metadata: { files: [{ status: "deleted" }] }, content: [] },
+            state: {
+              status: "completed",
+              input: {},
+              metadata: { files: [{ status: "deleted" }] },
+              content: [{ type: "text", text: "edited" }],
+            },
             time: { created: 1 },
           })
         })
