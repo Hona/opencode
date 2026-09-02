@@ -5,10 +5,12 @@
 // with realistic descriptions and JSON schemas; nothing is executed.
 //
 //   bun run script/benchmark-tool-snapshot.ts [--tools 3242] [--iterations 20] [--json out.json]
+//   bun run script/benchmark-tool-snapshot.ts --tools 200 --iterations 128 --churn equivalent
+// `--churn membership` hides a different tool each step; `equivalent` changes only resources.
 //
 // Per-iteration heap growth is sampled after a forced GC before the iteration and
-// without GC afterwards, so it approximates bytes allocated by that step. Retained
-// heap after all iterations is a separate forced-GC number.
+// without GC afterwards. This is a growth proxy, not an allocation count: automatic GC
+// and heap accounting can hide allocations. Retention is a separate forced-GC number.
 import fs from "fs/promises"
 import path from "path"
 import { heapStats } from "bun:jsc"
@@ -18,6 +20,7 @@ import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { CodeModeInstructions } from "../src/codemode/instructions"
 import { Image } from "../src/image"
 import { Tool } from "../src/tool"
+import type { Permission } from "../src/permission"
 
 const args = process.argv.slice(2)
 const flag = (name: string, fallback: number) => {
@@ -34,6 +37,11 @@ const toolCount = flag("tools", 3242)
 const iterations = flag("iterations", 20)
 const jsonIndex = args.indexOf("--json")
 const jsonPath = jsonIndex === -1 ? undefined : args[jsonIndex + 1]
+const churnIndex = args.indexOf("--churn")
+const churn = churnIndex === -1 ? "none" : args[churnIndex + 1]
+if (churn !== "none" && churn !== "equivalent" && churn !== "membership") {
+  throw new Error("--churn must be equivalent or membership")
+}
 
 const resources = [
   "accounts",
@@ -196,31 +204,54 @@ const program = Effect.gen(function* () {
     }
   })
 
-  const step = Effect.gen(function* () {
-    const started = performance.now()
-    const snapshot = yield* registry.snapshot([])
-    const snapshotMs = performance.now() - started
-    const instructions = CodeModeInstructions.make(snapshot.codeModeCatalog)
-    return { definitions: snapshot.definitions.length, instructions, snapshotMs }
-  })
+  const step = (index: number) =>
+    Effect.gen(function* () {
+      const started = performance.now()
+      const rules: Permission.Ruleset =
+        churn === "none"
+          ? []
+          : [
+              {
+                action:
+                  churn === "membership"
+                    ? `cloudflare-api_${inventory[index % inventory.length]!.name}`
+                    : "cloudflare-api_*",
+                resource: churn === "membership" ? "*" : `project-${index}`,
+                effect: "deny",
+              },
+            ]
+      const snapshot = yield* registry.snapshot(rules)
+      const snapshotMs = performance.now() - started
+      const instructions = CodeModeInstructions.make(snapshot.codeModeCatalog)
+      return { definitions: snapshot.definitions.length, instructions, snapshotMs, catalog: snapshot.codeModeCatalog }
+    })
 
   const samples: Array<{ ms: number; snapshotMs: number; heapGrowth: number }> = []
+  const catalogs = new WeakSet<object>()
+  let rendered = 0
   let definitions = 0
+  Bun.gc(true)
+  Bun.gc(true)
+  const retainedBefore = process.memoryUsage().heapUsed
   for (let index = 0; index < iterations; index++) {
     Bun.gc(true)
     Bun.gc(true)
     const before = heapStats().heapSize
     const started = performance.now()
-    const result = yield* step
+    const result = yield* step(index)
     const ms = performance.now() - started
     const heapGrowth = heapStats().heapSize - before
+    if (result.catalog && !catalogs.has(result.catalog)) {
+      catalogs.add(result.catalog)
+      rendered++
+    }
     definitions = result.definitions
     samples.push({ ms, snapshotMs: result.snapshotMs, heapGrowth })
   }
   Bun.gc(true)
   Bun.gc(true)
   const retained = process.memoryUsage().heapUsed
-  return { samples, definitions, schemaBytes, retained }
+  return { samples, definitions, schemaBytes, retainedBefore, retained, rendered }
 }).pipe(Effect.scoped, Effect.provide(registryLayer), Effect.provide(Logger.layer([])))
 
 const result = await Effect.runPromise(program)
@@ -239,6 +270,7 @@ console.log(
   `tools ${toolCount} (input schema + description bytes ${mib(result.schemaBytes)} MiB), direct definitions ${result.definitions}`,
 )
 console.log(`snapshot + instructions per step, ${iterations} iterations`)
+console.log(`  churn ${churn}, distinct catalog instances ${result.rendered}`)
 console.log(
   `  first    ${times[0]!.toFixed(1)} ms (snapshot ${result.samples[0]!.snapshotMs.toFixed(1)} ms), heap growth ${mib(growth[0]!)} MiB`,
 )
@@ -274,13 +306,16 @@ console.log(
   )} MiB`,
 )
 console.log(`  retained heapUsed after forced GC ${mib(result.retained)} MiB`)
+console.log(
+  `  retained heapUsed before snapshots ${mib(result.retainedBefore)} MiB, delta ${mib(result.retained - result.retainedBefore)} MiB`,
+)
 
 if (jsonPath) {
   await fs.mkdir(path.dirname(jsonPath), { recursive: true })
   await fs.writeFile(
     jsonPath,
     JSON.stringify(
-      { revision: process.env.OPENCODE_BENCH_REVISION, bun: Bun.version, toolCount, iterations, ...result },
+      { revision: process.env.OPENCODE_BENCH_REVISION, bun: Bun.version, toolCount, iterations, churn, ...result },
       null,
       2,
     ),

@@ -209,19 +209,16 @@ const layer = Layer.effect(
         ),
     })
 
-    // Every LLM step snapshots the registry, and rendering the Code Mode catalog is O(tools)
-    // (a TypeScript signature and search entry per tool). The catalog is a pure function of
-    // the registry generation and the permission ruleset, so it is rendered once per pair;
-    // `State` replaces its data object on every rebuild, which expires the entry.
-    const catalogs = new WeakMap<Data, Map<string, CodeModeCatalog.Inventory>>()
-    const catalog = (data: Data, rules: Permission.Ruleset, inventory: CodeModeTool.Inventory) => {
-      const key = JSON.stringify(rules)
-      const entries = catalogs.get(data) ?? new Map<string, CodeModeCatalog.Inventory>()
-      catalogs.set(data, entries)
-      const cached = entries.get(key)
-      if (cached) return cached
+    // Producers replace changed schemas/options and reload when source data (including schema
+    // conversion dependencies) changes. Keep only the last visible tool set per State generation:
+    // agent-only rule churn must not retain every historical catalog.
+    const catalogs = new WeakMap<Data, { key: string; value: CodeModeCatalog.Inventory }>()
+    const catalog = (data: Data, inventory: CodeModeTool.Inventory) => {
+      const key = JSON.stringify(Array.from(inventory.tools.keys()))
+      const cached = catalogs.get(data)
+      if (cached?.key === key) return cached.value
       const rendered = CodeModeTool.catalog(inventory)
-      entries.set(key, rendered)
+      catalogs.set(data, { key, value: rendered })
       return rendered
     }
 
@@ -249,7 +246,7 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
-          const codeModeCatalog = codeModeEnabled ? catalog(data, rules, codeModeInventory) : undefined
+          const codeModeCatalog = codeModeEnabled ? catalog(data, codeModeInventory) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [

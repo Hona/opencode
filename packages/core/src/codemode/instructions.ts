@@ -128,19 +128,8 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-// Registry snapshots reuse one catalog instance until the registry changes, so its summary
-// is reused with it instead of being rebuilt for every step.
-const summaries = new WeakMap<CodeModeCatalog.Inventory, CodeModeCatalog.Summary>()
-const summarize = (inventory: CodeModeCatalog.Inventory) => {
-  const cached = summaries.get(inventory)
-  if (cached) return cached
-  const summary = CodeModeCatalog.summarize(inventory)
-  summaries.set(inventory, summary)
-  return summary
-}
-
 export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
-  const catalog = inventory === undefined ? Instructions.removed : summarize(inventory)
+  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
   return Instructions.make({
     key,
     codec,
