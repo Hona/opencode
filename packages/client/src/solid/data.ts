@@ -312,6 +312,15 @@ export function createData(config: CreateDataInput) {
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
   onCleanup(() => compacting.clear())
 
+  // Eviction count per session. A transcript or inbox read that started before its session
+  // was released must not repopulate the released data when it settles; the next owner-driven
+  // sync reads fresh because eviction also invalidates the read.
+  const evictions = new Map<string, number>()
+  function retained(sessionID: string) {
+    const count = evictions.get(sessionID)
+    return () => evictions.get(sessionID) === count
+  }
+
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
   function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
@@ -495,6 +504,7 @@ export function createData(config: CreateDataInput) {
 
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
+    evictions.set(sessionID, (evictions.get(sessionID) ?? 0) + 1)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
@@ -1335,7 +1345,9 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
+            const current = retained(sessionID)
             const pending = await api().session.inbox.list({ sessionID })
+            if (!current()) return
             // A positive read acknowledges admission even when its SSE echo is delayed.
             pending.forEach((item) => outbox.delete(item.id))
             // Compactions also coalesce by Session, not just by the proposed ID.
@@ -1549,7 +1561,9 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
+            const current = retained(sessionID)
             const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            if (!current()) return
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1602,6 +1616,7 @@ export function createData(config: CreateDataInput) {
           }
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
+          const current = retained(sessionID)
           setStore("session", "messageLoading", sessionID, true)
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
@@ -1615,7 +1630,7 @@ export function createData(config: CreateDataInput) {
                 },
                 { signal },
               )
-              if (signal?.aborted) return
+              if (signal?.aborted || !current()) return
               fetched.push(...response.data)
               next = response.cursor.next ?? undefined
               if (!options?.all) break
