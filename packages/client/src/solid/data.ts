@@ -138,14 +138,14 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  type Pending = { promise: Promise<void>; invalidated: boolean; current?: () => boolean }
   const state = new Map<string, true | Pending>()
-  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+  const start = (key: string, load: () => Promise<void>, current?: () => boolean, wait?: Promise<void>) => {
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, current }
     state.set(key, entry)
     entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
       .then(() => {
-        if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
+        if (state.get(key) === entry && !entry.invalidated && current?.() !== false) state.set(key, true)
       })
       .finally(() => {
         if (state.get(key) === entry) state.delete(key)
@@ -153,12 +153,12 @@ function createSync() {
     return entry.promise
   }
   return {
-    run(key: string, load: () => Promise<void>) {
+    run(key: string, load: () => Promise<void>, current?: () => boolean) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
-      if (!active) return start(key, load)
+      if (!active) return start(key, load, current)
       if (!active.invalidated) return active.promise
-      return start(key, load, active.promise)
+      return start(key, load, current, active.promise)
     },
     complete(key: string) {
       if (state.has(key)) return
@@ -178,7 +178,8 @@ function createSync() {
         const active = state.get(key)
         if (active === true) state.delete(key)
         if (active !== undefined && active !== true) active.invalidated = true
-        return active !== undefined
+        // An obsolete pending catalog must not admit a fresh event-driven load after release.
+        return active !== undefined && (active === true || active.current?.() !== false)
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
@@ -219,6 +220,7 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
   const holds = new Map<string, number>()
+  const locationGeneration = new Map<string, number>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -1264,6 +1266,12 @@ export function createData(config: CreateDataInput) {
     }
   }
 
+  function locationCurrent(ref: LocationRef) {
+    const key = locationKey(ref)
+    const generation = locationGeneration.get(key)
+    return () => locationGeneration.get(key) === generation
+  }
+
   // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
   // effective location, and publishes under the server's canonical location; `alias`
   // also publishes under the requested key when the two differ.
@@ -1278,12 +1286,20 @@ export function createData(config: CreateDataInput) {
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
         const id = locationKey(location)
-        return sync.run(`location.${field}:${id}`, async () => {
-          const response = await load(locationQuery(location))
-          const key = locationKey(response.location)
-          publish(key, response.data)
-          if (options?.alias && key !== id) publish(id, response.data)
-        })
+        // Capture before sync.run can queue the callback behind an earlier read.
+        const current = field === "vcs" || field === "shell" ? undefined : locationCurrent(location)
+        return sync.run(
+          `location.${field}:${id}`,
+          async () => {
+            if (current?.() === false) return
+            const response = await load(locationQuery(location))
+            if (current?.() === false) return
+            const key = locationKey(response.location)
+            publish(key, response.data)
+            if (options?.alias && key !== id) publish(id, response.data)
+          },
+          current,
+        )
       },
       invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
     }
@@ -1801,7 +1817,9 @@ export function createData(config: CreateDataInput) {
         })
       },
       async sync(ref?: LocationRef) {
+        const current = locationCurrent(ref ?? defaultLocation())
         await result.location.syncInfo(ref)
+        if (!current()) return
         const location = ref ?? defaultLocation()
         await Promise.all([
           result.location.vcs.sync(location),
@@ -1854,6 +1872,7 @@ export function createData(config: CreateDataInput) {
           // waits for the current task; a new hold by then keeps the catalogs.
           queueMicrotask(() => {
             if (holds.has(key) || key === locationKey(defaultLocation())) return
+            locationGeneration.set(key, (locationGeneration.get(key) ?? 0) + 1)
             result.location.agent.invalidate(ref)
             result.location.command.invalidate(ref)
             result.location.integration.invalidate(ref)

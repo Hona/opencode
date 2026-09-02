@@ -5,7 +5,17 @@ import { OpenCode, type OpenCodeEvent } from "../src/promise"
 
 const held = { directory: "/held" }
 const released = { directory: "/released" }
-const categories = ["model", "provider", "agent", "command", "integration", "skill", "reference", "mcp.server", "mcp.resource"] as const
+const categories = [
+  "model",
+  "provider",
+  "agent",
+  "command",
+  "integration",
+  "skill",
+  "reference",
+  "mcp.server",
+  "mcp.resource",
+] as const
 
 test.each(categories)("last release rejects a late first %s response", async (category) => {
   const requested = Promise.withResolvers<void>()
@@ -34,41 +44,44 @@ test.each(categories)("last release rejects a late first %s response", async (ca
   }
 })
 
-test.each(categories)("a queued %s sync keeps its invocation generation across close/reopen/close", async (category) => {
-  const requested = Promise.withResolvers<void>()
-  const gate = Promise.withResolvers<void>()
-  const setup = fixture(async () => {
-    requested.resolve()
-    await gate.promise
-  })
-  const resource = catalog(setup.data, category)
-  try {
-    const release = setup.data.location.retain(released)
-    const initial = resource.sync(released)
-    await requested.promise
-    release()
-    await Promise.resolve()
-    const close = setup.data.location.retain(released)
-    const queued = resource.sync(released)
-    close()
-    await Promise.resolve()
-    gate.resolve()
-    await Promise.all([initial, queued])
-    expect(resource.list(released)).toBeUndefined()
-    expect(setup.requests).toHaveLength(1)
-    const reopen = setup.data.location.retain(released)
-    await resource.sync(released)
-    await resource.sync(released)
-    expect(setup.requests).toHaveLength(2)
-    expect(resource.list(released)).toHaveLength(1)
-    reopen()
-    await Promise.resolve()
-    expect(resource.list(released)).toBeUndefined()
-  } finally {
-    gate.resolve()
-    setup.dispose()
-  }
-})
+test.each(categories)(
+  "a queued %s sync keeps its invocation generation across close/reopen/close",
+  async (category) => {
+    const requested = Promise.withResolvers<void>()
+    const gate = Promise.withResolvers<void>()
+    const setup = fixture(async () => {
+      requested.resolve()
+      await gate.promise
+    })
+    const resource = catalog(setup.data, category)
+    try {
+      const release = setup.data.location.retain(released)
+      const initial = resource.sync(released)
+      await requested.promise
+      release()
+      await Promise.resolve()
+      const close = setup.data.location.retain(released)
+      const queued = resource.sync(released)
+      close()
+      await Promise.resolve()
+      gate.resolve()
+      await Promise.all([initial, queued])
+      expect(resource.list(released)).toBeUndefined()
+      expect(setup.requests).toHaveLength(1)
+      const reopen = setup.data.location.retain(released)
+      await resource.sync(released)
+      await resource.sync(released)
+      expect(setup.requests).toHaveLength(2)
+      expect(resource.list(released)).toHaveLength(1)
+      reopen()
+      await Promise.resolve()
+      expect(resource.list(released)).toBeUndefined()
+    } finally {
+      gate.resolve()
+      setup.dispose()
+    }
+  },
+)
 
 test("released aggregate sync does not start catalogs after delayed location info", async () => {
   const requested = Promise.withResolvers<void>()
@@ -98,7 +111,7 @@ test("released aggregate sync does not start catalogs after delayed location inf
 
 test.each([false, true])("release-window events do not revive pending catalogs (reacquire: %s)", async (reacquire) => {
   const gate = Promise.withResolvers<void>()
-  const setup = fixture((url) => url.pathname === "/api/location" ? Promise.resolve() : gate.promise)
+  const setup = fixture((url) => (url.pathname === "/api/location" ? Promise.resolve() : gate.promise))
   try {
     await setup.data.location.syncInfo(released)
     const release = setup.data.location.retain(released)
@@ -108,8 +121,21 @@ test.each([false, true])("release-window events do not revive pending catalogs (
     // Merely retaining again does not make an old pending request current.
     const close = reacquire ? setup.data.location.retain(released) : () => {}
     setup.emit({ id: "evt_credentials", created: 1, type: "credential.updated", data: {} })
-    setup.emit({ id: "evt_switch", created: 1, type: "credential.switched", data: { integrationID: "integration", credentialID: null } })
-    for (const type of ["catalog.updated", "agent.updated", "command.updated", "skill.updated", "integration.updated", "mcp.status.changed", "mcp.resources.changed"] as const) {
+    setup.emit({
+      id: "evt_switch",
+      created: 1,
+      type: "credential.switched",
+      data: { integrationID: "integration", credentialID: null },
+    })
+    for (const type of [
+      "catalog.updated",
+      "agent.updated",
+      "command.updated",
+      "skill.updated",
+      "integration.updated",
+      "mcp.status.changed",
+      "mcp.resources.changed",
+    ] as const) {
       setup.emit({ id: `evt_${type}`, created: 1, type, location: released, data: { server: "fixture" } })
     }
     gate.resolve()
@@ -133,7 +159,7 @@ test.each([false, true])("release-window events do not revive pending catalogs (
 
 test("default-location late loads survive last release", async () => {
   const gate = Promise.withResolvers<void>()
-  const setup = fixture((url) => url.pathname === "/api/location" ? Promise.resolve() : gate.promise)
+  const setup = fixture((url) => (url.pathname === "/api/location" ? Promise.resolve() : gate.promise))
   try {
     await setup.data.location.syncInfo()
     const release = setup.data.location.retain(setup.data.location.default())
@@ -146,6 +172,33 @@ test("default-location late loads survive last release", async () => {
     const reads = setup.requests.length
     await Promise.all(categories.map((category) => catalog(setup.data, category).sync()))
     expect(setup.requests).toHaveLength(reads)
+  } finally {
+    gate.resolve()
+    setup.dispose()
+  }
+})
+
+test("a current explicit load queued after release can still be refreshed by events", async () => {
+  const gate = Promise.withResolvers<void>()
+  const setup = fixture((url) => (url.pathname === "/api/location" ? Promise.resolve() : gate.promise))
+  try {
+    await setup.data.location.syncInfo(released)
+    const release = setup.data.location.retain(released)
+    const initial = categories.map((category) => catalog(setup.data, category).sync(released))
+    release()
+    await Promise.resolve()
+    const close = setup.data.location.retain(released)
+    const current = categories.map((category) => catalog(setup.data, category).sync(released))
+    setup.emit({ id: "evt_reopened", created: 1, type: "catalog.updated", location: released, data: {} })
+    gate.resolve()
+    await Promise.all([...initial, ...current])
+    await setup.settle()
+    expect(setup.requests).toHaveLength(1 + categories.length * 2 + 2)
+    const reads = setup.requests.length
+    await Promise.all(categories.map((category) => catalog(setup.data, category).sync(released)))
+    expect(setup.requests).toHaveLength(reads)
+    for (const category of categories) expect(catalog(setup.data, category).list(released)).toHaveLength(1)
+    close()
   } finally {
     gate.resolve()
     setup.dispose()
