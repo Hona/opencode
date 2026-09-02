@@ -39,13 +39,7 @@ const editPart: ToolSeed = {
     content: [{ type: "text", text: "Edited src/regression.ts" }],
     metadata: {
       files: [
-        currentFile(
-          "src/regression.ts",
-          "export const value = 'before'\n",
-          "export const value = 'after'\n",
-          1,
-          1,
-        ),
+        currentFile("src/regression.ts", "export const value = 'before'\n", "export const value = 'after'\n", 1, 1),
       ],
     },
   },
@@ -80,27 +74,35 @@ export async function setupTimelineBenchmark(
     ? { ...userMessage, metadata: { diffs: options.turnDiffs as JsonValue } }
     : userMessage
   const messages = [
-    ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index)).flat().map((message) => {
-      if (options.historyShape !== "tool-heavy" || message.type !== "assistant") return message
-      return {
-        ...message,
-        content: [
-          ...Array.from({ length: 6 }, (_, index) => toolContent({
-            id: `${message.id}:read:${index}`,
-            type: "tool",
-            name: "read",
-            state: {
-              status: "completed",
-              input: { path: `src/session/module-${index}.ts` },
-              content: [{ type: "text", text: historicalSource(index, false) }],
-              metadata: {},
-            },
-            time: { created: message.time.created, ran: message.time.created, completed: message.time.created + 100 },
-          })),
-          ...message.content,
-        ],
-      }
-    }),
+    ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index))
+      .flat()
+      .map((message) => {
+        if (options.historyShape !== "tool-heavy" || message.type !== "assistant") return message
+        return {
+          ...message,
+          content: [
+            ...Array.from({ length: 6 }, (_, index) =>
+              toolContent({
+                id: `${message.id}:read:${index}`,
+                type: "tool",
+                name: "read",
+                state: {
+                  status: "completed",
+                  input: { path: `src/session/module-${index}.ts` },
+                  content: [{ type: "text", text: historicalSource(index, false) }],
+                  metadata: {},
+                },
+                time: {
+                  created: message.time.created,
+                  ran: message.time.created,
+                  completed: message.time.created + 100,
+                },
+              }),
+            ),
+            ...message.content,
+          ],
+        }
+      }),
     currentUserMessage,
     assistantMessage,
   ]
