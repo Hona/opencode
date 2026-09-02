@@ -24,6 +24,10 @@ plain first paint. Worker request counts and round-trip time describe the
 mechanism, not CPU time or desktop memory. Full reconstructed content is checked
 separately after timing. No forced GC or machine-dependent thresholds are used.
 
+`HIGHLIGHT_CORRECTNESS=1` runs the deterministic `*.correctness.ts` checks against
+the same fixture instead of the timed benchmarks: cache reuse across remounts and
+invalidation on content, theme, and worker option changes.
+
 Optional output settings: `HIGHLIGHT_RESULTS`, `HIGHLIGHT_SCREENSHOTS`,
 `OPENCODE_PERFORMANCE_RUN_ID`, and `OPENCODE_PERFORMANCE_TRACE_DIR` (separate
 diagnostic runs, not clean timing). `HIGHLIGHT_PORT` defaults to 4793. Preserve the
