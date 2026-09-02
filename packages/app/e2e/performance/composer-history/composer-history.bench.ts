@@ -10,6 +10,7 @@ for (const shape of ["text", "unique", "repeated"]) {
     const input = page.getByRole("textbox", { name: "Prompt", exact: true })
     const samples = []
     for (const cache of ["cold", "warm"]) {
+      await expect(button).toBeEnabled()
       const mountStarted = performance.now()
       await button.click()
       await expect(page.getByTestId("history-ready")).toHaveText("ready")
