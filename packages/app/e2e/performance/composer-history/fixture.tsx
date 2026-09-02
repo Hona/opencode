@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
@@ -11,16 +12,24 @@ import "@/index.css"
 
 const shape = new URLSearchParams(location.search).get("shape") ?? "text"
 const normal = Array.from({ length: 100 }, (_, index) => {
-  const content = `Review the retry policy in src/network/request-${index}.ts. Preserve cancellation and the existing error messages.\n\n` +
+  const content =
+    `Review the retry policy in src/network/request-${index}.ts. Preserve cancellation and the existing error messages.\n\n` +
     `The request should stop after three attempts. Add coverage for a 429 response, a connection reset, and a successful retry. Verify that only idempotent requests are retried.\n\n` +
     `Report ${index}:\n\`\`\`ts\nexport async function request(input: Request) {\n  const response = await fetch(input)\n  if (!response.ok) throw new Error(response.statusText)\n  return response.json()\n}\n\`\`\``
   return {
     prompt: [
       { type: "text", content, start: 0, end: content.length },
-      ...(shape !== "text" && index % 2 === 0 ? [{
-        type: "image", id: `attachment-${index}`, filename: `request-${index}.png`, mime: "image/png",
-        blob: { id: `screenshot-${shape === "repeated" ? index % 10 : index}` },
-      }] : []),
+      ...(shape !== "text" && index % 2 === 0
+        ? [
+            {
+              type: "image",
+              id: `attachment-${index}`,
+              filename: `request-${index}.png`,
+              mime: "image/png",
+              blob: { id: `screenshot-${shape === "repeated" ? index % 10 : index}` },
+            },
+          ]
+        : []),
     ],
     comments: [],
   }
@@ -40,7 +49,9 @@ const db = await new Promise<IDBDatabase>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result)
   request.onerror = () => reject(request.error)
 })
-const ids = [...new Set(normal.flatMap((entry) => entry.prompt.flatMap((part) => "blob" in part ? [part.blob.id] : [])))]
+const ids = [
+  ...new Set(normal.flatMap((entry) => entry.prompt.flatMap((part) => (part.blob ? [part.blob.id] : [])))),
+]
 const screenshots: { id: string; blob: Blob }[] = []
 for (const id of ids) {
   const canvas = document.createElement("canvas")
@@ -54,7 +65,11 @@ for (const id of ids) {
   context.fillText(`request.ts - ${id}`, 30, 35)
   for (let line = 0; line < 38; line++) {
     context.fillStyle = line % 3 ? "#a8c7ba" : "#d4a882"
-    context.fillText(`${String(line + 1).padStart(3)}  const response${line} = await fetch('/api/request/${id}/${line}', { signal, headers });`, 30, 70 + line * 20)
+    context.fillText(
+      `${String(line + 1).padStart(3)}  const response${line} = await fetch('/api/request/${id}/${line}', { signal, headers });`,
+      30,
+      70 + line * 20,
+    )
   }
   const blob = await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!), "image/png"))
   screenshots.push({ id, blob })
@@ -76,18 +91,26 @@ IDBObjectStore.prototype.get = function (key) {
   if (this.name === "documents") metrics.documents++
   if (this.name === "blobs") {
     metrics.reads++
-    request.addEventListener("success", () => { metrics.blobBytes += request.result?.size ?? 0 })
+    request.addEventListener("success", () => {
+      metrics.blobBytes += request.result?.size ?? 0
+    })
   }
   return request
 }
 const platform: Platform = {
-  platform: "web", draftStore: createBrowserDraftStore(),
-  openExternal() {}, restart: async () => {}, notify: async () => {},
+  platform: "web",
+  draftStore: createBrowserDraftStore(),
+  openExternal() {},
+  restart: async () => {},
+  notify: async () => {},
 }
 const [state, setState] = createStore({ mount: 0, ready: false, result: "" })
 const workload = {
-  shape, normalEntries: normal.length, shellEntries: shell.length,
-  imageReferences: shape === "text" ? 0 : 50, uniqueImages: ids.length,
+  shape,
+  normalEntries: normal.length,
+  shellEntries: shell.length,
+  imageReferences: shape === "text" ? 0 : 50,
+  uniqueImages: ids.length,
   storedImageBytes: screenshots.reduce((sum, item) => sum + item.blob.size, 0),
   documentBytes: new TextEncoder().encode(JSON.stringify({ normal, shell })).length,
   screenshotDimensions: [1440, 900],
@@ -105,30 +128,46 @@ function Destination() {
   // Same history creation and editor mapping as createComposerModel. Destination draft is empty.
   const history = createComposerHistory()
   const store = createStore<ComposerPersistedState>({
-    prompt: [{ type: "text", content: "", start: 0, end: 0 }], cursor: 0, context: { items: [] },
+    prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+    cursor: 0,
+    context: { items: [] },
   })
   const controller = createComposerEditor({
-    store, commands: () => [], context: () => [], searchContextFiles: () => [],
+    store,
+    commands: () => [],
+    context: () => [],
+    searchContextFiles: () => [],
     history: {
       entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (prompt, mode) => history.add(prompt, mode, []),
     },
-    view: { placeholder: () => "Empty destination composer", submit: { stopping: () => false, onSubmit() {}, onStop() {} } },
+    view: {
+      placeholder: () => "Empty destination composer",
+      submit: { stopping: () => false, onSubmit() {}, onStop() {} },
+    },
   })
   createEffect(() => {
     if (history.entries("normal").length !== 100 || history.entries("shell").length !== 100) return
-    setState({ ready: true, result: JSON.stringify({ historyReadyMs: performance.now() - started, ...metrics, ...workload }) })
+    setState({
+      ready: true,
+      result: JSON.stringify({ historyReadyMs: performance.now() - started, ...metrics, ...workload }),
+    })
   })
   return <ComposerEditor controller={controller} />
 }
-render(() => (
-  <PlatformProvider value={platform}>
+render(
+  () => (
+    <PlatformProvider value={platform}>
       <main style={{ padding: "40px", width: "900px" }}>
         <h1>Composer global history: {shape}</h1>
         <button onClick={mount}>Mount empty composer</button>
         <output data-testid="history-ready">{state.ready ? "ready" : "idle"}</output>
         <pre data-testid="history-result">{state.result}</pre>
-        <Show when={state.mount} keyed>{() => <Destination />}</Show>
+        <Show when={state.mount} keyed>
+          {(_mount) => <Destination />}
+        </Show>
       </main>
-  </PlatformProvider>
-), document.getElementById("root")!)
+    </PlatformProvider>
+  ),
+  document.getElementById("root")!,
+)
