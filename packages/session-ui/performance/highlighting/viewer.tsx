@@ -12,7 +12,7 @@ const messages: { type: string; at: number; end?: number }[] = []
 const listening = new WeakSet<Worker>()
 const pending = new Map<string, (typeof messages)[number]>()
 const postMessage = Worker.prototype.postMessage
-Worker.prototype.postMessage = function (message: WorkerRequest, options?: StructuredSerializeOptions) {
+Worker.prototype.postMessage = function (message: WorkerRequest, options?: Transferable[] | StructuredSerializeOptions) {
   if (!listening.has(this)) {
     listening.add(this)
     this.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
@@ -24,7 +24,7 @@ Worker.prototype.postMessage = function (message: WorkerRequest, options?: Struc
   const item = { type: message.type, at: performance.now() }
   messages.push(item)
   pending.set(message.id, item)
-  postMessage.call(this, message, options)
+  postMessage.call(this, message, Array.isArray(options) ? { transfer: options } : options)
 }
 
 function source(count: number, revision: number) {

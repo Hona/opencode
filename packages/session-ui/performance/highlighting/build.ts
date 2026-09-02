@@ -8,6 +8,8 @@ const outDir = process.env.HIGHLIGHT_BUNDLE
 if (!outDir) throw new Error("Set HIGHLIGHT_BUNDLE to an external artifact directory")
 const ui = realpathSync(path.resolve(import.meta.dir, "../../node_modules/@opencode-ai/ui"))
 if (ui !== realpathSync(path.resolve(import.meta.dir, "../../../ui"))) throw new Error(`Wrong workspace source: ${ui}`)
+const util = realpathSync(path.resolve(import.meta.dir, "../../node_modules/@opencode-ai/util"))
+if (util !== realpathSync(path.resolve(import.meta.dir, "../../../util"))) throw new Error(`Wrong workspace source: ${util}`)
 await build({
   configFile: false,
   logLevel: "warn",
@@ -22,5 +24,5 @@ for (const file of files.sort()) hash.update(file).update(new Uint8Array(await B
 await Bun.write(path.join(outDir, "build.json"), JSON.stringify({
   revision: Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim(),
   sourceDiff: Bun.spawnSync(["git", "diff", "--", "src/components/session-diff.ts", "src/components/file.tsx", "src/pierre/worker.ts"]).stdout.toString(),
-  bundle: hash.digest("hex"), bun: Bun.version, ui,
+  bundle: hash.digest("hex"), bun: Bun.version, ui, util,
 }, null, 2))

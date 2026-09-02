@@ -22,7 +22,16 @@ for (const large of [false, true]) {
     })
     expect(complete).toBe(true)
     expect(errors).toEqual([])
-    report({ cold, remount, changed }, {
+    const retention = await (async () => {
+      if (!process.env.HIGHLIGHT_RETENTION) return
+      await page.evaluate(() => window.highlighting.unmount())
+      const session = await page.context().newCDPSession(page)
+      await session.send("HeapProfiler.collectGarbage")
+      const heap = await session.send("Runtime.getHeapUsage")
+      await session.detach()
+      return heap
+    })()
+    report({ cold, remount, changed, retention }, {
       browser: browser.version(),
       dimensions: await page.evaluate(() => window.highlighting.dimensions),
       build: JSON.parse(await readFile(path.join(process.env.HIGHLIGHT_BUNDLE!, "build.json"), "utf8")),

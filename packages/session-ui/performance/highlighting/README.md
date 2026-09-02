@@ -29,3 +29,7 @@ Optional output settings: `HIGHLIGHT_RESULTS`, `HIGHLIGHT_SCREENSHOTS`,
 diagnostic runs, not clean timing). `HIGHLIGHT_PORT` defaults to 4793. Preserve the
 baseline build before product edits, then point `HIGHLIGHT_BUNDLE` at either frozen
 build to compare the same workload without rebuilding.
+
+`HIGHLIGHT_RETENTION=1` enables a separate post-unmount, forced-GC renderer-isolate
+heap diagnostic. Do not use that run for timing or describe it as desktop RAM;
+it excludes worker heaps and native/browser-process memory.
