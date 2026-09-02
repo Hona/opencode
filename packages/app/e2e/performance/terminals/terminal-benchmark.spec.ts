@@ -229,6 +229,10 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         const cpuAfter = await cdp.send("Performance.getMetrics")
         interaction.teardownCpuMs = (cpuAfter.metrics.find((x) => x.name === "TaskDuration")!.value - cpuBefore.metrics.find((x) => x.name === "TaskDuration")!.value) * 1000
         const snapshot = await page.evaluate(() => window.terminalProbe.serialized[0].value)
+        expect(Array.from(snapshot.matchAll(/-(\d{5})\.test\.ts/g), (match) => Number(match[1]))).toEqual(
+          Array.from({ length: 12_000 - produced.firstRecord }, (_, index) => produced.firstRecord + index),
+        )
+        expect(snapshot).toContain("TERMINAL_WORKLOAD_DONE")
         await writeFile(
           path.join(
             process.env.TERMINAL_ARTIFACTS ?? tmpdir(),
