@@ -92,6 +92,79 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("keeps the shared models.dev snapshot pristine while catalog transforms mutate records in place", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("acme")
+      const modelID = Model.ID.make("gpt-5.4")
+      const snapshot = [
+        {
+          info: {
+            id: providerID,
+            name: "Acme",
+            activation: "auto",
+            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            settings: { baseURL: "https://api.acme.test/v1" },
+            headers: { "x-acme": "provider" },
+          },
+          environment: ["ACME_API_KEY"],
+          models: [
+            {
+              id: modelID,
+              modelID,
+              providerID,
+              name: "GPT-5.4",
+              settings: { baseURL: "https://models.acme.test/v1" },
+              capabilities: { tools: true, input: ["text"], output: ["text"] },
+              variants: [],
+              time: { released: Date.parse("2026-01-01") },
+              cost: [],
+              status: "active",
+              enabled: true,
+              limit: { context: 1_050_000, output: 128_000 },
+            },
+          ],
+        },
+      ] satisfies readonly ModelsDev.Snapshot[]
+      const pristine = JSON.stringify(snapshot)
+      // The plugin receives the same snapshot instance every Location shares.
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void }),
+        ),
+      )
+
+      // Later plugins mutate nested provider and model records in place, as the Bedrock provider does.
+      yield* catalog.transform((draft) => {
+        draft.provider.update(providerID, (provider) => {
+          if (provider.settings) provider.settings.baseURL = "https://override.acme.test/v1"
+          if (provider.headers) provider.headers["x-acme"] = "override"
+        })
+        draft.model.update(providerID, modelID, (model) => {
+          if (model.settings) model.settings.baseURL = "https://override.models.acme.test/v1"
+          model.variants.push({ id: Model.VariantID.make("configured") })
+          model.capabilities.input.push("image")
+        })
+      })
+
+      const provider = yield* catalog.provider.get(providerID)
+      const model = yield* catalog.model.get(providerID, modelID)
+      expect(provider?.settings?.baseURL).toBe("https://override.acme.test/v1")
+      expect(provider?.headers).toEqual({ "x-acme": "override" })
+      expect(model?.settings?.baseURL).toBe("https://override.models.acme.test/v1")
+      expect(model?.variants).toEqual([{ id: Model.VariantID.make("configured") }])
+      expect(model?.capabilities.input).toEqual(["text", "image"])
+      expect(JSON.stringify(snapshot)).toBe(pristine)
+    }),
+  )
+
   it.effect("projects normalized models.dev snapshots into the catalog", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
