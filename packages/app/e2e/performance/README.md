@@ -94,6 +94,8 @@ bunx playwright test --config e2e/performance/playwright.config.ts \
 
 **The tab-switch fixture is not an end-to-end cold-data benchmark.** It prefetches destination messages and returns full history. Measure cold API navigation, Home-row opening, and prefetched-but-unvisited tabs separately with normal pagination. Do not combine these entry paths or compare different transports and machine-load periods as one experiment.
 
+`inactive-tab-prefetch-benchmark.spec.ts` restores eight tabs with normal 20-message pages (44 parts and 139,257 response bytes per page). It gates heavy responses independently until every tab's attention callback has run, then measures selection with ready answer Markdown and bottom anchoring. A separate case closes an inactive tab before releasing the responses. The fixture reports speculative transcript/inbox reads, request concurrency, response bytes, and activation latency. Set `OPENCODE_PERFORMANCE_MEMORY=1` only in separate retention runs; those force GC before selection and must not be mixed into clean timing results. The scope is the production browser renderer, not total desktop memory. Live background events and eviction of previously visited transcripts are separate workloads.
+
 Keep one-off reports, recorded results, and traces outside git, in the ignored `e2e/performance/results/` directory or an external artifact directory. Preserve raw observations locally and publish anonymized summaries and charts in the PR description, not as committed experiment files.
 
 For a repeatable tab-switch summary, run from `packages/app`:
