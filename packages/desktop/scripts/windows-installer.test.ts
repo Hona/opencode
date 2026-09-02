@@ -3,15 +3,16 @@ import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-// Set OPENCODE_NSIS_PATH to electron-builder's makensis.exe to run the native hook.
-test.skipIf(process.platform !== "win32" || !process.env.OPENCODE_NSIS_PATH)(
+test.skipIf(process.platform !== "win32")(
   "installer grants sandbox access without changing unrelated permissions",
   async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-installer-"))
+    const { getMakeNsisPath } = await import("app-builder-lib/out/toolsets/windows")
     const config = (await import("../electron-builder.config")).default
+    const compiler = await getMakeNsisPath(config.toolsets?.nsis, config.nsis?.customNsisBinary)
+    const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-installer-"))
     const run = async (cmd: string[]) => {
       const result = Bun.spawn(cmd, {
-        env: { ...process.env, OPENCODE_INSTALLER_TEST_ROOT: dir },
+        env: { ...process.env, ...compiler.env, OPENCODE_INSTALLER_TEST_ROOT: dir },
         stdout: "pipe",
         stderr: "pipe",
       })
@@ -51,7 +52,7 @@ Section
 SectionEnd
 `,
       )
-      await run([process.env.OPENCODE_NSIS_PATH ?? "makensis.exe", path.join(dir, "installer.nsi")])
+      await run([compiler.path, path.join(dir, "installer.nsi")])
       await run([path.join(dir, "installer.exe")])
       const installed = await acl("app/runtime/icudtl.dat")
       expect(installed).toContain("(A;ID;0x1200a9;;;S-1-15-2-2)")
@@ -64,5 +65,5 @@ SectionEnd
       await rm(dir, { recursive: true, force: true })
     }
   },
-  60_000,
+  120_000,
 )
