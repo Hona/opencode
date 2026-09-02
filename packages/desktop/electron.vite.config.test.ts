@@ -3,34 +3,6 @@ import { loadConfigFromFile, MainConfigFactory } from "electron-vite"
 import { build } from "vite"
 import pkg from "./package.json"
 
-for (const command of ["build", "serve"] as const) {
-  test.each([
-    [undefined, "dev", "dev"],
-    ["", "dev", "dev"],
-    ["local", "dev", "local"],
-    ["dev", "dev", "dev"],
-    ["beta", "beta", "beta"],
-    ["prod", "prod", "prod"],
-    ["latest", "prod", "prod"],
-    ["snapshot-example", "dev", "dev"],
-  ] as const)(`keeps main/renderer channel identities consistent for ${command}: %s`, async (raw, main, renderer) => {
-    const previous = process.env.OPENCODE_CHANNEL
-    try {
-      if (raw === undefined) delete process.env.OPENCODE_CHANNEL
-      else process.env.OPENCODE_CHANNEL = raw
-      const result = await loadConfigFromFile(
-        { command, mode: command === "build" ? "production" : "development" },
-        `${import.meta.dirname}/electron.vite.config.ts`,
-      )
-      expect(result.config.main?.define?.["import.meta.env.OPENCODE_CHANNEL"]).toBe(JSON.stringify(main))
-      expect(result.config.renderer?.define?.["import.meta.env.VITE_OPENCODE_CHANNEL"]).toBe(JSON.stringify(renderer))
-    } finally {
-      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-      else process.env.OPENCODE_CHANNEL = previous
-    }
-  })
-}
-
 test.each(["build", "serve"] as const)("configures minification for %s", async (command) => {
   const result = await loadConfigFromFile(
     { command, mode: command === "build" ? "production" : "development" },

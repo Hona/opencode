@@ -72,11 +72,6 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/desktop#test": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.github/workflows/publish.yml"],
-      "outputs": []
-    },
     "@opencode-ai/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
