@@ -133,11 +133,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider
-            directory={value}
-            workspaceID={() => current()?.location.workspaceID}
-            sessionID={() => params.id}
-          >
+          <LocationProvider directory={value} workspaceID={() => current()?.location.workspaceID}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>

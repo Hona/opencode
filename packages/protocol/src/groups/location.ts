@@ -1,7 +1,6 @@
 import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { LocationNotFoundError } from "../errors.js"
 
 export const LocationQuery = Schema.Struct({
   location: Schema.optional(
@@ -32,7 +31,6 @@ export const LocationGroup = HttpApiGroup.make("server.location")
     HttpApiEndpoint.get("location.get", "/api/location", {
       query: LocationQuery,
       success: Location.Info,
-      error: LocationNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
