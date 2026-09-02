@@ -312,9 +312,8 @@ export function createData(config: CreateDataInput) {
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
   onCleanup(() => compacting.clear())
 
-  // Eviction count per session. A transcript or inbox read that started before its session
-  // was released must not repopulate the released data when it settles; the next owner-driven
-  // sync reads fresh because eviction also invalidates the read.
+  // Capture at public read invocation, before it can queue behind an older request.
+  // Eviction also invalidates the sync entry, so skipped work cannot complete a fresh read.
   const evictions = new Map<string, number>()
   function retained(sessionID: string) {
     const count = evictions.get(sessionID)
@@ -1344,8 +1343,9 @@ export function createData(config: CreateDataInput) {
           return store.session.pending[sessionID] ?? []
         },
         sync(sessionID: string) {
+          const current = retained(sessionID)
           return sync.run(`session.pending:${sessionID}`, async () => {
-            const current = retained(sessionID)
+            if (!current()) return
             const pending = await api().session.inbox.list({ sessionID })
             if (!current()) return
             // A positive read acknowledges admission even when its SSE echo is delayed.
@@ -1560,8 +1560,9 @@ export function createData(config: CreateDataInput) {
           return position === undefined ? undefined : messages?.[position]
         },
         sync(sessionID: string) {
+          const current = retained(sessionID)
           return sync.run(`session.message:${sessionID}`, async () => {
-            const current = retained(sessionID)
+            if (!current()) return
             const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
             if (!current()) return
             const fetched = response.data.toReversed()
@@ -1599,6 +1600,7 @@ export function createData(config: CreateDataInput) {
         ) {
           const signal = options?.signal
           if (signal?.aborted) return
+          const current = retained(sessionID)
           while (messageLoads.has(sessionID)) {
             const published = await (() => {
               const pending = messageLoads.get(sessionID)
@@ -1612,11 +1614,10 @@ export function createData(config: CreateDataInput) {
                 })
                 .finally(() => signal.removeEventListener("abort", cancel))
             })()
-            if ((!options?.all && published) || signal?.aborted) return
+            if ((!options?.all && published) || signal?.aborted || !current()) return
           }
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
-          const current = retained(sessionID)
           setStore("session", "messageLoading", sessionID, true)
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
@@ -1650,7 +1651,9 @@ export function createData(config: CreateDataInput) {
             .catch((error) => {
               if (!signal?.aborted) throw error
             })
-            .finally(() => setStore("session", "messageLoading", sessionID, false))
+            .finally(() => {
+              if (current()) setStore("session", "messageLoading", sessionID, false)
+            })
           track(messageLoads, sessionID, request)
           await request
         },
