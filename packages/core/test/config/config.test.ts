@@ -906,14 +906,16 @@ describe("Config", () => {
     ),
   )
 
-  it.live("substitutes environment variables and relative file contents", () =>
+  it.live("substitutes and JSON-escapes environment variables and relative file contents", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const previous = {
           token: process.env.OPENCODE_TEST_MCP_TOKEN,
+          shell: process.env.OPENCODE_TEST_SHELL,
           missing: process.env.OPENCODE_TEST_MISSING,
         }
-        process.env.OPENCODE_TEST_MCP_TOKEN = "secret"
+        process.env.OPENCODE_TEST_MCP_TOKEN = 'secret\n"token"\t\\tail'
+        process.env.OPENCODE_TEST_SHELL = String.raw`C:\Windows\System32\cmd.exe`
         delete process.env.OPENCODE_TEST_MISSING
         return previous
       }),
@@ -929,6 +931,7 @@ describe("Config", () => {
                     path.join(tmp.path, "opencode.jsonc"),
                     `{
                       // Ignored reference: {file:missing.txt}
+                      "shell": "{env:OPENCODE_TEST_SHELL}",
                       "username": "user-{env:OPENCODE_TEST_MISSING}",
                       "mcp": {
                         "servers": {
@@ -950,12 +953,13 @@ describe("Config", () => {
               return yield* Effect.gen(function* () {
                 const config = yield* Config.Service
                 const document = (yield* config.entries()).find((entry) => entry.type === "document")
+                expect(document?.info.shell).toBe(String.raw`C:\Windows\System32\cmd.exe`)
                 expect(document?.info.username).toBe("user-")
                 const remote = document?.info.mcp?.servers?.remote
                 expect(remote?.type).toBe("remote")
                 if (remote?.type !== "remote") return
                 expect(remote.headers).toEqual({
-                  Authorization: "Bearer secret",
+                  Authorization: 'Bearer secret\n"token"\t\\tail',
                   "X-Token": 'file\n"token"',
                 })
               }).pipe(Effect.provide(testLayer(tmp.path)))
@@ -966,6 +970,8 @@ describe("Config", () => {
         Effect.sync(() => {
           if (previous.token === undefined) delete process.env.OPENCODE_TEST_MCP_TOKEN
           else process.env.OPENCODE_TEST_MCP_TOKEN = previous.token
+          if (previous.shell === undefined) delete process.env.OPENCODE_TEST_SHELL
+          else process.env.OPENCODE_TEST_SHELL = previous.shell
           if (previous.missing === undefined) delete process.env.OPENCODE_TEST_MISSING
           else process.env.OPENCODE_TEST_MISSING = previous.missing
         }),
