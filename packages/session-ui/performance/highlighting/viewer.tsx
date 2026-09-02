@@ -20,7 +20,7 @@ Worker.prototype.postMessage = function (message: WorkerRequest, options?: Trans
       const item = pending.get(event.data.id)
       if (item) item.end = performance.now()
       pending.delete(event.data.id)
-    })
+    }, { capture: true })
   }
   const item = { type: message.type, at: performance.now() }
   messages.push(item)
