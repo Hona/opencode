@@ -110,7 +110,7 @@ test.each([false, true])("release-window events do not revive pending catalogs (
     setup.emit({ id: "evt_credentials", created: 1, type: "credential.updated", data: {} })
     setup.emit({ id: "evt_switch", created: 1, type: "credential.switched", data: { integrationID: "integration", credentialID: null } })
     for (const type of ["catalog.updated", "agent.updated", "command.updated", "skill.updated", "integration.updated", "mcp.status.changed", "mcp.resources.changed"] as const) {
-      setup.emit({ id: `evt_${type}`, created: 1, type, location: released, data: {} })
+      setup.emit({ id: `evt_${type}`, created: 1, type, location: released, data: { server: "fixture" } })
     }
     gate.resolve()
     await Promise.all(initial)

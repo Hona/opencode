@@ -27,11 +27,13 @@ const homeSearch = '[data-component="home-session-search"]'
 const composerModel = '[data-action="composer-model"]'
 
 type Request = { path: string; directory: string | null }
+type CatalogWindow = Window & { __catalogReads: { pending: number; completed: number } }
 
 benchmark.use({ viewport: { width: 1440, height: 900 }, video: "off", trace: "off", serviceWorkers: "block" })
 
+for (const pending of [false, true].filter((value) => !process.env.LOCATION_CATALOG_PENDING || Number(process.env.LOCATION_CATALOG_PENDING) === Number(value))) {
 for (const count of counts) {
-  benchmark(`location catalogs: visit and close ${count} workspaces`, async ({ page, report }, testInfo) => {
+  benchmark(`location catalogs: ${pending ? "close before first response" : "visit and close"} ${count} workspaces`, async ({ page, report }, testInfo) => {
     benchmark.setTimeout(300_000)
     const catalog = createLocationCatalog(modelCount)
     const directories = Array.from(
@@ -82,6 +84,27 @@ for (const count of counts) {
         .catch(() => undefined)
     })
 
+    const gate = Promise.withResolvers<void>()
+    if (!pending) gate.resolve()
+    await page.addInitScript(({ paths, server }) => {
+      const reads = { pending: 0, completed: 0 }
+      ;(window as CatalogWindow).__catalogReads = reads
+      const watched = (url: string) => !!url && new URL(url).origin === server && paths.includes(new URL(url).pathname)
+      const fetch = window.fetch.bind(window)
+      window.fetch = (input, init) => {
+        if (watched(input instanceof Request ? input.url : String(input))) reads.pending++
+        return fetch(input, init)
+      }
+      const text = Response.prototype.text
+      Response.prototype.text = async function () {
+        const body = await text.call(this)
+        if (watched(this.url)) {
+          reads.pending--
+          reads.completed++
+        }
+        return body
+      }
+    }, { paths: catalogPaths, server })
     const transport = await installSseTransport(page, { server })
     await mockOpenCodeServer(page, {
       directory: fixture.directory,
@@ -94,6 +117,12 @@ for (const count of counts) {
       sessions: [...sessions, marker],
       pageMessages: (id) => ({ items: pages[id] ?? [] }),
     })
+    await page.route("**/api/**", async (route) => {
+      const url = new URL(route.request().url())
+      if (pending && catalogPaths.includes(url.pathname) && directories.includes(url.searchParams.get("location[directory]") ?? "")) await gate.promise
+      await route.fallback()
+    })
+    page.on("close", () => gate.resolve())
     await installTimelineSettings(page)
     await page.addInitScript(
       ({ directories, sessionIDs, server }) => {
@@ -140,7 +169,12 @@ for (const count of counts) {
       const started = performance.now()
       await tab(session.id).click()
       await expectSessionTitle(page, session.title)
-      await expect(page.locator(composerModel)).toContainText("Claude Opus 4.6")
+      if (pending) {
+        await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
+        await expect.poll(() => catalogRequests(from).filter((request) => request.directory === session.directory).map((request) => request.path).toSorted()).toEqual(catalogPaths.toSorted())
+      } else {
+        await expect(page.locator(composerModel)).toContainText("Claude Opus 4.6")
+      }
       visits.push({ ms: performance.now() - started, catalogRequests: catalogRequests(from).length })
     }
 
@@ -148,7 +182,7 @@ for (const count of counts) {
     const warmFrom = requests.length
     await tab(sessions[0]!.id).click()
     await expectSessionTitle(page, sessions[0]!.title)
-    await expect(page.locator(composerModel)).toContainText("Claude Opus 4.6")
+    if (!pending) await expect(page.locator(composerModel)).toContainText("Claude Opus 4.6")
     const warmSwitch = summarize(catalogRequests(warmFrom))
     const heapOpen = await retainedHeap()
 
@@ -189,6 +223,17 @@ for (const count of counts) {
       },
     ] satisfies OpenCodeEvent[])
     await markerRead
+    const readsAtRelease = catalogRequests(0).length
+    gate.resolve()
+    // The browser probe retains counters only, never response bodies or catalog objects.
+    // Waiting for decoded bodies and no pending catalog reads also covers event refreshes
+    // queued behind the gated first loads. Home remains the actual owning UI throughout.
+    await page.waitForFunction((minimum) => {
+      const reads = (window as CatalogWindow).__catalogReads
+      return reads.completed >= minimum && reads.pending === 0
+    }, readsAtRelease)
+    await expect(page.locator(homeSearch)).toBeVisible()
+    await expect(page.locator('[data-slot="titlebar-tabs"] a[data-titlebar-tab-link]')).toHaveCount(0)
     const credentialRefresh = summarize(catalogRequests(credentialFrom))
     const heapRefreshed = await retainedHeap()
 
@@ -235,9 +280,11 @@ for (const count of counts) {
         credentialRefresh,
         revisit: { ...revisitRequests, ms: Math.round(revisitMs) },
         reconnect: reconnectRequests,
+        lateCatalogRequests: catalogRequests(0).length - readsAtRelease - revisitRequests.requests - reconnectRequests.requests,
       },
       {
         directories: count,
+        pendingFirstResponse: pending,
         models: modelCount,
         agents: catalog.agents.length,
         commands: catalog.commands.length,
@@ -252,4 +299,5 @@ for (const count of counts) {
     if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath("revisit.png") })
     await cdp.detach()
   })
+}
 }
