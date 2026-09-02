@@ -60,7 +60,7 @@ let active: ReturnType<typeof normalize> | undefined
 document.head.insertAdjacentHTML("beforeend", `<style>
   :root { color-scheme: light; --font-family-mono: monospace; --font-size-small: 13px;
     --color-background-stronger: white; --v2-background-bg-accent: #007acc; --v2-text-text-accent: #005a9e; }
-  body { margin: 16px; } #root { height: 760px; overflow: auto; }
+  body { margin: 16px; } #root { height: 760px; overflow: auto; overflow-anchor: none; }
 </style>`)
 
 type Measurement = {
@@ -90,8 +90,10 @@ async function mount(revision: number) {
     const work = messages.slice(offset).filter((item) => item.type === "diff")
     if (work.some((item) => !item.end || rendered < item.end)) return
     const root = host.querySelector("diffs-container")?.shadowRoot
-    if (!root?.querySelector("[data-line]")) return
-    if (!root.textContent?.includes(`status: ${200 + revision}`)) return
+    const edit = root?.querySelector('[data-line="11"][data-line-type="change-addition"]')
+    if (!root || !edit?.textContent?.includes(`status: ${200 + revision}`)) return
+    const bounds = edit.getBoundingClientRect()
+    if (bounds.top < host.getBoundingClientRect().top || bounds.bottom > host.getBoundingClientRect().bottom) return
     finish({
       readyMs: performance.now() - start,
       firstReadyMs: firstReady - start,
