@@ -19,27 +19,12 @@ import {
   type PromptModel,
 } from "@/composer/state"
 import { appendPrompt, promptLength } from "@/composer/prompt-parts"
-import { migrateTabs } from "./migration"
+import { TabStorage } from "./schema"
 import { useCurrentRoute } from "@/shell/state/layout"
 
-export type SessionTab = {
-  type: "session"
-  server: ServerConnection.Key
-  sessionId: string
-  routeSessionId?: string
-  routeParentId?: string
-}
-
-export type DraftTab = {
-  type: "draft"
-  draftID: string
-  server: ServerConnection.Key
-  directory: string
-  worktree?: string
-  branch?: string
-}
-
-export type Tab = SessionTab | DraftTab
+export type SessionTab = typeof TabStorage.Session.Type
+export type DraftTab = typeof TabStorage.Draft.Type
+export type Tab = typeof TabStorage.Tab.Type
 
 export type PendingSession = {
   draft: DraftTab
@@ -48,18 +33,10 @@ export type PendingSession = {
   composer: ComposerState
 }
 
-export type TabInfo = {
-  title?: string
-  directory?: string
-}
+export type TabInfo = typeof TabStorage.Info.Type
 
 export type TabPane = "terminal" | "review"
 export type TabPaneSize = "terminalHeight" | "sessionWidth"
-type TabPaneState = Partial<Record<TabPane, boolean> & Record<TabPaneSize, number>>
-
-type RecentTab = {
-  key?: string
-}
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -92,23 +69,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   init: () => {
     const servers = useServers()
     const platform = usePlatform()
-    const [store, setStore, _, ready] = persisted(
-      {
-        ...Persist.window("tabs"),
-        migrate: migrateTabs,
-      },
-      createStore<Tab[]>([]),
-    )
-    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
-    const [info, setInfo, , infoReady] = persisted(
-      Persist.window("tabs.info"),
-      createStore<Record<string, TabInfo>>({}),
-    )
-    const [panes, setPanes, , panesReady] = persisted(
-      Persist.window("tabs.panes"),
-      createStore<Record<string, TabPaneState>>({}),
-    )
-    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
+    const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
+    const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
+      key: undefined,
+    })
+    const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
+    const [panes, setPanes, , panesReady] = persisted(Persist.window("tabs.panes"), TabStorage.Panes, {})
+    const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
     const params = useParams()
