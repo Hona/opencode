@@ -74,3 +74,29 @@ test("appends search results without resetting the selected command", async ({ p
   )
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
+
+test("keeps the automatically selected file when session results arrive later", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page)
+  const sessions = Promise.withResolvers<void>()
+  await page.route("**/api/fs/find?*", (route) =>
+    route.fulfill({ json: { data: [{ path: "README.md", type: "file" }] } }),
+  )
+  await page.route("**/api/session?*", async (route) => {
+    await sessions.promise
+    await route.fulfill({
+      json: {
+        data: [{ ...paletteSession, location: { directory: paletteSession.directory }, title: "README work" }],
+      },
+    })
+  })
+  await input.fill("README")
+  const file = dialog.getByRole("option", { name: "/ README.md", exact: true })
+  await expect(file).toHaveAttribute("aria-selected", "true")
+  sessions.resolve()
+  await expect(dialog.getByRole("option", { name: /README work/ })).toBeVisible()
+  await expect(file).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("tab", { name: "README.md", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})

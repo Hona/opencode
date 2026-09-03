@@ -78,6 +78,12 @@ export function CommandPaletteView(props: {
   )
 
   createEffect(() => {
+    // Pin automatic selection too: a later source can insert rows before it.
+    const id = activeEntry()?.id
+    if (store.active !== id) setStore("active", id)
+  })
+
+  createEffect(() => {
     props.highlight(activeEntry())
   })
 
