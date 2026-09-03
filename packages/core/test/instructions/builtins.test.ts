@@ -36,7 +36,7 @@ const it = testEffect(
 )
 
 describe("InstructionBuiltIns", () => {
-  it.effect("loads location-scoped environment and host-local date instructions", () =>
+  it.effect("loads environment, date, and shared Mermaid instructions", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
@@ -55,6 +55,19 @@ describe("InstructionBuiltIns", () => {
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
+          "",
+          "# Mermaid diagrams",
+          "- Use fenced code blocks labelled `mermaid`.",
+          "- Put each diagram statement on its own line; do not use semicolons as statement separators.",
+          "- In sequence-diagram message text, encode a literal semicolon as `#59;`, or reword with a comma.",
+          "- Close each structural block such as `opt`, `alt`, or `loop` with `end`.",
+          "",
+          "Example:",
+          "```mermaid",
+          "sequenceDiagram",
+          "    Agent->>Plugin: Check permissions#59; create pending request",
+          "    Plugin-->>Agent: Structured result",
+          "```",
         ].join("\n"),
       )
     }),

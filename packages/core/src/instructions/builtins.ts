@@ -53,6 +53,30 @@ const layer = Layer.effect(
                 changed: (_previous, date) => `Today's date is now: ${date}`,
               },
             }),
+            Instructions.make({
+              key: Instructions.Key.make("core/mermaid-guidance"),
+              codec: Schema.toCodecJson(Schema.String),
+              read: Effect.succeed(
+                [
+                  "# Mermaid diagrams",
+                  "- Use fenced code blocks labelled `mermaid`.",
+                  "- Put each diagram statement on its own line; do not use semicolons as statement separators.",
+                  "- In sequence-diagram message text, encode a literal semicolon as `#59;`, or reword with a comma.",
+                  "- Close each structural block such as `opt`, `alt`, or `loop` with `end`.",
+                  "",
+                  "Example:",
+                  "```mermaid",
+                  "sequenceDiagram",
+                  "    Agent->>Plugin: Check permissions#59; create pending request",
+                  "    Plugin-->>Agent: Structured result",
+                  "```",
+                ].join("\n"),
+              ),
+              render: {
+                initial: (guidance) => guidance,
+                changed: (_previous, guidance) => guidance,
+              },
+            }),
           ]),
         ),
     })
