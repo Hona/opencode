@@ -17,6 +17,63 @@ const categories = [
   "mcp.resource",
 ] as const
 
+test("a release keeps the identity of a live session location across session.moved", async () => {
+  const setup = fixture()
+  const a = { directory: "/move-a" }
+  const b = { directory: "/move-b" }
+  try {
+    setup.data.session.remember({
+      id: "ses_move",
+      projectID: "project",
+      location: { ...a },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    })
+    const original = setup.data.session.get("ses_move")!.location
+    const release = setup.data.location.retain(original)
+    await Promise.all([a, b].flatMap((ref) => categories.map((category) => catalog(setup.data, category).sync(ref))))
+    setup.emit({
+      id: "evt_move",
+      created: 1,
+      type: "session.moved",
+      durable: { aggregateID: "ses_move", seq: 1, version: 1 },
+      data: { sessionID: "ses_move", location: b, projectID: "project" },
+    })
+    release()
+    await setup.settle()
+    for (const category of categories) expect(catalog(setup.data, category).list(a)).toBeUndefined()
+    setup.requests.length = 0
+    await Promise.all(categories.map((category) => catalog(setup.data, category).sync(b)))
+    const bRequests = [...setup.requests]
+    setup.requests.length = 0
+    await Promise.all(categories.map((category) => catalog(setup.data, category).sync(a)))
+    if (process.env.OPENCODE_LOCATION_EVIDENCE)
+      console.log(
+        "LOCATION_MOVE_CLIENT",
+        JSON.stringify({
+          sameProxy: original === setup.data.session.get("ses_move")!.location,
+          originalNow: original.directory,
+          bRequests,
+          aRequests: setup.requests,
+          a: categories.map((category) => [category, catalog(setup.data, category).list(a) ?? null]),
+          b: categories.map((category) => [category, catalog(setup.data, category).list(b) ?? null]),
+        }),
+      )
+    expect(bRequests).toEqual([])
+    expect(setup.requests).toHaveLength(categories.length)
+    for (const category of categories) {
+      expect(catalog(setup.data, category).list(a)).toHaveLength(1)
+      expect(catalog(setup.data, category).list(b)).toHaveLength(1)
+    }
+    setup.requests.length = 0
+    await Promise.all(categories.map((category) => catalog(setup.data, category).sync(a)))
+    expect(setup.requests).toEqual([])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test.each(categories)("last release rejects a late first %s response", async (category) => {
   const requested = Promise.withResolvers<void>()
   const gate = Promise.withResolvers<void>()

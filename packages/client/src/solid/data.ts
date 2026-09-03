@@ -1855,7 +1855,9 @@ export function createData(config: CreateDataInput) {
       // Catalogs stay resident while a consumer holds the location. Releasing the last hold drops
       // the loaded catalogs and their sync state so the next consumer reloads them. Light metadata
       // (info, vcs, running shells) and the default location stay resident.
-      retain(ref: LocationRef) {
+      retain(location: LocationRef) {
+        // Session movement can mutate a caller's Solid store proxy in place.
+        const ref = { directory: location.directory, workspaceID: location.workspaceID }
         const key = locationKey(ref)
         holds.set(key, (holds.get(key) ?? 0) + 1)
         let released = false
