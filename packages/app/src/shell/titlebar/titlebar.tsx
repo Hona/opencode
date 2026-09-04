@@ -444,7 +444,7 @@ export function Titlebar(props: {
                   "pl-4": macTrafficLights(),
                 }}
               >
-                <Show when={!mobile() && !props.verticalTabs}>
+                <Show when={!mobile() && (!props.verticalTabs || windows())}>
                   <ChannelIndicator horizontal debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
@@ -641,7 +641,9 @@ export function Titlebar(props: {
                                 data-tauri-drag-region
                               />
                             </Show>
-                            <ChannelIndicator sidebar debugTools={props.debugTools} />
+                            <Show when={!windows()}>
+                              <ChannelIndicator sidebar debugTools={props.debugTools} />
+                            </Show>
                             {homeButton(true)}
                             <button
                               type="button"
