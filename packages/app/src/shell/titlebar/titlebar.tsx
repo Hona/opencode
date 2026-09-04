@@ -442,6 +442,8 @@ export function Titlebar(props: {
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
                   "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
                   "pl-4": macTrafficLights(),
+                  // Center the 20px app icon over the sidebar's 16px icon column.
+                  "ps-3.5": windows(),
                 }}
               >
                 <Show when={!mobile() && (!props.verticalTabs || windows())}>
