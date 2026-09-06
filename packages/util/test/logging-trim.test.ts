@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { Effect } from "effect"
+import { existsSync } from "fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { trim } from "../src/observability/logging.js"
+import { LOG_TRIM_LOCK_STALE_MS, trim } from "../src/observability/logging.js"
 
 const dirs: string[] = []
 
@@ -51,6 +52,41 @@ describe("Logging.trim", () => {
     await fs.writeFile(file, "x".repeat(1000))
     await run(file, { max: 500, keep: 100 })
     expect((await fs.stat(file)).size).toBe(0)
+  })
+
+  test("skips while another process holds the lock, and releases its own", async () => {
+    const file = await write(10_000)
+    const before = await fs.readFile(file, "utf8")
+    await fs.mkdir(`${file}.trim`)
+    await run(file, { max: 60_000, keep: 30_000 })
+    expect(await fs.readFile(file, "utf8")).toBe(before)
+    await fs.rmdir(`${file}.trim`)
+    await run(file, { max: 60_000, keep: 30_000 })
+    expect((await fs.stat(file)).size).toBeLessThanOrEqual(30_000)
+    expect(existsSync(`${file}.trim`)).toBe(false)
+  })
+
+  test("removes a stale lock but still yields that round", async () => {
+    const file = await write(10_000)
+    const before = await fs.readFile(file, "utf8")
+    await fs.mkdir(`${file}.trim`)
+    const stale = new Date(Date.now() - LOG_TRIM_LOCK_STALE_MS - 1000)
+    await fs.utimes(`${file}.trim`, stale, stale)
+    await run(file, { max: 60_000, keep: 30_000 })
+    expect(await fs.readFile(file, "utf8")).toBe(before)
+    expect(existsSync(`${file}.trim`)).toBe(false)
+    await run(file, { max: 60_000, keep: 30_000 })
+    expect((await fs.stat(file)).size).toBeLessThanOrEqual(30_000)
+  })
+
+  test("concurrent trimmers never empty the file", async () => {
+    const file = await write(10_000)
+    await Promise.all(Array.from({ length: 8 }, () => run(file, { max: 60_000, keep: 30_000 })))
+    const after = await fs.readFile(file, "utf8")
+    expect(after.length).toBeGreaterThanOrEqual(30_000 - 12)
+    expect(after.length).toBeLessThanOrEqual(30_000)
+    expect(after.startsWith("line ")).toBe(true)
+    expect(after.endsWith("line 009999\n")).toBe(true)
   })
 
   test("scans past a chunk boundary to find the line start", async () => {

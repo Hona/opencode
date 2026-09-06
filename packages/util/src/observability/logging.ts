@@ -9,6 +9,8 @@ import { runID } from "./shared.js"
 export const LOG_MAX_BYTES = 50 * 1024 * 1024
 export const LOG_KEEP_BYTES = 25 * 1024 * 1024
 export const LOG_TRIM_INTERVAL = "1 hour"
+// A trim of a 1 GB log takes well under a second, so a lock older than this belongs to a dead process.
+export const LOG_TRIM_LOCK_STALE_MS = 5 * 60 * 1000
 const LOG_TRIM_CHUNK = 64 * 1024
 
 function formatter(id: string = runID()) {
@@ -77,6 +79,10 @@ export function fileLogger(target = file(), id: string = runID()) {
 // Compacts in place rather than writing a temp file and renaming over the log. Other processes hold
 // the same file open with O_APPEND, so they keep appending to the compacted file, whereas a rename
 // would strand them on the unlinked inode and lose their output.
+//
+// Appenders are not coordinated with the final truncate, so a batch flushed by another process
+// between the last read and the truncate is lost. That window is a few milliseconds once per trim,
+// which is an accepted trade for not wrapping every log write in a cross-process lock.
 export const trim = Effect.fn("Logging.trim")(function* (
   target: string,
   options: { max?: number; keep?: number } = {},
@@ -84,6 +90,19 @@ export const trim = Effect.fn("Logging.trim")(function* (
   const max = options.max ?? LOG_MAX_BYTES
   const keep = options.keep ?? LOG_KEEP_BYTES
   const fs = yield* FileSystem.FileSystem
+  // Every opencode process on the machine runs this against the same file. Two trimmers racing
+  // would have one compute its cut from a size the other already shrank, so only one may proceed
+  // and the rest skip until the next interval. mkdir is the atomic primitive on every platform.
+  const lock = `${target}.trim`
+  const acquired = yield* fs.makeDirectory(lock).pipe(
+    Effect.as(true),
+    Effect.catchIf(
+      (error) => error.reason._tag === "AlreadyExists",
+      () => breakStaleLock(fs, lock),
+    ),
+  )
+  if (!acquired) return
+  yield* Effect.addFinalizer(() => fs.remove(lock, { recursive: true }).pipe(Effect.ignore))
   const size = Number((yield* fs.stat(target)).size)
   if (size <= max) return
   const handle = yield* fs.open(target, { flag: "r+" })
@@ -99,6 +118,19 @@ export const trim = Effect.fn("Logging.trim")(function* (
   )
   yield* handle.truncate(written)
 }, Effect.scoped)
+
+// Removes a lock left by a process that died mid-trim. Still yields this round: the next interval
+// acquires cleanly, and a process that is legitimately trimming right now keeps its lock.
+function breakStaleLock(fs: FileSystem.FileSystem, lock: string) {
+  return Effect.gen(function* () {
+    const info = yield* fs.stat(lock).pipe(Effect.option)
+    const modified = Option.flatMap(info, (value) => value.mtime)
+    if (Option.isNone(modified)) return false
+    if (Date.now() - modified.value.getTime() < LOG_TRIM_LOCK_STALE_MS) return false
+    yield* fs.remove(lock, { recursive: true }).pipe(Effect.ignore)
+    return false
+  })
+}
 
 // First byte after the first newline at or beyond `from`, or EOF when the tail has no newline.
 function lineStart(handle: FileSystem.File, from: number) {
