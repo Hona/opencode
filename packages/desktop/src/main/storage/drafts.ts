@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import type { Database } from "./database"
 import { blobs, document } from "./schema"
 import { createWriteBehind } from "./write-behind"
@@ -8,17 +8,22 @@ export type DraftStore = ReturnType<typeof createDraftStore>
 
 export function createDraftStore(db: Database, input: { delay?: number; onError?: (error: unknown) => void } = {}) {
   collectBlobs(db)
+  const byKey = eq(document.key, sql.placeholder("key"))
+  const read = db.select({ value: document.value }).from(document).where(byKey).prepare()
+  const remove = db.delete(document).where(byKey).prepare()
+  const upsert = db
+    .insert(document)
+    .values({ key: sql.placeholder("key"), value: sql.placeholder("value") })
+    .onConflictDoUpdate({ target: document.key, set: { value: sql.placeholder("value") } })
+    .prepare()
   const writer = createWriteBehind<string | null>({
     delay: input.delay ?? 500,
     onError: input.onError,
     write: (batch) =>
-      db.transaction((tx) => {
+      db.transaction(() => {
         for (const [key, value] of batch) {
-          if (value === null) {
-            tx.delete(document).where(eq(document.key, key)).run()
-            continue
-          }
-          tx.insert(document).values({ key, value }).onConflictDoUpdate({ target: document.key, set: { value } }).run()
+          if (value === null) remove.run({ key })
+          else upsert.run({ key, value })
         }
       }),
   })
@@ -26,7 +31,7 @@ export function createDraftStore(db: Database, input: { delay?: number; onError?
   return {
     get(key: string) {
       if (writer.has(key)) return writer.get(key) ?? null
-      return db.select({ value: document.value }).from(document).where(eq(document.key, key)).get()?.value ?? null
+      return read.get({ key })?.value ?? null
     },
     set: (key: string, value: string | null) => writer.set(key, value),
     putBlob(data: Uint8Array) {
@@ -45,21 +50,14 @@ export function createDraftStore(db: Database, input: { delay?: number; onError?
   }
 }
 
-// Blobs are content-addressed and shared; drop the ones no document references anymore.
+// Blobs are content-addressed and shared; drop the ones no document references anymore. SQLite
+// walks the JSON itself, so startup does not parse every draft and history entry in JavaScript.
 function collectBlobs(db: Database) {
-  const used = new Set<string>()
-  db.select({ value: document.value })
-    .from(document)
-    .all()
-    .forEach((row) =>
-      JSON.parse(row.value, (_key, item) => {
-        if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
-        return item
-      }),
+  db.run(sql`
+    DELETE FROM ${blobs} WHERE ${blobs.id} NOT IN (
+      SELECT json_extract(node.value, '$.id')
+      FROM ${document}, json_tree(${document.value}) AS node
+      WHERE json_valid(${document.value}) AND node.key = 'blob' AND node.type = 'object'
     )
-  db.select({ id: blobs.id })
-    .from(blobs)
-    .all()
-    .filter((row) => !used.has(row.id))
-    .forEach((row) => db.delete(blobs).where(eq(blobs.id, row.id)).run())
+  `)
 }
