@@ -1,7 +1,15 @@
-import { Effect, FileSystem, Formatter, Logger, type LogLevel } from "effect"
+import { Effect, FileSystem, Formatter, Logger, Option, Schedule, Stream, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
 import { runID } from "./shared.js"
+
+// One log file is shared by every opencode process on the machine and only ever appended to, so it
+// is bounded by compacting in place instead of rotating: once it passes LOG_MAX_BYTES the head is
+// dropped so roughly LOG_KEEP_BYTES remain, rounded forward to the next line boundary.
+export const LOG_MAX_BYTES = 50 * 1024 * 1024
+export const LOG_KEEP_BYTES = 25 * 1024 * 1024
+export const LOG_TRIM_INTERVAL = "1 hour"
+const LOG_TRIM_CHUNK = 64 * 1024
 
 function formatter(id: string = runID()) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -56,7 +64,54 @@ export function fileLogger(target = file(), id: string = runID()) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     yield* fs.makeDirectory(path.dirname(target), { recursive: true })
-    return yield* Logger.toFile(formatter(id), target, { flag: "a" })
+    const logger = yield* Logger.toFile(formatter(id), target, { flag: "a" })
+    yield* trim(target).pipe(
+      Effect.ignore,
+      Effect.repeat(Schedule.spaced(LOG_TRIM_INTERVAL)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    return logger
+  })
+}
+
+// Compacts in place rather than writing a temp file and renaming over the log. Other processes hold
+// the same file open with O_APPEND, so they keep appending to the compacted file, whereas a rename
+// would strand them on the unlinked inode and lose their output.
+export const trim = Effect.fn("Logging.trim")(function* (
+  target: string,
+  options: { max?: number; keep?: number } = {},
+) {
+  const max = options.max ?? LOG_MAX_BYTES
+  const keep = options.keep ?? LOG_KEEP_BYTES
+  const fs = yield* FileSystem.FileSystem
+  const size = Number((yield* fs.stat(target)).size)
+  if (size <= max) return
+  const handle = yield* fs.open(target, { flag: "r+" })
+  const start = yield* lineStart(handle, size - keep)
+  yield* handle.seek(0, "start")
+  // Reads run to the current EOF so lines appended since the stat survive; the write cursor always
+  // trails the read cursor so the forward copy never overwrites unread bytes.
+  const written = yield* fs.stream(target, { offset: start, chunkSize: LOG_TRIM_CHUNK }).pipe(
+    Stream.runFoldEffect(
+      () => 0,
+      (total, chunk) => handle.writeAll(chunk).pipe(Effect.as(total + chunk.length)),
+    ),
+  )
+  yield* handle.truncate(written)
+}, Effect.scoped)
+
+// First byte after the first newline at or beyond `from`, or EOF when the tail has no newline.
+function lineStart(handle: FileSystem.File, from: number) {
+  return Effect.gen(function* () {
+    let cursor = from
+    while (true) {
+      yield* handle.seek(cursor, "start")
+      const chunk = yield* handle.readAlloc(LOG_TRIM_CHUNK)
+      if (Option.isNone(chunk)) return cursor
+      const newline = chunk.value.indexOf(10)
+      if (newline !== -1) return cursor + newline + 1
+      cursor += chunk.value.length
+    }
   })
 }
 
