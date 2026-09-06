@@ -93,16 +93,20 @@ export const trim = Effect.fn("Logging.trim")(function* (
   // Every opencode process on the machine runs this against the same file. Two trimmers racing
   // would have one compute its cut from a size the other already shrank, so only one may proceed
   // and the rest skip until the next interval. mkdir is the atomic primitive on every platform.
+  // acquireRelease keeps the mkdir uninterruptible, so a scope closing mid-call cannot leave a lock
+  // on disk with no finalizer registered to remove it.
   const lock = `${target}.trim`
-  const acquired = yield* fs.makeDirectory(lock).pipe(
-    Effect.as(true),
-    Effect.catchIf(
-      (error) => error.reason._tag === "AlreadyExists",
-      () => breakStaleLock(fs, lock),
+  const acquired = yield* Effect.acquireRelease(
+    fs.makeDirectory(lock).pipe(
+      Effect.as(true),
+      Effect.catchIf(
+        (error) => error.reason._tag === "AlreadyExists",
+        () => breakStaleLock(fs, lock),
+      ),
     ),
+    (acquired) => (acquired ? fs.remove(lock, { recursive: true }).pipe(Effect.ignore) : Effect.void),
   )
   if (!acquired) return
-  yield* Effect.addFinalizer(() => fs.remove(lock, { recursive: true }).pipe(Effect.ignore))
   const size = Number((yield* fs.stat(target)).size)
   if (size <= max) return
   const handle = yield* fs.open(target, { flag: "r+" })
@@ -121,6 +125,11 @@ export const trim = Effect.fn("Logging.trim")(function* (
 
 // Removes a lock left by a process that died mid-trim. Still yields this round: the next interval
 // acquires cleanly, and a process that is legitimately trimming right now keeps its lock.
+//
+// Two processes that both observe the same stale lock can race here: one removes it, a third
+// acquires fresh, and the other removes that fresh lock. That needs a crash inside a sub-second trim
+// followed by three processes ticking within the same few milliseconds, and the consequence is the
+// same bounded tail loss documented on `trim`. Not worth a breaker protocol; see EffectFlock if it is.
 function breakStaleLock(fs: FileSystem.FileSystem, lock: string) {
   return Effect.gen(function* () {
     const info = yield* fs.stat(lock).pipe(Effect.option)

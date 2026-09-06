@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import { Effect } from "effect"
+import { Effect, FileSystem, Fiber, Layer } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import os from "os"
@@ -77,6 +77,29 @@ describe("Logging.trim", () => {
     expect(existsSync(`${file}.trim`)).toBe(false)
     await run(file, { max: 60_000, keep: 30_000 })
     expect((await fs.stat(file)).size).toBeLessThanOrEqual(30_000)
+  })
+
+  test("an interrupt during lock acquisition leaves no lock behind", async () => {
+    const file = await write(10_000)
+    // The directory exists on disk but mkdir has not returned yet when the interrupt lands.
+    const slow = Layer.effect(
+      FileSystem.FileSystem,
+      Effect.map(FileSystem.FileSystem, (real) =>
+        FileSystem.make({
+          ...real,
+          makeDirectory: (path, options) =>
+            real.makeDirectory(path, options).pipe(Effect.tap(() => Effect.sleep("200 millis"))),
+        }),
+      ),
+    ).pipe(Layer.provide(NodeFileSystem.layer))
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const fiber = yield* trim(file, { max: 60_000, keep: 30_000 }).pipe(Effect.forkChild)
+        yield* Effect.sleep("50 millis")
+        yield* Fiber.interrupt(fiber)
+      }).pipe(Effect.provide(slow)),
+    )
+    expect(existsSync(`${file}.trim`)).toBe(false)
   })
 
   test("concurrent trimmers never empty the file", async () => {
