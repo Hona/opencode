@@ -1,72 +1,34 @@
 import { createHash } from "node:crypto"
-import { DatabaseSync } from "node:sqlite"
 import { eq } from "drizzle-orm"
-import { drizzle } from "drizzle-orm/node-sqlite"
-import { blob, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import type { Database } from "./database"
+import { blobs, document } from "./schema"
+import { createWriteBehind } from "./write-behind"
 
-const documents = sqliteTable("document", {
-  key: text().primaryKey(),
-  value: text().notNull(),
-})
-const blobs = sqliteTable("blob", {
-  id: text().primaryKey(),
-  data: blob({ mode: "buffer" }).notNull(),
-})
+export type DraftStore = ReturnType<typeof createDraftStore>
 
-export function createDesktopDraftStore(filename: string) {
-  const native = new DatabaseSync(filename)
-  native.exec(
-    "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS document (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS blob (id TEXT PRIMARY KEY, data BLOB NOT NULL);",
-  )
-  const db = drizzle({ client: native })
-  const used = new Set<string>()
-  db.select({ value: documents.value })
-    .from(documents)
-    .all()
-    .forEach(({ value }) =>
-      JSON.parse(value, (_key, item) => {
-        if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
-        return item
+export function createDraftStore(db: Database, input: { delay?: number; onError?: (error: unknown) => void } = {}) {
+  collectBlobs(db)
+  const writer = createWriteBehind<string | null>({
+    delay: input.delay ?? 500,
+    onError: input.onError,
+    write: (batch) =>
+      db.transaction((tx) => {
+        for (const [key, value] of batch) {
+          if (value === null) {
+            tx.delete(document).where(eq(document.key, key)).run()
+            continue
+          }
+          tx.insert(document).values({ key, value }).onConflictDoUpdate({ target: document.key, set: { value } }).run()
+        }
       }),
-    )
-  db.select({ id: blobs.id })
-    .from(blobs)
-    .all()
-    .filter(({ id }) => !used.has(id))
-    .forEach(({ id }) => db.delete(blobs).where(eq(blobs.id, id)).run())
-  const pending = new Map<string, string | null>()
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let closed = false
-  const flush = () => {
-    if (timer) clearTimeout(timer)
-    timer = undefined
-    if (closed) return
-    const writes = [...pending]
-    pending.clear()
-    if (!writes.length) return
-    db.transaction((tx) => {
-      writes.forEach(([key, value]) => {
-        if (value === null) tx.delete(documents).where(eq(documents.key, key)).run()
-        else
-          tx.insert(documents)
-            .values({ key, value })
-            .onConflictDoUpdate({ target: documents.key, set: { value } })
-            .run()
-      })
-    })
-  }
-  const schedule = () => {
-    if (!timer) timer = setTimeout(flush, 500)
-  }
+  })
+
   return {
-    get: (key: string) =>
-      pending.has(key)
-        ? (pending.get(key) ?? null)
-        : (db.select({ value: documents.value }).from(documents).where(eq(documents.key, key)).get()?.value ?? null),
-    set(key: string, value: string | null) {
-      pending.set(key, value)
-      schedule()
+    get(key: string) {
+      if (writer.has(key)) return writer.get(key) ?? null
+      return db.select({ value: document.value }).from(document).where(eq(document.key, key)).get()?.value ?? null
     },
+    set: (key: string, value: string | null) => writer.set(key, value),
     putBlob(data: Uint8Array) {
       const id = createHash("sha256").update(data).digest("hex")
       db.insert(blobs)
@@ -75,13 +37,29 @@ export function createDesktopDraftStore(filename: string) {
         .run()
       return id
     },
-    getBlob: (id: string) => db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data ?? null,
-    flush,
-    close() {
-      if (closed) return
-      flush()
-      closed = true
-      native.close()
+    getBlob(id: string): Uint8Array | null {
+      return db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data ?? null
     },
+    flush: writer.flush,
+    close: writer.close,
   }
+}
+
+// Blobs are content-addressed and shared; drop the ones no document references anymore.
+function collectBlobs(db: Database) {
+  const used = new Set<string>()
+  db.select({ value: document.value })
+    .from(document)
+    .all()
+    .forEach((row) =>
+      JSON.parse(row.value, (_key, item) => {
+        if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
+        return item
+      }),
+    )
+  db.select({ id: blobs.id })
+    .from(blobs)
+    .all()
+    .filter((row) => !used.has(row.id))
+    .forEach((row) => db.delete(blobs).where(eq(blobs.id, row.id)).run())
 }
