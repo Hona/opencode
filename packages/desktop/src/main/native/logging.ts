@@ -89,6 +89,9 @@ function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
     yield* initRunDirectory(fs, path)
     yield* Effect.sync(() => {
       log.transports.file.maxSize = 5 * 1024 * 1024
+      // Every renderer console line arrives here; the default synchronous append would block the
+      // main thread per line. Queue them instead and accept losing the last few on a hard crash.
+      log.transports.file.sync = false
       log.transports.file.resolvePathFn = (_vars, message) =>
         path.join(
           run,
