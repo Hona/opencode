@@ -75,13 +75,14 @@ export function createNewSessionWorkspaceController(input: {
       if (event.type === "worktree.updated") void worktreeActions.refetch()
     }),
   )
+  // `latest` only skips Suspense once the resource has resolved at least once. Before that it
+  // behaves like a plain read, which holds the transition that opens the New Session tab until
+  // the worktree list returns.
+  const worktreesLoaded = () => worktrees.state === "ready" || worktrees.state === "refreshing"
   const worktreeItems = createMemo(() => {
     const project = currentProject()
     if (!project) return []
-    // `latest` only skips Suspense once the resource has resolved at least once. Before that it
-    // behaves like a plain read, which holds the transition that opens the New Session tab until
-    // the worktree list returns. Fall back to the project inventory until then.
-    if (worktrees.state !== "ready" && worktrees.state !== "refreshing") return project.worktrees
+    if (!worktreesLoaded()) return project.worktrees
     const loaded = worktrees.latest
     return loaded?.projectID === project.id ? loaded.items : project.worktrees
   })
@@ -114,10 +115,11 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
     if (!project || !worktree) return
-    return isWorkspaceSelection(project, worktree) ||
-      worktreeDirectories().some((item) => sameDirectory(item, worktree))
-      ? worktree
-      : undefined
+    if (isWorkspaceSelection(project, worktree)) return worktree
+    // A saved choice may only exist in the server inventory. Keep it until the list can confirm it,
+    // otherwise the selector falls back to Local while loading and a submit would target the wrong directory.
+    if (!worktreesLoaded()) return worktree
+    return worktreeDirectories().some((item) => sameDirectory(item, worktree)) ? worktree : undefined
   })
   const fallback = createMemo(() => {
     const project = currentProject()
@@ -180,12 +182,10 @@ export function createNewSessionWorkspaceController(input: {
       workspace: createMemo(() => {
         const project = currentProject()
         const current = value()
-        return (
-          current === "create" ||
-          (!!project &&
-            (isWorkspaceDirectory(project, current) ||
-              worktreeDirectories().some((item) => sameDirectory(item, current))))
-        )
+        if (current === "create") return true
+        if (current === "main" || !project) return false
+        if (isWorkspaceDirectory(project, current) || !worktreesLoaded()) return true
+        return worktreeDirectories().some((item) => sameDirectory(item, current))
       }),
       reset: () => {
         input.setSelectedWorktree(undefined)
