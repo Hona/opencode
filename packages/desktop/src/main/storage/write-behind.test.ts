@@ -45,24 +45,29 @@ describe("write-behind", () => {
     expect([...batches[0]!]).toEqual([["b", 2]])
   })
 
-  test("reports a failed batch and keeps accepting writes", () => {
+  test("keeps a failed batch queued and retries it on the next flush", () => {
     const errors: unknown[] = []
     let fail = true
-    const written: number[] = []
+    const batches: Map<string, number>[] = []
     const writer = createWriteBehind<number>({
       delay: 1_000,
       onError: (error) => errors.push(error),
       write: (batch) => {
         if (fail) throw new Error("disk full")
-        written.push(...batch.values())
+        batches.push(batch)
       },
     })
     writer.set("a", 1)
+    writer.set("b", 1)
     writer.flush()
     expect(errors).toHaveLength(1)
+    expect(writer.get("a")).toBe(1)
     fail = false
     writer.set("a", 2)
     writer.flush()
-    expect(written).toEqual([2])
+    expect([...batches[0]!].sort()).toEqual([
+      ["a", 2],
+      ["b", 1],
+    ])
   })
 })

@@ -10,6 +10,7 @@ import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { acquireApplicationLock, configureApplication } from "./environment"
+import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
@@ -157,6 +158,9 @@ export const layer = Layer.unwrap(
     // Electron scopes the single-instance lock to userData.
     yield* configureApplication()
     if (!acquireApplicationLock()) return yield* Effect.interrupt
+    // Decide first-launch state before the storage layer creates drafts.sqlite, which would
+    // otherwise read as evidence of an earlier launch on a fresh install.
+    yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

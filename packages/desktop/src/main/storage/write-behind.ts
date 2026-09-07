@@ -18,7 +18,9 @@ export function createWriteBehind<T>(input: {
     try {
       input.write(batch)
     } catch (error) {
-      // A failed batch is dropped rather than retried; the next mutation writes fresh state.
+      // The renderer already saw these writes succeed. Keep them queued so the next flush retries
+      // them; anything written for the same key since then takes precedence.
+      for (const [key, value] of batch) if (!pending.has(key)) pending.set(key, value)
       if (!input.onError) throw error
       input.onError(error)
     }

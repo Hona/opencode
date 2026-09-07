@@ -66,6 +66,28 @@ describe("state store", () => {
     expect(rows(db)).toEqual([{ name: "w2", key: "tabs", value: "[]" }])
   })
 
+  test("a failed flush keeps every acknowledged write until a later flush succeeds", () => {
+    const database = openDatabase(":memory:")
+    const errors: unknown[] = []
+    const store = createStateStore(database.db, { delay: 1_000, onError: (error) => errors.push(error) })
+    store.set("w", "tabs", "[1]")
+    store.set("w", "recent", "{}")
+    database.db.run(sql`DROP TABLE state`)
+    store.flush()
+    expect(errors).toHaveLength(1)
+    expect(store.get("w", "tabs")).toBe("[1]")
+    database.db.run(
+      sql`CREATE TABLE state (name TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (name, key))`,
+    )
+    store.set("w", "info", "{}")
+    store.flush()
+    expect(rows(database.db)).toEqual([
+      { name: "w", key: "info", value: "{}" },
+      { name: "w", key: "recent", value: "{}" },
+      { name: "w", key: "tabs", value: "[1]" },
+    ])
+  })
+
   test("survives close and reopen on disk", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "opencode-state-"))
     roots.push(root)
