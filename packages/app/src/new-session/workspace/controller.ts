@@ -78,6 +78,10 @@ export function createNewSessionWorkspaceController(input: {
   const worktreeItems = createMemo(() => {
     const project = currentProject()
     if (!project) return []
+    // `latest` only skips Suspense once the resource has resolved at least once. Before that it
+    // behaves like a plain read, which holds the transition that opens the New Session tab until
+    // the worktree list returns. Fall back to the project inventory until then.
+    if (worktrees.state !== "ready" && worktrees.state !== "refreshing") return project.worktrees
     const loaded = worktrees.latest
     return loaded?.projectID === project.id ? loaded.items : project.worktrees
   })
@@ -140,12 +144,19 @@ export function createNewSessionWorkspaceController(input: {
         .catch(() => ({ directory, search, data: [] })),
   )
   createEffect(() => {
-    void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(
-      () => undefined,
-    )
-    const project = currentProject()
-    const directories = project ? [project.worktree, ...worktreeDirectories()] : [sdk().directory]
-    directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
+    void Promise.all([
+      data.location.syncInfo({ directory: sdk().directory }),
+      data.project.sync(),
+      data.location.vcs.sync({ directory: sdk().directory }),
+    ]).catch(() => undefined)
+  })
+  // Only the selected worktree feeds the branch label. Syncing every worktree in the inventory boots
+  // each one on the server, which then emits `agent.updated` and makes the client run the full
+  // catalog fan-out for every directory.
+  createEffect(() => {
+    const selection = value()
+    if (selection === "main" || selection === "create") return
+    void data.location.vcs.sync({ directory: selection }).catch(() => undefined)
   })
   const branch = createMemo(() =>
     resolveNewSessionBranch({
