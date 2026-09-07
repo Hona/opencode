@@ -38,7 +38,10 @@ describe("database", () => {
       .sort()
     expect(migrations.map((migration) => migration.id)).toEqual(ids)
     for (const migration of migrations) {
-      const source = await Bun.file(path.join(directory, migration.id, "migration.sql")).text()
+      const source = (await Bun.file(path.join(directory, migration.id, "migration.sql")).text()).replaceAll(
+        "\r\n",
+        "\n",
+      )
       for (const statement of migration.statements) expect(source).toContain(statement)
     }
   })

@@ -39,7 +39,9 @@ async function render() {
   const migrations = await Promise.all(
     ids.map(async (id) => ({
       id,
+      // Normalize so a CRLF checkout renders the same registry as an LF one.
       statements: (await Bun.file(path.join(directory, id, "migration.sql")).text())
+        .replaceAll("\r\n", "\n")
         .split("--> statement-breakpoint")
         .map((statement) => statement.trim())
         .filter((statement) => statement.length > 0),
