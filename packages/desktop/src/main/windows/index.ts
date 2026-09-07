@@ -143,13 +143,13 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     win.on("session-end", () => registry.setQuitting())
     win.on("closed", () => {
       if (!registry.closed(id)) return
-      storage.state.clear(windowDataFile(id))
       runFork(
-        fs
-          .remove(path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
-          .pipe(
-            Effect.catch((error) => scoped("window", Effect.logError("failed to clean window files", { id, error }))),
-          ),
+        Effect.gen(function* () {
+          yield* Effect.try(() => storage.state.clear(windowDataFile(id)))
+          yield* fs.remove(path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
+        }).pipe(
+          Effect.catch((error) => scoped("window", Effect.logError("failed to clean window state", { id, error }))),
+        ),
       )
     })
   }
