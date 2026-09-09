@@ -34,6 +34,27 @@ function setup(input?: {
 }
 
 describe("createRequestQueue", () => {
+  test("starts a free slot before the caller continues its synchronous work", async () => {
+    const input = setup()
+    const response = input.queue.fetch("http://server/api/session")
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/session"])
+    expect(input.queue.inflight()).toBe(1)
+    input.pending[0]!.resolve()
+    await response
+    expect(input.queue.inflight()).toBe(0)
+  })
+
+  test("releases a free slot without sending an already-aborted request", async () => {
+    const input = setup()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(input.queue.fetch("http://server/api/session", { signal: controller.signal })).rejects.toBeInstanceOf(
+      DOMException,
+    )
+    expect(input.pending).toHaveLength(0)
+    expect(input.queue.inflight()).toBe(0)
+  })
+
   test("caps concurrent requests and starts queued ones as slots free up", async () => {
     const input = setup()
     const responses = ["/api/a", "/api/b", "/api/c"].map((path) => input.queue.fetch(`http://server${path}`))
