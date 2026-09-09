@@ -70,7 +70,8 @@ export function createSessionTimelineRowRenderer(input: {
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
     const rows = input.projection.rows()
-    if (patchGroupKeys.size === 0) return owners
+    // Track status changes before a group is first opened: a failed patch can
+    // split an existing group without changing the projection's row identities.
     rows.forEach((row) => {
       if (row._tag !== "AssistantPart" || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
