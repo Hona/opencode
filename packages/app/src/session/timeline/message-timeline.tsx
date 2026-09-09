@@ -364,6 +364,7 @@ type MessageTimelineProps = {
   onSelectionInteraction: (event: MouseEvent) => void
   pinned: boolean
   centered: boolean
+  reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
   onReview: () => void
@@ -853,7 +854,7 @@ function MessageTimelineView(
                         </Popover>
                       )}
                     </Show>
-                    <SessionHeader />
+                    <SessionHeader reserveReviewToggle={props.reserveReviewToggle} />
                   </div>
                 )}
               </Show>
