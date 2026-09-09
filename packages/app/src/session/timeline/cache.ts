@@ -1,4 +1,14 @@
-import { createMemo, createRoot, getOwner, onCleanup, untrack, type Accessor, type JSX } from "solid-js"
+import {
+  createComputed,
+  createMemo,
+  createRoot,
+  getOwner,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
 import type { TimelineSessionSource } from "./controller"
 
@@ -8,7 +18,6 @@ export function createTimelineCache(
   visible: Accessor<boolean>,
 ) {
   const owner = getOwner()
-  let workspace = untrack(session.identity.workspaceKey)
   const cache = createScopedCache(
     (key) =>
       createRoot((dispose) => {
@@ -42,14 +51,8 @@ export function createTimelineCache(
     { maxEntries: 16, dispose: (entry) => entry.dispose() },
   )
   onCleanup(cache.clear)
-  return () => {
-    const next = session.identity.workspaceKey()
-    // Tool and Markdown providers follow the selected Location. Detached views
-    // must not retain those providers across a directory change.
-    if (next !== workspace) {
-      cache.clear()
-      workspace = next
-    }
-    return cache.get(session.identity.sessionKey()).value
-  }
+  // Providers follow the selected Location even while its history is loading.
+  // Dispose detached views before their effects can read the new Location.
+  createComputed(on(session.identity.workspaceKey, cache.clear, { defer: true }))
+  return () => cache.get(session.identity.sessionKey()).value
 }

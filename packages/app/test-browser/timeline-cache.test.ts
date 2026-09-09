@@ -128,6 +128,22 @@ test("disposes views whose Location-scoped providers no longer match", () => {
   expect(input.disposed).toHaveLength(3)
 })
 
+test("disposes views on workspace changes while the destination is not rendered", () => {
+  const input = setup()
+  try {
+    const first = input.cache()
+    input.setState("visible", false)
+    input.setState("directory", "/other")
+    expect(input.disposed).toEqual(["ses_a"])
+    input.setState("directory", "/repo")
+    input.setState("visible", true)
+    expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
+  expect(input.disposed).toEqual(["ses_a", "ses_a"])
+})
+
 test("evicts the least recently selected view and disposes all retained owners", () => {
   const input = setup()
   try {

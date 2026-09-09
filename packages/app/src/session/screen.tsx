@@ -248,7 +248,11 @@ export function SessionScreen(props: { session: SessionModel }) {
         anchor={timeline.view.anchor}
         setRevealMessage={timeline.view.setRevealMessage}
         setScrollToEnd={timeline.view.setScrollToEnd}
-        search={<TimelineSearchBar controller={timelineSearch} />}
+        search={
+          <Show when={active()}>
+            <TimelineSearchBar controller={timelineSearch} />
+          </Show>
+        }
       />
     ),
     () => conversationVisible() && messagesReady(),

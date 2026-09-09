@@ -8,6 +8,148 @@ import { waitForStableTimeline } from "../performance/timeline/session-tab-switc
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
 
+test("recovers from a failed cold history load when another session is selected", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    ...fixture,
+    pageMessages: (id) => ({
+      items: [{ id: `msg_${id}`, type: "user", text: `History for ${id}`, time: { created: 1 } }],
+    }),
+  })
+  await page.route(`**/api/session/${fixture.targetID}/message?*`, (route) =>
+    route.fulfill({ status: 500, json: { message: "History unavailable" } }),
+  )
+  await installStressSessionTabs(page)
+  await page.goto(stressSessionHref(fixture.sourceID))
+  await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+  await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.targetID)}"]`).click()
+  await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toBeVisible()
+  await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.sourceID)}"]`).click()
+  await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toHaveCount(0)
+})
+
+test("focuses Find in the selected cached timeline", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    ...fixture,
+    pageMessages: (id) => ({
+      items: [{ id: `msg_${id}`, type: "user", text: `History for ${id}`, time: { created: 1 } }],
+    }),
+  })
+  await installStressSessionTabs(page)
+  await page.goto(stressSessionHref(fixture.sourceID))
+  await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+  await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.targetID)}"]`).click()
+  await expect(page.getByText(`History for ${fixture.targetID}`, { exact: true })).toBeVisible()
+  await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.sourceID)}"]`).click()
+  await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+  await page.keyboard.type("History")
+  await expect(search).toHaveValue("History")
+  await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.targetID)}"]`).click()
+  await expect(page.getByText(`History for ${fixture.targetID}`, { exact: true })).toBeVisible()
+  await page.keyboard.press("ControlOrMeta+f")
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(search).toHaveCount(0)
+})
+
+test("disposes the old workspace's shell while destination history is loading", async ({ page }) => {
+  const destination = "C:/OpenCode/OtherProject"
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const reads: string[] = []
+  const output = { text: "Initial shell output\n" }
+  await mockOpenCodeServer(page, {
+    ...fixture,
+    sessions: fixture.sessions.map((session) =>
+      session.id === fixture.targetID ? { ...session, directory: destination } : session,
+    ),
+    pageMessages: (id) => ({
+      items:
+        id === fixture.sourceID
+          ? ([
+              { id: "msg_workspace_source", type: "user", text: "Follow the shell", time: { created: 1 } },
+              {
+                id: "msg_workspace_shell",
+                type: "assistant",
+                agent: "build",
+                model: { id: "claude-opus-4-6", providerID: "opencode" },
+                time: { created: 2 },
+                content: [
+                  {
+                    type: "tool",
+                    id: "call_workspace_shell",
+                    name: "shell",
+                    time: { created: 2 },
+                    state: {
+                      status: "running",
+                      input: { command: "run checks" },
+                      metadata: { shellID: "sh_workspace_source" },
+                    },
+                  },
+                ],
+              },
+            ] satisfies SessionMessageInfo[])
+          : [],
+    }),
+    beforeMessagesResponse: async ({ sessionID }) => {
+      if (sessionID !== fixture.targetID) return
+      requested.resolve()
+      await release.promise
+    },
+  })
+  await page.route("**/api/shell/sh_workspace_source/output?*", (route) => {
+    const url = new URL(route.request().url())
+    const directory = url.searchParams.get("location[directory]")!
+    reads.push(directory)
+    if (directory !== fixture.directory)
+      return route.fulfill({ status: 404, json: { _tag: "ShellNotFoundError", id: "sh_workspace_source" } })
+    return route.fulfill({
+      json: {
+        location: { directory },
+        data: {
+          output: output.text.slice(Number(url.searchParams.get("cursor") ?? 0)),
+          cursor: output.text.length,
+          size: output.text.length,
+          truncated: false,
+        },
+      },
+    })
+  })
+  await installStressSessionTabs(page)
+  await page.addInitScript(
+    (detail) =>
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({
+          general: {
+            timelineDetail: { ...detail, shell: { placement: "separate", details: "expanded" } },
+          },
+        }),
+      ),
+    timelinePresets[2].value,
+  )
+  await page.goto(stressSessionHref(fixture.sourceID))
+  const shell = page.locator('[data-timeline-part-id="call_workspace_shell"]')
+  await expect(shell.locator('[data-slot="bash-result"]')).toContainText("Initial shell output")
+  const original = await page.locator("[data-timeline-virtual-content]").elementHandle()
+  try {
+    await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.targetID)}"]`).click()
+    await requested.promise
+    await expect(page.locator("[data-session-title]")).toHaveText(fixture.expected.targetTitle)
+    output.text += "Output after returning\n"
+    await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(fixture.sourceID)}"]`).click()
+    await expect(shell.locator('[data-slot="bash-result"]')).toContainText("Output after returning")
+    expect(await original!.evaluate((element) => element.isConnected)).toBe(false)
+    expect(reads.length).toBeGreaterThan(1)
+    expect(reads.every((directory) => directory === fixture.directory)).toBe(true)
+  } finally {
+    release.resolve()
+  }
+})
+
 test("loads the transcript code font before opening rich history", async ({ page }) => {
   const font = page.waitForResponse((response) => /IBMPlexMono-Text[^/]*\.woff2/.test(response.url()))
   await mockOpenCodeServer(page, {
