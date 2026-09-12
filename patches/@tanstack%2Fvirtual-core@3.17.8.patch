@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index e470032a9572b3ced764ca02238a8c6be435a9d4..84a7bfca638f70e32a9567bc732a84b83578af4e 100644
+index e470032a9572b3ced764ca02238a8c6be435a9d4..847d8b71183060fab8681e73c88c200811b8e447 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -289,7 +289,7 @@ class Virtualizer {
@@ -82,7 +82,23 @@ index e470032a9572b3ced764ca02238a8c6be435a9d4..84a7bfca638f70e32a9567bc732a84b8
            followOnAppend,
            anchorDelta
          ];
-@@ -725,17 +735,20 @@ class Virtualizer {
+@@ -470,9 +480,15 @@ class Virtualizer {
+             onTouchEnd,
+             addEventListenerOptions
+           );
++          scrollEl.addEventListener(
++            "touchcancel",
++            onTouchEnd,
++            addEventListenerOptions
++          );
+           this.unsubs.push(() => {
+             scrollEl.removeEventListener("touchstart", onTouchStart);
+             scrollEl.removeEventListener("touchend", onTouchEnd);
++            scrollEl.removeEventListener("touchcancel", onTouchEnd);
+             if (this._iosTouchEndTimerId !== null && this.targetWindow != null) {
+               this.targetWindow.clearTimeout(this._iosTouchEndTimerId);
+               this._iosTouchEndTimerId = null;
+@@ -725,17 +741,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -106,7 +122,7 @@ index e470032a9572b3ced764ca02238a8c6be435a9d4..84a7bfca638f70e32a9567bc732a84b8
            lanes,
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
-@@ -1095,8 +1108,10 @@ class Virtualizer {
+@@ -1095,8 +1114,10 @@ class Virtualizer {
        const snapshot = [];
        if (this.itemSizeCache.size === 0) return snapshot;
        const m = this.getMeasurements();
@@ -146,7 +162,7 @@ index 6b43c0aea7ed9eeef75cbfb1351fcbd243913bdd..7be2680967934ddfbc4583a210a3d11e
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 2495b26cf2c3589213546b3958eaadf2eb6b751d..accd38a89bee766fd568aa8cec9bb90c6789277a 100644
+index 2495b26cf2c3589213546b3958eaadf2eb6b751d..4c68af4df7019aedab34e9232f3e62b76c913e32 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -287,7 +287,7 @@ class Virtualizer {
@@ -229,7 +245,23 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..accd38a89bee766fd568aa8cec9bb90c
            followOnAppend,
            anchorDelta
          ];
-@@ -723,17 +733,20 @@ class Virtualizer {
+@@ -468,9 +478,15 @@ class Virtualizer {
+             onTouchEnd,
+             addEventListenerOptions
+           );
++          scrollEl.addEventListener(
++            "touchcancel",
++            onTouchEnd,
++            addEventListenerOptions
++          );
+           this.unsubs.push(() => {
+             scrollEl.removeEventListener("touchstart", onTouchStart);
+             scrollEl.removeEventListener("touchend", onTouchEnd);
++            scrollEl.removeEventListener("touchcancel", onTouchEnd);
+             if (this._iosTouchEndTimerId !== null && this.targetWindow != null) {
+               this.targetWindow.clearTimeout(this._iosTouchEndTimerId);
+               this._iosTouchEndTimerId = null;
+@@ -723,17 +739,20 @@ class Virtualizer {
          this.getMeasurements(),
          this.getSize(),
          this.getScrollOffset(),
@@ -253,7 +285,7 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..accd38a89bee766fd568aa8cec9bb90c
            lanes,
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
-@@ -1093,8 +1106,10 @@ class Virtualizer {
+@@ -1093,8 +1112,10 @@ class Virtualizer {
        const snapshot = [];
        if (this.itemSizeCache.size === 0) return snapshot;
        const m = this.getMeasurements();
@@ -267,7 +299,7 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..accd38a89bee766fd568aa8cec9bb90c
              index: item.index,
              key: item.key,
 diff --git a/src/index.ts b/src/index.ts
-index dc6f1010c4d4758de9c46fb8d69209e582e47171..2578338abb5d9237624dd6d96bb50546c6dc3e68 100644
+index dc6f1010c4d4758de9c46fb8d69209e582e47171..4db9f34ef868f4c6fcf2401b921bfa4bc3df7c3b 100644
 --- a/src/index.ts
 +++ b/src/index.ts
 @@ -567,7 +567,7 @@ export class Virtualizer<
@@ -380,7 +412,23 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..2578338abb5d9237624dd6d96bb50546
          followOnAppend,
          anchorDelta,
        ]
-@@ -1410,16 +1421,25 @@ export class Virtualizer<
+@@ -929,9 +940,15 @@ export class Virtualizer<
+           onTouchEnd,
+           addEventListenerOptions,
+         )
++        scrollEl.addEventListener(
++          'touchcancel',
++          onTouchEnd,
++          addEventListenerOptions,
++        )
+         this.unsubs.push(() => {
+           scrollEl.removeEventListener('touchstart', onTouchStart)
+           scrollEl.removeEventListener('touchend', onTouchEnd)
++          scrollEl.removeEventListener('touchcancel', onTouchEnd)
+           if (this._iosTouchEndTimerId !== null && this.targetWindow != null) {
+             this.targetWindow.clearTimeout(this._iosTouchEndTimerId)
+             this._iosTouchEndTimerId = null
+@@ -1410,16 +1427,25 @@ export class Virtualizer<
        this.getSize(),
        this.getScrollOffset(),
        this.options.lanes,
@@ -408,7 +456,7 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..2578338abb5d9237624dd6d96bb50546
          lanes,
          // Pass the typed array so binary search + forward-walk can read
          // start/end directly from Float64Array, skipping the Proxy traps.
-@@ -1937,12 +1957,13 @@ export class Virtualizer<
+@@ -1937,12 +1963,13 @@ export class Virtualizer<
    takeSnapshot = (): Array<VirtualItem> => {
      const snapshot: Array<VirtualItem> = []
      if (this.itemSizeCache.size === 0) return snapshot

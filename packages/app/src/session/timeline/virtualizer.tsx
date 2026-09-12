@@ -103,7 +103,11 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
-  const [rendering, setRendering] = createStore({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+  const [rendering, setRendering] = createStore({
+    initialTail: coldBottomMount,
+    scrollAdjustment: 0,
+    touchKey: undefined as string | undefined,
+  })
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
   const rowKeys = createMemo(() => rows().map(TimelineRow.key), undefined, {
@@ -124,6 +128,7 @@ export function createTimelineVirtualizer(input: Input) {
   const rangeExtractor = createMemo(() => {
     const id = input.projection.activeMessageID()
     const active = id ? (input.projection.messageLastRowIndex().get(id) ?? -1) : -1
+    const touched = rendering.touchKey ? rowKeys().indexOf(rendering.touchKey) : -1
     const initialTail = rendering.initialTail && input.pinned()
     return (range: Range) => {
       // Batch a bounded cheap suffix, but stop before unknown/large content.
@@ -147,7 +152,9 @@ export function createTimelineVirtualizer(input: Input) {
         ? Array.from({ length: range.count - first }, (_, index) => first + index)
         : defaultRangeExtractor({ ...range, overscan: 2 })
       return filterVirtualIndexes(
-        [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b),
+        [...new Set([...indexes, ...(active < 0 ? [] : [active]), ...(touched < 0 ? [] : [touched])])].sort(
+          (a, b) => a - b,
+        ),
         range.count,
       )
     }
@@ -474,6 +481,14 @@ export function createTimelineVirtualizer(input: Input) {
     input.onUserScroll(event.target)
     touchScrolling = true
     touchStart = event.touches[0]?.clientY
+    // Native touch events keep their original target. Retain its row so release
+    // and cancellation still reach this viewport and the virtualizer's listeners.
+    setRendering(
+      "touchKey",
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-timeline-key]")?.dataset.timelineKey
+        : undefined,
+    )
     const root = listRoot()
     if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
   }
@@ -494,6 +509,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchEnd = () => {
     touchStart = undefined
+    setRendering("touchKey", undefined)
     if (!virtualizer.isScrolling) finishTouchScroll()
   }
 

@@ -280,17 +280,15 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         contentType: "application/json",
       })
       expect(painted.positions.length).toBeGreaterThan(1)
-      const reversals = painted.positions.filter(
-        (position, index, all) => index > 0 && position.top < all[index - 1].top - 2,
-      )
-      if (reversals.length) {
-        for (const index of [reversals[0].frame - 1, reversals[0].frame])
-          await testInfo.attach(`painted-reversal-${index}`, {
+      const issues = promptMotionIssues(painted.positions)
+      if (issues.length) {
+        for (const index of [Math.max(0, issues[0].frame - 1), issues[0].frame])
+          await testInfo.attach(`painted-motion-${index}`, {
             body: Buffer.from(painted.frames[index], "base64"),
             contentType: "image/jpeg",
           })
       }
-      expect(reversals, "The painted prompt must not reverse during a one-direction drag").toEqual([])
+      expect(issues, "The painted prompt must not reverse or disappear during a one-direction drag").toEqual([])
     })
 
     for (const nestedStart of [500, 0]) {
@@ -378,6 +376,94 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
     }
 
+    for (const release of ["touchEnd", "touchCancel"] as const) {
+      test(`returns Home after scrolling the touch target out of view (${release})`, async ({ page }, testInfo) => {
+        const image = Promise.withResolvers<void>()
+        const url = new URL("/lifecycle-image.svg", testInfo.project.use.baseURL).href
+        await page.route(url, async (route) => {
+          await image.promise
+          await route.fulfill({
+            contentType: "image/svg+xml",
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="steelblue"/></svg>',
+          })
+        })
+        await setupTimeline(page, {
+          messages: [
+            userMessage(),
+            assistantMessage(
+              Array.from({ length: 80 }, (_, index) =>
+                textPart(
+                  `prt_lifecycle_${index}`,
+                  `Part ${index}.${index === 46 ? `\n\n![Delayed image](${url})` : ""}`,
+                ),
+              ),
+              { completed: false },
+            ),
+          ],
+          viewport: { width: 390, height: 844 },
+        })
+        const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+        const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+        await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+        await expect(page.getByText("Part 79.", { exact: true })).toBeInViewport()
+        await page.evaluate(() => document.fonts.ready)
+        await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+        await scroller.evaluate((element) => {
+          element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+          element.scrollTop = 0
+        })
+        const first = scroller.locator('[data-timeline-row="UserMessage"]')
+        await expect(first).toBeInViewport()
+        const start = await first.evaluate((element) => element.getBoundingClientRect().top)
+        // Measure the history before exercising a gesture across the virtual window.
+        for (let index = 0; index < 10; index++) {
+          await scroller.evaluate((element) => (element.scrollTop += 300))
+          await page.screenshot()
+          await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        }
+        await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
+        await expect(page.getByText("Part 79.", { exact: true })).toBeInViewport()
+        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        const bounds = (await scroller.boundingBox())!
+        const touched = page.getByText("Part 66.", { exact: true })
+        await expect(touched).toBeInViewport()
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 }],
+        })
+        for (let step = 1; step <= 23; step++)
+          await devtools.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 + step * 30 }],
+          })
+        await expect(touched).not.toBeInViewport()
+        await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
+        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        await expect(touched).toHaveCount(0)
+        const anchor = page.getByText("Part 47.", { exact: true })
+        await expect(anchor).toBeInViewport()
+        const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
+        image.resolve()
+        const loaded = page.getByAltText("Delayed image", { exact: true })
+        await expect(loaded).toHaveJSProperty("naturalHeight", 300)
+        await expect
+          .poll(() =>
+            scroller
+              .locator("[data-timeline-key]", { has: loaded })
+              .evaluate((element) => element.getBoundingClientRect().height),
+          )
+          .toBeGreaterThan(300)
+        await page.screenshot()
+        expect(await anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+        await scroller.press("Home")
+        await expect(first).toBeInViewport()
+        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(start, 0)
+        await testInfo.attach("home-after-touch.png", { body: await page.screenshot(), contentType: "image/png" })
+      })
+    }
+
     test("keeps the visible row anchored through reflow and touch cancellation", async ({ page }, testInfo) => {
       await setupTimeline(page, {
         messages: [
@@ -439,6 +525,30 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
   })
 }
 
+for (const hidden of ["translateY(-500px)", "scale(0)"]) {
+  test(`painted motion rejects a disappearing prompt (${hidden})`, async ({ page }) => {
+    await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([textPart("prt_pixel_control", "Content.")])],
+      viewport: { width: 390, height: 844 },
+    })
+    const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+    await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+    const prompt = timeline.locator('[data-timeline-row="UserMessage"]')
+    await expect(prompt).toBeInViewport()
+    const view = (await timeline.getByRole("region", { name: "scrollable content", exact: true }).boundingBox())!
+    const frames = [(await page.screenshot({ type: "jpeg" })).toString("base64")]
+    // Negative control: a captured disappearance must fail even if the layout recovers.
+    await prompt.evaluate((element, transform) => (element.style.transform = transform), hidden)
+    frames.push((await page.screenshot({ type: "jpeg" })).toString("base64"))
+    await prompt.evaluate((element) => element.style.removeProperty("transform"))
+    frames.push((await page.screenshot({ type: "jpeg" })).toString("base64"))
+    const positions = await readPromptPositions(page, frames, view)
+    expect(positions.map((position) => position.top !== null)).toEqual([true, false, true])
+    expect(promptMotionIssues(positions)).toEqual([{ frame: 1, reason: "missing" }])
+  })
+}
+
 async function readFrom(page: Page, text: string) {
   const timeline = page.locator('[data-slot="session-timeline-scroll"]')
   const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
@@ -484,36 +594,52 @@ async function capturePromptMotion(page: Page, view: { x: number; y: number; wid
     await session.send("Page.stopScreencast")
     await Promise.all(acknowledgements)
     await session.detach()
-    const positions = await page.evaluate(
-      async ({ frames, view, viewport }) => {
-        const positions: { frame: number; top: number }[] = []
-        for (const [frame, encoded] of frames.entries()) {
-          const image = await createImageBitmap(
-            new Blob([Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))], { type: "image/jpeg" }),
-          )
-          const canvas = new OffscreenCanvas(image.width, image.height)
-          const context = canvas.getContext("2d")!
-          context.drawImage(image, 0, 0)
-          const pixels = context.getImageData(0, 0, image.width, image.height).data
-          const scale = image.height / viewport.height
-          // This fixture's only blue content in the top 200px is its user prompt.
-          // Track painted ink, including compositor-only scroll frames.
-          for (let y = Math.ceil(view.y * scale); y < Math.min(image.height, (view.y + 200) * scale); y++) {
-            let ink = 0
-            for (let x = Math.ceil((view.x + 16) * scale); x < (view.x + view.width - 16) * scale; x++) {
-              const offset = (y * image.width + x) * 4
-              if (pixels[offset + 2] > pixels[offset] + 50 && pixels[offset + 2] > pixels[offset + 1] + 30) ink++
-            }
-            if (ink < 3) continue
-            positions.push({ frame, top: y / scale })
-            break
-          }
-          image.close()
-        }
-        return positions
-      },
-      { frames, view, viewport },
-    )
-    return { positions, frames }
+    return { positions: await readPromptPositions(page, frames, view), frames }
   }
+}
+
+async function readPromptPositions(page: Page, frames: string[], view: { x: number; y: number; width: number }) {
+  return page.evaluate(
+    async ({ frames, view, viewport }) => {
+      const positions: { frame: number; top: number | null }[] = []
+      for (const [frame, encoded] of frames.entries()) {
+        const position = { frame, top: null as number | null }
+        const image = await createImageBitmap(
+          new Blob([Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))], { type: "image/jpeg" }),
+        )
+        const canvas = new OffscreenCanvas(image.width, image.height)
+        const context = canvas.getContext("2d")!
+        context.drawImage(image, 0, 0)
+        const pixels = context.getImageData(0, 0, image.width, image.height).data
+        const scale = image.height / viewport.height
+        // This fixture's only blue content in the top 200px is its user prompt.
+        // Track painted ink, including compositor-only scroll frames.
+        for (let y = Math.ceil(view.y * scale); y < Math.min(image.height, (view.y + 200) * scale); y++) {
+          let ink = 0
+          for (let x = Math.ceil((view.x + 16) * scale); x < (view.x + view.width - 16) * scale; x++) {
+            const offset = (y * image.width + x) * 4
+            if (pixels[offset + 2] > pixels[offset] + 50 && pixels[offset + 2] > pixels[offset + 1] + 30) ink++
+          }
+          if (ink < 3) continue
+          position.top = y / scale
+          break
+        }
+        positions.push(position)
+        image.close()
+      }
+      return positions
+    },
+    { frames, view, viewport: page.viewportSize()! },
+  )
+}
+
+function promptMotionIssues(positions: { frame: number; top: number | null }[]) {
+  const first = positions.findIndex((position) => position.top !== null)
+  if (first < 0) return [{ frame: 0, reason: "never-painted" }]
+  return positions.slice(first).flatMap((position, index, all) => {
+    if (position.top === null) return [{ frame: position.frame, reason: "missing" }]
+    const previous = all[index - 1]?.top
+    if (previous === undefined || previous === null || position.top >= previous - 2) return []
+    return [{ frame: position.frame, reason: "reversed" }]
+  })
 }
