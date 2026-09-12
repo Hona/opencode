@@ -372,11 +372,23 @@ export function ScrollView(props: ScrollViewProps) {
       return
     }
     const next = scrollKey(e)
-    if (!next) return
-    if (!isScrollKeyTarget(e.target, next)) return
-    if (scrollKeyOwner(viewportRef, e.target, next) !== viewportRef) return
+    // Modified navigation (for example Ctrl+Home) stays native, but must read
+    // the same reconciled geometry as the keys handled by this component.
+    const intent =
+      next ??
+      scrollKey({
+        key: e.key,
+        shiftKey: e.key === " " && e.shiftKey,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+      })
+    if (!intent) return
+    if (!isScrollKeyTarget(e.target, intent)) return
+    if (scrollKeyOwner(viewportRef, e.target, intent) !== viewportRef) return
 
     prepareScroll()
+    if (!next) return
     const scrollAmount = viewportRef.clientHeight * 0.8
     const lineAmount = 40
 

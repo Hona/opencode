@@ -323,6 +323,18 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         const tail = page.getByText("Latest output.", { exact: true })
         await expect(root.locator("[data-timeline-virtual-content]")).toBeVisible()
         await expect(tail).toBeInViewport()
+        if (nestedStart) {
+          await page.evaluate(() => document.fonts.ready)
+          const position = await tail.evaluate((element) => element.getBoundingClientRect().top)
+          await nested.evaluate((element) => (element.scrollTop = 500))
+          await nested.press("Control+End")
+          await expect
+            .poll(() => nested.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+            .toBeLessThan(1)
+          await nested.press("Control+Home")
+          await expect(nested).toHaveJSProperty("scrollTop", 0)
+          expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(position, 0)
+        }
         await nested.evaluate((element, top) => (element.scrollTop = top), nestedStart)
         await expect(nested).toHaveJSProperty("scrollTop", nestedStart)
         const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
@@ -476,6 +488,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       { key: "Home", held: false },
       { key: "Home", held: true },
       { key: "End", held: false },
+      { key: "Control+Home", held: false },
+      { key: "Control+Home", held: true },
+      { key: "Control+End", held: false },
       { key: "latest", held: false },
       { key: "scrollbar", held: false },
       { key: "scrollbar", held: true },
@@ -547,6 +562,14 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         const extent = await scroller.evaluate((element) => element.scrollHeight)
         const bounds = (await scroller.boundingBox())!
         const devtools = await page.context().newCDPSession(page)
+        if (handoff.key.startsWith("Control+"))
+          await scroller.evaluate((element) => {
+            document.addEventListener("keydown", function observe(event) {
+              if (!event.ctrlKey || !["Home", "End"].includes(event.key)) return
+              element.dataset.nativeScrollPrevented = String(event.defaultPrevented)
+              document.removeEventListener("keydown", observe)
+            })
+          })
         await devtools.send("Input.dispatchTouchEvent", {
           type: "touchStart",
           touchPoints: [{ x: bounds.x + 100, y: bounds.y + 200 }],
@@ -603,7 +626,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             .toBeCloseTo(touchTop + 30, 0)
         if (!handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
         if (handoff.key === "latest") await latest.click()
-        if (handoff.key === "Home" || handoff.key === "End") await scroller.press(handoff.key)
+        if (handoff.key !== "latest" && !usesScrollbar) await scroller.press(handoff.key)
+        if (handoff.key.startsWith("Control+"))
+          await expect(scroller).toHaveAttribute("data-native-scroll-prevented", "false")
         if (usesScrollbar) {
           expect(grip).toBeTruthy()
           if (!grip) return
@@ -634,7 +659,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           await page.mouse.up()
           await page.mouse.move(0, 0)
         }
-        const toStart = handoff.key === "Home" || usesScrollbar
+        const toStart = handoff.key.endsWith("Home") || usesScrollbar
         if (toStart) await expect(first).toBeInViewport()
         if (!toStart) await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
         await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
