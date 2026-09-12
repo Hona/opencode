@@ -12,7 +12,7 @@ import { reportVisualStability, startVisualProbe, stopVisualProbe, visualPlan } 
 
 // Compositor prediction can add 20–25px to discrete CDP moves even in a plain
 // scrollport. Disable it so the visual assertion measures the supplied gesture.
-test.use({ launchOptions: { args: ["--disable-features=ResamplingScrollEvents"] } })
+test.use({ colorScheme: "light", launchOptions: { args: ["--disable-features=ResamplingScrollEvents"] } })
 
 for (const device of ["Pixel 7", "iPhone 13"]) {
   test.describe(device, () => {
@@ -258,6 +258,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await timeline.send(partUpdated(shell("prt_shrink_0", "running", "Updated shorter output.")))
       await expect(part).toContainText("Updated shorter output.")
       await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(height)
+      const capture = await capturePromptMotion(page, bounds)
       for (let step = 1; step <= 21; step++)
         await devtools.send("Input.dispatchTouchEvent", {
           type: "touchMove",
@@ -273,6 +274,23 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await testInfo.attach("start-released.png", { body: await page.screenshot(), contentType: "image/png" })
       expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(reading.start, 0)
       expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+      const painted = await capture()
+      await testInfo.attach("painted-prompt-motion", {
+        body: JSON.stringify(painted.positions),
+        contentType: "application/json",
+      })
+      expect(painted.positions.length).toBeGreaterThan(1)
+      const reversals = painted.positions.filter(
+        (position, index, all) => index > 0 && position.top < all[index - 1].top - 2,
+      )
+      if (reversals.length) {
+        for (const index of [reversals[0].frame - 1, reversals[0].frame])
+          await testInfo.attach(`painted-reversal-${index}`, {
+            body: Buffer.from(painted.frames[index], "base64"),
+            contentType: "image/jpeg",
+          })
+      }
+      expect(reversals, "The painted prompt must not reverse during a one-direction drag").toEqual([])
     })
 
     for (const nestedStart of [500, 0]) {
@@ -442,4 +460,60 @@ async function readFrom(page: Page, text: string) {
   })
   await expect(anchor).toBeInViewport()
   return { timeline, scroller, anchor, start }
+}
+
+async function capturePromptMotion(page: Page, view: { x: number; y: number; width: number }) {
+  const session = await page.context().newCDPSession(page)
+  const frames: string[] = []
+  const acknowledgements: Promise<unknown>[] = []
+  const onFrame = (frame: { data: string; sessionId: number }) => {
+    frames.push(frame.data)
+    acknowledgements.push(session.send("Page.screencastFrameAck", { sessionId: frame.sessionId }))
+  }
+  session.on("Page.screencastFrame", onFrame)
+  const viewport = page.viewportSize()!
+  await session.send("Page.startScreencast", {
+    format: "jpeg",
+    quality: 90,
+    maxWidth: viewport.width,
+    maxHeight: viewport.height,
+    everyNthFrame: 1,
+  })
+  return async () => {
+    session.off("Page.screencastFrame", onFrame)
+    await session.send("Page.stopScreencast")
+    await Promise.all(acknowledgements)
+    await session.detach()
+    const positions = await page.evaluate(
+      async ({ frames, view, viewport }) => {
+        const positions: { frame: number; top: number }[] = []
+        for (const [frame, encoded] of frames.entries()) {
+          const image = await createImageBitmap(
+            new Blob([Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))], { type: "image/jpeg" }),
+          )
+          const canvas = new OffscreenCanvas(image.width, image.height)
+          const context = canvas.getContext("2d")!
+          context.drawImage(image, 0, 0)
+          const pixels = context.getImageData(0, 0, image.width, image.height).data
+          const scale = image.height / viewport.height
+          // This fixture's only blue content in the top 200px is its user prompt.
+          // Track painted ink, including compositor-only scroll frames.
+          for (let y = Math.ceil(view.y * scale); y < Math.min(image.height, (view.y + 200) * scale); y++) {
+            let ink = 0
+            for (let x = Math.ceil((view.x + 16) * scale); x < (view.x + view.width - 16) * scale; x++) {
+              const offset = (y * image.width + x) * 4
+              if (pixels[offset + 2] > pixels[offset] + 50 && pixels[offset + 2] > pixels[offset + 1] + 30) ink++
+            }
+            if (ink < 3) continue
+            positions.push({ frame, top: y / scale })
+            break
+          }
+          image.close()
+        }
+        return positions
+      },
+      { frames, view, viewport },
+    )
+    return { positions, frames }
+  }
 }

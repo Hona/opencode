@@ -182,17 +182,16 @@ export function createTimelineVirtualizer(input: Input) {
         // Rows and the sizer use the opposite translation while native touch
         // scrolling keeps its own offset. Range selection uses the logical offset.
         batch(() => {
-          // A shrinking prefix can bring the logical start into view before the
-          // native offset reaches zero. Do not translate past that boundary.
-          setRendering("scrollAdjustment", (value) => Math.max(value, -Math.max(0, offset)))
-          callback(offset + rendering.scrollAdjustment, scrolling)
-          // Keep native headroom while dragging toward newly grown history.
-          // Otherwise the browser can clamp at zero before the logical start.
+          const logicalOffset = offset + rendering.scrollAdjustment
+          callback(rendering.scrollAdjustment ? Math.max(0, logicalOffset) : offset, scrolling)
+          // Reconcile both start boundaries in one native write. Gradually
+          // clamping row translations lets the compositor paint between
+          // corrections and makes the content oscillate at the top.
           const root = listRoot()
           if (
-            rendering.scrollAdjustment > 0 &&
+            rendering.scrollAdjustment !== 0 &&
             root &&
-            (offset <= 0 || (touchStart !== undefined && offset <= root.clientHeight))
+            (logicalOffset <= 0 || offset <= 0 || (touchStart !== undefined && offset <= root.clientHeight))
           )
             flushTouchAdjustment()
           if (!scrolling && touchStart === undefined) finishTouchScroll()
@@ -333,7 +332,7 @@ export function createTimelineVirtualizer(input: Input) {
     batch(() => {
       setRendering("scrollAdjustment", 0)
       if (virtualContent) virtualContent.style.height = `${virtualizer.getTotalSize()}px`
-      elementScroll(root.scrollTop + adjustment, {}, virtualizer)
+      elementScroll(Math.max(0, root.scrollTop + adjustment), {}, virtualizer)
     })
   }
   const virtualItemByKey = createMemo(
