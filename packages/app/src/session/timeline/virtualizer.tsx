@@ -181,8 +181,22 @@ export function createTimelineVirtualizer(input: Input) {
         if (!active()) return
         // Rows and the sizer use the opposite translation while native touch
         // scrolling keeps its own offset. Range selection uses the logical offset.
-        callback(offset + rendering.scrollAdjustment, scrolling)
-        if (!scrolling && touchStart === undefined) finishTouchScroll()
+        batch(() => {
+          // A shrinking prefix can bring the logical start into view before the
+          // native offset reaches zero. Do not translate past that boundary.
+          setRendering("scrollAdjustment", (value) => Math.max(value, -Math.max(0, offset)))
+          callback(offset + rendering.scrollAdjustment, scrolling)
+          // Keep native headroom while dragging toward newly grown history.
+          // Otherwise the browser can clamp at zero before the logical start.
+          const root = listRoot()
+          if (
+            rendering.scrollAdjustment > 0 &&
+            root &&
+            (offset <= 0 || (touchStart !== undefined && offset <= root.clientHeight))
+          )
+            flushTouchAdjustment()
+          if (!scrolling && touchStart === undefined) finishTouchScroll()
+        })
         settleColdBottom()
       }
       return observeElementOffsetReconnectAware(instance, reportOffset, () => {
@@ -269,14 +283,16 @@ export function createTimelineVirtualizer(input: Input) {
       batch(() => {
         sizes.forEach(([index, value]) => {
           const row = rows()[index]
-          if (row && TimelineRow.key(row) === value.key) resizeItem(index, value.size)
-        })
-        if (touchAdjustment) {
+          if (!row || TimelineRow.key(row) !== value.key) return
+          resizeItem(index, value.size)
+          // TanStack recalculates its range after each resize. Advance the
+          // logical fold before deciding whether the next row needs anchoring.
+          if (!touchAdjustment) return
           setRendering("scrollAdjustment", (value) => value + touchAdjustment)
           touchAdjustment = 0
           const root = listRoot()
           if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
-        }
+        })
       })
       batchingColdSizes = false
       if (coldPending) pinColdBottom()
@@ -306,6 +322,10 @@ export function createTimelineVirtualizer(input: Input) {
 
   function finishTouchScroll() {
     touchScrolling = false
+    flushTouchAdjustment()
+  }
+
+  function flushTouchAdjustment() {
     const adjustment = rendering.scrollAdjustment
     const root = listRoot()
     if (!adjustment || !root) return
@@ -455,6 +475,8 @@ export function createTimelineVirtualizer(input: Input) {
     input.onUserScroll(event.target)
     touchScrolling = true
     touchStart = event.touches[0]?.clientY
+    const root = listRoot()
+    if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
   }
 
   const handleListTouchMove = (event: TouchEvent & { currentTarget: HTMLDivElement }) => {
@@ -464,6 +486,10 @@ export function createTimelineVirtualizer(input: Input) {
     touchStart = current
     // Dragging the content downward reveals earlier messages.
     if (current <= previous) return
+    const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
+    // A nested scrollport owns the intent. If it chains into the timeline at a
+    // boundary, the resulting native timeline scroll below will unpin instead.
+    if (nested && nested !== event.currentTarget && nested.scrollHeight > nested.clientHeight) return
     input.onUnpin()
   }
 
@@ -512,7 +538,7 @@ export function createTimelineVirtualizer(input: Input) {
     const atEnd = maxScroll - scrollTop <= endEpsilon
     const arrived = scrollTop > previousTop + endEpsilon || maxScroll < previousMaxScroll
     if (maxScroll <= 1 || (atEnd && arrived)) input.onPin()
-    else if (pointerHeld && scrollTop < previousTop - endEpsilon) input.onUnpin()
+    else if ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon) input.onUnpin()
     settleColdBottom()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()

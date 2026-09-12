@@ -1,9 +1,10 @@
-import { devices, expect, test } from "@playwright/test"
+import { devices, expect, test, type Page } from "@playwright/test"
 import {
   assistantMessage,
   partUpdated,
   renderedPartID,
   setupTimeline,
+  shell,
   textPart,
   userMessage,
 } from "../performance/timeline-stability/fixture"
@@ -90,7 +91,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect.poll(async () => (await anchor.boundingBox())?.y).toBeCloseTo(origin.y + sign * step * 50, 0)
           }
           await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-          // Include release and momentum corrections through the scroll indicator's idle state.
+          // Include release corrections through the scroll indicator's idle state.
           await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
           await testInfo.attach(`swipe-${index}.png`, { body: await page.screenshot(), contentType: "image/png" })
           expect((await anchor.boundingBox())?.y).toBeCloseTo(origin.y + sign * 400, 0)
@@ -146,5 +147,299 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await testInfo.attach("held-touch.png", { body: await page.screenshot(), contentType: "image/png" })
       expect((await anchor.boundingBox())?.y).toBeCloseTo(before.y, 0)
     })
+
+    for (const imageCount of [1, 2]) {
+      test(`keeps the reading anchor when ${imageCount} earlier images load during a drag`, async ({
+        page,
+      }, testInfo) => {
+        const image = Promise.withResolvers<void>()
+        const url = new URL("/mobile-scroll-images.svg", testInfo.project.use.baseURL).href
+        await page.route(url, async (route) => {
+          await image.promise
+          await route.fulfill({
+            contentType: "image/svg+xml",
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="340" height="600"><rect width="340" height="600" fill="steelblue"/></svg>',
+          })
+        })
+        await setupTimeline(page, {
+          messages: [
+            userMessage(),
+            assistantMessage(
+              Array.from({ length: 6 }, (_, index) =>
+                textPart(
+                  `prt_images_${index}`,
+                  index < imageCount
+                    ? `Image ${index}.\n\n![Image ${index}](${url})`
+                    : index < 2
+                      ? "Earlier context."
+                      : Array.from({ length: 12 }, (_, line) => `Part ${index} line ${line}.`).join("\n\n"),
+                ),
+              ),
+              { completed: false },
+            ),
+          ],
+          viewport: { width: 390, height: 844 },
+        })
+        const reading = await readFrom(page, "Part 2 line 0.")
+        const images = Array.from({ length: imageCount }, (_, index) =>
+          page.getByAltText(`Image ${index}`, { exact: true }),
+        )
+        const rows = images.map((image) => reading.scroller.locator("[data-timeline-key]", { has: image }))
+        const heights = await Promise.all(
+          rows.map((row) => row.evaluate((element) => element.getBoundingClientRect().height)),
+        )
+        const before = await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)
+        const bounds = (await reading.scroller.boundingBox())!
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 }],
+        })
+        image.resolve()
+        for (const [index, row] of rows.entries()) {
+          await expect(images[index]).toHaveJSProperty("naturalHeight", 600)
+          await expect
+            .poll(() => row.evaluate((element) => element.getBoundingClientRect().height))
+            .toBe(heights[index] + 600)
+        }
+        await testInfo.attach("images-held.png", { body: await page.screenshot(), contentType: "image/png" })
+        expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+        for (let step = 1; step <= 21; step++) {
+          await devtools.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 + step * 30 }],
+          })
+          await expect
+            .poll(() => reading.anchor.evaluate((element) => element.getBoundingClientRect().top))
+            .toBeCloseTo(before + step * 30 - 15, 0)
+        }
+        await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+        await expect(reading.timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(
+          before + 615,
+          0,
+        )
+      })
+    }
+
+    test("reaches the start without a gap or release jump after earlier output shrinks", async ({ page }, testInfo) => {
+      const timeline = await setupTimeline(page, {
+        messages: [
+          userMessage(),
+          assistantMessage(
+            Array.from({ length: 6 }, (_, index) =>
+              index < 2
+                ? shell(
+                    `prt_shrink_${index}`,
+                    "running",
+                    Array.from({ length: 4 }, (_, line) => `Output ${line}.`).join("\n\n"),
+                  )
+                : textPart(
+                    `prt_shrink_text_${index}`,
+                    Array.from({ length: 12 }, (_, line) => `Part ${index} line ${line}.`).join("\n\n"),
+                  ),
+            ),
+            { completed: false },
+          ),
+        ],
+        settings: { shellToolPartsExpanded: true },
+        viewport: { width: 390, height: 844 },
+      })
+      const reading = await readFrom(page, "Part 2 line 0.")
+      const bounds = (await reading.scroller.boundingBox())!
+      const devtools = await page.context().newCDPSession(page)
+      const part = page.locator(`[data-timeline-part-id="${renderedPartID("prt_shrink_0")}"]`)
+      const row = reading.scroller.locator("[data-timeline-key]", { has: part })
+      const height = await row.evaluate((element) => element.getBoundingClientRect().height)
+      await devtools.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 }],
+      })
+      await timeline.send(partUpdated(shell("prt_shrink_0", "running", "Updated shorter output.")))
+      await expect(part).toContainText("Updated shorter output.")
+      await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(height)
+      for (let step = 1; step <= 21; step++)
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 + step * 30 }],
+        })
+      const first = reading.scroller.locator('[data-timeline-row="UserMessage"]')
+      await expect(first).toBeInViewport()
+      await testInfo.attach("start-held.png", { body: await page.screenshot(), contentType: "image/png" })
+      expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(reading.start, 0)
+      const before = await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      await expect(reading.timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+      await testInfo.attach("start-released.png", { body: await page.screenshot(), contentType: "image/png" })
+      expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(reading.start, 0)
+      expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+    })
+
+    for (const nestedStart of [500, 0]) {
+      test(`nested output owns the gesture or chains at its boundary (${nestedStart})`, async ({ page }, testInfo) => {
+        const timeline = await setupTimeline(page, {
+          messages: [
+            userMessage(),
+            assistantMessage(
+              [
+                shell(
+                  "prt_nested",
+                  "completed",
+                  Array.from({ length: 120 }, (_, index) => `Output line ${index}`).join("\n"),
+                ),
+                textPart("prt_nested_tail", "Latest output."),
+              ],
+              { completed: false },
+            ),
+          ],
+          settings: { shellToolPartsExpanded: true },
+          seedHistory: true,
+          viewport: { width: 390, height: 844 },
+        })
+        const root = page.locator('[data-slot="session-timeline-scroll"]')
+        const nested = page.locator(`[data-timeline-part-id="${renderedPartID("prt_nested")}"] [data-scrollable]`)
+        const tail = page.getByText("Latest output.", { exact: true })
+        await expect(root.locator("[data-timeline-virtual-content]")).toBeVisible()
+        await expect(tail).toBeInViewport()
+        await nested.evaluate((element, top) => (element.scrollTop = top), nestedStart)
+        await expect(nested).toHaveJSProperty("scrollTop", nestedStart)
+        const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+        const bounds = (await nested.boundingBox())!
+        const x = bounds.x + 100
+        const y = bounds.y + bounds.height * (nestedStart ? 0.75 : 0.25)
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+        if (nestedStart) {
+          for (let step = 1; step <= 12; step++)
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: "touchMove",
+              touchPoints: [{ x, y: y - step * 10 }],
+            })
+          await expect.poll(() => nested.evaluate((element) => element.scrollTop)).toBeGreaterThan(550)
+          const far = await nested.evaluate((element) => element.scrollTop)
+          for (let step = 1; step <= 6; step++)
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: "touchMove",
+              touchPoints: [{ x, y: y - 120 + step * 10 }],
+            })
+          await expect.poll(() => nested.evaluate((element) => element.scrollTop)).toBeLessThan(far)
+          expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+        }
+        if (!nestedStart) {
+          for (let step = 1; step <= 12; step++)
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: "touchMove",
+              touchPoints: [{ x, y: y + step * 10 }],
+            })
+          await expect
+            .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
+            .toBeGreaterThan(before + 50)
+        }
+        await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+        await expect(root.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        const released = await tail.evaluate((element) => element.getBoundingClientRect().top)
+        await timeline.send(
+          partUpdated(
+            textPart(
+              "prt_nested_tail",
+              `Latest output.\n\nNew stream.\n\n${"Additional line.\n\n".repeat(30)}Latest stream end.`,
+            ),
+          ),
+        )
+        const latest = page
+          .locator(`[data-timeline-part-id="${renderedPartID("prt_nested_tail")}"]`)
+          .getByText("New stream.", { exact: true })
+        await expect(latest).toBeAttached()
+        await expect(root.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+        await testInfo.attach("nested-after-stream.png", { body: await page.screenshot(), contentType: "image/png" })
+        if (nestedStart) {
+          await expect(page.getByText("Latest stream end.", { exact: true })).toBeInViewport()
+        }
+        if (!nestedStart)
+          expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(released, 0)
+      })
+    }
+
+    test("keeps the visible row anchored through reflow and touch cancellation", async ({ page }, testInfo) => {
+      await setupTimeline(page, {
+        messages: [
+          userMessage(),
+          assistantMessage(
+            Array.from({ length: 40 }, (_, index) =>
+              textPart(`prt_reflow_${index}`, `Section ${index}. ${"Adjacent part content. ".repeat(16)}`),
+            ),
+          ),
+        ],
+        viewport: { width: 700, height: 844 },
+      })
+      const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+      const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+      await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+      const tail = page.getByText("Section 39.", { exact: false })
+      await expect(tail).toBeInViewport()
+      await page.evaluate(() => document.fonts.ready)
+      await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+      const bounds = (await scroller.boundingBox())!
+      const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+      const devtools = await page.context().newCDPSession(page)
+      await devtools.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: bounds.x + 130, y: bounds.y + 100 }],
+      })
+      await devtools.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: bounds.x + 130, y: bounds.y + 200 }],
+      })
+      await expect
+        .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
+        .toBeGreaterThan(before + 50)
+      await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+      const chosen = await scroller.evaluate((root) => {
+        const view = root.getBoundingClientRect()
+        const rows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+        const above = rows.filter((row) => row.getBoundingClientRect().bottom <= view.top).slice(-2)
+        const first = rows.find((row) => row.getBoundingClientRect().bottom > view.top)!
+        return {
+          above: above.map((row) => ({ key: row.dataset.timelineKey, height: row.getBoundingClientRect().height })),
+          key: first.dataset.timelineKey,
+          top: first.getBoundingClientRect().top,
+        }
+      })
+      expect(chosen.above).toHaveLength(2)
+      await page.setViewportSize({ width: 390, height: 844 })
+      for (const row of chosen.above)
+        await expect
+          .poll(async () => (await scroller.locator(`[data-timeline-key="${row.key}"]`).boundingBox())?.height)
+          .toBeGreaterThan(row.height)
+      const anchor = scroller.locator(`[data-timeline-key="${chosen.key}"]`)
+      await testInfo.attach("reflow-held.png", { body: await page.screenshot(), contentType: "image/png" })
+      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
+      await testInfo.attach("reflow-cancelled.png", { body: await page.screenshot(), contentType: "image/png" })
+      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+    })
   })
+}
+
+async function readFrom(page: Page, text: string) {
+  const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+  const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+  await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await scroller.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+    element.scrollTop = 0
+  })
+  const first = scroller.locator('[data-timeline-row="UserMessage"]')
+  await expect(first).toBeInViewport()
+  const start = await first.evaluate((element) => element.getBoundingClientRect().top)
+  const anchor = scroller.getByText(text, { exact: true })
+  await expect(anchor).toBeAttached()
+  await expect(scroller.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+  await anchor.evaluate((element) => {
+    const root = element.closest("[data-scrollable]")!
+    root.scrollTop += element.getBoundingClientRect().top - root.getBoundingClientRect().top - 8
+  })
+  await expect(anchor).toBeInViewport()
+  return { timeline, scroller, anchor, start }
 }
