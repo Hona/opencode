@@ -380,6 +380,107 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
     }
 
+    for (const handoff of [
+      { key: "Home", held: false },
+      { key: "Home", held: true },
+      { key: "End", held: false },
+      { key: "latest", held: false },
+    ] as const) {
+      test(`${handoff.key} owns pending touch adjustments (${handoff.held ? "held" : "released"})`, async ({
+        page,
+      }, testInfo) => {
+        const fixture = await setupTimeline(page, {
+          messages: [
+            userMessage(),
+            assistantMessage(
+              [
+                textPart(
+                  "prt_handoff_prefix",
+                  Array.from({ length: 40 }, (_, index) => `Prefix ${index}.`).join("\n\n"),
+                ),
+                shell("prt_handoff_shell", "running", "A short."),
+                textPart(
+                  "prt_handoff_reading",
+                  Array.from({ length: 60 }, (_, index) => `Reading ${index}.`).join("\n\n"),
+                ),
+              ],
+              { completed: false },
+            ),
+          ],
+          settings: { shellToolPartsExpanded: true },
+          viewport: { width: 390, height: 844 },
+        })
+        const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+        const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+        await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+        await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
+        await page.evaluate(() => document.fonts.ready)
+        await scroller.evaluate((element) => {
+          element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+          element.scrollTop = 0
+        })
+        const first = scroller.locator('[data-timeline-row="UserMessage"]')
+        await expect(first).toBeInViewport()
+        const start = await first.evaluate((element) => element.getBoundingClientRect().top)
+        await expect(page.getByText("Prefix 39.", { exact: true })).toBeAttached()
+        await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+        await scroller.evaluate(
+          (element, distance) => (element.scrollTop = element.scrollHeight - element.clientHeight - distance),
+          handoff.key === "latest" ? 800 : 80,
+        )
+        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        const latest = page.getByRole("button", { name: "Jump to latest", exact: true })
+        if (handoff.key === "latest") await expect(latest.locator("..")).toHaveCSS("opacity", "1")
+        const row = scroller.locator("[data-timeline-key]", {
+          has: page.locator(`[data-timeline-part-id="${renderedPartID("prt_handoff_shell")}"]`),
+        })
+        const height = await row.evaluate((element) => element.getBoundingClientRect().height)
+        const extent = await scroller.evaluate((element) => element.scrollHeight)
+        const bounds = (await scroller.boundingBox())!
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: bounds.x + 100, y: bounds.y + 200 }],
+        })
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: bounds.x + 100, y: bounds.y + 230 }],
+        })
+        await fixture.send(
+          partUpdated(
+            shell(
+              "prt_handoff_shell",
+              "running",
+              Array.from({ length: 10 }, (_, index) => `Shell A line ${index}.`).join("\n\n"),
+            ),
+          ),
+        )
+        await expect
+          .poll(() => row.evaluate((element) => element.getBoundingClientRect().height))
+          .toBeGreaterThan(height)
+        // The row grew, but its native scroll extent is still translated: the
+        // new navigation must take ownership before the idle reconciliation.
+        await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(extent)
+        await devtools.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: bounds.x + 100, y: bounds.y + 260 }],
+        })
+        if (!handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+        if (handoff.key === "latest") await latest.click()
+        if (handoff.key !== "latest") await scroller.press(handoff.key)
+        if (handoff.key === "Home") await expect(first).toBeInViewport()
+        if (handoff.key !== "Home") await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
+        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        if (handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+        if (handoff.key === "Home")
+          expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(start, 0)
+        await testInfo.attach("touch-navigation-handoff.png", {
+          body: await page.screenshot(),
+          contentType: "image/png",
+        })
+      })
+    }
+
     for (const release of ["touchEnd", "touchCancel"] as const) {
       test(`returns Home after scrolling the touch target out of view (${release})`, async ({ page }, testInfo) => {
         const image = Promise.withResolvers<void>()
