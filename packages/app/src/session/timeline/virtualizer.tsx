@@ -103,7 +103,7 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
-  const [rendering, setRendering] = createStore({ initialTail: coldBottomMount })
+  const [rendering, setRendering] = createStore({ initialTail: coldBottomMount, scrollAdjustment: 0 })
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
   const rowKeys = createMemo(() => rows().map(TimelineRow.key), undefined, {
@@ -154,6 +154,8 @@ export function createTimelineVirtualizer(input: Input) {
   })
   const measuredElements = new WeakSet<Element>()
   let touchStart: number | undefined
+  let touchScrolling = false
+  let touchAdjustment = 0
   let pointerHeld = false
   let maxScroll = 0
   let virtualContent: HTMLDivElement | undefined
@@ -177,7 +179,10 @@ export function createTimelineVirtualizer(input: Input) {
     observeElementOffset: (instance, callback) => {
       reportOffset = (offset, scrolling) => {
         if (!active()) return
-        callback(offset, scrolling)
+        // Rows and the sizer use the opposite translation while native touch
+        // scrolling keeps its own offset. Range selection uses the logical offset.
+        callback(offset + rendering.scrollAdjustment, scrolling)
+        if (!scrolling && touchStart === undefined) finishTouchScroll()
         settleColdBottom()
       }
       return observeElementOffsetReconnectAware(instance, reportOffset, () => {
@@ -212,6 +217,7 @@ export function createTimelineVirtualizer(input: Input) {
     scrollToFn: (offset, options, instance) => {
       if (!active()) return
       if (batchingColdSizes && input.pinned()) return
+      setRendering("scrollAdjustment", 0)
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
       elementScroll(offset, options, instance)
     },
@@ -265,6 +271,12 @@ export function createTimelineVirtualizer(input: Input) {
           const row = rows()[index]
           if (row && TimelineRow.key(row) === value.key) resizeItem(index, value.size)
         })
+        if (touchAdjustment) {
+          setRendering("scrollAdjustment", (value) => value + touchAdjustment)
+          touchAdjustment = 0
+          const root = listRoot()
+          if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
+        }
       })
       batchingColdSizes = false
       if (coldPending) pinColdBottom()
@@ -278,13 +290,31 @@ export function createTimelineVirtualizer(input: Input) {
     })
   }
   onCleanup(() => pendingSizes.clear())
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) => {
     // Prepended rows can resize more than once as deferred content mounts. Keep
     // compensating while they remain entirely above the visible content fold.
-    if (addedKeys.has(String(item.key)))
-      return item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
     const first = instance.range?.startIndex
-    return first !== undefined && item.index < first
+    const adjust = addedKeys.has(String(item.key))
+      ? item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
+      : first !== undefined && item.index < first
+    if (!touchScrolling || input.pinned()) return adjust
+    // iOS defers native scroll writes until momentum ends. Keep the same visual
+    // anchor now, rather than moving rows now and snapping the viewport back later.
+    if (adjust) touchAdjustment += delta
+    return false
+  }
+
+  function finishTouchScroll() {
+    touchScrolling = false
+    const adjustment = rendering.scrollAdjustment
+    const root = listRoot()
+    if (!adjustment || !root) return
+    // Transfer the translation into the native offset in the same paint.
+    batch(() => {
+      setRendering("scrollAdjustment", 0)
+      if (virtualContent) virtualContent.style.height = `${virtualizer.getTotalSize()}px`
+      elementScroll(root.scrollTop + adjustment, {}, virtualizer)
+    })
   }
   const virtualItemByKey = createMemo(
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
@@ -423,16 +453,23 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchStart = (event: TouchEvent) => {
     input.onUserScroll(event.target)
+    touchScrolling = true
     touchStart = event.touches[0]?.clientY
   }
 
   const handleListTouchMove = (event: TouchEvent & { currentTarget: HTMLDivElement }) => {
     const current = event.touches[0]?.clientY
     if (current === undefined || touchStart === undefined) return
-    // Dragging the content downward reveals earlier messages.
-    if (current <= touchStart) return
+    const previous = touchStart
     touchStart = current
+    // Dragging the content downward reveals earlier messages.
+    if (current <= previous) return
     input.onUnpin()
+  }
+
+  const handleListTouchEnd = () => {
+    touchStart = undefined
+    if (!virtualizer.isScrolling) finishTouchScroll()
   }
 
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
@@ -504,7 +541,7 @@ export function createTimelineVirtualizer(input: Input) {
           data-timeline-key={rowProps.rowKey}
           style={{
             position: "absolute",
-            top: `${item().start - topOffset()}px`,
+            top: `${item().start - topOffset() - rendering.scrollAdjustment}px`,
             left: "0",
             width: "100%",
             height: `${item().size}px`,
@@ -585,6 +622,8 @@ export function createTimelineVirtualizer(input: Input) {
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
           onTouchMove={handleListTouchMove}
+          onTouchEnd={handleListTouchEnd}
+          onTouchCancel={handleListTouchEnd}
           onPointerDown={handleListPointerDown}
           onKeyDown={handleListKeyDown}
           onScroll={handleListScroll}
@@ -602,7 +641,7 @@ export function createTimelineVirtualizer(input: Input) {
               if (active()) input.setContentRef(element)
             }}
             style={{
-              height: `${virtualizer.getTotalSize()}px`,
+              height: `${virtualizer.getTotalSize() - rendering.scrollAdjustment}px`,
               position: "relative",
               width: "100%",
               visibility: coldBottomMount ? "hidden" : undefined,
@@ -612,7 +651,7 @@ export function createTimelineVirtualizer(input: Input) {
             <div
               data-timeline-row="bottom-spacer"
               class="h-16 absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualizer.getTotalSize() - 64}px)` }}
+              style={{ transform: `translateY(${virtualizer.getTotalSize() - 64 - rendering.scrollAdjustment}px)` }}
             >
               {props.bottomSpacer}
             </div>
