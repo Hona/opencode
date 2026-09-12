@@ -477,10 +477,26 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       { key: "Home", held: true },
       { key: "End", held: false },
       { key: "latest", held: false },
+      { key: "scrollbar", held: false },
+      { key: "scrollbar", held: true },
+      { key: "scrollbar-large", held: true },
     ] as const) {
       test(`${handoff.key} owns pending touch adjustments (${handoff.held ? "held" : "released"})`, async ({
         page,
       }, testInfo) => {
+        const growsDuringDrag = handoff.key === "scrollbar" && handoff.held
+        const growsBeforeDrag = handoff.key === "scrollbar-large"
+        const usesScrollbar = handoff.key.startsWith("scrollbar")
+        const image = Promise.withResolvers<void>()
+        const imageURL = new URL("/scrollbar-drag-image.svg", testInfo.project.use.baseURL).href
+        if (growsDuringDrag || growsBeforeDrag)
+          await page.route(imageURL, async (route) => {
+            await image.promise
+            await route.fulfill({
+              contentType: "image/svg+xml",
+              body: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="${growsBeforeDrag ? 4000 : 300}"><rect width="300" height="${growsBeforeDrag ? 4000 : 300}" fill="steelblue"/></svg>`,
+            })
+          })
         const fixture = await setupTimeline(page, {
           messages: [
             userMessage(),
@@ -488,7 +504,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               [
                 textPart(
                   "prt_handoff_prefix",
-                  Array.from({ length: 40 }, (_, index) => `Prefix ${index}.`).join("\n\n"),
+                  Array.from({ length: 40 }, (_, index) => `Prefix ${index}.`).join("\n\n") +
+                    (growsDuringDrag || growsBeforeDrag ? `\n\n![Earlier diagram](${imageURL})` : ""),
                 ),
                 shell("prt_handoff_shell", "running", "A short."),
                 textPart(
@@ -518,7 +535,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
         await scroller.evaluate(
           (element, distance) => (element.scrollTop = element.scrollHeight - element.clientHeight - distance),
-          handoff.key === "latest" ? 800 : 80,
+          growsBeforeDrag ? 1200 : handoff.key === "latest" ? 800 : 80,
         )
         await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
         const latest = page.getByRole("button", { name: "Jump to latest", exact: true })
@@ -553,18 +570,76 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         // The row grew, but its native scroll extent is still translated: the
         // new navigation must take ownership before the idle reconciliation.
         await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(extent)
+        if (growsBeforeDrag) {
+          image.resolve()
+          const diagram = page.getByAltText("Earlier diagram", { exact: true })
+          await expect(diagram).toHaveJSProperty("naturalHeight", 4000)
+          await expect
+            .poll(() =>
+              scroller
+                .locator("[data-timeline-key]", { has: diagram })
+                .evaluate((element) => element.getBoundingClientRect().height),
+            )
+            .toBeGreaterThan(4000)
+          await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(extent)
+        }
+        const thumb = usesScrollbar ? timeline.locator('.scroll-view__thumb[data-orientation="vertical"]') : undefined
+        await thumb?.hover()
+        const grip = await thumb?.boundingBox()
+        const touchTop = thumb
+          ? await page
+              .getByText("Reading 50.", { exact: true })
+              .evaluate((element) => element.getBoundingClientRect().top)
+          : undefined
         await devtools.send("Input.dispatchTouchEvent", {
           type: "touchMove",
           touchPoints: [{ x: bounds.x + 100, y: bounds.y + 260 }],
         })
+        if (touchTop !== undefined)
+          await expect
+            .poll(() =>
+              page.getByText("Reading 50.", { exact: true }).evaluate((element) => element.getBoundingClientRect().top),
+            )
+            .toBeCloseTo(touchTop + 30, 0)
         if (!handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
         if (handoff.key === "latest") await latest.click()
-        if (handoff.key !== "latest") await scroller.press(handoff.key)
-        if (handoff.key === "Home") await expect(first).toBeInViewport()
-        if (handoff.key !== "Home") await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
+        if (handoff.key === "Home" || handoff.key === "End") await scroller.press(handoff.key)
+        if (usesScrollbar) {
+          expect(grip).toBeTruthy()
+          if (!grip) return
+          const anchor = page.getByText("Reading 50.", { exact: true })
+          const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
+          await page.mouse.down()
+          expect(await anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+          await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 4)
+          await expect
+            .poll(() => anchor.evaluate((element) => element.getBoundingClientRect().top))
+            .toBeGreaterThan(before)
+          expect((await anchor.evaluate((element) => element.getBoundingClientRect().top)) - before).toBeLessThan(60)
+          if (growsDuringDrag) {
+            const prefix = scroller.locator("[data-timeline-key]", {
+              has: page.locator(`[data-timeline-part-id="${renderedPartID("prt_handoff_prefix")}"]`),
+            })
+            const prefixHeight = await prefix.evaluate((element) => element.getBoundingClientRect().height)
+            const extent = await scroller.evaluate((element) => element.scrollHeight)
+            // More content can arrive after the thumb has already captured the pointer.
+            image.resolve()
+            await expect(page.getByAltText("Earlier diagram", { exact: true })).toHaveJSProperty("naturalHeight", 300)
+            await expect
+              .poll(() => prefix.evaluate((element) => element.getBoundingClientRect().height))
+              .toBeGreaterThan(prefixHeight)
+            await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(extent)
+          }
+          await page.mouse.move(grip.x + grip.width / 2, bounds.y + 5)
+          await page.mouse.up()
+          await page.mouse.move(0, 0)
+        }
+        const toStart = handoff.key === "Home" || usesScrollbar
+        if (toStart) await expect(first).toBeInViewport()
+        if (!toStart) await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
         await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
         if (handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-        if (handoff.key === "Home")
+        if (toStart)
           expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(start, 0)
         await testInfo.attach("touch-navigation-handoff.png", {
           body: await page.screenshot(),

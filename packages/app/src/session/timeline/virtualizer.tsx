@@ -545,21 +545,6 @@ export function createTimelineVirtualizer(input: Input) {
     window.removeEventListener("pointercancel", releasePointer)
   })
 
-  createEffect(() => {
-    const root = listRoot()
-    if (!root) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      const key = scrollKey(event)
-      if (!key) return
-      if (!isScrollKeyTarget(event.target, key)) return
-      if (scrollKeyOwner(root, event.target, key) !== root) return
-      // Rebase before ScrollView computes an absolute or relative native target.
-      prepareNavigation()
-    }
-    root.addEventListener("keydown", onKeyDown, true)
-    onCleanup(() => root.removeEventListener("keydown", onKeyDown, true))
-  })
-
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const key = scrollKey(event)
     if (!key) return
@@ -689,6 +674,8 @@ export function createTimelineVirtualizer(input: Input) {
         <ScrollView
           data-slot="session-timeline-scroll"
           viewportRef={bindListRoot}
+          onBeforeScroll={prepareNavigation}
+          verticalScrollAdjustment={rendering.scrollAdjustment}
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
           onPointerDown={handleListPointerDown}
