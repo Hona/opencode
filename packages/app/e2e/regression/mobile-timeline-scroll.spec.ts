@@ -4,6 +4,8 @@ import {
   partDelta,
   partUpdated,
   renderedPartID,
+  session,
+  sessionID,
   setupTimeline,
   shell,
   textPart,
@@ -378,6 +380,96 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         if (!nestedStart)
           expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(released, 0)
       })
+    }
+
+    for (const width of [390, 1000]) {
+      for (const release of ["touchEnd", "touchCancel"] as const) {
+        test(`detached session gestures do not unpin the selected session (${width}px, ${release})`, async ({
+          page,
+        }, testInfo) => {
+          const server = testInfo.project.use.baseURL!
+          const second = "ses_gesture_destination"
+          await page.addInitScript(
+            ({ server, first, second }) => {
+              localStorage.setItem(
+                "opencode.window.browser.dat:tabs",
+                JSON.stringify([
+                  { type: "session", sessionId: first, server },
+                  { type: "session", sessionId: second, server },
+                ]),
+              )
+            },
+            { server, first: sessionID, second },
+          )
+          const content = Array.from({ length: 60 }, (_, index) => `Read output ${index}.`).join("\n\n")
+          const fixture = await setupTimeline(page, {
+            sessions: [session(), session({ id: second, title: "Second gesture session" })],
+            messages: [
+              userMessage(),
+              assistantMessage([textPart("prt_session_gesture", content)], { completed: false }),
+            ],
+            viewport: { width, height: 900 },
+          })
+          const timeline = page.locator('[data-slot="session-timeline-scroll"]')
+          const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+          const tail = page.getByText("Read output 59.", { exact: true })
+          await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+          await expect(tail).toBeInViewport()
+          await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+          await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+          const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+          const bounds = (await scroller.boundingBox())!
+          const point = { x: bounds.x + 150, y: bounds.y + 200 }
+          const oldTarget = await page.evaluateHandle((point) => document.elementFromPoint(point.x, point.y), point)
+          const oldRoot = (await scroller.elementHandle())!
+          const devtools = await page.context().newCDPSession(page)
+          await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
+          await devtools.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: point.x, y: point.y + 40 }],
+          })
+          await expect
+            .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
+            .toBeGreaterThan(before)
+          if (width < 768) {
+            await page.locator('[data-slot="mobile-tabs-trigger"]').click()
+            await page
+              .locator('[data-slot="mobile-tabs-drawer"]')
+              .locator(`[data-titlebar-tab-link][href$="/session/${second}"]`)
+              .click()
+            await expect(page.locator('[data-slot="mobile-tabs-trigger"]')).toContainText("Second gesture session")
+          }
+          if (width >= 768) {
+            await page.locator(`[data-titlebar-tab-link][href$="/session/${second}"]`).click()
+            await expect(page.getByRole("heading", { name: "Second gesture session", exact: true })).toBeVisible()
+          }
+          await expect(page).toHaveURL(new RegExp(`/session/${second}$`))
+          await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
+          await expect(tail).toBeInViewport()
+          await expect.poll(() => oldTarget.evaluate((element) => element?.isConnected)).toBe(false)
+          expect(await oldRoot.evaluate((element) => element.isConnected)).toBe(false)
+          const selected = await tail.evaluate((element) => element.getBoundingClientRect().top)
+          await devtools.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: point.x, y: point.y + 70 }],
+          })
+          await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
+          expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(selected, 0)
+          await oldTarget.dispose()
+          await oldRoot.dispose()
+          const delta = partDelta(
+            "prt_session_gesture",
+            `\n\n${Array.from({ length: 30 }, (_, index) => `Newly streamed ${index}.`).join("\n\n")}`,
+          )
+          if (delta.type !== "session.text.delta") throw new Error("Expected a text delta")
+          await fixture.send({ ...delta, data: { ...delta.data, sessionID: second } })
+          await expect(page.getByText("Newly streamed 29.", { exact: true })).toBeInViewport()
+          await testInfo.attach("selected-session-follows.png", {
+            body: await page.screenshot(),
+            contentType: "image/png",
+          })
+        })
+      }
     }
 
     for (const handoff of [

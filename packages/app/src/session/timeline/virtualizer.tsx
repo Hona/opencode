@@ -502,6 +502,9 @@ export function createTimelineVirtualizer(input: Input) {
     if (current === undefined || touchStart === undefined) return
     const previous = touchStart
     touchStart = current
+    // A retained target can outlive its whole session view. Only the active
+    // timeline may change the shared follow state; release still cleans up below.
+    if (!active()) return
     // Dragging the content downward reveals earlier messages.
     if (current <= previous) return
     // A nested scrollport owns the intent. If it chains into the timeline at a
