@@ -1,8 +1,9 @@
 import { getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
 import { encodeFilePath } from "@/workspaces/files/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"
+import type { AgentPart, FileAttachmentPart, Prompt, SkillPart } from "@/composer/state"
 import { formatCommentNote, type PromptComment } from "@/composer/comment-note"
+import type { DeliveredAttachment } from "@/composer/attachments/deliver"
 
 // Network fields feed both boundaries; display fields keep desktop-only rendering details in the local echo.
 type PromptRequest = {
@@ -28,7 +29,7 @@ type ContextFile = {
 type BuildPromptRequestInput = {
   prompt: Prompt
   context: ContextFile[]
-  images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
+  attachments: DeliveredAttachment[]
   text: string
   sessionDirectory: string
 }
@@ -106,16 +107,21 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     return [file, ...mentions]
   })
 
-  const images = input.images.map((attachment) => ({
-    uri: attachment.dataUrl,
-    mime: attachment.mime,
-    name: attachment.sourcePath ?? attachment.filename,
-  }))
+  const inline = input.attachments.flatMap((item) =>
+    item.type === "inline"
+      ? [{ uri: item.dataUrl, mime: item.attachment.mime, name: item.attachment.sourcePath ?? item.attachment.filename }]
+      : [],
+  )
+  // Path references are part of what the user sends, so they stay visible in the message.
+  const body = [
+    ...(input.text.trim() ? [input.text] : []),
+    ...input.attachments.flatMap((item) => (item.type === "path" ? [`Attached file: \`${item.path}\``] : [])),
+  ].join("\n")
 
   return {
-    text: [...(input.text.trim() ? [input.text] : []), ...comments.map(formatCommentNote)].join("\n"),
-    displayText: input.text,
-    files: [...files, ...context, ...images],
+    text: [...(body ? [body] : []), ...comments.map(formatCommentNote)].join("\n"),
+    displayText: body,
+    files: [...files, ...context, ...inline],
     agents,
     skills,
     comments,

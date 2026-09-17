@@ -43,5 +43,13 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           }),
         ),
       )
+      .handle("fs.write", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.Service
+            return yield* fs.write(ctx.payload)
+          }),
+        ),
+      )
   }),
 )

@@ -65,6 +65,22 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.post("fs.write", "/api/fs/write", {
+      query: LocationQuery,
+      payload: FileSystem.WriteInput,
+      success: Location.response(FileSystem.Write),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "fs.write",
+          summary: "Write file",
+          description:
+            "Write base64 content to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "filesystem",

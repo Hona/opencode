@@ -179,6 +179,8 @@ import type {
   FileListOutput,
   FileFindInput,
   FileFindOutput,
+  FileWriteInput,
+  FileWriteOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1139,7 +1141,19 @@ const EndpointFileFind = (raw: RawClient["server.fs"]) => (input: FileFindInput)
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupFile = (raw: RawClient["server.fs"]) => ({ list: EndpointFileList(raw), find: EndpointFileFind(raw) })
+type FileWriteRequest = Parameters<RawClient["server.fs"]["fs.write"]>[0]
+const EndpointFileWrite = (raw: RawClient["server.fs"]) => (input: FileWriteInput) =>
+  preserveEffect<FileWriteOutput>()(
+    raw["fs.write"]({ query: { location: input["location"] }, payload: input["payload"] } as FileWriteRequest).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupFile = (raw: RawClient["server.fs"]) => ({
+  list: EndpointFileList(raw),
+  find: EndpointFileFind(raw),
+  write: EndpointFileWrite(raw),
+})
 
 const EndpointCommandList = (raw: RawClient["server.command"]) => (input?: CommandListInput) =>
   preserveEffect<CommandListOutput>()(

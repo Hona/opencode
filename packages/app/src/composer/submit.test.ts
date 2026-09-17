@@ -3,6 +3,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
+import type { AttachmentDestination } from "./attachments/deliver"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
 
@@ -48,11 +49,20 @@ function controls(): ComposerControls {
   }
 }
 
+const nativeDestination: AttachmentDestination = {
+  input: { image: true, pdf: true },
+  local: false,
+  upload: async () => {
+    throw new Error("native attachments must not upload")
+  },
+}
+
 function submitInput(
   adapter: ActiveComposerAdapter | NewSessionComposerAdapter,
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
+  destination: AttachmentDestination = nativeDestination,
 ) {
   return createComposerSubmit({
     adapter,
@@ -64,6 +74,7 @@ function submitInput(
     resetHistory() {},
     setMode() {},
     closePopover() {},
+    destination: () => destination,
     notify,
     comments: { capture: () => [], clear() {}, restore() {} },
   })
@@ -643,6 +654,94 @@ describe("Composer submission", () => {
         delivery: "steer",
       },
     ])
+  })
+
+  test("references a local attachment by its source path when the model cannot read it", async () => {
+    const state = createMemoryComposerState({ prompt: "unpack this" }).capture()
+    state.set([
+      ...state.current(),
+      {
+        type: "image",
+        id: "archive",
+        filename: "archive.zip",
+        sourcePath: "C:\\Downloads\\archive.zip",
+        mime: "application/zip",
+        blob: { id: "archive", url: "data:application/zip;base64,UEs=" },
+      },
+      {
+        type: "image",
+        id: "screenshot",
+        filename: "screenshot.png",
+        sourcePath: "C:\\Downloads\\screenshot.png",
+        mime: "image/png",
+        blob: { id: "screenshot", url: "data:image/png;base64,YQ==" },
+      },
+    ])
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    await submitInput(adapter, undefined, "normal", () => [], { ...nativeDestination, local: true }).submit(
+      new Event("submit"),
+    )
+    const request = await admitted.promise
+
+    expect(request.text).toBe("unpack this\nAttached file: `C:\\Downloads\\archive.zip`")
+    expect(request.metadata).toMatchObject({ displayText: request.text })
+    expect(request.files).toEqual([{ uri: "data:image/png;base64,YQ==", name: "C:\\Downloads\\screenshot.png" }])
+  })
+
+  test("uploads an attachment the model cannot read to a remote server and references that path", async () => {
+    const state = createMemoryComposerState({ prompt: "describe this" }).capture()
+    state.set([
+      ...state.current(),
+      {
+        type: "image",
+        id: "screenshot",
+        filename: "screenshot.png",
+        sourcePath: "C:\\Downloads\\screenshot.png",
+        mime: "image/png",
+        blob: { id: "screenshot", url: "data:image/png;base64,YQ==" },
+      },
+    ])
+    const uploads: { name: string; data: string }[] = []
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    await submitInput(adapter, undefined, "normal", () => [], {
+      input: { image: false, pdf: false },
+      local: false,
+      upload: async (file) => {
+        uploads.push(file)
+        return `/tmp/opencode/uploads/1/${file.name}`
+      },
+    }).submit(new Event("submit"))
+    const request = await admitted.promise
+
+    expect(uploads).toEqual([{ name: "screenshot.png", data: "YQ==" }])
+    expect(request.text).toBe("describe this\nAttached file: `/tmp/opencode/uploads/1/screenshot.png`")
+    expect(request.files).toEqual([])
   })
 
   test("does not run an empty shell command from hidden attachments", async () => {

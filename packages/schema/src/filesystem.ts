@@ -3,7 +3,8 @@ export * as FileSystem from "./filesystem.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
-import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
+import { Base64 } from "./prompt.js"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 
 const Changed = ephemeral({
   type: "filesystem.changed",
@@ -41,3 +42,15 @@ export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   type: Schema.Literals(["file", "directory"]).pipe(optional),
   limit: PositiveInt.pipe(optional),
 }) {}
+
+export class WriteInput extends Schema.Class<WriteInput>("FileSystem.WriteInput")({
+  path: Schema.String.annotate({
+    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+  }),
+  data: Base64,
+}) {}
+
+export interface Write extends Schema.Schema.Type<typeof Write> {}
+export const Write = Schema.Struct({
+  path: AbsolutePath,
+}).annotate({ identifier: "FileSystem.Write" })

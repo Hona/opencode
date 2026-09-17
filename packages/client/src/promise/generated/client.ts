@@ -175,6 +175,8 @@ import type {
   FileListOutput,
   FileFindInput,
   FileFindOutput,
+  FileWriteInput,
+  FileWriteOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1560,6 +1562,19 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/fs/find`,
             query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      write: (input: FileWriteInput, requestOptions?: RequestOptions) =>
+        request<FileWriteOutput>(
+          {
+            method: "POST",
+            path: `/api/fs/write`,
+            query: { location: input["location"] },
+            body: input["payload"],
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,

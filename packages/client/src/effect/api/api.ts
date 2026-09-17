@@ -1823,9 +1823,17 @@ export type FileFindInput = {
 export type FileFindOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
+export type FileWriteInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly payload: FileSystem.WriteInput
+}
+export type FileWriteOutput = { readonly location: Location.PublicRef; readonly data: FileSystem.Write }
+export type FileWriteOperation<E = never> = (input: FileWriteInput) => Effect.Effect<FileWriteOutput, E>
+
 export interface FileApi<E = never> {
   readonly list: FileListOperation<E>
   readonly find: FileFindOperation<E>
+  readonly write: FileWriteOperation<E>
 }
 
 export type CommandListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

@@ -5,9 +5,9 @@ import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
-import { PositiveInt, RelativePath } from "./schema.js"
+import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
-import { Entry, FileSystem, FindInput } from "@opencode/schema/filesystem"
+import { Entry, FileSystem, FindInput, Write, WriteInput } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -33,7 +33,7 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
-export { FindInput }
+export { FindInput, Write, WriteInput }
 
 export const DEFAULT_SEARCH_LIMIT = 100
 export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
@@ -62,6 +62,8 @@ export interface Interface {
   ) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
+  /** Writes a file at an absolute path or one relative to the location; not confined to it. */
+  readonly write: (input: WriteInput) => Effect.Effect<Write>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
@@ -142,6 +144,13 @@ const baseLayer = Layer.effect(
               .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
           ),
         )
+      }),
+      // Unlike read, write reaches outside the location so clients can stage files in the
+      // server tmp directory, which the model is already told to prefer and permitted to access.
+      write: Effect.fn("FileSystem.write")(function* (input) {
+        const target = path.resolve(location.directory, input.path)
+        yield* fs.writeWithDirs(target, Buffer.from(input.data, "base64")).pipe(Effect.orDie)
+        return Write.make({ path: AbsolutePath.make(target) })
       }),
     })
   }),

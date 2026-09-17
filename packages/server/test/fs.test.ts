@@ -77,3 +77,39 @@ it.live(
     }),
   15_000,
 )
+
+it.live(
+  "write stores binary files at absolute paths outside the location and at relative paths inside it",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const current = path.join(tmp.path, "project")
+      yield* Effect.promise(() => fs.mkdir(current, { recursive: true }))
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00])
+      const write = (target: string) =>
+        Effect.promise(async () => {
+          const url = new URL("/api/fs/write", server.base)
+          url.searchParams.set("location[directory]", current)
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { ...server.headers, "content-type": "application/json" },
+            body: JSON.stringify({ path: target, data: Buffer.from(bytes).toString("base64") }),
+          })
+          expect(response.status).toBe(200)
+          const result = await response.json()
+          expect(result.location.directory).toBe(current)
+          return result.data.path as string
+        })
+
+      // Mixed separators arrive from clients on another OS; the server resolves them.
+      const outside = yield* write(`${tmp.path}/staged/nested/archive.zip`)
+      expect(outside).toBe(path.join(tmp.path, "staged", "nested", "archive.zip"))
+      expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(outside)))).toEqual(bytes)
+
+      const inside = yield* write(path.join("nested", "archive.zip"))
+      expect(inside).toBe(path.join(current, "nested", "archive.zip"))
+      expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(inside)))).toEqual(bytes)
+    }),
+  15_000,
+)
