@@ -57,13 +57,12 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
     input: controls().model.selection.current()?.capabilities.input ?? { image: false, pdf: false },
     local: server.isLocal,
     upload: async (file) => {
-      const query = { location: { directory: location().directory } }
-      const tmp = await sdk.api.file.tmp(query)
+      const info = await sdk.api.server.info()
       // One directory per upload keeps the original filename without collisions; the server
       // normalizes the separators and returns the resolved path.
       const written = await sdk.api.file.write({
-        ...query,
-        payload: { path: `${tmp.data.path}/uploads/${crypto.randomUUID()}/${file.name}`, data: file.data },
+        location: { directory: location().directory },
+        payload: { path: `${info.paths.tmp}/uploads/${crypto.randomUUID()}/${file.name}`, data: file.data },
       })
       return written.data.path
     },
