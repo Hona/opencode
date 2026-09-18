@@ -96,16 +96,19 @@ export function projectedProviderMetrics(messages: readonly SessionMessageInfo[]
       item.type === "assistant" && item.time.streamed !== undefined && item.tokens !== undefined,
   )
   if (!message) return
-  const first = message.content.reduce<number | undefined>((earliest, item) => {
-    if (item.type === "text") return earliest
-    const created = item.time?.created
-    if (created === undefined) return earliest
-    return earliest === undefined ? created : Math.min(earliest, created)
-  }, undefined)
+  // Content is chronological; only a non-text head carries the first-output time.
+  const head = message.content[0]
+  const first = head && head.type !== "text" ? head.time?.created : undefined
+  // Reasoning ends when the answer starts, so a reasoning part right before the first text
+  // approximates the live `session.text.started` timestamp.
+  const text = message.content.findIndex((item) => item.type === "text")
+  const before = text > 0 ? message.content[text - 1] : undefined
+  const answer = first !== undefined && before?.type === "reasoning" ? before.time?.completed : undefined
   return attemptMetrics({
     assistantMessageID: message.id,
     started: message.time.created,
     first,
+    answer,
     streamed: message.time.streamed,
     tokens: message.tokens,
   })

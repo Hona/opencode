@@ -227,6 +227,17 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
   })
   const metrics = () => state.live ?? projected()
 
+  // Missed events during an outage are never replayed; the refreshed projection must win.
+  createEffect(
+    on(
+      () => target()?.ctx.sdk.connection.status(),
+      (status) => {
+        if (status !== "connected") setState("live", undefined)
+      },
+      { defer: true },
+    ),
+  )
+
   createEffect(
     on(target, (current) => {
       setState("live", undefined)
