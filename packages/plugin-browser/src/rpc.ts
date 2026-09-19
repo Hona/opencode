@@ -184,7 +184,7 @@ export const Operations = [
   ),
   operation(
     "preview",
-    "SHOW A FILE TO THE USER. Use this whenever the user should look at a file you created or changed: screenshots, images, video, audio, PDF, HTML pages, Markdown, CSV, fonts, or code. It opens the file in the user's Review pane and focuses its tab with a rendered preview. Pass a server-local path, relative to the workspace or absolute (/tmp/… and C:\\… both work). Do not paste file contents, describe them, or open file:// URLs in a browser tab instead of calling this.",
+    "Show a file to the user. Opens the file in the Review pane and focuses its tab. Images, SVG, audio, video, PDF, HTML, Markdown, CSV, and fonts render as previews; other files show highlighted source. Use this to present a file you created or changed instead of pasting its contents or opening a file:// URL in a browser tab. The path is server-local: relative to the workspace or absolute.",
     { path: short },
     Schema.Struct({ path: short }),
   ),
