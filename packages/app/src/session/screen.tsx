@@ -54,7 +54,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
   const browser = createSessionBrowser(props.session)
   return (
-    <ArtifactOpenerProvider browser={browser}>
+    <ArtifactOpenerProvider session={props.session} browser={browser}>
       <ArtifactMarkdownProvider>
         <SessionScreenContent session={props.session} browser={browser} />
       </ArtifactMarkdownProvider>

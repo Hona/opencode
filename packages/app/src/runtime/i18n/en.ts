@@ -630,6 +630,13 @@ export const dict = {
   "file.view.preview": "Preview",
   "file.view.source": "Source",
   "file.view.openInBrowser": "Open in browser",
+  "file.view.binary": "Binary file · {{size}}",
+  "file.view.table.rows.one": "{{count}} row",
+  "file.view.table.rows.other": "{{count}} rows",
+  "file.view.table.columns.one": "{{count}} column",
+  "file.view.table.columns.other": "{{count}} columns",
+  "file.view.table.truncated": "Showing the first {{shown}} of {{total}} rows.",
+  "file.view.fontSample": "Sphinx of black quartz, judge my vow.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",

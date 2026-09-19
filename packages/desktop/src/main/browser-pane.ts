@@ -424,6 +424,11 @@ export function createBrowserPane(storage: StateStore) {
         "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
       )
     if (action.type === "tabs.list") return { value: inventory(entry), files: [] }
+    if (action.type === "preview") {
+      // The renderer owns file tabs; it resolves the path against the session's workspace.
+      report(entry, { type: "preview", path: action.path })
+      return { value: { path: action.path }, files: [] }
+    }
     if (action.type === "tabs.open") {
       const page = create(entry)
       if (action.focus !== false) focus(entry, page.state().id)

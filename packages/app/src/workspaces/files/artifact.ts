@@ -1,6 +1,20 @@
 import type { FileContent } from "@/runtime/server/types"
 
-export type ArtifactKind = "image" | "svg" | "audio" | "video" | "pdf" | "html" | "markdown" | "text"
+export type ArtifactKind =
+  | "image"
+  | "svg"
+  | "audio"
+  | "video"
+  | "pdf"
+  | "html"
+  | "markdown"
+  | "mermaid"
+  | "table"
+  | "font"
+  | "text"
+
+/** Kinds that render a preview from their text and can toggle back to highlighted source. */
+export const previewableKinds = new Set<ArtifactKind>(["svg", "html", "markdown", "mermaid", "table"])
 
 const mimes = new Map([
   ["png", "image/png"],
@@ -18,21 +32,32 @@ const mimes = new Map([
   ["mp3", "audio/mpeg"],
   ["wav", "audio/wav"],
   ["ogg", "audio/ogg"],
+  ["oga", "audio/ogg"],
   ["m4a", "audio/mp4"],
   ["aac", "audio/aac"],
   ["flac", "audio/flac"],
   ["opus", "audio/ogg"],
+  ["weba", "audio/webm"],
   ["mp4", "video/mp4"],
   ["m4v", "video/mp4"],
   ["webm", "video/webm"],
   ["mov", "video/quicktime"],
   ["ogv", "video/ogg"],
+  ["mkv", "video/x-matroska"],
   ["pdf", "application/pdf"],
   ["html", "text/html"],
   ["htm", "text/html"],
   ["md", "text/markdown"],
   ["markdown", "text/markdown"],
   ["mdx", "text/markdown"],
+  ["mmd", "text/vnd.mermaid"],
+  ["mermaid", "text/vnd.mermaid"],
+  ["csv", "text/csv"],
+  ["tsv", "text/tab-separated-values"],
+  ["ttf", "font/ttf"],
+  ["otf", "font/otf"],
+  ["woff", "font/woff"],
+  ["woff2", "font/woff2"],
 ])
 
 export function artifactExtension(path: string) {
@@ -53,13 +78,16 @@ export function artifactKind(path: string): ArtifactKind {
   if (mime === "application/pdf") return "pdf"
   if (mime === "text/html") return "html"
   if (mime === "text/markdown") return "markdown"
+  if (mime === "text/vnd.mermaid") return "mermaid"
+  if (mime === "text/csv" || mime === "text/tab-separated-values") return "table"
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("audio/")) return "audio"
+  if (mime.startsWith("font/")) return "font"
   return "video"
 }
 
 /** Kinds whose bytes are kept as base64 so media elements can play them without a text round trip. */
-const binaryKinds = new Set<ArtifactKind>(["image", "audio", "video", "pdf"])
+const binaryKinds = new Set<ArtifactKind>(["image", "audio", "video", "pdf", "font"])
 
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */
 function isBinaryBytes(bytes: Uint8Array) {
@@ -81,8 +109,74 @@ export function fileContentFromBytes(path: string, bytes: Uint8Array): FileConte
   const mimeType = artifactMime(path)
   if (binaryKinds.has(kind)) return { type: "binary", content: bytesToBase64(bytes), encoding: "base64", mimeType }
   // Unknown binaries keep no bytes: the viewer only shows a placeholder for them.
-  if (kind === "text" && isBinaryBytes(bytes)) return { type: "binary", content: "" }
+  if (kind === "text" && isBinaryBytes(bytes)) return { type: "binary", content: "", size: bytes.length }
   return { type: "text", content: new TextDecoder().decode(bytes), mimeType }
+}
+
+/** Approximate on-disk size of loaded content. */
+export function contentBytes(content: FileContent) {
+  if (content.size !== undefined) return content.size
+  if (content.encoding === "base64") {
+    const padding = content.content.endsWith("==") ? 2 : content.content.endsWith("=") ? 1 : 0
+    return Math.floor((content.content.length * 3) / 4) - padding
+  }
+  return new TextEncoder().encode(content.content).length
+}
+
+/**
+ * Parse RFC 4180 style delimited text. Quoted fields may contain the delimiter, newlines, and
+ * doubled quotes. Rows beyond `limit` are counted but not returned.
+ */
+export function parseDelimited(text: string, delimiter: string, limit = 1000) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let quoted = false
+  let total = 0
+  const endRow = () => {
+    row.push(field)
+    field = ""
+    const blank = row.length === 1 && row[0] === ""
+    if (!blank) {
+      total++
+      if (rows.length < limit) rows.push(row)
+    }
+    row = []
+  }
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]!
+    if (quoted) {
+      if (char !== '"') {
+        field += char
+        continue
+      }
+      if (text[index + 1] === '"') {
+        field += '"'
+        index++
+        continue
+      }
+      quoted = false
+      continue
+    }
+    if (char === '"' && field === "") {
+      quoted = true
+      continue
+    }
+    if (char === delimiter) {
+      row.push(field)
+      field = ""
+      continue
+    }
+    if (char === "\r") continue
+    if (char === "\n") {
+      endRow()
+      continue
+    }
+    field += char
+  }
+  if (field !== "" || row.length > 0) endRow()
+  const columns = rows.reduce((max, current) => Math.max(max, current.length), 0)
+  return { rows, total, columns }
 }
 
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */

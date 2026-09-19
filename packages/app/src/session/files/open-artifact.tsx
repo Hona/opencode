@@ -1,6 +1,8 @@
-import { batch, type ParentProps } from "solid-js"
+import { batch, createEffect, onCleanup, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
+import { useBrowserAttachments } from "@/session/browser/attachments"
+import type { SessionModel } from "@/session/model"
 import { showToast } from "@/shell/notifications/toast"
 import { useFile } from "@/workspaces/files/model"
 import { artifactKind, resolveArtifactPath } from "@/workspaces/files/artifact"
@@ -33,12 +35,13 @@ export function ArtifactMarkdownProvider(props: ParentProps) {
  */
 export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = createSimpleContext({
   name: "ArtifactOpener",
-  init: (props: { browser: ReturnType<typeof createSessionBrowser> }) => {
+  init: (props: { session: SessionModel; browser: ReturnType<typeof createSessionBrowser> }) => {
     const file = useFile()
     const server = useServer()
     const platform = usePlatform()
     const language = useLanguage()
     const location = useWorkspaceLocation()
+    const attachments = useBrowserAttachments()
     const { tabs, view } = useSessionLayout()
 
     const root = () => location().directory.replaceAll("\\", "/").replace(/\/+$/, "")
@@ -82,16 +85,21 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
       props.browser.command({ type: "tabs.open", url: fileUrl(`${root()}/${path}`) })
     }
 
-    return {
-      canOpenInBrowser,
-      openInBrowser,
-      /** Open `href` as referenced from `base` (a workspace-relative directory, "" for the root). */
-      open(href: string, base?: string) {
-        const target = resolve(href, base)
-        if ("outside" in target) return openOutside(target.outside)
-        if (artifactKind(target.path) === "html" && canOpenInBrowser()) return openInBrowser(target.path)
-        openTab(target.path)
-      },
+    /** Open `href` as referenced from `base` (a workspace-relative directory, "" for the root). */
+    const open = (href: string, base?: string) => {
+      const target = resolve(href, base)
+      if ("outside" in target) return openOutside(target.outside)
+      if (artifactKind(target.path) === "html" && canOpenInBrowser()) return openInBrowser(target.path)
+      openTab(target.path)
     }
+
+    // The agent's browser.preview tool arrives through the desktop browser pane attachment.
+    createEffect(() => {
+      const sessionID = props.session.identity.sessionID()
+      if (!sessionID) return
+      onCleanup(attachments.onPreview(server, sessionID, (path) => open(path)))
+    })
+
+    return { canOpenInBrowser, openInBrowser, open }
   },
 })
