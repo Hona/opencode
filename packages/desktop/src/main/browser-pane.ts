@@ -10,7 +10,7 @@ import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin } from "./browser/policy"
+import { destinationOrigin, localEndpoint } from "./browser/policy"
 import { emitIpcEvent } from "./ipc-events"
 import { SidecarCredentials } from "./service/sidecar-credentials"
 import { createBrowserRestoreStore } from "./browser/restore"
@@ -31,6 +31,8 @@ type Entry = {
   lastState?: string
   network?: BrowserNetwork
   storageKey: string
+  /** The server runs on this machine, so its files may be shown as file:// documents. */
+  file: boolean
 }
 
 export function createBrowserPane(storage: StateStore) {
@@ -78,6 +80,7 @@ export function createBrowserPane(storage: StateStore) {
         focusedTabID: previous.focusedTabID,
         partition: `opencode-browser-${crypto.randomUUID()}`,
         storageKey,
+        file: localEndpoint(target.endpoint.url),
       }
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
@@ -393,6 +396,7 @@ export function createBrowserPane(storage: StateStore) {
       initialize,
       restore,
       popupOptions,
+      file: entry.file,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)

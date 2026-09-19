@@ -8,7 +8,7 @@ import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
 import type { BrowserNetwork } from "./browser/network"
-import { destinationOrigin, normalizeURL } from "./browser/policy"
+import { allowedDestination, destinationOrigin, normalizeURL } from "./browser/policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -40,8 +40,11 @@ export function createBrowserPage(
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
+    /** Allow file:// documents; set only when the server shares this machine's filesystem. */
+    file?: boolean
   },
 ) {
+  const policy = { file: options.file }
   const view = new electron.WebContentsView({
     ...options.popupOptions,
     webPreferences: {
@@ -170,7 +173,7 @@ export function createBrowserPage(
   contents.on("content-bounds-updated", (event) => event.preventDefault())
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
-    if (!event.isMainFrame || event.url === "about:blank" || destinationOrigin(event.url)) return
+    if (!event.isMainFrame || event.url === "about:blank" || allowedDestination(event.url, policy)) return
     event.preventDefault()
     options.publish("ERR_BLOCKED_BY_CLIENT")
   }
@@ -295,7 +298,7 @@ export function createBrowserPage(
     ...(options.initialize === false
       ? []
       : [
-          contents.loadURL(normalizeURL(options.restore?.url || "about:blank")).catch((error: Error) => {
+          contents.loadURL(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             options.publish(error.message)
@@ -439,7 +442,7 @@ export function createBrowserPage(
     }
     switch (action.type) {
       case "navigate": {
-        const url = normalizeURL(action.url)
+        const url = normalizeURL(action.url, policy)
         const cancel = () => contents.stop()
         signal.addEventListener("abort", cancel, { once: true })
         try {
@@ -788,7 +791,7 @@ export function createBrowserPage(
       resources: [
         ...new Set(
           action.type === "navigate"
-            ? [new URL(normalizeURL(action.url)).href]
+            ? [new URL(normalizeURL(action.url, policy)).href]
             : capture
               ? sourceURLs()
               : urls.length

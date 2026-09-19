@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,7 +12,22 @@ import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { showToast } from "@/shell/notifications/toast"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
+import {
+  selectionFromLines,
+  useFile,
+  type FileSelection,
+  type FileState,
+  type SelectedLineRange,
+} from "@/workspaces/files/model"
+import { artifactKind } from "@/workspaces/files/artifact"
+import {
+  ArtifactFrame,
+  ArtifactMarkdown,
+  ArtifactToolbar,
+  ArtifactVideo,
+  OpenInBrowserButton,
+  type ArtifactMode,
+} from "@/session/files/artifact-view"
 import { useComments } from "@/composer/comments"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useComposerState } from "@/composer/persistence"
@@ -205,6 +220,11 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  const kind = createMemo(() => artifactKind(path() ?? ""))
+  // Rendered previews are the default for documents; the toggle is per view and not persisted.
+  const [artifact, setArtifact] = createStore({ mode: "preview" as ArtifactMode })
+  createEffect(on(path, () => setArtifact("mode", "preview"), { defer: true }))
+  const previewing = createMemo(() => (kind() === "markdown" || kind() === "html") && artifact.mode === "preview")
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -450,22 +470,64 @@ export function SessionFileView(props: SessionFileViewProps) {
     </div>
   )
 
+  const renderArtifact = (value: NonNullable<FileState["content"]>) => (
+    <Switch fallback={renderFile(value.content)}>
+      <Match when={kind() === "video"}>
+        <ArtifactVideo content={value} onLoad={scrollSync.queueRestore} />
+      </Match>
+      <Match when={kind() === "markdown" && previewing()}>
+        <ArtifactMarkdown path={path() ?? ""} text={value.content} cacheKey={cacheKey()} />
+      </Match>
+    </Switch>
+  )
+
+  const toolbar = () => (
+    <Show when={kind() === "markdown" || kind() === "html"}>
+      <ArtifactToolbar
+        mode={artifact.mode}
+        onModeChange={(mode) => setArtifact("mode", mode)}
+        actions={
+          <Show when={kind() === "html"}>
+            <OpenInBrowserButton path={path() ?? ""} />
+          </Show>
+        }
+      />
+    </Show>
+  )
+
+  // PDF and HTML frames own their scrolling, so they fill the panel instead of the ScrollView.
+  const framed = createMemo(() => kind() === "pdf" || (kind() === "html" && previewing()))
+
   const content = () => (
-    <div class="mt-3 relative h-full min-h-0">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
-        <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
-          </Match>
-          <Match when={state()?.notFound ? state()?.name : undefined}>
-            {(name) => (
-              <div class="px-6 py-4 text-text-weak">{language.t("file.error.notFound", { name: name() })}</div>
-            )}
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+    <div class="mt-3 relative h-full min-h-0 flex flex-col">
+      {toolbar()}
+      <Show
+        when={!framed()}
+        fallback={
+          <div class="min-h-0 flex-1">
+            <Show when={state()?.content}>
+              {(value) => (
+                <ArtifactFrame path={path() ?? ""} content={value()} kind={kind() === "pdf" ? "pdf" : "html"} />
+              )}
+            </Show>
+          </div>
+        }
+      >
+        <ScrollView class="min-h-0 flex-1" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
+          <Switch>
+            <Match when={state()?.loaded ? state()?.content : undefined}>{(value) => renderArtifact(value())}</Match>
+            <Match when={state()?.loading}>
+              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
+            </Match>
+            <Match when={state()?.notFound ? state()?.name : undefined}>
+              {(name) => (
+                <div class="px-6 py-4 text-text-weak">{language.t("file.error.notFound", { name: name() })}</div>
+              )}
+            </Match>
+            <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+          </Switch>
+        </ScrollView>
+      </Show>
     </div>
   )
 
