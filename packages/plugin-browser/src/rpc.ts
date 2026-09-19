@@ -183,6 +183,12 @@ export const Operations = [
     State,
   ),
   operation(
+    "preview",
+    "Show a file in the user's Review pane and focus its tab. Images, SVG, audio, video, PDF, HTML, and Markdown render as previews; other files show highlighted source. Path is server-local: relative to the workspace or absolute. Use this instead of pasting file contents when the user should look at a file you produced.",
+    { path: short },
+    Schema.Struct({ path: short }),
+  ),
+  operation(
     "navigate",
     "Navigate this tab to HTTP/HTTPS or about:blank; wait for the document load. Element refs expire.",
     { ...tab, url: short },
