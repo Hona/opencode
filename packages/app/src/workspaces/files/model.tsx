@@ -10,6 +10,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
 import { createPathHelpers } from "./path"
+import { fileContentFromBytes } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
@@ -189,10 +190,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         .read({ path: file, location: { directory } })
         .then((data) => {
           if (scope() !== directory) return
-          const content = { type: "text" as const, content: new TextDecoder().decode(data) }
+          const content = fileContentFromBytes(file, data)
           setLoaded(file, content)
-
-          if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
         })
