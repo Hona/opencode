@@ -625,8 +625,6 @@ export const dict = {
   "toast.file.loadFailed.title": "Failed to load file",
   "file.error.notFound": "File not found: {{name}}",
   "toast.file.listFailed.title": "Failed to list files",
-  "toast.file.outsideWorkspace.title": "File is outside this workspace",
-  "toast.file.outsideWorkspace.description": "{{path}} can only be opened by the desktop app on the server's machine.",
   "file.view.preview": "Preview",
   "file.view.source": "Source",
   "file.view.openInBrowser": "Open in browser",

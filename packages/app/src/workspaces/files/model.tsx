@@ -5,7 +5,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@opencode/util/encode"
-import { getFilename } from "@opencode/util/path"
+import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -186,8 +186,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
+      // Files outside the workspace are read from their own directory, like markdown images.
+      const parent = getDirectory(file)
+      const request = path.absolute(file)
+        ? {
+            path: getFilename(file),
+            location: { directory: parent.length > 1 ? parent.replace(/[/\\]$/, "") : parent },
+          }
+        : { path: file, location: { directory } }
       const promise = serverSDK.api.file
-        .read({ path: file, location: { directory } })
+        .read(request)
         .then((data) => {
           if (scope() !== directory) return
           const content = fileContentFromBytes(file, data)
@@ -280,6 +288,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     return {
       ready: () => view().ready(),
       normalize: path.normalize,
+      absolute: path.absolute,
       tab: path.tab,
       pathFromTab: path.pathFromTab,
       tree: {
