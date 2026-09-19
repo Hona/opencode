@@ -23,28 +23,72 @@ const group = (source: string) => {
   const pk = n.match(/packages\/([^/]+)\/src\/(.+)$/)
   return pk ? `${pk[1]}/${pk[2]}` : n.slice(-50)
 }
+const parent = new Map<number, number>()
+for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id)
+const resolve = (frame: any) => {
+  const name = frame.functionName
+  if (name === "(program)" || name === "(garbage collector)") return { label: name, fn: name }
+  const file = frame.url.split("/").pop()
+  const map = maps.get(file)
+  if (!map) return { label: `(no map) ${file}`, fn: name }
+  const pos = originalPositionFor(map, { line: frame.lineNumber + 1, column: frame.columnNumber })
+  return { label: pos.source ? group(pos.source) : `(unmapped) ${file}`, fn: pos.name ?? name }
+}
+const labelOf = (frame: any) => resolve(frame).label
+// A sample belongs to the render phase once Solid's root is on the stack; everything before that is
+// module evaluation, everything after the first render is later work (hydration, effects, timers).
+const stackHas = (id: number, test: (label: string, fn: string) => boolean) => {
+  for (let cur: number | undefined = id; cur !== undefined; cur = parent.get(cur)) {
+    const resolved = resolve(nodes.get(cur).callFrame)
+    if (test(resolved.label, resolved.fn)) return true
+  }
+  return false
+}
+const phases = { evaluate: new Map<string, number>(), render: new Map<string, number>(), later: new Map<string, number>() }
+let phase: keyof typeof phases = "evaluate"
+let t = 0
 let total = 0
 for (let i = 0; i < profile.samples.length; i++) {
   const dt = (profile.timeDeltas[i] ?? 0) / 1000
+  t += dt
   const node = nodes.get(profile.samples[i])
-  const frame = node.callFrame
-  const name = frame.functionName
-  if (name === "(idle)") continue
+  if (node.callFrame.functionName === "(idle)") {
+    if (phase === "render" && dt > 5) phase = "later"
+    continue
+  }
   total += dt
-  const file = frame.url.split("/").pop()
-  const map = maps.get(file)
-  const label = (() => {
-    if (name === "(program)" || name === "(garbage collector)") return name
-    if (!map) return `(no map) ${file}`
-    const pos = originalPositionFor(map, { line: frame.lineNumber + 1, column: frame.columnNumber })
-    return pos.source ? group(pos.source) : `(unmapped) ${file}`
-  })()
+  if (phase === "evaluate" && stackHas(node.id, (label, fn) => label === "solid-js" && (fn === "render" || fn === "createRoot")))
+    phase = "render"
+  const label = labelOf(node.callFrame)
+  const bucket = phases[phase]
+  bucket.set(label, (bucket.get(label) ?? 0) + dt)
   self.set(label, (self.get(label) ?? 0) + dt)
   const pkg = label.split("/").slice(0, label.startsWith("effect/") || label.startsWith("@") ? 2 : 1).join("/")
   byPkg.set(pkg, (byPkg.get(pkg) ?? 0) + dt)
 }
-console.log(`busy ${total.toFixed(0)} ms\n== by package ==`)
-for (const [k, v] of [...byPkg].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(v.toFixed(1).padStart(7), k)
-console.log("\n== by source ==")
-for (const [k, v] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 45)) console.log(v.toFixed(1).padStart(7), k)
+console.log(`busy ${total.toFixed(0)} ms over ${t.toFixed(0)} ms`)
+void phases
+// Timeline: 25 ms buckets with the top sources, so module evaluation, render and hydration show as bands.
+const buckets = new Map<number, Map<string, number>>()
+t = 0
+for (let i = 0; i < profile.samples.length; i++) {
+  const dt = (profile.timeDeltas[i] ?? 0) / 1000
+  t += dt
+  const node = nodes.get(profile.samples[i])
+  if (node.callFrame.functionName === "(idle)") continue
+  const b = Math.floor(t / 25) * 25
+  const m = buckets.get(b) ?? new Map()
+  const label = labelOf(node.callFrame).replace(/^(\.\.\/)+/, "")
+  m.set(label, (m.get(label) ?? 0) + dt)
+  buckets.set(b, m)
+}
+console.log("\n== timeline (25 ms buckets) ==")
+for (const [b, m] of [...buckets].sort((a, c) => a[0] - c[0])) {
+  const busy = [...m.values()].reduce((a, c) => a + c, 0)
+  if (busy < 1) continue
+  const top = [...m].sort((a, c) => c[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(" | ")
+  console.log(String(b).padStart(5), busy.toFixed(0).padStart(3), top)
+}
+console.log("\n== by package (all) ==")
+for (const [k, v] of [...byPkg].sort((a, b) => b[1] - a[1]).slice(0, 20)) console.log(v.toFixed(1).padStart(7), k)
 
