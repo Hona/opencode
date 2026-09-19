@@ -45,10 +45,9 @@ export function ArtifactToolbar(props: {
 }) {
   const language = useLanguage()
   return (
-    <div class="flex h-10 shrink-0 items-center gap-3 px-4">
+    <div data-slot="artifact-toolbar" class="flex h-10 shrink-0 items-center gap-3 px-4">
       <Show when={props.onModeChange}>
         <SegmentedControl
-          class="!w-auto"
           value={props.mode ?? "preview"}
           onChange={(value) => {
             if (value === "preview" || value === "source") props.onModeChange?.(value)

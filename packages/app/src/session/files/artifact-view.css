@@ -1,3 +1,12 @@
+/* The control defaults to a fixed 232px with equal segments; here it hugs its two labels. */
+[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2"] {
+  width: auto;
+}
+
+[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2-item"] {
+  flex: 0 0 auto;
+}
+
 [data-slot="artifact-stage"] {
   --artifact-check: color-mix(in oklch, var(--v2-text-text-base) 5%, transparent);
   background-color: var(--v2-background-bg-deep);
