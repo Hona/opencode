@@ -18,6 +18,14 @@ export type ArtifactMode = "preview" | "source"
 /** Facts a viewer learns from the decoded media, shown in the toolbar. */
 export type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
 
+type MediaProps = {
+  path: string
+  content: FileContent
+  onInfo: (info: ArtifactInfo) => void
+  /** The browser could not decode the bytes; the host falls back to the binary placeholder. */
+  onError: () => void
+}
+
 export function formatBytes(locale: string, bytes: number) {
   const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const
   const index = Math.min(units.length - 1, bytes > 0 ? Math.floor(Math.log10(bytes) / 3) : 0)
@@ -82,7 +90,7 @@ export function OpenInBrowserButton(props: { path: string }) {
   const language = useLanguage()
   const artifacts = useArtifactOpener()
   return (
-    <Show when={artifacts.canOpenInBrowser()}>
+    <Show when={artifacts.canOpenInBrowser(props.path)}>
       <Button size="small" variant="ghost" icon="globe" onClick={() => artifacts.openInBrowser(props.path)}>
         {language.t("file.view.openInBrowser")}
       </Button>
@@ -99,7 +107,7 @@ function createBlobUrl(content: () => FileContent) {
 }
 
 /** Images and SVG previews: fit the pane, click to inspect at 1:1 when the image is larger. */
-export function ArtifactImage(props: { path: string; content: FileContent; onInfo: (info: ArtifactInfo) => void }) {
+export function ArtifactImage(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   const [state, setState] = createStore({ zoom: "fit" as "fit" | "actual", overflow: false, width: 0, height: 0 })
   let stage: HTMLDivElement | undefined
@@ -135,6 +143,7 @@ export function ArtifactImage(props: { path: string; content: FileContent; onInf
           src={url()}
           alt={getFilename(props.path)}
           draggable={false}
+          onError={() => props.onError()}
           onLoad={(event) => {
             const image = event.currentTarget
             setState({ width: image.naturalWidth, height: image.naturalHeight })
@@ -151,7 +160,7 @@ export function ArtifactImage(props: { path: string; content: FileContent; onInf
   )
 }
 
-export function ArtifactVideo(props: { path: string; content: FileContent; onInfo: (info: ArtifactInfo) => void }) {
+export function ArtifactVideo(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" data-zoom="fit" class="relative min-h-0 flex-1 overflow-hidden">
@@ -162,6 +171,7 @@ export function ArtifactVideo(props: { path: string; content: FileContent; onInf
           controls
           preload="metadata"
           playsinline
+          onError={() => props.onError()}
           src={url()}
           onLoadedMetadata={(event) => {
             const video = event.currentTarget
@@ -173,7 +183,7 @@ export function ArtifactVideo(props: { path: string; content: FileContent; onInf
   )
 }
 
-export function ArtifactAudio(props: { path: string; content: FileContent; onInfo: (info: ArtifactInfo) => void }) {
+export function ArtifactAudio(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
@@ -185,6 +195,7 @@ export function ArtifactAudio(props: { path: string; content: FileContent; onInf
           <div class="max-w-full truncate text-14-medium text-text-strong">{getFilename(props.path)}</div>
           <audio
             class="w-full"
+            onError={() => props.onError()}
             controls
             preload="metadata"
             src={url()}
@@ -242,7 +253,8 @@ export function ArtifactTable(props: { path: string; text: string; onInfo: (info
   const language = useLanguage()
   const parsed = createMemo(() => parseDelimited(props.text, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ","))
   createEffect(() => props.onInfo({ rows: parsed().total, columns: parsed().columns }))
-  const header = () => parsed().rows[0] ?? []
+  // Pad the header to the widest row so no data column is dropped.
+  const header = () => Array.from({ length: parsed().columns }, (_, index) => parsed().rows[0]?.[index] ?? "")
   const body = () => parsed().rows.slice(1)
   return (
     <div class="min-h-0 flex-1 overflow-auto">

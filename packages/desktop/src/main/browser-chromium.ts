@@ -8,7 +8,7 @@ import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
 import type { BrowserNetwork } from "./browser/network"
-import { allowedDestination, destinationOrigin, normalizeURL } from "./browser/policy"
+import { allowedDestination, destinationOrigin, normalizeURL, type Policy } from "./browser/policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -40,11 +40,15 @@ export function createBrowserPage(
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
-    /** Allow file:// documents; set only when the server shares this machine's filesystem. */
-    file?: boolean
+    /** Directories whose files may load as file:// documents; empty when the server is remote. */
+    fileRoots?: () => ReadonlyArray<string>
   },
 ) {
-  const policy = { file: options.file }
+  const policy: Policy = {
+    get fileRoots() {
+      return options.fileRoots?.() ?? []
+    },
+  }
   const view = new electron.WebContentsView({
     ...options.popupOptions,
     webPreferences: {

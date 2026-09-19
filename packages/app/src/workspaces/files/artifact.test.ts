@@ -4,6 +4,7 @@ import {
   bytesToBase64,
   contentBytes,
   fileContentFromBytes,
+  MAX_MEDIA_BYTES,
   parseDelimited,
   resolveArtifactPath,
 } from "./artifact"
@@ -48,6 +49,11 @@ describe("fileContentFromBytes", () => {
       content: "const a = 1",
       mimeType: undefined,
     })
+  })
+
+  test("keeps only the size of media above the cap", () => {
+    const content = fileContentFromBytes("big.mp4", new Uint8Array(MAX_MEDIA_BYTES + 1))
+    expect(content).toEqual({ type: "binary", content: "", size: MAX_MEDIA_BYTES + 1 })
   })
 
   test("marks unknown binaries without keeping bytes", () => {

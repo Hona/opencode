@@ -10,7 +10,7 @@ import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin, localEndpoint } from "./browser/policy"
+import { destinationOrigin } from "./browser/policy"
 import { emitIpcEvent } from "./ipc-events"
 import { SidecarCredentials } from "./service/sidecar-credentials"
 import { createBrowserRestoreStore } from "./browser/restore"
@@ -31,8 +31,11 @@ type Entry = {
   lastState?: string
   network?: BrowserNetwork
   storageKey: string
-  /** The server runs on this machine, so its files may be shown as file:// documents. */
-  file: boolean
+  /**
+   * Workspace directories whose files may load as file:// documents. Set only for the desktop's
+   * own sidecar: a forwarded or explicit loopback server does not share this machine's disk.
+   */
+  fileRoots: string[]
 }
 
 export function createBrowserPane(storage: StateStore) {
@@ -80,8 +83,11 @@ export function createBrowserPane(storage: StateStore) {
         focusedTabID: previous.focusedTabID,
         partition: `opencode-browser-${crypto.randomUUID()}`,
         storageKey,
-        file: localEndpoint(target.endpoint.url),
+        fileRoots: [],
       }
+      const sidecar = SidecarCredentials.get()
+      const sameMachine =
+        !!sidecar && URL.canParse(target.endpoint.url) && new URL(target.endpoint.url).origin === sidecar.url
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
       let attached = false
@@ -115,6 +121,8 @@ export function createBrowserPane(storage: StateStore) {
               ),
             )
             const session = yield* client.session.get({ sessionID })
+            // The agent can already read this workspace, so showing its files adds no access.
+            if (sameMachine) entry.fileRoots = [session.location.directory]
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
             }
@@ -396,7 +404,7 @@ export function createBrowserPane(storage: StateStore) {
       initialize,
       restore,
       popupOptions,
-      file: entry.file,
+      fileRoots: () => entry.fileRoots,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)

@@ -187,12 +187,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setLoading(file)
 
       // Files outside the workspace are read from their own directory, like markdown images.
-      const parent = getDirectory(file)
+      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
       const request = path.absolute(file)
-        ? {
-            path: getFilename(file),
-            location: { directory: parent.length > 1 ? parent.replace(/[/\\]$/, "") : parent },
-          }
+        ? { path: getFilename(file), location: { directory: getDirectory(file) } }
         : { path: file, location: { directory } }
       const promise = serverSDK.api.file
         .read(request)
