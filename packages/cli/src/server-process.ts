@@ -135,29 +135,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 }),
             }
       const server = yield* start(serverOptions, lifecycle, transform).pipe(
-        Effect.catch((error) => {
-          if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
-          return Effect.gen(function* () {
-            // A distro's own service forwarded onto the Windows loopback can never be this host's
-            // incumbent, so skip the rendezvous wait and let the host service take a free port instead.
-            if (yield* WslPorts.holds(port)) {
-              if ((yield* Service.discover(serviceOptions)) !== undefined) return undefined
-              yield* Effect.logWarning("managed service port is held by a WSL distro; binding a free port instead", {
-                hostname,
-                port,
-              })
-              return yield* start({ ...serverOptions, port: 0 }, lifecycle, transform)
-            }
-            if (yield* recognizeIncumbent(serviceOptions, hostname, port)) return undefined
-            return yield* Effect.fail(
-              new Error(
-                `Managed service port ${port} on ${hostname} is already in use by another process. ` +
-                  "Configure another port with `opencode service set port <port>` and start the service again.",
-                { cause: error },
-              ),
-            )
-          })
-        }),
+        Effect.catch((error) =>
+          serviceOptions !== undefined && port !== undefined && addressInUse(error)
+            ? resolvePortConflict(error, serviceOptions, hostname, port, () =>
+                start({ ...serverOptions, port: 0 }, lifecycle, transform),
+              )
+            : Effect.fail(error),
+        ),
       )
       if (server === undefined) return
       const url = HttpServer.formatAddress(server.address)
@@ -170,6 +154,34 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
+})
+
+// The fixed port is a rendezvous between sibling contenders, so a taken port normally means a sibling
+// is still registering. A WSL distro's service forwarded onto the Windows loopback can never be this
+// host's incumbent, so the host service takes a free port instead of waiting for one.
+const resolvePortConflict = Effect.fnUntraced(function* <A, E, R>(
+  error: unknown,
+  options: DiscoverOptions,
+  hostname: string,
+  port: number,
+  rebind: () => Effect.Effect<A, E, R>,
+) {
+  const wsl = yield* WslPorts.holds(port)
+  const sibling = wsl ? yield* Service.discover(options) : yield* recognizeIncumbent(options, hostname, port)
+  if (sibling) return undefined
+  if (!wsl)
+    return yield* Effect.fail(
+      new Error(
+        `Managed service port ${port} on ${hostname} is already in use by another process. ` +
+          "Configure another port with `opencode service set port <port>` and start the service again.",
+        { cause: error },
+      ),
+    )
+  yield* Effect.logWarning("managed service port is held by a WSL distro; binding a free port instead", {
+    hostname,
+    port,
+  })
+  return yield* rebind()
 })
 
 const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {
