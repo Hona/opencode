@@ -91,9 +91,7 @@ const binaryKinds = new Set<ArtifactKind>(["image", "audio", "video", "pdf", "fo
 
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */
 function isBinaryBytes(bytes: Uint8Array) {
-  const limit = Math.min(bytes.length, 8192)
-  for (let index = 0; index < limit; index++) if (bytes[index] === 0) return true
-  return false
+  return bytes.subarray(0, 8192).includes(0)
 }
 
 export function bytesToBase64(bytes: Uint8Array) {
@@ -104,10 +102,16 @@ export function bytesToBase64(bytes: Uint8Array) {
   return btoa(parts.join(""))
 }
 
+/** Media above this stays a placeholder: base64 encoding on the main thread and the LRU budget both suffer. */
+export const MAX_MEDIA_BYTES = 25 * 1024 * 1024
+
 export function fileContentFromBytes(path: string, bytes: Uint8Array): FileContent {
   const kind = artifactKind(path)
   const mimeType = artifactMime(path)
-  if (binaryKinds.has(kind)) return { type: "binary", content: bytesToBase64(bytes), encoding: "base64", mimeType }
+  if (binaryKinds.has(kind)) {
+    if (bytes.length > MAX_MEDIA_BYTES) return { type: "binary", content: "", size: bytes.length }
+    return { type: "binary", content: bytesToBase64(bytes), encoding: "base64", mimeType }
+  }
   // Unknown binaries keep no bytes: the viewer only shows a placeholder for them.
   if (kind === "text" && isBinaryBytes(bytes)) return { type: "binary", content: "", size: bytes.length }
   return { type: "text", content: new TextDecoder().decode(bytes), mimeType }

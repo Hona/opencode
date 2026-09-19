@@ -229,9 +229,12 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  // Media the browser could not decode falls back to the binary placeholder.
+  const [decode, setDecode] = createStore({ failed: false })
   const kind = createMemo<ArtifactKind | "binary">(() => {
     const content = state()?.content
     if (content?.type === "binary" && !content.mimeType) return "binary"
+    if (decode.failed) return "binary"
     return artifactKind(path() ?? "")
   })
   const previewable = createMemo(() => {
@@ -240,7 +243,16 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
   // Rendered previews are the default for documents; the toggle is per view and not persisted.
   const [artifact, setArtifact] = createStore({ mode: "preview" as ArtifactMode, info: {} as ArtifactInfo })
-  createEffect(on(path, () => setArtifact({ mode: "preview", info: {} }), { defer: true }))
+  createEffect(
+    on(
+      () => state()?.content,
+      () => {
+        setArtifact({ mode: "preview", info: {} })
+        setDecode("failed", false)
+      },
+      { defer: true },
+    ),
+  )
   const previewing = createMemo(() => previewable() && artifact.mode === "preview")
   // Text files keep the plain code view; everything else has a dedicated viewer unless showing source.
   const viewer = createMemo(() => kind() !== "text" && (previewing() || !previewable()))
@@ -492,18 +504,19 @@ export function SessionFileView(props: SessionFileViewProps) {
   )
 
   const setInfo = (info: ArtifactInfo) => setArtifact("info", info)
+  const fail = () => setDecode("failed", true)
 
   // Viewers own their size and scrolling; the code view scrolls inside ScrollView so line state persists.
   const renderViewer = (value: NonNullable<FileState["content"]>) => (
     <Switch>
       <Match when={kind() === "image" || kind() === "svg"}>
-        <ArtifactImage path={path() ?? ""} content={value} onInfo={setInfo} />
+        <ArtifactImage path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
       </Match>
       <Match when={kind() === "video"}>
-        <ArtifactVideo path={path() ?? ""} content={value} onInfo={setInfo} />
+        <ArtifactVideo path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
       </Match>
       <Match when={kind() === "audio"}>
-        <ArtifactAudio path={path() ?? ""} content={value} onInfo={setInfo} />
+        <ArtifactAudio path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
       </Match>
       <Match when={kind() === "pdf" || kind() === "html"}>
         <ArtifactFrame path={path() ?? ""} content={value} kind={kind() === "pdf" ? "pdf" : "html"} />

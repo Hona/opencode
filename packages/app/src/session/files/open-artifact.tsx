@@ -8,6 +8,7 @@ import { artifactKind, resolveArtifactPath } from "@/workspaces/files/artifact"
 import { encodeFilePath } from "@/workspaces/files/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
+import { ServerConnection } from "@/runtime/server/registry"
 import { useSessionLayout } from "@/session/session-layout"
 import type { createSessionBrowser } from "@/session/browser/model"
 
@@ -47,34 +48,46 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
      * become absolute too, so a `../../shared/report.pdf` still opens.
      */
     const resolve = (href: string, base?: string) => {
-      const value = href.replaceAll("\\", "/")
+      // Agents cite locations as path:line or path:line:col; the file is what opens.
+      const value = href.replaceAll("\\", "/").replace(/:\d+(?::\d+)?$/, "")
       if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return file.normalize(value)
       const relative = resolveArtifactPath(base ?? "", value)
       if (relative !== undefined) return file.normalize(relative)
-      return file.normalize(resolveArtifactPath(root(), value) ?? value)
+      // Climbing past the workspace root: resolve from the referencing folder's absolute location.
+      const dir = base ? `${root()}/${base.replace(/\/+$/, "")}` : root()
+      return file.normalize(resolveArtifactPath(dir, value) ?? value)
     }
 
+    // Inline paths are guessed from text, so confirm the file exists before a tab appears for it.
     const openTab = (path: string) => {
       const tab = file.tab(path)
-      batch(() => {
-        tabs().open(tab)
-        void file.load(path)
-        if (!view().reviewPanel.opened()) view().reviewPanel.open()
-        tabs().setActive(tab)
+      void file.load(path).then(() => {
+        if (file.notFound(path) || !file.get(path)?.loaded) return
+        batch(() => {
+          tabs().open(tab)
+          if (!view().reviewPanel.opened()) view().reviewPanel.open()
+          tabs().setActive(tab)
+        })
       })
     }
 
-    // Only a same-machine server can hand the browser pane a file:// URL it is able to read.
-    const canOpenInBrowser = () => server.isLocal && props.browser.available() && props.browser.attached()
+    // The desktop's own sidecar shares this disk, and its browser pane accepts file:// URLs inside the
+    // session workspace only. Forwarded loopback servers do not qualify, matching the desktop policy.
+    const canOpenInBrowser = (path?: string) =>
+      ServerConnection.builtin(server.conn) &&
+      props.browser.available() &&
+      props.browser.attached() &&
+      (path === undefined || !file.absolute(path))
 
     const openInBrowser = (path: string) => {
-      props.browser.command({ type: "tabs.open", url: fileUrl(file.absolute(path) ? path : `${root()}/${path}`) })
+      props.browser.command({ type: "tabs.open", url: fileUrl(`${root()}/${path}`) })
     }
 
     /** Open `href` as referenced from `base` (a workspace-relative directory, "" for the root). */
     const open = (href: string, base?: string) => {
       const path = resolve(href, base)
-      if (artifactKind(path) === "html" && canOpenInBrowser()) return openInBrowser(path)
+      if (!path) return
+      if (artifactKind(path) === "html" && canOpenInBrowser(path)) return openInBrowser(path)
       openTab(path)
     }
 
