@@ -3,13 +3,10 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { useBrowserAttachments } from "@/session/browser/attachments"
 import type { SessionModel } from "@/session/model"
-import { showToast } from "@/shell/notifications/toast"
 import { useFile } from "@/workspaces/files/model"
 import { artifactKind, resolveArtifactPath } from "@/workspaces/files/artifact"
 import { encodeFilePath } from "@/workspaces/files/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { useSessionLayout } from "@/session/session-layout"
 import type { createSessionBrowser } from "@/session/browser/model"
@@ -30,33 +27,31 @@ export function ArtifactMarkdownProvider(props: ParentProps) {
 }
 
 /**
- * Opens files the agent references: workspace files become side-panel tabs (or a browser tab
- * for HTML when the desktop can load it directly), files outside the workspace open in the OS.
+ * Opens files the agent references as side-panel tabs, inside or outside the workspace, or as
+ * a browser tab for HTML when the desktop can load the file directly.
  */
 export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = createSimpleContext({
   name: "ArtifactOpener",
   init: (props: { session: SessionModel; browser: ReturnType<typeof createSessionBrowser> }) => {
     const file = useFile()
     const server = useServer()
-    const platform = usePlatform()
-    const language = useLanguage()
     const location = useWorkspaceLocation()
     const attachments = useBrowserAttachments()
     const { tabs, view } = useSessionLayout()
 
     const root = () => location().directory.replaceAll("\\", "/").replace(/\/+$/, "")
 
-    const resolve = (href: string, base?: string): { path: string } | { outside: string } => {
+    /**
+     * Turn a link into a path `useFile` can load: workspace-relative when it is under the root,
+     * otherwise absolute. Relative links resolve against `base`; ones that climb past the root
+     * become absolute too, so a `../../shared/report.pdf` still opens.
+     */
+    const resolve = (href: string, base?: string) => {
       const value = href.replaceAll("\\", "/")
-      const dir = root()
-      if (/^[a-z]:\//i.test(value) || value.startsWith("/")) {
-        const windows = /^[a-z]:/i.test(dir)
-        const prefix = `${dir}/`
-        const inside = windows ? value.toLowerCase().startsWith(prefix.toLowerCase()) : value.startsWith(prefix)
-        return inside ? { path: value.slice(prefix.length) } : { outside: value }
-      }
-      const path = resolveArtifactPath(base ?? "", value)
-      return path === undefined ? { outside: `${dir}/${value}` } : { path }
+      if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return file.normalize(value)
+      const relative = resolveArtifactPath(base ?? "", value)
+      if (relative !== undefined) return file.normalize(relative)
+      return file.normalize(resolveArtifactPath(root(), value) ?? value)
     }
 
     const openTab = (path: string) => {
@@ -69,28 +64,18 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
       })
     }
 
-    const openOutside = (absolute: string) => {
-      if (server.isLocal && platform.openLocalFile) return platform.openLocalFile(fileUrl(absolute))
-      showToast({
-        variant: "error",
-        title: language.t("toast.file.outsideWorkspace.title"),
-        description: language.t("toast.file.outsideWorkspace.description", { path: absolute }),
-      })
-    }
-
     // Only a same-machine server can hand the browser pane a file:// URL it is able to read.
     const canOpenInBrowser = () => server.isLocal && props.browser.available() && props.browser.attached()
 
     const openInBrowser = (path: string) => {
-      props.browser.command({ type: "tabs.open", url: fileUrl(`${root()}/${path}`) })
+      props.browser.command({ type: "tabs.open", url: fileUrl(file.absolute(path) ? path : `${root()}/${path}`) })
     }
 
     /** Open `href` as referenced from `base` (a workspace-relative directory, "" for the root). */
     const open = (href: string, base?: string) => {
-      const target = resolve(href, base)
-      if ("outside" in target) return openOutside(target.outside)
-      if (artifactKind(target.path) === "html" && canOpenInBrowser()) return openInBrowser(target.path)
-      openTab(target.path)
+      const path = resolve(href, base)
+      if (artifactKind(path) === "html" && canOpenInBrowser()) return openInBrowser(path)
+      openTab(path)
     }
 
     // The agent's browser.preview tool arrives through the desktop browser pane attachment.

@@ -189,13 +189,14 @@ export function blobUrlFromContent(content: FileContent) {
 }
 
 /**
- * Resolve a link found inside a workspace file against that file's directory. The result is a
- * workspace-relative path, or undefined when the link escapes the workspace root.
+ * Resolve a relative link against a directory. A relative base yields a workspace-relative path and
+ * an absolute base an absolute one; undefined when the link climbs past the base's root.
  */
 export function resolveArtifactPath(base: string, href: string) {
   const target = href.replaceAll("\\", "/")
   if (target.startsWith("/")) return undefined
-  const segments = [...base.replaceAll("\\", "/").split("/").filter(Boolean)]
+  const dir = base.replaceAll("\\", "/")
+  const segments = [...dir.split("/").filter(Boolean)]
   for (const segment of target.split("/")) {
     if (!segment || segment === ".") continue
     if (segment !== "..") {
@@ -205,5 +206,5 @@ export function resolveArtifactPath(base: string, href: string) {
     if (segments.length === 0) return undefined
     segments.pop()
   }
-  return segments.join("/")
+  return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
 }
