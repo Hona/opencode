@@ -237,7 +237,6 @@ export const dict = {
   "provider.connect.console.description":
     "Sign in with your OpenCode Console account. Your browser opens to the Console, where you pick a workspace and select Authorize.",
   "provider.connect.console.opening": "Opening your browser…",
-  "provider.connect.console.advanced": "Advanced",
   "provider.connect.console.apiKey.switch": "Connect with an API key or service account instead",
   "provider.connect.console.apiKey.description":
     "Paste an API key for a service account. You create service accounts in the OpenCode Console under Keys.",

@@ -710,30 +710,18 @@ function ProviderConnection(props: {
     )
   }
 
-  // Deliberately quiet: most people should never need a key, so it only appears after
-  // opening "Advanced".
-  function ConsoleAdvanced() {
-    const [store, setStore] = createStore({ open: false })
+  // Deliberately quiet: most people should never need a key, so this stays small and at the bottom.
+  function ConsoleApiKeySwitch() {
     return (
-      <div class="mt-auto flex flex-col items-end gap-1 px-3 pt-4 text-[11px] leading-4 text-v2-text-text-muted">
+      <div class="mt-auto flex justify-end px-3 pt-4 text-[11px] leading-4 text-v2-text-text-muted">
         <button
           type="button"
-          class="rounded-xs px-1 hover:text-v2-text-text-base focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-          aria-expanded={store.open}
-          onClick={() => setStore("open", (open) => !open)}
+          data-action="provider-connect-api-key"
+          class="rounded-xs px-1 underline decoration-v2-border-border-base underline-offset-2 hover:text-v2-text-text-base focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
+          onClick={() => void controller.auth.select(keyIndex())}
         >
-          {language.t("provider.connect.console.advanced")}
+          {language.t("provider.connect.console.apiKey.switch")}
         </button>
-        <Show when={store.open}>
-          <button
-            type="button"
-            data-action="provider-connect-api-key"
-            class="rounded-xs px-1 underline decoration-v2-border-border-base underline-offset-2 hover:text-v2-text-text-base focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-            onClick={() => void controller.auth.select(keyIndex())}
-          >
-            {language.t("provider.connect.console.apiKey.switch")}
-          </button>
-        </Show>
       </div>
     )
   }
@@ -788,7 +776,7 @@ function ProviderConnection(props: {
           </Match>
         </Switch>
         <Show when={isConsole() && controller.currentMethod()?.type !== "key" && keyIndex() !== -1}>
-          <ConsoleAdvanced />
+          <ConsoleApiKeySwitch />
         </Show>
       </div>
     </div>

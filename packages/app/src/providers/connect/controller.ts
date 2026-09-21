@@ -1,9 +1,14 @@
-import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode/client/promise"
+import type {
+  FormAnswer,
+  IntegrationInfo,
+  IntegrationMethod,
+  IntegrationOauthConnectOutput,
+} from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
-import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
+import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -42,12 +47,28 @@ export function createProviderConnectionController(options: {
     const directory = options.directory()
     return directory ? { directory } : undefined
   }
-  const [integration] = createResource(
-    () => ({ provider: options.provider(), directory: options.directory() }),
-    (input) =>
-      serverSDK.api.integration
-        .get({ integrationID: input.provider, location: location() })
-        .then((result) => result.data),
+  // Not createResource: the dialog is owned by whichever page opened it, so reading a pending
+  // resource here would suspend that page's <Suspense> and blank the screen behind the dialog.
+  const [integration, setIntegration] = createStore({
+    loading: true,
+    latest: undefined as IntegrationInfo | undefined,
+  })
+  createEffect(
+    on(
+      () => ({ provider: options.provider(), directory: options.directory() }),
+      (input) => {
+        setIntegration({ loading: true, latest: undefined })
+        serverSDK.api.integration
+          .get({ integrationID: input.provider, location: location() })
+          .then((result) => result.data)
+          .catch(() => undefined)
+          .then((latest) => {
+            if (polling.disposed) return
+            if (input.provider !== options.provider() || input.directory !== options.directory()) return
+            setIntegration({ loading: false, latest })
+          })
+      },
+    ),
   )
   const methods = createMemo<ProviderConnectMethod[]>(() => {
     const values = integration.latest?.methods.filter(
