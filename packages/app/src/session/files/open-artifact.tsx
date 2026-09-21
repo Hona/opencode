@@ -13,10 +13,6 @@ import { useSessionLayout } from "@/session/session-layout"
 import { createOpenSessionFileTab } from "@/session/helpers"
 import type { createSessionBrowser } from "@/session/browser/model"
 
-export function fileUrl(absolute: string) {
-  return `file://${encodeFilePath(absolute)}`
-}
-
 /** Routes local links in timeline markdown to the artifact opener while keeping image loading. */
 export function ArtifactMarkdownProvider(props: ParentProps) {
   const markdown = useMarkdown()
@@ -86,7 +82,7 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
       (path === undefined || !file.absolute(path))
 
     const openInBrowser = (path: string) => {
-      props.browser.command({ type: "tabs.open", url: fileUrl(`${root()}/${path}`) })
+      props.browser.command({ type: "tabs.open", url: `file://${encodeFilePath(`${root()}/${path}`)}` })
     }
 
     /** Open `href` as referenced from `base` (a workspace-relative directory, "" for the root). */

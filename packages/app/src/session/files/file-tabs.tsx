@@ -11,7 +11,6 @@ import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { showToast } from "@/shell/notifications/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { artifactKind } from "@/workspaces/files/artifact"
 import { ArtifactView } from "@/session/files/artifact-view"
@@ -459,7 +458,12 @@ export function SessionFileView(props: SessionFileViewProps) {
         <Match when={state()?.loaded ? state()?.content : undefined}>
           {(value) => (
             <Show when={artifact()} fallback={codeView(value().content)}>
-              <ArtifactView path={path() ?? ""} content={value()} source={codeView(value().content)} />
+              <ArtifactView
+                path={path() ?? ""}
+                content={value()}
+                cacheKey={cacheKey()}
+                source={codeView(value().content)}
+              />
             </Show>
           )}
         </Match>

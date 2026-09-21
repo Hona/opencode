@@ -3,14 +3,14 @@ import { NodeHttpClient } from "@effect/platform-node"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
-import type { BrowserWindow } from "electron"
+import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin } from "./browser/policy"
+import { destinationOrigin, fileURLWithin } from "./browser/policy"
 import { emitIpcEvent } from "./ipc-events"
 import { SidecarCredentials } from "./service/sidecar-credentials"
 import { createBrowserRestoreStore } from "./browser/restore"
@@ -88,6 +88,13 @@ export function createBrowserPane(storage: StateStore) {
       const sidecar = SidecarCredentials.get()
       const sameMachine =
         !!sidecar && URL.canParse(target.endpoint.url) && new URL(target.endpoint.url).origin === sidecar.url
+      // Navigation guards cover documents; subresources (img, script, fetch) also must not read
+      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
+      electron.session
+        .fromPartition(entry.partition)
+        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+          callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
+        )
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
       let attached = false

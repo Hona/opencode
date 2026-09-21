@@ -8,7 +8,6 @@ import { ScrollView } from "@opencode/ui/scroll-view"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { sampledChecksum } from "@opencode/util/encode"
 import type { FileContent } from "@/runtime/server/types"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
@@ -42,7 +41,7 @@ const previewableKinds = new Set<ArtifactKind>(["svg", "html", "markdown", "merm
  * Renders a loaded non-text file: media, documents, and data get a dedicated viewer with a toolbar;
  * previewable text kinds can switch to `source`, which the host supplies (its code view).
  */
-export function ArtifactView(props: { path: string; content: FileContent; source: JSX.Element }) {
+export function ArtifactView(props: { path: string; content: FileContent; cacheKey?: string; source: JSX.Element }) {
   const language = useLanguage()
   const [state, setState] = createStore({
     mode: "preview" as ArtifactMode,
@@ -79,17 +78,13 @@ export function ArtifactView(props: { path: string; content: FileContent; source
   })
 
   const media = { onInfo: (info: ArtifactInfo) => setState("info", info), onError: () => setState("undecodable", true) }
-  const document = () => (
+  const rendered = () => (
     <ScrollView class="min-h-0 flex-1">
       <Show
         when={kind() === "markdown"}
-        fallback={<ArtifactMermaid text={props.content.content} cacheKey={sampledChecksum(props.content.content)} />}
+        fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
       >
-        <ArtifactMarkdown
-          path={props.path}
-          text={props.content.content}
-          cacheKey={sampledChecksum(props.content.content)}
-        />
+        <ArtifactMarkdown path={props.path} text={props.content.content} cacheKey={props.cacheKey} />
       </Show>
     </ScrollView>
   )
@@ -126,7 +121,7 @@ export function ArtifactView(props: { path: string; content: FileContent; source
           <Match when={kind() === "table"}>
             <ArtifactTable path={props.path} text={props.content.content} onInfo={media.onInfo} />
           </Match>
-          <Match when={kind() === "markdown" || kind() === "mermaid"}>{document()}</Match>
+          <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           <Match when={kind() === "binary"}>
             <ArtifactBinary path={props.path} size={formatBytes(language.intl(), contentBytes(props.content))} />
           </Match>
@@ -337,7 +332,8 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
 function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string }) {
   const parent = useMarkdown()
   const artifacts = useArtifactOpener()
-  const dir = createMemo(() => getDirectory(props.path))
+  // getDirectory yields "/" for a root-level file, which would make relative links absolute.
+  const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
   return (

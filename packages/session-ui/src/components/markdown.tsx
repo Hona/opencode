@@ -608,8 +608,7 @@ export function Markdown(
         copied: i18n.t("ui.message.copied"),
       }))
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
-    if (markdown?.openLocalFile) container.dataset.localLinks = ""
-    else delete container.dataset.localLinks
+    container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
     if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
   })
 

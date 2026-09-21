@@ -100,6 +100,7 @@ describe("resolveArtifactPath", () => {
     ["docs/api", "../index.md", "docs/index.md"],
     ["", "src/app.ts", "src/app.ts"],
     ["docs", "sub\\win.md", "docs/sub/win.md"],
+    ["", "docs/guide.md", "docs/guide.md"],
     ["/tmp/notes/", "../out/a.pdf", "/tmp/out/a.pdf"],
     ["C:/tmp/notes/", "img.png", "C:/tmp/notes/img.png"],
     ["/repo", "../shared/report.pdf", "/shared/report.pdf"],

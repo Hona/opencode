@@ -8,7 +8,14 @@ import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
 import type { BrowserNetwork } from "./browser/network"
-import { allowedDestination, destinationOrigin, normalizeURL, type Policy } from "./browser/policy"
+import {
+  allowedDestination,
+  destinationOrigin,
+  fileURLWithin,
+  localFileURL,
+  normalizeURL,
+  type Policy,
+} from "./browser/policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -175,9 +182,12 @@ export function createBrowserPage(
   contents.session.setDevicePermissionHandler(() => false)
   contents.session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
   contents.on("content-bounds-updated", (event) => event.preventDefault())
-  // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load.
+  // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
+  // except file: documents, which must stay inside the allowed roots at every depth.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
-    if (!event.isMainFrame || event.url === "about:blank" || allowedDestination(event.url, policy)) return
+    if (event.url === "about:blank") return
+    if (event.isMainFrame ? allowedDestination(event.url, policy) : !localFileURL(event.url)) return
+    if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
     options.publish("ERR_BLOCKED_BY_CLIENT")
   }
