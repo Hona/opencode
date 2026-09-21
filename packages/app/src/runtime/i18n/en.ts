@@ -244,10 +244,6 @@ export const dict = {
   "provider.connect.console.apiKey.link": "Open the Console",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
-  "provider.connect.toast.consoleConnected.title": "OpenCode Console connected",
-  "provider.connect.toast.goInactive.description":
-    "OpenCode Go is not active on this workspace yet. Subscribe in the Console to use Go models.",
-  "provider.connect.toast.goInactive.action": "Open Console",
 
   "provider.custom.title": "Custom provider",
   "provider.custom.unavailable": "Custom providers are unavailable on this server",

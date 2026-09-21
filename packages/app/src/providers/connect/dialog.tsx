@@ -12,7 +12,6 @@ import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMou
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { ExternalLink } from "@/runtime/platform/external-link"
-import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -266,7 +265,6 @@ function ProviderConnection(props: {
   const dialog = useDialog()
   const params = useParams()
   const language = useLanguage()
-  const platform = usePlatform()
   const data = useData()
   const global = useGlobal()
   const providers = useProviders(() => props.directory)
@@ -290,6 +288,7 @@ function ProviderConnection(props: {
     onComplete: () => {
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
+      // Console sign-in returns Go models inside the `opencode` provider, so this covers Go too.
       const linked = (data.location.provider.list(location()) ?? []).filter(
         (item) => item.id === props.provider || item.integrationID === integrationID(),
       )
@@ -300,20 +299,6 @@ function ProviderConnection(props: {
           .map((model) => ({ providerID: model.providerID, modelID: model.id })),
       )
       dialog.close()
-      if (props.provider === "opencode-go" && !ids.has("opencode-go")) {
-        showToast({
-          icon: "circle-check",
-          title: language.t("provider.connect.toast.consoleConnected.title"),
-          description: language.t("provider.connect.toast.goInactive.description"),
-          actions: [
-            {
-              label: language.t("provider.connect.toast.goInactive.action"),
-              onClick: () => platform.openExternal("https://opencode.ai/console/go"),
-            },
-          ],
-        })
-        return
-      }
       showToast({
         variant: "success",
         icon: "circle-check",
