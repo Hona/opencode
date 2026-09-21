@@ -279,6 +279,9 @@ function ProviderConnection(props: {
 
   const controller = createProviderConnectionController({
     provider: integrationID,
+    // A Go service-account key still belongs to the `opencode-go` integration (zen/go/v1),
+    // exactly as before; only the sign-in is shared with the Console.
+    keyProvider: () => props.provider,
     directory,
     autoSelect: (methods) => {
       if (!isConsole()) return undefined

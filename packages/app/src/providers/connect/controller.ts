@@ -33,6 +33,8 @@ function hiddenDefaults(method: ProviderConnectMethod | undefined) {
 
 export function createProviderConnectionController(options: {
   provider: () => string
+  /** Integration that stores API keys when it differs from the one that lists methods and runs OAuth. */
+  keyProvider?: () => string
   directory: () => string | undefined
   onComplete: () => void
   /** Picks the method to start without asking when the integration exposes several. */
@@ -300,7 +302,7 @@ export function createProviderConnectionController(options: {
   }
   const connectKey = async (key: string) => {
     await serverSDK.api.integration.connect.key({
-      integrationID: options.provider(),
+      integrationID: options.keyProvider?.() ?? options.provider(),
       location: location(),
       key,
       ...(store.formAnswer ? { answer: store.formAnswer } : {}),
