@@ -9,10 +9,29 @@ import { createStore, produce } from "solid-js/store"
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 type Authorization = IntegrationOauthConnectOutput["data"]
 
+// OpenCode Go and OpenCode Zen both bill through the OpenCode Console, so the
+// Console sign-in is the connection method for both providers.
+export const CONSOLE_INTEGRATION = "opencode"
+export const CONSOLE_PROVIDERS = new Set(["opencode", "opencode-go"])
+
+export function consoleIntegration(provider: string) {
+  return CONSOLE_PROVIDERS.has(provider) ? CONSOLE_INTEGRATION : provider
+}
+
+function hiddenDefaults(method: ProviderConnectMethod | undefined) {
+  return Object.fromEntries(
+    (method?.form ?? []).flatMap((field) =>
+      field.type !== "external" && field.hidden && field.default !== undefined ? [[field.key, field.default]] : [],
+    ),
+  ) as FormAnswer
+}
+
 export function createProviderConnectionController(options: {
   provider: () => string
   directory: () => string | undefined
   onComplete: () => void
+  /** Picks the method to start without asking when the integration exposes several. */
+  autoSelect?: (methods: ProviderConnectMethod[]) => number | undefined
   pollInterval?: number
 }) {
   const language = useLanguage()
@@ -43,15 +62,24 @@ export function createProviderConnectionController(options: {
     formAnswer: undefined as FormAnswer | undefined,
     state: "pending" as "pending" | "complete" | "error" | "form" | undefined,
     error: undefined as string | undefined,
+    auto: false,
   })
   const polling = {
     generation: 0,
     timer: undefined as ReturnType<typeof setTimeout> | undefined,
     disposed: false,
+    // An attempt the server still considers open; cancelled when the dialog goes away.
+    attempt: undefined as Authorization | undefined,
   }
   const currentMethod = createMemo(() =>
     store.methodIndex === undefined ? undefined : methods().at(store.methodIndex),
   )
+  const autoIndex = createMemo(() => {
+    if (integration.loading) return undefined
+    const values = methods()
+    if (values.length === 1) return 0
+    return options.autoSelect?.(values)
+  })
 
   type Action =
     | { type: "method.select"; index: number }
@@ -109,6 +137,14 @@ export function createProviderConnectionController(options: {
     )
   }
 
+  const cancelAttempt = () => {
+    const attempt = polling.attempt
+    polling.attempt = undefined
+    if (!attempt) return
+    void serverSDK.api.integration.oauth
+      .cancel({ integrationID: options.provider(), attemptID: attempt.attemptID, location: location() })
+      .catch(() => undefined)
+  }
   const cancelPolling = () => {
     polling.generation++
     if (polling.timer === undefined) return
@@ -117,6 +153,7 @@ export function createProviderConnectionController(options: {
   }
   const finish = async () => {
     cancelPolling()
+    polling.attempt = undefined
     const ref = location()
     data.location.integration.invalidate(ref)
     data.location.provider.invalidate(ref)
@@ -140,6 +177,7 @@ export function createProviderConnectionController(options: {
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
+      polling.attempt = undefined
       dispatch({
         type: "auth.error",
         error: result.error instanceof Error ? result.error.message : String(result.error),
@@ -151,26 +189,35 @@ export function createProviderConnectionController(options: {
       return
     }
     if (result.status.status === "failed") {
+      polling.attempt = undefined
       dispatch({ type: "auth.error", error: result.status.message })
       return
     }
     if (result.status.status === "expired") {
-      dispatch({ type: "auth.error", error: language.t("common.requestFailed") })
+      polling.attempt = undefined
+      dispatch({ type: "auth.error", error: language.t("provider.connect.oauth.expired") })
       return
     }
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
+  const open = () => {
+    const url = store.authorization?.url
+    if (url) platform.openExternal(url)
+  }
   const select = async (index: number, answer?: FormAnswer) => {
     cancelPolling()
+    cancelAttempt()
     const generation = polling.generation
     const selected = methods()[index]
     dispatch({ type: "method.select", index })
-    if (selected.form?.length && !answer) {
+    const visible = (selected.form ?? []).some((field) => field.type === "external" || !field.hidden)
+    if (visible && !answer) {
       dispatch({ type: "auth.form" })
       return
     }
+    const merged = { ...hiddenDefaults(selected), ...answer }
     if (selected.type === "key") {
-      dispatch({ type: "auth.answer", answer })
+      dispatch({ type: "auth.answer", answer: Object.keys(merged).length ? merged : undefined })
       return
     }
     if (selected.type !== "oauth") return
@@ -183,11 +230,11 @@ export function createProviderConnectionController(options: {
       .connect({
         integrationID: options.provider(),
         methodID: selected.id,
-        ...(answer ? { answer } : {}),
+        ...(Object.keys(merged).length ? { answer: merged } : {}),
         location: location(),
       })
       .then((response) => {
-        if (options.provider() === "opencode" && platform.platform === "desktop") {
+        if (options.provider() === CONSOLE_INTEGRATION && platform.platform === "desktop") {
           const url = new URL(response.data.url)
           url.searchParams.set("client_id", "opencode-desktop")
           response.data.url = url.href
@@ -195,16 +242,39 @@ export function createProviderConnectionController(options: {
         return { ok: true as const, authorization: response.data }
       })
       .catch((error) => ({ ok: false as const, error }))
-    if (polling.disposed || generation !== polling.generation) return
-    if (!result.ok) {
-      dispatch({ type: "auth.error", error: String(result.error) })
+    if (polling.disposed || generation !== polling.generation) {
+      if (result.ok)
+        void serverSDK.api.integration.oauth
+          .cancel({
+            integrationID: options.provider(),
+            attemptID: result.authorization.attemptID,
+            location: location(),
+          })
+          .catch(() => undefined)
       return
     }
+    if (!result.ok) {
+      dispatch({
+        type: "auth.error",
+        error: result.error instanceof Error ? result.error.message : String(result.error),
+      })
+      return
+    }
+    polling.attempt = result.authorization
     dispatch({ type: "auth.complete", authorization: result.authorization })
+    // Same as `opencode auth login`: hand the user straight to the browser instead of
+    // asking them to click a link and retype a code.
+    platform.openExternal(result.authorization.url)
     if (result.authorization.mode === "auto") void poll(result.authorization, generation)
+  }
+  const retry = () => {
+    const index = store.methodIndex
+    if (index === undefined) return
+    void select(index, store.formAnswer)
   }
   const reset = () => {
     cancelPolling()
+    cancelAttempt()
     dispatch({ type: "method.reset" })
   }
   const connectKey = async (key: string) => {
@@ -236,15 +306,16 @@ export function createProviderConnectionController(options: {
     return undefined
   }
 
-  let auto = false
   createEffect(() => {
-    if (auto || integration.loading || methods().length !== 1) return
-    auto = true
-    void select(0)
+    const index = autoIndex()
+    if (store.auto || index === undefined) return
+    setStore("auto", true)
+    void select(index)
   })
   onCleanup(() => {
     polling.disposed = true
     cancelPolling()
+    cancelAttempt()
   })
 
   return {
@@ -254,11 +325,19 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
+    // True while nothing useful can be shown yet: the integration is loading, a method is
+    // about to be picked automatically, or the authorization request is in flight.
+    busy: () =>
+      integration.loading ||
+      (store.methodIndex === undefined && !store.auto && autoIndex() !== undefined) ||
+      store.state === "pending",
     auth: {
       state: () => store.state,
       error: () => store.error,
       select,
       reset,
+      retry,
+      open,
       connectKey,
       completeCode,
     },
