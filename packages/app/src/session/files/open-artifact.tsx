@@ -1,4 +1,4 @@
-import { batch, createEffect, onCleanup, type ParentProps } from "solid-js"
+import { createEffect, onCleanup, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { useBrowserAttachments } from "@/session/browser/attachments"
@@ -10,6 +10,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSessionLayout } from "@/session/session-layout"
+import { createOpenSessionFileTab } from "@/session/helpers"
 import type { createSessionBrowser } from "@/session/browser/model"
 
 export function fileUrl(absolute: string) {
@@ -58,16 +59,21 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
       return file.normalize(resolveArtifactPath(dir, value) ?? value)
     }
 
+    const showTab = createOpenSessionFileTab({
+      normalizeTab: (tab) => tab,
+      openTab: (tab) => tabs().open(tab),
+      pathFromTab: file.pathFromTab,
+      loadFile: () => undefined,
+      openReviewPanel: () => {
+        if (!view().reviewPanel.opened()) view().reviewPanel.open()
+      },
+      setActive: (tab) => tabs().setActive(tab),
+    })
+
     // Inline paths are guessed from text, so confirm the file exists before a tab appears for it.
     const openTab = (path: string) => {
-      const tab = file.tab(path)
       void file.load(path).then(() => {
-        if (file.notFound(path) || !file.get(path)?.loaded) return
-        batch(() => {
-          tabs().open(tab)
-          if (!view().reviewPanel.opened()) view().reviewPanel.open()
-          tabs().setActive(tab)
-        })
+        if (file.get(path)?.loaded) showTab(file.tab(path))
       })
     }
 

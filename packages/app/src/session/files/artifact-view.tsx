@@ -1,22 +1,31 @@
-import { createEffect, createMemo, For, onCleanup, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
+import { sampledChecksum } from "@opencode/util/encode"
 import type { FileContent } from "@/runtime/server/types"
 import { useLanguage } from "@/runtime/i18n/language"
-import { blobUrlFromContent, parseDelimited, resolveArtifactPath } from "@/workspaces/files/artifact"
+import {
+  artifactKind,
+  blobUrlFromContent,
+  contentBytes,
+  parseDelimited,
+  resolveArtifactPath,
+  type ArtifactKind,
+} from "@/workspaces/files/artifact"
 import { useArtifactOpener } from "@/session/files/open-artifact"
 import "./artifact-view.css"
 
-export type ArtifactMode = "preview" | "source"
+type ArtifactMode = "preview" | "source"
 
 /** Facts a viewer learns from the decoded media, shown in the toolbar. */
-export type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
+type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
 
 type MediaProps = {
   path: string
@@ -26,7 +35,108 @@ type MediaProps = {
   onError: () => void
 }
 
-export function formatBytes(locale: string, bytes: number) {
+/** Kinds that render a preview from their text and can toggle back to highlighted source. */
+const previewableKinds = new Set<ArtifactKind>(["svg", "html", "markdown", "mermaid", "table"])
+
+/**
+ * Renders a loaded non-text file: media, documents, and data get a dedicated viewer with a toolbar;
+ * previewable text kinds can switch to `source`, which the host supplies (its code view).
+ */
+export function ArtifactView(props: { path: string; content: FileContent; source: JSX.Element }) {
+  const language = useLanguage()
+  const [state, setState] = createStore({
+    mode: "preview" as ArtifactMode,
+    info: {} as ArtifactInfo,
+    // Media the browser could not decode falls back to the binary placeholder.
+    undecodable: false,
+  })
+  createEffect(
+    on(
+      () => props.content,
+      () => setState({ mode: "preview", info: {}, undecodable: false }),
+      { defer: true },
+    ),
+  )
+
+  const kind = createMemo<ArtifactKind | "binary">(() => {
+    if (props.content.type === "binary" && !props.content.mimeType) return "binary"
+    if (state.undecodable) return "binary"
+    return artifactKind(props.path)
+  })
+  const previewable = createMemo(() => {
+    const value = kind()
+    return value !== "binary" && previewableKinds.has(value)
+  })
+  const meta = createMemo(() => {
+    const info = state.info
+    return [
+      info.width && info.height ? `${info.width} × ${info.height}` : undefined,
+      info.duration ? formatDuration(info.duration) : undefined,
+      info.rows !== undefined ? language.plural("file.view.table.rows", Math.max(0, info.rows - 1)) : undefined,
+      info.columns !== undefined ? language.plural("file.view.table.columns", info.columns) : undefined,
+      formatBytes(language.intl(), contentBytes(props.content)),
+    ].filter((item): item is string => !!item)
+  })
+
+  const media = { onInfo: (info: ArtifactInfo) => setState("info", info), onError: () => setState("undecodable", true) }
+  const document = () => (
+    <ScrollView class="min-h-0 flex-1">
+      <Show
+        when={kind() === "markdown"}
+        fallback={<ArtifactMermaid text={props.content.content} cacheKey={sampledChecksum(props.content.content)} />}
+      >
+        <ArtifactMarkdown
+          path={props.path}
+          text={props.content.content}
+          cacheKey={sampledChecksum(props.content.content)}
+        />
+      </Show>
+    </ScrollView>
+  )
+
+  return (
+    <>
+      <ArtifactToolbar
+        mode={state.mode}
+        onModeChange={previewable() ? (mode) => setState("mode", mode) : undefined}
+        meta={meta()}
+        actions={
+          <Show when={kind() === "html"}>
+            <OpenInBrowserButton path={props.path} />
+          </Show>
+        }
+      />
+      <Show when={!previewable() || state.mode === "preview"} fallback={props.source}>
+        <Switch>
+          <Match when={kind() === "image" || kind() === "svg"}>
+            <ArtifactImage path={props.path} content={props.content} {...media} />
+          </Match>
+          <Match when={kind() === "video"}>
+            <ArtifactVideo path={props.path} content={props.content} {...media} />
+          </Match>
+          <Match when={kind() === "audio"}>
+            <ArtifactAudio path={props.path} content={props.content} {...media} />
+          </Match>
+          <Match when={kind() === "pdf" || kind() === "html"}>
+            <ArtifactFrame path={props.path} content={props.content} kind={kind() === "pdf" ? "pdf" : "html"} />
+          </Match>
+          <Match when={kind() === "font"}>
+            <ArtifactFont path={props.path} content={props.content} />
+          </Match>
+          <Match when={kind() === "table"}>
+            <ArtifactTable path={props.path} text={props.content.content} onInfo={media.onInfo} />
+          </Match>
+          <Match when={kind() === "markdown" || kind() === "mermaid"}>{document()}</Match>
+          <Match when={kind() === "binary"}>
+            <ArtifactBinary path={props.path} size={formatBytes(language.intl(), contentBytes(props.content))} />
+          </Match>
+        </Switch>
+      </Show>
+    </>
+  )
+}
+
+function formatBytes(locale: string, bytes: number) {
   const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const
   const index = Math.min(units.length - 1, bytes > 0 ? Math.floor(Math.log10(bytes) / 3) : 0)
   const value = bytes / 1000 ** index
@@ -39,13 +149,13 @@ export function formatBytes(locale: string, bytes: number) {
   }).format(value)
 }
 
-export function formatDuration(seconds: number) {
+function formatDuration(seconds: number) {
   const total = Math.round(seconds)
   const minutes = Math.floor(total / 60)
   return `${minutes}:${String(total % 60).padStart(2, "0")}`
 }
 
-export function ArtifactToolbar(props: {
+function ArtifactToolbar(props: {
   mode?: ArtifactMode
   onModeChange?: (mode: ArtifactMode) => void
   meta: string[]
@@ -86,7 +196,7 @@ export function ArtifactToolbar(props: {
   )
 }
 
-export function OpenInBrowserButton(props: { path: string }) {
+function OpenInBrowserButton(props: { path: string }) {
   const language = useLanguage()
   const artifacts = useArtifactOpener()
   return (
@@ -107,7 +217,7 @@ function createBlobUrl(content: () => FileContent) {
 }
 
 /** Images and SVG previews: fit the pane, click to inspect at 1:1 when the image is larger. */
-export function ArtifactImage(props: MediaProps) {
+function ArtifactImage(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   const [state, setState] = createStore({ zoom: "fit" as "fit" | "actual", overflow: false, width: 0, height: 0 })
   let stage: HTMLDivElement | undefined
@@ -160,7 +270,7 @@ export function ArtifactImage(props: MediaProps) {
   )
 }
 
-export function ArtifactVideo(props: MediaProps) {
+function ArtifactVideo(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" data-zoom="fit" class="relative min-h-0 flex-1 overflow-hidden">
@@ -183,7 +293,7 @@ export function ArtifactVideo(props: MediaProps) {
   )
 }
 
-export function ArtifactAudio(props: MediaProps) {
+function ArtifactAudio(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
@@ -207,13 +317,15 @@ export function ArtifactAudio(props: MediaProps) {
   )
 }
 
-export function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
+function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
   const url = createBlobUrl(() => props.content)
+  // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
+  const src = () => (props.kind === "pdf" ? `${url()}#navpanes=0&view=FitH` : url())
   return (
     <iframe
       class="block h-full w-full flex-1 border-0 bg-white"
       title={getFilename(props.path)}
-      src={url()}
+      src={src()}
       // The PDF viewer is Chromium's own and does not run in a sandboxed frame. HTML runs as an
       // opaque origin: no app storage, cookies, or credentialed requests reach it.
       sandbox={props.kind === "html" ? "allow-scripts allow-popups allow-forms allow-modals" : undefined}
@@ -222,7 +334,7 @@ export function ArtifactFrame(props: { path: string; content: FileContent; kind:
   )
 }
 
-export function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string }) {
+function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string }) {
   const parent = useMarkdown()
   const artifacts = useArtifactOpener()
   const dir = createMemo(() => getDirectory(props.path))
@@ -241,7 +353,7 @@ export function ArtifactMarkdown(props: { path: string; text: string; cacheKey?:
 }
 
 /** Mermaid sources render through the same fenced-block pipeline the timeline uses. */
-export function ArtifactMermaid(props: { path: string; text: string; cacheKey?: string }) {
+function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
   return (
     <div class="mx-auto w-full max-w-4xl px-8 py-6">
       <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} class="select-text" />
@@ -249,7 +361,7 @@ export function ArtifactMermaid(props: { path: string; text: string; cacheKey?: 
   )
 }
 
-export function ArtifactTable(props: { path: string; text: string; onInfo: (info: ArtifactInfo) => void }) {
+function ArtifactTable(props: { path: string; text: string; onInfo: (info: ArtifactInfo) => void }) {
   const language = useLanguage()
   const parsed = createMemo(() => parseDelimited(props.text, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ","))
   createEffect(() => props.onInfo({ rows: parsed().total, columns: parsed().columns }))
@@ -287,7 +399,7 @@ export function ArtifactTable(props: { path: string; text: string; onInfo: (info
 
 const specimenSizes = [12, 16, 24, 40, 64]
 
-export function ArtifactFont(props: { path: string; content: FileContent }) {
+function ArtifactFont(props: { path: string; content: FileContent }) {
   const language = useLanguage()
   const url = createBlobUrl(() => props.content)
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
@@ -332,7 +444,7 @@ export function ArtifactFont(props: { path: string; content: FileContent }) {
   )
 }
 
-export function ArtifactBinary(props: { path: string; size: string }) {
+function ArtifactBinary(props: { path: string; size: string }) {
   const language = useLanguage()
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1">

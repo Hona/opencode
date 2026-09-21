@@ -13,9 +13,6 @@ export type ArtifactKind =
   | "font"
   | "text"
 
-/** Kinds that render a preview from their text and can toggle back to highlighted source. */
-export const previewableKinds = new Set<ArtifactKind>(["svg", "html", "markdown", "mermaid", "table"])
-
 const mimes = new Map([
   ["png", "image/png"],
   ["jpg", "image/jpeg"],
