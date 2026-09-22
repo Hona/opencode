@@ -5,7 +5,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionOwnership } from "@/session/session-ownership"
-import { decode64 } from "@/runtime/persistence/base64"
+import { useWorkspaceLocation } from "@/workspaces/location"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -19,6 +19,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
+  const workspace = useWorkspaceLocation()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
@@ -29,7 +30,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   // Mirrors the TUI's `/connect`, which the Console's setup steps tell people to run.
   const connectProvider = async () => {
     const { DialogConnectProvider } = await import("@/providers/connect/dialog")
-    void dialog.show(() => <DialogConnectProvider directory={decode64(local.slug())} />)
+    void dialog.show(() => <DialogConnectProvider directory={workspace().directory} />)
   }
 
   const chooseModel = async () => {

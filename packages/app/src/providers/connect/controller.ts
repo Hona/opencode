@@ -83,7 +83,9 @@ export function createProviderConnectionController(options: {
     methodIndex: undefined as number | undefined,
     authorization: undefined as Authorization | undefined,
     formAnswer: undefined as FormAnswer | undefined,
-    state: "pending" as "pending" | "complete" | "error" | "form" | undefined,
+    // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
+    // value would keep multi-method providers on the spinner instead of the method list.
+    state: undefined as "pending" | "complete" | "error" | "form" | undefined,
     error: undefined as string | undefined,
     auto: false,
   })

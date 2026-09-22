@@ -805,7 +805,9 @@ function ProviderConnection(props: {
             <OAuthAutoView />
           </Match>
         </Switch>
-        <Show when={isConsole() && controller.currentMethod()?.type !== "key" && keyIndex() !== -1}>
+        <Show
+          when={isConsole() && !controller.loading() && controller.currentMethod()?.type !== "key" && keyIndex() !== -1}
+        >
           <ConsoleApiKeySwitch />
         </Show>
       </div>
