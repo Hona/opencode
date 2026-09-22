@@ -685,12 +685,7 @@ function ProviderConnection(props: {
   function OAuthAutoView() {
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>
-          {language.t(
-            isConsole() ? "provider.connect.console.description" : "provider.connect.oauth.auto.description",
-            { provider: provider().name },
-          )}
-        </div>
+        <div>{language.t("provider.connect.oauth.auto.description", { provider: provider().name })}</div>
         <StatusRow>{language.t("provider.connect.status.waiting")}</StatusRow>
         <div class="flex flex-wrap items-center gap-2">
           <Button variant="neutral" icon="arrow-up-right" onClick={() => controller.auth.open()}>
@@ -709,6 +704,25 @@ function ProviderConnection(props: {
             />
           )}
         </Show>
+      </div>
+    )
+  }
+
+  // Rendered from the first frame of the Console sign-in, before the attempt exists. Only the
+  // status line changes once the browser opens, so nothing around it moves.
+  function ConsoleSignInView() {
+    const ready = () => controller.authorization()?.url !== undefined
+    return (
+      <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+        <div>{language.t("provider.connect.console.description", { provider: provider().name })}</div>
+        <StatusRow>
+          {language.t(ready() ? "provider.connect.status.waiting" : "provider.connect.console.opening")}
+        </StatusRow>
+        <div class="flex flex-wrap items-center gap-2">
+          <Button variant="neutral" icon="arrow-up-right" disabled={!ready()} onClick={() => controller.auth.open()}>
+            {language.t("provider.connect.oauth.openBrowser")}
+          </Button>
+        </div>
       </div>
     )
   }
@@ -746,15 +760,19 @@ function ProviderConnection(props: {
       </div>
       <div class="flex min-h-0 flex-1 flex-col">
         <Switch>
+          <Match
+            when={
+              isConsole() &&
+              controller.currentMethod()?.type !== "key" &&
+              controller.auth.state() !== "error" &&
+              (controller.busy() || controller.authorization()?.mode === "auto")
+            }
+          >
+            <ConsoleSignInView />
+          </Match>
           <Match when={controller.busy()}>
             <div class="px-3">
-              <StatusRow>
-                {language.t(
-                  isConsole() && controller.methodIndex() !== undefined
-                    ? "provider.connect.console.opening"
-                    : "provider.connect.status.inProgress",
-                )}
-              </StatusRow>
+              <StatusRow>{language.t("provider.connect.status.inProgress")}</StatusRow>
             </div>
           </Match>
           <Match when={controller.methodIndex() === undefined}>
