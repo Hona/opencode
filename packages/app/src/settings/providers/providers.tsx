@@ -8,6 +8,7 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/controller"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { SettingsList } from "@/settings/list"
 import "@/settings/settings.css"
@@ -60,11 +61,20 @@ export const SettingsProviders: Component<{
       .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
 
+  // The Console account (integration `opencode`) shares its id with the Zen provider. A stored API
+  // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
+  // the sign-in row must stay until an OAuth grant exists or the user can never reach it.
+  const signedIn = () =>
+    integrations
+      .list()
+      .find((entry) => entry.id === CONSOLE_INTEGRATION)
+      ?.connections.some((connection) => connection.type === "credential" && connection.method === "oauth") ?? false
+
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
     const items = providers
       .popular()
-      .filter((p) => !connectedIDs.has(p.id))
+      .filter((p) => (p.id === CONSOLE_INTEGRATION ? !signedIn() : !connectedIDs.has(p.id)))
       .slice()
     items.sort((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id))
     return items
