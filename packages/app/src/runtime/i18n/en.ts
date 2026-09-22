@@ -237,6 +237,7 @@ export const dict = {
   "provider.connect.console.description":
     "Sign in with your OpenCode Console account. Your browser opens to the Console, where you pick a workspace and select Authorize.",
   "provider.connect.console.opening": "Opening your browser…",
+  "provider.connect.console.code.placeholder": "Requesting a code…",
   "provider.connect.console.apiKey.switch": "Connect with an API key or service account instead",
   "provider.connect.console.apiKey.description":
     "Paste an API key for a service account. You create service accounts in the OpenCode Console under Keys.",
@@ -1366,6 +1367,7 @@ export const dict = {
   "settings.providers.tag.environment": "Environment",
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",
+  "settings.providers.tag.account": "Account",
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Choose which models appear in model picker",
