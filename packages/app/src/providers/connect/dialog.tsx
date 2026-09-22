@@ -723,6 +723,15 @@ function ProviderConnection(props: {
             {language.t("provider.connect.oauth.openBrowser")}
           </Button>
         </div>
+        <TextField
+          label={language.t("provider.connect.oauth.auto.confirmationCode")}
+          description={language.t("provider.connect.oauth.auto.confirmationCode.description")}
+          class="font-mono"
+          value={code() ?? ""}
+          placeholder={language.t("provider.connect.console.code.placeholder")}
+          readOnly
+          copyable={code() !== undefined}
+        />
       </div>
     )
   }
