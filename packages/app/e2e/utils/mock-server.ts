@@ -263,7 +263,9 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         integrationGet: (ctx) =>
           Effect.succeed({
             location: location(config),
-            data: {
+            data: config.integrations
+              ?.filter(record)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],

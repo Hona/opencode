@@ -88,5 +88,7 @@ test("a Console account hides the sign-in row", async ({ page }) => {
   })
   const connected = settings.locator('[data-component="connected-providers-section"]')
   await expect(connected.getByText("OpenCode Zen", { exact: true })).toBeVisible()
+  // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
+  await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
   await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(0)
 })
