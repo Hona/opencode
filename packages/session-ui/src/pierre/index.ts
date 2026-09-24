@@ -2,7 +2,7 @@ import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRan
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
 
-export type DiffProps<T = {}> = FileDiffOptions<T> & {
+export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
@@ -17,6 +17,11 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 const unsafeCSS = `
 :host {
   --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  /* Pierre mixes 15% in dark mode, which makes collapsed rows read as highlighted. */
+  --diffs-bg-separator-override: light-dark(
+    color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
+    color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
+  );
 }
 
 [data-diff],
@@ -198,7 +203,7 @@ ${lineCommentStyles}
 
 `
 
-export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
+export function createDefaultOptions<T>(style: FileDiffOptions<T, undefined>["diffStyle"]) {
   return {
     theme: "OpenCode",
     themeType: "system",
@@ -210,7 +215,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     disableBackground: false,
     expansionLineCount: 20,
     hunkSeparators: "line-info-basic",
-    lineDiffType: "word-alt",
+    lineDiffType: "word-line",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,
