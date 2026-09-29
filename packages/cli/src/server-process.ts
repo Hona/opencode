@@ -7,9 +7,10 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import { Effect, Option, Redacted, Schedule, Schema } from "effect"
+import { connect } from "node:net"
+import { Effect, Option, Redacted, Result, Schedule, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
-import { HttpServer } from "effect/unstable/http"
+import { HttpServer, HttpServerError } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
@@ -138,15 +139,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                   })
                 }),
             }
-      const server = yield* start(serverOptions, lifecycle, transform).pipe(
-        Effect.catch((error) =>
-          serviceOptions !== undefined && port !== undefined && addressInUse(error)
-            ? resolvePortConflict(error, serviceOptions, hostname, port, () =>
-                start({ ...serverOptions, port: 0 }, lifecycle, transform),
-              )
-            : Effect.fail(error),
-        ),
-      )
+      const server = yield* serviceOptions === undefined || port === undefined
+        ? start(serverOptions, lifecycle, transform)
+        : claimServicePort({
+            options: serviceOptions,
+            hostname,
+            port,
+            // A configured port is part of the user's setup (remote access, firewall rules); only the default moves.
+            movable: options.port === undefined && config.port === undefined,
+            claim: (candidate) => start({ ...serverOptions, port: candidate }, lifecycle, transform),
+          })
       if (server === undefined) return
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
@@ -160,32 +162,43 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   )
 })
 
-// The fixed port is a rendezvous between sibling contenders, so a taken port normally means a sibling
-// is still registering. A WSL distro's service forwarded onto the Windows loopback can never be this
-// host's incumbent, so the host service takes a free port instead of waiting for one.
-const resolvePortConflict = Effect.fnUntraced(function* <A, E, R>(
-  error: unknown,
-  options: DiscoverOptions,
-  hostname: string,
-  port: number,
-  rebind: () => Effect.Effect<A, E, R>,
-) {
-  const wsl = yield* WslPorts.holds(port)
-  const sibling = wsl ? yield* Service.discover(options) : yield* recognizeIncumbent(options, hostname, port)
-  if (sibling) return undefined
-  if (!wsl)
-    return yield* Effect.fail(
-      new Error(
-        `Managed service port ${port} on ${hostname} is already in use by another process. ` +
-          "Configure another port with `opencode service set port <port>` and start the service again.",
-        { cause: error },
-      ),
-    )
-  yield* Effect.logWarning("managed service port is held by a WSL distro; binding a free port instead", {
-    hostname,
-    port,
-  })
-  return yield* rebind()
+// The service port is the lock that keeps two services off one database: a contender that cannot bind
+// it waits for the sibling holding it to register, then exits. Some ports are held where no sibling can
+// be: reserved by the OS (Hyper-V excluded ranges refuse connections, and Bun reports them as
+// EADDRINUSE) or forwarded from a WSL distro. Every contender skips those in the same order, so
+// contenders still meet at the first port that can actually be bound.
+const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
+  readonly options: DiscoverOptions
+  readonly hostname: string
+  readonly port: number
+  readonly movable: boolean
+  readonly claim: (port: number) => Effect.Effect<A, E, R>
+}) {
+  const wsl = yield* Effect.cached(WslPorts.listening())
+  for (let port = input.port; port <= 65_535; port++) {
+    const result = yield* Effect.result(input.claim(port))
+    if (Result.isSuccess(result)) {
+      if (port !== input.port)
+        yield* Effect.logWarning("managed service port unavailable; using the next free port", {
+          hostname: input.hostname,
+          preferred: input.port,
+          port,
+        })
+      return result.success
+    }
+    if (!bindConflict(result.failure)) return yield* Effect.fail(result.failure)
+    const foreign = !(yield* accepting(input.hostname, port)) || (yield* wsl).includes(port)
+    if (!foreign && (yield* recognizeIncumbent(input.options, input.hostname, port))) return undefined
+    if (!input.movable)
+      return yield* Effect.fail(
+        new Error(
+          `Managed service port ${port} on ${input.hostname} is already in use or reserved by another process. ` +
+            "Configure another port with `opencode service set port <port>` and start the service again.",
+          { cause: result.failure },
+        ),
+      )
+  }
+  return yield* Effect.fail(new Error(`No free managed service port on ${input.hostname} from ${input.port}`))
 })
 
 const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {
@@ -205,10 +218,28 @@ function truthy(value?: string) {
   return value === "1" || value?.toLowerCase() === "true"
 }
 
-function addressInUse(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false
-  if ("code" in error && error.code === "EADDRINUSE") return true
-  return "cause" in error && addressInUse(error.cause)
+// Node reports EACCES for Windows excluded ranges and exclusive wildcard listeners; Bun reports EADDRINUSE.
+function bindConflict(error: unknown) {
+  if (!(error instanceof HttpServerError.ServeError)) return false
+  const code =
+    typeof error.cause === "object" && error.cause !== null && "code" in error.cause ? error.cause.code : undefined
+  return code === "EADDRINUSE" || code === "EACCES"
+}
+
+// A sibling accepts connections as soon as it binds, so a port nobody accepts on is reserved, not held.
+function accepting(hostname: string, port: number) {
+  return Effect.callback<boolean>((resume) => {
+    const host = hostname === "0.0.0.0" ? "127.0.0.1" : hostname === "::" ? "::1" : hostname
+    const socket = connect({ host, port, timeout: 1_000 })
+    const settle = (value: boolean) => {
+      socket.destroy()
+      resume(Effect.succeed(value))
+    }
+    socket.once("connect", () => settle(true))
+    socket.once("error", () => settle(false))
+    socket.once("timeout", () => settle(false))
+    return Effect.sync(() => socket.destroy())
+  })
 }
 
 function waitForStdinClose() {

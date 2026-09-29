@@ -5,24 +5,24 @@ import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 
 /**
- * Whether a running WSL distro is listening on the port. WSL forwards distro listeners onto the
- * Windows loopback (NAT `localhostForwarding` via wslrelay.exe, or mirrored networking), so a service
- * inside a distro makes the same port fail to bind on the host. Reading `/proc/net/tcp` inside each
- * distro answers this regardless of the networking mode, and needs no tooling in the distro.
+ * TCP ports that running WSL distros listen on. WSL forwards distro listeners onto the Windows loopback
+ * (NAT `localhostForwarding` via wslrelay.exe, or mirrored networking), so these ports fail to bind on
+ * the host. Reading `/proc/net/tcp` inside each distro answers this regardless of the networking mode,
+ * and needs no tooling in the distro.
  */
-export const holds = Effect.fnUntraced(function* (port: number) {
-  if (process.platform !== "win32") return false
+export const listening = Effect.fnUntraced(function* () {
+  if (process.platform !== "win32") return []
   const distros = (yield* wsl(["--list", "--running", "--quiet"])).split(/\r?\n/).map((line) => line.trim())
   const tables = yield* Effect.forEach(
     distros.filter(Boolean),
     (distro) => wsl(["-d", distro, "--exec", "cat", "/proc/net/tcp", "/proc/net/tcp6"]),
     { concurrency: "unbounded" },
   )
-  return tables.some((table) => listening(table).includes(port))
+  return tables.flatMap(parse)
 })
 
 /** Listening TCP ports in `/proc/net/tcp` or `/proc/net/tcp6` text (state `0A`, hex port after the last colon). */
-export function listening(table: string) {
+export function parse(table: string) {
   return table
     .split("\n")
     .map((line) => line.trim().split(/\s+/))
