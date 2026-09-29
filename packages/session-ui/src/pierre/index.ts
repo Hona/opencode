@@ -143,15 +143,15 @@ const unsafeCSS = `
 }
 
 @media (max-width: 767px) {
-  /* File annotations share the code column; reclaim the measured number gutter. */
-  [data-file] [data-line-annotation] {
-    margin-inline-start: calc(-1 * var(--diffs-column-number-width, 0px));
-    z-index: 4;
+  /* File annotations share the code column; reclaim the number gutter. Pierre only measures column widths for
+     scrolling files with annotations, so derive the gutter from the code grid width instead. */
+  [data-file][data-overflow='wrap'] [data-code] {
+    container-type: inline-size;
   }
 
-  [data-file] [data-annotation-content] {
-    width: var(--diffs-column-width, auto);
-    inset-inline-start: 0;
+  [data-file][data-overflow='wrap'] [data-line-annotation] {
+    margin-inline-start: calc(100% - 100cqi);
+    z-index: 4;
   }
 }
 
