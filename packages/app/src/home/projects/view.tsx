@@ -207,7 +207,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           when={
             props.servers.length > 1 ||
             props.servers.some(
-              (server) => server.type === "ssh" && (server.authenticationRequired || server.connecting),
+              (server) => server.type === "extension" && (server.authenticationRequired || server.connecting),
             )
           }
           fallback={
@@ -244,8 +244,8 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
-                const authentication = () => item.type === "ssh" && item.authenticationRequired
-                const connecting = () => item.type === "ssh" && item.connecting
+                const authentication = () => item.type === "extension" && item.authenticationRequired
+                const connecting = () => item.type === "extension" && item.connecting
                 return (
                   <div class="flex min-w-0 flex-col gap-1">
                     <HomeServerRow
@@ -348,7 +348,7 @@ function HomeServerRow(props: {
   health: ServerHealth | undefined
 }) {
   const healthy = () => !!props.health?.healthy
-  const authentication = () => props.server.type === "ssh" && props.server.authenticationRequired
+  const authentication = () => props.server.type === "extension" && props.server.authenticationRequired
   const incompatible = () => !!props.health?.incompatible
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
@@ -413,7 +413,7 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator
               health={props.health}
-              connecting={props.server.type === "ssh" && props.server.connecting}
+              connecting={props.server.type === "extension" && props.server.connecting}
               authenticationRequired={authentication()}
             />
           </div>

@@ -15,7 +15,6 @@ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(na
 const PALETTE_ID = "command.palette"
 export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
-const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new", "file.attach", "browser.reload"])
 
 type KeyLabel =
   | "common.key.ctrl"
@@ -64,11 +63,6 @@ function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, al
 
 function signatureFromEvent(event: KeyboardEvent) {
   return signature(keyFromKeyboardEvent(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
-}
-
-function isAllowedEditableKeybind(option: CommandOption | undefined) {
-  if (!option) return false
-  return !!option.editable || EDITABLE_KEYBIND_IDS.has(actionId(option.id))
 }
 
 export type KeybindConfig = string
@@ -410,7 +404,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option) && !modified && !isTab)
+      if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab)
         return
 
       if (isPalette) {
@@ -468,6 +462,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       keybindParts(id: string) {
         const config = keybindConfig(id)
         return config ? formatKeybindParts(config, language.t) : []
+      },
+      /** The event matches the command's effective keybind (user override or default). */
+      matches(id: string, event: KeyboardEvent) {
+        const config = keybindConfig(id)
+        return !!config && matchKeybind(parseKeybind(config), event)
       },
       show: showPalette,
       keybinds(enabled: boolean) {

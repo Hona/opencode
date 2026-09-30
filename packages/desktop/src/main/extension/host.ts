@@ -95,6 +95,8 @@ export function createHost(input: {
   readonly servers: Map<number, readonly ExtensionEndpoint[]>
   readonly restart: (handoff?: () => void | Promise<void>) => Promise<void>
   readonly log: (message: string, data: Record<string, unknown>) => void
+  /** Extension logs at their own level. */
+  readonly write: (level: "debug" | "info" | "warn" | "error", message: string, data: Record<string, unknown>) => void
 }) {
   const local = builtins.filter((definition) => !definition.os || definition.os.includes(os))
   const manager = createManager(
@@ -201,6 +203,8 @@ export function createHost(input: {
       url: endpoint.url,
       headers: authorization ? { authorization } : {},
       local: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
+      ...(endpoint.username === undefined ? {} : { username: endpoint.username }),
+      ...(endpoint.password === undefined ? {} : { password: endpoint.password }),
     }
   }
 
@@ -210,6 +214,7 @@ export function createHost(input: {
     packaged: app.isPackaged,
     server,
     restart: input.restart,
+    log: (level, message, data) => input.write(level, message, data ?? {}),
   }
 
   const loader = (id: string): (() => Promise<Loaded>) | undefined => {
@@ -585,6 +590,14 @@ export function createHost(input: {
     async start() {
       const ids = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)]
       await Promise.all(ids.map(activate))
+    },
+    /** Activates the extension a remote belongs to ahead of `start`. Remote ids start with their extension's id. */
+    demand(remote: string) {
+      if (remotes.has(remote)) return
+      const id = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)].find(
+        (id) => remote === id || remote.startsWith(`${id}.`),
+      )
+      if (id) void activate(id)
     },
     snapshot(remote: string, window: number): { available: boolean; state?: unknown } {
       const provider = remotes.get(remote)

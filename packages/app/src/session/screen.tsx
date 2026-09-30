@@ -1,7 +1,7 @@
-import { ErrorBoundary, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { ErrorBoundary, Show, Match, Switch, createMemo, createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { Slot, type SessionView } from "@opencode/gui-extensions/sdk"
+import { Slot, type BackgroundTask, type SessionView } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
@@ -30,19 +30,24 @@ export function SessionScreen(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
   const view = createSessionView(props.session)
   return (
-    <ExtensionLinks session={view}>
-      <SessionScreenContent session={props.session} view={view} />
+    <ExtensionLinks session={view.view}>
+      <SessionScreenContent session={props.session} view={view.view} bindBackground={view.bindBackground} />
     </ExtensionLinks>
   )
 }
 
-function SessionScreenContent(props: { session: SessionModel; view: SessionView }) {
+function SessionScreenContent(props: {
+  session: SessionModel
+  view: SessionView
+  bindBackground: (tasks: () => readonly BackgroundTask[]) => void
+}) {
   const session = props.session
   const host = useExtensionHost()
   const attachment = useExtensionAttachment()
   const isDesktop = session.isDesktop
   const sidebar = createPanelSidebar()
   const region = createRegion({ region: "side", view: props.view, tabs: session.layout.tabs })
+  onCleanup(attachment.region(region))
   const mobile = createMobileViews()
   const screen = createSessionScreenLayout(session, {
     wide: region.wide,
@@ -157,6 +162,7 @@ function SessionScreenContent(props: { session: SessionModel; view: SessionView 
     region,
     visible: conversationVisible,
   })
+  props.bindBackground(composer.requests.background.tasks)
   useUsageExceededDialogs()
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
@@ -212,6 +218,7 @@ function SessionScreenContent(props: { session: SessionModel; view: SessionView 
           {(_key) => (
             <MobileViewTabs
               views={mobile}
+              region={region}
               current={mobileView()}
               session={props.view}
               sidebar={sidebar}
@@ -237,7 +244,15 @@ function SessionScreenContent(props: { session: SessionModel; view: SessionView 
             <></>
           </Match>
           <Match when={!isDesktop() && session.identity.params.id ? mobileEntry() : undefined}>
-            {(entry) => <MobilePanel entry={entry()} view={props.view} sidebar={sidebar} visible />}
+            {(entry) => (
+              <MobilePanel
+                entry={entry()}
+                view={props.view}
+                sidebar={sidebar}
+                visible
+                open={() => region.openFor(entry().extension)}
+              />
+            )}
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>

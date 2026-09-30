@@ -5,6 +5,8 @@ import { Context, Effect, Layer } from "effect"
 import type { ExtensionEndpoint } from "../../shared/ipc-rpc/extensions"
 import { ApplicationLifecycle } from "../lifecycle"
 import { Shutdown } from "../lifecycle/shutdown"
+
+const LEVELS = { debug: "Debug", info: "Info", warn: "Warn", error: "Error" } as const
 import { DesktopCli } from "../service/desktop-cli"
 import { DesktopStorage } from "../storage"
 import { setAppQuitting } from "../windows"
@@ -75,6 +77,7 @@ export const layer = Layer.effect(
           servers,
           restart,
           log: (message, data) => runFork(Effect.logError(message, data)),
+          write: (level, message, data) => runFork(Effect.logWithLevel(LEVELS[level])(message, data)),
         })
         return current.host
       })
@@ -101,6 +104,12 @@ export const layer = Layer.effect(
         const ids = subscriptions.get(remote) ?? new Set()
         ids.add(window)
         subscriptions.set(remote, ids)
+        // A booting window waits on some remotes (e.g. server sources) before its first paint, so the
+        // extension that provides one starts now instead of with the deferred rest.
+        void host().then(
+          (loaded) => loaded.demand(remote),
+          () => undefined,
+        )
         return current.host?.snapshot(remote, window) ?? { available: false }
       },
       configure(window, list) {

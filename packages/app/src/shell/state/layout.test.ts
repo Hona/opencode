@@ -37,7 +37,7 @@ describe("layout persistence", () => {
     expect(defaults).toEqual({
       sidebar: { opened: false, width: 344, workspaces: {}, workspacesDefault: false },
       terminal: { height: 280, opened: false },
-      review: { diffStyle: "split", panelOpened: false },
+      review: { panelOpened: false },
       fileTree: { opened: false, width: 200, tab: "changes" },
       session: { width: 600 },
       mobileSidebar: { opened: false },
@@ -50,7 +50,7 @@ describe("layout persistence", () => {
         sidebar: { width: "bad" },
         terminal: null,
         session: { width: undefined },
-        review: { diffStyle: "bad" },
+        review: { panelOpened: "bad" },
       }),
     ).toEqual(defaults)
   })
@@ -58,7 +58,7 @@ describe("layout persistence", () => {
   test("migrates old sidebar and panel settings and writes current fields", () => {
     const value = decode({ sidebar: { workspaces: true }, review: {}, fileTree: { opened: true, width: 260 } })
     expect(value.sidebar).toEqual({ opened: false, width: 344, workspaces: {}, workspacesDefault: true })
-    expect(value.review).toEqual({ diffStyle: "split", panelOpened: true })
+    expect(value.review).toEqual({ panelOpened: true })
     expect(value.fileTree).toEqual({ opened: true, width: 200, tab: "changes" })
     expect(Schema.encodeSync(schema)(value)).toEqual(value)
     expect(decode(Schema.encodeSync(schema)(value))).toEqual(value)
@@ -67,10 +67,10 @@ describe("layout persistence", () => {
 
   test("preserves current panel preferences", () => {
     const value = decode({
-      review: { diffStyle: "unified", panelOpened: false },
+      review: { panelOpened: false },
       fileTree: { opened: true, width: 260, tab: "all" },
     })
-    expect(value.review).toEqual({ diffStyle: "unified", panelOpened: false })
+    expect(value.review).toEqual({ panelOpened: false })
     expect(value.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
   })
 
@@ -86,14 +86,14 @@ describe("layout persistence", () => {
     expect(
       decode({
         sidebar: { workspaces: { good: true, bad: "bad" } },
-        sessionView: { [key]: { scroll, reviewMode: "git" } },
+        sessionView: { [key]: { scroll, pendingMessage: "message" } },
       }),
     ).toMatchObject({
       sidebar: { workspaces: {} },
-      sessionView: { [key]: { scroll: {}, reviewMode: "git" } },
+      sessionView: { [key]: { scroll: {}, pendingMessage: "message" } },
     })
     expect(
-      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, reviewMode: "bad" } } }).sessionView,
+      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, pendingMessage: 5 } } }).sessionView,
     ).toEqual({ [key]: { scroll: {} } })
   })
 
@@ -101,10 +101,10 @@ describe("layout persistence", () => {
     const key = "local\u0000L3Byb2plY3Q/session"
     const value = decode({
       sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b", "btw"], active: "btw" } },
-      sessionView: { old: { scroll: {} }, [key]: { scroll: {}, reviewOpen: ["a", null, "b"] } },
+      sessionView: { old: { scroll: {} }, [key]: { scroll: {} } },
     })
     expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b"], active: undefined } })
-    expect(value.sessionView).toEqual({ [key]: { scroll: {}, reviewOpen: ["a", "b"] } })
+    expect(value.sessionView).toEqual({ [key]: { scroll: {} } })
   })
 })
 

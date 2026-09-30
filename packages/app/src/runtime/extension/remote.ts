@@ -20,7 +20,7 @@ export function createRemotes(bridge: Bridge | undefined) {
     return schema ? Schema.decodeUnknownSync(schema)(value) : value
   }
 
-  bridge?.on((message) => {
+  const stop = bridge?.on((message) => {
     if (message.type === "state") {
       if (!specs.has(message.remote)) return
       setState("values", message.remote, reconcile(decodeState(message.remote, message.state)))
@@ -78,16 +78,24 @@ export function createRemotes(bridge: Bridge | undefined) {
     }) as unknown as RemoteClient<RemoteSpec>
   }
 
+  const client = (token: Remote) => {
+    if (!bridge) return undefined
+    subscribe(bridge, token)
+    if (!state.available[token.id]) return undefined
+    const existing = clients.get(token.id)
+    if (existing) return existing
+    const created = create(bridge, token)
+    clients.set(token.id, created)
+    return created
+  }
+
   return {
-    client(token: Remote) {
-      if (!bridge) return undefined
-      subscribe(bridge, token)
-      if (!state.available[token.id]) return undefined
-      const existing = clients.get(token.id)
-      if (existing) return existing
-      const created = create(bridge, token)
-      clients.set(token.id, created)
-      return created
+    client,
+    /** A client typed by its token, for host code that uses one remote directly. */
+    typed: <S extends RemoteSpec>(token: Remote<S>) => client(token) as RemoteClient<S> | undefined,
+    /** Stops listening to the bridge; for clients made outside the window's extension root. */
+    dispose() {
+      stop?.()
     },
   }
 }

@@ -36,7 +36,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const sdk = useWorkspaceLocation()
   const data = useData()
   const server = useServer()
-  const available = () => server.conn.type !== "ssh" || server.ctx.sdk.connection.status() === "connected"
+  const available = () =>
+    server.conn.type !== "extension" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
   const files = useFile()
   const links = useExtensionHost().links
   const extensions = useExtensionAttachment()
@@ -396,6 +397,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),
       keybind: "mod+u",
+      editable: true,
       disabled: controller.state.mode !== "normal",
       onSelect: () => controller.attach(),
     },
@@ -405,7 +407,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       keybind: "mod+shift+x",
       disabled: controller.state.mode === "shell",
-      onSelect: () => controller.dispatch({ type: "mode.shell" }),
+      onSelect: () => void controller.dispatch({ type: "mode.shell" }),
     },
     {
       id: "prompt.mode.normal",
@@ -413,7 +415,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       keybind: "mod+shift+e",
       disabled: controller.state.mode === "normal",
-      onSelect: () => controller.dispatch({ type: "mode.normal" }),
+      onSelect: () => void controller.dispatch({ type: "mode.normal" }),
     },
   ])
 

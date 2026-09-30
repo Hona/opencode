@@ -10,6 +10,7 @@ import {
   untrack,
   useContext,
   type Accessor,
+  type Owner,
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -35,7 +36,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 type Entry = { key: string; point: string; extension: string; value: Accessor<unknown> }
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
 type Instance = { definition: Definition; context: Context; dispose: () => void }
-type Bound = readonly { readonly token: Host<unknown>; create(extension: string): unknown }[]
+type Bound = readonly { readonly token: Host<unknown>; create(extension: string, owner: Owner | null): unknown }[]
 export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
 
 const HostContext = createContext<ReturnType<typeof createHost>>()
@@ -136,11 +137,10 @@ function createHost(input: {
     if (input.disabled()?.has(definition.id) !== false || instances.has(definition.id)) return
     runWithOwner(owner, () =>
       createRoot((dispose) => {
-        const instance = createInstance(definition, dispose)
+        const instance = createInstance(definition, dispose, getOwner())
         instances.set(definition.id, instance)
-        void Promise.resolve()
-          .then(() => untrack(() => module.default(instance.context)))
-          .then(
+        // Setup runs synchronously inside the extension root so its effects and memos are owned.
+        void Promise.try(() => untrack(() => module.default(instance.context))).then(
             (cleanup) => {
               if (instances.get(definition.id) !== instance) return
               if (typeof cleanup === "function") instance.context.cleanup(cleanup)
@@ -156,7 +156,7 @@ function createHost(input: {
     )
   }
 
-  const createInstance = (definition: Definition, dispose: () => void): Instance => {
+  const createInstance = (definition: Definition, dispose: () => void, root: Owner | null): Instance => {
     const extension = definition.id
     const controller = new AbortController()
     const cleanups = new Set<Cleanup>()
@@ -176,7 +176,9 @@ function createHost(input: {
       cleanup: own,
       add(point: Point<unknown>, item: unknown) {
         if (controller.signal.aborted) return () => {}
-        const value = typeof item === "function" ? createMemo(item as () => unknown) : () => item
+        // Work after an await in setup has no owner; fall back to the extension root.
+        const value =
+          typeof item === "function" ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => unknown))! : () => item
         const key = `${extension}/${++sequence.value}`
         setState("entries", point.id, (entries = []) => [...entries, { key, point: point.id, extension, value }])
         return own(() => setState("entries", point.id, (entries = []) => entries.filter((entry) => entry.key !== key)))
@@ -198,7 +200,7 @@ function createHost(input: {
           if (created.has(token.id)) return created.get(token.id)
           const service = hosts.get(token.id)
           if (!service) throw new Error(`Host service "${token.id}" is unavailable`)
-          const value = service.create(extension)
+          const value = service.create(extension, root)
           created.set(token.id, value)
           return value
         }
@@ -260,6 +262,9 @@ function createHost(input: {
     })
   }
 
+  const replaced = new Map<string, Definition>()
+  const latest = (definition: Definition) => replaced.get(definition.id) ?? definition
+
   const ready = createMemo(() =>
     !!input.disabled() &&
     input.definitions.every((definition) => {
@@ -280,7 +285,7 @@ function createHost(input: {
           return
         }
         if (instances.has(definition.id) || state.status[definition.id] === "loading") return
-        void activate(definition)
+        void activate(latest(definition))
       }),
     )
   })
@@ -292,14 +297,17 @@ function createHost(input: {
     list,
     items,
     links,
-    definitions: () => input.definitions,
+    definitions: () => input.definitions.map(latest),
     context: (id: string) => instances.get(id)?.context,
     fail,
-    reload(id: string) {
-      const definition = input.definitions.find((item) => item.id === id)
+    /** `next` replaces the definition, e.g. after a development hot update. */
+    reload(id: string, next?: Definition) {
+      const definition = next ?? input.definitions.find((item) => item.id === id)
       if (!definition) return
+      if (next) replaced.set(id, next)
       deactivate(id)
-      void activate(definition)
+      setState("errors", id, undefined)
+      void activate(latest(definition))
     },
   }
 }

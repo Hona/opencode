@@ -31,6 +31,8 @@ export interface PanelFrame {
   readonly animate: Accessor<boolean>
   /** One inner sidebar preference shared by every side panel, toggled from the tab strip. */
   readonly sidebar: PanelSidebar
+  /** This extension's tab ids stored in the session's side strip (the ids `list` receives as `open`). */
+  readonly open: Accessor<readonly string[]>
 }
 
 /** The host provides this around panel renders. */

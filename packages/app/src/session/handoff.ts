@@ -1,35 +1,10 @@
-import type { SelectedLineRange } from "@/workspaces/files/model"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
 
-type HandoffSession = {
-  files: Record<string, SelectedLineRange | null>
-}
-
 const MAX = 40
 
-const store = {
-  session: new Map<string, HandoffSession>(),
-}
 const [messages, setMessages] = createStore<Record<string, SessionMessageUser | undefined>>({})
 const messageOrder = new Map<string, true>()
-
-const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
-  map.delete(key)
-  map.set(key, value)
-  while (map.size > MAX) {
-    const first = map.keys().next().value
-    if (first === undefined) return
-    map.delete(first)
-  }
-}
-
-export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = store.session.get(key) ?? { files: {} }
-  touch(store.session, key, { ...prev, ...patch })
-}
-
-export const getSessionHandoff = (key: string) => store.session.get(key)
 
 export const setSessionMessageHandoff = (key: string, message: SessionMessageUser) => {
   messageOrder.delete(key)

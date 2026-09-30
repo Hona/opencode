@@ -1,11 +1,14 @@
 import { Command } from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
+import { useSettings } from "@/settings/model"
+import { migrateKeybinds } from "@/settings/keybinds/migration"
 import { useExtensionHost } from "./host"
 
 /** Publishes extension commands as `${extension}.${id}` in the host command registry. */
 export function ExtensionCommands() {
   const host = useExtensionHost()
   const command = useCommand()
+  migrateKeybinds(useSettings())
   command.register("extensions", () =>
     host.items(Command).map((item) => ({
       id: `${item.extension}.${item.value.id}`,

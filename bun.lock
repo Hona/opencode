@@ -519,6 +519,7 @@
         "@dnd-kit/abstract": "0.5.0",
         "@dnd-kit/dom": "0.5.0",
         "@dnd-kit/solid": "0.5.0",
+        "@effect/platform-node": "catalog:",
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
@@ -544,6 +545,7 @@
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
+        "@lydell/node-pty": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -551,6 +553,7 @@
         "devtools-protocol": "0.0.1687809",
         "electron": "44.4.5",
         "electron-updater": "6.8.9",
+        "lighthouse": "13.4.1",
         "vite": "catalog:",
       },
     },

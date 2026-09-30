@@ -4,13 +4,11 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { BrowserAttachmentsProvider } from "@/session/browser/attachments"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
-import { DesktopPairingCommand } from "@/shell/commands/desktop"
 import { ExtensionAttachment } from "@/runtime/extension/root"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
@@ -89,10 +87,7 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <ExtensionAttachment>
-            <DesktopPairingCommand />
-            <BrowserAttachmentsProvider>
-              <Shell>{props.children}</Shell>
-            </BrowserAttachmentsProvider>
+            <Shell>{props.children}</Shell>
           </ExtensionAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>

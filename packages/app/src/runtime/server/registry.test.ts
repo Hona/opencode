@@ -63,9 +63,13 @@ describe("resolveServerList", () => {
 test("treats WSL sidecars as remote server connections", () => {
   expect(
     ServerConnection.local({
-      type: "sidecar",
-      variant: "wsl",
-      distro: "Debian",
+      type: "extension",
+      key: "wsl:Debian",
+      extension: "wsl",
+      state: "ready",
+      connecting: false,
+      authenticationRequired: false,
+      managed: false,
       http: { url: "http://127.0.0.1:4097" },
     }),
   ).toBe(false)

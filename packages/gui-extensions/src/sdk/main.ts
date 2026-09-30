@@ -20,7 +20,7 @@ export interface Surface {
 }
 
 export interface Surfaces {
-  /** The renderer presents it with `<Surface id>`; the host owns bounds, zoom, corners, and occlusion. */
+  /** The renderer presents it with the renderer SDK's `Surfaces.View`; the host owns bounds, zoom, corners, and occlusion. */
   create(view: WebContentsView, window: BrowserWindow): Surface
 }
 
@@ -29,7 +29,12 @@ export interface MainStorage {
   store<S extends Schema.ConstraintCodec<unknown, unknown>>(
     key: string,
     options: { readonly schema: S; readonly initial: S["Type"]; readonly from?: string },
-  ): { get(): S["Type"]; set(value: S["Type"]): void }
+  ): {
+    get(): S["Type"]
+    set(value: S["Type"]): void
+    /** Deletes the value and the older copy `from` names, so the key reads as `initial` again. */
+    remove(): void
+  }
 }
 
 export interface MainServer {
@@ -38,6 +43,9 @@ export interface MainServer {
   readonly headers: Readonly<Record<string, string>>
   /** Same machine as this app's own server. Loopback HTTP alone does not qualify. */
   readonly local: boolean
+  /** Credentials a window configured for the server; `headers` already carries them. None for the app's own server. */
+  readonly username?: string
+  readonly password?: string
 }
 
 export interface Cli {
@@ -54,6 +62,8 @@ export interface MainApp {
   server(id: string): MainServer | undefined
   /** Flushes state and marks the app as quitting, then runs handoff (e.g. quitAndInstall) or relaunches. */
   restart(handoff?: () => void | Promise<void>): Promise<void>
+  /** Writes to the desktop log file (included in exported debug logs). */
+  log(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void
 }
 
 export interface Menubar {

@@ -1,16 +1,20 @@
-import { createMemo, createResource, onCleanup, Show, type ParentProps } from "solid-js"
+import { createMemo, createResource, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { builtins } from "@opencode/gui-extensions/renderer"
 import type { Installed } from "@opencode/gui-extensions/sdk/bridge"
+import { builtins } from "./builtins"
+import { createMenubar, ExtensionMenubarProvider } from "./menubar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionHostProvider, useExtensionHost } from "./host"
 import { createRemotes } from "./remote"
 import { createExtensionAttachment, createExtensionServices, ExtensionAttachmentProvider, type ExtensionServices } from "./services"
 import { ExtensionCommands } from "./commands"
 import { ExtensionStyles } from "./render"
+import { ExtensionServersProvider } from "./servers"
+import { ExtensionServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
 
 const ServicesContext = createContext<ExtensionServices>()
+const ExtensionHotReload = import.meta.env.DEV ? lazy(() => import("./hmr")) : undefined
 
 export function useExtensionServices() {
   const value = useContext(ServicesContext)
@@ -23,6 +27,7 @@ export function ExtensionRoot(props: ParentProps) {
   const platform = usePlatform()
   const services = createExtensionServices()
   const bridge = platform.extensions
+  const menubar = createMenubar(bridge)
   const remotes = createRemotes(bridge)
   const [installed, setInstalled] = createStore({ list: [] as Installed[] })
   const [loaded] = createResource(async () => {
@@ -45,7 +50,18 @@ export function ExtensionRoot(props: ParentProps) {
           remote={(token) => remotes.client(token)}
         >
           <ExtensionStyles />
-          {props.children}
+          {ExtensionHotReload && (
+            <Suspense>
+              <ExtensionHotReload />
+            </Suspense>
+          )}
+          <ExtensionMenubarProvider value={menubar}>
+            <ExtensionServersProvider
+              failed={(id) => installed.list.some((item) => item.id === id && item.error !== undefined)}
+            >
+              {props.children}
+            </ExtensionServersProvider>
+          </ExtensionMenubarProvider>
         </ExtensionHostProvider>
     </ServicesContext.Provider>
   )
@@ -58,6 +74,7 @@ export function ExtensionAttachment(props: ParentProps) {
   return (
     <ExtensionAttachmentProvider value={attachment}>
       <ExtensionCommands />
+      <ExtensionServerEndpoints />
       <Show when={host.ready()}>{props.children}</Show>
     </ExtensionAttachmentProvider>
   )

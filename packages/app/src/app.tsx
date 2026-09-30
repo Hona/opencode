@@ -16,9 +16,6 @@ import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/lang
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
-import { WslServersProvider } from "@/servers/wsl/context"
-import { SshProvider } from "@/servers/ssh/context"
-import { SshRestore } from "@/servers/ssh/restore"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { ExtensionRoot } from "@/runtime/extension/root"
@@ -82,15 +79,11 @@ export function AppBaseProviders(
               }}
             >
               <QueryProvider>
-                <WslServersProvider>
-                  <DialogProvider>
-                    <ExtensionRoot>
-                      <SshProvider>
-                        <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                      </SshProvider>
-                    </ExtensionRoot>
-                  </DialogProvider>
-                </WslServersProvider>
+                <DialogProvider>
+                  <ExtensionRoot>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                  </ExtensionRoot>
+                </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
@@ -116,7 +109,6 @@ export function AppInterface(props: {
         <BodyTypography />
         <CommandProvider>
           <DesktopCommands />
-          <SshRestore />
           <HighlightsProvider>
             {props.children}
             {rootProps.children}

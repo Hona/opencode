@@ -1,4 +1,17 @@
-import { batch, createContext, createMemo, createSignal, onCleanup, untrack, useContext, type Accessor } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+  untrack,
+  useContext,
+  type Accessor,
+  type Owner,
+} from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
@@ -8,8 +21,10 @@ import {
   Layout,
   Native,
   Panel,
+  Preferences,
   Sessions,
   Storage,
+  Surfaces,
   System,
   type Host,
   type PanelState,
@@ -21,36 +36,53 @@ import {
 import { usePlatform } from "@/runtime/platform/platform"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { useGlobal } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
+import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
+import { useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
+import { useIsRouting, useLocation } from "@solidjs/router"
+import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
+import { createSurfaces } from "./surface"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
   current: Accessor<SessionView | undefined>
   scope: (server: string) => ServerScope
-  layout: Omit<Layout, "narrow" | "settings">
+  layout: Omit<Layout, "narrow" | "settings" | "project">
   settings: (page?: string) => void
+  project: (server: string, title: string) => void
   font: Accessor<string>
+  preferences: Preferences
+  routing: Accessor<boolean>
+  path: Accessor<string>
+  keybind: (command: string) => readonly string[]
+  matches: (command: string, event: KeyboardEvent) => boolean
 }
 
-export type HostService = { readonly token: Host<unknown>; create(extension: string): unknown }
+export type HostService = { readonly token: Host<unknown>; create(extension: string, owner: Owner | null): unknown }
 type StorageFrom = Parameters<Storage["store"]>[1]["from"]
 
 /** Services the host owns. Session and layout attach once the app interface mounts. */
 export function createExtensionServices() {
   const platform = usePlatform()
   const dialog = useDialog()
+  const language = useLanguage()
   const narrow = createMediaQuery("(max-width: 767px)")
   const [attached, setAttached] = createSignal<Attached>()
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, readonly [Store<object>, (mutation: (draft: object) => void) => void]>()
   const current = () => attached()
+  const surfaces = createSurfaces({
+    bridge: platform.extensions,
+    zoom: () => platform.webviewZoom?.() ?? 1,
+    dialog: () => !!dialog.active,
+  })
 
   const target = (extension: string, key: string, scope: StorageScope | undefined, from: StorageFrom | undefined) => {
     const name = `extension.${extension}.${key}`
@@ -77,10 +109,13 @@ export function createExtensionServices() {
   const services: HostService[] = [
     {
       token: Storage,
-      create: (extension) =>
+      create: (extension, owner) =>
         ({
           store(key, options) {
-            const pair = persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform)
+            // Persistence owns effects and resources; code after an await in setup has no owner.
+            const pair = runWithOwner(getOwner() ?? owner, () =>
+              persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
+            )!
             return [pair[0], (mutation: (draft: object) => void) => pair[1](produce(mutation)), pair[3]] as never
           },
           memory(key, options) {
@@ -129,6 +164,7 @@ export function createExtensionServices() {
               launch: (path, app) => platform.openPath?.(path, app) ?? Promise.resolve(),
               reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
               installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
+              forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
             } satisfies NonNullable<Native>)
           : undefined,
     },
@@ -140,6 +176,13 @@ export function createExtensionServices() {
           channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as App["channel"],
           platform: platform.platform,
           font: () => requireAttached(current()).font(),
+          locale: language.intl,
+          direction: language.direction,
+          setDirection: language.setDirection,
+          routing: () => current()?.routing() ?? false,
+          path: () => current()?.path() ?? "",
+          keybind: (command) => current()?.keybind(command) ?? [],
+          matches: (command, event) => current()?.matches(command, event) ?? false,
           on(_event, handler) {
             removed.add(handler)
             return () => {
@@ -169,6 +212,7 @@ export function createExtensionServices() {
       create: () =>
         ({
           narrow,
+          ready: () => current()?.layout.ready() ?? false,
           open: (key, session, options) => requireAttached(current()).layout.open(key, session, options),
           close: (key, session) => requireAttached(current()).layout.close(key, session),
           toggle: (key, session) => requireAttached(current()).layout.toggle(key, session),
@@ -186,8 +230,19 @@ export function createExtensionServices() {
             set: (session, key, value) => requireAttached(current()).layout.scroll.set(session, key, value),
           },
           settings: (page) => requireAttached(current()).settings(page),
+          project: (server, title) => requireAttached(current()).project(server, title),
         }) satisfies Layout,
     },
+    {
+      token: Preferences,
+      create: () =>
+        ({
+          releaseNotes: () => requireAttached(current()).preferences.releaseNotes(),
+          setReleaseNotes: (value) => requireAttached(current()).preferences.setReleaseNotes(value),
+          mobileDiffWrap: () => requireAttached(current()).preferences.mobileDiffWrap(),
+        }) satisfies Preferences,
+    },
+    { token: Surfaces, create: () => surfaces },
   ]
 
   return {
@@ -225,6 +280,8 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const settings = useSettings()
   const surface = useSettingsSurface()
   const host = useExtensionHost()
+  const command = useCommand()
+  const location = useLocation()
   const narrow = createMediaQuery("(max-width: 767px)")
   const views = new Map<string, SessionView>()
   const [mounted, setMounted] = createStore({ revision: 0 })
@@ -239,6 +296,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     const ctx = global.ensureServerCtx(conn)
     return {
       id,
+      name: serverName(conn) || id,
       get url() {
         return ctx.sdk.url
       },
@@ -251,6 +309,9 @@ export function createExtensionAttachment(services: ExtensionServices) {
       builtin: ServerConnection.builtin(conn),
       get compatible() {
         return !global.servers.health[ServerConnection.Key.make(id)]?.incompatible
+      },
+      get connected() {
+        return ctx.sdk.connection.status() === "connected"
       },
     }
   }
@@ -345,11 +406,23 @@ export function createExtensionAttachment(services: ExtensionServices) {
     )
   }
 
-  const open = (key: string, session: SessionRef, options?: { readonly preview?: boolean; readonly focus?: boolean }) => {
+  const open = (
+    key: string,
+    session: SessionRef,
+    options?: { readonly preview?: boolean; readonly focus?: boolean; readonly select?: boolean },
+  ) => {
     const item = provider(key)
     if (item?.value.region === "dock") return setDock(session, true)
     const value = stateKey(session)
     if (!value) return
+    // focus: false adds the tab quietly: no selection, no region change, no preview replacement.
+    if (options?.focus === false && !options.preview) return layout.panel.append(value, key)
+    if (options?.select)
+      return batch(() => {
+        if (!narrow()) tabs.setPane(shellTab(session), "review", true)
+        layout.panel.append(value, key)
+        layout.panel.focus(value, key)
+      })
     const known = listed(session, value)
     const launchers = new Set(known.flatMap((entry) => (entry.tab.kind === "launcher" ? [entry.key] : [])))
     batch(() => {
@@ -362,7 +435,6 @@ export function createExtensionAttachment(services: ExtensionServices) {
       if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
       if (options?.preview) return layout.panel.preview(value, key, launchers)
       layout.panel.open(value, key, launchers)
-      if (options?.focus !== false) layout.panel.focus(value, key)
     })
   }
 
@@ -377,22 +449,66 @@ export function createExtensionAttachment(services: ExtensionServices) {
     if (view && tab) item?.value.close?.(tab, view)
   }
 
+  // The routed session's side region, which knows the fallback selection the stored state lacks.
+  const [region, setRegion] = createSignal<{ active(): string | undefined }>()
+
   const state = (key: string, session: SessionRef): PanelState => {
     if (provider(key)?.value.region === "dock") return dockOpened(session) ? "visible" : "closed"
     const value = stateKey(session)
     if (!value) return "closed"
     const panel = layout.panel.state(value)
-    if (panel.active !== key) return panel.all.includes(key) ? "open" : "closed"
+    const active = mountedView(session) ? (region()?.active() ?? panel.active) : panel.active
+    if (active !== key) return panel.all.includes(key) ? "open" : "closed"
     return sideOpened(session) ? "visible" : "active"
   }
+
+  // Open-project requests wait until their server is listed (e.g. an SSH server that just connected).
+  const servers = useServers()
+  const picker = useDirectoryPicker()
+  const [projects, setProjects] = createSignal<readonly { server: string; title: string }[]>([])
+  createEffect(() => {
+    const pending = projects()
+    const ready = pending.flatMap((request) => {
+      const server = servers.list.find((conn) => ServerConnection.key(conn) === request.server)
+      return server ? [{ request, server }] : []
+    })
+    if (ready.length === 0) return
+    setProjects(pending.filter((request) => !ready.some((item) => item.request === request)))
+    untrack(() =>
+      ready.forEach(({ request, server }) =>
+        picker({
+          server,
+          title: request.title,
+          onSelect: (value) => {
+            const directory = Array.isArray(value) ? value[0] : value
+            if (!directory) return
+            const key = ServerConnection.key(server)
+            servers.projects.forServer(key).open(directory)
+            void tabs.newDraft({ server: key, directory })
+          },
+        }),
+      ),
+    )
+  })
 
   const detach = services.attach({
     sessions,
     current,
     scope,
+    project: (server, title) => setProjects((pending) => [...pending, { server, title }]),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
+    routing: useIsRouting(),
+    path: () => `${location.pathname}${location.search}`,
+    keybind: command.keybindParts,
+    matches: command.matches,
+    preferences: {
+      releaseNotes: settings.general.releaseNotes,
+      setReleaseNotes: settings.general.setReleaseNotes,
+      mobileDiffWrap: settings.general.mobileDiffWrap,
+    },
     settings: (page) => surface.open(page as Parameters<typeof surface.open>[0]),
     layout: {
+      ready: layout.ready,
       open,
       close,
       toggle(key, session) {
@@ -438,6 +554,12 @@ export function createExtensionAttachment(services: ExtensionServices) {
   return {
     /** The routed, mounted session view. */
     current,
+    region(value: { active(): string | undefined }) {
+      setRegion(() => value)
+      return () => {
+        if (region() === value) setRegion(undefined)
+      }
+    },
     mobile: {
       current: mobileView,
       select(view: string) {

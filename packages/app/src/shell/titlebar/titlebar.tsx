@@ -30,11 +30,10 @@ import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { useSettingsDialog } from "@/settings/command"
-import { updaterAction } from "@/shell/updates/action"
-import type { UpdaterState } from "@/shell/updates/types"
 import { rootSession } from "@/shell/routes/session"
 import { Status } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "@/runtime/extension/host"
+import { TitlebarStatusItems, useTitlebarStatus } from "@/runtime/extension/status"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -46,16 +45,7 @@ const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px
 const macTrafficLightsBaseWidth = 68
 const macTrafficLightsTopClearance = 28
 
-export type TitlebarUpdate = {
-  state: UpdaterState | undefined
-  install: () => void
-}
-
-export function Titlebar(props: {
-  update?: TitlebarUpdate
-  debugTools?: { visible: boolean; toggle: () => void }
-  verticalTabs?: { mount?: HTMLElement }
-}) {
+export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
@@ -98,22 +88,7 @@ export function Titlebar(props: {
     })
   })
 
-  const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const state = props.update?.state
-    const installing = state?.status === "installing"
-    const version = state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
-    return {
-      visible: version !== undefined || installing,
-      installing,
-      label: language.t("titlebar.update"),
-      ariaLabel: language.t(updaterAction(state).label),
-      title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
-      onInstall: () => props.update?.install(),
-    }
-  })
-  const rightState = createMemo<TitlebarRightState>(() => ({
-    update: updateState(),
-  }))
+  const status = useTitlebarStatus()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
 
   const back = () => {
@@ -705,9 +680,9 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <Show when={updateState().visible}>
+                            <Show when={status.ids().length > 0}>
                               <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
-                                <TitlebarUpdateIconButton state={updateState()} vertical />
+                                <TitlebarStatusItems status={status} vertical />
                               </div>
                             </Show>
                           </Portal>
@@ -720,7 +695,10 @@ export function Titlebar(props: {
                   <div class="flex-1" />
                 </Show>
                 <Show when={!props.verticalTabs}>
-                  <TitlebarRight state={rightState()} />
+                  <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
+                    <TitlebarStatusItems status={status} />
+                    <TitlebarRightMount />
+                  </div>
                 </Show>
               </div>
             )
@@ -728,80 +706,6 @@ export function Titlebar(props: {
         </Match>
       </Switch>
     </header>
-  )
-}
-
-type TitlebarUpdatePillState = {
-  visible: boolean
-  installing: boolean
-  label: string
-  ariaLabel: string
-  title?: string
-  onInstall: () => void
-}
-
-type TitlebarRightState = {
-  update: TitlebarUpdatePillState
-}
-
-function TitlebarRight(props: { state: TitlebarRightState }) {
-  return (
-    <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
-      <Show when={props.state.update.visible}>
-        <TitlebarUpdateIconButton state={props.state.update} />
-      </Show>
-      <TitlebarRightMount />
-    </div>
-  )
-}
-
-function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState; vertical?: boolean }) {
-  const label = () => (
-    <span
-      class="shrink-0 text-[11px] leading-4 text-v2-text-text-accent [font-weight:530] opacity-0 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0"
-      classList={{
-        "ms-px me-4 -translate-x-2 rtl:translate-x-2": props.vertical,
-        "ms-2 me-px translate-x-2 rtl:-translate-x-2": !props.vertical,
-      }}
-    >
-      {props.state.label}
-    </span>
-  )
-  return (
-    <div
-      data-slot="titlebar-update"
-      class="group relative shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 focus-within:z-30 motion-reduce:transition-none"
-      classList={{
-        "h-7 w-7 self-start hover:w-[84px] focus-within:w-[84px]": props.vertical,
-        "me-3 h-5 w-5 hover:w-[68px] focus-within:w-[68px]": !props.vertical,
-      }}
-    >
-      <button
-        type="button"
-        class="absolute top-0 z-10 flex h-full w-full items-center overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none [app-region:no-drag]"
-        classList={{ "start-0 justify-start": props.vertical, "end-0 justify-end": !props.vertical }}
-        onClick={props.state.onInstall}
-        disabled={props.state.installing}
-        aria-busy={props.state.installing}
-        aria-label={props.state.ariaLabel}
-      >
-        <Show when={!props.vertical}>{label()}</Show>
-        <span
-          class="flex shrink-0 items-center justify-center"
-          classList={{ "size-7": props.vertical, "size-5": !props.vertical }}
-        >
-          <Show
-            when={!props.state.installing}
-            fallback={<span data-slot="titlebar-update-loader" aria-hidden="true" />}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 11V3M3.5 7.63128L7 11L10.5 7.63128" stroke="currentColor" />
-            </svg>
-          </Show>
-        </span>
-        <Show when={props.vertical}>{label()}</Show>
-      </button>
-    </div>
   )
 }
 

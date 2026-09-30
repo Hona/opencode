@@ -18,7 +18,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import type { SessionView } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, SessionView } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
@@ -33,11 +33,10 @@ import { parseCommentNote, readPromptPresentation } from "@/composer/comment-not
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
-import type { BackgroundTask } from "../summary/background"
 
 type SessionBackground = {
   blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
-  tasks: Accessor<BackgroundTask[]>
+  tasks: Accessor<readonly BackgroundTask[]>
   move: () => Promise<void>
 }
 

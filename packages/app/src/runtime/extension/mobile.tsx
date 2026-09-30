@@ -7,7 +7,7 @@ import { Menu } from "@opencode/ui/menu"
 import { Panel, type PanelSidebar, type PanelTab, type SessionView } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
-import { MobilePanel, panelKey, type RegionEntry } from "./panels"
+import { MobilePanel, panelKey, type Region, type RegionEntry } from "./panels"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -44,6 +44,7 @@ export type MobileViews = ReturnType<typeof createMobileViews>
 /** The narrow-screen view switcher: the conversation, each panel's view, and an overflow menu. */
 export function MobileViewTabs(props: {
   views: MobileViews
+  region: Region
   current: string
   session: SessionView
   sidebar: PanelSidebar
@@ -147,7 +148,15 @@ export function MobileViewTabs(props: {
             returnFocus={() => trigger}
           >
             <Show when={drawer()} keyed>
-              {(entry) => <MobilePanel entry={entry} view={props.session} sidebar={props.sidebar} visible />}
+              {(entry) => (
+                <MobilePanel
+                  entry={entry}
+                  view={props.session}
+                  sidebar={props.sidebar}
+                  visible
+                  open={() => props.region.openFor(entry.extension)}
+                />
+              )}
             </Show>
           </MobilePanelDrawer>
         </Suspense>

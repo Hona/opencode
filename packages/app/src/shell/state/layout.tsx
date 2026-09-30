@@ -11,7 +11,6 @@ import { Persist, persisted, removePersisted } from "@/runtime/persistence/stora
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
 import { decode64 } from "@/runtime/persistence/base64"
-import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
 import { createPathHelpers } from "@/workspaces/files/path"
 import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
@@ -50,8 +49,6 @@ export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
-export type ReviewDiffStyle = typeof layoutSchema.Type.review.diffStyle
-export type ReviewChangeMode = NonNullable<(typeof layoutSchema.Type.sessionView)[string]["reviewMode"]>
 export type ReviewPanelSource = "context-button" | "other"
 export type TabPanes = {
   terminalOpened: Accessor<boolean>
@@ -137,9 +134,6 @@ const sessionTabsSchema = Persistence.struct({
 })
 const sessionViewSchema = Persistence.struct({
   scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
-  reviewOpen: Schema.optional(Persistence.array(Schema.String)),
-  reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
-  reviewFile: Schema.optional(Schema.String),
   pendingMessage: Schema.optional(Schema.String),
   pendingMessageAt: Schema.optional(Schema.Finite),
 })
@@ -153,12 +147,15 @@ export const layoutSchema = Persistence.struct({
   }),
   terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
   review: Persistence.struct({
-    diffStyle: Schema.Literals(["unified", "split"]),
     panelOpened: Schema.Boolean,
+    // Owned by the review extension, which copies it out once; kept so layout rewrites cannot drop it first.
+    diffStyle: Schema.optional(Schema.Literals(["unified", "split"])),
   }),
   fileTree: Persistence.struct({
     opened: Schema.Boolean,
     width: Schema.Finite,
+    // The file extension owns the tree's tab now. The stored field stays so the migration below
+    // keeps telling current layouts from ones saved before the tab existed.
     tab: Schema.Literals(["changes", "all"]),
   }),
   session: Persistence.struct({ width: Schema.Finite }),
@@ -229,7 +226,7 @@ export function initialLayout(server?: ServerConnection.Key): typeof layoutSchem
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
     terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
-    review: { diffStyle: "split", panelOpened: DEFAULT_REVIEW_PANEL_OPENED },
+    review: { panelOpened: DEFAULT_REVIEW_PANEL_OPENED },
     fileTree: { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" },
     session: { width: DEFAULT_SESSION_WIDTH },
     mobileSidebar: { opened: false },
@@ -385,27 +382,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
-      review: {
-        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
-        setDiffStyle(diffStyle: ReviewDiffStyle) {
-          if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: DEFAULT_REVIEW_PANEL_OPENED })
-            return
-          }
-          setStore("review", "diffStyle", diffStyle)
-        },
-      },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
-        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
-        setTab(tab: "changes" | "all") {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
-            return
-          }
-          setStore("fileTree", "tab", tab)
-        },
         open() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
@@ -499,15 +478,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       view(sessionKey: string | Accessor<string>, panes?: TabPanes) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const reviewMode = createMemo(() => {
-          const mode = s().reviewMode
-          if (mode === "git" || mode === "branch" || mode === "turn") return mode
-        })
-        const reviewFile = createMemo(() => {
-          const file = s().reviewFile
-          if (typeof file === "string") return file
-        })
         const terminalOpened = panes?.terminalOpened ?? createMemo(() => store.terminal?.opened ?? false)
         const terminalHeight = createMemo(() =>
           panes
@@ -549,7 +519,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const current = store.review
           if (!current) {
             batch(() => {
-              setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+              setStore("review", { panelOpened: next })
               setEphemeral("reviewPanelSource", nextSource)
             })
             return
@@ -614,69 +584,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               setReviewPanelOpened(!reviewPanelOpened(), "other")
             },
           },
-          review: {
-            mode: reviewMode,
-            setMode(mode: ReviewChangeMode) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, { scroll: {}, reviewMode: mode })
-                prune(session)
-                return
-              }
-              if (current.reviewMode === mode) return
-              setStore("sessionView", session, "reviewMode", mode)
-              prune(session)
-            },
-            file: reviewFile,
-            setFile(file: string) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, { scroll: {}, reviewFile: file })
-                prune(session)
-                return
-              }
-              if (current.reviewFile === file) return
-              setStore("sessionView", session, "reviewFile", file)
-              prune(session)
-            },
-            open: createMemo(() => s().reviewOpen ?? []),
-            setOpen(open: string[]) {
-              const session = key()
-              const next = Array.from(new Set(open))
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, {
-                  scroll: {},
-                  reviewOpen: next,
-                })
-                return
-              }
-
-              if (same(current.reviewOpen, next)) return
-              setStore("sessionView", session, "reviewOpen", next)
-            },
-            openPath(path: string) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, {
-                  scroll: {},
-                  reviewOpen: [path],
-                })
-                return
-              }
-
-              if (!current.reviewOpen) {
-                setStore("sessionView", session, "reviewOpen", [path])
-                return
-              }
-
-              if (current.reviewOpen.includes(path)) return
-              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
-            },
-          },
         }
       },
       /** Side panel tabs for any session key, mounted or not. Reads are reactive. */
@@ -705,6 +612,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
           })
+        },
+        /** Adds a tab at the end of the strip without selecting it or touching the preview. */
+        append(session: string, tab: string) {
+          const next = normalizeSessionTab(sessionPath(session), tab)
+          const current = store.sessionTabs[session]
+          if (!current) return setStore("sessionTabs", session, { all: [next] })
+          if (current.all.includes(next)) return
+          setStore("sessionTabs", session, "all", current.all.length, next)
         },
         focus(session: string, tab: string) {
           if (!store.sessionTabs[session]) {

@@ -1,4 +1,4 @@
-import { createMemo, ErrorBoundary, For, onMount, Show, type JSX, type ParentProps } from "solid-js"
+import { createMemo, ErrorBoundary, For, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { ExtensionContext, Slot, Style, type SessionView, type SlotMap } from "@opencode/gui-extensions/sdk"
@@ -16,7 +16,8 @@ export function Contribution(props: { extension: string; children: () => JSX.Ele
             return null
           }}
         >
-          <ExtensionContext.Provider value={context}>{props.children()}</ExtensionContext.Provider>
+          {/* Untracked: a contribution renders once; its own reactivity updates it in place. */}
+          <ExtensionContext.Provider value={context}>{untrack(props.children)}</ExtensionContext.Provider>
         </ErrorBoundary>
       )}
     </Show>

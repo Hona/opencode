@@ -35,6 +35,8 @@ export interface Menu {
   readonly order?: number
   /** Receives the row input, e.g. a server key for "server.row". */
   readonly when?: (input: string) => boolean
+  /** Shown but disabled while false. Receives the same input as `when`. */
+  readonly enabled?: (input: string) => boolean
   run(input: string): void
 }
 
@@ -43,7 +45,8 @@ export interface PanelTab {
   readonly id: string
   /** Accessible name. Also the trigger content when `label` is absent. */
   readonly title: string
-  readonly label?: (state: { readonly active: boolean }) => JSX.Element
+  /** preview is the host's replaceable preview tab (double-click keeps it). */
+  readonly label?: (state: { readonly active: boolean; readonly preview: boolean }) => JSX.Element
   /**
    * - `pinned`: listed without being opened, before every other tab, never closed or dragged.
    * - `fixed`: not draggable; compact close button.
@@ -54,8 +57,6 @@ export interface PanelTab {
   readonly first?: boolean
   /** Selected when the stored selection is gone. The highest value wins, then strip order. */
   readonly fallback?: number
-  /** Replaced by the next preview; double-click promotes it. */
-  readonly preview?: boolean
   /** Tabs in one group share one render that stays mounted while any member is listed. */
   readonly group?: string
   /** Struck through, e.g. a file that no longer exists. */
@@ -80,6 +81,8 @@ export interface Panel {
   readonly region: "side" | "dock"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
+  /** Tabs are not restored: stored keys this panel stops listing leave the strip. */
+  readonly transient?: boolean
   /** Stored tab keys from before extensions, mapped to this panel's tab ids. The host rewrites them once. */
   readonly legacy?: Readonly<Record<string, string>>
   /** A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"`. */
@@ -97,6 +100,7 @@ export interface Panel {
 }
 
 export interface SettingEntry {
+  /** The `data-action` of the row search reveals. An entry with the Setting's own id describes the page itself. */
   readonly id: string
   readonly title: string
   readonly description?: string
@@ -104,32 +108,81 @@ export interface SettingEntry {
 }
 
 export interface Setting {
+  /** A page's settings tab value (`/settings?tab=<id>`). */
   readonly id: string
   /** Adds a section to a host page. Omit to add a page. */
   readonly page?: "general" | "servers"
+  /** Nav label of a page; search shows it as the section of every entry. */
   readonly title: string
   readonly icon?: IconName
   readonly available?: "desktop" | "mobile"
   /** Search metadata, indexed without mounting the page. */
   readonly entries?: readonly SettingEntry[]
+  /** `target` is the entry search is revealing. */
   render(input: { readonly target?: string }): JSX.Element
 }
 
-export type ServerState = "stopped" | "starting" | "auth" | "ready" | "failed"
+export type ServerState = "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+
+export interface ServerHealth {
+  readonly healthy: boolean
+  readonly version?: string
+  readonly incompatible?: boolean
+  readonly checking?: boolean
+}
+
+/** What the host passes to an entry's settings row. */
+export interface ServerRow {
+  /** `${extension}:${id}`. */
+  readonly key: string
+  /** The latest health check; undefined until one finishes. */
+  health(): ServerHealth | undefined
+  /** The host status mark: a dot, a spinner, a lock, or a warning. */
+  readonly Indicator: (props: {
+    readonly health?: ServerHealth
+    readonly connecting?: boolean
+    readonly auth?: boolean
+  }) => JSX.Element
+  /** The default server. `available` is false where the platform keeps no default. */
+  readonly default: { available(): boolean; current(): boolean; set(value: boolean): void }
+  /** Runs the entry's `remove`, then closes the server's tabs and clears it as the default. */
+  remove(): Promise<void>
+  /** Menu "server.row" items for this server, rendered as items of the row's own menu. */
+  readonly Items: () => JSX.Element
+}
 
 export interface ServerEntry {
   readonly id: string
   readonly name: string
+  /** Short badge after the name, e.g. "SSH". */
+  readonly label?: string
   readonly state: ServerState
+  /** False keeps the entry out of the app's server list (home, tabs, routes); settings still shows it. */
+  readonly listed?: boolean
   readonly http?: { readonly url: string; readonly username?: string; readonly password?: string }
+  /**
+   * Resolves the endpoint again after the connection drops, e.g. a tunnel. Such a server is managed:
+   * the host probes every new endpoint and holds prompts until the event connection is up.
+   */
   reconnect?(signal: AbortSignal): Promise<{ readonly url: string; readonly password?: string }>
   /** Called before opening a server that is not ready. Resolves true once it is. */
   connect?(): Promise<boolean>
+  /** Runs before the host forgets the server. */
+  remove?(): Promise<void>
+  /** The connection row in the server's settings. */
+  row?(row: ServerRow): JSX.Element
+  /**
+   * Covers the routed session or draft while the entry is not ready; the route stays mounted underneath.
+   * `tab` identifies the routed tab and changes when another one is routed.
+   */
+  cover?(input: { readonly tab: string }): JSX.Element
 }
 
 export interface Server {
   /** Startup waits until every source is ready. */
   readonly ready: boolean
+  /** Sources list in ascending order. */
+  readonly order?: number
   /** Keys are `${extension}:${id}`. */
   readonly entries: readonly ServerEntry[]
 }
@@ -140,6 +193,8 @@ export interface Link {
   readonly origin?: string
   /** The path is a known workspace file (e.g. a palette result), not a guess from text. */
   readonly exact?: boolean
+  /** Opened by the agent rather than the user (e.g. a browser preview); must not switch the narrow-screen view. */
+  readonly background?: boolean
   /** Workspace-relative directory the link was written in. */
   readonly base?: string
   readonly session?: SessionRef
@@ -153,9 +208,10 @@ export interface LinkHandler {
 
 export interface Status {
   readonly id: string
-  /** 	itlebar (default) places a pill in the titlebar or tabs footer; channel makes the dev channel badge a toggle. */
+  /** titlebar (default) places a pill in the titlebar or tabs footer; channel makes the dev channel badge a toggle. */
   readonly placement?: "titlebar" | "channel"
   readonly label: string
+  /** Accessible name when it differs from the visible label. */
   readonly title?: string
   readonly icon?: IconName
   readonly busy?: boolean

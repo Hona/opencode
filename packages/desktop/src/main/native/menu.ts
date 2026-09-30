@@ -2,7 +2,9 @@ import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
 import {
   DESKTOP_MENU,
+  desktopMenuKey,
   desktopMenuVisible,
+  desktopMenuWithExtensions,
   type DesktopMenu,
   type DesktopMenuEntry,
   type DesktopMenuRole,
@@ -10,13 +12,11 @@ import {
 import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
-import { CHANNEL, UPDATER_ENABLED } from "../constants"
 import { runDesktopMenuAction } from "./menu-actions"
 import { nativeT } from "./translations"
 
 type Deps = {
   trigger: (id: string) => void
-  checkForUpdates: () => void
   installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
@@ -28,7 +28,7 @@ export type MenubarEntry = {
   readonly menu: string
   readonly id: string
   readonly label: string
-  /** A built-in item's command or action, or another contribution's id. */
+  /** A built-in item's command, action, or role, or another contribution's id. */
   readonly after?: string
   enabled(): boolean
   run(): void
@@ -78,25 +78,21 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
   if (menu.role && !extra.length) return { role: nativeRole(menu.role), label: nativeT(menu.labelKey) }
-  const base = (menu.items ?? [])
-    .filter((entry) => desktopMenuVisible(entry, "macos"))
-    .map((entry) => ({
-      key: entry.type === "item" ? (entry.command ?? entry.action) : undefined,
-      item: nativeItem(entry, deps),
-    }))
-  const items = extra.reduce((list, entry) => {
-    const next = {
-      key: entry.id,
-      item: { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() },
-    }
-    const index = entry.after ? list.findIndex((item) => item.key === entry.after) : -1
-    if (index < 0) return [...list, next]
-    return [...list.slice(0, index + 1), next, ...list.slice(index + 1)]
-  }, base)
+  const items = desktopMenuWithExtensions(
+    (menu.items ?? [])
+      .filter((entry) => desktopMenuVisible(entry, "macos"))
+      .map((entry) => ({ key: desktopMenuKey(entry), entry })),
+    extra,
+  )
   return {
     ...(menu.role ? { role: nativeRole(menu.role) } : {}),
     label: nativeT(menu.labelKey),
-    submenu: items.map((entry) => entry.item),
+    submenu: items.map((item) => {
+      const entry = item.entry
+      if ("menu" in entry)
+        return { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() }
+      return nativeItem(entry, deps)
+    }),
   }
 }
 
@@ -107,7 +103,6 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   const item: MenuItemConstructorOptions = {
     label: entry.labelKey ? nativeT(entry.labelKey) : undefined,
     accelerator: entry.accelerator?.macos,
-    enabled: entry.enabled === "updater" ? UPDATER_ENABLED : undefined,
   }
 
   if (entry.command) {
@@ -116,13 +111,8 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   }
   if (entry.action) {
     const action = entry.action
-    if (action === "app.checkForUpdates" && CHANNEL === "beta") {
-      item.click = () => deps.trigger(action)
-      return item
-    }
     item.click = () =>
       runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
-        checkForUpdates: deps.checkForUpdates,
         installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,

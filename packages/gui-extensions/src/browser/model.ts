@@ -264,7 +264,7 @@ export function createModel(ctx: Context) {
   // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise.
   const preview = (ref: SessionRef, path: string) => {
     const view = sessions.current()
-    if (view?.key === ref.key) links.open({ href: path, session: view })
+    if (view?.key === ref.key) links.open({ href: path, session: view, background: true })
   }
 
   return {

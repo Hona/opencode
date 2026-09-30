@@ -107,6 +107,16 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
     })
   })
 
+  // Transient panels (e.g. btw) are not restored: their stored keys leave once the panel stops listing them.
+  createEffect(() => {
+    const listed = new Set(entries().map((entry) => entry.key))
+    const transient = providers().flatMap((item) => (item.value.transient ? [`${item.extension}:`] : []))
+    if (transient.length === 0) return
+    const all = stored()
+    const next = all.filter((key) => listed.has(key) || !transient.some((prefix) => key.startsWith(prefix)))
+    if (next.length !== all.length) input.tabs().setAll(next)
+  })
+
   const strip = createMemo(() => {
     const listed = stored().flatMap((key) => {
       const entry = byKey().get(key)
@@ -148,6 +158,9 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
       return key ? byKey().get(key) : undefined
     }),
     wide: createMemo(() => providers().some((item) => item.value.wide)),
+    /** An extension's tab ids in the stored strip. */
+    openFor: (extension: string) =>
+      stored().flatMap((key) => (key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [])),
     lead: () => !!strip().find((entry) => entry.tab.kind !== "pinned")?.tab.first,
     select(key: string) {
       input.tabs().setActive(key)
@@ -163,7 +176,11 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
 export type Region = ReturnType<typeof createRegion>
 
 /** Grouped content stays mounted while any member is listed; other tabs mount only while selected. */
-export function RegionContent(props: { region: Region; view: SessionView; frame: Omit<PanelFrame, "visible"> & { open: Accessor<boolean> } }) {
+export function RegionContent(props: {
+  region: Region
+  view: SessionView
+  frame: Omit<PanelFrame, "visible" | "open"> & { shown: Accessor<boolean> }
+}) {
   const groups = createMemo(() =>
     Array.from(new Set(props.region.entries().flatMap((entry) => (entry.tab.group ? [groupKey(entry)] : [])))),
   )
@@ -198,7 +215,13 @@ export function RegionContent(props: { region: Region; view: SessionView; frame:
                   classList={{ hidden: !active() }}
                   inert={!active() || undefined}
                 >
-                  <PanelContext.Provider value={{ ...props.frame, visible: () => props.frame.open() && active() }}>
+                  <PanelContext.Provider
+                    value={{
+                      ...props.frame,
+                      visible: () => props.frame.shown() && active(),
+                      open: () => props.region.openFor(extension),
+                    }}
+                  >
                     <Contribution extension={extension}>
                       {() => member()!.provider.render(() => member()!.tab, props.view)}
                     </Contribution>
@@ -223,7 +246,9 @@ export function RegionContent(props: { region: Region; view: SessionView; frame:
                   data-slot="tabs-content"
                   class="flex flex-col h-full overflow-hidden contain-strict"
                 >
-                  <PanelContext.Provider value={{ ...props.frame, visible: props.frame.open }}>
+                  <PanelContext.Provider
+                    value={{ ...props.frame, visible: props.frame.shown, open: () => props.region.openFor(extension) }}
+                  >
                     <Contribution extension={extension}>
                       {() => entry()!.provider.render(() => entry()!.tab, props.view)}
                     </Contribution>
@@ -363,6 +388,7 @@ export function DockRegion(props: {
                 reserve: () => !!props.reserve,
                 animate: () => !size.active(),
                 sidebar: props.sidebar,
+                open: () => [],
               }}
             >
               <Contribution extension={extension}>{() => entry()!.provider.render(() => entry()!.tab, props.view)}</Contribution>
@@ -375,7 +401,13 @@ export function DockRegion(props: {
 }
 
 /** Renders one panel as a narrow-screen view. */
-export function MobilePanel(props: { entry: RegionEntry; view: SessionView; sidebar: PanelSidebar; visible: boolean }): JSX.Element {
+export function MobilePanel(props: {
+  entry: RegionEntry
+  view: SessionView
+  sidebar: PanelSidebar
+  visible: boolean
+  open: Accessor<readonly string[]>
+}): JSX.Element {
   return (
     <PanelContext.Provider
       value={{
@@ -385,6 +417,7 @@ export function MobilePanel(props: { entry: RegionEntry; view: SessionView; side
         reserve: () => false,
         animate: () => true,
         sidebar: props.sidebar,
+        open: props.open,
       }}
     >
       <Contribution extension={props.entry.extension}>

@@ -2,11 +2,12 @@ import { MemoryRouter, createMemoryHistory } from "@solidjs/router"
 import { createMemo, Show } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { render } from "solid-js/web"
+import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
+import type { WslServersState } from "../../../gui-extensions/src/wsl/contract"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 import { ServerConnection } from "../../src/runtime/server/registry"
-import { useWslServers } from "../../src/servers/wsl/context"
-import type { WslServersEvent, WslServersPlatform, WslServersState } from "../../src/servers/wsl/types"
+import { useExtensionServers } from "../../src/runtime/extension/servers"
 
 export function mount(input: { server: string; mode: "failed" | "stopped" | "ready" }) {
   const root = document.getElementById("root")
@@ -46,44 +47,62 @@ export function mount(input: { server: string; mode: "failed" | "stopped" | "rea
         },
       },
     })
-    const listeners = new Set<(event: WslServersEvent) => void>()
-    const publish = () =>
-      listeners.forEach((listener) => listener({ type: "state", state: structuredClone(unwrap(store.state)) }))
-    const unused = async () => {
-      throw new Error("Unexpected fixture action")
-    }
-    const wsl: WslServersPlatform = {
-      getState: async () => structuredClone(unwrap(store.state)),
-      subscribe: (listener) => {
-        listeners.add(listener)
-        return () => listeners.delete(listener)
+    // The main-process WSL and SSH extensions, as the extension bridge sees them.
+    const listeners = new Set<(message: BridgeMessage) => void>()
+    const snapshot = () => structuredClone(unwrap(store.state))
+    const publish = () => listeners.forEach((listener) => listener({ type: "state", remote: "wsl", state: snapshot() }))
+    const methods: Record<string, (input: { id?: string; name?: string }) => void> = {
+      installOpencode(value) {
+        setStore("calls", (calls) => [...calls, `update:${value.name}`])
+        setStore("state", "opencodeChecks", value.name ?? "", { version: "current", matchesDesktop: true })
       },
-      probeRuntime: unused,
-      refreshDistros: unused,
-      installWsl: unused,
-      installDistro: unused,
-      probeAddable: unused,
-      openTerminal: unused,
-      addServer: unused,
-      async installOpencode(distro) {
-        setStore("calls", (calls) => [...calls, `update:${distro}`])
-        setStore("state", "opencodeChecks", distro, { version: "current", matchesDesktop: true })
-        publish()
-      },
-      async startServer(id) {
-        setStore("calls", (calls) => [...calls, `start:${id}`])
-        setStore("state", "servers", (server) => server.config.id === id, "runtime", {
+      startServer(value) {
+        setStore("calls", (calls) => [...calls, `start:${value.id}`])
+        setStore("state", "servers", (server) => server.config.id === value.id, "runtime", {
           kind: "ready",
           url: input.server,
           password: null,
         })
-        publish()
       },
-      async removeServer(id) {
-        setStore("calls", (calls) => [...calls, `remove:${id}`])
-        setStore("state", "servers", (servers) => servers.filter((server) => server.config.id !== id))
-        publish()
+      removeServer(value) {
+        setStore("calls", (calls) => [...calls, `remove:${value.id}`])
+        setStore("state", "servers", (servers) => servers.filter((server) => server.config.id !== value.id))
       },
+    }
+    const bridge: Bridge = {
+      async call(request) {
+        const method = request.remote === "wsl" ? methods[request.method] : undefined
+        if (!method) throw new Error("Unexpected fixture action")
+        method(request.input as { id?: string; name?: string })
+        publish()
+        return null
+      },
+      async subscribe(remote) {
+        if (remote === "wsl") return { available: true, state: snapshot() }
+        if (remote === "ssh") return { available: true, state: { servers: [], revision: 0 } }
+        return { available: false }
+      },
+      on(listener) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+      surface: () => undefined,
+      capture: async () => undefined,
+      menubar: () => undefined,
+      configure: () => undefined,
+      manager: {
+        list: async () => [],
+        enable: async () => undefined,
+        disable: async () => undefined,
+        reload: async () => undefined,
+        install: async () => undefined,
+        remove: async () => undefined,
+        source: async () => "",
+        asset: () => "",
+      },
+    }
+    const unused = async () => {
+      throw new Error("Unexpected fixture action")
     }
     const platform: Platform = {
       platform: "desktop",
@@ -93,28 +112,16 @@ export function mount(input: { server: string; mode: "failed" | "stopped" | "rea
       openDirectoryPickerDialog: async () => null,
       notify: async () => undefined,
       restart: unused,
-      wslServers: wsl,
+      extensions: bridge,
     }
     function Interface() {
-      const wsl = useWslServers()
+      const extensions = useExtensionServers()
       const servers = createMemo<ServerConnection.Any[]>(() => [
         { type: "sidecar", variant: "base", displayName: "Local Server", http: { url: input.server } },
-        ...(wsl.data?.servers ?? []).flatMap((item): ServerConnection.Any[] =>
-          item.runtime.kind === "ready"
-            ? [
-                {
-                  type: "sidecar",
-                  variant: "wsl",
-                  distro: item.config.distro,
-                  displayName: item.config.distro,
-                  http: { url: item.runtime.url },
-                },
-              ]
-            : [],
-        ),
+        ...extensions.list(),
       ])
       return (
-        <Show when={wsl.data}>
+        <Show when={extensions.ready()}>
           <AppInterface
             servers={servers()}
             defaultServer={ServerConnection.Key.make("sidecar")}

@@ -11,7 +11,6 @@ import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/clien
 import type { SessionDocument } from "@opencode/session-ui/document"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
-import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
 import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
@@ -20,8 +19,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ReviewPanelView } from "@/session/review/panel"
-import { createReviewPanelState } from "@/session/review/panel-state"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -273,9 +270,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     id="review-panel"
                     class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
                   >
-                    <div class="min-h-0 flex-1">
-                      <SessionReviewPane diffs={props.document.diffs} />
-                    </div>
+                    <div class="min-h-0 flex-1" />
                     <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
                   </aside>
                 </Show>
@@ -359,25 +354,3 @@ function SessionSurfaceHeader(props: {
   )
 }
 
-function SessionReviewPane(props: { diffs: SessionDocument["diffs"] }) {
-  const language = useLanguage()
-  const review = createReviewPanelState()
-  const [state, setState] = createStore({
-    active: props.diffs[0]?.file,
-    diffStyle: "unified" as "unified" | "split",
-  })
-  return (
-    <ReviewPanelView
-      title={language.t("ui.sessionReview.title.lastTurn")}
-      empty={<SessionReviewEmptyChangesV2 />}
-      diffs={props.diffs}
-      diffsReady
-      activeFile={state.active}
-      onSelectFile={(file) => setState("active", file)}
-      diffStyle={state.diffStyle}
-      onDiffStyleChange={(value) => setState("diffStyle", value)}
-      state={review}
-      fileList="flat"
-    />
-  )
-}

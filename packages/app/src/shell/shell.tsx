@@ -2,22 +2,20 @@ import { Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { Titlebar, type TitlebarUpdate } from "@/shell/titlebar/titlebar"
+import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
-import { SshAuthentication } from "@/servers/ssh/authentication"
-import { useUpdaterInstall } from "@/shell/updates/download"
+import { ExtensionServerCover } from "@/runtime/extension/server-shell"
 import { ExtensionSlot } from "@/runtime/extension/render"
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const settings = useSettingsSurface()
   const preferences = useSettings()
-  const installUpdate = useUpdaterInstall()
   const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({
     tabsWidth: 260,
@@ -26,12 +24,6 @@ export default function Layout(props: ParentProps) {
   const verticalTabs = () => preferences.appearance.tabLayout() === "vertical" && !mobile()
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
 
-  const update: TitlebarUpdate = {
-    get state() {
-      return platform.updater?.state()
-    },
-    install: installUpdate,
-  }
   return (
     <TitlebarRightProvider>
       <div
@@ -48,10 +40,7 @@ export default function Layout(props: ParentProps) {
             : "max(0px, calc(8px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))",
         }}
       >
-        <Titlebar
-          update={update}
-          verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined}
-        />
+        <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
         <div class="flex flex-1 min-h-0 min-w-0 flex-row">
           <Show when={verticalTabs()}>
             <aside
@@ -88,9 +77,9 @@ export default function Layout(props: ParentProps) {
               "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
-            <SshAuthentication>
+            <ExtensionServerCover>
               <Suspense>{props.children}</Suspense>
-            </SshAuthentication>
+            </ExtensionServerCover>
           </main>
         </div>
         <ExtensionSlot at="shell.bottom" input={{}} />
