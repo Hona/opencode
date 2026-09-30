@@ -153,15 +153,20 @@ export interface LinkHandler {
 
 export interface Status {
   readonly id: string
+  /** 	itlebar (default) places a pill in the titlebar or tabs footer; channel makes the dev channel badge a toggle. */
+  readonly placement?: "titlebar" | "channel"
   readonly label: string
   readonly title?: string
-  readonly icon: IconName
+  readonly icon?: IconName
   readonly busy?: boolean
+  readonly pressed?: boolean
   run(): void
 }
 
 export interface SlotMap {
   readonly app: Record<string, never>
+  /** Full-width strip under the shell content, above toasts. */
+  readonly "shell.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": { readonly session: SessionView; readonly active: boolean }
   readonly "session.panel.end": { readonly session: SessionView }

@@ -1,4 +1,4 @@
-import { lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
@@ -11,21 +11,15 @@ import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
 import { SshAuthentication } from "@/servers/ssh/authentication"
 import { useUpdaterInstall } from "@/shell/updates/download"
-import { useCommand } from "@/shell/commands/command"
-import { useLanguage } from "@/runtime/i18n/language"
-
-const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
+import { ExtensionSlot } from "@/runtime/extension/render"
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const settings = useSettingsSurface()
   const preferences = useSettings()
   const installUpdate = useUpdaterInstall()
-  const command = useCommand()
-  const language = useLanguage()
   const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({
-    debugTools: false,
     tabsWidth: 260,
     tabsMount: undefined as HTMLElement | undefined,
   })
@@ -38,23 +32,6 @@ export default function Layout(props: ParentProps) {
     },
     install: installUpdate,
   }
-  // A plain object avoids the compiler's conditional-prop memo, which leaks when read from event handlers.
-  const debugTools = {
-    get visible() {
-      return state.debugTools
-    },
-    toggle: () => setState("debugTools", (value) => !value),
-  }
-
-  command.register("debug-bar", () => [
-    {
-      id: "debugBar.toggle",
-      title: language.t("command.debugBar.toggle"),
-      category: language.t("command.category.view"),
-      onSelect: debugTools.toggle,
-    },
-  ])
-
   return (
     <TitlebarRightProvider>
       <div
@@ -74,7 +51,6 @@ export default function Layout(props: ParentProps) {
         <Titlebar
           update={update}
           verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined}
-          debugTools={debugTools}
         />
         <div class="flex flex-1 min-h-0 min-w-0 flex-row">
           <Show when={verticalTabs()}>
@@ -117,11 +93,7 @@ export default function Layout(props: ParentProps) {
             </SshAuthentication>
           </main>
         </div>
-        <Show when={state.debugTools}>
-          <Suspense>
-            <DebugBar diagnostics={import.meta.env.DEV} inline />
-          </Suspense>
-        </Show>
+        <ExtensionSlot at="shell.bottom" input={{}} />
         <ToastRegion />
         <UploadToastHost />
       </div>

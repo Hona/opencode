@@ -33,6 +33,8 @@ import { useSettingsDialog } from "@/settings/command"
 import { updaterAction } from "@/shell/updates/action"
 import type { UpdaterState } from "@/shell/updates/types"
 import { rootSession } from "@/shell/routes/session"
+import { Status } from "@opencode/gui-extensions/sdk"
+import { useExtensionHost } from "@/runtime/extension/host"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -470,7 +472,7 @@ export function Titlebar(props: {
                 }}
               >
                 <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator horizontal debugTools={props.debugTools} />
+                  <ChannelIndicator horizontal />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -666,7 +668,7 @@ export function Titlebar(props: {
                               />
                             </Show>
                             <Show when={!windows()}>
-                              <ChannelIndicator sidebar debugTools={props.debugTools} />
+                              <ChannelIndicator sidebar />
                             </Show>
                             {homeButton(true)}
                             <button
@@ -803,18 +805,19 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState; verti
   )
 }
 
-function ChannelIndicator(props: {
-  horizontal?: boolean
-  sidebar?: boolean
-  debugTools?: { visible: boolean; toggle: () => void }
-}) {
+function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
   const language = useLanguage()
   const platform = usePlatform()
+  const host = useExtensionHost()
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
   if (!channel || channel === "prod") return null
 
   const label = () => language.t(`titlebar.channel.${channel}`)
-  const debug = () => (channel === "dev" || channel === "local" ? props.debugTools : undefined)
+  // An extension may turn the dev badge into a toggle (the debug bar does).
+  const debug = () =>
+    channel === "dev" || channel === "local"
+      ? host.list(Status).find((item) => item.placement === "channel")
+      : undefined
   return (
     <Tooltip
       placement={props.sidebar ? "right" : "bottom"}
@@ -832,9 +835,9 @@ function ChannelIndicator(props: {
           "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
             !!debug(),
         }}
-        onClick={() => debug()?.toggle()}
-        aria-label={debug() ? language.t("titlebar.toggleDebugTools") : undefined}
-        aria-pressed={debug()?.visible}
+        onClick={() => debug()?.run()}
+        aria-label={debug()?.label}
+        aria-pressed={debug()?.pressed}
       >
         <img
           src={channel === "beta" ? betaIcon : devIcon}
