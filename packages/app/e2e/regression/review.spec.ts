@@ -192,6 +192,10 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await page.mouse.wheel(1_000, 0)
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
   await expect.poll(() => statusInset(status, "right")).toBeLessThanOrEqual(24)
+  const thumb = sidebar.locator('.scroll-view__thumb[data-orientation="horizontal"]')
+  const scrolled = await viewport.evaluate((element) => element.scrollLeft)
+  await dragThumb(page, thumb, -40)
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(scrolled)
 
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   await filter.fill(longFilename)
@@ -200,9 +204,10 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await viewport.evaluate((element) => {
     element.setAttribute("dir", "rtl")
     element.scrollLeft = 0
+    element.dispatchEvent(new Event("scroll"))
   })
   await viewport.hover()
-  await page.mouse.wheel(-1_000, 0)
+  await dragThumb(page, thumb, -40)
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(0)
   await expect.poll(() => statusInset(filteredStatus, "left")).toBeLessThanOrEqual(24)
   await viewport.evaluate((element) => {
@@ -275,21 +280,48 @@ test("image files keep the review panel painted while loading", async ({ page })
     },
   })
   await page.getByRole("button", { name: "Toggle review" }).click()
-  const review = page.locator('#review-panel [data-component="session-review-v2"]')
-  await expect(review).toBeVisible()
+  await expect(page.locator('#review-panel [data-component="session-review-v2"]')).toBeVisible()
 
+  // Records every painted frame from before the click until after the image read completes.
+  await page.evaluate(() => {
+    const probe = { problems: [] as string[], frames: 0, running: true }
+    const sample = () => {
+      const panel = document.querySelector<HTMLElement>('#review-panel [data-component="session-review-v2"]')
+      const rect = panel?.getBoundingClientRect()
+      const hit =
+        rect?.width && rect.height ? document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) : null
+      const frame = [
+        !panel?.checkVisibility() && "hidden",
+        !panel?.textContent?.trim() && "blank",
+        !(hit && document.querySelector("#review-panel")?.contains(hit)) && "outside the review panel",
+        hit && getComputedStyle(hit).backgroundColor === "rgb(0, 0, 0)" && "black",
+      ].filter((problem) => typeof problem === "string")
+      probe.problems.push(...frame)
+      probe.frames += 1
+      if (probe.running) requestAnimationFrame(sample)
+    }
+    ;(window as Window & { e2eImageProbe?: typeof probe }).e2eImageProbe = probe
+    requestAnimationFrame(sample)
+  })
+  const frames = () =>
+    page.evaluate(() => (window as Window & { e2eImageProbe?: { frames: number } }).e2eImageProbe!.frames)
+  const response = page.waitForResponse((item) => item.url().includes(`/api/fs/read/${image}`))
   await page.getByRole("button", { name: /preview\.png/ }).click()
   await read.promise
-  await expect(review).toHaveText(/\S/)
-  expect(
-    await review.evaluate((element) => {
-      const rect = element.getBoundingClientRect()
-      const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-      return center ? getComputedStyle(center).backgroundColor : "none"
-    }),
-  ).not.toBe("rgb(0, 0, 0)")
+  const pending = await frames()
+  await expect.poll(frames).toBeGreaterThan(pending)
   release.resolve()
+  await response
   await expect(page.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("preview.png")
+  const loaded = await frames()
+  await expect.poll(frames).toBeGreaterThan(loaded)
+  expect(
+    await page.evaluate(() => {
+      const probe = (window as Window & { e2eImageProbe?: { problems: string[]; running: boolean } }).e2eImageProbe!
+      probe.running = false
+      return probe.problems
+    }),
+  ).toEqual([])
 })
 
 test("restores review state and the side-panel tab per session", async ({ page }) => {
@@ -322,9 +354,10 @@ test("restores review state and the side-panel tab per session", async ({ page }
     await expectSessionTitle(page, title)
   }
 
+  // Each session selects a file other than the first, which the review would show without a stored selection.
   await toggle.click()
-  await page.getByRole("button", { name: "alpha.ts" }).click()
-  await selectedFile("alpha.ts")
+  await page.getByRole("button", { name: "gamma.ts" }).click()
+  await selectedFile("gamma.ts")
   await panel.getByRole("button", { name: "Open file" }).click()
   await panel.getByRole("button", { name: "README.md" }).click()
   await selectedTab("README.md")
@@ -346,6 +379,9 @@ test("restores review state and the side-panel tab per session", async ({ page }
 
   await switchSession("Alpha review state")
   await selectedTab("README.md")
+  await review.click()
+  await selectedFile("gamma.ts")
+  await panel.getByRole("tab", { name: "README.md", exact: true }).click()
   await switchSession("Beta review state")
   await selectedTab("Context")
   await switchSession("Gamma review state")
@@ -364,7 +400,7 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await panel.getByRole("tab", { name: "README.md", exact: true }).press("Home")
   await expect(review).toHaveAttribute("aria-selected", "true")
   await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
-  await selectedFile("alpha.ts")
+  await selectedFile("gamma.ts")
   await review.press("End")
   await selectedTab("README.md")
   await page.keyboard.press("Control+w")
@@ -435,6 +471,15 @@ for (const direction of ["ltr", "rtl"] as const) {
     }
     await expect(panel).toBeHidden()
   })
+}
+
+async function dragThumb(page: Page, thumb: Locator, dx: number) {
+  await expect(thumb).toBeVisible()
+  const box = (await thumb.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2)
+  await page.mouse.up()
 }
 
 async function statusInset(status: Locator, side: "left" | "right") {

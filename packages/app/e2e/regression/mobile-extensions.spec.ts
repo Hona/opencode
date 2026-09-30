@@ -89,6 +89,14 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
         deletions: 1,
         patch: `diff --git a/modified.ts b/modified.ts\n--- a/modified.ts\n+++ b/modified.ts\n@@ -1 +1 @@\n-export const value = 1\n+export const value = "${"long content ".repeat(30)}"\n`,
       },
+      {
+        file: "src/review.ts",
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+        patch:
+          "diff --git a/src/review.ts b/src/review.ts\n--- a/src/review.ts\n+++ b/src/review.ts\n@@ -1,3 +1,3 @@\n export const first = 1\n-export const value = 'before'\n+export const value = 'after'\n export const last = 3\n",
+      },
     ],
     fileContent: async (path) => {
       if (path === "modified.ts") await held.promise
@@ -140,15 +148,17 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   }
   page.on("request", recordWrite)
   const note = "Use the existing value instead"
-  await modified.getByText(`export const value = "${"long content ".repeat(30)}"`, { exact: true }).click()
-  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
-  await review.getByRole("textbox").fill(note)
-  await review.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()
-  await expect(review.getByText(note, { exact: true })).toBeVisible()
+  const commented = review.locator('[data-file="src/review.ts"]')
+  await commented.getByRole("button", { expanded: false }).click()
+  await commented.getByText("export const value = 'after'", { exact: true }).click()
+  await expect(commented.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 2")
+  await commented.getByRole("textbox").fill(note)
+  await commented.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()
+  await expect(commented.getByText(note, { exact: true })).toBeVisible()
   await navigation.getByRole("tab", { name: "Session", exact: true }).click()
   const attachments = page.locator('[data-component="composer-attachments"]')
   await expect(attachments.getByText(note, { exact: true })).toBeVisible()
-  await expect(attachments).toContainText("modified.ts:1")
+  await expect(attachments).toContainText("review.ts:2")
   page.off("request", recordWrite)
   expect(writes).toEqual([])
 
@@ -188,14 +198,6 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
   await expect(modified.locator("[data-diff]")).toHaveAttribute("data-overflow", "wrap")
 
-  // Opening a changed file selects its tab at once, before a slower file finishes loading.
-  const added = review.locator('[data-file="added.ts"]')
-  await added.getByRole("button", { name: "added.ts", exact: true }).click()
-  await added.getByRole("button", { name: "Open file", exact: true }).click()
-  await expect(navigation.getByRole("tab", { name: "Files", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(files.getByRole("tab", { name: "added.ts", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(files.getByText("contents:added.ts", { exact: true })).toBeVisible()
-  await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
   const openFile = modified.getByRole("button", { name: "Open file", exact: true })
   await expect
     .poll(async () => {
@@ -204,15 +206,22 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
       return button.x + button.width < summary.x + summary.width / 2
     })
     .toBe(true)
-  await openFile.click()
-  await expect(navigation.getByRole("tab", { name: "Files", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(files.getByRole("tab", { name: "modified.ts", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(files).toHaveAttribute("data-browsing", "false")
-  held.resolve()
-  await expect(files.getByText("contents:modified.ts", { exact: true })).toBeVisible()
+
+  // Opening a changed file selects its tab at once, before a slower file finishes loading; reopening switches back.
+  await review.locator('[data-file="added.ts"]').getByRole("button", { name: "added.ts", exact: true }).click()
+  const selected = files.getByRole("tablist", { name: "Open files", exact: true }).getByRole("tab", { selected: true })
+  for (const file of ["added.ts", "modified.ts", "added.ts", "modified.ts"]) {
+    await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
+    await review.locator(`[data-file="${file}"]`).getByRole("button", { name: "Open file", exact: true }).click()
+    await expect(navigation.getByRole("tab", { name: "Files", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(selected).toHaveText([file])
+    await expect(files).toHaveAttribute("data-browsing", "false")
+    if (file === "modified.ts") held.resolve()
+    await expect(files.getByText(`contents:${file}`, { exact: true })).toBeVisible()
+  }
 })
 
-test("summary drawer dismisses by backdrop and drag", async ({ page }) => {
+test("summary drawer dismisses by button, backdrop, Escape, and drag", async ({ page }) => {
   await mockStressTimeline(page)
   await page.goto(sessionHref(fixture.targetID))
   const more = page
@@ -221,7 +230,7 @@ test("summary drawer dismisses by backdrop and drag", async ({ page }) => {
   const drawer = page.getByRole("dialog", { name: "Session details", exact: true })
   const overlay = page.locator('[data-slot="mobile-drawer-overlay"]')
 
-  for (const dismissal of ["backdrop", "drag"] as const) {
+  for (const dismissal of ["button", "backdrop", "escape", "drag"] as const) {
     await more.click()
     await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
     await expect(drawer.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
@@ -231,7 +240,9 @@ test("summary drawer dismisses by backdrop and drag", async ({ page }) => {
       .poll(() => drawer.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42))
       .toBe(0)
     await expect(drawer).not.toHaveAttribute("data-transitioning")
+    if (dismissal === "button") await drawer.getByRole("button", { name: "Close", exact: true }).click()
     if (dismissal === "backdrop") await overlay.click({ position: { x: 10, y: 10 } })
+    if (dismissal === "escape") await page.keyboard.press("Escape")
     if (dismissal === "drag") {
       const bounds = (await drawer.locator('[data-slot="mobile-drawer-handle"]').boundingBox())!
       await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)

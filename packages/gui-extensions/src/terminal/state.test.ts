@@ -23,7 +23,9 @@ describe("TerminalState", () => {
         { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
       ],
     })
-    expect(decodeTerminalState(Schema.encodeSync(TerminalState)(decoded))).toEqual(decoded)
+    const active = decodeTerminalState({ ...decoded, active: "two" })
+    expect(active.active).toBe("two")
+    expect(decodeTerminalState(Schema.encodeSync(TerminalState)(active))).toEqual(active)
   })
 
   test("defaults missing and malformed fields without dropping usable terminals", () => {

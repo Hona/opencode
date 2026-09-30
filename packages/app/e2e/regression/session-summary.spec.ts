@@ -56,11 +56,16 @@ test("summary disclosures import legacy settings and persist in extension storag
   const trigger = page.getByRole("button", { name: "Session details", exact: true })
   const summary = page.getByRole("dialog", { name: "Session details", exact: true })
   const project = summary.getByRole("button", { name: fixture.project.name, exact: true })
+  const workspace = summary.getByRole("button", { name: "Local repository", exact: true })
   const server = summary.getByRole("button", { name: "Extensions", exact: true })
   await trigger.click()
   await expect(project).toHaveAttribute("aria-expanded", "false")
+  await expect(workspace).toBeHidden()
   await expect(server).toHaveAttribute("aria-expanded", "true")
   await expect(summary.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
+  await project.click()
+  await expect(project).toHaveAttribute("aria-expanded", "true")
+  await expect(workspace).toBeVisible()
   await server.click()
   await expect(server).toHaveAttribute("aria-expanded", "false")
   await expect(summary.getByRole("button", { name: "MCP", exact: true })).toHaveCount(0)
@@ -71,11 +76,12 @@ test("summary disclosures import legacy settings and persist in extension storag
     .poll(() =>
       page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:extension.summary.prefs") ?? "null")),
     )
-    .toEqual({ projectExpanded: false, serverExpanded: false })
+    .toEqual({ projectExpanded: true, serverExpanded: false })
 
   await page.goto(sessionHref(fixture.sourceID))
   await trigger.click()
-  await expect(project).toHaveAttribute("aria-expanded", "false")
+  await expect(project).toHaveAttribute("aria-expanded", "true")
+  await expect(workspace).toBeVisible()
   await expect(server).toHaveAttribute("aria-expanded", "false")
   await server.click()
   await expect(summary.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
@@ -119,6 +125,23 @@ for (const direction of ["ltr", "rtl"] as const) {
     const text = summary.getByText(branch, { exact: true })
     await expect(text).toHaveCSS("text-overflow", "ellipsis")
     await expect.poll(() => text.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    // Labels, including the truncated branch, stop 12px before the trailing indicator column.
+    const workspace = summary.getByRole("button", { name: "Local repository", exact: true })
+    for (const [label, indicator] of [
+      [text, workspace.locator(".session-summary-menu-indicator")],
+      ...["Local repository", "MCP", "Plugins", "Skills", "LSP"].map((name) => {
+        const item = summary.getByRole("button", { name, exact: true })
+        return [item.locator(".session-summary-label"), item.locator(".session-summary-menu-indicator")]
+      }),
+    ]) {
+      await expect
+        .poll(async () => {
+          const start = (await label!.boundingBox())!
+          const end = (await indicator!.boundingBox())!
+          return direction === "ltr" ? end.x - start.x - start.width : start.x - end.x - end.width
+        })
+        .toBeGreaterThanOrEqual(12)
+    }
     await expectAlignedWithHeader(page, direction)
 
     const mcp = summary.getByRole("button", { name: "MCP", exact: true })
@@ -166,54 +189,58 @@ for (const direction of ["ltr", "rtl"] as const) {
 }
 
 test("summary catalogs load, refresh while cached, and tell errors from empty", async ({ page }) => {
-  const state = { fail: true, extra: false, skills: true }
+  const state = { fail: true, extra: false, empty: false }
   const pluginDirectories: string[] = []
-  await mockStressTimeline(page, {
-    mcp: [{ name: "summary-mcp", status: { status: "connected" } }],
-    plugins: () => [
-      { id: "builtin", source: { type: "builtin" }, features: {}, state: { status: "active" } },
-      {
-        id: "supermemory",
-        source: { type: "package", target: "opencode-supermemory" },
-        features: { server: true },
-        state: { status: "active" },
-      },
-      {
-        id: "broken-plugin",
-        source: { type: "local", path: "/broken.ts" },
-        features: { server: true },
-        state: { status: "failed", error: "Plugin failed to activate" },
-      },
-      ...(state.extra
-        ? [
-            {
-              id: "daytona",
-              source: { type: "package", target: "opencode-daytona" },
-              features: {},
-              state: { status: "active" },
-            },
-          ]
-        : []),
-    ],
-    skills: () =>
-      state.skills
-        ? [
-            { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
-            { id: "review-animations", name: "review-animations", path: "/skills/review/SKILL.md", content: "Review" },
-          ]
-        : [],
-    configEntries: [
-      {
-        type: "document",
-        info: {
-          lsp: {
-            typescript: { command: ["typescript-language-server", "--stdio"] },
-            rust: { command: ["rust-analyzer"] },
-          },
+  const lsp = [
+    {
+      type: "document",
+      info: {
+        lsp: {
+          typescript: { command: ["typescript-language-server", "--stdio"] },
+          rust: { command: ["rust-analyzer"] },
         },
       },
-      { type: "document", info: { lsp: { rust: { disabled: true } } } },
-    ],
+    },
+    { type: "document", info: { lsp: { rust: { disabled: true } } } },
+  ]
+  await mockStressTimeline(page, {
+    mcp: () => (state.empty ? [] : [{ name: "summary-mcp", status: { status: "connected" } }]),
+    plugins: () =>
+      state.empty
+        ? []
+        : [
+            { id: "builtin", source: { type: "builtin" }, features: {}, state: { status: "active" } },
+            {
+              id: "supermemory",
+              source: { type: "package", target: "opencode-supermemory" },
+              features: { server: true },
+              state: { status: "active" },
+            },
+            {
+              id: "broken-plugin",
+              source: { type: "local", path: "/broken.ts" },
+              features: { server: true },
+              state: { status: "failed", error: "Plugin failed to activate" },
+            },
+            ...(state.extra
+              ? [
+                  {
+                    id: "daytona",
+                    source: { type: "package", target: "opencode-daytona" },
+                    features: {},
+                    state: { status: "active" },
+                  },
+                ]
+              : []),
+          ],
+    skills: () =>
+      state.empty
+        ? []
+        : [
+            { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
+            { id: "review-animations", name: "review-animations", path: "/skills/review/SKILL.md", content: "Review" },
+          ],
+    configEntries: lsp,
   })
   await page.route(
     (url) => url.pathname === "/api/plugin",
@@ -272,12 +299,21 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   }
 
   state.extra = true
-  state.skills = false
   await open("Plugins")
   await expect(menu("Plugins").getByText("daytona", { exact: true })).toBeVisible()
-  await open("Skills")
-  await expect(menu("Skills").getByText("No skills configured", { exact: true })).toBeVisible()
-  await expectRefreshKeeps(page, "Skills", "/api/skill", "No skills configured")
+
+  state.empty = true
+  lsp.length = 0
+  for (const service of [
+    { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured" },
+    { name: "Plugins", path: "/api/plugin", empty: "No plugins configured" },
+    { name: "Skills", path: "/api/skill", empty: "No skills configured" },
+    { name: "LSP", path: "/api/config", empty: "No LSP servers configured" },
+  ]) {
+    await open(service.name)
+    await expect(menu(service.name).getByText(service.empty, { exact: true })).toBeVisible()
+    await expectRefreshKeeps(page, service.name, service.path, service.empty)
+  }
   expect(warnings).toEqual([])
 })
 
