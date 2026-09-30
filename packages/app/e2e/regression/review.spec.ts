@@ -1,5 +1,6 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Locator, type Page } from "@playwright/test"
+import { base64Encode } from "@opencode/util/encode"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -406,6 +407,54 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await page.keyboard.press("Control+w")
   await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0)
   await expect(review).toHaveAttribute("aria-selected", "true")
+})
+
+test("keeps the review state a session stored before extensions", async ({ page }) => {
+  const directory = "C:/OpenCode/ReviewLegacy"
+  await openSession(page, {
+    name: "ReviewLegacy",
+    vcs: { current: "feature", default: "dev" },
+    vcsDiff: ({ mode }) =>
+      mode === "branch" ? [fileDiff("alpha.ts"), fileDiff("beta.ts")] : [fileDiff("alpha.ts"), fileDiff("gamma.ts")],
+    seed: {
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionView: {
+            [`local\u0000${base64Encode(directory)}/ses_reviewlegacy`]: {
+              scroll: {},
+              reviewMode: "branch",
+              reviewFile: "beta.ts",
+              reviewOpen: ["beta.ts"],
+            },
+          },
+        },
+      },
+    },
+  })
+  const mode = (name: string) => page.getByRole("button", { name, exact: true })
+  const changes = page.getByRole("tablist", { name: "Session view", exact: true }).getByRole("tab", { name: "Changes" })
+  const trigger = (file: string) =>
+    page
+      .locator(`[data-component="session-review"] [data-file="${file}"]`)
+      .getByRole("button", { name: file, exact: true })
+
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await expect(mode("Branch changes")).toBeVisible()
+  await expect(page.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("beta.ts")
+  // The narrow review lists every file and expands the ones left open.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await changes.click()
+  await expect(trigger("beta.ts")).toHaveAttribute("aria-expanded", "true")
+  await expect(trigger("alpha.ts")).toHaveAttribute("aria-expanded", "false")
+
+  // The copy happens once: a later change survives a reload, although the old state is still stored.
+  await mode("Branch changes").click()
+  await page.getByRole("option", { name: "Git changes" }).click()
+  await expect(trigger("gamma.ts")).toBeVisible()
+  await page.reload()
+  await changes.click()
+  await expect(mode("Git changes")).toBeVisible()
+  await expect(trigger("gamma.ts")).toBeVisible()
 })
 
 for (const direction of ["ltr", "rtl"] as const) {

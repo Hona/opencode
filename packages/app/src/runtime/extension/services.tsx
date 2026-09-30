@@ -13,6 +13,7 @@ import {
   type Owner,
 } from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
+import { Predicate } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
 import {
@@ -97,14 +98,13 @@ export function createExtensionServices() {
       const location = scope.session.location
       if (!location) throw new Error("Session storage requires a session location")
       connected.scoped(name)
+      const server = connected.scope(scope.session.server.id)
+      const directory = base64Encode(location.directory)
       return {
-        ...Persist.serverSession(
-          connected.scope(scope.session.server.id),
-          base64Encode(location.directory),
-          scope.session.id,
-          name,
-        ),
-        copyFrom,
+        ...Persist.serverSession(server, directory, scope.session.id, name),
+        copyFrom:
+          sessionCopy(from, SessionStateKey.from(server, SessionRouteKey.fromRoute(directory, scope.session.id))) ??
+          copyFrom,
       }
     }
     if (!scope.directory) return { ...Persist.serverGlobal(connected.scope(scope.server), name), copyFrom }
@@ -594,4 +594,18 @@ export function createExtensionAttachment(services: ExtensionServices) {
 function requireAttached(value: Attached | undefined) {
   if (!value) throw new Error("The app interface is not mounted")
   return value
+}
+
+/** Imports a session's entry from an app key that holds every session's state under one field. */
+function sessionCopy(from: StorageFrom, session: SessionStateKey) {
+  if (typeof from !== "object" || !from.sessions) return
+  const field = from.sessions
+  return {
+    key: from.key,
+    storage: Persist.global(from.key).storage,
+    pick: (value: unknown) => {
+      const sessions = Predicate.isObject(value) ? value[field] : undefined
+      return from.pick(Predicate.isObject(sessions) ? sessions[session] : undefined)
+    },
+  }
 }

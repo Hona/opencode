@@ -57,7 +57,17 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
   const saved = createMemo(
     on(scope, (key) =>
       key
-        ? storage.store("session", { schema: SessionState, initial: { open: [] }, scope: { session: view } })
+        ? storage.store("session", {
+            schema: SessionState,
+            initial: { open: [] },
+            scope: { session: view },
+            from: {
+              key: "layout",
+              sessions: "sessionView",
+              pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
+                entry && { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen },
+            },
+          })
         : undefined,
     ),
   )

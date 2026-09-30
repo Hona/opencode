@@ -76,6 +76,11 @@ const sessionTabsSchema = Persistence.struct({
 })
 const sessionViewSchema = Persistence.struct({
   scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
+  // Review state from before extensions. An extension copies each session's entry out once; nothing writes these
+  // any more, and they stay so layout rewrites cannot drop a session's entry before it is copied.
+  reviewOpen: Schema.optional(Persistence.array(Schema.String)),
+  reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
+  reviewFile: Schema.optional(Schema.String),
   pendingMessage: Schema.optional(Schema.String),
   pendingMessageAt: Schema.optional(Schema.Finite),
 })

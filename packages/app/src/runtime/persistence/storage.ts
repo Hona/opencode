@@ -25,10 +25,10 @@ type PersistTarget = {
   workspaceStorageAliases?: string[]
   previousKey?: string
   /**
-   * Imports an older key once, from this storage or else the default storage (e.g. `settings.v3`).
-   * With pick, only that part is copied and the source stays.
+   * Imports an older key once, from this storage (or `storage` when given) or else the default storage
+   * (e.g. `settings.v3`). With pick, only that part is copied and the source stays.
    */
-  copyFrom?: { key: string; pick?: (value: unknown) => unknown }
+  copyFrom?: { key: string; storage?: string; pick?: (value: unknown) => unknown }
   key: string
 }
 
@@ -528,7 +528,15 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
       const sources: RelocationSource<SyncStorage>[] = [
         ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
         ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
-        ...(config.copyFrom ? [{ storage: current, key: config.copyFrom.key, pick: config.copyFrom.pick }] : []),
+        ...(config.copyFrom
+          ? [
+              {
+                storage: config.copyFrom.storage ? localStorageWithPrefix(config.copyFrom.storage) : current,
+                key: config.copyFrom.key,
+                pick: config.copyFrom.pick,
+              },
+            ]
+          : []),
         ...(config.copyFrom && config.storage
           ? [{ storage: localStorageDirect(), key: config.copyFrom.key, pick: config.copyFrom.pick }]
           : []),
@@ -571,7 +579,17 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
         storage: isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name),
       })),
       previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
-      config.copyFrom ? { storage: current, key: config.copyFrom.key, pick: config.copyFrom.pick } : undefined,
+      config.copyFrom
+        ? {
+            storage: config.copyFrom.storage
+              ? isDesktop
+                ? platform.storage?.(config.copyFrom.storage)
+                : localStorageWithPrefix(config.copyFrom.storage)
+              : current,
+            key: config.copyFrom.key,
+            pick: config.copyFrom.pick,
+          }
+        : undefined,
       config.copyFrom && config.storage
         ? {
             storage: isDesktop ? platform.storage?.() : localStorageDirect(),

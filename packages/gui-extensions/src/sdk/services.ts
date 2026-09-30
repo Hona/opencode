@@ -248,7 +248,17 @@ export interface Storage {
        * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal").
        * With pick, only the picked part of the old JSON is copied and the old key stays for its other owners.
        */
-      readonly from?: string | { readonly key: string; pick(value: unknown): unknown }
+      readonly from?:
+        | string
+        | {
+            readonly key: string
+            /**
+             * For session scope: `key` is an app key (e.g. "layout") whose field `sessions` holds every session's
+             * state by the host's session key. pick receives only this session's entry, or undefined.
+             */
+            readonly sessions?: string
+            pick(value: unknown): unknown
+          }
     },
   ): readonly [Store<S["Type"]>, (mutation: (draft: S["Type"]) => void) => void, Accessor<boolean>]
   /** Window-local and kept across extension reloads. */
