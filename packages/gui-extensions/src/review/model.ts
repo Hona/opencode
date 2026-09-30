@@ -60,8 +60,9 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
     ),
   )
   const update = (mutation: (draft: (typeof SessionState)["Type"]) => void) => saved()?.[1](mutation)
-  const mode = () => saved()?.[0].mode ?? "git"
-  const selectedFile = () => saved()?.[0].file
+  // Memos, so the store a session switch reopens does not recompute the diffs, kinds and tree rows it feeds.
+  const mode = createMemo(() => saved()?.[0].mode ?? "git")
+  const selectedFile = createMemo(() => saved()?.[0].file)
 
   // After a session switch the review renders a frame later, so the switch paints first.
   const generation = { value: 0, disposed: false }
