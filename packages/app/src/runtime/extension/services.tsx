@@ -112,7 +112,10 @@ export function createExtensionServices() {
             URL.revokeObjectURL(url)
             return true
           },
-          open: (url) => platform.openExternal(url),
+          open(url) {
+            if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:") return platform.openLocalFile(url)
+            platform.openExternal(url)
+          },
         }) satisfies System,
     },
     {

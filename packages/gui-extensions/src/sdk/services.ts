@@ -209,6 +209,7 @@ export interface Storage {
 export interface System {
   copy(text: string): Promise<void>
   save(file: { readonly name: string; readonly content: string }): Promise<boolean>
+  /** Opens a URL in the system browser; desktop opens file:// URLs with the default app. */
   open(url: string): void
 }
 
