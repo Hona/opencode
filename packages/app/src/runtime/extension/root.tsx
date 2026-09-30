@@ -48,6 +48,7 @@ export function ExtensionRoot(props: ParentProps) {
     loaded() ? new Set(installed.list.filter((item) => !item.enabled).map((item) => item.id)) : undefined,
   )
   const os = platform.platform === "desktop" ? platform.os : undefined
+  // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
   const definitions = builtins.filter((definition) => !definition.os || (!!os && definition.os.includes(os)))
   return (
     <ServicesContext.Provider value={services}>

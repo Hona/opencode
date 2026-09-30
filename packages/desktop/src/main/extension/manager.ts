@@ -7,7 +7,11 @@ import { extension, extensionFile } from "../storage/schema"
 import { ExtensionError } from "./error"
 import { decodeManifest } from "./manifest"
 
-/** Enable state and installed archives, committed together in the desktop database. */
+/**
+ * Enable state and installed archives, committed together in the desktop database. Archive installs are groundwork for
+ * `.ocdx` extensions: an installed archive runs its main entry only, the renderer loads built-ins until that format
+ * ships renderer bundles, and packaged builds refuse the manager until installs have a trust model.
+ */
 export function createManager(db: Database, reserved: (id: string) => boolean) {
   const row = (id: string) => db.select().from(extension).where(eq(extension.id, id)).get()
   return {
