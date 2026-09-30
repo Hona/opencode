@@ -27,7 +27,7 @@ import { artifactKind, resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import { FileTree } from "./contract"
 import { FileVisual } from "./label"
-import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import { encodeFilePath, fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
 
 const OPEN = "open"
@@ -180,8 +180,9 @@ const setup: Setup = (ctx) => {
     region: "side",
     legacy: { "open-file": OPEN },
     // Older builds stored some files as absolute paths; one file is one tab once the workspace root is known.
+    // Resolves the stored URL once and encodes the result, so an encoded name such as a%23b.txt stays one file.
     normalize: (id, session) =>
-      isFileTab(id) && session.file.ready() ? fileTabId(session.file, fileTabPath(session.file, id)) : id,
+      isFileTab(id) && session.file.ready() ? `//${encodeFilePath(fileTabPath(session.file, id))}` : id,
     mobile: {
       get title() {
         return ctx.t("mobile.title")

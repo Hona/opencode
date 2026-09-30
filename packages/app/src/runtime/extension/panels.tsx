@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, For, on, onMount, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, For, on, onMount, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -31,6 +31,7 @@ type Tabs = Accessor<{
   setAll(all: string[]): void
   setActive(tab: string | undefined): void
   close(tab: string): void
+  remap(rewrite: (tab: string) => string): void
 }>
 
 export type RegionEntry = {
@@ -105,16 +106,8 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
       if (!item?.value.normalize) return key
       return panelKey(item.extension, item.value.normalize(key.slice(item.extension.length + 1), input.view))
     }
-    const all = stored()
-    const next = Array.from(new Set(all.map(rewrite)))
-    const selected = input.tabs().active()
-    const active = selected ? rewrite(selected) : selected
-    const changed = next.length !== all.length || next.some((key, index) => key !== all[index])
-    if (!changed && active === selected) return
-    batch(() => {
-      if (changed) input.tabs().setAll(next)
-      if (active !== selected) input.tabs().setActive(active)
-    })
+    // remap reads the stored tabs and writes nothing once every key is canonical, so this settles in one rerun.
+    input.tabs().remap(rewrite)
   })
 
   // Transient panels are not restored: their stored keys leave once the panel stops listing them.

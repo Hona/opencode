@@ -16,8 +16,6 @@ import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./he
 import { requireServerKey } from "@/shell/routes/session"
 import { closeSessionTab, openSessionTab, previewSessionTab } from "./session-tabs"
 
-export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
-
 const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
@@ -552,6 +550,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               }
               const preview = ephemeral.sessionTabPreview[session]
               if (preview && !all.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+            })
+          },
+          /** Rewrites every stored key, the selected tab and the preview together; keys that collapse into one dedupe. */
+          remap(rewrite: (tab: string) => string) {
+            const session = key()
+            const current = store.sessionTabs[session]
+            if (!current) return
+            const all = Array.from(new Set(current.all.map(rewrite)))
+            const active = current.active === undefined ? undefined : rewrite(current.active)
+            const preview = ephemeral.sessionTabPreview[session]
+            const nextPreview = preview === undefined ? undefined : rewrite(preview)
+            const changed = all.length !== current.all.length || all.some((tab, index) => tab !== current.all[index])
+            if (!changed && active === current.active && nextPreview === preview) return
+            batch(() => {
+              setStore("sessionTabs", session, { ...current, all, active })
+              setEphemeral("sessionTabPreview", session, nextPreview)
             })
           },
           async open(tab: string) {
