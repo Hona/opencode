@@ -188,7 +188,19 @@ test.describe("timeline history", () => {
       const idle = status("idle")
       // Idle ends the working turn, so its last text part shows the response actions. A completed step changes
       // nothing visible while the session is still busy; the idle that follows it proves both were projected.
-      const actions = page.locator(`[data-timeline-part-id="${last.id}:text:0"] [data-slot="text-part-copy-wrapper"]`)
+      const actionsSelector = `[data-timeline-part-id="${last.id}:text:0"] [data-slot="text-part-copy-wrapper"]`
+      const actions = page.locator(actionsSelector)
+      // The final state: the response actions after a completion, the Interrupted notice after an interruption.
+      const spacer = { selector: '[data-timeline-row="bottom-spacer"]' }
+      await page.evaluate(
+        (final) => window.__historyRootProbe!.settle(final),
+        scenario.error
+          ? {
+              attached: [],
+              visible: [spacer, { selector: '[data-slot="session-timeline-notice-label"]', text: "Interrupted" }],
+            }
+          : { attached: [actionsSelector], visible: [spacer] },
+      )
       for (const event of scenario.idleFirst ? [idle, message] : [message, idle]) {
         await timeline.send(event)
         if (event === idle) {
@@ -204,6 +216,8 @@ test.describe("timeline history", () => {
       await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
       await expect(page.locator('[data-timeline-row="bottom-spacer"]')).toBeVisible()
       if (scenario.error) await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
+      // The DOM can settle before the sampler's next frame; `hidden` is complete once a sample has shown the final state.
+      await expect.poll(() => page.evaluate(() => window.__historyRootProbe!.settled)).toBe(true)
       expect(await page.evaluate(() => window.__historyRootProbe!.hidden)).toBe(false)
     })
   }
@@ -305,7 +319,7 @@ test.describe("timeline history", () => {
 
 declare global {
   interface Window {
-    __historyRootProbe?: { arm(): string[]; hidden: boolean }
+    __historyRootProbe?: { arm(): string[]; hidden: boolean; settle(final: ProbeFinal): void; settled: boolean }
   }
 }
 
@@ -396,8 +410,24 @@ function rootHistory() {
   }).flat()
 }
 
-// Samples every painted frame and records whether any part that was visible when armed disappeared.
+// A state the probe waits to see painted: every `attached` selector matches, and every `visible` entry matches a
+// visible element (with exactly `text`, when set).
+type ProbeFinal = { attached: string[]; visible: { selector: string; text?: string }[] }
+
+// Samples every painted frame and records whether any part that was visible when armed disappeared. After `settle`,
+// it also records (`settled`) the first sample that shows the final state, so `hidden` then covers that frame.
 function installVisibilityProbe() {
+  const shown = (element: Element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.width > 0 && rect.height > 0 && element.checkVisibility({ visibilityProperty: true })
+  }
+  const shows = (final: ProbeFinal) =>
+    final.attached.every((selector) => document.querySelector(selector)) &&
+    final.visible.every((entry) =>
+      [...document.querySelectorAll(entry.selector)].some(
+        (element) => shown(element) && (entry.text === undefined || element.textContent?.trim() === entry.text),
+      ),
+    )
   const visibleParts = () => {
     const viewport = document.querySelector("[data-timeline-virtual-content]")?.closest(".scroll-view__viewport")
     const view = viewport?.getBoundingClientRect()
@@ -413,11 +443,17 @@ function installVisibilityProbe() {
     armed: false,
     hidden: false,
     parts: [] as string[],
+    final: undefined as ProbeFinal | undefined,
+    settled: false,
     // Returns the parts that must stay visible.
     arm() {
       state.parts = visibleParts()
       state.armed = true
       return state.parts
+    },
+    settle(final: ProbeFinal) {
+      state.final = final
+      state.settled = false
     },
   }
   window.__historyRootProbe = state
@@ -425,6 +461,7 @@ function installVisibilityProbe() {
     if (state.armed) {
       const visible = new Set(visibleParts())
       if (state.parts.length === 0 || state.parts.some((partID) => !visible.has(partID))) state.hidden = true
+      if (state.final && !state.settled) state.settled = shows(state.final)
     }
     requestAnimationFrame(() => setTimeout(sample, 0))
   }

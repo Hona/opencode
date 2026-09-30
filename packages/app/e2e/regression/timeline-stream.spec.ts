@@ -1113,6 +1113,17 @@ test.describe("shell completion", () => {
         time: { created: 2, completed: 3 },
       }
       const state = { finished: false, requests: 0 }
+      // Larger than one server page (65,536 bytes), so the final output is read in two pages. The card shows its most
+      // recent 64 KiB.
+      const finished = `Checking project\n${Array.from({ length: 8_192 }, (_, index) => `step ${String(index + 1).padStart(5, "0")}\n`).join("")}Check finished\n`
+      const tail = finished.slice(-64 * 1024)
+      // Byte cursors of this shell's output reads.
+      const reads: number[] = []
+      page.on("request", (request) => {
+        const url = new URL(request.url())
+        if (url.pathname === `/api/shell/${background.id}/output`)
+          reads.push(Number(url.searchParams.get("cursor") ?? 0))
+      })
       const timeline = await setupTimeline(page, {
         viewport: { width: grouped ? 390 : 1400, height: 900 },
         settings: { shellToolPartsExpanded: !grouped },
@@ -1125,7 +1136,7 @@ test.describe("shell completion", () => {
         shellOutput: ({ id }) => {
           if (id !== background.id) return "Checking project\n"
           state.requests++
-          return state.finished ? "Checking project\nCheck finished\n" : "Checking project\n"
+          return state.finished ? finished : "Checking project\n"
         },
       })
       await page.clock.install()
@@ -1160,17 +1171,24 @@ test.describe("shell completion", () => {
       })
       await expect(shimmer).toHaveAttribute("data-active", "false")
       await expect(other).toHaveAttribute("data-active", "true")
-      await expect(card.locator('[data-slot="bash-result"]')).toHaveText("Checking project\nCheck finished")
+      await expect(card.locator('[data-slot="bash-result"]')).toHaveText(tail)
+      // The first page from the running output's cursor ends 65,536 bytes later; the second page starts there.
+      expect(reads).toContain(17 + 65_536)
       await expect(card.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
 
       const requests = state.requests
       await page.clock.fastForward(5_000)
       expect(state.requests).toBe(requests)
 
+      reads.length = 0
       await page.reload()
       if (grouped) await groupTrigger.click()
       await expect(shimmer).toHaveAttribute("data-active", "false")
       await expect(other).toHaveAttribute("data-active", "true")
+      // An expanded card reads the exited shell's final output from the start, again in two pages.
+      if (grouped) return
+      await expect(card.locator('[data-slot="bash-result"]')).toHaveText(tail)
+      expect(reads).toContain(65_536)
     })
   }
 

@@ -22,7 +22,8 @@ export interface MockServerConfig {
   // Background shell commands (`GET /api/shell`).
   shellCommands?: Resolvable<unknown[]>
   // All output a shell command has captured so far in `directory`, or undefined for an unknown command (404
-  // ShellNotFoundError). The mock pages it by the request's byte `cursor` and `limit`.
+  // ShellNotFoundError). The mock pages it like the server: from the request's byte `cursor`, at most `limit` bytes
+  // (default 65,536).
   shellOutput?: (input: { id: string; directory: string }) => string | undefined
   // Records `POST /api/experimental/fs/write` (attachment uploads), which answers the requested path.
   // Without it, writes answer 501 MockUnsupported.
@@ -864,8 +865,8 @@ function mockHandlers(
             const bytes = new TextEncoder().encode(output)
             const query = new URL(ctx.request.url, "http://localhost").searchParams
             const cursor = Math.min(Number(query.get("cursor") ?? 0), bytes.length)
-            const limit = query.get("limit")
-            const end = limit === null ? bytes.length : Math.min(bytes.length, cursor + Number(limit))
+            // The server answers at most one page (`Shell.output` defaults `limit` to 65,536 bytes).
+            const end = Math.min(bytes.length, cursor + Number(query.get("limit") ?? 65_536))
             return Effect.succeed({
               location: location(config, directory),
               data: {
