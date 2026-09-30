@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url"
-import type { Context } from "@opencode/gui-extensions/sdk"
+import type { Context, Dialogs } from "@opencode/gui-extensions/sdk"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
@@ -46,4 +46,50 @@ story("an async setup that resolves after the host unmounts releases everything 
     return { before, after: host.entries(point.id), cleaned }
   }, fixture)
   expect(result).toEqual({ before: 1, after: 0, cleaned: ["registered", "returned"] })
+})
+
+story("older loads neither set up nor fail over the replacement after reloads", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensionHost } = await import(fixture)
+    const host = mountExtensionHost()
+    const setups: string[] = []
+    host.reload()
+    host.reload()
+    host.load(() => void setups.push("first"), 0)
+    host.fail(1, new Error("second"))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    host.load(() => void setups.push("third"), 2)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const outcome = { setups, status: host.status() }
+    host.unmount()
+    return outcome
+  }, fixture)
+  expect(result).toEqual({ setups: ["third"], status: "active" })
+})
+
+story("a dialog service kept from before a reload opens and closes nothing under the replacement", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensionHost } = await import(fixture)
+    const host = mountExtensionHost()
+    const services: Dialogs[] = []
+    const setup = (ctx: Context) => void services.push(ctx.use({ kind: "host" as const, id: "dialog" }) as Dialogs)
+    const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+    const shown = (value: string) => !!document.body.textContent?.includes(value)
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    host.load(setup, 0)
+    await wait(20)
+    host.reload()
+    host.load(setup, 1)
+    await wait(20)
+    const [stale, fresh] = services
+    stale.push(text("stale dialog"))
+    fresh.push(text("fresh dialog"))
+    await wait(50)
+    stale.close()
+    await wait(300)
+    const outcome = { stale: shown("stale dialog"), fresh: shown("fresh dialog") }
+    host.unmount()
+    return outcome
+  }, fixture)
+  expect(result).toEqual({ stale: false, fresh: true })
 })

@@ -1,5 +1,4 @@
 import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
@@ -7,7 +6,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { renderSVG } from "uqr"
-import { System, useExtension, type RemoteClient } from "../sdk"
+import { Dialogs, System, useExtension, type RemoteClient } from "../sdk"
 import type { Pairing } from "./contract"
 
 type Client = RemoteClient<typeof Pairing.spec>
@@ -18,7 +17,8 @@ export default function PairingPage(props: { pairing: Accessor<Client | undefine
 
 function SettingsPairing(props: { client: Client }) {
   const ctx = useExtension()
-  const dialog = useDialog()
+  // The extension's dialogs close with it, so disabling pairing also stops the dialog's code polling.
+  const dialogs = ctx.use(Dialogs)
   const queryClient = useQueryClient()
   const local = useQuery(() => ({
     queryKey: [ctx.id, "local"],
@@ -67,7 +67,7 @@ function SettingsPairing(props: { client: Client }) {
                 variant="neutral"
                 disabled={!localHost()}
                 onClick={() =>
-                  dialog.push(() => (
+                  dialogs.push(() => (
                     <DialogPairing title={ctx.t("connection")} host={localHost()!} code={() => props.client.code()} />
                   ))
                 }

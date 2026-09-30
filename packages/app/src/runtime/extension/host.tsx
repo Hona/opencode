@@ -42,7 +42,10 @@ import { useLanguage } from "@/runtime/i18n/language"
 type Entry = { key: string; point: string; extension: string; value: Accessor<unknown> }
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
 type Instance = { definition: Definition; context: Context; dispose: () => void }
-type Bound = readonly { readonly token: Host<unknown>; create(extension: string, owner: Owner | null): unknown }[]
+type Bound = readonly {
+  readonly token: Host<unknown>
+  create(extension: string, owner: Owner | null, context: Context): unknown
+}[]
 export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
 
 const HostContext = createContext<ReturnType<typeof createHost>>()
@@ -87,6 +90,9 @@ function createHost(input: {
   const sequence = { value: 0 }
   // An entry that finishes loading after the host is gone must not create a root nothing disposes.
   const lifetime = { disposed: false }
+  // The current load of each extension. Deactivating drops it and a reload replaces it, so an older load
+  // neither sets up nor reports a failure over its replacement.
+  const loads = new Map<string, object>()
 
   const items = <T,>(point: Point<T>) => {
     const existing = memos.get(point.id)
@@ -136,10 +142,10 @@ function createHost(input: {
   const dialog = useDialog()
   hosts.set(Dialogs.id, {
     token: Dialogs,
-    create: (extension): Dialogs => {
+    // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
+    create: (extension, _, context): Dialogs => {
       const open = (method: "show" | "push") => (render: () => JSX.Element) => {
-        const context = instances.get(extension)?.context
-        if (!context) return
+        if (context.signal.aborted) return
         const id = `extension:${extension}:${sequence.value++}`
         // Closes this dialog, not whichever is on top, when the extension goes away.
         const release = context.cleanup(() => dialog.close(id))
@@ -165,22 +171,34 @@ function createHost(input: {
           id,
         )
       }
-      return { show: open("show"), push: open("push"), close: () => dialog.close(), active: () => !!dialog.active }
+      return {
+        show: open("show"),
+        push: open("push"),
+        close: () => {
+          if (!context.signal.aborted) dialog.close()
+        },
+        active: () => !!dialog.active,
+      }
     },
   })
 
   const activate = async (definition: Definition) => {
     const load = definition.renderer
     if (!load) return
+    const attempt = {}
+    const current = () => loads.get(definition.id) === attempt
+    loads.set(definition.id, attempt)
     setState("status", definition.id, "loading")
     // The current language's catalog loads with the entry, so the first render is already translated.
     const [module, messages] = await Promise.all([
       load().catch((error: unknown) => {
-        fail(definition.id, error)
+        if (current()) fail(definition.id, error)
         return undefined
       }),
       loadMessages(definition.i18n, untrack(language.locale)),
     ])
+    if (!current()) return
+    loads.delete(definition.id)
     if (!module || lifetime.disposed) return
     if (input.disabled()?.has(definition.id) !== false || instances.has(definition.id)) return
     runWithOwner(owner, () =>
@@ -266,7 +284,7 @@ function createHost(input: {
           if (created.has(token.id)) return created.get(token.id)
           const service = hosts.get(token.id)
           if (!service) throw new Error(`Host service "${token.id}" is unavailable`)
-          const value = service.create(extension, root)
+          const value = service.create(extension, root, context)
           created.set(token.id, value)
           return value
         }
@@ -303,12 +321,14 @@ function createHost(input: {
             setState("entries", point, (list = []) => list.filter((entry) => entry.extension !== extension))
           })
         })
-        dispose()
+        // A throwing onCleanup in the extension's root must not stop the host disposing the rest.
+        release(dispose)
       },
     }
   }
 
   const deactivate = (id: string) => {
+    loads.delete(id)
     const instance = instances.get(id)
     if (!instance) return
     instances.delete(id)
@@ -357,6 +377,7 @@ function createHost(input: {
   })
   onCleanup(() => {
     lifetime.disposed = true
+    loads.clear()
     Array.from(instances.keys()).forEach(deactivate)
   })
 

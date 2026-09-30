@@ -78,6 +78,7 @@ type Instance = {
   messages: Messages
   dispose(): Promise<void>
 }
+type Launch = { stale: boolean }
 
 const os: OS = process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
 
@@ -108,7 +109,9 @@ export function createHost(input: {
   const services = new Map<string, { readonly extension: string; readonly impl: unknown }>()
   const remotes = new Map<string, Provider>()
   const active = new Map<string, Instance>()
-  const pending = new Map<string, Promise<void>>()
+  // The latest activation of each extension. Deactivating marks it stale, so it is never joined: the next
+  // activation waits for it to settle and release what it created, then starts afresh.
+  const launches = new Map<string, { readonly token: Launch; readonly settled: Promise<void> }>()
   const errors = new Map<string, string>()
   const reloads = new Map<string, number>()
   const closed = new Set<(win: BrowserWindow) => void>()
@@ -479,23 +482,31 @@ export function createHost(input: {
   }
 
   const activate = (id: string) => {
-    const running = pending.get(id)
-    if (running) return running
-    const task = launch(id).finally(() => pending.delete(id))
-    pending.set(id, task)
-    return task
+    const previous = launches.get(id)
+    if (previous && !previous.token.stale) return previous.settled
+    const token: Launch = { stale: false }
+    const settled = (previous?.settled ?? Promise.resolve())
+      .then(() => launch(id, token))
+      .finally(() => {
+        if (launches.get(id)?.token === token) launches.delete(id)
+      })
+    launches.set(id, { token, settled })
+    return settled
   }
 
-  const launch = async (id: string) => {
+  const launch = async (id: string, token: Launch) => {
     const load = loader(id)
-    if (!load || active.has(id) || !manager.enabled(id) || status.disposed) return
+    const current = () => !token.stale && manager.enabled(id) && !status.disposed
+    if (!load || active.has(id) || !current()) return
     errors.delete(id)
-    const loaded = await load().catch((error: unknown) => fail(id, error))
-    // Disabled, reloaded, or quitting while the code loaded.
-    if (!loaded || active.has(id) || !manager.enabled(id) || status.disposed) return
+    const loaded = await load().catch((error: unknown) => (token.stale ? undefined : fail(id, error)))
+    // Disabled, reloaded, replaced, or quitting while the code loaded: it belongs to an older revision.
+    if (!loaded || active.has(id) || !current()) return
     const instance = createInstance(id, loaded.i18n)
     active.set(id, instance)
     instance.messages = await resolveMessages(loaded.i18n).catch(() => instance.messages)
+    // Deactivated while the catalog loaded: the instance is already disposed, so its setup never runs.
+    if (token.stale) return
     const outcome = await Promise.resolve()
       .then(() => loaded.setup(instance.context))
       .then(
@@ -503,14 +514,18 @@ export function createHost(input: {
         (error: unknown) => ({ ok: false as const, error }),
       )
     if (outcome.ok) {
+      // A setup that settles after its instance was disposed releases its cleanup at once.
       if (typeof outcome.cleanup === "function") instance.context.cleanup(outcome.cleanup)
       return
     }
+    if (active.get(id) !== instance) return
     fail(id, outcome.error)
-    if (active.get(id) === instance) await deactivate(id)
+    await deactivate(id)
   }
 
   const deactivate = async (id: string) => {
+    const launching = launches.get(id)
+    if (launching) launching.token.stale = true
     const instance = active.get(id)
     if (!instance) return
     active.delete(id)
