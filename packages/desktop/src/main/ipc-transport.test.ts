@@ -43,6 +43,17 @@ describe("desktop RPC transport", () => {
     await runtime.dispose()
   })
 
+  test("omitting undefined fields leaves bytes and defined values alone", () => {
+    const data = new Uint8Array([0, 255, 2])
+    expect(omitUndefined(data)).toBe(data)
+    // Strict equality: a kept `drop: undefined` key must fail the match.
+    expect(omitUndefined({ data, nested: [{ keep: null, drop: undefined }], count: 0 })).toStrictEqual({
+      data,
+      nested: [{ keep: null }],
+      count: 0,
+    })
+  })
+
   test("keeps multiple renderer ports independent", async () => {
     let received: unknown
     const handlers = TestRpcs.toLayer(

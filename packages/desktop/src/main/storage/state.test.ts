@@ -56,10 +56,14 @@ describe("state store", () => {
     store.set("w2", "tabs", "[]")
     store.flush()
     store.set("w1", "recent", "{}")
+    store.set("w2", "recent", "{}")
     store.clear("w1")
     expect(store.get("w1", "recent")).toBeNull()
     store.flush()
-    expect(rows(db)).toEqual([{ name: "w2", key: "tabs", value: "[]" }])
+    expect(rows(db)).toEqual([
+      { name: "w2", key: "recent", value: "{}" },
+      { name: "w2", key: "tabs", value: "[]" },
+    ])
   })
 
   test("a failed flush keeps every acknowledged write until a later flush succeeds", () => {

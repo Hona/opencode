@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { createDesktopFiles } from "./files"
 
-function fileApi(events: string[]) {
+function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
   return {
+    openDirectoryPicker: async () => null,
     openFilePicker: async () => ({
       token: "selection",
       files: [
@@ -17,10 +18,31 @@ function fileApi(events: string[]) {
     releasePickedFiles: async (token: string) => {
       events.push(`release:${token}`)
     },
-  } as Parameters<typeof createDesktopFiles>[0]
+    getPathForFile: () => "fallback",
+    saveFile: async () => false,
+    openExternal: () => {},
+    openBrowser: async () => true,
+    openLocalFile: () => {},
+    resolveAppPath: async () => null,
+    openPath: async () => undefined,
+    revealPath: async () => false,
+    readClipboardImage: async () => null,
+    writeClipboardText: async (text: string) => {
+      events.push(`clipboard:${text}`)
+    },
+  }
 }
 
 describe("desktop attachment files", () => {
+  test("returns the native browser launch result and forwards clipboard text", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles({ ...fileApi(events), openBrowser: async () => false }, "macos")
+
+    expect(await files.openBrowser("https://opencode.ai/console")).toBe(false)
+    await files.writeClipboardText("ses_123")
+    expect(events).toEqual(["clipboard:ses_123"])
+  })
+
   test("reads selected files sequentially and releases the token", async () => {
     const events: string[] = []
     const files = createDesktopFiles(fileApi(events), "windows")

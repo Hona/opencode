@@ -77,18 +77,20 @@ test("trims external dependencies without excluding runtime files", async () => 
   for (const prefix of ["node_modules/", "node_modules/parent/node_modules/"]) {
     const included = (file: string, stats = statSync(import.meta.filename)) =>
       filter(path.join(import.meta.dirname, prefix, file), stats)
+    // One file for each excluded pattern, including each brace alternative.
     for (const file of [
       "@zip.js/zip.js/dist/zip.js",
-      "@zip.js/zip.js/index.cjs",
-      "unrelated/dist/index.d.ts",
-      "unrelated/dist/index.d.cts",
-      "unrelated/dist/index.d.ts.map",
-      "unrelated/dist/index.js.map",
-      "js-yaml/dist/js-yaml.mjs.map",
+      ...["index.cjs", "index.min.js", "index-fflate.js", "deno.json", "eslint.config.mjs"].map(
+        (name) => `@zip.js/zip.js/${name}`,
+      ),
+      ...["d.ts", "d.cts", "d.mts", "d.ts.map", "d.cts.map", "d.mts.map", "js.map", "cjs.map", "mjs.map"].map(
+        (extension) => `unrelated/dist/index.${extension}`,
+      ),
       "ajv/lib/core.ts",
       "ajv-formats/src/formats.ts",
       "js-yaml/dist/js-yaml.js",
       "js-yaml/dist/js-yaml.min.js",
+      "js-yaml/dist/js-yaml.mjs.map",
       "js-yaml/bin/js-yaml.js",
     ]) {
       expect(included(file)).toBe(false)
@@ -97,6 +99,10 @@ test("trims external dependencies without excluding runtime files", async () => 
       "@zip.js/zip.js/index.js",
       "@zip.js/zip.js/lib/z-worker-inline.js",
       "electron-updater/out/main.js",
+      "electron-updater/out/MacUpdater.js",
+      "electron-updater/out/NsisUpdater.js",
+      "electron-updater/out/providers/GitHubProvider.js",
+      "builder-util-runtime/out/httpExecutor.js",
       "ajv/dist/ajv.js",
       "ajv/dist/refs/json-schema-draft-07.json",
       "ajv-formats/dist/formats.js",

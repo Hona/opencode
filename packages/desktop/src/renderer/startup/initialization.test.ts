@@ -11,9 +11,11 @@ function failure(error: unknown) {
 
 describe("desktop renderer initialization", () => {
   test("throws the original initialization error, marked as a local server startup, before rendering", () => {
-    const error = new Error("sidecar startup failed")
+    const error = new Error("Cannot migrate session_message projections")
     expect(failure(error)).toBe(error)
     expect(error).toHaveProperty("localServerStartup", true)
+    // The RPC error text reaches the error screen unchanged.
+    expect(error.message).toBe("Cannot migrate session_message projections")
     // A falsy error is still an error.
     const empty = failure("")
     expect(empty).toBeInstanceOf(Error)

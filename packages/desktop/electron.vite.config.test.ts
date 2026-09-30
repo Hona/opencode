@@ -10,13 +10,17 @@ const load = (command: "build" | "serve") =>
     { command, mode: command === "build" ? "production" : "development" },
     `${import.meta.dirname}/electron.vite.config.ts`,
   )
+// Bundled into the main process, so the manifest must not also ship them as external packages.
+const bundled = ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]
 
-test("renderer config previews onboarding only in development and ships sourcemaps and public assets", async () => {
+test("minifies only builds, previews onboarding only in development, and ships sourcemaps and public assets", async () => {
   const previous = process.env.OPENCODE_TEST_ONBOARDING
   try {
     process.env.OPENCODE_TEST_ONBOARDING = "1"
     for (const command of ["build", "serve"] as const) {
       const result = await load(command)
+      for (const target of [result.config.main, result.config.preload, result.config.renderer])
+        expect(target?.build?.minify).toBe(command === "build")
       expect(result.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe(
         JSON.stringify(command === "serve"),
       )
@@ -39,11 +43,7 @@ test("renderer config previews onboarding only in development and ships sourcema
 })
 
 test("bundles one Effect runtime and Drizzle while keeping native dependencies external", async () => {
-  const result = await load("build")
-  if (!result.config.main) throw new Error("Missing main-process build configuration")
-  const bundled = result.config.main.build?.externalizeDeps
-  // A bundled dependency listed in the manifest would ship a second, external copy.
-  for (const name of typeof bundled === "object" ? (bundled.exclude ?? []) : []) {
+  for (const name of bundled) {
     expect(Object.keys(pkg.dependencies)).not.toContain(name)
     expect(Object.keys(pkg.optionalDependencies)).not.toContain(name)
   }
@@ -55,6 +55,8 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
     "@lydell/node-pty-win32-arm64",
     "@lydell/node-pty-win32-x64",
   ])
+  const result = await load("build")
+  if (!result.config.main) throw new Error("Missing main-process build configuration")
   const config = await new MainConfigFactory(
     result.config.main,
     { configFile: false, mode: "production" },
@@ -71,7 +73,7 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
   expect(chunks.every((chunk) => !chunk.fileName.includes("/"))).toBe(true)
   const imports = chunks.flatMap((chunk) => [...chunk.imports, ...chunk.dynamicImports])
   const modules = chunks.flatMap((chunk) => Object.keys(chunk.modules))
-  for (const name of ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]) {
+  for (const name of bundled) {
     expect(imports.filter((id) => id === name || id.startsWith(`${name}/`))).toEqual([])
     expect(modules.some((id) => id.includes(`/node_modules/${name}/`))).toBe(true)
   }
