@@ -164,9 +164,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
 
 // The service port is the lock that keeps two services off one database: a contender that cannot bind
 // it waits for the sibling holding it to register, then exits. Some ports are held where no sibling can
-// be: reserved by the OS (Hyper-V excluded ranges refuse connections, and Bun reports them as
-// EADDRINUSE) or forwarded from a WSL distro. Every contender skips those in the same order, so
-// contenders still meet at the first port that can actually be bound.
+// be: reserved by the OS (Bun reports Hyper-V excluded ranges as EADDRINUSE), a stale WSL forward, or a
+// running WSL distro's listener. Every contender skips those in the same order, so contenders still
+// meet at the first port that can actually be bound.
 const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
   readonly options: DiscoverOptions
   readonly hostname: string
@@ -187,7 +187,7 @@ const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
       return result.success
     }
     if (!bindConflict(result.failure)) return yield* Effect.fail(result.failure)
-    const foreign = !(yield* accepting(input.hostname, port)) || (yield* wsl).includes(port)
+    const foreign = (yield* unanswered(input.hostname, port)) || (yield* wsl).includes(port)
     if (!foreign && (yield* recognizeIncumbent(input.options, input.hostname, port))) return undefined
     if (!input.movable)
       return yield* Effect.fail(
@@ -226,18 +226,22 @@ function bindConflict(error: unknown) {
   return code === "EADDRINUSE" || code === "EACCES"
 }
 
-// A sibling accepts connections as soon as it binds, so a port nobody accepts on is reserved, not held.
-function accepting(hostname: string, port: number) {
+// A sibling answers HTTP as soon as it binds. A reserved port refuses the connection, and a stale WSL
+// forward accepts it then closes without answering; neither can be a sibling. Silence is not proof, so
+// a listener too busy to answer still counts as a possible sibling.
+function unanswered(hostname: string, port: number) {
   return Effect.callback<boolean>((resume) => {
     const host = hostname === "0.0.0.0" ? "127.0.0.1" : hostname === "::" ? "::1" : hostname
-    const socket = connect({ host, port, timeout: 1_000 })
+    const socket = connect({ host, port })
     const settle = (value: boolean) => {
-      socket.destroy()
+      socket.removeAllListeners().destroy()
       resume(Effect.succeed(value))
     }
-    socket.once("connect", () => settle(true))
-    socket.once("error", () => settle(false))
-    socket.once("timeout", () => settle(false))
+    socket.setTimeout(1_000, () => settle(false))
+    socket.once("connect", () => socket.write(`GET /api/info HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`))
+    socket.once("data", () => settle(false))
+    socket.once("error", () => settle(true))
+    socket.once("close", () => settle(true))
     return Effect.sync(() => socket.destroy())
   })
 }
