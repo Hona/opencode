@@ -80,12 +80,6 @@ export function applyProviderMetricEvent(state: ProviderMetricState, event: Prov
   state.latest = attemptMetrics(state.attempt)
 }
 
-export function foldProviderMetrics(events: readonly ProviderMetricEvent[]) {
-  const state: ProviderMetricState = {}
-  events.forEach((event) => applyProviderMetricEvent(state, event))
-  return state.latest
-}
-
 /**
  * Baseline from already-loaded history. Text parts carry no start timestamp yet, so TTFT, TTFA,
  * and TPS stay unavailable for text-first requests until a live request supplies them.

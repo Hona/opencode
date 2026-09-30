@@ -1,20 +1,15 @@
-import { useIsRouting, useLocation, useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, on, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { useGlobal } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
-import { base64Encode } from "@opencode/util/encode"
+import { App, Native, Sessions, useExtension } from "../sdk"
 import {
   applyProviderMetricEvent,
   isProviderMetricEvent,
   projectedProviderMetrics,
   type ProviderMetrics,
   type ProviderMetricState,
-} from "./provider-metrics"
+} from "./metrics"
 
 type Mem = Performance & {
   memory?: {
@@ -176,13 +171,11 @@ function ToggleCell(props: {
   )
 }
 
-export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}) {
-  const language = useLanguage()
-  const platform = usePlatform()
-  const global = useGlobal()
-  const params = useParams<{ serverKey?: string; id?: string }>()
-  const location = useLocation()
-  const routing = useIsRouting()
+export default function DebugBar(props: { diagnostics?: boolean; inline?: boolean }) {
+  const ctx = useExtension()
+  const app = ctx.use(App)
+  const native = ctx.use(Native)
+  const sessions = ctx.use(Sessions)
   const [state, setState] = createStore({
     cls: undefined as number | undefined,
     delay: undefined as number | undefined,
@@ -209,30 +202,27 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
 
   const target = createMemo(
     () => {
-      if (!params.serverKey || !params.id) return
-      const connection = global.servers
-        .list()
-        .find((item) => base64Encode(ServerConnection.key(item)) === params.serverKey)
-      if (!connection) return
-      return { ctx: global.ensureServerCtx(connection), id: params.id }
+      const session = sessions.current()
+      if (!session?.id) return
+      return { server: session.server, data: session.server.data, id: session.id }
     },
     undefined,
-    { equals: (a, b) => a?.ctx === b?.ctx && a?.id === b?.id },
+    { equals: (a, b) => a?.data === b?.data && a?.id === b?.id },
   )
   // History comes from the already-loaded message projection; live requests refine it in place.
   const projected = createMemo(() => {
     const current = target()
     if (!current) return
-    return projectedProviderMetrics(current.ctx.data.session.message.list(current.id))
+    return projectedProviderMetrics(current.data.session.message.list(current.id))
   })
   const metrics = () => state.live ?? projected()
 
   // Missed events during an outage are never replayed; the refreshed projection must win.
   createEffect(
     on(
-      () => target()?.ctx.sdk.connection.status(),
-      (status) => {
-        if (status !== "connected") setState("live", undefined)
+      () => target()?.server.connected,
+      (connected) => {
+        if (!connected) setState("live", undefined)
       },
       { defer: true },
     ),
@@ -244,16 +234,16 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
       if (!current) return
       const accumulator: ProviderMetricState = {}
       onCleanup(
-        current.ctx.sdk.event.listen((event) => {
-          if (!isProviderMetricEvent(event) || event.data.sessionID !== current.id) return
-          applyProviderMetricEvent(accumulator, event)
+        current.data.listen(({ details }) => {
+          if (!isProviderMetricEvent(details) || details.data.sessionID !== current.id) return
+          applyProviderMetricEvent(accumulator, details)
           if (accumulator.latest) setState("live", accumulator.latest)
         }),
       )
     }),
   )
 
-  const na = () => language.t("debugBar.na").toUpperCase()
+  const na = () => ctx.t("na").toUpperCase()
   const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
   const heapv = () => {
     const value = heap()
@@ -263,14 +253,14 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
   const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
   const toggleFocus = async () => {
-    if (!platform.setForceFocus) return
+    if (!native) return
     const enabled = !state.focus
-    await platform.setForceFocus(enabled)
+    await native.forceFocus(enabled)
     setState("focus", enabled)
   }
 
   onCleanup(() => {
-    if (state.focus) void platform.setForceFocus?.(false).catch(() => undefined)
+    if (state.focus) void native?.forceFocus(false).catch(() => undefined)
   })
 
   let prev = ""
@@ -281,8 +271,8 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
 
   createEffect(() => {
     if (!props.diagnostics) return
-    const busy = routing()
-    const next = `${location.pathname}${location.search}`
+    const busy = app.routing()
+    const next = app.path()
 
     if (!init) {
       init = true
@@ -526,7 +516,7 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
 
   return (
     <aside
-      aria-label={language.t(props.diagnostics ? "debugBar.ariaLabel" : "debugBar.providerAriaLabel")}
+      aria-label={ctx.t(props.diagnostics ? "ariaLabel" : "providerAriaLabel")}
       classList={{
         "pointer-events-auto hidden overflow-hidden text-text-strong md:block": true,
         "mt-[-6px] w-full shrink-0 px-3 py-1": !!props.inline,
@@ -545,104 +535,104 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
         }}
       >
         <Cell
-          label={language.t("debugBar.tps.label")}
-          tip={language.t("debugBar.tps.tip")}
+          label={ctx.t("tps.label")}
+          tip={ctx.t("tps.tip")}
           value={fixed(metrics()?.tps, 1) ?? na()}
           dim={metrics()?.tps === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.ttft.label")}
-          tip={language.t("debugBar.ttft.tip")}
+          label={ctx.t("ttft.label")}
+          tip={ctx.t("ttft.tip")}
           value={duration(metrics()?.ttft) ?? na()}
           dim={metrics()?.ttft === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.ttfa.label")}
-          tip={language.t("debugBar.ttfa.tip")}
+          label={ctx.t("ttfa.label")}
+          tip={ctx.t("ttfa.tip")}
           value={duration(metrics()?.ttfa) ?? na()}
           dim={metrics()?.ttfa === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.e2e.label")}
-          tip={language.t("debugBar.e2e.tip")}
+          label={ctx.t("e2e.label")}
+          tip={ctx.t("e2e.tip")}
           value={duration(metrics()?.e2e) ?? na()}
           dim={metrics()?.e2e === undefined}
           inline={props.inline}
         />
         <Show when={props.diagnostics}>
           <Cell
-            label={language.t("debugBar.nav.label")}
-            tip={language.t("debugBar.nav.tip")}
+            label={ctx.t("nav.label")}
+            tip={ctx.t("nav.tip")}
             value={navv()}
             bad={bad(state.nav.dur, 400)}
             dim={state.nav.dur === undefined && !state.nav.pending}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.fps.label")}
-            tip={language.t("debugBar.fps.tip")}
+            label={ctx.t("fps.label")}
+            tip={ctx.t("fps.tip")}
             value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
             bad={bad(state.fps, 50, true)}
             dim={state.fps === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.frame.label")}
-            tip={language.t("debugBar.frame.tip")}
+            label={ctx.t("frame.label")}
+            tip={ctx.t("frame.tip")}
             value={time(state.gap) ?? na()}
             bad={bad(state.gap, 50)}
             dim={state.gap === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.jank.label")}
-            tip={language.t("debugBar.jank.tip")}
+            label={ctx.t("jank.label")}
+            tip={ctx.t("jank.tip")}
             value={state.jank === undefined ? na() : `${state.jank}`}
             bad={bad(state.jank, 8)}
             dim={state.jank === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.long.label")}
-            tip={language.t("debugBar.long.tip", { max: ms(state.long.max) ?? na() })}
+            label={ctx.t("long.label")}
+            tip={ctx.t("long.tip", { max: ms(state.long.max) ?? na() })}
             value={longv()}
             bad={bad(state.long.block, 200)}
             dim={state.long.count === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.delay.label")}
-            tip={language.t("debugBar.delay.tip")}
+            label={ctx.t("delay.label")}
+            tip={ctx.t("delay.tip")}
             value={time(state.delay) ?? na()}
             bad={bad(state.delay, 100)}
             dim={state.delay === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.inp.label")}
-            tip={language.t("debugBar.inp.tip")}
+            label={ctx.t("inp.label")}
+            tip={ctx.t("inp.tip")}
             value={time(state.inp) ?? na()}
             bad={bad(state.inp, 200)}
             dim={state.inp === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.cls.label")}
-            tip={language.t("debugBar.cls.tip")}
+            label={ctx.t("cls.label")}
+            tip={ctx.t("cls.tip")}
             value={state.cls === undefined ? na() : state.cls.toFixed(2)}
             bad={bad(state.cls, 0.1)}
             dim={state.cls === undefined}
             inline={props.inline}
           />
           <Cell
-            label={language.t("debugBar.mem.label")}
+            label={ctx.t("mem.label")}
             tip={
               state.heap.used === undefined
-                ? language.t("debugBar.mem.tipUnavailable")
-                : language.t("debugBar.mem.tip", {
+                ? ctx.t("mem.tipUnavailable")
+                : ctx.t("mem.tip", {
                     used: mb(state.heap.used) ?? na(),
                     limit: mb(state.heap.limit) ?? na(),
                   })
@@ -651,23 +641,23 @@ export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}
             bad={bad(heap(), 0.8)}
             dim={state.heap.used === undefined}
             inline={props.inline}
-            span={platform.setForceFocus ? 2 : 3}
+            span={native ? 2 : 3}
           />
           <ToggleCell
-            active={language.direction() === "rtl"}
+            active={app.direction() === "rtl"}
             inline={props.inline}
-            label={language.t("debugBar.direction.label")}
-            tip={language.t("debugBar.direction.tip")}
-            value={language.t(`debugBar.direction.${language.direction()}`)}
-            onClick={() => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl")}
+            label={ctx.t("direction.label")}
+            tip={ctx.t("direction.tip")}
+            value={ctx.t(`direction.${app.direction()}`)}
+            onClick={() => app.setDirection(app.direction() === "rtl" ? "ltr" : "rtl")}
           />
-          <Show when={platform.setForceFocus}>
+          <Show when={native}>
             <ToggleCell
               active={state.focus}
               inline={props.inline}
-              label={language.t("debugBar.focus.label")}
-              tip={language.t("debugBar.focus.tip")}
-              value={language.t(state.focus ? "debugBar.focus.on" : "debugBar.focus.off")}
+              label={ctx.t("focus.label")}
+              tip={ctx.t("focus.tip")}
+              value={ctx.t(state.focus ? "focus.on" : "focus.off")}
               onClick={() => void toggleFocus()}
             />
           </Show>

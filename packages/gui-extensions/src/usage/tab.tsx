@@ -1,25 +1,20 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import { useData } from "@/runtime/server/current"
 import { checksum } from "@opencode/util/encode"
-import { same } from "@/runtime/persistence/equality"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { Accordion } from "@opencode/ui/accordion"
 import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { showToast } from "@opencode/ui/toast"
+import { useI18n } from "@opencode/ui/context/i18n"
 import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { showToast } from "@/shell/notifications/toast"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { useProviders } from "@/providers/catalog/providers"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { useSessionLayout } from "@/session/session-layout"
-import { createSessionContextFormatter } from "./session-context-format"
+import { Layout, System, useExtension, type SessionView } from "../sdk"
+import { catalogModel, syncCatalog } from "./catalog"
+import { fetchSessionExport, sessionExportFilename } from "./export"
+import { createSessionContextFormatter } from "./format"
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -82,22 +77,21 @@ function RawMessage(props: {
 
 const emptyMessages: SessionMessageInfo[] = []
 
-export function SessionContextTab() {
-  const data = useData()
-  const language = useLanguage()
-  const platform = usePlatform()
-  const sdk = useWorkspaceLocation()
-  const serverSDK = useServerSDK()
-  const providers = useProviders(() => sdk().directory)
-  const { params, view } = useSessionLayout()
+export default function SessionContextTab(props: { session: SessionView }) {
+  const ctx = useExtension()
+  const layout = ctx.use(Layout)
+  const system = ctx.use(System)
+  const i18n = useI18n()
+  const data = () => props.session.server.data
+  syncCatalog(props.session)
 
-  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
+  const info = createMemo(() => (props.session.id ? data().session.get(props.session.id) : undefined))
 
   const messages = createMemo(
     () => {
-      const id = params.id
+      const id = props.session.id
       if (!id) return emptyMessages
-      return data.session.message.list(id)
+      return data().session.message.list(id)
     },
     emptyMessages,
     { equals: same },
@@ -105,17 +99,16 @@ export function SessionContextTab() {
 
   const usd = createMemo(
     () =>
-      new Intl.NumberFormat(language.intl(), {
+      new Intl.NumberFormat(i18n.locale(), {
         style: "currency",
         currency: "USD",
       }),
   )
 
-  const ctx = createMemo(() => {
+  const context = createMemo(() => {
     const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
     if (message?.type !== "assistant" || !message.tokens) return
-    const provider = providers.all().get(message.model.providerID)
-    const model = provider?.models[message.model.id]
+    const entry = catalogModel(props.session, message.model)
     const total =
       message.tokens.input +
       message.tokens.output +
@@ -125,15 +118,15 @@ export function SessionContextTab() {
     return {
       message,
       tokens: message.tokens,
-      providerLabel: provider?.name ?? message.model.providerID,
-      modelLabel: model?.name ?? message.model.id,
-      limit: model?.limit.context,
+      providerLabel: entry?.provider.name ?? message.model.providerID,
+      modelLabel: entry?.model?.name ?? message.model.id,
+      limit: entry?.model?.limit.context,
       input: message.tokens.input,
       total,
-      usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      usage: entry?.model?.limit.context ? Math.round((total / entry.model.limit.context) * 100) : null,
     }
   })
-  const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
+  const formatter = createMemo(() => createSessionContextFormatter(i18n.locale()))
 
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
@@ -159,60 +152,62 @@ export function SessionContextTab() {
   })
 
   const providerLabel = createMemo(() => {
-    const c = ctx()
+    const c = context()
     if (!c) return "—"
     return c.providerLabel
   })
 
   const modelLabel = createMemo(() => {
-    const c = ctx()
+    const c = context()
     if (!c) return "—"
     return c.modelLabel
   })
 
   const stats = [
-    { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
-    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
-    { label: "context.stats.provider", value: providerLabel },
-    { label: "context.stats.model", value: modelLabel },
-    { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
-    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
-    { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
-    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
-    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.tokens.output) },
-    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.tokens.reasoning) },
+    { label: "stats.session", value: () => info()?.title ?? (props.session.id || "—") },
+    { label: "stats.messages", value: () => counts().all.toLocaleString(i18n.locale()) },
+    { label: "stats.provider", value: providerLabel },
+    { label: "stats.model", value: modelLabel },
+    { label: "stats.limit", value: () => formatter().number(context()?.limit) },
+    { label: "stats.totalTokens", value: () => formatter().number(context()?.total) },
+    { label: "stats.usage", value: () => formatter().percent(context()?.usage) },
+    { label: "stats.inputTokens", value: () => formatter().number(context()?.input) },
+    { label: "stats.outputTokens", value: () => formatter().number(context()?.tokens.output) },
+    { label: "stats.reasoningTokens", value: () => formatter().number(context()?.tokens.reasoning) },
     {
-      label: "context.stats.cacheTokens",
-      value: () => `${formatter().number(ctx()?.tokens.cache.read)} / ${formatter().number(ctx()?.tokens.cache.write)}`,
+      label: "stats.cacheTokens",
+      value: () =>
+        `${formatter().number(context()?.tokens.cache.read)} / ${formatter().number(context()?.tokens.cache.write)}`,
     },
-    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
-    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
-    { label: "context.stats.totalCost", value: cost },
-    { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
-    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+    { label: "stats.userMessages", value: () => counts().user.toLocaleString(i18n.locale()) },
+    { label: "stats.assistantMessages", value: () => counts().assistant.toLocaleString(i18n.locale()) },
+    { label: "stats.totalCost", value: cost },
+    { label: "stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
+    { label: "stats.lastActivity", value: () => formatter().time(context()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
   const exportSession = async () => {
-    const sessionID = params.id
+    const sessionID = props.session.id
     if (!sessionID) return
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: serverSDK.api,
+        api: props.session.server.client,
       })
       const filename = sessionExportFilename(data.info)
-      if (!(await saveSessionExport(filename, data, platform))) return
+      if (!(await system.save({ name: filename, content: JSON.stringify(data, null, 2) }))) return
       showToast({
         variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
+        // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
+        icon: (() => <Icon name="circle-check" />) as unknown as JSX.Element,
+        title: ctx.t("toast.session.export.success.title"),
+        description: ctx.t("toast.session.export.success.description", { filename }),
       })
     } catch (err) {
       showToast({
         variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+        title: ctx.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : ctx.t("toast.session.export.failed.description"),
       })
     }
   }
@@ -224,7 +219,7 @@ export function SessionContextTab() {
     const el = scroll
     if (!el) return
 
-    const s = view().scroll("context")
+    const s = layout.scroll.get(props.session, "context")
     if (!s) return
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
@@ -245,7 +240,7 @@ export function SessionContextTab() {
       pending = undefined
       if (!next) return
 
-      view().setScroll("context", next)
+      layout.scroll.set(props.session, "context", next)
     })
   }
 
@@ -275,15 +270,13 @@ export function SessionContextTab() {
     >
       <div data-slot="session-usage-content" class="px-4 pt-4 pb-6 flex flex-col gap-6 md:px-6 md:pb-10 md:gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
-          <For each={stats}>
-            {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
-          </For>
+          <For each={stats}>{(stat) => <Stat label={ctx.t(stat.label)} value={stat.value()} />}</For>
         </div>
 
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
+              <div class="text-12-regular text-text-weak">{ctx.t("systemPrompt.title")}</div>
               <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
                 <Markdown text={prompt()} class="text-12-regular" />
               </div>
@@ -293,7 +286,7 @@ export function SessionContextTab() {
 
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
-            <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
+            <div class="text-12-regular text-text-weak">{ctx.t("rawMessages.title")}</div>
             <Button
               size="small"
               variant="ghost"
@@ -301,7 +294,7 @@ export function SessionContextTab() {
               onClick={exportSession}
             >
               <Icon name="download" size="small" />
-              <span>{language.t("context.export.session")}</span>
+              <span>{ctx.t("export.session")}</span>
             </Button>
           </div>
           <Accordion multiple>
@@ -313,4 +306,11 @@ export function SessionContextTab() {
       </div>
     </ScrollView>
   )
+}
+
+function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
 }

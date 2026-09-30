@@ -97,7 +97,7 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expect(editor).toBeEditable()
 
   await editor.fill("/btw")
-  const suggestion = page.locator('[data-suggestion-id="session.btw"]')
+  const suggestion = page.locator('[data-suggestion-id="btw.ask"]')
   await expect(suggestion).toBeVisible()
   await suggestion.click()
   await expect(editor).toHaveText("/btw ")
