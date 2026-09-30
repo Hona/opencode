@@ -7,16 +7,10 @@ import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-c
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
+import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { App, Links, useExtension, type FileContent, type SessionView } from "../sdk"
-import {
-  artifactKind,
-  blobUrlFromContent,
-  contentBytes,
-  parseDelimited,
-  resolveArtifactPath,
-  type ArtifactKind,
-} from "./artifact"
+import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { useShared } from "./context"
 import { workspaceFileUrl } from "./path"
 

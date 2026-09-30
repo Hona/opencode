@@ -11,7 +11,7 @@ import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { Layout, useExtension, type LineRange, type SessionView } from "../sdk"
-import { artifactKind } from "./artifact"
+import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
 import { fileTabPath } from "./path"
@@ -57,10 +57,7 @@ function FileCommentMenu(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: {
-  get: () => ScrollPos | undefined
-  set: (pos: ScrollPos) => void
-}) {
+function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: ScrollPos) => void }) {
   const state = {
     scroll: undefined as HTMLDivElement | undefined,
     scrollFrame: undefined as number | undefined,
@@ -388,8 +385,7 @@ export function SessionFileView(props: { session: SessionView; id: string }) {
     const loaded = !!current()?.loaded
     const ready = file.ready()
     const shown = active()
-    const restore =
-      (loaded && !previous.loaded) || (ready && !previous.ready) || (shown && loaded && !previous.active)
+    const restore = (loaded && !previous.loaded) || (ready && !previous.ready) || (shown && loaded && !previous.active)
     previous.loaded = loaded
     previous.ready = ready
     previous.active = shown

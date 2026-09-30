@@ -1,23 +1,5 @@
+import { encodeFilePath } from "@opencode/util/path"
 import type { Files } from "../sdk"
-
-export function encodeFilePath(filepath: string): string {
-  // Normalize Windows paths: convert backslashes to forward slashes
-  const normalized = filepath.replace(/\\/g, "/")
-
-  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
-  const rooted = /^[A-Za-z]:/.test(normalized) ? "/" + normalized : normalized
-
-  // Encode each path segment (preserving forward slashes as path separators)
-  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
-  // can reliably detect drives.
-  return rooted
-    .split("/")
-    .map((segment, index) => {
-      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
-      return encodeURIComponent(segment)
-    })
-    .join("/")
-}
 
 export function pathToFileUrl(filepath: string): string {
   return `file://${encodeFilePath(filepath)}`

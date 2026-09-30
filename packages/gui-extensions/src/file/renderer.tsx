@@ -23,11 +23,13 @@ import {
   onIdle,
 } from "../sdk"
 import { OpenAppPreferences } from "./apps"
-import { artifactKind, resolveArtifactPath } from "./artifact"
+import { artifactKind } from "@opencode/util/artifact"
+import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import { FileTree } from "./contract"
 import { FileVisual } from "./label"
-import { encodeFilePath, fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import { encodeFilePath } from "@opencode/util/path"
+import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
 
 const OPEN = "open"

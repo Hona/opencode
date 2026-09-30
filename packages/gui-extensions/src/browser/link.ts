@@ -1,3 +1,4 @@
+import { encodeFilePath } from "@opencode/util/path"
 import type { Files } from "../sdk"
 
 /**
@@ -53,15 +54,4 @@ function resolvePath(base: string, href: string) {
     segments.pop()
   }
   return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
-}
-
-function encodeFilePath(filepath: string) {
-  const slashed = filepath.replace(/\\/g, "/")
-  // Windows drive paths (D:/path) become /D:/path for a proper file:// URL.
-  const normalized = /^[A-Za-z]:/.test(slashed) ? `/${slashed}` : slashed
-  // Encode each segment but keep the drive colon (`/C:/...`) so file URL parsers detect drives.
-  return normalized
-    .split("/")
-    .map((segment, index) => (index === 1 && /^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
-    .join("/")
 }
