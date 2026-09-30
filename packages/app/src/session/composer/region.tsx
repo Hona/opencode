@@ -20,7 +20,7 @@ import { useComposerCommands } from "@/composer/commands"
 import { useSessionCommands } from "../commands/use-session-commands"
 import type { SessionModel } from "../model"
 import type { SessionScreenLayout } from "../screen-layout"
-import { syncPromptModel, syncSessionModel } from "../session-model-helpers"
+import { syncPromptModel } from "../session-model-helpers"
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
@@ -57,7 +57,7 @@ export function createActiveSessionRegion(input: {
         const info = input.session.data.info()
         const selection = resolveSessionComposerSelection(info, message?.metadata)
         if (info && selection.agent && selection.model) {
-          syncSessionModel(local, { sessionID: info.id, agent: selection.agent, model: selection.model })
+          local.session.restore({ sessionID: info.id, agent: selection.agent, model: selection.model })
         }
       },
     ),

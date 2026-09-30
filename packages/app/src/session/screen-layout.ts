@@ -5,7 +5,6 @@ import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
 import { createSizing } from "./helpers"
 import type { SessionModel } from "./model"
-import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
 /** wide asks for the wider session minimum; sidebar is whether any extension fills the side panel sidebar. */
@@ -56,13 +55,10 @@ export function createSessionScreenLayout(
     if (width === undefined) return 1000
     return sessionPanelWidthMax({ available: width, split: splitSide() })
   })
-  const panelLayout = createMemo(() =>
-    sessionPanelLayout({
-      side: tabsOpen(),
-      dock: dockSideOpen(),
-      files: fileTreeOpen(),
-    }),
-  )
+  const panelLayout = createMemo(() => ({
+    visible: tabsOpen() || dockSideOpen() || fileTreeOpen(),
+    stacked: tabsOpen() && dockSideOpen(),
+  }))
   const [motion, setMotion] = createStore({ gap: panelLayout().stacked, closing: false })
   createEffect((previous) => {
     const stacked = panelLayout().stacked

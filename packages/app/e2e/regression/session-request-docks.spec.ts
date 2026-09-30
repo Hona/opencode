@@ -1,15 +1,12 @@
-import { base64Encode } from "@opencode/util/encode"
 import { expect, test, type Page } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { SERVER, sessionHref } from "../utils/app"
 import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
+import { mockWorkspace, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/RequestDocks"
-const projectID = "proj_request_docks"
 const sessionID = "ses_request_docks"
 const title = "Request dock regression"
-const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
     forms: [
@@ -35,7 +32,7 @@ test("shows a pending question dock", async ({ page }) => {
     ],
   })
 
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
   const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
@@ -47,7 +44,6 @@ test("shows a pending question dock", async ({ page }) => {
 
   const rejectRequests: string[] = []
   page.on("request", (request) => {
-    if (request.method() !== "POST") return
     if (
       request.method() === "DELETE" &&
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request`
@@ -96,7 +92,7 @@ test("shows a pending permission dock", async ({ page }) => {
     ],
   })
 
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
@@ -114,12 +110,9 @@ test("shows a pending permission dock", async ({ page }) => {
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
-  const transport = await installSseTransport(page, {
-    server,
-    retry: 20,
-  })
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
   await mockServer(page, { forms: [] })
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
 
@@ -183,55 +176,6 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-async function mockServer(
-  page: Page,
-  requests: {
-    permissions?: unknown[] | (() => unknown[])
-    forms?: unknown[] | (() => unknown[])
-    sessionStatus?: Record<string, unknown>
-  },
-) {
-  await mockOpenCodeServer(page, {
-    directory,
-    project: {
-      id: projectID,
-      worktree: directory,
-      vcs: "git",
-      name: "request-docks",
-      time: { created: 1700000000000, updated: 1700000000000 },
-      sandboxes: [],
-    },
-    provider: {
-      all: [
-        {
-          id: "opencode",
-          name: "OpenCode",
-          models: {
-            "claude-opus-4-6": {
-              id: "claude-opus-4-6",
-              name: "Claude Opus 4.6",
-              limit: { context: 200_000 },
-            },
-          },
-        },
-      ],
-      connected: ["opencode"],
-      default: { providerID: "opencode", modelID: "claude-opus-4-6" },
-    },
-    sessions: [
-      {
-        id: sessionID,
-        slug: "request-docks",
-        projectID,
-        directory,
-        title,
-        version: "dev",
-        time: { created: 1700000000000, updated: 1700000000000 },
-      },
-    ],
-    pageMessages: () => ({ items: [] }),
-    permissions: requests.permissions,
-    forms: requests.forms,
-    sessionStatus: requests.sessionStatus,
-  })
+function mockServer(page: Page, requests: Pick<WorkspaceInput, "permissions" | "forms">) {
+  return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }
