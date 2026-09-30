@@ -24,7 +24,10 @@ type PersistTarget = {
   scope?: "window"
   workspaceStorageAliases?: string[]
   previousKey?: string
-  /** Imports an older key of the same storage once. With pick, only that part is copied and the source stays. */
+  /**
+   * Imports an older key once, from this storage or else the default storage (e.g. `settings.v3`).
+   * With pick, only that part is copied and the source stays.
+   */
   copyFrom?: { key: string; pick?: (value: unknown) => unknown }
   key: string
 }
@@ -534,6 +537,9 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
         ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
         ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
         ...(config.copyFrom ? [{ storage: current, key: config.copyFrom.key, pick: config.copyFrom.pick }] : []),
+        ...(config.copyFrom && config.storage
+          ? [{ storage: localStorageDirect(), key: config.copyFrom.key, pick: config.copyFrom.pick }]
+          : []),
       ]
 
       const api: SyncStorage = {
@@ -574,6 +580,13 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
       })),
       previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
       config.copyFrom ? { storage: current, key: config.copyFrom.key, pick: config.copyFrom.pick } : undefined,
+      config.copyFrom && config.storage
+        ? {
+            storage: isDesktop ? platform.storage?.() : localStorageDirect(),
+            key: config.copyFrom.key,
+            pick: config.copyFrom.pick,
+          }
+        : undefined,
     ]
       .filter((source): source is RelocationSource<SyncStorage | AsyncStorage> => !!source?.storage)
       .map((source) => ({ ...source, storage: toAsyncStorage(source.storage) }))
