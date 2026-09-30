@@ -4,7 +4,6 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useCommand } from "@/shell/commands/command"
-import { reviewTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSessionLayout } from "@/session/session-layout"
 
@@ -17,7 +16,7 @@ export function SessionReviewToggle() {
     <SessionHeaderActions
       state={{
         reviewLabel: language.t("command.review.toggle"),
-        reviewKeybind: reviewTooltipKeybind(command),
+        reviewKeybind: command.keybindParts("review.toggle"),
         reviewVisible: true,
         reviewOpened: view().side.opened(),
         onReviewToggle: () => view().side.toggle(),

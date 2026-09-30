@@ -22,7 +22,6 @@ import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter
 import { isAttachment } from "./prompt-parts"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
-import { composerPlaceholder } from "./placeholder"
 import { createComposerSubmit } from "./submit"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
@@ -79,12 +78,12 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => adapter.working() && blank())
-  const placeholder = () =>
-    composerPlaceholder(
-      mode(),
-      (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
-      adapter.working() || (options?.queue?.count() ?? 0) > 0,
-    )
+  const placeholder = () => {
+    if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
+    if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
+      return language.t("ui.promptInput.placeholder.followUp", { slash: "/", at: "@" })
+    return language.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" })
+  }
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))

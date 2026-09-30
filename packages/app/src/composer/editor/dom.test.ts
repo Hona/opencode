@@ -1,55 +1,30 @@
-import { describe, expect, test } from "bun:test"
-import { getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./dom"
+import { expect, test } from "bun:test"
+import { getCursorPosition, getTextLength, setCursorPosition } from "./dom"
 
-describe("Composer editor DOM", () => {
-  test("length helpers treat breaks as one char and ignore zero-width chars", () => {
-    const container = document.createElement("div")
-    container.appendChild(document.createTextNode("ab\u200B"))
-    container.appendChild(document.createElement("br"))
-    container.appendChild(document.createTextNode("cd"))
+const br = () => document.createElement("br")
+const text = (value: string) => document.createTextNode(value)
+const pill = () => {
+  const element = document.createElement("span")
+  element.dataset.mention = "file"
+  element.textContent = "@file"
+  return element
+}
 
-    expect(getNodeLength(container.childNodes[0]!)).toBe(2)
-    expect(getNodeLength(container.childNodes[1]!)).toBe(1)
-    expect(getTextLength(container)).toBe(5)
+// Breaks count as one character and zero-width characters count as none.
+test.each([
+  { name: "zero-width characters", nodes: () => [text("ab\u200B"), br(), text("cd")], length: 5, positions: [] },
+  { name: "pills and breaks", nodes: () => [text("ab"), pill(), br(), text("cd")], length: 10, positions: [2, 7, 8] },
+  { name: "blank lines", nodes: () => [text("a"), br(), br(), text("b")], length: 4, positions: [2, 3] },
+])("maps text length and the caret across $name", (row) => {
+  const container = document.createElement("div")
+  container.append(...row.nodes())
+  document.body.appendChild(container)
+
+  expect(getTextLength(container)).toBe(row.length)
+  row.positions.forEach((position) => {
+    setCursorPosition(container, position)
+    expect(getCursorPosition(container)).toBe(position)
   })
 
-  test("setCursorPosition and getCursorPosition round-trip with pills and breaks", () => {
-    const container = document.createElement("div")
-    const pill = document.createElement("span")
-    pill.dataset.mention = "file"
-    pill.textContent = "@file"
-    container.appendChild(document.createTextNode("ab"))
-    container.appendChild(pill)
-    container.appendChild(document.createElement("br"))
-    container.appendChild(document.createTextNode("cd"))
-    document.body.appendChild(container)
-
-    setCursorPosition(container, 2)
-    expect(getCursorPosition(container)).toBe(2)
-
-    setCursorPosition(container, 7)
-    expect(getCursorPosition(container)).toBe(7)
-
-    setCursorPosition(container, 8)
-    expect(getCursorPosition(container)).toBe(8)
-
-    container.remove()
-  })
-
-  test("setCursorPosition and getCursorPosition round-trip across blank lines", () => {
-    const container = document.createElement("div")
-    container.appendChild(document.createTextNode("a"))
-    container.appendChild(document.createElement("br"))
-    container.appendChild(document.createElement("br"))
-    container.appendChild(document.createTextNode("b"))
-    document.body.appendChild(container)
-
-    setCursorPosition(container, 2)
-    expect(getCursorPosition(container)).toBe(2)
-
-    setCursorPosition(container, 3)
-    expect(getCursorPosition(container)).toBe(3)
-
-    container.remove()
-  })
+  container.remove()
 })

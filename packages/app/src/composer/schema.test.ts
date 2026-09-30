@@ -21,20 +21,28 @@ const image: Omit<ImageAttachmentPart, "blob"> = {
   mime: "image/png",
 }
 const comment = { id: "comment", path: "src/app.ts", selection: { start: 1, end: 2 }, comment: "note", time: 1 }
+const decode = Schema.decodeUnknownSync(
+  Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
+)
 
 describe("composer persistence schemas", () => {
   test("defaults missing or invalid fields independently and normalizes the cursor", () => {
-    const decode = Schema.decodeUnknownSync(
-      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-    )
     expect(decode({})).toEqual({ prompt: DEFAULT_PROMPT, context: { items: [] } })
+    const selection = { startLine: 1, startChar: 0, endLine: 2, endChar: 3 }
     const value = decode({
       prompt: [null, { type: "unknown" }],
       cursor: -1,
       mode: "unknown",
       model: { providerID: 42, modelID: "model" },
       retry: { id: "bad", agent: "build", providerID: "provider", modelID: "model" },
-      context: { items: [{ type: "file", path: "src/app.ts", commentID: "note", key: "stale" }, null] },
+      context: {
+        items: [
+          { type: "file", path: "src/app.ts", commentID: "note", key: "stale" },
+          null,
+          { type: "file", path: "src/app.ts", selection, comment: "Check this", key: "untrusted" },
+          { type: "file", path: 42 },
+        ],
+      },
     })
     expect(value.prompt).toEqual(DEFAULT_PROMPT)
     expect(value.cursor).toBe(0)
@@ -43,6 +51,14 @@ describe("composer persistence schemas", () => {
     expect(value.retry).toBeUndefined()
     expect(value.context.items).toEqual([
       { type: "file", path: "src/app.ts", commentID: "note", key: "file:src/app.ts:undefined:undefined:c=note" },
+      // A comment without an ID is keyed by a digest of its text.
+      {
+        type: "file",
+        path: "src/app.ts",
+        selection,
+        comment: "Check this",
+        key: expect.stringMatching(/^file:src\/app\.ts:1:2:c=/),
+      },
     ])
     expect(decode({ prompt: false, cursor: Infinity, context: null })).toEqual({
       prompt: DEFAULT_PROMPT,
@@ -54,9 +70,7 @@ describe("composer persistence schemas", () => {
   })
 
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {
-    const value = Schema.decodeUnknownSync(
-      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-    )({
+    const value = decode({
       prompt: [
         text,
         { type: "agent", content: "@build", start: 5, end: 11, name: "build" },
@@ -93,11 +107,7 @@ describe("composer persistence schemas", () => {
       providerID: "provider",
       modelID: "model",
     })
-    expect(
-      Schema.decodeUnknownSync(
-        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-      )(Schema.encodeSync(ComposerStore)(value)),
-    ).toEqual(value)
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("preserves file source variants through canonical round trips", () => {
@@ -114,9 +124,7 @@ describe("composer persistence schemas", () => {
         text: sourceText,
       },
     ]
-    const value = Schema.decodeUnknownSync(
-      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-    )({
+    const value = decode({
       prompt: sources.map((source) => ({
         type: "file",
         path: "src/app.ts",
@@ -129,17 +137,11 @@ describe("composer persistence schemas", () => {
     })
     expect(value.prompt).toHaveLength(3)
     expect(value.prompt.map((part) => part.type === "file" && part.source)).toEqual(sources)
-    expect(
-      Schema.decodeUnknownSync(
-        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-      )(Schema.encodeSync(ComposerStore)(value)),
-    ).toEqual(value)
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("migrates inline images, keeps store references without a URL, and never encodes dataUrl", () => {
-    const value = Schema.decodeUnknownSync(
-      Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-    )({
+    const value = decode({
       prompt: [
         { ...image, dataUrl: "data:image/png;base64,YQ==", sourcePath: "/image.png" },
         { ...image, blob: { id: "data:image/png;base64,Yg==" } },
@@ -147,6 +149,7 @@ describe("composer persistence schemas", () => {
         { ...image, blob: { id: "missing" } },
         { ...image, blob: { id: "bad", url: "https://example.com/image.png" } },
         { ...image, blob: { id: "missing" }, dataUrl: "data:image/png;base64,YQ==" },
+        { ...image, blob: { id: 42 } },
       ],
     })
     expect(value.prompt).toHaveLength(6)
@@ -161,11 +164,7 @@ describe("composer persistence schemas", () => {
     expect(value.prompt[5]).toEqual({ ...image, blob: { id: "missing", url: "" } })
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
-    expect(
-      Schema.decodeUnknownSync(
-        Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
-      )(encoded),
-    ).toEqual(value)
+    expect(decode(encoded)).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {

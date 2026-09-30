@@ -23,7 +23,6 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
-import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionTabTitle } from "./tab-title"
@@ -611,7 +610,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           value={
                             <>
                               {language.t("command.session.new")}
-                              <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                              <Keybind keys={command.keybindParts("tab.new")} variant="neutral" />
                             </>
                           }
                         >
