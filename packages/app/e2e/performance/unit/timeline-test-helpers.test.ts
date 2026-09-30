@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { base64Encode } from "@opencode/util/encode"
-import { fixture } from "../timeline/session-timeline-stress.fixture"
-import { stressSessionHref } from "../timeline/timeline-test-helpers"
+import { fixture, stressSessionHref } from "../../utils/session-fixture"
 
 test("builds stress session links for the benchmark server", () => {
   expect(stressSessionHref(fixture.sourceID)).toBe(

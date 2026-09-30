@@ -52,21 +52,30 @@ export function mount(input: { server: string; mode: "failed" | "stopped" | "rea
     const snapshot = () => structuredClone(unwrap(store.state))
     const publish = () => listeners.forEach((listener) => listener({ type: "state", remote: "wsl", state: snapshot() }))
     const methods: Record<string, (input: { id?: string; name?: string }) => void> = {
+      // The contract state is deeply readonly, so each action replaces the changed branch.
       installOpencode(value) {
+        const name = value.name ?? ""
         setStore("calls", (calls) => [...calls, `update:${value.name}`])
-        setStore("state", "opencodeChecks", value.name ?? "", { version: "current", matchesDesktop: true })
+        setStore("state", (state) => ({
+          opencodeChecks: {
+            ...state.opencodeChecks,
+            [name]: { ...state.opencodeChecks[name]!, version: "current", matchesDesktop: true },
+          },
+        }))
       },
       startServer(value) {
         setStore("calls", (calls) => [...calls, `start:${value.id}`])
-        setStore("state", "servers", (server) => server.config.id === value.id, "runtime", {
-          kind: "ready",
-          url: input.server,
-          password: null,
-        })
+        setStore("state", (state) => ({
+          servers: state.servers.map((server) =>
+            server.config.id === value.id
+              ? { ...server, runtime: { kind: "ready" as const, url: input.server, password: null } }
+              : server,
+          ),
+        }))
       },
       removeServer(value) {
         setStore("calls", (calls) => [...calls, `remove:${value.id}`])
-        setStore("state", "servers", (servers) => servers.filter((server) => server.config.id !== value.id))
+        setStore("state", (state) => ({ servers: state.servers.filter((server) => server.config.id !== value.id) }))
       },
     }
     const bridge: Bridge = {

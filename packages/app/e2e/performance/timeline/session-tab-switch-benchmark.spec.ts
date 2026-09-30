@@ -2,14 +2,14 @@ import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
-import { fixture } from "./session-timeline-stress.fixture"
-import { expected, messages, workload } from "./session-tab-switch.fixture"
 import {
-  createReviewDiffs,
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
+import { expected, messages, workload } from "./session-tab-switch.fixture"
+import { createReviewDiffs } from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 const scenarios = [

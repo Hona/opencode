@@ -1,9 +1,8 @@
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
-import { fixture } from "./session-timeline-stress.fixture"
+import { fixture, installStressSessionTabs, stressSessionHref } from "../../utils/session-fixture"
 import { messages } from "./session-tab-switch.fixture"
-import { installStressSessionTabs, stressSessionHref } from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 const sessions = Array.from({ length: 8 }, (_, index) => ({

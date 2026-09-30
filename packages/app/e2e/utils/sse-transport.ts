@@ -50,10 +50,9 @@ type BrowserCommand<T> =
   | { type: "connections" }
   | { type: "acknowledgements" }
 
+// Keyed by server origin so every installed server keeps its own connections and commands.
 type BrowserTransport = Window & {
-  __testSseTransport?: {
-    command: (command: BrowserCommand<unknown>) => unknown
-  }
+  __testSseTransports?: Record<string, { command: (command: BrowserCommand<unknown>) => unknown }>
 }
 
 export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEvent>(
@@ -157,7 +156,8 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
         return acknowledge(connection, encoded[0]!.bytes.byteLength, output.length, encoded[0]!.delivery.options?.id)
       }
 
-      ;(window as BrowserTransport).__testSseTransport = { command }
+      const host = window as BrowserTransport
+      host.__testSseTransports = { ...host.__testSseTransports, [server]: { command } }
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
@@ -212,22 +212,25 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
   )
 
   const command = <Result>(input: BrowserCommand<T>) =>
-    page.evaluate((input) => {
-      const transport = (window as BrowserTransport).__testSseTransport
-      if (!transport) throw new Error("SSE transport was not installed before page load")
-      return transport.command(input as BrowserCommand<unknown>)
-    }, input) as Promise<Result>
+    page.evaluate(
+      ({ server, input }) => {
+        const transport = (window as BrowserTransport).__testSseTransports?.[server]
+        if (!transport) throw new Error(`SSE transport for ${server} was not installed before page load`)
+        return transport.command(input as BrowserCommand<unknown>)
+      },
+      { server, input },
+    ) as Promise<Result>
 
   return {
     server,
     async waitForConnection(input = {}) {
       const connection = await page.waitForFunction(
-        (after) => {
-          const transport = (window as BrowserTransport).__testSseTransport
+        ({ server, after }) => {
+          const transport = (window as BrowserTransport).__testSseTransports?.[server]
           const connections = transport?.command({ type: "connections" }) as SseConnectionRecord[] | undefined
           return connections?.findLast((connection) => connection.id > after && connection.endedAt === undefined)
         },
-        input.after ?? 0,
+        { server, after: input.after ?? 0 },
         { timeout: input.timeout },
       )
       let result: SseConnectionRecord | undefined

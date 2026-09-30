@@ -1,6 +1,5 @@
 import { benchmark, expect } from "../benchmark"
 import { expectSessionTitle } from "../../utils/waits"
-import { fixture } from "./session-timeline-stress.fixture"
 import {
   collectCachedRepaintTrace,
   compressCachedRepaintTrace,
@@ -9,11 +8,12 @@ import {
 } from "./session-tab-repaint-probe"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 import {
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   mockStressTimeline,
   stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
 
 benchmark("samples cached session repaint after the click", async ({ page, report }) => {
   benchmark.setTimeout(120_000)

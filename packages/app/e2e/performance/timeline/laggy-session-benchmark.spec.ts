@@ -6,7 +6,7 @@ import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect } from "../benchmark"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
-import { stressSessionHref } from "./timeline-test-helpers"
+import { stressSessionHref } from "../../utils/session-fixture"
 import { startChromeTrace } from "../chrome-trace"
 
 const file = process.env.LAGGY_SESSION_FILE

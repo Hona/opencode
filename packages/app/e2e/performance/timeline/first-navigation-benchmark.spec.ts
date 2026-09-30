@@ -1,14 +1,14 @@
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect } from "../benchmark"
 import { measureFirstNavigation } from "./first-navigation-probe"
-import { fixture } from "./session-timeline-stress.fixture"
 import {
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   mockStressTimeline,
   stressDraftHref,
   stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const contentSelector = '[data-message-id], [data-component="composer-editor"]'

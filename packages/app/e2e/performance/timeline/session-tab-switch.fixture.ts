@@ -1,5 +1,5 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { fixture } from "./session-timeline-stress.fixture"
+import { fixture } from "../../utils/session-fixture"
 
 export const exchanges = 200
 

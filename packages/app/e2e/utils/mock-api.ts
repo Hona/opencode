@@ -20,8 +20,10 @@ const Query = Schema.Struct({
   path: Schema.optional(Schema.String),
   query: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
+  mode: Schema.optional(Schema.String),
 })
 const SessionParams = { sessionID: Schema.String }
+const PtyParams = { ptyID: Schema.String }
 const NoContent = HttpApiSchema.NoContent
 
 export class MockNotFound extends Schema.TaggedError<MockNotFound>()("MockNotFound", {
@@ -29,6 +31,10 @@ export class MockNotFound extends Schema.TaggedError<MockNotFound>()("MockNotFou
 }) {}
 
 export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBadRequest", {
+  message: Schema.String,
+}) {}
+
+export class MockInternal extends Schema.TaggedError<MockInternal>()("MockInternal", {
   message: Schema.String,
 }) {}
 
@@ -111,12 +117,17 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("location", "/api/location", { success: Json }))
-  .add(HttpApiEndpoint.get("permissionRequests", "/api/permission/request", { success: Json }))
+  .add(
+    HttpApiEndpoint.get("permissionRequests", "/api/permission/request", {
+      success: Json,
+      error: MockInternal.pipe(HttpApiSchema.status(500)),
+    }),
+  )
   .add(HttpApiEndpoint.get("formRequests", "/api/form", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
   .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branch", { success: Json }))
-  .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { query: Query, success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(
     HttpApiEndpoint.get("fsRead", "/api/fs/read/*", {
@@ -126,9 +137,45 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("fsFind", "/api/fs/find", { query: Query, success: Json }))
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
   .add(
-    HttpApiEndpoint.get("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
-      params: { ptyID: Schema.String },
+    HttpApiEndpoint.get("ptyList", "/api/pty", {
       success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("ptyCreate", "/api/pty", {
+      payload: JsonPayload,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("ptyGet", "/api/pty/:ptyID", {
+      params: PtyParams,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.put("ptyUpdate", "/api/pty/:ptyID", {
+      params: PtyParams,
+      payload: JsonPayload,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("ptyRemove", "/api/pty/:ptyID", {
+      params: PtyParams,
+      success: NoContent,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
+      params: PtyParams,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
     }),
   )
   .add(

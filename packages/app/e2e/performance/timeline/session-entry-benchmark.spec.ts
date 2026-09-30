@@ -1,8 +1,7 @@
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
 import { measureNavigationMilestones } from "./navigation-milestones"
-import { fixture } from "./session-timeline-stress.fixture"
+import { fixture, installStressSessionTabs, mockStressTimeline, stressSessionHref } from "../../utils/session-fixture"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
-import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
 
 benchmark.use({
   viewport: { width: 1440, height: 900 },

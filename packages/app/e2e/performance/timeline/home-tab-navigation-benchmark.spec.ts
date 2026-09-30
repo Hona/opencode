@@ -1,13 +1,13 @@
 import { benchmark, expect } from "../benchmark"
 import { expectSessionTitle } from "../../utils/waits"
 import { measureNavigationMilestones } from "./navigation-milestones"
-import { fixture } from "./session-timeline-stress.fixture"
 import {
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   mockStressTimeline,
   stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const homeRow = '[data-component="home-session-row"]'

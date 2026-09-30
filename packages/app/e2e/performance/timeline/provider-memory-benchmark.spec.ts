@@ -1,8 +1,13 @@
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
-import { fixture, pageMessages } from "./session-timeline-stress.fixture"
-import { installStressSessionTabs, installTimelineSettings, stressSessionHref } from "./timeline-test-helpers"
+import {
+  fixture,
+  installStressSessionTabs,
+  installTimelineSettings,
+  pageMessages,
+  stressSessionHref,
+} from "../../utils/session-fixture"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 import type { ModelUpdated } from "@opencode/client/promise"
 
