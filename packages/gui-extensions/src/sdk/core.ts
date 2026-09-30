@@ -114,7 +114,7 @@ export interface Context {
   readonly id: string
   /** Aborts when the extension is disabled, reloaded, or the window closes. */
   readonly signal: AbortSignal
-  /** Runs when the extension goes away. No-op after disposal. */
+  /** Runs when the extension goes away; runs at once if it already has, e.g. after an await in setup. */
   cleanup(fn: Cleanup): Cleanup
   /** Contribute an item. Pass a function to contribute reactively; return undefined to withdraw. */
   add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup

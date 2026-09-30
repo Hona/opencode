@@ -190,8 +190,9 @@ function createHost(input: {
         // Setup runs synchronously inside the extension root so its effects and memos are owned.
         void Promise.try(() => untrack(() => module.default(instance.context))).then(
           (cleanup) => {
-            if (instances.get(definition.id) !== instance) return
+            // Registered first: if the extension already went away, the cleanup runs now.
             if (typeof cleanup === "function") instance.context.cleanup(cleanup)
+            if (instances.get(definition.id) !== instance) return
             setState("status", definition.id, "active")
           },
           (error: unknown) => {
@@ -218,8 +219,15 @@ function createHost(input: {
     })
     const messages = () => catalog.latest
     const created = new Map<string, unknown>()
+    // Promise.try runs the cleanup synchronously and isolates a throw from the others.
+    const release = (fn: Cleanup) =>
+      void Promise.try(fn).catch((error: unknown) => console.error(`[extension] ${extension}`, error))
     const own = (fn: Cleanup): Cleanup => {
-      if (controller.signal.aborted) return () => {}
+      // Work that outlives the extension, e.g. after an await in setup, is released as soon as it registers.
+      if (controller.signal.aborted) {
+        release(fn)
+        return () => {}
+      }
       const cleanup = () => {
         if (cleanups.delete(cleanup)) return fn()
       }
@@ -288,12 +296,7 @@ function createHost(input: {
         controller.abort()
         // One batch: every contribution and service of the extension disappears in the same frame.
         batch(() => {
-          Array.from(cleanups)
-            .reverse()
-            .forEach((cleanup) => {
-              // Promise.try runs the cleanup synchronously and isolates a throw from the others.
-              void Promise.try(cleanup).catch((error: unknown) => console.error(`[extension] ${extension}`, error))
-            })
+          Array.from(cleanups).reverse().forEach(release)
           cleanups.clear()
           Object.entries(state.entries).forEach(([point, entries]) => {
             if (!entries?.some((entry) => entry.extension === extension)) return
