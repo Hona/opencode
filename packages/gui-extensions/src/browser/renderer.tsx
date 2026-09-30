@@ -1,5 +1,138 @@
-import type { Setup } from "../sdk"
+import { createEffect, createRoot, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
+import { App, Command, Link, Menu, Panel, Sessions, type PanelTab, type Setup } from "../sdk"
+import { Browser } from "./contract"
+import type { Model } from "./model"
 
-const setup: Setup = () => {}
+const setup: Setup = (ctx) => {
+  // The native pane is a desktop feature.
+  if (ctx.use(App).platform !== "desktop") return
+  // The host calls setup after its root finishes, so setup owns its computations in a root of its own.
+  return createRoot((dispose) => {
+    const sessions = ctx.use(Sessions)
+    const owner = getOwner()
+    const [model, setModel] = createSignal<Model>()
+    const status = { requested: false }
+    // Everything here serves a mounted session, so the attachment model and the pane's protocol
+    // schemas load when the first session opens instead of at startup.
+    createEffect(() => {
+      if (status.requested || !sessions.current()) return
+      status.requested = true
+      void import("./model").then((module) => {
+        if (ctx.signal.aborted) return
+        const created = runWithOwner(owner, () => module.createModel(ctx))
+        setModel(() => created)
+      })
+    })
+
+    ctx.provide(Browser, {
+      attached: (session) => model()?.attached(session) ?? false,
+      canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
+      open: (session, url) => model()?.openURL(session, url),
+      openFile: (session, path) => model()?.openFile(session, path),
+    })
+
+    ctx.add(Command, (): Command | undefined => {
+      const view = sessions.current()
+      const value = model()
+      if (!view || !value) return undefined
+      return {
+        id: "open",
+        title: ctx.t("command.open"),
+        group: ctx.t("command.category.view"),
+        bind: "mod+shift+b",
+        enabled: value.available(view),
+        run: () => value.open(view),
+      }
+    })
+
+    ctx.add(Command, (): Command | undefined => {
+      const pane = model()?.pane()
+      if (!pane) return undefined
+      return {
+        id: "reload",
+        title: ctx.t("command.reload"),
+        group: ctx.t("command.category.view"),
+        bind: "f5",
+        editable: true,
+        enabled: pane.visible() && !!pane.address(),
+        run: pane.reload,
+      }
+    })
+
+    ctx.add(Menu, (): Menu | undefined => {
+      const view = sessions.current()
+      const value = model()
+      if (!view || !value?.available(view)) return undefined
+      return {
+        menu: "session.panel",
+        id: "open",
+        title: ctx.t("tab.title"),
+        icon: "globe",
+        keybind: "browser.open",
+        order: 20,
+        run: () => value.open(view),
+      }
+    })
+
+    ctx.add(Link, {
+      priority: 10,
+      match: (link) => !!model()?.match(link),
+      open: (link) => model()?.openLink(link),
+    })
+
+    // Stable tab objects with live labels, so title and URL changes never remount a trigger.
+    const tabs = new Map<string, Map<string, PanelTab>>()
+    const create = (session: string, id: string): PanelTab => {
+      const text = () => {
+        const tab = model()?.tab({ key: session }, id)
+        return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.title") : tab.title || tab.url
+      }
+      return {
+        id,
+        get title() {
+          return text()
+        },
+        label: () => (
+          <div class="flex items-center gap-1.5">
+            <Icon name="globe" size="small" />
+            <span class="max-w-40 truncate">{text()}</span>
+          </div>
+        ),
+        group: "browser",
+        dom: { tab: `session-side-panel-browser-tab-${id}`, panel: "session-side-panel-browser-tabpanel" },
+      }
+    }
+    const SessionBrowserPane = lazy(() => import("./panel"))
+    ctx.add(Panel, {
+      id: "main",
+      region: "side",
+      list(session, open) {
+        const ids = model()?.tabs(session, open) ?? []
+        if (ids.length === 0) {
+          tabs.delete(session.key)
+          return []
+        }
+        const previous = tabs.get(session.key)
+        const next = new Map(ids.map((id) => [id, previous?.get(id) ?? create(session.key, id)]))
+        tabs.set(session.key, next)
+        return [...next.values()]
+      },
+      render: (tab, session) => (
+        <Show when={model()}>
+          {(value) => (
+            <Suspense>
+              <SessionBrowserPane tab={tab} session={session} model={value()} />
+            </Suspense>
+          )}
+        </Show>
+      ),
+      close: (tab, session) => model()?.closeTab(session, tab.id),
+      focus: (tab, session) => model()?.focusTab(session, tab.id),
+    })
+
+    return dispose
+  })
+}
 
 export default setup

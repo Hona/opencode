@@ -19,7 +19,7 @@ type Request = {
 type Wire = { headers: Protocol.Network.Headers; statusCode: number }
 const levels = ["debug", "info", "warning", "error"] as const
 // Values the model must not read; the header name still shows it was sent.
-const redacted = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"])
+const redacted: readonly string[] = ["cookie", "set-cookie", "authorization", "proxy-authorization"]
 
 export function createDiagnostics(cdp: Cdp) {
   const messages: Browser.ConsoleEntry[] = []
@@ -385,7 +385,7 @@ function trimHeaders(headers: Protocol.Network.Headers) {
   for (const [key, value] of entries.slice(0, 100)) {
     // Lower-case names so renderer and wire copies of one header merge instead of duplicating.
     const name = key.toLowerCase().slice(0, 2_048)
-    const text = redacted.has(name) ? "<redacted>" : String(value)
+    const text = redacted.includes(name) ? "<redacted>" : String(value)
     const remaining = Math.max(0, 16_000 - size - name.length)
     if (!remaining) {
       truncated = true

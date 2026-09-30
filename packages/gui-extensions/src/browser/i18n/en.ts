@@ -1,1 +1,15 @@
-export default {}
+export default {
+  "command.open": "Open browser",
+  "command.reload": "Reload browser page",
+  "tab.title": "Browser",
+  "address.label": "Browser address",
+  "address.placeholder": "Enter URL",
+  "action.stop": "Stop",
+  replaced: "Browser control moved to another desktop window.",
+  unsupported: "This desktop app does not support the browser pane.",
+  suspended: "Browser suspended. Interact with this session to reconnect.",
+  "empty.title": "Enter URL",
+  "empty.description": 'Or prompt "Open in the app browser"',
+  "failed.title": "URL can't be reached",
+  "failed.description": "Check the URL and your connection, then try again.",
+}

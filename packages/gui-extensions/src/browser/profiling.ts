@@ -6,17 +6,22 @@ import type { Cdp } from "./cdp"
 import type { BrowserFiles } from "./files"
 import { analyzeCpu, analyzeTrace, parseHeap } from "./analysis"
 
-let recording:
-  | {
-      owner: WebContents
-      pid: number
-      started: number
-      timer?: ReturnType<typeof setTimeout>
-      finish: () => Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }>
-    }
-  | undefined
+export type Recording = {
+  owner: WebContents
+  pid: number
+  started: number
+  timer?: ReturnType<typeof setTimeout>
+  finish: () => Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }>
+}
 
-export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserFiles, source: () => readonly string[]) {
+/** Only one trace records across every tab of the app; `shared` holds it. */
+export function createProfiling(
+  contents: WebContents,
+  cdp: Cdp,
+  files: BrowserFiles,
+  source: () => readonly string[],
+  shared: { recording?: Recording },
+) {
   let trace: Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }> | undefined
   let traceResources = new Set<string>()
   let traceID = ""
@@ -31,7 +36,7 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
     | undefined
   let takingHeap = false
   cdp.on("Page.frameNavigated", ({ frame }) => {
-    if (recording?.owner === contents) traceResources.add(frame.url)
+    if (shared.recording?.owner === contents) traceResources.add(frame.url)
     if (cpu && !cpu.result) cpu.resources.add(frame.url)
   })
   const json = async (id: Browser.FileID) => {
@@ -74,9 +79,9 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
       }
     },
     async startTrace(durationMs = 10_000) {
-      if (recording)
+      if (shared.recording)
         throw new Error(
-          recording.owner === contents
+          shared.recording.owner === contents
             ? "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another."
             : "Another tab owns the active performance trace. Wait for its owner to finish; do not stop or replace another tab's recording.",
         )
@@ -156,13 +161,13 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
             } finally {
               clearTimeout(timeout)
               off()
-              if (recording === owner) recording = undefined
+              if (shared.recording === owner) shared.recording = undefined
             }
           })()
           return trace
         },
       }
-      recording = owner
+      shared.recording = owner
       trace = undefined
       traceResources = new Set(source())
       traceID = crypto.randomUUID()
@@ -188,12 +193,12 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
         }, durationMs)
       } catch (error) {
         off()
-        if (recording === owner) recording = undefined
+        if (shared.recording === owner) shared.recording = undefined
         throw error
       }
     },
     stopTrace() {
-      if (recording?.owner === contents) return recording.finish()
+      if (shared.recording?.owner === contents) return shared.recording.finish()
       if (trace) return trace
       return Promise.reject(
         new Error(
@@ -275,7 +280,7 @@ export function createProfiling(contents: WebContents, cdp: Cdp, files: BrowserF
       return heap.object(action.id, action.limit)
     },
     async dispose() {
-      if (recording?.owner === contents) await recording.finish().catch(() => undefined)
+      if (shared.recording?.owner === contents) await shared.recording.finish().catch(() => undefined)
       if (cpu && !cpu.result) await stopCpu().catch(() => undefined)
     },
   }

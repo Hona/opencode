@@ -1,4 +1,3 @@
-import type { BrowserPaneCommand, BrowserPaneLayout, BrowserPaneTarget } from "@opencode/app/desktop"
 import { NodeHttpClient } from "@effect/platform-node"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
@@ -6,23 +5,24 @@ import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
-import { createBrowserPage, type BrowserPage } from "./browser-chromium"
-import { browserFailure } from "./browser/errors"
-import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin, fileURLWithin } from "./browser/policy"
-import { emitIpcEvent } from "./ipc-events"
-import { SidecarCredentials } from "./service/sidecar-credentials"
-import { createBrowserRestoreStore } from "./browser/restore"
-import type { StateStore } from "./storage/state"
+import type { MainApp, MainStorage, Surfaces, Windows } from "../sdk/main"
+import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
+import { browserFailure } from "./errors"
+import { createBrowserNetwork, type BrowserNetwork } from "./network"
+import { destinationOrigin, fileURLWithin } from "./policy"
+import type { PaneEvent } from "./remote"
+import { createBrowserRestoreStore } from "./restore"
+
+type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
 type Entry = {
-  bindingID: string
+  binding: string
+  window: number
   win: BrowserWindow
   abort: AbortController
-  registered: PromiseWithResolvers<void>
+  registered: ReturnType<typeof Promise.withResolvers<void>>
   requests: Map<string, { abort: AbortController; tabID?: Browser.TabID }>
-  report?: (event: BrowserPaneEvent["event"]) => void
+  report?: (event: PaneEvent) => void
   cleanup?: () => void
   pages: Map<Browser.TabID, BrowserPage>
   tabs: Map<Browser.TabID, Browser.Tab>
@@ -38,20 +38,31 @@ type Entry = {
   fileRoots: string[]
 }
 
-export function createBrowserPane(storage: StateStore) {
+export type Pane = ReturnType<typeof createBrowserPane>
+
+export function createBrowserPane(input: {
+  readonly windows: Windows
+  readonly app: MainApp
+  readonly storage: MainStorage
+  readonly surfaces: Surfaces
+  readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
+}) {
   const entries = new Map<string, Entry>()
-  const restore = createBrowserRestoreStore(storage)
+  const restore = createBrowserRestoreStore(input.storage)
+  const shared: Shared = { ref: 0 }
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
   let disposed = false
   return {
-    async register(win: BrowserWindow, bindingID: string, target: BrowserPaneTarget) {
-      if (disposed || !destinationOrigin(target.endpoint.url)) throw new Error("browser.pane.registration.invalid")
-      if (target.endpoint.username && !target.endpoint.password) throw new Error("browser.pane.endpoint.invalid")
-      if (entries.has(bindingID)) throw new Error("browser.pane.owner.invalid")
+    async register(window: number, binding: string, target: Target) {
+      const server = input.app.server(target.server)
+      if (disposed || !server || !destinationOrigin(server.url)) throw new Error("browser.pane.registration.invalid")
+      if (server.username && !server.password) throw new Error("browser.pane.endpoint.invalid")
+      const win = input.windows.get(window)
+      if (!win || entries.has(binding)) throw new Error("browser.pane.owner.invalid")
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
-      const sessionID = SessionID.make(target.sessionID)
-      const storageKey = `${target.serverKey}\n${sessionID}`
+      const sessionID = SessionID.make(target.session)
+      const storageKey = `${target.server}\n${sessionID}`
       const saved = restore.load(storageKey)
       const previous = target.restore ?? {
         tabs: saved.tabs.map((tab) => ({
@@ -62,7 +73,8 @@ export function createBrowserPane(storage: StateStore) {
         focusedTabID: saved.focusedTabID,
       }
       const entry: Entry = {
-        bindingID,
+        binding,
+        window,
         win,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
@@ -85,9 +97,6 @@ export function createBrowserPane(storage: StateStore) {
         storageKey,
         fileRoots: [],
       }
-      const sidecar = SidecarCredentials.get()
-      const sameMachine =
-        !!sidecar && URL.canParse(target.endpoint.url) && new URL(target.endpoint.url).origin === sidecar.url
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.
       electron.session
@@ -109,27 +118,24 @@ export function createBrowserPane(storage: StateStore) {
         win.webContents.off("destroyed", stop)
         win.webContents.off("did-start-navigation", navigate)
       }
-      entries.set(bindingID, entry)
+      entries.set(binding, entry)
       void runtime
         .runPromise(
           Effect.gen(function* () {
             const http = yield* HttpClient.HttpClient
             // The renderer never holds the managed sidecar's password; Node requests bypass
-            // the webRequest header injection, so resolve the credential here in main.
-            const authorization = target.endpoint.password
-              ? `Basic ${Buffer.from(`${target.endpoint.username ?? "opencode"}:${target.endpoint.password}`).toString("base64")}`
-              : SidecarCredentials.authorization(SidecarCredentials.get(), target.endpoint.url)
-            const client = yield* OpenCode.make({ baseUrl: target.endpoint.url }).pipe(
+            // the webRequest header injection, so the host resolves the credential here in main.
+            const client = yield* OpenCode.make({ baseUrl: server.url }).pipe(
               Effect.provideService(
                 HttpClient.HttpClient,
-                authorization
-                  ? HttpClient.mapRequest(http, HttpClientRequest.setHeader("authorization", authorization))
+                Object.keys(server.headers).length
+                  ? HttpClient.mapRequest(http, HttpClientRequest.setHeaders(server.headers))
                   : http,
               ),
             )
             const session = yield* client.session.get({ sessionID })
             // The agent can already read this workspace, so showing its files adds no access.
-            if (sameMachine) entry.fileRoots = [session.location.directory]
+            if (server.local) entry.fileRoots = [session.location.directory]
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
             }
@@ -269,57 +275,45 @@ export function createBrowserPane(storage: StateStore) {
         .catch(stop)
       const timeout = setTimeout(stop, 15_000)
       await entry.registered.promise.finally(() => clearTimeout(timeout))
-      if (entries.get(bindingID) !== entry) throw new Error("browser.pane.registration.closed")
+      if (entries.get(binding) !== entry) throw new Error("browser.pane.registration.closed")
       publishState(entry)
     },
-    layout(win: BrowserWindow, bindingID: string, value?: BrowserPaneLayout) {
-      const entry = owned(win, bindingID)
-      if (!value) return entry.pages.forEach((page) => page.setVisible(false))
-      const bounds = value.bounds
-      if (!value.visible || !bounds || bounds.width <= 0 || bounds.height <= 0) {
-        entry.pages.get(value.tabID)?.setVisible(false)
-        return
-      }
-      const page = load(entry, value.tabID)
-      if (!page) return
-      entry.pages.forEach((other) => {
-        if (other !== page) other.setVisible(false)
-      })
-      page.layout(bounds, value.background, value.radius)
-      page.setVisible(true)
+    load(window: number, binding: string, tabID: Browser.TabID) {
+      load(owned(window, binding), tabID)
     },
-    async capture(win: BrowserWindow, bindingID: string, tabID: Browser.TabID) {
-      return (await owned(win, bindingID).pages.get(tabID)?.capture()) ?? null
-    },
-    async command(win: BrowserWindow, bindingID: string, command: BrowserPaneCommand) {
-      const entry = owned(win, bindingID)
+    async command(window: number, binding: string, command: Browser.Action) {
+      const entry = owned(window, binding)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)
     },
-    async close(win: BrowserWindow, bindingID: string) {
-      const entry = owned(win, bindingID)
+    async close(window: number, binding: string) {
+      const entry = owned(window, binding)
       restore.remove(entry.storageKey)
       close(entry)
     },
+    /**
+     * The extension is going away (reload, disable, or quit). Windows keep each pane's tabs as a
+     * suspended attachment, like an idle server eviction, and register again once the pane is back.
+     */
     async dispose() {
       disposed = true
-      entries.forEach((entry) => close(entry))
+      entries.forEach((entry) => close(entry, "browser.pane.suspended"))
       await runtime.dispose()
     },
   }
 
-  function owned(win: BrowserWindow, bindingID: string) {
-    const entry = entries.get(bindingID)
-    if (!entry || entry.win !== win) throw new Error("browser.pane.unavailable")
+  function owned(window: number, binding: string) {
+    const entry = entries.get(binding)
+    if (!entry || entry.window !== window) throw new Error("browser.pane.unavailable")
     return entry
   }
 
-  function publish(entry: Entry, event: BrowserPaneEvent["event"]) {
-    if (!entries.has(entry.bindingID) || entry.win.isDestroyed() || entry.win.webContents.isDestroyed()) return
-    emitIpcEvent(entry.win.webContents, new BrowserPaneEvent({ bindingID: entry.bindingID, event }))
+  function publish(entry: Entry, event: PaneEvent) {
+    if (!entries.has(entry.binding) || entry.win.isDestroyed() || entry.win.webContents.isDestroyed()) return
+    input.emit(entry.window, { binding: entry.binding, event })
   }
 
   function close(entry: Entry, reason = "browser.pane.registration.closed") {
-    if (entries.get(entry.bindingID) !== entry) return
+    if (entries.get(entry.binding) !== entry) return
     entry.report = undefined
     entry.requests.forEach((request) => request.abort.abort())
     entry.requests.clear()
@@ -332,7 +326,7 @@ export function createBrowserPane(storage: StateStore) {
     entry.tabs.clear()
     entry.focusedTabID = null
     if (!suspended) publishState(entry, reason)
-    entries.delete(entry.bindingID)
+    entries.delete(entry.binding)
     entry.registered.reject(new Error("browser.pane.registration.closed"))
     entry.cleanup?.()
     entry.abort.abort()
@@ -377,7 +371,7 @@ export function createBrowserPane(storage: StateStore) {
     report(entry, event)
   }
 
-  function report(entry: Entry, event: BrowserPaneEvent["event"]) {
+  function report(entry: Entry, event: PaneEvent) {
     if (entry.report) return entry.report(event)
     publish(entry, event)
   }
@@ -415,6 +409,8 @@ export function createBrowserPane(storage: StateStore) {
       restore,
       popupOptions,
       fileRoots: () => entry.fileRoots,
+      shared,
+      surfaces: input.surfaces,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
@@ -427,6 +423,8 @@ export function createBrowserPane(storage: StateStore) {
     })
     entry.pages.set(id, page)
     entry.tabs.set(id, restore ?? page.state())
+    // Straight to the window, not through the server report: the surface is local to this desktop.
+    publish(entry, { type: "surface", tabID: id, surface: page.surface })
     void page.ready
       .then(() => {
         if (entry.pages.get(id) === page) publishState(entry)

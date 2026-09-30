@@ -1,5 +1,4 @@
 import type { WebContents } from "electron"
-import type { Page } from "puppeteer-core"
 import { EventEmitter } from "node:events"
 import type { BrowserFiles } from "./files"
 import type { Cdp } from "./cdp"
@@ -44,7 +43,7 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
     const page = {
       url: () => contents.getURL(),
       target: () => ({ createCDPSession: async () => root }),
-    } as unknown as Page
+    } as unknown as Parameters<typeof snapshot>[0]
     // Our screenshot tool handles captures separately. Lighthouse's screenshot
     // gatherer resizes the viewport and waits for frames that hidden views may not paint.
     const result = await snapshot(page, {

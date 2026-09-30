@@ -2,25 +2,19 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
-import { createCdp, abortError, waitFor } from "./browser/cdp"
-import { createBrowserFiles } from "./browser/files"
-import { createDiagnostics } from "./browser/diagnostics"
-import { createProfiling } from "./browser/profiling"
-import { createCornerImages } from "./native/corners"
-import type { BrowserNetwork } from "./browser/network"
-import {
-  allowedDestination,
-  destinationOrigin,
-  fileURLWithin,
-  localFileURL,
-  normalizeURL,
-  type Policy,
-} from "./browser/policy"
+import type { Surfaces } from "../sdk/main"
+import { createCdp, abortError, waitFor } from "./cdp"
+import { createBrowserFiles } from "./files"
+import { createDiagnostics } from "./diagnostics"
+import { createProfiling, type Recording } from "./profiling"
+import type { BrowserNetwork } from "./network"
+import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, normalizeURL, type Policy } from "./policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
-let nextRef = 0
+/** State every page of the pane shares: the element ref counter and the app-wide trace recording. */
+export type Shared = { ref: number; recording?: Recording }
 // Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
-const retainedOperations = new Set<Browser.Method>([
+const retainedOperations: readonly Browser.Method[] = [
   "navigate",
   "files.list",
   "files.get",
@@ -32,7 +26,7 @@ const retainedOperations = new Set<Browser.Method>([
   "heap.query",
   "heap.object",
   "heap.compare",
-])
+]
 export type BrowserPage = ReturnType<typeof createBrowserPage>
 
 export function createBrowserPage(
@@ -49,6 +43,8 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
+    shared: Shared
+    surfaces: Surfaces
   },
 ) {
   const policy: Policy = {
@@ -96,7 +92,7 @@ export function createBrowserPage(
   const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
   const diagnostics = createDiagnostics(cdp)
-  const profiling = createProfiling(contents, cdp, files, sourceURLs)
+  const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
   const refs = new Map<string, Element>()
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
@@ -290,23 +286,12 @@ export function createBrowserPage(
     dialog = null
     publish()
   })
+  // Hidden tabs keep a desktop-sized viewport until the renderer lays the surface out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
-  view.setVisible(false)
-  win.contentView.addChildView(view)
-  const corners = [new electron.ImageView(), new electron.ImageView()]
-  let cornerKey = ""
-  corners.forEach((corner) => {
-    corner.setVisible(false)
-    win.contentView.addChildView(corner)
-  })
-  let visible = false
-  const updateVisibility = () => {
-    // The renderer's layout requests may lag behind navigation; the page decides
-    // whether there is a document worth exposing over the themed background.
-    const show = visible && content
-    view.setVisible(show)
-    corners.forEach((corner) => corner.setVisible(show && !!cornerKey))
-  }
+  const surface = options.surfaces.create(view, win)
+  // The renderer's layout requests may lag behind navigation; the page decides
+  // whether there is a document worth exposing over the themed background.
+  const updateVisibility = () => surface.show(content)
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
@@ -334,39 +319,8 @@ export function createBrowserPage(
     contents,
     state,
     ready,
-    layout(bounds: Electron.Rectangle, background?: readonly [number, number, number, number], radius = 10) {
-      view.setBounds(bounds)
-      const size = Math.min(radius, Math.floor(bounds.width / 2), Math.floor(bounds.height / 2))
-      const scale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-      const key = background && size > 0 ? `${background}:${size}:${scale}` : ""
-      if (key && key !== cornerKey && background) {
-        createCornerImages(background, size, scale).forEach((image, index) => corners[index].setImage(image))
-      }
-      cornerKey = key
-      corners.forEach((corner, index) => {
-        // A composited layer is required above WebContentsView. A zero-duration
-        // bounds update creates that layer without a visible animation.
-        corner.setBounds(
-          {
-            x: bounds.x + (index ? bounds.width - size : 0),
-            y: bounds.y + bounds.height - size,
-            width: size,
-            height: size,
-          },
-          { animate: { duration: 0 } },
-        )
-      })
-    },
-    setVisible(value: boolean) {
-      visible = value
-      updateVisibility()
-    },
-    // Freezes the shown page so the renderer can paint it under DOM overlays while the view hides.
-    async capture() {
-      if (closed || !visible || !content) return
-      const image = await contents.capturePage()
-      return image.isEmpty() ? undefined : new Uint8Array(image.toJPEG(90))
-    },
+    /** The host surface the renderer lays this page out with. */
+    surface: surface.id,
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)
@@ -386,7 +340,7 @@ export function createBrowserPage(
       if (
         command.generation !== undefined &&
         command.generation !== generation &&
-        !retainedOperations.has(command.action.type)
+        !retainedOperations.includes(command.action.type)
       )
         throw new Error(
           "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
@@ -435,10 +389,7 @@ export function createBrowserPage(
       await profiling.dispose()
       cdp.dispose()
       refs.clear()
-      if (!win.isDestroyed()) {
-        corners.forEach((corner) => win.contentView.removeChildView(corner))
-        win.contentView.removeChildView(view)
-      }
+      surface.dispose()
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
@@ -752,7 +703,7 @@ export function createBrowserPage(
       case "heap.compare":
         return result({ tab: state(), ...(await profiling.analyze(action)) })
       case "lighthouse": {
-        const { audit } = await import("./browser/lighthouse")
+        const { audit } = await import("./lighthouse")
         const report = await audit(contents, files, cdp, captureSources)
         return result(
           { tab: state(), scores: report.scores, failures: report.failures },
@@ -1094,7 +1045,7 @@ export function createBrowserPage(
         const actionable =
           role !== "RootWebArea" &&
           (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
-        const ref = actionable && node.backendDOMNodeId ? `e${++nextRef}` : ""
+        const ref = actionable && node.backendDOMNodeId ? `e${++options.shared.ref}` : ""
         const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
         if (ref && element) refs.set(ref, element)
         const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
