@@ -40,7 +40,7 @@ test("shows a pending question dock", async ({ page }) => {
   await expect(question.getByText("Which implementation should be used?")).toBeVisible()
   await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
   await expect(question.getByRole("radio", { name: /Extended/ })).toBeVisible()
-  await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
 
   const rejectRequests: string[] = []
   page.on("request", (request) => {
@@ -79,7 +79,9 @@ test("shows a pending question dock", async ({ page }) => {
 })
 
 test("shows a pending permission dock", async ({ page }) => {
+  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
   await mockServer(page, {
+    onPermissionReply: (reply) => replies.push(reply),
     sessionPermissions: {
       [sessionID]: [
         {
@@ -102,13 +104,17 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
-  await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
 
-  const reply = page.waitForRequest((request) => request.method() === "POST")
+  const reply = page.waitForResponse((response) => response.request().method() === "POST")
   await permission.getByRole("button", { name: "Allow once" }).click()
-  const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
-  expect(request.postDataJSON()).toEqual({ decision: "once" })
+  const response = await reply
+  expect(new URL(response.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
+  expect(response.request().postDataJSON()).toEqual({ decision: "once" })
+  expect(response.status()).toBe(204)
+  expect(replies).toEqual([{ sessionID, permissionID: "permission-request", body: { decision: "once" } }])
+  await expect(permission).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
@@ -120,22 +126,21 @@ test("restores the draft caret before typing after a request dock closes", async
 
   const editor = page.locator('[data-component="composer-editor"][contenteditable="true"]')
   const draft = "keep the caret at the end"
+  const caret = () =>
+    editor.evaluate((element) => {
+      const selection = window.getSelection()
+      if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
+      const range = selection.getRangeAt(0).cloneRange()
+      range.selectNodeContents(element)
+      range.setEnd(selection.anchorNode!, selection.anchorOffset)
+      return range.toString().length
+    })
   await editor.fill(draft)
-  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+  // The editor places the caret after the filled text; move it only from that known position.
+  await expect.poll(caret).toBe(draft.length)
   for (let index = 0; index < 4; index++) await page.keyboard.press("ArrowLeft")
   const cursor = draft.length - 4
-  await expect
-    .poll(() =>
-      editor.evaluate((element) => {
-        const selection = window.getSelection()
-        if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
-        const range = selection.getRangeAt(0).cloneRange()
-        range.selectNodeContents(element)
-        range.setEnd(selection.anchorNode!, selection.anchorOffset)
-        return range.toString().length
-      }),
-    )
-    .toBe(cursor)
+  await expect.poll(caret).toBe(cursor)
   await transport.send({
     id: "evt_form_created",
     created: 1700000001000,
@@ -178,6 +183,6 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "forms">) {
+function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms">) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }

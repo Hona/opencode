@@ -128,26 +128,16 @@ for (const direction of ["ltr", "rtl"] as const) {
 
 test.describe("rename", () => {
   const heading = (page: Page, name: string) => page.getByRole("heading", { name, exact: true })
+  // Rename requests (`PATCH /api/session/:id`); the mock stores the new title for later reads.
+  const renames: { sessionID: string; body: unknown }[] = []
 
   test.beforeEach(async ({ page }) => {
-    const sessions = fixture.sessions.map((session) => ({ ...session }))
-    await mockStressTimeline(page, { sessions })
-    await page.route("**/api/session/*", async (route) => {
-      if (route.request().method() !== "PATCH") return route.fallback()
-      const id = new URL(route.request().url()).pathname.split("/").at(-1)
-      const session = sessions.find((item) => item.id === id)
-      const payload: unknown = route.request().postDataJSON()
-      if (
-        !session ||
-        !payload ||
-        typeof payload !== "object" ||
-        !("title" in payload) ||
-        typeof payload.title !== "string"
-      )
-        throw new Error("Invalid rename request")
-      session.title = payload.title
-      await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    renames.length = 0
+    page.on("request", (request) => {
+      const match = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)$/)
+      if (request.method() === "PATCH" && match) renames.push({ sessionID: match[1]!, body: request.postDataJSON() })
     })
+    await mockStressTimeline(page)
     await page.goto("/")
     await page.locator('[data-component="home-session-row"]').filter({ hasText: fixture.expected.targetTitle }).click()
     await expect(heading(page, fixture.expected.targetTitle)).toBeVisible()
@@ -164,6 +154,7 @@ test.describe("rename", () => {
       if (commit === "click outside") await page.locator('[data-component="composer-editor"]').click()
       await expect(heading(page, "Renamed session")).toBeVisible()
       await expect(tabs(page).filter({ hasText: "Renamed session" })).toBeVisible()
+      await expect.poll(() => renames).toEqual([{ sessionID: fixture.targetID, body: { title: "Renamed session" } }])
       await page.reload()
       await expect(heading(page, "Renamed session")).toBeVisible()
     })
@@ -181,6 +172,7 @@ test.describe("rename", () => {
       await expect(heading(page, fixture.expected.targetTitle)).toBeVisible()
       await page.reload()
       await expect(heading(page, fixture.expected.targetTitle)).toBeVisible()
+      expect(renames).toEqual([])
     })
   }
 
@@ -214,6 +206,7 @@ test.describe("rename", () => {
     await input.fill("Renamed from tab")
     await input.press("Enter")
     await expect(heading(page, "Renamed from tab")).toBeVisible()
+    await expect.poll(() => renames).toEqual([{ sessionID: fixture.targetID, body: { title: "Renamed from tab" } }])
     await page.reload()
     await expect(heading(page, "Renamed from tab")).toBeVisible()
     const renamed = tabs(page).filter({ hasText: "Renamed from tab" })
@@ -240,6 +233,7 @@ test.describe("rename", () => {
     await expect(page).toHaveURL(new RegExp(`/session/${fixture.sourceID}$`))
     await tabs(page).filter({ hasText: "Inactive tab renamed" }).click()
     await expect(heading(page, "Inactive tab renamed")).toBeVisible()
+    expect(renames).toEqual([{ sessionID: fixture.targetID, body: { title: "Inactive tab renamed" } }])
     await page.reload()
     await expect(heading(page, "Inactive tab renamed")).toBeVisible()
   })

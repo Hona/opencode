@@ -39,6 +39,12 @@ export class MockInternal extends Schema.TaggedError<MockInternal>()("MockIntern
   message: Schema.String,
 }) {}
 
+// The server's error for an unknown shell command; the timeline shows that shell's output as missing.
+export class MockShellNotFound extends Schema.TaggedError<MockShellNotFound>()("ShellNotFoundError", {
+  id: Schema.String,
+  message: Schema.String,
+}) {}
+
 // A mutation the scenario did not configure a handler for.
 export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("MockUnsupported", {
   message: Schema.String,
@@ -73,6 +79,21 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("integrationOAuthConnect", "/api/integration/:integrationID/connect/oauth", {
+      params: { integrationID: Schema.String },
+      payload: JsonPayload,
+      success: Json,
+      error: Unsupported,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("integrationOAuthStatus", "/api/integration/:integrationID/connect/oauth/:attemptID", {
+      params: { integrationID: Schema.String, attemptID: Schema.String },
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
     HttpApiEndpoint.delete("credentialRemove", "/api/credential/:credentialID", {
       params: { credentialID: Schema.String },
       success: NoContent,
@@ -82,6 +103,20 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("skill", "/api/skill", { success: Json }))
   .add(HttpApiEndpoint.get("plugin", "/api/plugin", { success: Json }))
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
+  .add(
+    HttpApiEndpoint.post("mcpConnect", "/api/experimental/mcp/:server/connect", {
+      params: { server: Schema.String },
+      success: NoContent,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("mcpDisconnect", "/api/experimental/mcp/:server/disconnect", {
+      params: { server: Schema.String },
+      success: NoContent,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
   .add(HttpApiEndpoint.get("mcpResource", "/api/mcp/resource", { success: Json }))
   .add(HttpApiEndpoint.get("projectList", "/api/project", { success: Json }))
   .add(
@@ -144,7 +179,21 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("fsFind", "/api/fs/find", { query: Query, success: Json }))
+  .add(
+    HttpApiEndpoint.post("fsWrite", "/api/experimental/fs/write", {
+      payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      success: Json,
+      error: Unsupported,
+    }),
+  )
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
+  .add(
+    HttpApiEndpoint.get("shellOutput", "/api/shell/:id/output", {
+      params: { id: Schema.String },
+      success: Json,
+      error: MockShellNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
   .add(
     HttpApiEndpoint.get("ptyList", "/api/pty", {
       success: Json,

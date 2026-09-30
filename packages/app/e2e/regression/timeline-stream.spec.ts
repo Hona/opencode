@@ -434,23 +434,19 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
   expect(await markers()).toEqual({ markers: ["before", "before", "before", "before"], shadowRoots: 0 })
 })
 
-for (const transition of ["idle", "retry"] as const) {
+for (const transition of ["reasoning-end", "idle", "retry"] as const) {
   test(`stops active Thinking on ${transition} without a following tool`, async ({ page }) => {
     const id = `prt_reasoning_stop_${transition}`
+    const text = "## Inspecting stability\n\nThe timeline is ready for the next step."
     const timeline = await setupTimeline(page, {
-      messages: [
-        userMessage(),
-        assistantMessage([reasoningPart(id, "## Inspecting stability\n\nThe timeline is ready for the next step.")], {
-          completed: false,
-        }),
-      ],
+      messages: [userMessage(), assistantMessage([reasoningPart(id, text)], { completed: false })],
       settings: { timelineDetail: { ...detailed, thinking: { placement: "separate", details: "collapsed" } } },
     })
     const part = page.locator(`[data-timeline-part-id="${renderedPartID(id)}"]`)
     const trigger = part.locator('[data-slot="collapsible-trigger"]')
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
-    await timeline.send(status(transition))
+    await timeline.send(transition === "reasoning-end" ? partUpdated(reasoningPart(id, text)) : status(transition))
     await expect(trigger).toContainText("Thought")
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(transition === "retry" ? 1 : 0)
@@ -1116,6 +1112,7 @@ test.describe("shell completion", () => {
         ],
         time: { created: 2, completed: 3 },
       }
+      const state = { finished: false, requests: 0 }
       const timeline = await setupTimeline(page, {
         viewport: { width: grouped ? 390 : 1400, height: 900 },
         settings: { shellToolPartsExpanded: !grouped },
@@ -1124,29 +1121,12 @@ test.describe("shell completion", () => {
           { id: "msg_user", type: "user", text: "Run two independent checks.", time: { created: 1 } },
           message,
         ],
-      })
-      const state = { finished: false, requests: 0 }
-      await page.route("**/api/shell?*", (route) =>
-        route.fulfill({
-          json: {
-            location: { directory },
-            data: [...(state.finished ? [] : [background]), { ...background, id: "sh_other" }],
-          },
-        }),
-      )
-      await page.route("**/api/shell/*/output?*", (route) => {
-        const url = new URL(route.request().url())
-        const target = url.pathname.includes(`/${background.id}/`)
-        if (target) state.requests++
-        const output = target && state.finished ? "Checking project\nCheck finished\n" : "Checking project\n"
-        const cursor = Number(url.searchParams.get("cursor") ?? 0)
-        const end = Math.min(output.length, cursor + 17)
-        return route.fulfill({
-          json: {
-            location: { directory },
-            data: { output: output.slice(cursor, end), cursor: end, size: output.length, truncated: false },
-          },
-        })
+        shellCommands: () => [...(state.finished ? [] : [background]), { ...background, id: "sh_other" }],
+        shellOutput: ({ id }) => {
+          if (id !== background.id) return "Checking project\n"
+          state.requests++
+          return state.finished ? "Checking project\nCheck finished\n" : "Checking project\n"
+        },
       })
       await page.clock.install()
       await page.reload()
@@ -1220,22 +1200,8 @@ test.describe("shell completion", () => {
           time: { created: 2 },
         },
       ],
+      shellOutput: ({ id }) => (id === background.id ? "Checking project\n" : undefined),
     })
-    await page.route("**/api/shell/*/output?*", (route) =>
-      route.fulfill({
-        json: {
-          location: { directory },
-          data: {
-            output: Number(new URL(route.request().url()).searchParams.get("cursor")) === 0 ? "Checking project\n" : "",
-            cursor: 17,
-            size: 17,
-            truncated: false,
-          },
-        },
-      }),
-    )
-    await page.reload()
-    await timeline.transport.waitForConnection()
     const card = page.locator('[data-timeline-part-id="call_foreground"]')
     const shimmer = card.locator('[data-component="text-shimmer"]')
     await expect(shimmer).toHaveAttribute("data-active", "true")

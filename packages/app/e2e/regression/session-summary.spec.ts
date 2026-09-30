@@ -318,33 +318,20 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
 })
 
 test("every MCP row hit area toggles exactly once and keeps the submenu open", async ({ page }) => {
-  await mockStressTimeline(page)
-  const state = { enabled: true }
-  const writes: string[] = []
-  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, (route) => {
-    if (route.request().method() === "OPTIONS") return route.fallback()
-    const url = new URL(route.request().url())
-    const directory = url.searchParams.get("location[directory]")
-    if (route.request().method() === "POST") {
-      expect(directory).toBe(fixture.directory)
-      writes.push(url.pathname)
-      state.enabled = url.pathname.endsWith("/connect")
-      return route.fulfill({ status: 204 })
-    }
-    return route.fulfill({
-      json: {
-        location: { directory: fixture.directory },
-        data:
-          url.pathname === "/api/mcp/resource"
-            ? { resources: [], templates: [] }
-            : [
-                { name: "figma", status: { status: state.enabled ? "connected" : "disabled" } },
-                { name: "linear", status: { status: "needs_auth" }, integrationID: "linear-oauth" },
-                { name: "playwright", status: { status: "failed", error: "Connection refused" } },
-                { name: "waiting", status: { status: "pending" } },
-              ],
-      },
-    })
+  // The harness stores each connect/disconnect as the server's status; `writes` records the requests.
+  await mockStressTimeline(page, {
+    mcp: [
+      { name: "figma", status: { status: "connected" } },
+      { name: "linear", status: { status: "needs_auth" }, integrationID: "linear-oauth" },
+      { name: "playwright", status: { status: "failed", error: "Connection refused" } },
+      { name: "waiting", status: { status: "pending" } },
+    ],
+  })
+  const writes: { path: string; directory: string | null }[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (request.method() !== "POST" || !url.pathname.startsWith("/api/experimental/mcp/")) return
+    writes.push({ path: url.pathname, directory: url.searchParams.get("location[directory]") })
   })
   await page.goto(sessionHref(fixture.targetID))
   await page.getByRole("button", { name: "Session details", exact: true }).click()
@@ -376,48 +363,33 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
     await expect(submenu).toBeVisible()
     if (target === "keyboard") await expect(toggle).toBeFocused()
     expect(writes).toHaveLength(index + 1)
-    expect(writes[index]).toBe(`/api/experimental/mcp/figma/${enabled ? "connect" : "disconnect"}`)
+    expect(writes[index]).toEqual({
+      path: `/api/experimental/mcp/figma/${enabled ? "connect" : "disconnect"}`,
+      directory: fixture.directory,
+    })
   }
 })
 
 test("MCP authentication starts before a slow resource catalog finishes", async ({ page, context }) => {
-  await mockStressTimeline(page)
-  const state = { status: "disabled" }
+  const state = { connected: false }
   const attempts: string[] = []
-  const resources = Promise.withResolvers<void>()
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
-    if (route.request().method() === "OPTIONS") return route.fallback()
-    const url = new URL(route.request().url())
-    if (url.pathname.endsWith("/connect")) {
-      state.status = "needs_auth"
-      return route.fulfill({ status: 204 })
-    }
-    if (url.pathname === "/api/mcp/resource" && state.status === "needs_auth") await resources.promise
-    return route.fulfill({
-      json: {
-        location: { directory: fixture.directory },
-        data:
-          url.pathname === "/api/mcp/resource"
-            ? { resources: [], templates: [] }
-            : [{ name: "linear", integrationID: "linear-oauth", status: { status: state.status } }],
-      },
-    })
+  await mockStressTimeline(page, {
+    mcp: [{ name: "linear", integrationID: "linear-oauth", status: { status: "disabled" } }],
+    onMcpAction: () => {
+      state.connected = true
+      return { status: "needs_auth" }
+    },
+    integrations: [{ id: "linear-oauth", name: "Linear", methods: [{ id: "oauth", type: "oauth" }], connections: [] }],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/authorize" }),
   })
-  await page.route("**/api/integration/**", (route) => {
-    if (route.request().method() === "OPTIONS") return route.fallback()
-    if (route.request().method() === "POST") {
-      attempts.push(route.request().url())
-      return route.fulfill({
-        json: { location: { directory: fixture.directory }, data: { url: "https://auth.example.test/authorize" } },
-      })
-    }
-    return route.fulfill({
-      json: {
-        location: { directory: fixture.directory },
-        data: { id: "linear-oauth", methods: [{ id: "oauth", type: "oauth" }] },
-      },
-    })
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname.startsWith("/api/integration/"))
+      attempts.push(request.url())
+  })
+  // Only the resource catalog refresh after connecting is slow.
+  const resources = await holdRoute(page, (url) => state.connected && url.pathname === "/api/mcp/resource", {
+    method: "GET",
   })
   await page.goto(sessionHref(fixture.targetID))
   await page.getByRole("button", { name: "Session details", exact: true }).click()
@@ -425,21 +397,15 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
   const submenu = page.getByRole("dialog", { name: "MCP", exact: true })
   const toggle = submenu.getByRole("switch", { name: "linear", exact: true })
   await expect(toggle).toBeEnabled()
-  const refresh = page.waitForRequest(
-    (request) =>
-      state.status === "needs_auth" &&
-      new URL(request.url()).pathname === "/api/mcp/resource" &&
-      request.method() === "GET",
-  )
   try {
     const popup = page.waitForEvent("popup")
     await submenu.getByText("linear", { exact: true }).click()
     await expect(await popup).toHaveURL("https://auth.example.test/authorize")
-    await refresh
+    await resources.arrived
     await expect(toggle).toBeChecked()
     await expect(toggle).toHaveAccessibleDescription("Sign in required")
   } finally {
-    resources.resolve()
+    resources.release()
   }
   await expect(toggle).toBeEnabled()
   expect(attempts).toHaveLength(1)

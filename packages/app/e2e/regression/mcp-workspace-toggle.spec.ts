@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { NO_PROVIDER, sessionHref } from "../utils/app"
+import type { MockServerConfig } from "../utils/mock-server"
 import { mockWorkspace } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -10,13 +11,16 @@ const title = "Workspace MCP routing"
 
 type Surface = "popover" | "dialog"
 
-// A session in a worktree of the project; `list` answers the MCP list for each location directory.
+// A session in a worktree of the project. The harness answers the MCP list for each location directory and stores
+// connect/disconnect results per directory; `requests` records every MCP request and the directory it targeted.
 // The popover belongs to the summary extension; the dialog (Ctrl+;) is the app's own MCP toggle.
-async function open(
-  page: Page,
-  input: { surface: Surface; list: (target: string) => unknown[]; action: (name: string, target: string) => void },
-) {
+async function open(page: Page, input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction">) {
   const requests: { path: string; directory: string }[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (request.method() === "OPTIONS" || !/^\/api\/(?:experimental\/)?mcp(?:\/|$)/.test(url.pathname)) return
+    requests.push({ path: url.pathname, directory: url.searchParams.get("location[directory]") || directory })
+  })
   await mockWorkspace(page, {
     name: "mcp-workspace",
     directory,
@@ -24,24 +28,8 @@ async function open(
     provider: NO_PROVIDER,
     sessions: [{ id: sessionID, title, directory: workspace }],
     seed: { settings: { keybinds: { "mcp.toggle": "ctrl+;" } } },
-  })
-  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
-    if (route.request().method() === "OPTIONS") return route.fallback()
-    const url = new URL(route.request().url())
-    const target = url.searchParams.get("location[directory]") ?? directory
-    requests.push({ path: url.pathname, directory: target })
-    const action = url.pathname.match(/^\/api\/experimental\/mcp\/figma-desktop\/(connect|disconnect)$/)?.[1]
-    if (action) {
-      input.action(action, target)
-      // Connection failures are reported by the refreshed status, not the HTTP response.
-      return route.fulfill({ status: 204 })
-    }
-    return route.fulfill({
-      json: {
-        location: { directory: target },
-        data: url.pathname === "/api/mcp/resource" ? { resources: [], templates: [] } : input.list(target),
-      },
-    })
+    mcp: input.mcp,
+    onMcpAction: input.onMcpAction,
   })
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
@@ -61,14 +49,12 @@ for (const shared of [true, false]) {
   test(`toggles the workspace MCP when the default location ${shared ? "has" : "does not have"} the server`, async ({
     page,
   }) => {
-    const connected = new Set<string>()
+    const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
     const view = await open(page, {
       surface: "popover",
-      list: (target) =>
-        !shared && target !== workspace
-          ? []
-          : [{ name: "figma-desktop", status: { status: connected.has(target) ? "connected" : "disabled" } }],
-      action: (name, target) => (name === "connect" ? connected.add(target) : connected.delete(target)),
+      mcp: (target) =>
+        !shared && target !== workspace ? [] : [{ name: "figma-desktop", status: { status: "disabled" } }],
+      onMcpAction: (action) => void actions.push(action),
     })
     await expect(view.toggle).not.toBeChecked()
     await expect(view.toggle).toBeEnabled()
@@ -77,7 +63,7 @@ for (const shared of [true, false]) {
     await view.panel.locator('[data-slot="switch-control"]').click()
     await expect(view.toggle).toBeChecked()
     await expect(view.toggle).toBeEnabled()
-    expect(connected).toEqual(new Set([workspace]))
+    expect(actions).toEqual([{ server: "figma-desktop", action: "connect", directory: workspace }])
     expect(view.requests).toContainEqual({ path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace })
     expect(view.requests).toContainEqual({ path: "/api/mcp/resource", directory: workspace })
     expect(view.requests.every((request) => request.directory === workspace)).toBe(true)
@@ -86,7 +72,10 @@ for (const shared of [true, false]) {
     await view.panel.getByText("figma-desktop", { exact: true }).click()
     await expect(view.toggle).not.toBeChecked()
     await expect(view.toggle).toBeEnabled()
-    expect(connected.size).toBe(0)
+    expect(actions).toEqual([
+      { server: "figma-desktop", action: "connect", directory: workspace },
+      { server: "figma-desktop", action: "disconnect", directory: workspace },
+    ])
     expect(view.requests).toContainEqual({
       path: "/api/experimental/mcp/figma-desktop/disconnect",
       directory: workspace,
@@ -98,15 +87,17 @@ for (const shared of [true, false]) {
 for (const surface of ["popover", "dialog"] as const) {
   test(`shows connection failures from the MCP ${surface} and allows reconnecting`, async ({ page }) => {
     const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
-    const state = { fail: true, status: surface === "popover" ? "failed" : "disabled" }
+    const state = { fail: true }
     const view = await open(page, {
       surface,
-      list: (target) => [
-        { name: "figma-desktop", status: { status: target === workspace ? state.status : "connected", error } },
+      mcp: (target) => [
+        {
+          name: "figma-desktop",
+          status: { status: target !== workspace ? "connected" : surface === "popover" ? "failed" : "disabled", error },
+        },
       ],
-      action: (name) => {
-        state.status = name === "disconnect" ? "disabled" : state.fail ? "failed" : "connected"
-      },
+      // Connection failures are reported by the refreshed status, not the HTTP response.
+      onMcpAction: (input) => (input.action === "connect" && state.fail ? { status: "failed", error } : undefined),
     })
     // A failed server shows as enabled in the popover; switch it off first.
     const reset = async () => {

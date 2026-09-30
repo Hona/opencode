@@ -163,14 +163,16 @@ test.describe("timeline history", () => {
       await expect.poll(() => requests.filter((request) => request.phase === "start").length).toBe(2)
       expect(sequence).toEqual(["messages:start:latest", "messages:end:latest", `messages:start:${messages[2]!.id}`])
 
-      await page.evaluate(() => window.__historyRootProbe!.arm())
-      await waitForProbeSamples(page, 0)
+      // The probe samples every painted frame from here on; the steps below wait for projected state, not samples.
+      expect(await page.evaluate(() => window.__historyRootProbe!.arm())).not.toEqual([])
       expect(await page.evaluate(() => window.__historyRootProbe!.hidden)).toBe(false)
-      const beforeHistory = await page.evaluate(() => window.__historyRootProbe!.samples)
       history.resolve()
       await expect.poll(() => requests.filter((request) => request.phase === "end").length).toBe(2)
       await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
-      await waitForProbeSamples(page, beforeHistory)
+      // The older page is projected above the kept rows.
+      await expect(
+        page.locator(`[data-timeline-row="UserMessage"][data-message-id="${messages[0]!.id}"]`),
+      ).toBeAttached()
       expect(pages).toEqual([
         { before: undefined, limit: 40 },
         { before: messages[2]!.id, limit: 20 },
@@ -184,13 +186,17 @@ test.describe("timeline history", () => {
       }
       const message = messageUpdated(completed)
       const idle = status("idle")
+      // Idle ends the working turn, so its last text part shows the response actions. A completed step changes
+      // nothing visible while the session is still busy; the idle that follows it proves both were projected.
+      const actions = page.locator(`[data-timeline-part-id="${last.id}:text:0"] [data-slot="text-part-copy-wrapper"]`)
       for (const event of scenario.idleFirst ? [idle, message] : [message, idle]) {
-        const beforeEvent = await page.evaluate(() => window.__historyRootProbe!.samples)
         await timeline.send(event)
-        if (event === idle) await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
+        if (event === idle) {
+          await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
+          await expect(actions).toBeAttached()
+        }
         if (event === message && scenario.error)
           await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
-        await waitForProbeSamples(page, beforeEvent)
         await expect(page.locator("[data-timeline-virtual-content]")).toHaveCount(1)
         await expect(page.locator("[data-timeline-key]")).not.toHaveCount(0)
       }
@@ -299,7 +305,7 @@ test.describe("timeline history", () => {
 
 declare global {
   interface Window {
-    __historyRootProbe?: { arm(): void; hidden: boolean; samples: number }
+    __historyRootProbe?: { arm(): string[]; hidden: boolean }
   }
 }
 
@@ -407,10 +413,11 @@ function installVisibilityProbe() {
     armed: false,
     hidden: false,
     parts: [] as string[],
-    samples: 0,
+    // Returns the parts that must stay visible.
     arm() {
       state.parts = visibleParts()
       state.armed = true
+      return state.parts
     },
   }
   window.__historyRootProbe = state
@@ -418,14 +425,8 @@ function installVisibilityProbe() {
     if (state.armed) {
       const visible = new Set(visibleParts())
       if (state.parts.length === 0 || state.parts.some((partID) => !visible.has(partID))) state.hidden = true
-      state.samples++
     }
     requestAnimationFrame(() => setTimeout(sample, 0))
   }
   requestAnimationFrame(() => setTimeout(sample, 0))
-}
-
-// The probe must have sampled painted frames after the event before its record means anything.
-async function waitForProbeSamples(page: Page, after: number) {
-  await expect.poll(() => page.evaluate(() => window.__historyRootProbe!.samples)).toBeGreaterThanOrEqual(after + 3)
 }

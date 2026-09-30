@@ -18,14 +18,7 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
 }
 
 test("the session context menu renames, exports, and deletes a Home session", async ({ page }) => {
-  const sessions = fixture.sessions.map((item) => ({ ...item }))
-  // The mock acknowledges renames without storing them; later reads must return the new title.
-  page.on("request", (request) => {
-    if (request.method() !== "PATCH") return
-    const target = sessions.find((item) => new URL(request.url()).pathname.endsWith(`/session/${item.id}`))
-    if (target) target.title = request.postDataJSON().title
-  })
-  await openHome(page, { sessions })
+  await openHome(page)
   const target = row(page, fixture.expected.targetTitle)
   await expect(target).toBeVisible()
 

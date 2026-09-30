@@ -406,9 +406,10 @@ export async function installTimelineSettings(page: Page) {
   })
 }
 
+// Each call serves its own copies of the sessions, so creates and renames never leak into other tests.
 export function mockStressTimeline(page: Page, input: Partial<MockServerConfig> = {}) {
   return mockOpenCodeServer(page, {
-    sessions: fixture.sessions,
+    sessions: fixture.sessions.map((item) => ({ ...item })),
     provider: fixture.provider,
     directory: fixture.directory,
     project: fixture.project,

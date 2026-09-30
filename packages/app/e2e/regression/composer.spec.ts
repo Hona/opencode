@@ -133,7 +133,12 @@ test("replaces only the selected text and leaves the caret after the paste", asy
 })
 
 test("shows the dropzone and attaches a dropped file", async ({ page }) => {
-  await openDraft(page, { name: "ComposerDraft", provider: NO_PROVIDER })
+  const writes: { path: string; directory: string; body: string }[] = []
+  await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: (write) => void writes.push(write),
+  })
   const surface = page.locator('[data-component="new-session"]')
   const dropzone = page.locator('[data-component="session-dropzone"]')
   const transfer = await page.evaluateHandle(() => {
@@ -150,6 +155,18 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await surface.dispatchEvent("drop", { dataTransfer: transfer })
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
   await expect(dropzone).toHaveCount(0)
+  // The file is uploaded to its own directory in the server's temporary directory, then attached by path.
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      {
+        path: expect.stringMatching(/\/uploads\/[0-9a-f-]{36}\/dropzone\.txt$/),
+        directory: "C:/OpenCode/ComposerDraft",
+        body: "Dropzone fixture",
+      },
+    ])
+  await expect(page.locator('[data-component="upload-progress"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
 test("keeps a narrow session composer contained when invoking a built-in", async ({ page }) => {

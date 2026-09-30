@@ -4,7 +4,7 @@ import { Duration, Effect, Layer } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { SERVER } from "./app"
-import { MockApi, MockBadRequest, MockInternal, MockNotFound, MockUnsupported } from "./mock-api"
+import { MockApi, MockBadRequest, MockInternal, MockNotFound, MockShellNotFound, MockUnsupported } from "./mock-api"
 import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
@@ -17,7 +17,16 @@ export interface MockServerConfig {
   provider: unknown | (() => unknown)
   integrations?: unknown[]
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
+  // Background shell commands (`GET /api/shell`).
+  shellCommands?: Resolvable<unknown[]>
+  // All output a shell command has captured so far in `directory`, or undefined for an unknown command (404
+  // ShellNotFoundError). The mock pages it by the request's byte `cursor` and `limit`.
+  shellOutput?: (input: { id: string; directory: string }) => string | undefined
+  // Records `POST /api/experimental/fs/write` (attachment uploads), which answers the requested path.
+  // Without it, writes answer 501 MockUnsupported.
+  onFileWrite?: (input: { path: string; directory: string; body: string }) => void
   configEntries?: unknown[]
   directory: string
   project: unknown
@@ -54,7 +63,18 @@ export interface MockServerConfig {
   // Without it, permission replies answer 501 MockUnsupported.
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
-  mcp?: Resolvable<unknown[]>
+  // MCP servers. A list serves every workspace; a function receives the requested directory.
+  mcp?: unknown[] | ((directory: string) => unknown[])
+  // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
+  // another status (for example `{ status: "failed", error }`). Unknown servers answer 404.
+  onMcpAction?: (input: {
+    server: string
+    action: "connect" | "disconnect"
+    directory: string
+  }) => void | Record<string, unknown>
+  // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
+  // Without it, OAuth connects answer 501 MockUnsupported.
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -116,7 +136,8 @@ type MockStream = { push: (payloads: unknown[]) => void }
 type MockStreamWindow = Window & {
   // Set to any value by benchmarks that bring their own event stream.
   __testSseTransport?: unknown
-  __testSseTransports?: Record<string, unknown>
+  // `installSseTransport` registrations; `command` takes its browser command shape.
+  __testSseTransports?: Record<string, { command: (input: unknown) => unknown }>
   // Per-origin mock event streams; in-page benchmark probes push through them directly.
   __mockServerStreams?: Record<string, MockStream>
 }
@@ -203,15 +224,25 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   )
 
   // Delivers events on this server's mock stream; buffered until the app connects.
+  // An origin served by an SSE transport receives the events as one burst on its active connection.
   const push = (payloads: readonly OpenCodeEvent[]) =>
     page.evaluate(
       ({ server, payloads }) => {
-        const stream = (window as MockStreamWindow).__mockServerStreams?.[server]
-        if (!stream) throw new Error(`No mock event stream for ${server}; use its SSE transport instead`)
-        stream.push(payloads)
+        const host = window as MockStreamWindow
+        const stream = host.__mockServerStreams?.[server]
+        if (stream) return stream.push(payloads)
+        const transport = host.__testSseTransports?.[server]
+        if (!transport) throw new Error(`No mock event stream for ${server}`)
+        transport.command({ type: "send", deliveries: payloads.map((payload) => ({ payload })), burst: true })
       },
       { server, payloads: payloads as unknown[] },
     )
+  // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
+  const emit = (events: OpenCodeEvent[]) =>
+    void push(events).catch((error: unknown) => {
+      if (page.isClosed() || retryableDelivery(error)) return
+      throw error
+    })
 
   if (config.events) {
     // Batches stay queued until the page accepts them; failures other than a missing document fail the test.
@@ -240,7 +271,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = createMockServerHandler(config)
+  const transport = createMockServerHandler(config, emit)
   page.on("close", () => void transport.dispose())
 
   await page.route("**/api/**", async (route) => {
@@ -264,11 +295,22 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         body: body ? Uint8Array.from(body) : undefined,
       }),
     )
-    if (response.status === 404 && url.origin !== server) return route.fallback()
+    const payload = Buffer.from(await response.arrayBuffer())
+    // A handler's 404 carries a tagged error; a route the mock does not define must not reach the app server, whose
+    // SPA fallback would answer HTML 200. Answer 501 and fail the test from the route handler.
+    if (response.status === 404 && !payload.toString().includes('"_tag"')) {
+      const request = `${route.request().method()} ${url.pathname}`
+      await route.fulfill({
+        status: 501,
+        headers: corsHeaders,
+        json: { name: "MockUnsupported", message: `The mock server has no route for ${request}` },
+      })
+      throw new Error(`Unmocked API request: ${request} (add it to e2e/utils/mock-server.ts)`)
+    }
     return route.fulfill({
       status: response.status,
       headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      body: Buffer.from(await response.arrayBuffer()),
+      body: payload,
     })
   })
 
@@ -320,12 +362,21 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
   )
 }
 
-export function createMockServerHandler(config: MockServerConfig) {
+// `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
+export function createMockServerHandler(config: MockServerConfig, emit: (events: OpenCodeEvent[]) => void = () => {}) {
   const pty = createPty(config)
   const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
       Layer.provide(
-        mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0, sessionCreates: 0, pty }),
+        mockHandlers(config, {
+          cursors: new Map<string, string>(),
+          nextCursor: 0,
+          sessionCreates: 0,
+          pty,
+          emit,
+          mcp: new Map<string, Record<string, unknown>>(),
+          attempts: new Map<string, number>(),
+        }),
       ),
       Layer.provide(HttpServer.layerServices),
     ),
@@ -484,6 +535,10 @@ function mockHandlers(
     nextCursor: number
     sessionCreates: number
     pty: ReturnType<typeof createPty>
+    emit: (events: OpenCodeEvent[]) => void
+    // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
+    mcp: Map<string, Record<string, unknown>>
+    attempts: Map<string, number>
   },
 ) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
@@ -503,6 +558,22 @@ function mockHandlers(
         }),
       ),
     )
+  const mcpServers = (directory: string) =>
+    (typeof config.mcp === "function" ? config.mcp(directory) : (config.mcp ?? [])).map((server) => {
+      const status = record(server) ? state.mcp.get(`${directory}\n${String(server.name)}`) : undefined
+      return status && record(server) ? { ...server, status } : server
+    })
+  const mcpAction = (server: string, action: "connect" | "disconnect", request: { url: string }) =>
+    Effect.suspend(() => {
+      const directory = requestDirectory(config, request)
+      if (!mcpServers(directory).some((item) => record(item) && item.name === server))
+        return Effect.fail(new MockNotFound({ message: `MCP server ${server} not found` }))
+      const status = config.onMcpAction?.({ server, action, directory }) ?? {
+        status: action === "connect" ? "connected" : "disabled",
+      }
+      state.mcp.set(`${directory}\n${server}`, status)
+      return noContent
+    })
   const unsupported = (operation: string, handler: string) =>
     Effect.fail(
       new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
@@ -623,6 +694,36 @@ function mockHandlers(
           Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
             Effect.andThen(noContent),
           ),
+        integrationOAuthConnect: (ctx) => {
+          const start = config.onIntegrationOAuth
+          if (!start) return unsupported("start OAuth connections", "onIntegrationOAuth")
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const created = Date.now()
+            const attemptID = `con_mock_${state.attempts.size + 1}`
+            state.attempts.set(attemptID, created)
+            const started = start({ integrationID: ctx.params.integrationID, directory, body: ctx.payload })
+            return {
+              location: location(config, directory),
+              data: {
+                attemptID,
+                url: started.url,
+                instructions: "",
+                mode: "auto",
+                time: { created, expires: created + 600_000 },
+              },
+            }
+          })
+        },
+        integrationOAuthStatus: (ctx) =>
+          Effect.suspend(() => {
+            const created = state.attempts.get(ctx.params.attemptID)
+            if (created === undefined) return Effect.fail(new MockNotFound({ message: "OAuth attempt not found" }))
+            return Effect.succeed({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: { status: "pending", time: { created, expires: created + 600_000 } },
+            })
+          }),
         credentialRemove: () => noContent,
         command: (ctx) =>
           Effect.sync(() => ({
@@ -631,8 +732,18 @@ function mockHandlers(
           })),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
-        mcp: () => Effect.sync(() => ({ location: location(config), data: resolve(config.mcp ?? []) })),
-        mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),
+        mcp: (ctx) =>
+          Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            return { location: location(config, directory), data: mcpServers(directory) }
+          }),
+        mcpConnect: (ctx) => mcpAction(ctx.params.server, "connect", ctx.request),
+        mcpDisconnect: (ctx) => mcpAction(ctx.params.server, "disconnect", ctx.request),
+        mcpResource: (ctx) =>
+          Effect.succeed({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: { resources: [], templates: [] },
+          }),
         projectList: () =>
           Effect.sync(() => {
             if (config.projects) return resolve(config.projects)
@@ -727,7 +838,44 @@ function mockHandlers(
                 : entries,
             })),
           ),
-        shell: () => Effect.succeed({ location: location(config), data: [] }),
+        fsWrite: (ctx) => {
+          const write = config.onFileWrite
+          if (!write) return unsupported("write files", "onFileWrite")
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const path = new URL(ctx.request.url, "http://localhost").searchParams.get("path") ?? ""
+            write({ path, directory, body: new TextDecoder().decode(ctx.payload) })
+            return { location: location(config, directory), data: { path } }
+          })
+        },
+        shell: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.shellCommands ?? []),
+          })),
+        shellOutput: (ctx) =>
+          Effect.suspend(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const output = config.shellOutput?.({ id: ctx.params.id, directory })
+            if (output === undefined)
+              return Effect.fail(
+                new MockShellNotFound({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+              )
+            const bytes = new TextEncoder().encode(output)
+            const query = new URL(ctx.request.url, "http://localhost").searchParams
+            const cursor = Math.min(Number(query.get("cursor") ?? 0), bytes.length)
+            const limit = query.get("limit")
+            const end = limit === null ? bytes.length : Math.min(bytes.length, cursor + Number(limit))
+            return Effect.succeed({
+              location: location(config, directory),
+              data: {
+                output: new TextDecoder().decode(bytes.subarray(cursor, end)),
+                cursor: end,
+                size: bytes.length,
+                truncated: false,
+              },
+            })
+          }),
         ptyList: (ctx) =>
           ptyEnabled.pipe(
             Effect.map(() => {
@@ -894,12 +1042,37 @@ function mockHandlers(
               .map(currentPermission)
               .filter((permission) => permission.sessionID === ctx.params.sessionID),
           })),
+        // Like the server, a reply publishes `permission.replied`, and later reads no longer list the request.
         sessionPermissionReply: (ctx) => {
           const reply = config.onPermissionReply
           if (!reply) return unsupported("record permission replies", "onPermissionReply")
-          return Effect.sync(() =>
-            reply({ sessionID: ctx.params.sessionID, permissionID: ctx.params.permissionID, body: ctx.payload }),
-          ).pipe(Effect.andThen(noContent))
+          return Effect.sync(() => {
+            const sessionID = ctx.params.sessionID
+            const permissionID = ctx.params.permissionID
+            reply({ sessionID, permissionID, body: ctx.payload })
+            const pending = [
+              config.sessionPermissions?.[sessionID] ?? [],
+              typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []),
+            ]
+            pending.forEach((list) => {
+              const index = list.findIndex((item) => record(item) && item.id === permissionID)
+              if (index >= 0) list.splice(index, 1)
+            })
+            state.emit([
+              {
+                id: `evt_permission_replied_${permissionID}`,
+                created: Date.now(),
+                type: "permission.replied",
+                location: { directory: requestDirectory(config, ctx.request) },
+                data: {
+                  sessionID,
+                  requestID: permissionID,
+                  reply:
+                    record(ctx.payload) && typeof ctx.payload.decision === "string" ? ctx.payload.decision : "once",
+                },
+              } as OpenCodeEvent,
+            ])
+          }).pipe(Effect.andThen(noContent))
         },
         sessionRename: (ctx) =>
           Effect.sync(() => {

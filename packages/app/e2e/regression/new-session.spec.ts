@@ -183,6 +183,8 @@ test("the title and message stay stable through worktree creation", async ({ pag
     }
     sample()
     return {
+      // A frame painted after the synchronous first sample that already shows the created session's title.
+      handedOff: () => frames.slice(1).some((frame) => frame.title === "Created workspace session"),
       stop: () => {
         cancelAnimationFrame(frame)
         return frames
@@ -197,6 +199,8 @@ test("the title and message stay stable through worktree creation", async ({ pag
   await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
   await expect(editor(page)).toHaveText(followUp)
   await expect(editor(page)).toBeFocused()
+  // The DOM can reach the final state before the sampler's next frame; wait until a sample has observed it.
+  await expect.poll(() => observation.evaluate((observation) => observation.handedOff())).toBe(true)
   const frames = await observation.evaluate((observation) => observation.stop())
   await observation.dispose()
   // At least one painted frame after the handoff, beyond the synchronous first sample.

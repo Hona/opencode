@@ -115,6 +115,8 @@ type TimelineServerInput = Partial<
     | "pty"
     | "keepalive"
     | "onPermissionReply"
+    | "shellCommands"
+    | "shellOutput"
   >
 >
 

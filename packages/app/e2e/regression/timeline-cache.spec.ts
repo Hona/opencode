@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { expected, messages } from "../utils/markdown-sessions"
-import { seed, sessionHref, type SeedInput } from "../utils/app"
+import { expectPath, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 
@@ -214,6 +214,9 @@ test("disposes the old workspace's shell while destination history is loading", 
         requested.resolve()
         await release.promise
       },
+      // The shell runs in the source workspace only.
+      shellOutput: (input) =>
+        input.id === "sh_workspace_source" && input.directory === fixture.directory ? output.text : undefined,
     },
     {
       settings: {
@@ -223,23 +226,10 @@ test("disposes the old workspace's shell while destination history is loading", 
       },
     },
   )
-  await page.route("**/api/shell/sh_workspace_source/output?*", (route) => {
-    const url = new URL(route.request().url())
-    const directory = url.searchParams.get("location[directory]")!
-    reads.push(directory)
-    if (directory !== fixture.directory)
-      return route.fulfill({ status: 404, json: { _tag: "ShellNotFoundError", id: "sh_workspace_source" } })
-    return route.fulfill({
-      json: {
-        location: { directory },
-        data: {
-          output: output.text.slice(Number(url.searchParams.get("cursor") ?? 0)),
-          cursor: output.text.length,
-          size: output.text.length,
-          truncated: false,
-        },
-      },
-    })
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (request.method() === "GET" && url.pathname === "/api/shell/sh_workspace_source/output")
+      reads.push(url.searchParams.get("location[directory]") ?? "")
   })
   await page.goto(sessionHref(fixture.sourceID))
   const shell = page.locator('[data-timeline-part-id="call_workspace_shell"]')
@@ -302,7 +292,6 @@ for (const grouped of [true, false]) {
   test(`restores a ${grouped ? "grouped" : "separate"} timeline after inactive updates and a resize`, async ({
     page,
   }) => {
-    const events: OpenCodeEvent[] = []
     const history: Record<string, SessionMessageInfo[]> = Object.fromEntries(
       [fixture.sourceID, fixture.targetID].map((id) => [
         id,
@@ -333,9 +322,9 @@ for (const grouped of [true, false]) {
         ] satisfies SessionMessageInfo[],
       ]),
     )
-    await openTabs(
+    const mock = await openTabs(
       page,
-      { pageMessages: (id) => ({ items: history[id] ?? [] }), events: () => events.splice(0) },
+      { pageMessages: (id) => ({ items: history[id] ?? [] }) },
       {
         settings: {
           general: {
@@ -366,19 +355,28 @@ for (const grouped of [true, false]) {
     await expect(shell).toHaveCount(0)
     expect(await original!.evaluate((element) => element.isConnected)).toBe(false)
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCount(1)
-    events.push({
-      id: "evt_cached_text",
-      created: 4,
-      type: "session.text.ended",
-      location: { directory: fixture.directory },
-      durable: { aggregateID: fixture.sourceID, seq: 0, version: 1 },
-      data: {
-        sessionID: fixture.sourceID,
-        assistantMessageID: `msg_assistant_${fixture.sourceID}`,
-        ordinal: 0,
-        text: "Updated while inactive",
+    await mock.push([
+      {
+        id: "evt_cached_text",
+        created: 4,
+        type: "session.text.ended",
+        location: { directory: fixture.directory },
+        durable: { aggregateID: fixture.sourceID, seq: 0, version: 1 },
+        data: {
+          sessionID: fixture.sourceID,
+          assistantMessageID: `msg_assistant_${fixture.sourceID}`,
+          ordinal: 0,
+          text: "Updated while inactive",
+        },
       },
-    })
+    ])
+    // The cached source timeline applies the update while detached; the destination stays selected.
+    await expect
+      .poll(() => original!.evaluate((element) => element.textContent?.includes("Updated while inactive") ?? false))
+      .toBe(true)
+    expect(await original!.evaluate((element) => element.isConnected)).toBe(false)
+    await expectPath(page, sessionHref(fixture.targetID))
+    await expect(page.getByText(`Answer for ${fixture.targetID}`, { exact: true })).toBeVisible()
     await page.setViewportSize({ width: 900, height: 650 })
     await tab(page, fixture.sourceID).click()
     await expect(page.getByText("Updated while inactive", { exact: true })).toBeVisible()
@@ -415,13 +413,14 @@ function tab(page: Page, sessionID: string) {
 
 // The source and target sessions open as titlebar tabs of one expanded project.
 async function openTabs(page: Page, input: Partial<MockServerConfig>, extra: SeedInput = {}) {
-  await mockStressTimeline(page, input)
+  const mock = await mockStressTimeline(page, input)
   await seed(page, {
     projects: { local: [{ worktree: fixture.directory, expanded: true }] },
     lastProject: { local: fixture.directory },
     tabs: [fixture.sourceID, fixture.targetID],
     ...extra,
   })
+  return mock
 }
 
 async function openTimeline(page: Page, history: SessionMessageInfo[]) {
