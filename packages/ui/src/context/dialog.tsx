@@ -37,35 +37,33 @@ export function useDialogLayer() {
 
 function init() {
   const [stack, setStack] = createSignal<Active[]>([])
-  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  // Each closing dialog disposes after its own exit animation.
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const lock = { value: false }
+  const clearTimers = () => {
+    timers.forEach((timer) => clearTimeout(timer))
+    timers.clear()
+  }
 
-  onCleanup(() => {
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
-  })
+  onCleanup(clearTimers)
 
   const close = (id?: string) => {
     const items = stack()
     const current = id ? items.find((item) => item.id === id) : items.at(-1)
-    if (!current || lock.value) return
+    // One Escape or backdrop click closes one dialog; closing a dialog by id never waits for another.
+    if (!current || timers.has(current.id) || (!id && lock.value)) return
     lock.value = true
     current.onClose?.()
     current.setClosing(true)
-
-    const closed = current.id
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-
-    timer.current = setTimeout(() => {
-      timer.current = undefined
-      current.dispose()
-      setStack((items) => items.filter((item) => item.id !== closed))
-      lock.value = false
-    }, 100)
+    timers.set(
+      current.id,
+      setTimeout(() => {
+        timers.delete(current.id)
+        current.dispose()
+        setStack((items) => items.filter((item) => item.id !== current.id))
+        if (timers.size === 0) lock.value = false
+      }, 100),
+    )
   }
 
   createEffect(() => {
@@ -138,10 +136,6 @@ function init() {
   }
 
   const push = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
     lock.value = false
     mount(element, owner, onClose, stack().length, id)
   }
@@ -149,10 +143,7 @@ function init() {
   const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
     for (const item of stack()) item.dispose()
     setStack([])
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
+    clearTimers()
     lock.value = false
     mount(element, owner, onClose, 0, id)
   }
