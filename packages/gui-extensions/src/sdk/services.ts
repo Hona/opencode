@@ -191,8 +191,11 @@ export interface Storage {
       readonly schema: S
       readonly initial: S["Type"]
       readonly scope?: StorageScope
-      /** Imports an older host key once. */
-      readonly from?: string
+      /**
+       * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal").
+       * With pick, only the picked part of the old JSON is copied and the old key stays for its other owners.
+       */
+      readonly from?: string | { readonly key: string; pick(value: unknown): unknown }
     },
   ): readonly [Store<S["Type"]>, (mutation: (draft: S["Type"]) => void) => void, Accessor<boolean>]
   /** Window-local and kept across extension reloads. */

@@ -40,6 +40,7 @@ type Attached = {
 }
 
 export type HostService = { readonly token: Host<unknown>; create(extension: string): unknown }
+type StorageFrom = Parameters<Storage["store"]>[1]["from"]
 
 /** Services the host owns. Session and layout attach once the app interface mounts. */
 export function createExtensionServices() {
@@ -51,22 +52,26 @@ export function createExtensionServices() {
   const memory = new Map<string, readonly [Store<object>, (mutation: (draft: object) => void) => void]>()
   const current = () => attached()
 
-  const target = (extension: string, key: string, scope: StorageScope | undefined, from: string | undefined) => {
+  const target = (extension: string, key: string, scope: StorageScope | undefined, from: StorageFrom | undefined) => {
     const name = `extension.${extension}.${key}`
-    if (!scope || scope === "app") return { ...Persist.global(name), previousKey: from }
+    const copyFrom = typeof from === "string" ? { key: from } : from
+    if (!scope || scope === "app") return { ...Persist.global(name), copyFrom }
     const connected = requireAttached(attached())
     if ("session" in scope) {
       const location = scope.session.location
       if (!location) throw new Error("Session storage requires a session location")
-      return Persist.serverSession(
-        connected.scope(scope.session.server.id),
-        base64Encode(location.directory),
-        scope.session.id,
-        name,
-      )
+      return {
+        ...Persist.serverSession(
+          connected.scope(scope.session.server.id),
+          base64Encode(location.directory),
+          scope.session.id,
+          name,
+        ),
+        copyFrom,
+      }
     }
-    if (!scope.directory) return Persist.serverGlobal(connected.scope(scope.server), name)
-    return Persist.serverWorkspace(connected.scope(scope.server), base64Encode(scope.directory), name)
+    if (!scope.directory) return { ...Persist.serverGlobal(connected.scope(scope.server), name), copyFrom }
+    return { ...Persist.serverWorkspace(connected.scope(scope.server), base64Encode(scope.directory), name), copyFrom }
   }
 
   const services: HostService[] = [

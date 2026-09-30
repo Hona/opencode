@@ -22,8 +22,8 @@ export interface Definition {
   readonly main?: () => Promise<{ readonly default: Setup }>
 }
 
-export function define(definition: Definition) {
-  return definition
+export const Extension = {
+  define: (definition: Definition) => definition,
 }
 
 declare const brand: unique symbol
