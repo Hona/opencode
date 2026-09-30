@@ -23,7 +23,6 @@ import { FileTree } from "../file/contract"
 import { useExtension, usePanel, type PanelSidebar, type SessionView } from "../sdk"
 import {
   applyFileListKeyDown,
-  filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
   reviewDiffNeedsLoad,
@@ -45,7 +44,9 @@ type ReviewPanelProps = {
   session: SessionView
   title?: JSX.Element
   empty?: JSX.Element
+  /** Renderable diffs and their change kinds, computed once by the review model. */
   diffs: FileDiffInfo[]
+  kinds: ReturnType<typeof reviewDiffKinds>
   diffsReady: boolean
   diffVersion?: number
   loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
@@ -78,7 +79,8 @@ export default function ReviewPanelContent(props: {
       session={props.session}
       title={<ReviewTitle review={props.review} />}
       empty={<ReviewPanelEmpty review={props.review} />}
-      diffs={props.review.diffs()}
+      diffs={props.review.renderable()}
+      kinds={props.review.kinds()}
       diffsReady={props.review.ready()}
       diffVersion={props.review.diffVersion()}
       loadDiff={props.review.loadDiff}
@@ -114,7 +116,7 @@ function ReviewPanel(props: ReviewPanelProps) {
         return undefined
       })
 
-  const diffs = createMemo(() => props.diffs.filter(filterRenderableDiff))
+  const diffs = () => props.diffs
   const filteredFiles = createMemo(() =>
     filterReviewFiles(
       diffs().map((diff) => diff.file),
@@ -123,7 +125,7 @@ function ReviewPanel(props: ReviewPanelProps) {
   )
   const searching = createMemo(() => props.state.filter().trim().length > 0)
   const navigationFiles = createMemo(() => (searching() ? filteredFiles() : sortReviewPaths(filteredFiles())))
-  const kinds = createMemo(() => reviewDiffKinds(diffs()))
+  const kinds = () => props.kinds
   // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
   const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
   const activeDiff = createMemo(() => {
