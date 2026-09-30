@@ -3,7 +3,8 @@ import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
 import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
-import { pruneSessionKeys } from "./helpers"
+import { createSignal } from "solid-js"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 
 test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
   expect(currentRoute(`/${type}`, "")).toEqual({ type })
@@ -96,6 +97,27 @@ describe("layout persistence", () => {
     expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b", "btw"], active: "btw" } })
     expect(value.sessionView).toEqual({ [key]: { scroll: {} } })
   })
+})
+
+test("session keys touch before seeding scroll state and follow a changing accessor on each read", () => {
+  const calls: string[] = []
+  expect(
+    ensureSessionKey(
+      "dir/a",
+      (key) => calls.push(`touch:${key}`),
+      (key) => calls.push(`seed:${key}`),
+    ),
+  ).toBe("dir/a")
+  expect(calls).toEqual(["touch:dir/a", "seed:dir/a"])
+
+  const seen: string[] = []
+  const [key, setKey] = createSignal("dir/one")
+  const read = createSessionKeyReader(key, (value) => seen.push(value))
+  expect(seen).toEqual([])
+  expect(read()).toBe("dir/one")
+  setKey("dir/two")
+  expect(read()).toBe("dir/two")
+  expect(seen).toEqual(["dir/one", "dir/two"])
 })
 
 test("pruneSessionKeys keeps the active key, drops the lowest-used keys, and never prunes without an active key", () => {

@@ -29,6 +29,39 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
+test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
+  await page.setViewportSize({ width: 935, height: 522 })
+  await openDraft(page, { name: "PanelCorner", seed: { theme: { id: "oc-2", scheme: "dark" } } })
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
+  const box = await page.locator('[data-component="new-session"]').boundingBox()
+  if (!box) throw new Error("New-session panel bounds are unavailable")
+  const screenshot = await page.screenshot()
+  // Sample the four corner pixels, which lie outside the rounded panel.
+  const corners = await page.evaluate(
+    async ({ source, points }) => {
+      const image = new Image()
+      image.src = source
+      await image.decode()
+      const canvas = document.createElement("canvas")
+      canvas.width = image.naturalWidth
+      canvas.height = image.naturalHeight
+      const context = canvas.getContext("2d")!
+      context.drawImage(image, 0, 0)
+      return points.map((point) => Array.from(context.getImageData(point.x, point.y, 1, 1).data))
+    },
+    {
+      source: `data:image/png;base64,${screenshot.toString("base64")}`,
+      points: [
+        { x: Math.floor(box.x), y: Math.floor(box.y) },
+        { x: Math.ceil(box.x + box.width) - 1, y: Math.floor(box.y) },
+        { x: Math.floor(box.x), y: Math.ceil(box.y + box.height) - 1 },
+        { x: Math.ceil(box.x + box.width) - 1, y: Math.ceil(box.y + box.height) - 1 },
+      ],
+    },
+  )
+  expect(corners.filter(([red, green, blue, alpha]) => red > 8 || green > 8 || blue > 8 || alpha !== 255)).toEqual([])
+})
+
 test("a pending worktree session shows immediately, keeps its draft, and hands off to the created session", async ({
   page,
 }) => {
@@ -156,7 +189,8 @@ test("the title and message stay stable through worktree creation", async ({ pag
   await expect(editor(page)).toBeFocused()
   const frames = await observation.evaluate((observation) => observation.stop())
   await observation.dispose()
-  expect(frames.length).toBeGreaterThan(0)
+  // At least one painted frame after the handoff, beyond the synchronous first sample.
+  expect(frames.slice(1).some((frame) => frame.title === "Created workspace session")).toBe(true)
   expect(
     frames.filter(
       (frame) =>

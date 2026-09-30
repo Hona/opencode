@@ -104,18 +104,15 @@ test("Home and the directory picker load without newer browser APIs", async ({ p
   await expect(target).toBeVisible()
 })
 
+const recovery = "C:/OpenCode/Worktrees/project-menu-recovery"
 const worktree =
   "C:/OpenCode/Worktrees/project-42/long-folder-name-for-checking-wrapped-worktree-paths/another-long-folder-name"
 
 for (const state of [
-  { name: "local", directory: fixture.directory, icon: "monitor", closed: false },
-  { name: "worktree", directory: worktree, icon: "outline-worktree", closed: false },
-  {
-    name: "closed worktree",
-    directory: "C:/OpenCode/Worktrees/project-menu-recovery",
-    icon: "outline-worktree",
-    closed: true,
-  },
+  { name: "local", directory: fixture.directory, icon: "monitor" },
+  { name: "worktree", directory: worktree, icon: "outline-worktree" },
+  { name: "closed worktree", directory: recovery, icon: "outline-worktree", recovery: "closed" },
+  { name: "unopened worktree", directory: recovery, icon: "outline-worktree", recovery: "unopened" },
 ]) {
   test(`the session project menu opens settings and Home for a ${state.name} project`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -133,15 +130,17 @@ for (const state of [
       },
       sessions: fixture.sessions.map((item) => ({ ...item, directory: state.directory })),
       beforeMessagesResponse: (input) =>
-        state.closed && input.sessionID === fixture.targetID ? messages.promise : Promise.resolve(),
+        state.recovery && input.sessionID === fixture.targetID ? messages.promise : Promise.resolve(),
     })
-    await seed(page, {
-      projects: { local: [{ worktree: fixture.directory, expanded: true }] },
-      lastProject: { local: fixture.directory },
-      tabs: [fixture.sourceID, fixture.targetID],
-    })
+    // An unopened project has no stored project list or tabs.
+    if (state.recovery !== "unopened")
+      await seed(page, {
+        projects: { local: [{ worktree: fixture.directory, expanded: true }] },
+        lastProject: { local: fixture.directory },
+        tabs: [fixture.sourceID, fixture.targetID],
+      })
     const name = fixture.project.name
-    if (state.closed) {
+    if (state.recovery === "closed") {
       await page.goto("/")
       const project = page.locator('[data-component="home-project-row"]').filter({ hasText: name })
       await project.locator("..").getByRole("button", { name: "More options", exact: true }).click()
@@ -149,7 +148,7 @@ for (const state of [
       await expect(project).toHaveCount(0)
       await page.locator(`[data-titlebar-tab-link][href="${sessionHref(fixture.targetID)}"]`).click()
     }
-    if (!state.closed) await page.goto(sessionHref(fixture.targetID))
+    if (state.recovery !== "closed") await page.goto(sessionHref(fixture.targetID))
 
     const header = page.locator("[data-session-title]")
     const trigger = header.getByRole("button", { name, exact: true })
@@ -158,8 +157,8 @@ for (const state of [
     const pathItem = menu.getByRole("menuitem", { name: state.directory, exact: true })
     const settings = page.getByTestId("settings-screen")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
-    for (const loaded of state.closed ? [false, true] : [true]) {
-      if (state.closed && loaded) {
+    for (const loaded of state.recovery ? [false, true] : [true]) {
+      if (state.recovery && loaded) {
         messages.resolve()
         await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
       }
@@ -197,3 +196,35 @@ for (const state of [
     ).toBeVisible()
   })
 }
+
+test("the project menu path arrow has a glyph when the page has an older icon sprite", async ({ page }) => {
+  await mockStressTimeline(page)
+  await seed(page, { projects: { local: [{ worktree: fixture.directory, expanded: true }] }, tabs: [fixture.targetID] })
+  // A page cached before the arrow icon shipped carries a sprite without it.
+  await page.route(
+    (url) => url.pathname === sessionHref(fixture.targetID),
+    async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({
+        response,
+        body: (await response.text()).replace(
+          '<div id="root"',
+          '<svg id="opencode-v2-icon-sprite" width="0" height="0" aria-hidden="true"><symbol id="opencode-v2-icon-monitor" viewBox="0 0 16 16"><path d="M1 1h14v14H1z"/></symbol></svg><div id="root"',
+        ),
+      })
+    },
+  )
+  await page.goto(sessionHref(fixture.targetID))
+  const header = page.locator("[data-session-title]")
+  await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+  await header.getByRole("button", { name: fixture.project.name, exact: true }).click()
+  const arrow = page
+    .getByRole("menu")
+    .getByRole("menuitem", { name: fixture.directory, exact: true })
+    .locator('[data-slot="session-project-open-icon"]')
+  await expect(arrow).toHaveCount(1)
+  await expect
+    .poll(() => arrow.locator("svg").evaluate((element: SVGSVGElement) => element.getBBox().width))
+    .toBeGreaterThan(0)
+  await expect(page.locator("#opencode-v2-icon-sprite")).toHaveCount(1)
+})

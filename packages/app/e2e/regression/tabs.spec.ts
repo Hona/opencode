@@ -1,6 +1,16 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, expectPath, project, seed, session, sessionHref } from "../utils/app"
+import {
+  NO_PROVIDER,
+  REMOTE_SERVER,
+  SERVER,
+  expectPath,
+  holdRoute,
+  project,
+  seed,
+  session,
+  sessionHref,
+} from "../utils/app"
 import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockWorkspace } from "../utils/workspace"
@@ -39,6 +49,32 @@ test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse 
   await expectPath(page, sessionHref(b.id))
   await page.mouse.up()
   await expectPath(page, sessionHref(b.id))
+})
+
+test("a tab does not reopen its title editor while a rename is saving", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="true"]')
+  await expect(title).toHaveText(a.title)
+  const save = await holdRoute(page, (url) => url.pathname === `/api/session/${a.id}`, { method: "PATCH" })
+
+  await title.dblclick()
+  await expect(editor).toBeFocused()
+  await editor.fill("Renamed tab")
+  await editor.press("Enter")
+  expect((await save.arrived).postDataJSON()).toEqual({ title: "Renamed tab" })
+  await expect(editor).toHaveCount(0)
+  await title.dblclick()
+  await expect(editor).toHaveCount(0)
+
+  // The context menu's Rename item is enabled again once the save settles.
+  save.release()
+  await title.click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeEnabled()
+  await page.keyboard.press("Escape")
+  await title.dblclick()
+  await expect(editor).toBeFocused()
 })
 
 test("keyboard navigation follows the visible tab order and skips unresolved tabs", async ({ page }) => {

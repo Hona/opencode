@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { evictContentLru, resetFileContentLru, touchFileContent } from "./content-cache"
+import { evictContentLru, removeFileContentBytes, resetFileContentLru, touchFileContent } from "./content-cache"
+
+const chunk = 8 * 1024 * 1024
+
+function evict(keep?: Set<string>) {
+  const evicted: string[] = []
+  evictContentLru(keep, (path) => evicted.push(path))
+  return evicted
+}
 
 describe("file content eviction", () => {
   afterEach(() => {
@@ -9,23 +17,38 @@ describe("file content eviction", () => {
   test("evicts by entry cap using LRU order", () => {
     Array.from({ length: 41 }, (_, n) => touchFileContent(`f-${n}`, 1))
 
-    const evicted: string[] = []
-    evictContentLru(undefined, (path) => evicted.push(path))
-    evictContentLru(undefined, (path) => evicted.push(path))
-
-    expect(evicted).toEqual(["f-0"])
+    expect(evict()).toEqual(["f-0"])
+    expect(evict()).toEqual([])
   })
 
   test("evicts by byte cap while preserving protected entries", () => {
-    const chunk = 8 * 1024 * 1024
     touchFileContent("a", chunk)
     touchFileContent("b", chunk)
     touchFileContent("c", chunk)
 
-    const evicted: string[] = []
-    evictContentLru(new Set(["a"]), (path) => evicted.push(path))
-    evictContentLru(new Set(["a"]), (path) => evicted.push(path))
+    expect(evict(new Set(["a"]))).toEqual(["b"])
+    expect(evict(new Set(["a"]))).toEqual([])
+  })
 
-    expect(evicted).toEqual(["b"])
+  // The byte cap is 20 MiB, so each step shows the running total through what it evicts.
+  test("accounts for overwrites, byte-preserving touches, removals, and resets", () => {
+    touchFileContent("a", chunk)
+    touchFileContent("b", chunk)
+    touchFileContent("a", 1)
+    touchFileContent("c", chunk)
+    expect(evict()).toEqual([])
+
+    touchFileContent("b")
+    touchFileContent("d", chunk)
+    expect(evict()).toEqual(["a", "c"])
+
+    removeFileContentBytes("b")
+    touchFileContent("e", chunk)
+    expect(evict()).toEqual([])
+
+    resetFileContentLru()
+    touchFileContent("f", chunk)
+    touchFileContent("g", chunk)
+    expect(evict()).toEqual([])
   })
 })

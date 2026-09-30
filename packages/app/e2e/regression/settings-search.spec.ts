@@ -110,6 +110,103 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
   await expect(page.getByRole("textbox", { name: /Search sessions/ })).toBeFocused()
 })
 
+test("a long empty-state query keeps its closing quote beside the ellipsis while typing and resizing", async ({
+  page,
+}) => {
+  const view = await open(page)
+  const query = "zzzz 🧑🏽‍💻 ".repeat(40)
+  await view.search.fill(query)
+  const status = view.settings.getByRole("status")
+  const quoted = status.locator("bdi")
+  const fits = () =>
+    quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth)
+  await expect(status).toHaveAccessibleName(`No results for "${query}"`)
+  await expect(quoted).toHaveText(/^".+…"$/)
+  await expect.poll(fits).toBe(true)
+  const text = await quoted.textContent()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(quoted).toHaveText(/^".+…"$/)
+  await expect(quoted).not.toHaveText(text!)
+  await expect.poll(fits).toBe(true)
+  await view.search.fill("zzzzzzzzzz")
+  await view.search.pressSequentially("x")
+  await expect(status).toHaveText('No results for "zzzzzzzzzzx"')
+})
+
+test("the search input tracks overflow through typing, caret moves, resizing, and clearing", async ({ page }) => {
+  const view = await open(page)
+  const overflow = async (start: string, end: string) => {
+    await expect(view.search).toHaveAttribute("data-overflow-start", start)
+    await expect(view.search).toHaveAttribute("data-overflow-end", end)
+  }
+  await view.search.fill("zzzz ".repeat(30))
+  await view.search.press("End")
+  await overflow("true", "false")
+  await view.search.press("Home")
+  await overflow("false", "true")
+  await view.search.evaluate((input: HTMLInputElement) => {
+    input.scrollLeft = (input.scrollWidth - input.clientWidth) / 2
+  })
+  await overflow("true", "true")
+  await view.search.fill("z".repeat(50))
+  await page.setViewportSize({ width: 600, height: 844 })
+  await overflow("false", "false")
+  await view.search.fill("zzzz ".repeat(30))
+  await view.settings.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(view.search).toHaveValue("")
+  await expect(view.search).toBeFocused()
+  await overflow("false", "false")
+})
+
+test("a search result reveal highlights once and cleans up after it finishes", async ({ page }) => {
+  const view = await open(page)
+  await view.settings.evaluate((root) => {
+    root.setAttribute("data-search-flashes", "0")
+    root.addEventListener("animationstart", (event) => {
+      if (!(event instanceof AnimationEvent) || event.animationName !== "settings-search-reveal") return
+      root.setAttribute("data-search-flashes", String(Number(root.getAttribute("data-search-flashes")) + 1))
+    })
+  })
+  await view.search.fill("skills")
+  await view.results.getByRole("option").click()
+  await expect(view.settings.getByRole("tab", { name: "Skills", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(view.settings).toHaveAttribute("data-search-flashes", "1")
+  await view.settings.evaluate((root) =>
+    Promise.all(
+      root
+        .getAnimations({ subtree: true })
+        .filter(
+          (animation) => animation instanceof CSSAnimation && animation.animationName === "settings-search-reveal",
+        )
+        .map((animation) => animation.finished),
+    ),
+  )
+  await expect(view.settings.locator("[data-search-target]")).toHaveCount(0)
+  for (const tab of ["MCPs", "Skills"]) {
+    await view.settings.getByRole("tab", { name: tab, exact: true }).click()
+    await expect(view.settings.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true")
+  }
+  await expect(view.settings.locator("[data-search-target]")).toHaveCount(0)
+  await expect(view.settings).toHaveAttribute("data-search-flashes", "1")
+})
+
+test("Models and Shortcuts leave focus on navigation until the user types", async ({ page }) => {
+  const view = await open(page)
+  for (const entry of [
+    { tab: "Models", search: "Search models" },
+    { tab: "Shortcuts", search: "Search shortcuts" },
+  ]) {
+    await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
+    await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).not.toBeFocused()
+  }
+  const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await page.keyboard.press("p")
+  await expect(search).toBeFocused()
+  await page.keyboard.type("alette")
+  await expect(search).toHaveValue("palette")
+  await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+})
+
 test("section search takes typed input, clears in place, and escapes in steps", async ({ page }) => {
   const view = await open(page, { count: 8 })
   await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()

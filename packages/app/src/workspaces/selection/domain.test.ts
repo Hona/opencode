@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
 import {
   absoluteTreePath,
+  activeTreeNavigation,
   advanceTreePreload,
   nextSuggestionIndex,
+  nextTreeScrollTop,
   pickerFileSearchQuery,
   pickerMode,
   preloadTreeDirectories,
@@ -44,6 +46,13 @@ test.each([
 })
 
 test("centralizes file and directory selection policy", () => {
+  const nodes = [
+    { name: "components", type: "directory" as const },
+    { name: "index.ts", type: "file" as const },
+  ]
+  expect(pickerMode("file", "/repo").entries("src/", nodes)).toEqual(["src/components/", "src/index.ts"])
+  expect(pickerMode("directory").entries("src/", nodes)).toEqual(["src/components/"])
+
   const file = pickerMode("file", "/repo")
   expect(file.includeFiles).toBeTrue()
   expect(file.selection("/repo/src", "index.ts")).toBe("src/index.ts")
@@ -396,6 +405,21 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   await Promise.all(running)
   expect(started).toEqual(["first", "second", "opened", "preload"])
   expect(maximum).toBe(2)
+})
+
+test.each([
+  [3, 3, true],
+  [2, 3, false],
+])("a tree mutation from navigation %p applies during navigation %p: %p", (request, current, expected) => {
+  expect(activeTreeNavigation(request, current)).toBe(expected)
+})
+
+test.each([
+  [100, 40, 140],
+  [10, -40, 0],
+  [290, 40, 300],
+])("bridged wheel scrolling from %p by %p clamps to %p", (current, delta, expected) => {
+  expect(nextTreeScrollTop(current, delta, 500, 200)).toBe(expected)
 })
 
 test("wraps autocomplete keyboard navigation", () => {

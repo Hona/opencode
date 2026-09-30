@@ -188,13 +188,20 @@ describe("schema-backed persistence", () => {
       createRoot((dispose) => {
         const [, setFull] = persisted(full, Current, initial, web)
         const [, setFailing] = persisted(failing, Current, initial, web)
+        const count = () => ({
+          full: attempts.filter((key) => key === `${full.storage}:${full.key}`).length,
+          failing: attempts.filter((key) => key === `${failing.storage}:${failing.key}`).length,
+        })
         setFull("label", "full")
         setFailing("label", "first")
         flushPersisted()
-        const failed = attempts.filter((key) => key === `${failing.storage}:${failing.key}`).length
+        const first = count()
+        expect(first.full).toBeGreaterThan(0)
+        expect(first.failing).toBeGreaterThan(0)
+        setFull("label", "full again")
         setFailing("label", "second")
         flushPersisted()
-        expect(attempts.filter((key) => key === `${failing.storage}:${failing.key}`)).toHaveLength(failed)
+        expect(count()).toEqual(first)
 
         const [, setHealthy] = persisted(healthy, Current, initial, web)
         const [, setDirect] = persisted(direct, Current, initial, web)

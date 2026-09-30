@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
+import { mockOpenCodeServer } from "../utils/mock-server"
 import { openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
@@ -34,6 +35,18 @@ function open(page: Page, input: Partial<WorkspaceInput> = {}) {
     })),
     ...input,
     seed: { tabs: [], ...input.seed },
+  })
+}
+
+// The seeded remote server answers as a second single-project server.
+function mockRemote(page: Page) {
+  return mockOpenCodeServer(page, {
+    server: REMOTE_SERVER,
+    directory: "/remote/settings-demo",
+    project: project({ id: "proj_remote_settings", directory: "/remote/settings-demo" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
   })
 }
 
@@ -76,6 +89,7 @@ test("a settings page survives refresh", async ({ page }) => {
 })
 
 test("another server's settings page survives refresh", async ({ page }) => {
+  await mockRemote(page)
   const { settings } = await open(page, { seed: { servers: [REMOTE_SERVER] } })
   const url = (value: URL) =>
     value.pathname === "/settings" &&
@@ -194,6 +208,8 @@ test("project settings open as a nested view that keeps its route", async ({ pag
   const menu = page.getByRole("menu")
   await settings.locator(".settings-tab-header").getByRole("button", { name: "More options", exact: true }).click()
   await expect(menu.getByRole("menuitem")).toHaveText(["Clear notifications", "Close"])
+  // Escape must reach the menu, not the settings screen behind it.
+  await expect.poll(() => menu.evaluate((element) => element.contains(document.activeElement))).toBe(true)
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()
   await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
@@ -341,8 +357,10 @@ test.describe("pages open before slow data", () => {
     inventory.release()
     await expect(settings.getByText(sandboxes[0]!, { exact: true })).toBeVisible()
     await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
-    sessions.release()
+    // Home already listed this session; it renders while the directory reads are still held.
+    await sessions.arrived
     await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
+    sessions.release()
 
     const refresh = await holdRoute(page, (url) => url.pathname === "/api/worktree", { method: "GET" })
     await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
@@ -408,7 +426,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
     { directory },
     ...[...sandboxes, empty].map((item) => ({ directory: item, strategy: "git" })),
   ]
-  const { settings, push } = await open(page, {
+  const view = await open(page, {
     project: { sandboxes: [...sandboxes, empty] },
     worktrees: () => inventory,
     onWorktreeRemove: (body) => {
@@ -418,6 +436,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
       )
     },
   })
+  const settings = view.settings
   // Holding every directory would fill the request budget; hold only the worktree without sessions.
   const sessions = await holdRoute(
     page,
@@ -435,12 +454,20 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   const listed = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
   )
+  const read = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return url.pathname === "/api/session" && url.searchParams.get("directory") === discovered
+  })
+  // Home never listed this session, so only the new worktree's directory read can show it.
+  view.sessions.push(session({ id: "ses_discovered", directory: discovered, title: "Discovered session", projectID }))
   inventory.push({ directory: discovered, strategy: "git" })
-  await push([
+  await view.push([
     { id: "evt_settings_worktree_updated", created: Date.now(), type: "worktree.updated", data: { projectID } },
   ] as OpenCodeEvent[])
   expect((await listed).ok()).toBe(true)
   await expect(settings.getByText(discovered, { exact: true })).toBeVisible()
+  expect((await read).ok()).toBe(true)
+  await expect(settings.getByText("Discovered session", { exact: true })).toBeVisible()
 
   await openProject(page)
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
@@ -666,6 +693,7 @@ for (const row of [
 }
 
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {
+  await mockRemote(page)
   const { settings } = await open(page, { seed: { servers: [REMOTE_SERVER] } })
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" }).hover()
