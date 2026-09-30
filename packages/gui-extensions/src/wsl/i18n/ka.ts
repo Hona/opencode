@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "გჭირდებათ სხვა დისტრო?",
   "onboarding.needAnotherDistroHint": "დააინსტალირეთ Linux დისტრიბუცია WSL კატალოგიდან",
   "onboarding.wslNotInstalled.title": "WSL არ არის დაინსტალირებული",
-  "onboarding.wslNotInstalled.description": "WSL (Windows ქვესისტემა Linux-ისთვის) საჭიროა, სანამ OpenCode შეძლებს WSL სერვერის დამატებას",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows ქვესისტემა Linux-ისთვის) საჭიროა, სანამ OpenCode შეძლებს WSL სერვერის დამატებას",
   "onboarding.wslUnavailable.title": "WSL მიუწვდომელია",
   "onboarding.wslUnavailable.description": "OpenCode ვერ დაადასტურა WSL ამ მოწყობილობაზე.",
   "onboarding.installWsl": "დააინსტალირეთ WSL",
-  "onboarding.windowsRestartRequired": "გადატვირთეთ Windows WSL-ის ინსტალაციის დასასრულებლად, შემდეგ ხელახლა გახსენით OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "გადატვირთეთ Windows WSL-ის ინსტალაციის დასასრულებლად, შემდეგ ხელახლა გახსენით OpenCode.",
   "onboarding.allDistrosAdded": "ყველა დაინსტალირებული დისტრო უკვე დამატებულია.",
   "onboarding.noDistros": "გავრცელება ჯერ არ არის გამოვლენილი.",
   "onboarding.installDistro": "Install Distro",
@@ -41,7 +43,8 @@ export default {
   "error.opencodeMissing": "opencode არ არის დაინსტალირებული ამ დისტროში",
   "error.opencodeCannotRun": "opencode დაინსტალირებულია, მაგრამ ვერ გაშვება",
   "error.opencodeNotInstalled": "OpenCode არ არის დაინსტალირებული {{distro}}",
-  "error.updateVersion": "OpenCode განახლება დასრულდა, მაგრამ {{distro}} კვლავ იუწყება {{installed}}; მოსალოდნელია {{expected}}",
+  "error.updateVersion":
+    "OpenCode განახლება დასრულდა, მაგრამ {{distro}} კვლავ იუწყება {{installed}}; მოსალოდნელია {{expected}}",
   "error.noVersion": "ვერსიის გარეშე",
   "error.serverExited": "WSL სერვერი გავიდა გაშვების შემდეგ (კოდი={{code}} სიგნალი={{signal}})",
   "error.serverExitedBeforeHealthy": "WSL სერვერი გავიდა გაჯანსაღებამდე (code={{code}} signal={{signal}}){{output}}",

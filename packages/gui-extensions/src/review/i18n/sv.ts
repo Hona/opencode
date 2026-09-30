@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Inga grenändringar ännu",
   "git.title": "Skapa ett Git-arkiv",
   "git.description": "Spåra, granska och ångra ändringar i det här projektet",
-  "loadingChanges": "Läser in ändringar…",
-  "noChanges": "Inga ändringar",
+  loadingChanges: "Läser in ändringar…",
+  noChanges: "Inga ändringar",
 }

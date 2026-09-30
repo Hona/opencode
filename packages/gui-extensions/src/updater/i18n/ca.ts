@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Estàs al dia",
   "toast.latest.description": "Esteu executant la darrera versió de OpenCode.",
   "migration.title": "Passa de Beta a Estable",
-  "migration.description": "De moment, OpenCode Beta passa a OpenCode Estable. Baixeu la versió {{version}} i instal·leu l’OpenCode des de la imatge de disc per continuar rebent actualitzacions.",
+  "migration.description":
+    "De moment, OpenCode Beta passa a OpenCode Estable. Baixeu la versió {{version}} i instal·leu l’OpenCode des de la imatge de disc per continuar rebent actualitzacions.",
   "section.title": "Actualitzacions",
   "releaseNotes.title": "Notes de publicació",
   "releaseNotes.description": "Mostra les finestres emergents Novetats després de les actualitzacions",

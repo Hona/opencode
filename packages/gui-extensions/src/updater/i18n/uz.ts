@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Siz yangilangansiz",
   "toast.latest.description": "Siz OpenCode oxirgi versiyasini ishga tushiryapsiz.",
   "migration.title": "Beta-dan Stable-ga o‘tish",
-  "migration.description": "Hozircha OpenCode Beta OpenCode Stable-ga o‘tmoqda. Yangilanishlarni olishda davom etish uchun {{version}} versiyasini yuklab oling, so‘ng OpenCode-ni disk tasviridan o‘rnating.",
+  "migration.description":
+    "Hozircha OpenCode Beta OpenCode Stable-ga o‘tmoqda. Yangilanishlarni olishda davom etish uchun {{version}} versiyasini yuklab oling, so‘ng OpenCode-ni disk tasviridan o‘rnating.",
   "section.title": "Yangilanishlar",
   "releaseNotes.title": "Chiqarish qaydlari",
   "releaseNotes.description": "Yangilanishlardan so'ng nimalar yangi qalqib chiquvchi oynalarni ko'rsating",

@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Ende nuk ka ndryshime në degë",
   "git.title": "Krijoni një depo Git",
   "git.description": "Gjurmoni, rishikoni dhe anuloni ndryshimet në këtë projekt",
-  "loadingChanges": "Ndryshimet po ngarkohen…",
-  "noChanges": "Nuk ka ndryshime",
+  loadingChanges: "Ndryshimet po ngarkohen…",
+  noChanges: "Nuk ka ndryshime",
 }

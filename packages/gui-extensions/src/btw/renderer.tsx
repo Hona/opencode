@@ -22,18 +22,21 @@ const setup: Setup = (ctx) => {
     ),
   }
 
-  ctx.add(Command, (): Command => ({
-    id: "ask",
-    title: ctx.t("command.title"),
-    description: ctx.t("command.description"),
-    group: ctx.t("command.category.session"),
-    section: "session",
-    slash: { name: "btw", arguments: true },
-    hidden: true,
-    // Offered only while a session is open in a desktop-width window.
-    enabled: !layout.narrow() && !!sessions.current(),
-    run: (input) => btw.ask(input),
-  }))
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "ask",
+      title: ctx.t("command.title"),
+      description: ctx.t("command.description"),
+      group: ctx.t("command.category.session"),
+      section: "session",
+      slash: { name: "btw", arguments: true },
+      hidden: true,
+      // Offered only while a session is open in a desktop-width window.
+      enabled: !layout.narrow() && !!sessions.current(),
+      run: (input) => btw.ask(input),
+    }),
+  )
 
   ctx.add(Panel, {
     id: "main",

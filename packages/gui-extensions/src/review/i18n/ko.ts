@@ -8,6 +8,6 @@ export default {
   "empty.branch": "아직 브랜치 변경 사항이 없습니다",
   "git.title": "Git 저장소 생성",
   "git.description": "이 프로젝트의 변경 사항을 추적, 검토 및 실행 취소",
-  "loadingChanges": "변경 사항 로드 중…",
-  "noChanges": "변경 없음",
+  loadingChanges: "변경 사항 로드 중…",
+  noChanges: "변경 없음",
 }

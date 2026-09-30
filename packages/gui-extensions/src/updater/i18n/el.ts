@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Είστε ενημερωμένοι",
   "toast.latest.description": "Εκτελείτε την πιο πρόσφατη έκδοση του OpenCode.",
   "migration.title": "Μετάβαση από Beta σε Σταθερή",
-  "migration.description": "Προς το παρόν, το OpenCode Beta μεταφέρεται στο OpenCode Stable. Κάντε λήψη της έκδοσης {{version}} και, στη συνέχεια, εγκαταστήστε το OpenCode από το είδωλο δίσκου για να συνεχίσετε να λαμβάνετε ενημερώσεις.",
+  "migration.description":
+    "Προς το παρόν, το OpenCode Beta μεταφέρεται στο OpenCode Stable. Κάντε λήψη της έκδοσης {{version}} και, στη συνέχεια, εγκαταστήστε το OpenCode από το είδωλο δίσκου για να συνεχίσετε να λαμβάνετε ενημερώσεις.",
   "section.title": "Ενημέρωση",
   "releaseNotes.title": "Σημειώσεις έκδοσης",
   "releaseNotes.description": "Εμφάνιση αναδυόμενων παραθύρων για τα νέα μετά από ενημερώσεις",

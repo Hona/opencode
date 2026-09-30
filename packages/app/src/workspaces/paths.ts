@@ -85,7 +85,6 @@ export function isProjectDirectory(project: WorkspaceProject | undefined, direct
   return [project.worktree, ...(project.sandboxes ?? [])].some((root) => containsDirectory(root, directory))
 }
 
-
 export function isWorkspaceSelection(project: WorkspaceProject | undefined, selection: string) {
   if (selection === "main" || selection === "create") return true
   if (!project) return false

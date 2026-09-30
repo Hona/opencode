@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "आपके पास नवीनतम संस्करण है",
   "toast.latest.description": "आप OpenCode का नवीनतम संस्करण चला रहे हैं।",
   "migration.title": "बीटा से स्टेबल पर जाएँ",
-  "migration.description": "फ़िलहाल OpenCode Beta को OpenCode Stable में बदला जा रहा है। संस्करण {{version}} डाउनलोड करें, फिर अपडेट मिलते रहने के लिए डिस्क इमेज से OpenCode इंस्टॉल करें।",
+  "migration.description":
+    "फ़िलहाल OpenCode Beta को OpenCode Stable में बदला जा रहा है। संस्करण {{version}} डाउनलोड करें, फिर अपडेट मिलते रहने के लिए डिस्क इमेज से OpenCode इंस्टॉल करें।",
   "section.title": "अपडेट",
   "releaseNotes.title": "रिलीज़ नोट्स",
   "releaseNotes.description": "अपडेट के बाद 'नया क्या है' पॉपअप दिखाएँ",

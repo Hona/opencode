@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Hozircha filial o'zgarmadi",
   "git.title": "Git omborini yarating",
   "git.description": "Ushbu loyihadagi oʻzgarishlarni kuzating, koʻrib chiqing va bekor qiling",
-  "loadingChanges": "Oʻzgarishlar yuklanmoqda…",
-  "noChanges": "Oʻzgarishlar yoʻq",
+  loadingChanges: "Oʻzgarishlar yuklanmoqda…",
+  noChanges: "Oʻzgarishlar yoʻq",
 }

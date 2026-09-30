@@ -56,7 +56,9 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
   const scope = createMemo(() => (view.location ? `${view.key}\n${view.location.directory}` : undefined))
   const saved = createMemo(
     on(scope, (key) =>
-      key ? storage.store("session", { schema: SessionState, initial: { open: [] }, scope: { session: view } }) : undefined,
+      key
+        ? storage.store("session", { schema: SessionState, initial: { open: [] }, scope: { session: view } })
+        : undefined,
     ),
   )
   const update = (mutation: (draft: (typeof SessionState)["Type"]) => void) => saved()?.[1](mutation)
@@ -230,7 +232,12 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
 
     if (scoped !== root) {
       const result = await request(scoped).then(valid, (error: unknown) => {
-        console.debug("[session-review] failed to load scoped vcs diff", { mode: value, path, directory: scoped, error })
+        console.debug("[session-review] failed to load scoped vcs diff", {
+          mode: value,
+          path,
+          directory: scoped,
+          error,
+        })
         return undefined
       })
       if (result) return result
@@ -258,7 +265,13 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
       preview: comment.preview ?? selectionPreview(comment.file, selection),
     })
   }
-  const updateComment = (comment: { id: string; file: string; selection: LineRange; comment: string; preview?: string }) => {
+  const updateComment = (comment: {
+    id: string
+    file: string
+    selection: LineRange
+    comment: string
+    preview?: string
+  }) => {
     view.comment.update(comment.id, comment.comment)
     view.composer.update(comment.id, {
       comment: comment.comment,

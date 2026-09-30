@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Bật/tắt thanh gỡ lỗi",
   "status.toggle": "Chuyển đổi công cụ gỡ lỗi",
-  "ariaLabel": "Chẩn đoán hiệu suất phát triển",
-  "providerAriaLabel": "Chẩn đoán hiệu suất nhà cung cấp",
-  "na": "không có",
+  ariaLabel: "Chẩn đoán hiệu suất phát triển",
+  providerAriaLabel: "Chẩn đoán hiệu suất nhà cung cấp",
+  na: "không có",
   "ttft.label": "TTFT",
   "ttft.tip": "Thời gian từ khi gửi yêu cầu đến nhà cung cấp cho đến đầu ra đầu tiên của mô hình.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Thời gian từ khi gửi yêu cầu đến nhà cung cấp cho đến khi luồng phản hồi kết thúc.",
   "nav.label": "NAV",
-  "nav.tip": "Lần chuyển tuyến hoàn tất gần nhất có truy cập trang phiên, được đo từ lúc bộ định tuyến bắt đầu đến khung hình đầu tiên sau khi ổn định.",
+  "nav.tip":
+    "Lần chuyển tuyến hoàn tất gần nhất có truy cập trang phiên, được đo từ lúc bộ định tuyến bắt đầu đến khung hình đầu tiên sau khi ổn định.",
   "fps.label": "FPS",
   "fps.tip": "Số khung hình mỗi giây trong 5 giây qua.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Độ trễ đầu vào được quan sát tồi tệ nhất trong 5 giây qua.",
   "inp.label": "INP",
-  "inp.tip": "Thời lượng tương tác gần đúng trong 5 giây qua. Đây giống như INP, không phải là Web Vitals chính thức INP.",
+  "inp.tip":
+    "Thời lượng tương tác gần đúng trong 5 giây qua. Đây giống như INP, không phải là Web Vitals chính thức INP.",
   "cls.label": "CLS",
   "cls.tip": "Sự thay đổi bố cục tích lũy cho thời gian tồn tại của ứng dụng hiện tại.",
   "mem.label": "MEM",

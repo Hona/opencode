@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Треба вам још један дистро?",
   "onboarding.needAnotherDistroHint": "Инсталирајте Linux дистрибуцију из каталога WSL",
   "onboarding.wslNotInstalled.title": "WSL није инсталиран",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) је потребан да би OpenCode могао да дода WSL сервер",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) је потребан да би OpenCode могао да дода WSL сервер",
   "onboarding.wslUnavailable.title": "WSL недоступан",
   "onboarding.wslUnavailable.description": "OpenCode није могао да потврди WSL на овој машини.",
   "onboarding.installWsl": "Инсталирај WSL",
-  "onboarding.windowsRestartRequired": "Поново покрените Windows да бисте завршили инсталирање WSL, а затим поново отворите OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Поново покрените Windows да бисте завршили инсталирање WSL, а затим поново отворите OpenCode.",
   "onboarding.allDistrosAdded": "Све инсталиране дистрибуције су већ додате.",
   "onboarding.noDistros": "Још нису откривене дистрибуције.",
   "onboarding.installDistro": "Инсталирајте дистро",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode није инсталиран у овој дистрибуцији",
   "error.opencodeCannotRun": "opencode је инсталиран, али не може да се покрене",
   "error.opencodeNotInstalled": "OpenCode није инсталиран у {{distro}}",
-  "error.updateVersion": "OpenCode ажурирање је завршено, али {{distro}} и даље извештава {{installed}}; очекивано {{expected}}",
+  "error.updateVersion":
+    "OpenCode ажурирање је завршено, али {{distro}} и даље извештава {{installed}}; очекивано {{expected}}",
   "error.noVersion": "нема верзије",
   "error.serverExited": "WSL сервер је изашао након покретања (код={{code}} сигнал={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL сервер је изашао пре него што је постао здрав (код={{code}} сигнал={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL сервер је изашао пре него што је постао здрав (код={{code}} сигнал={{signal}}){{output}}",
   "error.healthTimeout": "Сидецар за {{distro}} проверу здравља истекло је после {{timeout}}мс",
   "error.commandTimeout": "{{command}} {{args}} истекло је после {{timeout}}мс",
   "error.failedPort": "није успело преузимање порта",

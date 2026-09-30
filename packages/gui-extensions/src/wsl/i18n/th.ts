@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "ต้องการดิสโทรอื่น?",
   "onboarding.needAnotherDistroHint": "ติดตั้งดิสทริบิวชัน Linux จากแค็ตตาล็อก WSL",
   "onboarding.wslNotInstalled.title": "ยังไม่ได้ติดตั้ง WSL",
-  "onboarding.wslNotInstalled.description": "ต้องมี WSL (Windows Subsystem for Linux) ก่อนที่ OpenCode จะเพิ่มเซิร์ฟเวอร์ WSL ได้",
+  "onboarding.wslNotInstalled.description":
+    "ต้องมี WSL (Windows Subsystem for Linux) ก่อนที่ OpenCode จะเพิ่มเซิร์ฟเวอร์ WSL ได้",
   "onboarding.wslUnavailable.title": "WSL ไม่พร้อมใช้งาน",
   "onboarding.wslUnavailable.description": "OpenCode ไม่สามารถตรวจสอบ WSL บนเครื่องนี้ได้",
   "onboarding.installWsl": "ติดตั้ง WSL",
-  "onboarding.windowsRestartRequired": "รีสตาร์ท Windows เพื่อให้การติดตั้ง WSL เสร็จสมบูรณ์ แล้วเปิด OpenCode อีกครั้ง",
+  "onboarding.windowsRestartRequired":
+    "รีสตาร์ท Windows เพื่อให้การติดตั้ง WSL เสร็จสมบูรณ์ แล้วเปิด OpenCode อีกครั้ง",
   "onboarding.allDistrosAdded": "เพิ่มดิสโทรที่ติดตั้งไว้ทั้งหมดแล้ว",
   "onboarding.noDistros": "ยังไม่พบดิสโทร",
   "onboarding.installDistro": "ติดตั้งดิสโทร",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "ไม่ได้ติดตั้ง opencode ในดิสโทรนี้",
   "error.opencodeCannotRun": "ติดตั้ง opencode แล้ว แต่ไม่สามารถเรียกใช้ได้",
   "error.opencodeNotInstalled": "ไม่ได้ติดตั้ง OpenCode ใน {{distro}}",
-  "error.updateVersion": "อัปเดต OpenCode เสร็จแล้ว แต่ {{distro}} ยังคงรายงานเวอร์ชัน {{installed}} ทั้งที่ควรเป็น {{expected}}",
+  "error.updateVersion":
+    "อัปเดต OpenCode เสร็จแล้ว แต่ {{distro}} ยังคงรายงานเวอร์ชัน {{installed}} ทั้งที่ควรเป็น {{expected}}",
   "error.noVersion": "ไม่มีเวอร์ชัน",
   "error.serverExited": "เซิร์ฟเวอร์ WSL หยุดทำงานหลังเริ่มต้น (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "เซิร์ฟเวอร์ WSL หยุดทำงานก่อนพร้อมใช้งาน (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "เซิร์ฟเวอร์ WSL หยุดทำงานก่อนพร้อมใช้งาน (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "การตรวจสอบสถานะ Sidecar สำหรับ {{distro}} หมดเวลาหลังจาก {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} หมดเวลาหลังจาก {{timeout}}ms",
   "error.failedPort": "ไม่สามารถรับพอร์ตได้",

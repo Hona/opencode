@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Afficher ou masquer la barre de débogage",
   "status.toggle": "Afficher ou masquer les outils de débogage",
-  "ariaLabel": "Diagnostics de performance de développement",
-  "providerAriaLabel": "Diagnostic des performances du fournisseur",
-  "na": "n/a",
+  ariaLabel: "Diagnostics de performance de développement",
+  providerAriaLabel: "Diagnostic des performances du fournisseur",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Temps entre l’envoi de la requête au fournisseur et la première sortie du modèle.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Temps entre l’envoi de la requête au fournisseur et la fin du flux de réponse.",
   "nav.label": "NAV",
-  "nav.tip": "Dernière transition de route terminée touchant une page de session, mesurée du début du routeur jusqu'au premier affichage après stabilisation.",
+  "nav.tip":
+    "Dernière transition de route terminée touchant une page de session, mesurée du début du routeur jusqu'au premier affichage après stabilisation.",
   "fps.label": "FPS",
   "fps.tip": "Fréquence d'images calculée sur les 5 dernières secondes.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Pire délai d'entrée observé au cours des 5 dernières secondes.",
   "inp.label": "INP",
-  "inp.tip": "Durée approximative d'interaction au cours des 5 dernières secondes. Il s'agit d'une mesure similaire à l'INP, et non de l'INP officiel des Web Vitals.",
+  "inp.tip":
+    "Durée approximative d'interaction au cours des 5 dernières secondes. Il s'agit d'une mesure similaire à l'INP, et non de l'INP officiel des Web Vitals.",
   "cls.label": "CLS",
   "cls.tip": "Décalage cumulatif de la mise en page pour la durée de vie actuelle de l'application.",
   "mem.label": "MEM",

@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Tú ert dagførdur",
   "toast.latest.description": "Tú koyrir nýggjastu útgávuna av OpenCode.",
   "migration.title": "Far úr Beta í Støðugt",
-  "migration.description": "Í løtuni verður OpenCode Beta flutt til OpenCode Stable. Tak útgávu {{version}} niður og legg síðani OpenCode inn úr diskmyndini fyri framhaldandi at fáa dagføringar.",
+  "migration.description":
+    "Í løtuni verður OpenCode Beta flutt til OpenCode Stable. Tak útgávu {{version}} niður og legg síðani OpenCode inn úr diskmyndini fyri framhaldandi at fáa dagføringar.",
   "section.title": "Dagføringar",
   "releaseNotes.title": "Útgávuviðmerkingar",
   "releaseNotes.description": "Vís Hvat er nýtt popups eftir dagføringar",

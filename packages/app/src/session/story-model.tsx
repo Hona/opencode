@@ -353,4 +353,3 @@ function SessionSurfaceHeader(props: {
     </header>
   )
 }
-

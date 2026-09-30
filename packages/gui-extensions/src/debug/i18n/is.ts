@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Sýna eða fela villuleitarstiku",
   "status.toggle": "Skiptu um villuleitarverkfæri",
-  "ariaLabel": "Þróunarárangursgreiningar",
-  "providerAriaLabel": "Afkastagreining þjónustuveitu",
-  "na": "n/a",
+  ariaLabel: "Þróunarárangursgreiningar",
+  providerAriaLabel: "Afkastagreining þjónustuveitu",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Tími frá því að beiðni er send til þjónustuveitu þar til fyrsta úttak líkansins berst.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tími frá því að beiðni er send til þjónustuveitu þar til svarstraumnum lýkur.",
   "nav.label": "NAV",
-  "nav.tip": "Síðasta lokið leiðarskipti sem snertir lotusíðu, mæld frá byrjun beinis þar til fyrsta málningin eftir að hún sest.",
+  "nav.tip":
+    "Síðasta lokið leiðarskipti sem snertir lotusíðu, mæld frá byrjun beinis þar til fyrsta málningin eftir að hún sest.",
   "fps.label": "FPS",
   "fps.tip": "Rámar á sekúndu rúllandi síðustu 5 sekúndur.",
   "frame.label": "FRAME",

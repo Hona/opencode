@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "אתה מעודכן",
   "toast.latest.description": "אתה מפעיל את הגרסה האחרונה של OpenCode.",
   "migration.title": "מעבר מבטא לגרסה יציבה",
-  "migration.description": "בשלב זה OpenCode Beta עובר ל-OpenCode Stable. יש להוריד את גרסה ⁨{{version}}⁩ ולאחר מכן להתקין את OpenCode מתמונת הדיסק כדי להמשיך לקבל עדכונים.",
+  "migration.description":
+    "בשלב זה OpenCode Beta עובר ל-OpenCode Stable. יש להוריד את גרסה ⁨{{version}}⁩ ולאחר מכן להתקין את OpenCode מתמונת הדיסק כדי להמשיך לקבל עדכונים.",
   "section.title": "עדכונים",
   "releaseNotes.title": "הערות שחרור",
   "releaseNotes.description": "הצגת חלונות 'מה חדש' לאחר עדכונים",

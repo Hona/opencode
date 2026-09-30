@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Lülita silumisriba",
   "status.toggle": "Silumistööriistade sisse- ja väljalülitamine",
-  "ariaLabel": "Arendustegevuse diagnostika",
-  "providerAriaLabel": "Pakkuja jõudluse diagnostika",
-  "na": "n/a",
+  ariaLabel: "Arendustegevuse diagnostika",
+  providerAriaLabel: "Pakkuja jõudluse diagnostika",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Aeg pakkujale päringu saatmisest mudeli esimese väljundini.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Aeg pakkujale päringu saatmisest vastusevoo lõppemiseni.",
   "nav.label": "NAV",
-  "nav.tip": "Viimane lõpetatud marsruudi üleminek, mis puudutab seansi lehte, mõõdetuna ruuteri algusest kuni esimese värvimiseni pärast selle settimist.",
+  "nav.tip":
+    "Viimane lõpetatud marsruudi üleminek, mis puudutab seansi lehte, mõõdetuna ruuteri algusest kuni esimese värvimiseni pärast selle settimist.",
   "fps.label": "FPS",
   "fps.tip": "Veerevad kaadrid sekundis viimase 5 sekundi jooksul.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Halvim täheldatud sisendi viivitus viimase 5 sekundi jooksul.",
   "inp.label": "INP",
-  "inp.tip": "Ligikaudne interaktsiooni kestus viimase 5 sekundi jooksul. See on INP-sarnane, mitte ametlik Web Vitals INP.",
+  "inp.tip":
+    "Ligikaudne interaktsiooni kestus viimase 5 sekundi jooksul. See on INP-sarnane, mitte ametlik Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulatiivne paigutuse nihe praeguse rakenduse kasutusaja jooksul.",
   "mem.label": "MEM",

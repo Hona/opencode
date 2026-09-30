@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "切換偵錯列",
   "status.toggle": "切換除錯工具",
-  "ariaLabel": "開發效能診斷",
-  "providerAriaLabel": "提供者效能診斷",
-  "na": "不適用",
+  ariaLabel: "開發效能診斷",
+  providerAriaLabel: "提供者效能診斷",
+  na: "不適用",
   "ttft.label": "TTFT",
   "ttft.tip": "從送出提供者要求到模型首次輸出所需的時間。",
   "ttfa.label": "TTFA",

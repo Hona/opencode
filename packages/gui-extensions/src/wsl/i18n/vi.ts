@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Cần một bản phân phối khác?",
   "onboarding.needAnotherDistroHint": "Cài đặt bản phân phối Linux từ danh mục WSL",
   "onboarding.wslNotInstalled.title": "WSL chưa được cài đặt",
-  "onboarding.wslNotInstalled.description": "Cần có WSL (Hệ thống con Windows dành cho Linux) trước khi OpenCode có thể thêm máy chủ WSL",
+  "onboarding.wslNotInstalled.description":
+    "Cần có WSL (Hệ thống con Windows dành cho Linux) trước khi OpenCode có thể thêm máy chủ WSL",
   "onboarding.wslUnavailable.title": "WSL không có sẵn",
   "onboarding.wslUnavailable.description": "OpenCode không thể xác minh WSL trên máy này.",
   "onboarding.installWsl": "Cài đặt WSL",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "opencode chưa được cài đặt trong bản phân phối này",
   "error.opencodeCannotRun": "opencode đã được cài đặt nhưng không thể chạy",
   "error.opencodeNotInstalled": "OpenCode chưa được cài đặt trong {{distro}}",
-  "error.updateVersion": "Đã cập nhật OpenCode nhưng {{distro}} vẫn báo phiên bản {{installed}}; phiên bản dự kiến là {{expected}}",
+  "error.updateVersion":
+    "Đã cập nhật OpenCode nhưng {{distro}} vẫn báo phiên bản {{installed}}; phiên bản dự kiến là {{expected}}",
   "error.noVersion": "không có phiên bản",
   "error.serverExited": "Máy chủ WSL đã thoát sau khi khởi động (mã={{code}} tín hiệu={{signal}})",
-  "error.serverExitedBeforeHealthy": "Máy chủ WSL đã thoát trước khi sẵn sàng (mã={{code}} tín hiệu={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Máy chủ WSL đã thoát trước khi sẵn sàng (mã={{code}} tín hiệu={{signal}}){{output}}",
   "error.healthTimeout": "Sidecar kiểm tra tình trạng của {{distro}} đã hết thời gian chờ sau {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} đã hết thời gian chờ sau {{timeout}}ms",
   "error.failedPort": "Không lấy được cổng",

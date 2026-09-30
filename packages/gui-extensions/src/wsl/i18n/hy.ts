@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Պետք է մեկ այլ բաշխում",
   "onboarding.needAnotherDistroHint": "Տեղադրեք Linux բաշխումը WSL կատալոգից",
   "onboarding.wslNotInstalled.title": "WSL տեղադրված չէ",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Ենթահամակարգը Linux-ի համար) անհրաժեշտ է, որպեսզի OpenCode-ը կարողանա ավելացնել WSL սերվեր",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Ենթահամակարգը Linux-ի համար) անհրաժեշտ է, որպեսզի OpenCode-ը կարողանա ավելացնել WSL սերվեր",
   "onboarding.wslUnavailable.title": "WSL անհասանելի է",
   "onboarding.wslUnavailable.description": "OpenCode-ը չկարողացավ հաստատել WSL-ն այս մեքենայի վրա։",
   "onboarding.installWsl": "Տեղադրեք WSL",
-  "onboarding.windowsRestartRequired": "Վերագործարկեք Windows՝ WSL-ի տեղադրումն ավարտելու համար, այնուհետև նորից բացեք OpenCode։",
+  "onboarding.windowsRestartRequired":
+    "Վերագործարկեք Windows՝ WSL-ի տեղադրումն ավարտելու համար, այնուհետև նորից բացեք OpenCode։",
   "onboarding.allDistrosAdded": "Բոլոր տեղադրված բաշխումները արդեն ավելացված են։",
   "onboarding.noDistros": "Դեռևս տարածումներ չեն հայտնաբերվել։",
   "onboarding.installDistro": "Տեղադրել դիստրիբուտիվը",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode-ը տեղադրված չէ այս բաշխում",
   "error.opencodeCannotRun": "opencode-ը տեղադրված է, բայց չի կարող գործարկվել",
   "error.opencodeNotInstalled": "OpenCode տեղադրված չէ {{distro}}",
-  "error.updateVersion": "OpenCode թարմացումն ավարտված է, բայց {{distro}}-ը դեռ հայտնում է {{installed}}; սպասվում է {{expected}}",
+  "error.updateVersion":
+    "OpenCode թարմացումն ավարտված է, բայց {{distro}}-ը դեռ հայտնում է {{installed}}; սպասվում է {{expected}}",
   "error.noVersion": "առանց տարբերակ",
   "error.serverExited": "WSL սերվերը դուրս է եկել գործարկումից հետո (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL սերվերը դուրս է եկել առողջանալուց առաջ (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL սերվերը դուրս է եկել առողջանալուց առաջ (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} առողջության ստուգման կողային մեքենայի ժամանակը սպառվել է {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} ժամանակը սպառվել է {{timeout}}ms",
   "error.failedPort": "Չհաջողվեց ստանալ միացքը",

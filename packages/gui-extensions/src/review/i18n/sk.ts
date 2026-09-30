@@ -12,6 +12,6 @@ export default {
   "empty.branch": "Zatiaľ žiadne zmeny vetvy",
   "git.title": "Vytvoriť Git repozitár",
   "git.description": "Sledujte, kontrolujte a vracajte zmeny v tomto projekte",
-  "loadingChanges": "Načítavam zmeny…",
-  "noChanges": "Žiadne zmeny",
+  loadingChanges: "Načítavam zmeny…",
+  noChanges: "Žiadne zmeny",
 }

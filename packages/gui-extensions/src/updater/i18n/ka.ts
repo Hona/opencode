@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "თქვენ განახლებული ხართ",
   "toast.latest.description": "თქვენ იყენებთ OpenCode-ის უახლეს ვერსიას.",
   "migration.title": "Beta-დან Stable-ზე გადასვლა",
-  "migration.description": "ამჟამად OpenCode Beta გადადის OpenCode Stable-ზე. ჩამოტვირთეთ ვერსია {{version}}, შემდეგ დააინსტალირეთ OpenCode დისკის ასლიდან, რათა განახლებების მიღება განაგრძოთ.",
+  "migration.description":
+    "ამჟამად OpenCode Beta გადადის OpenCode Stable-ზე. ჩამოტვირთეთ ვერსია {{version}}, შემდეგ დააინსტალირეთ OpenCode დისკის ასლიდან, რათა განახლებების მიღება განაგრძოთ.",
   "section.title": "განახლებები",
   "releaseNotes.title": "გამოშვების შენიშვნები",
   "releaseNotes.description": "აჩვენე რა არის ახალი ამომხტარი ფანჯარა განახლებების შემდეგ",

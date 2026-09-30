@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Slå fejlfindingslinjen til eller fra",
   "status.toggle": "Slå fejlfindingsværktøjer til/fra",
-  "ariaLabel": "Udviklingsydelsesdiagnostik",
-  "providerAriaLabel": "Diagnosticering af udbyderens ydeevne",
-  "na": "n/a",
+  ariaLabel: "Udviklingsydelsesdiagnostik",
+  providerAriaLabel: "Diagnosticering af udbyderens ydeevne",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Tid fra afsendelse af udbyderanmodningen til modellens første output.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tid fra afsendelse af udbyderanmodningen, til dens svarstream sluttede.",
   "nav.label": "NAV",
-  "nav.tip": "Sidste gennemførte ruteovergang, der berører en sessionsside, målt fra routerstart til den første optegning efter den falder til ro.",
+  "nav.tip":
+    "Sidste gennemførte ruteovergang, der berører en sessionsside, målt fra routerstart til den første optegning efter den falder til ro.",
   "fps.label": "FPS",
   "fps.tip": "Rullende antal billedrammer pr. sekund over de sidste 5 sekunder.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Værste observerede inputforsinkelse i de sidste 5 sekunder.",
   "inp.label": "INP",
-  "inp.tip": "Omtrentlig interaktionsvarighed over de sidste 5 sekunder. Dette er INP-lignende, ikke den officielle Web Vitals INP.",
+  "inp.tip":
+    "Omtrentlig interaktionsvarighed over de sidste 5 sekunder. Dette er INP-lignende, ikke den officielle Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulativt layoutskift for den nuværende app-levetid.",
   "mem.label": "MEM",

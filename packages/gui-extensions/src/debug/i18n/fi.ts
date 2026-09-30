@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Näytä tai piilota virheenkorjauspalkki",
   "status.toggle": "Näytä tai piilota virheenkorjaustyökalut",
-  "ariaLabel": "Kehityksen suorituskyvyn diagnostiikka",
-  "providerAriaLabel": "Palveluntarjoajan suorituskyvyn diagnostiikka",
-  "na": "n/a",
+  ariaLabel: "Kehityksen suorituskyvyn diagnostiikka",
+  providerAriaLabel: "Palveluntarjoajan suorituskyvyn diagnostiikka",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Aika palveluntarjoajapyynnön lähettämisestä mallin ensimmäiseen tulosteeseen.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Aika palveluntarjoajapyynnön lähettämisestä vastausvirran päättymiseen.",
   "nav.label": "NAV",
-  "nav.tip": "Viimeisin valmis reittisiirtymä, joka koskee istuntosivua, mitattuna reitityksen alusta ensimmäiseen piirtoon siirtymän valmistumisen jälkeen.",
+  "nav.tip":
+    "Viimeisin valmis reittisiirtymä, joka koskee istuntosivua, mitattuna reitityksen alusta ensimmäiseen piirtoon siirtymän valmistumisen jälkeen.",
   "fps.label": "FPS",
   "fps.tip": "Liukuva kuvataajuus viimeisten 5 sekunnin ajalta.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "VIIVE",
   "delay.tip": "Pisin havaittu syöttöviive viimeisten 5 sekunnin aikana.",
   "inp.label": "INP",
-  "inp.tip": "Vuorovaikutuksen arvioitu kesto viimeisen 5 sekunnin ajalta. Tämä on INP-tyyppinen, ei virallinen Web Vitals INP.",
+  "inp.tip":
+    "Vuorovaikutuksen arvioitu kesto viimeisen 5 sekunnin ajalta. Tämä on INP-tyyppinen, ei virallinen Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulatiivinen asettelusiirtymä sovelluksen nykyisen käyttöjakson aikana.",
   "mem.label": "MEM",

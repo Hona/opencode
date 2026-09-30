@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Tørvar tær eina aðra distro?",
   "onboarding.needAnotherDistroHint": "Set upp Linux útbreiðslu frá WSL kataloginum",
   "onboarding.wslNotInstalled.title": "WSL ikki innstillað",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Undirskipan til Linux) er kravd áðrenn OpenCode kann leggja ein WSL ambætara til",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Undirskipan til Linux) er kravd áðrenn OpenCode kann leggja ein WSL ambætara til",
   "onboarding.wslUnavailable.title": "WSL ikki tøkt",
   "onboarding.wslUnavailable.description": "OpenCode kundi ikki staðfesta WSL á hesi maskinuni.",
   "onboarding.installWsl": "Set upp WSL",
-  "onboarding.windowsRestartRequired": "Endurbyrja Windows fyri at klára at seta upp WSL, og opna síðani OpenCode aftur.",
+  "onboarding.windowsRestartRequired":
+    "Endurbyrja Windows fyri at klára at seta upp WSL, og opna síðani OpenCode aftur.",
   "onboarding.allDistrosAdded": "Allar uppsettar distros eru longu lagdar afturat.",
   "onboarding.noDistros": "Ongar útbreiðslur eru funnar enn.",
   "onboarding.installDistro": "Set distro upp",
@@ -44,7 +46,8 @@ export default {
   "error.updateVersion": "OpenCode dagføring liðug men {{distro}} greiðir enn frá {{installed}}; væntað {{expected}}.",
   "error.noVersion": "eingin útgáva",
   "error.serverExited": "WSL-ambætarin steðgaði eftir uppstart (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-ambætarin steðgaði, áðrenn hann var klárur (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL-ambætarin steðgaði, áðrenn hann var klárur (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Síðuvognur til {{distro}} heilsukanning tíðaravmarkað eftir {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} tíðaravmarkað eftir {{timeout}}ms",
   "error.failedPort": "Tað eydnaðist ikki at fáa havn",

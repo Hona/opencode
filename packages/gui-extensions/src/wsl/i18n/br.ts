@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Precisa de outra distribuição?",
   "onboarding.needAnotherDistroHint": "Instale uma distribuição Linux pelo catálogo do WSL",
   "onboarding.wslNotInstalled.title": "WSL não instalado",
-  "onboarding.wslNotInstalled.description": "O WSL (Windows Subsystem for Linux) é necessário para que o OpenCode possa adicionar um servidor WSL",
+  "onboarding.wslNotInstalled.description":
+    "O WSL (Windows Subsystem for Linux) é necessário para que o OpenCode possa adicionar um servidor WSL",
   "onboarding.wslUnavailable.title": "WSL indisponível",
   "onboarding.wslUnavailable.description": "O OpenCode não conseguiu verificar o WSL neste computador.",
   "onboarding.installWsl": "Instalar o WSL",
-  "onboarding.windowsRestartRequired": "Reinicie o Windows para concluir a instalação do WSL e abra o OpenCode novamente.",
+  "onboarding.windowsRestartRequired":
+    "Reinicie o Windows para concluir a instalação do WSL e abra o OpenCode novamente.",
   "onboarding.allDistrosAdded": "Todas as distribuições instaladas já foram adicionadas.",
   "onboarding.noDistros": "Nenhuma distribuição detectada ainda.",
   "onboarding.installDistro": "Instalar distribuição",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "O opencode não está instalado nesta distribuição",
   "error.opencodeCannotRun": "O opencode está instalado, mas não pôde ser executado",
   "error.opencodeNotInstalled": "O OpenCode não está instalado em {{distro}}",
-  "error.updateVersion": "A atualização do OpenCode foi concluída, mas {{distro}} ainda informa a versão {{installed}}; a versão esperada é {{expected}}",
+  "error.updateVersion":
+    "A atualização do OpenCode foi concluída, mas {{distro}} ainda informa a versão {{installed}}; a versão esperada é {{expected}}",
   "error.noVersion": "sem versão",
   "error.serverExited": "O servidor WSL foi encerrado após a inicialização (código={{code}} sinal={{signal}})",
-  "error.serverExitedBeforeHealthy": "O servidor WSL foi encerrado antes de ficar íntegro (código={{code}} sinal={{signal}}){{output}}",
-  "error.healthTimeout": "O tempo limite da verificação de integridade do sidecar de {{distro}} foi excedido após {{timeout}}ms",
+  "error.serverExitedBeforeHealthy":
+    "O servidor WSL foi encerrado antes de ficar íntegro (código={{code}} sinal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "O tempo limite da verificação de integridade do sidecar de {{distro}} foi excedido após {{timeout}}ms",
   "error.commandTimeout": "O tempo limite de {{command}} {{args}} foi excedido após {{timeout}}ms",
   "error.failedPort": "Falha ao obter a porta",
   "server.default": "Padrão",

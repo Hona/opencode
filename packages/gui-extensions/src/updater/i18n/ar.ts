@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "لديك أحدث إصدار",
   "toast.latest.description": "أنت تستخدم أحدث إصدار من OpenCode.",
   "migration.title": "الانتقال من الإصدار التجريبي إلى المستقر",
-  "migration.description": "ينتقل OpenCode Beta حاليًا إلى OpenCode Stable. نزّل الإصدار ⁨{{version}}⁩، ثم ثبّت OpenCode من صورة القرص للاستمرار في تلقي التحديثات.",
+  "migration.description":
+    "ينتقل OpenCode Beta حاليًا إلى OpenCode Stable. نزّل الإصدار ⁨{{version}}⁩، ثم ثبّت OpenCode من صورة القرص للاستمرار في تلقي التحديثات.",
   "section.title": "التحديثات",
   "releaseNotes.title": "ملاحظات الإصدار",
-  "releaseNotes.description": "عرض نوافذ \"ما الجديد\" المنبثقة بعد التحديثات",
+  "releaseNotes.description": 'عرض نوافذ "ما الجديد" المنبثقة بعد التحديثات',
   "check.title": "التحقق من التحديثات",
   "check.description": "التحقق يدويًا من التحديثات وتثبيتها إذا كانت متاحة",
   "menu.check": "التحقق من وجود تحديثات…",

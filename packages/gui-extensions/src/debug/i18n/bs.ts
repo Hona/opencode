@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Uključi/isključi traku za otklanjanje grešaka",
   "status.toggle": "Prebaci alate za otklanjanje grešaka",
-  "ariaLabel": "Dijagnostika performansi razvoja",
-  "providerAriaLabel": "Dijagnostika performansi pružaoca usluge",
-  "na": "n/a",
+  ariaLabel: "Dijagnostika performansi razvoja",
+  providerAriaLabel: "Dijagnostika performansi pružaoca usluge",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Vrijeme od slanja zahtjeva pružaocu do prvog izlaza modela.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Vrijeme od slanja zahtjeva pružaocu do završetka toka odgovora.",
   "nav.label": "NAV",
-  "nav.tip": "Posljednji završeni prelazak rute koji dotiče stranicu sesije, mjeren od početka rutera do prvog iscrtavanja nakon smirivanja.",
+  "nav.tip":
+    "Posljednji završeni prelazak rute koji dotiče stranicu sesije, mjeren od početka rutera do prvog iscrtavanja nakon smirivanja.",
   "fps.label": "FPS",
   "fps.tip": "Kadrovi u sekundi tokom posljednjih 5 sekundi.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Najgore zabilježeno kašnjenje unosa u posljednjih 5 sekundi.",
   "inp.label": "INP",
-  "inp.tip": "Približno trajanje interakcije tokom posljednjih 5 sekundi. Ovo je slično INP-u, nije službeni Web Vitals INP.",
+  "inp.tip":
+    "Približno trajanje interakcije tokom posljednjih 5 sekundi. Ovo je slično INP-u, nije službeni Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulativni pomak rasporeda za trenutni životni vijek aplikacije.",
   "mem.label": "MEM",

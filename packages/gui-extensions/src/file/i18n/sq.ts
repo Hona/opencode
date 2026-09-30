@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "Zgjidhni një skedar për të hapur",
+  selectToOpen: "Zgjidhni një skedar për të hapur",
   "open.finder": "Finder",
   "open.fileExplorer": "Eksploruesi i skedarëve",
   "open.fileManager": "Menaxheri i skedarëve",

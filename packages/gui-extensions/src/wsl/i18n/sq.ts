@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Keni nevojë për një shpërndarje tjetër?",
   "onboarding.needAnotherDistroHint": "Instaloni një shpërndarje Linux nga katalogu WSL",
   "onboarding.wslNotInstalled.title": "WSL nuk është i instaluar",
-  "onboarding.wslNotInstalled.description": "WSL (Nënsistemi Windows për Linux) kërkohet përpara se OpenCode të shtojë një server WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Nënsistemi Windows për Linux) kërkohet përpara se OpenCode të shtojë një server WSL",
   "onboarding.wslUnavailable.title": "WSL i padisponueshëm",
   "onboarding.wslUnavailable.description": "OpenCode nuk mund ta verifikonte WSL në këtë makinë.",
   "onboarding.installWsl": "Instaloni WSL",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "Opencode nuk është i instaluar në këtë shpërndarje",
   "error.opencodeCannotRun": "Opencode është instaluar por nuk mund të ekzekutohet",
   "error.opencodeNotInstalled": "OpenCode nuk është i instaluar në {{distro}}",
-  "error.updateVersion": "Përditësimi i OpenCode përfundoi, por {{distro}} ende raporton {{installed}}; pritet {{expected}}",
+  "error.updateVersion":
+    "Përditësimi i OpenCode përfundoi, por {{distro}} ende raporton {{installed}}; pritet {{expected}}",
   "error.noVersion": "asnjë version",
   "error.serverExited": "Serveri WSL doli pas nisjes (kodi={{code}} sinjal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Serveri WSL doli përpara se të bëhej i shëndetshëm (kodi={{code}} sinjal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Serveri WSL doli përpara se të bëhej i shëndetshëm (kodi={{code}} sinjal={{signal}}){{output}}",
   "error.healthTimeout": "Makina anësore për kontrollin shëndetësor të {{distro}} mbaroi pas {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} skadoi pas {{timeout}}ms",
   "error.failedPort": "Dështoi në marrjen e portit",

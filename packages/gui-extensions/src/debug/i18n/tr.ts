@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Hata ayıklama çubuğunu aç/kapat",
   "status.toggle": "Hata ayıklama araçlarını değiştir",
-  "ariaLabel": "Geliştirme performansı teşhisi",
-  "providerAriaLabel": "Sağlayıcı performansı tanılaması",
-  "na": "yok",
+  ariaLabel: "Geliştirme performansı teşhisi",
+  providerAriaLabel: "Sağlayıcı performansı tanılaması",
+  na: "yok",
   "ttft.label": "TTFT",
   "ttft.tip": "Sağlayıcı isteğinin gönderilmesinden ilk model çıktısına kadar geçen süre.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Sağlayıcı isteğinin gönderilmesinden yanıt akışının sona ermesine kadar geçen süre.",
   "nav.label": "NAV",
-  "nav.tip": "Yönlendirici başlangıcından yerleşme sonrası ilk boyamaya kadar ölçülen, bir oturum sayfasına dokunan son tamamlanmış rota geçişi.",
+  "nav.tip":
+    "Yönlendirici başlangıcından yerleşme sonrası ilk boyamaya kadar ölçülen, bir oturum sayfasına dokunan son tamamlanmış rota geçişi.",
   "fps.label": "FPS",
   "fps.tip": "Son 5 saniyedeki hareketli saniye başına kare ortalaması.",
   "frame.label": "FRAME",

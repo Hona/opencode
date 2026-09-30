@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "选择要打开的文件",
+  selectToOpen: "选择要打开的文件",
   "open.finder": "访达",
   "open.fileExplorer": "文件资源管理器",
   "open.fileManager": "文件管理器",

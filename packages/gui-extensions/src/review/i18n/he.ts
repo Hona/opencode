@@ -10,6 +10,6 @@ export default {
   "empty.branch": "אין עדיין שינויים בענף",
   "git.title": "צור מאגר Git",
   "git.description": "עקוב, סקור ובטל שינויים בפרויקט הזה",
-  "loadingChanges": "טוען שינויים…",
-  "noChanges": "אין שינויים",
+  loadingChanges: "טוען שינויים…",
+  noChanges: "אין שינויים",
 }

@@ -3,11 +3,12 @@ export default {
   "command.toggle": "Togol terminal",
   "command.new": "Terminal baharu",
   "command.new.description": "Cipta tab terminal baharu",
-  "loading": "Memuatkan terminal…",
+  loading: "Memuatkan terminal…",
   "title.numbered": "Terminal {{number}}",
-  "close": "Tutup terminal",
+  close: "Tutup terminal",
   "connectionLost.title": "Sambungan Terputus",
   "connectionLost.abnormalClose": "WebSocket ditutup secara tidak normal: {{code}}",
-  "connectionLost.description": "Sambungan terminal telah terganggu. Ini boleh berlaku apabila pelayan dimulakan semula.",
+  "connectionLost.description":
+    "Sambungan terminal telah terganggu. Ini boleh berlaku apabila pelayan dimulakan semula.",
   "tab.title": "Terminal",
 }

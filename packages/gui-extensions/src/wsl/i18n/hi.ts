@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "एक और डिस्ट्रो की आवश्यकता है?",
   "onboarding.needAnotherDistroHint": "WSL कैटलॉग से Linux वितरण स्थापित करें",
   "onboarding.wslNotInstalled.title": "WSL स्थापित नहीं है",
-  "onboarding.wslNotInstalled.description": "OpenCode द्वारा WSL सर्वर जोड़ने से पहले WSL (Linux के लिए Windows सबसिस्टम) आवश्यक है",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode द्वारा WSL सर्वर जोड़ने से पहले WSL (Linux के लिए Windows सबसिस्टम) आवश्यक है",
   "onboarding.wslUnavailable.title": "WSL अनुपलब्ध है",
   "onboarding.wslUnavailable.description": "OpenCode इस मशीन पर WSL को सत्यापित नहीं कर सका।",
   "onboarding.installWsl": "WSL स्थापित करें",
-  "onboarding.windowsRestartRequired": "WSL की स्थापना समाप्त करने के लिए Windows को पुनरारंभ करें, फिर OpenCode को फिर से खोलें।",
+  "onboarding.windowsRestartRequired":
+    "WSL की स्थापना समाप्त करने के लिए Windows को पुनरारंभ करें, फिर OpenCode को फिर से खोलें।",
   "onboarding.allDistrosAdded": "सभी स्थापित डिस्ट्रो पहले ही जोड़े जा चुके हैं।",
   "onboarding.noDistros": "अभी तक कोई डिस्ट्रो नहीं मिला।",
   "onboarding.installDistro": "डिस्ट्रो स्थापित करें",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "इस डिस्ट्रो में opencode इंस्टॉल नहीं है",
   "error.opencodeCannotRun": "opencode इंस्टॉल है, लेकिन चल नहीं सका",
   "error.opencodeNotInstalled": "{{distro}} में OpenCode इंस्टॉल नहीं है",
-  "error.updateVersion": "OpenCode अपडेट पूरा हो गया, लेकिन {{distro}} अब भी {{installed}} रिपोर्ट कर रहा है; अपेक्षित संस्करण {{expected}} है",
+  "error.updateVersion":
+    "OpenCode अपडेट पूरा हो गया, लेकिन {{distro}} अब भी {{installed}} रिपोर्ट कर रहा है; अपेक्षित संस्करण {{expected}} है",
   "error.noVersion": "कोई संस्करण नहीं",
   "error.serverExited": "WSL सर्वर स्टार्टअप के बाद बंद हो गया (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL सर्वर के सुचारु होने से पहले बंद हो गया (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL सर्वर के सुचारु होने से पहले बंद हो गया (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} के Sidecar की स्वास्थ्य जाँच {{timeout}}ms के बाद समय-सीमा पार कर गई",
   "error.commandTimeout": "{{command}} {{args}} ने {{timeout}}ms के बाद समय-सीमा पार कर दी",
   "error.failedPort": "पोर्ट प्राप्त नहीं किया जा सका",

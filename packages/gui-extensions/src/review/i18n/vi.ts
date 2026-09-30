@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Chưa có thay đổi nhánh",
   "git.title": "Tạo kho lưu trữ Git",
   "git.description": "Theo dõi, xem xét và hoàn tác các thay đổi trong dự án này",
-  "loadingChanges": "Đang tải các thay đổi…",
-  "noChanges": "Không có thay đổi",
+  loadingChanges: "Đang tải các thay đổi…",
+  noChanges: "Không có thay đổi",
 }

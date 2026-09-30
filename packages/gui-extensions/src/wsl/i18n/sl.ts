@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Potrebujete drugo distribucijo?",
   "onboarding.needAnotherDistroHint": "Namestite distribucijo Linux iz kataloga WSL",
   "onboarding.wslNotInstalled.title": "WSL ni nameščen",
-  "onboarding.wslNotInstalled.description": "WSL (podsistem Windows za Linux) je potreben, preden lahko OpenCode doda strežnik WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (podsistem Windows za Linux) je potreben, preden lahko OpenCode doda strežnik WSL",
   "onboarding.wslUnavailable.title": "WSL ni na voljo",
   "onboarding.wslUnavailable.description": "OpenCode ni mogel preveriti WSL na tej napravi.",
   "onboarding.installWsl": "Namestite WSL",
-  "onboarding.windowsRestartRequired": "Znova zaženite Windows, da dokončate namestitev WSL, nato znova odprite OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Znova zaženite Windows, da dokončate namestitev WSL, nato znova odprite OpenCode.",
   "onboarding.allDistrosAdded": "Vse nameščene distribucije so že dodane.",
   "onboarding.noDistros": "Ni zaznanih distribucij.",
   "onboarding.installDistro": "Namestite distro",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode ni nameščen v tej distribuciji",
   "error.opencodeCannotRun": "opencode je nameščen, vendar se ne more zagnati",
   "error.opencodeNotInstalled": "OpenCode ni nameščen v {{distro}}",
-  "error.updateVersion": "Posodobitev OpenCode je končana, vendar {{distro}} še vedno poroča {{installed}}; pričakovano {{expected}}",
+  "error.updateVersion":
+    "Posodobitev OpenCode je končana, vendar {{distro}} še vedno poroča {{installed}}; pričakovano {{expected}}",
   "error.noVersion": "brez različice",
   "error.serverExited": "Strežnik WSL je po zagonu zapustil (koda={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Strežnik WSL je zapustil, preden je postal zdrav (koda={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Strežnik WSL je zapustil, preden je postal zdrav (koda={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Stranska prikolica za zdravstveni pregled {{distro}} je potekla po {{timeout}}ms",
   "error.commandTimeout": "Časovna omejitev {{command}} {{args}} je potekla po {{timeout}}ms",
   "error.failedPort": "Vrat ni bilo mogoče pridobiti",

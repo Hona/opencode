@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "ທ່ານອັບເດດແລ້ວ",
   "toast.latest.description": "ທ່ານກຳລັງໃຊ້ OpenCode ເວີຊັນຫຼ້າສຸດ.",
   "migration.title": "ຍ້າຍຈາກ Beta ໄປ Stable",
-  "migration.description": "ໃນຕອນນີ້ OpenCode Beta ກຳລັງຍ້າຍໄປ OpenCode Stable. ດາວໂຫຼດເວີຊັນ {{version}} ແລ້ວຕິດຕັ້ງ OpenCode ຈາກອິມເມດດິສກ໌ ເພື່ອສືບຕໍ່ຮັບອັບເດດ.",
+  "migration.description":
+    "ໃນຕອນນີ້ OpenCode Beta ກຳລັງຍ້າຍໄປ OpenCode Stable. ດາວໂຫຼດເວີຊັນ {{version}} ແລ້ວຕິດຕັ້ງ OpenCode ຈາກອິມເມດດິສກ໌ ເພື່ອສືບຕໍ່ຮັບອັບເດດ.",
   "section.title": "ອັບເດດ",
   "releaseNotes.title": "ບັນທຶກການປ່ອຍ",
   "releaseNotes.description": "ສະແດງປັອບອັບໃໝ່ແມ່ນຫຍັງຫຼັງຈາກອັບເດດ",

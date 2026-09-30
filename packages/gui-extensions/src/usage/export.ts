@@ -1,6 +1,9 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
 
-export async function fetchSessionExport(input: { sessionID: string; api: Pick<OpenCodeClient, "session" | "message"> }) {
+export async function fetchSessionExport(input: {
+  sessionID: string
+  api: Pick<OpenCodeClient, "session" | "message">
+}) {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
     input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),

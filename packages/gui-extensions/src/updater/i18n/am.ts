@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "ዘመኑን ጠብቀዋል",
   "toast.latest.description": "የቅርብ ጊዜውን የOpenCode እትም እያሄዱ ነው።",
   "migration.title": "ከBeta ወደ Stable ይዛወሩ",
-  "migration.description": "ለጊዜው OpenCode Beta ወደ OpenCode Stable እየተዛወረ ነው። ዝማኔዎችን መቀበልዎን ለመቀጠል ስሪት {{version}}ን ያውርዱ፣ ከዚያ OpenCodeን ከዲስክ ምስሉ ይጫኑ።",
+  "migration.description":
+    "ለጊዜው OpenCode Beta ወደ OpenCode Stable እየተዛወረ ነው። ዝማኔዎችን መቀበልዎን ለመቀጠል ስሪት {{version}}ን ያውርዱ፣ ከዚያ OpenCodeን ከዲስክ ምስሉ ይጫኑ።",
   "section.title": "ዝማኔዎች",
   "releaseNotes.title": "የልቀት ማስታወሻዎች",
   "releaseNotes.description": "ከዝማኔዎች በኋላ ምን አዲስ ብቅ-ባዮችን አሳይ",

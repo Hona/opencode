@@ -1,7 +1,9 @@
 import { Effect, Layer, Logger, References } from "effect"
 
 /** Services for running the updater's effects: every log goes to the desktop log file, debug included. */
-export function logContext(log: (level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void) {
+export function logContext(
+  log: (level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void,
+) {
   const logger = Logger.make((options) => {
     const entry = Logger.formatStructured.log(options)
     const [message, ...details] = Array.isArray(options.message) ? options.message : [options.message]

@@ -53,7 +53,9 @@ export default function SessionFileList(props: {
   onFileDoubleClick?: (path: string) => void
 }) {
   const ctx = useExtension()
-  const openIn = ctx.use(Native) ? useOpenInApp({ session: props.session, path: () => props.session.file.root }) : undefined
+  const openIn = ctx.use(Native)
+    ? useOpenInApp({ session: props.session, path: () => props.session.file.root })
+    : undefined
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
   const highlighted = () => normalizeFileTreeV2Path(props.highlighted ?? "")
   const normalized = createMemo(() => props.files.map(normalizeFileTreeV2Path))

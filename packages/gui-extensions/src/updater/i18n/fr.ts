@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Vous êtes à jour",
   "toast.latest.description": "Vous utilisez la dernière version d'OpenCode.",
   "migration.title": "Passer de la version bêta à la version stable",
-  "migration.description": "Pour le moment, OpenCode Beta passe à OpenCode Stable. Téléchargez la version {{version}}, puis installez OpenCode depuis l’image disque pour continuer à recevoir les mises à jour.",
+  "migration.description":
+    "Pour le moment, OpenCode Beta passe à OpenCode Stable. Téléchargez la version {{version}}, puis installez OpenCode depuis l’image disque pour continuer à recevoir les mises à jour.",
   "section.title": "Mises à jour",
   "releaseNotes.title": "Notes de version",
   "releaseNotes.description": "Afficher les fenêtres contextuelles « Quoi de neuf » après les mises à jour",

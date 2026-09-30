@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Vís ella fjala kembibjálkan",
   "status.toggle": "Skift feilsøkingartól",
-  "ariaLabel": "Menningar avriksdiagnostikk",
-  "providerAriaLabel": "Avriksgreining hjá veitara",
-  "na": "n/a",
+  ariaLabel: "Menningar avriksdiagnostikk",
+  providerAriaLabel: "Avriksgreining hjá veitara",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Tíð frá tí at fyrispurningurin verður sendur veitaranum, til fyrsta úttakið frá modellinum.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tíð frá tí at fyrispurningurin verður sendur veitaranum, til svarstreymurin endar.",
   "nav.label": "NAV",
-  "nav.tip": "Seinast liðugt leiðsluskifti nertir við eina setu síðu, mált frá router byrjan til fyrstu málingina eftir at hon setur seg.",
+  "nav.tip":
+    "Seinast liðugt leiðsluskifti nertir við eina setu síðu, mált frá router byrjan til fyrstu málingina eftir at hon setur seg.",
   "fps.label": "FPS",
   "fps.tip": "Rullandi rammur um sekundið seinastu 5 sekundini.",
   "frame.label": "FRAME",

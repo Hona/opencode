@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "شما به روز هستید",
   "toast.latest.description": "شما آخرین نسخه OpenCode را اجرا می کنید.",
   "migration.title": "انتقال از بتا به پایدار",
-  "migration.description": "در حال حاضر OpenCode Beta به OpenCode Stable منتقل می‌شود. نسخهٔ ⁨{{version}}⁩ را دانلود کنید، سپس برای ادامهٔ دریافت به‌روزرسانی‌ها OpenCode را از تصویر دیسک نصب کنید.",
+  "migration.description":
+    "در حال حاضر OpenCode Beta به OpenCode Stable منتقل می‌شود. نسخهٔ ⁨{{version}}⁩ را دانلود کنید، سپس برای ادامهٔ دریافت به‌روزرسانی‌ها OpenCode را از تصویر دیسک نصب کنید.",
   "section.title": "به روز رسانی ها",
   "releaseNotes.title": "یادداشت های انتشار",
   "releaseNotes.description": "نمایش پنجره های بازشو What's New بعد از به روز رسانی",

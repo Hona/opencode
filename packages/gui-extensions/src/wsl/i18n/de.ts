@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Andere Distribution benötigt?",
   "onboarding.needAnotherDistroHint": "Installieren Sie eine Linux-Distribution aus dem WSL-Katalog",
   "onboarding.wslNotInstalled.title": "WSL nicht installiert",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) ist erforderlich, bevor OpenCode einen WSL-Server hinzufügen kann",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) ist erforderlich, bevor OpenCode einen WSL-Server hinzufügen kann",
   "onboarding.wslUnavailable.title": "WSL nicht verfügbar",
   "onboarding.wslUnavailable.description": "OpenCode konnte WSL auf diesem Computer nicht überprüfen.",
   "onboarding.installWsl": "WSL installieren",
-  "onboarding.windowsRestartRequired": "Starten Sie Windows neu, um die WSL-Installation abzuschließen, und öffnen Sie dann OpenCode erneut.",
+  "onboarding.windowsRestartRequired":
+    "Starten Sie Windows neu, um die WSL-Installation abzuschließen, und öffnen Sie dann OpenCode erneut.",
   "onboarding.allDistrosAdded": "Alle installierten Distributionen wurden bereits hinzugefügt.",
   "onboarding.noDistros": "Noch keine Distributionen erkannt.",
   "onboarding.installDistro": "Distribution installieren",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode ist in dieser Distribution nicht installiert",
   "error.opencodeCannotRun": "opencode ist installiert, konnte aber nicht ausgeführt werden",
   "error.opencodeNotInstalled": "OpenCode ist in {{distro}} nicht installiert",
-  "error.updateVersion": "Das OpenCode-Update wurde abgeschlossen, aber {{distro}} meldet weiterhin {{installed}}; erwartet wurde {{expected}}",
+  "error.updateVersion":
+    "Das OpenCode-Update wurde abgeschlossen, aber {{distro}} meldet weiterhin {{installed}}; erwartet wurde {{expected}}",
   "error.noVersion": "keine Version",
   "error.serverExited": "WSL-Server wurde nach dem Start beendet (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-Server wurde beendet, bevor er betriebsbereit war (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "Zeitüberschreitung bei der Integritätsprüfung des Sidecars für {{distro}} nach {{timeout}} ms",
+  "error.serverExitedBeforeHealthy":
+    "WSL-Server wurde beendet, bevor er betriebsbereit war (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Zeitüberschreitung bei der Integritätsprüfung des Sidecars für {{distro}} nach {{timeout}} ms",
   "error.commandTimeout": "Zeitüberschreitung bei {{command}} {{args}} nach {{timeout}} ms",
   "error.failedPort": "Port konnte nicht abgerufen werden",
   "server.default": "Standard",

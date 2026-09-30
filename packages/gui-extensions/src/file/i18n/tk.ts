@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "Açmak üçin bir faýl saýlaň",
+  selectToOpen: "Açmak üçin bir faýl saýlaň",
   "open.finder": "Finder",
   "open.fileExplorer": "Faýl gözlegçisi",
   "open.fileManager": "Faýl dolandyryjysy",

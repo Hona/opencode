@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Jums ir jaunākā versija",
   "toast.latest.description": "Jūs izmantojat jaunāko OpenCode versiju.",
   "migration.title": "Pāriet no Beta uz stabilo versiju",
-  "migration.description": "Pagaidām OpenCode Beta tiek pārcelta uz OpenCode Stable. Lejupielādējiet versiju {{version}} un pēc tam instalējiet OpenCode no diska attēla, lai turpinātu saņemt atjauninājumus.",
+  "migration.description":
+    "Pagaidām OpenCode Beta tiek pārcelta uz OpenCode Stable. Lejupielādējiet versiju {{version}} un pēc tam instalējiet OpenCode no diska attēla, lai turpinātu saņemt atjauninājumus.",
   "section.title": "Atjauninājumi",
   "releaseNotes.title": "Izlaiduma piezīmes",
   "releaseNotes.description": "Rādīt Jaunumu logus pēc atjauninājumiem",

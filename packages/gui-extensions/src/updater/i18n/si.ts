@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "ඔබ යාවත්කාලීනයි",
   "toast.latest.description": "ඔබ OpenCode හි නවතම අනුවාදය ධාවනය කරයි.",
   "migration.title": "බීටා වෙතින් ස්ථාවර අනුවාදයට මාරු වන්න",
-  "migration.description": "දැනට OpenCode Beta, OpenCode Stable වෙත මාරු වෙමින් පවතී. {{version}} අනුවාදය බාගත කර, යාවත්කාලීන දිගටම ලැබීමට තැටි රූපයෙන් OpenCode ස්ථාපනය කරන්න.",
+  "migration.description":
+    "දැනට OpenCode Beta, OpenCode Stable වෙත මාරු වෙමින් පවතී. {{version}} අනුවාදය බාගත කර, යාවත්කාලීන දිගටම ලැබීමට තැටි රූපයෙන් OpenCode ස්ථාපනය කරන්න.",
   "section.title": "යාවත්කාලීන",
   "releaseNotes.title": "නිකුත් කිරීමේ සටහන්",
   "releaseNotes.description": "යාවත්කාලීන කිරීමෙන් පසු නව උත්පතන මොනවාදැයි පෙන්වන්න",

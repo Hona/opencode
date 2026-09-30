@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Rodyti arba slėpti derinimo juostą",
   "status.toggle": "Perjungti derinimo įrankius",
-  "ariaLabel": "Vystymosi veiklos diagnostika",
-  "providerAriaLabel": "Teikėjo našumo diagnostika",
-  "na": "n/a",
+  ariaLabel: "Vystymosi veiklos diagnostika",
+  providerAriaLabel: "Teikėjo našumo diagnostika",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Laikas nuo užklausos išsiuntimo teikėjui iki pirmosios modelio išvesties.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Laikas nuo užklausos išsiuntimo teikėjui iki atsakymo srauto pabaigos.",
   "nav.label": "NAV",
-  "nav.tip": "Paskutinis baigtas maršruto perėjimas, liečiant seanso puslapį, matuojant nuo maršrutizatoriaus pradžios iki pirmojo dažymo po to, kai jis nusistovi.",
+  "nav.tip":
+    "Paskutinis baigtas maršruto perėjimas, liečiant seanso puslapį, matuojant nuo maršrutizatoriaus pradžios iki pirmojo dažymo po to, kai jis nusistovi.",
   "fps.label": "FPS",
   "fps.tip": "Slenkantys kadrai per sekundę per paskutines 5 sekundes.",
   "frame.label": "FRAME",

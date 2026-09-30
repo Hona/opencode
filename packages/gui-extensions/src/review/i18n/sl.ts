@@ -12,6 +12,6 @@ export default {
   "empty.branch": "Ni še nobenih sprememb veje",
   "git.title": "Ustvarite repozitorij Git",
   "git.description": "Sledite, pregledujte in razveljavite spremembe v tem projektu",
-  "loadingChanges": "Nalaganje sprememb …",
-  "noChanges": "Brez sprememb",
+  loadingChanges: "Nalaganje sprememb …",
+  noChanges: "Brez sprememb",
 }

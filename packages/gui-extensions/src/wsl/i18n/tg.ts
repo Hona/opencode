@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Дистрои дигар лозим аст?",
   "onboarding.needAnotherDistroHint": "Аз каталоги WSL тақсимоти Linux насб кунед",
   "onboarding.wslNotInstalled.title": "WSL насб нашудааст",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) лозим аст, то OpenCode сервери WSL илова карда шавад",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) лозим аст, то OpenCode сервери WSL илова карда шавад",
   "onboarding.wslUnavailable.title": "WSL дастрас нест",
   "onboarding.wslUnavailable.description": "OpenCode WSL-ро дар ин мошин тафтиш карда натавонист.",
   "onboarding.installWsl": "Насб кунед WSL",
-  "onboarding.windowsRestartRequired": "Барои анҷом додани насби WSL Windows-ро аз нав оғоз кунед, сипас OpenCode-ро боз кунед.",
+  "onboarding.windowsRestartRequired":
+    "Барои анҷом додани насби WSL Windows-ро аз нав оғоз кунед, сипас OpenCode-ро боз кунед.",
   "onboarding.allDistrosAdded": "Ҳама дистрибюторҳои насбшуда аллакай илова карда шудаанд.",
   "onboarding.noDistros": "То ҳол ягон паҳнкунӣ ошкор нашудааст.",
   "onboarding.installDistro": "Дистро насб кунед",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode дар ин паҳнкунӣ насб нашудааст",
   "error.opencodeCannotRun": "opencode насб шудааст, аммо иҷро карда натавонист",
   "error.opencodeNotInstalled": "OpenCode дар {{distro}} насб нашудааст",
-  "error.updateVersion": "OpenCode навсозӣ анҷом ёфт, аммо {{distro}} то ҳол гузориш медиҳад {{installed}}; интизорӣ {{expected}}",
+  "error.updateVersion":
+    "OpenCode навсозӣ анҷом ёфт, аммо {{distro}} то ҳол гузориш медиҳад {{installed}}; интизорӣ {{expected}}",
   "error.noVersion": "версия нест",
   "error.serverExited": "WSL сервер пас аз оғозшавӣ хориҷ шуд (рамз = {{code}} сигнал = {{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL сервер пеш аз солим шудан хориҷ шуд (рамз={{code}} сигнал ={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL сервер пеш аз солим шудан хориҷ шуд (рамз={{code}} сигнал ={{signal}}){{output}}",
   "error.healthTimeout": "Санҷиши саломатии Sidecar барои {{distro}} пас аз {{timeout}} мс ба охир расид",
   "error.commandTimeout": "{{command}} {{args}} пас аз {{timeout}}мс ба охир расид",
   "error.failedPort": "Ба даст овардани порт муяссар нашуд",

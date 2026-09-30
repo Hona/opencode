@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Güncelsiniz",
   "toast.latest.description": "OpenCode'un en son sürümünü kullanıyorsunuz.",
   "migration.title": "Beta’dan Kararlı’ya geç",
-  "migration.description": "OpenCode Beta şimdilik OpenCode Stable’a taşınıyor. Güncellemeleri almaya devam etmek için {{version}} sürümünü indirin, ardından OpenCode’u disk görüntüsünden yükleyin.",
+  "migration.description":
+    "OpenCode Beta şimdilik OpenCode Stable’a taşınıyor. Güncellemeleri almaya devam etmek için {{version}} sürümünü indirin, ardından OpenCode’u disk görüntüsünden yükleyin.",
   "section.title": "Güncellemeler",
   "releaseNotes.title": "Sürüm notları",
   "releaseNotes.description": "Güncellemelerden sonra Yenilikler bildirimlerini göster",

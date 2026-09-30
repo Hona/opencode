@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "切换调试栏",
   "status.toggle": "切换调试工具",
-  "ariaLabel": "开发性能诊断",
-  "providerAriaLabel": "提供商性能诊断",
-  "na": "不适用",
+  ariaLabel: "开发性能诊断",
+  providerAriaLabel: "提供商性能诊断",
+  na: "不适用",
   "ttft.label": "TTFT",
   "ttft.tip": "从发送提供商请求到模型首次输出所用的时间。",
   "ttfa.label": "TTFA",

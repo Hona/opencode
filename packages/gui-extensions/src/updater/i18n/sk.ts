@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Všetko je aktuálne",
   "toast.latest.description": "Používate najnovšiu verziu OpenCode.",
   "migration.title": "Prejsť z Beta na Stable",
-  "migration.description": "OpenCode Beta zatiaľ prechádza na OpenCode Stable. Stiahnite verziu {{version}} a potom nainštalujte OpenCode z obrazu disku, aby ste mohli naďalej dostávať aktualizácie.",
+  "migration.description":
+    "OpenCode Beta zatiaľ prechádza na OpenCode Stable. Stiahnite verziu {{version}} a potom nainštalujte OpenCode z obrazu disku, aby ste mohli naďalej dostávať aktualizácie.",
   "section.title": "Aktualizácie",
   "releaseNotes.title": "Poznámky k vydaniu",
   "releaseNotes.description": "Zobrazovať okná Čo je nové po aktualizáciách",

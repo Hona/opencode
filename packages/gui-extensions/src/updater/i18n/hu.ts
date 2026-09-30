@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Ön naprakész",
   "toast.latest.description": "Ön a OpenCode legújabb verzióját futtatja.",
   "migration.title": "Váltás a Bétáról a Stabil verzióra",
-  "migration.description": "Az OpenCode Beta egyelőre átkerül az OpenCode Stable verzióba. Töltse le a(z) {{version}} verziót, majd telepítse az OpenCode-ot a lemezképből a frissítések további fogadásához.",
+  "migration.description":
+    "Az OpenCode Beta egyelőre átkerül az OpenCode Stable verzióba. Töltse le a(z) {{version}} verziót, majd telepítse az OpenCode-ot a lemezképből a frissítések további fogadásához.",
   "section.title": "Frissítések",
   "releaseNotes.title": "Kiadási megjegyzések",
   "releaseNotes.description": "Az Újdonságok előugró ablakok megjelenítése a frissítések után",

@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "別のディストリビューションが必要ですか？",
   "onboarding.needAnotherDistroHint": "WSLカタログからLinuxディストリビューションをインストール",
   "onboarding.wslNotInstalled.title": "WSLがインストールされていません",
-  "onboarding.wslNotInstalled.description": "OpenCodeでWSLサーバーを追加するには、WSL (Windows Subsystem for Linux) が必要です",
+  "onboarding.wslNotInstalled.description":
+    "OpenCodeでWSLサーバーを追加するには、WSL (Windows Subsystem for Linux) が必要です",
   "onboarding.wslUnavailable.title": "WSLを利用できません",
   "onboarding.wslUnavailable.description": "このマシンのWSLを確認できませんでした。",
   "onboarding.installWsl": "WSLをインストール",
-  "onboarding.windowsRestartRequired": "WSLのインストールを完了するにはWindowsを再起動し、OpenCodeをもう一度開いてください。",
+  "onboarding.windowsRestartRequired":
+    "WSLのインストールを完了するにはWindowsを再起動し、OpenCodeをもう一度開いてください。",
   "onboarding.allDistrosAdded": "インストール済みのディストリビューションはすべて追加済みです。",
   "onboarding.noDistros": "ディストリビューションはまだ検出されていません。",
   "onboarding.installDistro": "ディストリビューションをインストール",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "このディストリビューションにはopencodeがインストールされていません",
   "error.opencodeCannotRun": "opencodeはインストールされていますが、実行できませんでした",
   "error.opencodeNotInstalled": "{{distro}}にはOpenCodeがインストールされていません",
-  "error.updateVersion": "OpenCodeのアップデートは完了しましたが、{{distro}}から報告されたバージョンはまだ{{installed}}です。想定されるバージョンは{{expected}}です",
+  "error.updateVersion":
+    "OpenCodeのアップデートは完了しましたが、{{distro}}から報告されたバージョンはまだ{{installed}}です。想定されるバージョンは{{expected}}です",
   "error.noVersion": "バージョンなし",
   "error.serverExited": "WSLサーバーが起動後に終了しました (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSLサーバーが正常に稼働する前に終了しました (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSLサーバーが正常に稼働する前に終了しました (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}}のSidecarのヘルスチェックが{{timeout}}ms後にタイムアウトしました",
   "error.commandTimeout": "{{command}} {{args}}が{{timeout}}ms後にタイムアウトしました",
   "error.failedPort": "ポートを取得できませんでした",

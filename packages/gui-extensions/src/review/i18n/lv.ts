@@ -10,6 +10,6 @@ export default {
   "empty.branch": "Vēl nav zara izmaiņu",
   "git.title": "Izveidot Git repozitoriju",
   "git.description": "Izseko, pārskati un atsauc izmaiņas šajā projektā",
-  "loadingChanges": "Notiek izmaiņu ielāde…",
-  "noChanges": "Nav izmaiņu",
+  loadingChanges: "Notiek izmaiņu ielāde…",
+  noChanges: "Nav izmaiņu",
 }

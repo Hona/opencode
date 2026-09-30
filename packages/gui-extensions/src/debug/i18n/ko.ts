@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "디버그 표시줄 전환",
   "status.toggle": "디버그 도구 전환",
-  "ariaLabel": "개발 성능 진단",
-  "providerAriaLabel": "공급자 성능 진단",
-  "na": "해당 없음",
+  ariaLabel: "개발 성능 진단",
+  providerAriaLabel: "공급자 성능 진단",
+  na: "해당 없음",
   "ttft.label": "TTFT",
   "ttft.tip": "공급자 요청 전송부터 모델의 첫 출력까지 걸린 시간입니다.",
   "ttfa.label": "TTFA",

@@ -10,6 +10,6 @@ export default {
   "empty.branch": "Aún no hay cambios en la rama",
   "git.title": "Crear repositorio Git",
   "git.description": "Rastrea, revisa y deshaz cambios en este proyecto",
-  "loadingChanges": "Cargando cambios…",
-  "noChanges": "Sin cambios",
+  loadingChanges: "Cargando cambios…",
+  noChanges: "Sin cambios",
 }

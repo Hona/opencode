@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Χρειάζεστε άλλη διανομή;",
   "onboarding.needAnotherDistroHint": "Εγκαταστήστε μια διανομή Linux από τον κατάλογο WSL",
   "onboarding.wslNotInstalled.title": "WSL δεν έχει εγκατασταθεί",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Υποσύστημα για Linux) απαιτείται για να μπορέσει ο OpenCode να προσθέσει έναν διακομιστή WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Υποσύστημα για Linux) απαιτείται για να μπορέσει ο OpenCode να προσθέσει έναν διακομιστή WSL",
   "onboarding.wslUnavailable.title": "WSL μη διαθέσιμο",
   "onboarding.wslUnavailable.description": "OpenCode δεν μπόρεσε να επαληθεύσει το WSL σε αυτό το μηχάνημα.",
   "onboarding.installWsl": "Εγκατάσταση WSL",
-  "onboarding.windowsRestartRequired": "Επανεκκινήστε το Windows για να ολοκληρώσετε την εγκατάσταση του WSL και μετά ανοίξτε ξανά το OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Επανεκκινήστε το Windows για να ολοκληρώσετε την εγκατάσταση του WSL και μετά ανοίξτε ξανά το OpenCode.",
   "onboarding.allDistrosAdded": "Όλες οι εγκατεστημένες διανομές έχουν ήδη προστεθεί.",
   "onboarding.noDistros": "Δεν έχουν εντοπιστεί ακόμη διανομές.",
   "onboarding.installDistro": "Εγκατάσταση διανομής",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "ο ανοιχτός κώδικας δεν είναι εγκατεστημένος σε αυτήν τη διανομή",
   "error.opencodeCannotRun": "ο ανοιχτός κώδικας είναι εγκατεστημένος αλλά δεν ήταν δυνατή η εκτέλεση",
   "error.opencodeNotInstalled": "OpenCode δεν είναι εγκατεστημένο στο {{distro}}",
-  "error.updateVersion": "OpenCode η ενημέρωση ολοκληρώθηκε αλλά το {{distro}} εξακολουθεί να αναφέρει {{installed}}; αναμενόμενο {{expected}}",
+  "error.updateVersion":
+    "OpenCode η ενημέρωση ολοκληρώθηκε αλλά το {{distro}} εξακολουθεί να αναφέρει {{installed}}; αναμενόμενο {{expected}}",
   "error.noVersion": "χωρίς έκδοση",
   "error.serverExited": "WSL έξοδος διακομιστή μετά την εκκίνηση (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL ο διακομιστής εξήλθε πριν γίνει υγιής (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL ο διακομιστής εξήλθε πριν γίνει υγιής (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Το πλευρικό καρότσι για έλεγχο υγείας {{distro}} έληξε μετά από {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} έληξε μετά από {{timeout}}ms",
   "error.failedPort": "Αποτυχία λήψης θύρας",

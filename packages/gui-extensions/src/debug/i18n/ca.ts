@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Commuta la barra de depuració",
   "status.toggle": "Commuta les eines de depuració",
-  "ariaLabel": "Diagnòstic de rendiment del desenvolupament",
-  "providerAriaLabel": "Diagnòstic del rendiment del proveïdor",
-  "na": "n/a",
+  ariaLabel: "Diagnòstic de rendiment del desenvolupament",
+  providerAriaLabel: "Diagnòstic del rendiment del proveïdor",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Temps des de l’enviament de la sol·licitud al proveïdor fins a la primera sortida del model.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Temps des de l’enviament de la sol·licitud al proveïdor fins que finalitza el flux de resposta.",
   "nav.label": "NAV",
-  "nav.tip": "L'última transició de ruta completada tocant una pàgina de sessió, mesurada des de l'inici de l'encaminador fins a la primera pintura després que s'instal·li.",
+  "nav.tip":
+    "L'última transició de ruta completada tocant una pàgina de sessió, mesurada des de l'inici de l'encaminador fins a la primera pintura després que s'instal·li.",
   "fps.label": "FPS",
   "fps.tip": "Fotogrames en moviment per segon durant els darrers 5 segons.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "El pitjor retard d'entrada observat en els últims 5 segons.",
   "inp.label": "INP",
-  "inp.tip": "Durada aproximada de la interacció durant els darrers 5 segons. Això és semblant a INP, no el Web Vitals oficial INP.",
+  "inp.tip":
+    "Durada aproximada de la interacció durant els darrers 5 segons. Això és semblant a INP, no el Web Vitals oficial INP.",
   "cls.label": "CLS",
   "cls.tip": "Canvi de disseny acumulat per a la vida útil actual de l'aplicació.",
   "mem.label": "MEM",

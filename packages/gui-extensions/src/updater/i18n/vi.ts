@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Đã cập nhật",
   "toast.latest.description": "Bạn đang chạy phiên bản mới nhất của OpenCode.",
   "migration.title": "Chuyển từ Beta sang bản ổn định",
-  "migration.description": "Hiện tại, OpenCode Beta đang chuyển sang OpenCode ổn định. Hãy tải phiên bản {{version}} xuống, sau đó cài đặt OpenCode từ ảnh đĩa để tiếp tục nhận bản cập nhật.",
+  "migration.description":
+    "Hiện tại, OpenCode Beta đang chuyển sang OpenCode ổn định. Hãy tải phiên bản {{version}} xuống, sau đó cài đặt OpenCode từ ảnh đĩa để tiếp tục nhận bản cập nhật.",
   "section.title": "Cập nhật",
   "releaseNotes.title": "Ghi chú phát hành",
   "releaseNotes.description": "Hiển thị cửa sổ bật lên Có gì mới sau khi cập nhật",

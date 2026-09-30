@@ -29,7 +29,9 @@ export function SessionContextUsage(props: {
   const messages = createMemo(() =>
     props.session.id ? props.session.server.data.session.message.list(props.session.id) : [],
   )
-  const info = createMemo(() => (props.session.id ? props.session.server.data.session.get(props.session.id) : undefined))
+  const info = createMemo(() =>
+    props.session.id ? props.session.server.data.session.get(props.session.id) : undefined,
+  )
 
   const usd = createMemo(
     () =>

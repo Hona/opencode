@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Necessites una altra distribució?",
   "onboarding.needAnotherDistroHint": "Instal·leu una distribució Linux del catàleg WSL.",
   "onboarding.wslNotInstalled.title": "WSL no instal·lat",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsistema per a Linux) és necessari abans que OpenCode pugui afegir un WSL servidor",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsistema per a Linux) és necessari abans que OpenCode pugui afegir un WSL servidor",
   "onboarding.wslUnavailable.title": "WSL no disponible",
   "onboarding.wslUnavailable.description": "OpenCode no ha pogut verificar WSL en aquesta màquina.",
   "onboarding.installWsl": "Instal·la WSL",
-  "onboarding.windowsRestartRequired": "Reinicieu Windows per acabar d'instal·lar WSL i, a continuació, torneu a obrir OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Reinicieu Windows per acabar d'instal·lar WSL i, a continuació, torneu a obrir OpenCode.",
   "onboarding.allDistrosAdded": "Totes les distribucions instal·lades ja s'han afegit.",
   "onboarding.noDistros": "Encara no s'ha detectat cap distribució.",
   "onboarding.installDistro": "Instal·leu la distribució",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode no està instal·lat en aquesta distribució",
   "error.opencodeCannotRun": "opencode està instal·lat però no s'ha pogut executar",
   "error.opencodeNotInstalled": "OpenCode no està instal·lat a {{distro}}",
-  "error.updateVersion": "OpenCode actualització acabada però {{distro}} encara informa {{installed}}; esperat {{expected}}",
+  "error.updateVersion":
+    "OpenCode actualització acabada però {{distro}} encara informa {{installed}}; esperat {{expected}}",
   "error.noVersion": "cap versió",
   "error.serverExited": "El servidor WSL s'ha tancat després d'iniciar-se (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "El servidor WSL s'ha tancat abans d'estar operatiu (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "S'ha esgotat el temps d'espera del sidecar per a {{distro}} comprovació de salut després de {{timeout}}ms",
+  "error.serverExitedBeforeHealthy":
+    "El servidor WSL s'ha tancat abans d'estar operatiu (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "S'ha esgotat el temps d'espera del sidecar per a {{distro}} comprovació de salut després de {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} s'ha esgotat després de {{timeout}}ms",
   "error.failedPort": "No s'ha pogut obtenir el port",
   "server.default": "Per defecte",

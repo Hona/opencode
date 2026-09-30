@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Trenger du en annen distribusjon?",
   "onboarding.needAnotherDistroHint": "Installer en Linux-distribusjon fra WSL-katalogen",
   "onboarding.wslNotInstalled.title": "WSL er ikke installert",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) kreves før OpenCode kan legge til en WSL-server",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) kreves før OpenCode kan legge til en WSL-server",
   "onboarding.wslUnavailable.title": "WSL er utilgjengelig",
   "onboarding.wslUnavailable.description": "OpenCode kunne ikke bekrefte WSL på denne maskinen.",
   "onboarding.installWsl": "Installer WSL",
-  "onboarding.windowsRestartRequired": "Start Windows på nytt for å fullføre installasjonen av WSL, og åpne deretter OpenCode på nytt.",
+  "onboarding.windowsRestartRequired":
+    "Start Windows på nytt for å fullføre installasjonen av WSL, og åpne deretter OpenCode på nytt.",
   "onboarding.allDistrosAdded": "Alle installerte distribusjoner er allerede lagt til.",
   "onboarding.noDistros": "Ingen distribusjoner oppdaget ennå.",
   "onboarding.installDistro": "Installer distribusjon",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode er ikke installert i denne distribusjonen",
   "error.opencodeCannotRun": "opencode er installert, men kunne ikke kjøres",
   "error.opencodeNotInstalled": "OpenCode er ikke installert i {{distro}}",
-  "error.updateVersion": "Oppdateringen av OpenCode er fullført, men {{distro}} rapporterer fortsatt {{installed}}; forventet {{expected}}",
+  "error.updateVersion":
+    "Oppdateringen av OpenCode er fullført, men {{distro}} rapporterer fortsatt {{installed}}; forventet {{expected}}",
   "error.noVersion": "ingen versjon",
   "error.serverExited": "WSL-serveren ble avsluttet etter oppstart (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-serveren ble avsluttet før den var klar (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL-serveren ble avsluttet før den var klar (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Tidsavbrudd for tilstandskontrollen av sidecar for {{distro}} etter {{timeout}} ms",
   "error.commandTimeout": "Tidsavbrudd for {{command}} {{args}} etter {{timeout}} ms",
   "error.failedPort": "Kunne ikke hente port",

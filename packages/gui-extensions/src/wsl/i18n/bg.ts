@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Нуждаете се от друга дистрибуция?",
   "onboarding.needAnotherDistroHint": "Инсталирайте дистрибуция Linux от каталога WSL",
   "onboarding.wslNotInstalled.title": "WSL не е инсталиран",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) се изисква, преди OpenCode да може да добави WSL сървър",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) се изисква, преди OpenCode да може да добави WSL сървър",
   "onboarding.wslUnavailable.title": "WSL не е наличен",
   "onboarding.wslUnavailable.description": "OpenCode не можа да провери WSL на тази машина.",
   "onboarding.installWsl": "Инсталирайте WSL",
-  "onboarding.windowsRestartRequired": "Рестартирайте Windows, за да завършите инсталирането на WSL, след което отворете отново OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Рестартирайте Windows, за да завършите инсталирането на WSL, след което отворете отново OpenCode.",
   "onboarding.allDistrosAdded": "Всички инсталирани дистрибуции вече са добавени.",
   "onboarding.noDistros": "Все още няма открити дистрибуции.",
   "onboarding.installDistro": "Инсталирайте дистрибуция",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode не е инсталиран в тази дистрибуция",
   "error.opencodeCannotRun": "opencode е инсталиран, но не може да стартира",
   "error.opencodeNotInstalled": "OpenCode не е инсталиран в {{distro}}",
-  "error.updateVersion": "OpenCode актуализацията приключи, но {{distro}} все още съобщава {{installed}}; очаквано {{expected}}",
+  "error.updateVersion":
+    "OpenCode актуализацията приключи, но {{distro}} все още съобщава {{installed}}; очаквано {{expected}}",
   "error.noVersion": "няма версия",
   "error.serverExited": "WSL сървърът излезе след стартиране (код={{code}} сигнал={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL сървърът излезе, преди да стане здрав (код={{code}} сигнал={{signal}}){{output}}",
-  "error.healthTimeout": "Времето за изчакване на допълнителната кола за {{distro}} проверка на здравето изтече след {{timeout}}ms",
+  "error.serverExitedBeforeHealthy":
+    "WSL сървърът излезе, преди да стане здрав (код={{code}} сигнал={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Времето за изчакване на допълнителната кола за {{distro}} проверка на здравето изтече след {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} времето за изчакване изтече след {{timeout}}ms",
   "error.failedPort": "Неуспешно получаване на порт",
   "server.default": "По подразбиране",

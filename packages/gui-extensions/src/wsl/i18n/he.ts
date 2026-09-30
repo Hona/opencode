@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "צריך הפצה נוספת?",
   "onboarding.needAnotherDistroHint": "התקנת הפצת Linux מהקטלוג של WSL",
   "onboarding.wslNotInstalled.title": "WSL לא מותקן",
-  "onboarding.wslNotInstalled.description": "WSL (מערכת משנה Windows עבור Linux) נדרשת לפני ש-OpenCode יוכל להוסיף שרת WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (מערכת משנה Windows עבור Linux) נדרשת לפני ש-OpenCode יוכל להוסיף שרת WSL",
   "onboarding.wslUnavailable.title": "WSL לא זמין",
   "onboarding.wslUnavailable.description": "OpenCode לא הצליח לאמת את WSL במחשב זה.",
   "onboarding.installWsl": "התקן את WSL",

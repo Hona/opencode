@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "އަނެއްކާވެސް ޑިސްޓްރޯއެއް ބޭނުންތަ؟",
   "onboarding.needAnotherDistroHint": "WSL ކެޓަލަގުން Linux ޑިސްޓްރިބިއުޝަނެއް އިންސްޓޯލް ކުރުން",
   "onboarding.wslNotInstalled.title": "WSL އިންސްޓޯލްކޮށްފައެއް ނުވެއެވެ",
-  "onboarding.wslNotInstalled.description": "WSL އަށް WSL ސަރވަރ އެއް އިތުރު ކުރުމުގެ ކުރިން WSL (Windows Subsystem for Linux) ބޭނުންވެއެވެ",
+  "onboarding.wslNotInstalled.description":
+    "WSL އަށް WSL ސަރވަރ އެއް އިތުރު ކުރުމުގެ ކުރިން WSL (Windows Subsystem for Linux) ބޭނުންވެއެވެ",
   "onboarding.wslUnavailable.title": "WSL ލިބެން ނެތް",
   "onboarding.wslUnavailable.description": "މި މެޝިނުގައި OpenCode އަށް WSL ޔަގީން ނުކުރެވުނެވެ.",
   "onboarding.installWsl": "WSL އިންސްޓޯލް ކުރާށެވެ",
-  "onboarding.windowsRestartRequired": "WSL އިންސްޓޯލް ކުރުން ނިންމުމަށް Windows އަލުން ސްޓާޓްކޮށް، ދެން OpenCode އަލުން ހުޅުވާށެވެ.",
+  "onboarding.windowsRestartRequired":
+    "WSL އިންސްޓޯލް ކުރުން ނިންމުމަށް Windows އަލުން ސްޓާޓްކޮށް، ދެން OpenCode އަލުން ހުޅުވާށެވެ.",
   "onboarding.allDistrosAdded": "އިންސްޓޯލްކޮށްފައިވާ ހުރިހާ ޑިސްޓްރޯތަކެއް މިހާރުވެސް އިތުރުކޮށްފައިވެއެވެ.",
   "onboarding.noDistros": "އަދި ޑިސްޓްރޯއެއް ހޯދިފައެއް ނުވެއެވެ.",
   "onboarding.installDistro": "ޑިސްޓްރޯ އިންސްޓޯލް ކުރާށެވެ",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "މި ޑިސްޓްރޯގައި opencode އިންސްޓޯލްކޮށްފައެއް ނުވެއެވެ",
   "error.opencodeCannotRun": "opencode އިންސްޓޯލް ކޮށްފައި އޮތް ނަމަވެސް ހިންގޭ ގޮތެއް ނުވިއެވެ",
   "error.opencodeNotInstalled": "OpenCode އަކީ ⁨{{distro}}⁩ ގައި އިންސްޓޯލް ކުރެވިފައިވާ އެއްޗެއް ނޫނެވެ",
-  "error.updateVersion": "OpenCode އަޕްޑޭޓް ނިމުނު ނަމަވެސް ⁨{{distro}}⁩ އަދިވެސް ރިޕޯޓް ކުރަނީ ⁨{{installed}}⁩؛ ލަފާކުރެވޭ ގޮތުގައި ⁨{{expected}}⁩",
+  "error.updateVersion":
+    "OpenCode އަޕްޑޭޓް ނިމުނު ނަމަވެސް ⁨{{distro}}⁩ އަދިވެސް ރިޕޯޓް ކުރަނީ ⁨{{installed}}⁩؛ ލަފާކުރެވޭ ގޮތުގައި ⁨{{expected}}⁩",
   "error.noVersion": "އެއްވެސް ވަރޝަނެއް ނެތެވެ",
   "error.serverExited": "ސްޓާޓްއަޕް ކުރުމަށްފަހު WSL ސަރވަރ އިން ނުކުމެއްޖެ (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)",
-  "error.serverExitedBeforeHealthy": "WSL ސަރވަރ އިން ނުކުތީ ދުޅަހެޔޮ ސިއްހަތެއްގައި ހުރުމުގެ ކުރިން (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",
-  "error.healthTimeout": "⁨{{distro}}⁩ ހެލްތު ޗެކް ކުރުމަށް ސައިޑްކާރ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
+  "error.serverExitedBeforeHealthy":
+    "WSL ސަރވަރ އިން ނުކުތީ ދުޅަހެޔޮ ސިއްހަތެއްގައި ހުރުމުގެ ކުރިން (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",
+  "error.healthTimeout":
+    "⁨{{distro}}⁩ ހެލްތު ޗެކް ކުރުމަށް ސައިޑްކާރ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
   "error.failedPort": "ބަނދަރު ހޯދުމަށް ނާކާމިޔާބުވިއެވެ",
   "server.default": "ޑީފޯލްޓް",

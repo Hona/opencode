@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Өөр дистро хэрэгтэй байна уу?",
   "onboarding.needAnotherDistroHint": "WSL каталогоос Linux түгээлтийг суулгана уу",
   "onboarding.wslNotInstalled.title": "WSL суулгаагүй байна",
-  "onboarding.wslNotInstalled.description": "OpenCode WSL сервер нэмэхийн өмнө WSL (Windows Subsystem for Linux) шаардлагатай",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode WSL сервер нэмэхийн өмнө WSL (Windows Subsystem for Linux) шаардлагатай",
   "onboarding.wslUnavailable.title": "WSL боломжгүй",
   "onboarding.wslUnavailable.description": "OpenCode энэ машин дээр WSL-г баталгаажуулж чадсангүй.",
   "onboarding.installWsl": "WSL суулгах",
-  "onboarding.windowsRestartRequired": "WSL-г суулгаж дуусгахын тулд Windows-г дахин эхлүүлээд OpenCode-г дахин нээнэ үү.",
+  "onboarding.windowsRestartRequired":
+    "WSL-г суулгаж дуусгахын тулд Windows-г дахин эхлүүлээд OpenCode-г дахин нээнэ үү.",
   "onboarding.allDistrosAdded": "Бүх суулгасан түгээлтүүд аль хэдийн нэмэгдсэн байна.",
   "onboarding.noDistros": "Одоогоор ямар ч түгээлт илрээгүй байна.",
   "onboarding.installDistro": "Дистро суулгана уу",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode энэ түгээлтэд суулгаагүй байна",
   "error.opencodeCannotRun": "opencode суулгасан боловч ажиллуулж чадсангүй",
   "error.opencodeNotInstalled": "OpenCode-г {{distro}}-д суулгаагүй байна",
-  "error.updateVersion": "OpenCode шинэчлэлт дууссан боловч {{distro}} мэдээлсэн хэвээр {{installed}}; хүлээгдэж буй {{expected}}",
+  "error.updateVersion":
+    "OpenCode шинэчлэлт дууссан боловч {{distro}} мэдээлсэн хэвээр {{installed}}; хүлээгдэж буй {{expected}}",
   "error.noVersion": "хувилбар байхгүй",
   "error.serverExited": "WSL сервер эхлүүлсний дараа гарсан (код={{code}} дохио ={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL сервер эрүүл болохоосоо өмнө гарсан (код={{code}} дохио={{signal}}){{output}}",
-  "error.healthTimeout": "{{distro}} эрүүл мэндийн үзлэгт хамрагдах хажуугийн машины хугацаа {{timeout}}мс дараа дууссан",
+  "error.serverExitedBeforeHealthy":
+    "WSL сервер эрүүл болохоосоо өмнө гарсан (код={{code}} дохио={{signal}}){{output}}",
+  "error.healthTimeout":
+    "{{distro}} эрүүл мэндийн үзлэгт хамрагдах хажуугийн машины хугацаа {{timeout}}мс дараа дууссан",
   "error.commandTimeout": "{{command}} {{args}} хугацаа {{timeout}}мс дараа дууссан",
   "error.failedPort": "Портыг авч чадсангүй",
   "server.default": "Өгөгдмөл",

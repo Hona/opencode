@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Kas vajate teist distrot?",
   "onboarding.needAnotherDistroHint": "Installige Linux distributsioon kataloogist WSL",
   "onboarding.wslNotInstalled.title": "WSL pole installitud",
-  "onboarding.wslNotInstalled.description": "WSL (Windows alamsüsteem Linux jaoks) on nõutav, enne kui OpenCode saab lisada WSL serveri",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows alamsüsteem Linux jaoks) on nõutav, enne kui OpenCode saab lisada WSL serveri",
   "onboarding.wslUnavailable.title": "WSL pole saadaval",
   "onboarding.wslUnavailable.description": "OpenCode ei saanud selles masinas kontrollida WSL.",
   "onboarding.installWsl": "Installige WSL",
@@ -41,7 +42,8 @@ export default {
   "error.opencodeMissing": "opencode pole sellesse distrosse installitud",
   "error.opencodeCannotRun": "opencode on installitud, kuid seda ei saa käivitada",
   "error.opencodeNotInstalled": "OpenCode pole installitud asukohta {{distro}}",
-  "error.updateVersion": "OpenCode värskendus on lõpetatud, kuid {{distro}} teatab endiselt {{installed}}; oodata {{expected}}",
+  "error.updateVersion":
+    "OpenCode värskendus on lõpetatud, kuid {{distro}} teatab endiselt {{installed}}; oodata {{expected}}",
   "error.noVersion": "versiooni pole",
   "error.serverExited": "WSL-server sulgus pärast käivitamist (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy": "WSL server väljus enne tervenemist (code={{code}} signal={{signal}}){{output}}",

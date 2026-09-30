@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Behöver du en annan distro?",
   "onboarding.needAnotherDistroHint": "Installera en Linux-distribution från WSL-katalogen",
   "onboarding.wslNotInstalled.title": "WSL är inte installerat",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) krävs innan OpenCode kan lägga till en WSL-server",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) krävs innan OpenCode kan lägga till en WSL-server",
   "onboarding.wslUnavailable.title": "WSL är inte tillgängligt",
   "onboarding.wslUnavailable.description": "OpenCode kunde inte verifiera WSL på den här maskinen.",
   "onboarding.installWsl": "Installera WSL",
-  "onboarding.windowsRestartRequired": "Starta om Windows för att slutföra installationen av WSL och öppna sedan OpenCode igen.",
+  "onboarding.windowsRestartRequired":
+    "Starta om Windows för att slutföra installationen av WSL och öppna sedan OpenCode igen.",
   "onboarding.allDistrosAdded": "Alla installerade distros har redan lagts till.",
   "onboarding.noDistros": "Inga distros har upptäckts ännu.",
   "onboarding.installDistro": "Installera distro",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode är inte installerat i den här distributionen",
   "error.opencodeCannotRun": "opencode är installerat men kunde inte köras",
   "error.opencodeNotInstalled": "OpenCode är inte installerat i {{distro}}",
-  "error.updateVersion": "OpenCode-uppdateringen slutfördes, men {{distro}} rapporterar fortfarande {{installed}}. {{expected}} förväntades",
+  "error.updateVersion":
+    "OpenCode-uppdateringen slutfördes, men {{distro}} rapporterar fortfarande {{installed}}. {{expected}} förväntades",
   "error.noVersion": "ingen version",
   "error.serverExited": "WSL-servern avslutades efter start (kod={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-servern avslutades innan den blev felfri (kod={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "Tidsgränsen för hälsokontrollen av sidoprocessen för {{distro}} överskreds efter {{timeout}} ms",
+  "error.serverExitedBeforeHealthy":
+    "WSL-servern avslutades innan den blev felfri (kod={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Tidsgränsen för hälsokontrollen av sidoprocessen för {{distro}} överskreds efter {{timeout}} ms",
   "error.commandTimeout": "Tidsgränsen för {{command}} {{args}} överskreds efter {{timeout}} ms",
   "error.failedPort": "Det gick inte att hämta porten",
   "server.default": "Standard",

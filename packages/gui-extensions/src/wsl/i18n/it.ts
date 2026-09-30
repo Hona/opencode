@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Hai bisogno di un'altra distribuzione?",
   "onboarding.needAnotherDistroHint": "Installa una distribuzione Linux dal catalogo WSL",
   "onboarding.wslNotInstalled.title": "WSL non installato",
-  "onboarding.wslNotInstalled.description": "WSL (Sottosistema Windows per Linux) è necessario prima che OpenCode possa aggiungere un server WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Sottosistema Windows per Linux) è necessario prima che OpenCode possa aggiungere un server WSL",
   "onboarding.wslUnavailable.title": "WSL non disponibile",
   "onboarding.wslUnavailable.description": "OpenCode non ha potuto verificare WSL su questa macchina.",
   "onboarding.installWsl": "Installa WSL",
@@ -41,11 +42,14 @@ export default {
   "error.opencodeMissing": "opencode non è installato in questa distribuzione",
   "error.opencodeCannotRun": "opencode è installato, ma non è stato possibile eseguirlo",
   "error.opencodeNotInstalled": "OpenCode non è installato in {{distro}}",
-  "error.updateVersion": "L'aggiornamento di OpenCode è terminato, ma {{distro}} segnala ancora la versione {{installed}}; era prevista la versione {{expected}}",
+  "error.updateVersion":
+    "L'aggiornamento di OpenCode è terminato, ma {{distro}} segnala ancora la versione {{installed}}; era prevista la versione {{expected}}",
   "error.noVersion": "nessuna versione",
   "error.serverExited": "Il server WSL si è chiuso dopo l'avvio (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Il server WSL si è chiuso prima di diventare operativo (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "Il controllo dello stato del sidecar per {{distro}} ha superato il tempo limite di {{timeout}}ms",
+  "error.serverExitedBeforeHealthy":
+    "Il server WSL si è chiuso prima di diventare operativo (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Il controllo dello stato del sidecar per {{distro}} ha superato il tempo limite di {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} ha superato il tempo limite di {{timeout}}ms",
   "error.failedPort": "Impossibile ottenere la porta",
   "server.default": "Predefinito",

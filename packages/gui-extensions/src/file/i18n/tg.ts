@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "Барои кушодан файлеро интихоб кунед",
+  selectToOpen: "Барои кушодан файлеро интихоб кунед",
   "open.finder": "Ҷустуҷӯ",
   "open.fileExplorer": "Роҳбалади файлҳо",
   "open.fileManager": "Мудири файлҳо",

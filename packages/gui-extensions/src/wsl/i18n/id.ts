@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Perlu distro lain?",
   "onboarding.needAnotherDistroHint": "Instal distribusi Linux dari katalog WSL",
   "onboarding.wslNotInstalled.title": "WSL belum terinstal",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) diperlukan sebelum OpenCode dapat menambahkan server WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) diperlukan sebelum OpenCode dapat menambahkan server WSL",
   "onboarding.wslUnavailable.title": "WSL tidak tersedia",
   "onboarding.wslUnavailable.description": "OpenCode tidak dapat memverifikasi WSL di komputer ini.",
   "onboarding.installWsl": "Instal WSL",
-  "onboarding.windowsRestartRequired": "Mulai ulang Windows untuk menyelesaikan instalasi WSL, lalu buka kembali OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Mulai ulang Windows untuk menyelesaikan instalasi WSL, lalu buka kembali OpenCode.",
   "onboarding.allDistrosAdded": "Semua distro yang terinstal sudah ditambahkan.",
   "onboarding.noDistros": "Belum ada distro terdeteksi.",
   "onboarding.installDistro": "Instal distro",
@@ -41,7 +43,8 @@ export default {
   "error.opencodeMissing": "opencode belum terinstal di distro ini",
   "error.opencodeCannotRun": "opencode telah terinstal, tetapi tidak dapat dijalankan",
   "error.opencodeNotInstalled": "OpenCode belum terinstal di {{distro}}",
-  "error.updateVersion": "Pembaruan OpenCode selesai, tetapi {{distro}} masih melaporkan {{installed}}; seharusnya {{expected}}",
+  "error.updateVersion":
+    "Pembaruan OpenCode selesai, tetapi {{distro}} masih melaporkan {{installed}}; seharusnya {{expected}}",
   "error.noVersion": "tanpa versi",
   "error.serverExited": "Server WSL berhenti setelah dimulai (kode={{code}} sinyal={{signal}})",
   "error.serverExitedBeforeHealthy": "Server WSL berhenti sebelum siap (kode={{code}} sinyal={{signal}}){{output}}",

@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Tarvitsetko toisen jakelun?",
   "onboarding.needAnotherDistroHint": "Asenna Linux-jakelu WSL-luettelosta",
   "onboarding.wslNotInstalled.title": "WSL:ää ei ole asennettu",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) vaaditaan ennen kuin OpenCode voi lisätä WSL-palvelimen",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) vaaditaan ennen kuin OpenCode voi lisätä WSL-palvelimen",
   "onboarding.wslUnavailable.title": "WSL ei ole käytettävissä",
   "onboarding.wslUnavailable.description": "OpenCode ei voinut vahvistaa WSL:ää tällä koneella.",
   "onboarding.installWsl": "Asenna WSL",
-  "onboarding.windowsRestartRequired": "Viimeistele WSL:n asennus käynnistämällä Windows uudelleen ja avaa sitten OpenCode uudelleen.",
+  "onboarding.windowsRestartRequired":
+    "Viimeistele WSL:n asennus käynnistämällä Windows uudelleen ja avaa sitten OpenCode uudelleen.",
   "onboarding.allDistrosAdded": "Kaikki asennetut jakelut on jo lisätty.",
   "onboarding.noDistros": "Jakeluja ei ole vielä havaittu.",
   "onboarding.installDistro": "Asenna jakelu",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencodea ei ole asennettu tähän jakeluun",
   "error.opencodeCannotRun": "opencode on asennettu, mutta sitä ei voitu suorittaa",
   "error.opencodeNotInstalled": "OpenCodea ei ole asennettu jakeluun {{distro}}",
-  "error.updateVersion": "OpenCoden päivitys valmistui, mutta {{distro}} ilmoittaa yhä version {{installed}}; odotettu versio on {{expected}}",
+  "error.updateVersion":
+    "OpenCoden päivitys valmistui, mutta {{distro}} ilmoittaa yhä version {{installed}}; odotettu versio on {{expected}}",
   "error.noVersion": "ei versiota",
   "error.serverExited": "WSL-palvelin sulkeutui käynnistyksen jälkeen (koodi={{code}} signaali={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-palvelin sulkeutui ennen toimintavalmiutta (koodi={{code}} signaali={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL-palvelin sulkeutui ennen toimintavalmiutta (koodi={{code}} signaali={{signal}}){{output}}",
   "error.healthTimeout": "Jakelun {{distro}} sivuprosessin kuntotarkistus aikakatkaistiin {{timeout}} ms:n jälkeen",
   "error.commandTimeout": "Komento {{command}} {{args}} aikakatkaistiin {{timeout}} ms:n jälkeen",
   "error.failedPort": "Portin noutaminen epäonnistui",

@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Afișează sau ascunde bara de depanare",
   "status.toggle": "Comutați instrumentele de depanare",
-  "ariaLabel": "Diagnosticare performanță dezvoltare",
-  "providerAriaLabel": "Diagnosticarea performanței furnizorului",
-  "na": "n/a",
+  ariaLabel: "Diagnosticare performanță dezvoltare",
+  providerAriaLabel: "Diagnosticarea performanței furnizorului",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Timpul de la trimiterea cererii către furnizor până la prima ieșire a modelului.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Timpul de la trimiterea cererii către furnizor până la încheierea fluxului de răspuns.",
   "nav.label": "NAV",
-  "nav.tip": "Ultima tranziție de rută finalizată care implică o pagină de sesiune, măsurată de la pornirea routerului până la primul paint după stabilizare.",
+  "nav.tip":
+    "Ultima tranziție de rută finalizată care implică o pagină de sesiune, măsurată de la pornirea routerului până la primul paint după stabilizare.",
   "fps.label": "FPS",
   "fps.tip": "Cadre pe secundă medii în ultimele 5 secunde.",
   "frame.label": "CADRU",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "ÎNTÂRZIERE",
   "delay.tip": "Cea mai mare întârziere de input observată în ultimele 5 secunde.",
   "inp.label": "INP",
-  "inp.tip": "Durata aproximativă a interacțiunii din ultimele 5 secunde. Este similar cu INP, nu valoarea oficială Web Vitals INP.",
+  "inp.tip":
+    "Durata aproximativă a interacțiunii din ultimele 5 secunde. Este similar cu INP, nu valoarea oficială Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Deplasare cumulativă a layoutului pentru durata actuală a aplicației.",
   "mem.label": "MEM",

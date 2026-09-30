@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Hələ branch dəyişikliyi yoxdur",
   "git.title": "Git repozitoriyası yaradın",
   "git.description": "Bu layihədə dəyişiklikləri izləyin, nəzərdən keçirin və ləğv edin",
-  "loadingChanges": "Dəyişikliklər yüklənir…",
-  "noChanges": "Dəyişiklik yoxdur",
+  loadingChanges: "Dəyişikliklər yüklənir…",
+  noChanges: "Dəyişiklik yoxdur",
 }

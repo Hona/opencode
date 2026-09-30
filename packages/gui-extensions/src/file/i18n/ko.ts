@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "열 파일을 선택하세요",
+  selectToOpen: "열 파일을 선택하세요",
   "open.finder": "Finder",
   "open.fileExplorer": "파일 탐색기",
   "open.fileManager": "파일 관리자",

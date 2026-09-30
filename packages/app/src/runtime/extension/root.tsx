@@ -6,7 +6,12 @@ import { createMenubar, ExtensionMenubarProvider } from "./menubar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionHostProvider, useExtensionHost } from "./host"
 import { createRemotes } from "./remote"
-import { createExtensionAttachment, createExtensionServices, ExtensionAttachmentProvider, type ExtensionServices } from "./services"
+import {
+  createExtensionAttachment,
+  createExtensionServices,
+  ExtensionAttachmentProvider,
+  type ExtensionServices,
+} from "./services"
 import { ExtensionCommands } from "./commands"
 import { ExtensionStyles } from "./render"
 import { ExtensionServersProvider } from "./servers"
@@ -35,7 +40,10 @@ export function ExtensionRoot(props: ParentProps) {
     setInstalled("list", reconcile([...(await bridge.manager.list())]))
     return true
   })
-  if (bridge) onCleanup(bridge.on((message) => message.type === "extensions" && setInstalled("list", reconcile([...message.list]))))
+  if (bridge)
+    onCleanup(
+      bridge.on((message) => message.type === "extensions" && setInstalled("list", reconcile([...message.list]))),
+    )
   const disabled = createMemo(() =>
     loaded() ? new Set(installed.list.filter((item) => !item.enabled).map((item) => item.id)) : undefined,
   )
@@ -43,26 +51,26 @@ export function ExtensionRoot(props: ParentProps) {
   const definitions = builtins.filter((definition) => !definition.os || (!!os && definition.os.includes(os)))
   return (
     <ServicesContext.Provider value={services}>
-        <ExtensionHostProvider
-          definitions={definitions}
-          disabled={disabled}
-          services={services.services}
-          remote={(token) => remotes.client(token)}
-        >
-          <ExtensionStyles />
-          {ExtensionHotReload && (
-            <Suspense>
-              <ExtensionHotReload />
-            </Suspense>
-          )}
-          <ExtensionMenubarProvider value={menubar}>
-            <ExtensionServersProvider
-              failed={(id) => installed.list.some((item) => item.id === id && item.error !== undefined)}
-            >
-              {props.children}
-            </ExtensionServersProvider>
-          </ExtensionMenubarProvider>
-        </ExtensionHostProvider>
+      <ExtensionHostProvider
+        definitions={definitions}
+        disabled={disabled}
+        services={services.services}
+        remote={(token) => remotes.client(token)}
+      >
+        <ExtensionStyles />
+        {ExtensionHotReload && (
+          <Suspense>
+            <ExtensionHotReload />
+          </Suspense>
+        )}
+        <ExtensionMenubarProvider value={menubar}>
+          <ExtensionServersProvider
+            failed={(id) => installed.list.some((item) => item.id === id && item.error !== undefined)}
+          >
+            {props.children}
+          </ExtensionServersProvider>
+        </ExtensionMenubarProvider>
+      </ExtensionHostProvider>
     </ServicesContext.Provider>
   )
 }

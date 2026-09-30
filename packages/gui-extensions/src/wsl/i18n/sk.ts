@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Potrebujete inú distribúciu?",
   "onboarding.needAnotherDistroHint": "Nainštalujte linuxovú distribúciu z katalógu WSL",
   "onboarding.wslNotInstalled.title": "WSL nie je nainštalovaný",
-  "onboarding.wslNotInstalled.description": "Pred pridaním WSL servera cez OpenCode je potrebné mať nainštalovaný WSL (Windows Subsystem for Linux).",
+  "onboarding.wslNotInstalled.description":
+    "Pred pridaním WSL servera cez OpenCode je potrebné mať nainštalovaný WSL (Windows Subsystem for Linux).",
   "onboarding.wslUnavailable.title": "WSL nie je dostupný",
   "onboarding.wslUnavailable.description": "OpenCode nemohol overiť WSL na tomto zariadení.",
   "onboarding.installWsl": "Nainštalovať WSL",
-  "onboarding.windowsRestartRequired": "Reštartujte Windows, aby ste dokončili inštaláciu WSL, potom znova otvorte OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Reštartujte Windows, aby ste dokončili inštaláciu WSL, potom znova otvorte OpenCode.",
   "onboarding.allDistrosAdded": "Všetky nainštalované distribúcie sú už pridané.",
   "onboarding.noDistros": "Zatiaľ neboli zistené žiadne distribúcie.",
   "onboarding.installDistro": "Inštalovať distribúciu",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode nie je v tejto distribúcii nainštalovaný",
   "error.opencodeCannotRun": "opencode je nainštalovaný, ale nedá sa spustiť",
   "error.opencodeNotInstalled": "OpenCode nie je nainštalovaný v {{distro}}",
-  "error.updateVersion": "Aktualizácia OpenCode bola dokončená, ale {{distro}} stále hlási {{installed}}; očakávané {{expected}}",
+  "error.updateVersion":
+    "Aktualizácia OpenCode bola dokončená, ale {{distro}} stále hlási {{installed}}; očakávané {{expected}}",
   "error.noVersion": "žiadna verzia",
   "error.serverExited": "WSL server sa ukončil po spustení (kód={{code}} signál={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL server sa ukončil pred inicializáciou (kód={{code}} signál={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL server sa ukončil pred inicializáciou (kód={{code}} signál={{signal}}){{output}}",
   "error.healthTimeout": "Kontrola stavu sidecar pre {{distro}} vypršala po {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} vypršalo po {{timeout}} ms",
   "error.failedPort": "Nepodarilo sa získať port",

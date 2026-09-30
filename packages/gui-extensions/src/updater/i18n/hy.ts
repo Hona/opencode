@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Դուք արդի եք",
   "toast.latest.description": "Դուք օգտագործում եք OpenCode-ի վերջին տարբերակը։",
   "migration.title": "Beta-ից անցնել Stable-ի",
-  "migration.description": "Առայժմ OpenCode Beta-ն անցնում է OpenCode Stable-ի։ Ներբեռնեք {{version}} տարբերակը, ապա տեղադրեք OpenCode-ը սկավառակի պատկերից՝ թարմացումները շարունակելու համար։",
+  "migration.description":
+    "Առայժմ OpenCode Beta-ն անցնում է OpenCode Stable-ի։ Ներբեռնեք {{version}} տարբերակը, ապա տեղադրեք OpenCode-ը սկավառակի պատկերից՝ թարմացումները շարունակելու համար։",
   "section.title": "Թարմացումներ",
   "releaseNotes.title": "Թողարկման նշումներ",
   "releaseNotes.description": "Ցույց տալ, թե ինչ է նոր պատուհանները թարմացումներից հետո",

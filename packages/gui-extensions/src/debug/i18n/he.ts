@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "הצגה או הסתרה של סרגל ניפוי הבאגים",
   "status.toggle": "הצגה או הסתרה של כלי ניפוי באגים",
-  "ariaLabel": "אבחון ביצועי פיתוח",
-  "providerAriaLabel": "אבחון ביצועי הספק",
-  "na": "לא זמין",
+  ariaLabel: "אבחון ביצועי פיתוח",
+  providerAriaLabel: "אבחון ביצועי הספק",
+  na: "לא זמין",
   "ttft.label": "TTFT",
   "ttft.tip": "הזמן משליחת בקשת הספק עד לפלט הראשון של הדגם.",
   "ttfa.label": "TTFA",

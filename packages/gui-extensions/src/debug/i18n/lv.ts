@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Rādīt vai paslēpt atkļūdošanas joslu",
   "status.toggle": "Pārslēgt atkļūdošanas rīkus",
-  "ariaLabel": "Izstrādes veiktspējas diagnostika",
-  "providerAriaLabel": "Pakalpojumu sniedzēja veiktspējas diagnostika",
-  "na": "nav",
+  ariaLabel: "Izstrādes veiktspējas diagnostika",
+  providerAriaLabel: "Pakalpojumu sniedzēja veiktspējas diagnostika",
+  na: "nav",
   "ttft.label": "TTFT",
   "ttft.tip": "Laiks no pieprasījuma nosūtīšanas pakalpojumu sniedzējam līdz pirmajai modeļa izvadei.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Laiks no pieprasījuma nosūtīšanas pakalpojumu sniedzējam līdz atbildes straumes beigām.",
   "nav.label": "NAV",
-  "nav.tip": "Pēdējā pabeigtā maršruta pāreja, kas skar sesijas lapu, mērīts no maršrutētāja sākuma līdz pirmajam attēlojumam pēc stabilizācijas.",
+  "nav.tip":
+    "Pēdējā pabeigtā maršruta pāreja, kas skar sesijas lapu, mērīts no maršrutētāja sākuma līdz pirmajam attēlojumam pēc stabilizācijas.",
   "fps.label": "FPS",
   "fps.tip": "Kustīgais kadru skaits sekundē pēdējās 5 sekundēs.",
   "frame.label": "KADRS",

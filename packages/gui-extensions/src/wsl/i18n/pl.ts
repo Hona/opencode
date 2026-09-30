@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Potrzebujesz innej dystrybucji?",
   "onboarding.needAnotherDistroHint": "Zainstaluj dystrybucję systemu Linux z katalogu WSL",
   "onboarding.wslNotInstalled.title": "WSL nie jest zainstalowany",
-  "onboarding.wslNotInstalled.description": "WSL (Podsystem Windows dla systemu Linux) jest wymagany, zanim OpenCode będzie mógł dodać serwer WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Podsystem Windows dla systemu Linux) jest wymagany, zanim OpenCode będzie mógł dodać serwer WSL",
   "onboarding.wslUnavailable.title": "WSL jest niedostępny",
   "onboarding.wslUnavailable.description": "OpenCode nie mógł zweryfikować WSL na tym komputerze.",
   "onboarding.installWsl": "Zainstaluj WSL",
-  "onboarding.windowsRestartRequired": "Uruchom ponownie system Windows, aby dokończyć instalację WSL, a następnie ponownie otwórz OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Uruchom ponownie system Windows, aby dokończyć instalację WSL, a następnie ponownie otwórz OpenCode.",
   "onboarding.allDistrosAdded": "Wszystkie zainstalowane dystrybucje zostały już dodane.",
   "onboarding.noDistros": "Nie wykryto jeszcze żadnych dystrybucji.",
   "onboarding.installDistro": "Zainstaluj dystrybucję",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "Program opencode nie jest zainstalowany w tej dystrybucji",
   "error.opencodeCannotRun": "Program opencode jest zainstalowany, ale nie można go uruchomić",
   "error.opencodeNotInstalled": "OpenCode nie jest zainstalowany w dystrybucji {{distro}}",
-  "error.updateVersion": "Aktualizacja OpenCode została ukończona, ale dystrybucja {{distro}} nadal zgłasza wersję {{installed}}; oczekiwano {{expected}}",
+  "error.updateVersion":
+    "Aktualizacja OpenCode została ukończona, ale dystrybucja {{distro}} nadal zgłasza wersję {{installed}}; oczekiwano {{expected}}",
   "error.noVersion": "brak wersji",
   "error.serverExited": "Serwer WSL zakończył działanie po uruchomieniu (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Serwer WSL zakończył działanie przed osiągnięciem gotowości (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "Przekroczono limit czasu {{distro}}ms podczas sprawdzania kondycji procesu sidecar dla dystrybucji {{timeout}}",
+  "error.serverExitedBeforeHealthy":
+    "Serwer WSL zakończył działanie przed osiągnięciem gotowości (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Przekroczono limit czasu {{distro}}ms podczas sprawdzania kondycji procesu sidecar dla dystrybucji {{timeout}}",
   "error.commandTimeout": "Polecenie {{command}} {{args}} przekroczyło limit czasu {{timeout}}ms",
   "error.failedPort": "Nie udało się uzyskać portu",
   "server.default": "Domyślny",

@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "تبديل إظهار شريط تصحيح الأخطاء",
   "status.toggle": "إظهار أدوات التصحيح أو إخفاؤها",
-  "ariaLabel": "تشخيص أداء التطوير",
-  "providerAriaLabel": "تشخيص أداء المزوّد",
-  "na": "غير متاح",
+  ariaLabel: "تشخيص أداء التطوير",
+  providerAriaLabel: "تشخيص أداء المزوّد",
+  na: "غير متاح",
   "ttft.label": "TTFT",
   "ttft.tip": "الوقت من إرسال طلب المزوّد إلى أول مخرجات للنموذج.",
   "ttfa.label": "TTFA",

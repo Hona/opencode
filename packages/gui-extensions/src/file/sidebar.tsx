@@ -33,7 +33,9 @@ export default function FileSidebar(props: { session: SessionView }) {
   const count = createMemo(() => shared.changes()?.diffs(props.session).length ?? 0)
   const ready = createMemo(() => shared.changes()?.ready(props.session) ?? false)
   const diffFiles = createMemo(() =>
-    (shared.changes()?.diffs(props.session) ?? []).flatMap((diff) => (typeof diff.file === "string" ? [diff.file] : [])),
+    (shared.changes()?.diffs(props.session) ?? []).flatMap((diff) =>
+      typeof diff.file === "string" ? [diff.file] : [],
+    ),
   )
   const kinds = createMemo(() => shared.changes()?.kinds(props.session) ?? empty)
 

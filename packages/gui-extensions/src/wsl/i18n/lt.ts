@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Reikia kito platinimo?",
   "onboarding.needAnotherDistroHint": "Įdiekite Linux paskirstymą iš WSL katalogo",
   "onboarding.wslNotInstalled.title": "WSL neįdiegtas",
-  "onboarding.wslNotInstalled.description": "Kad OpenCode galėtų pridėti WSL serverį, reikalingas WSL (Windows posistemis, skirtas Linux)",
+  "onboarding.wslNotInstalled.description":
+    "Kad OpenCode galėtų pridėti WSL serverį, reikalingas WSL (Windows posistemis, skirtas Linux)",
   "onboarding.wslUnavailable.title": "WSL nepasiekiamas",
   "onboarding.wslUnavailable.description": "OpenCode nepavyko patikrinti WSL šiame įrenginyje.",
   "onboarding.installWsl": "Įdiekite WSL",
-  "onboarding.windowsRestartRequired": "Iš naujo paleiskite Windows, kad užbaigtumėte WSL diegimą, tada iš naujo atidarykite OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Iš naujo paleiskite Windows, kad užbaigtumėte WSL diegimą, tada iš naujo atidarykite OpenCode.",
   "onboarding.allDistrosAdded": "Visos įdiegtos distribucijos jau pridėtos.",
   "onboarding.noDistros": "Dar neaptikta jokių paskirstymų.",
   "onboarding.installDistro": "Įdiekite distro",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode šiame distributyve neįdiegtas",
   "error.opencodeCannotRun": "opencode įdiegtas, bet jo paleisti nepavyko",
   "error.opencodeNotInstalled": "OpenCode neįdiegtas distributyve {{distro}}",
-  "error.updateVersion": "OpenCode naujinimas baigtas, bet {{distro}} vis dar praneša {{installed}}; tikėtasi {{expected}}",
+  "error.updateVersion":
+    "OpenCode naujinimas baigtas, bet {{distro}} vis dar praneša {{installed}}; tikėtasi {{expected}}",
   "error.noVersion": "versijos nėra",
   "error.serverExited": "WSL serveris užsidarė po paleidimo (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL serveris užsidarė prieš pradėdamas tinkamai veikti (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL serveris užsidarė prieš pradėdamas tinkamai veikti (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Baigėsi {{distro}} pagalbinio proceso būklės patikros {{timeout}} ms skirtasis laikas",
   "error.commandTimeout": "Baigėsi komandai {{command}} {{args}} skirtas {{timeout}} ms laikas",
   "error.failedPort": "Nepavyko gauti prievado",

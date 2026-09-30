@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Hibakeresési sáv be- vagy kikapcsolása",
   "status.toggle": "Hibakereső eszközök váltása",
-  "ariaLabel": "Fejlesztési teljesítmény diagnosztika",
-  "providerAriaLabel": "Szolgáltatói teljesítménydiagnosztika",
-  "na": "n/a",
+  ariaLabel: "Fejlesztési teljesítmény diagnosztika",
+  providerAriaLabel: "Szolgáltatói teljesítménydiagnosztika",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "A szolgáltatói kérés elküldésétől a modell első kimenetéig eltelt idő.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "A szolgáltatói kérés elküldésétől a válaszfolyam végéig eltelt idő.",
   "nav.label": "NAV",
-  "nav.tip": "Utolsó befejezett útvonal-átmenet, amely egy munkamenet-oldalt érint, az útválasztó indulásától az első festésig mérve.",
+  "nav.tip":
+    "Utolsó befejezett útvonal-átmenet, amely egy munkamenet-oldalt érint, az útválasztó indulásától az első festésig mérve.",
   "fps.label": "FPS",
   "fps.tip": "Gördülő képkockák másodpercenként az utolsó 5 másodpercben.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "A legrosszabb megfigyelt bemeneti késleltetés az elmúlt 5 másodpercben.",
   "inp.label": "INP",
-  "inp.tip": "Az interakció hozzávetőleges időtartama az elmúlt 5 másodpercben. Ez a INP-szerű, nem a hivatalos Web Vitals INP.",
+  "inp.tip":
+    "Az interakció hozzávetőleges időtartama az elmúlt 5 másodpercben. Ez a INP-szerű, nem a hivatalos Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Összesített elrendezési eltolódás az alkalmazás jelenlegi élettartamára vonatkozóan.",
   "mem.label": "MEM",

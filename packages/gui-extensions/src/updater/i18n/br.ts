@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "Você está atualizado",
   "toast.latest.description": "Você está usando a versão mais recente do OpenCode.",
   "migration.title": "Migrar da versão Beta para a Estável",
-  "migration.description": "Por enquanto, o OpenCode Beta está migrando para o OpenCode Estável. Baixe a versão {{version}} e instale o OpenCode pela imagem de disco para continuar recebendo atualizações.",
+  "migration.description":
+    "Por enquanto, o OpenCode Beta está migrando para o OpenCode Estável. Baixe a versão {{version}} e instale o OpenCode pela imagem de disco para continuar recebendo atualizações.",
   "section.title": "Atualizações",
   "releaseNotes.title": "Notas da versão",
-  "releaseNotes.description": "Mostrar pop-ups de \"Novidades\" após atualizações",
+  "releaseNotes.description": 'Mostrar pop-ups de "Novidades" após atualizações',
   "check.title": "Verificar atualizações",
   "check.description": "Verificar atualizações manualmente e instalar se houver",
   "menu.check": "Verificar atualizações…",

@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "অন্য ডিস্ট্রো প্রয়োজন?",
   "onboarding.needAnotherDistroHint": "WSL ক্যাটালগ থেকে একটি Linux বিতরণ ইনস্টল করুন",
   "onboarding.wslNotInstalled.title": "WSL ইনস্টল করা হয়নি",
-  "onboarding.wslNotInstalled.description": "WSL (Linux এর জন্য Windows সাবসিস্টেম) OpenCode একটি WSL সার্ভার যোগ করার আগে প্রয়োজন",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Linux এর জন্য Windows সাবসিস্টেম) OpenCode একটি WSL সার্ভার যোগ করার আগে প্রয়োজন",
   "onboarding.wslUnavailable.title": "WSL অনুপলব্ধ",
   "onboarding.wslUnavailable.description": "OpenCode এই মেশিনে WSL যাচাই করতে পারেনি।",
   "onboarding.installWsl": "WSL ইনস্টল করুন",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "এই ডিস্ট্রোতে opencode ইনস্টল করা নেই",
   "error.opencodeCannotRun": "opencode ইনস্টল করা আছে কিন্তু চালানো যায়নি",
   "error.opencodeNotInstalled": "OpenCode {{distro}} এ ইনস্টল করা নেই",
-  "error.updateVersion": "OpenCode আপডেট শেষ হয়েছে কিন্তু {{distro}} এখনও রিপোর্ট করে {{installed}}; প্রত্যাশিত {{expected}}",
+  "error.updateVersion":
+    "OpenCode আপডেট শেষ হয়েছে কিন্তু {{distro}} এখনও রিপোর্ট করে {{installed}}; প্রত্যাশিত {{expected}}",
   "error.noVersion": "কোন সংস্করণ নেই",
   "error.serverExited": "WSL সার্ভার স্টার্টআপের পরে প্রস্থান হয়েছে (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL সার্ভার সুস্থ হওয়ার আগে প্রস্থান করেছে (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL সার্ভার সুস্থ হওয়ার আগে প্রস্থান করেছে (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} স্বাস্থ্য পরীক্ষার জন্য সাইডকার {{timeout}}ms পরে সময় শেষ হয়েছে",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms পরে সময় শেষ হয়েছে",
   "error.failedPort": "পোর্ট পেতে ব্যর্থ",

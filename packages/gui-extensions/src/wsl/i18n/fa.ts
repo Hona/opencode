@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "به توزیع دیگری نیاز دارید؟",
   "onboarding.needAnotherDistroHint": "توزیع Linux را از کاتالوگ WSL نصب کنید",
   "onboarding.wslNotInstalled.title": "WSL نصب نشده است",
-  "onboarding.wslNotInstalled.description": "WSL (زیر سیستم Windows برای Linux) قبل از اینکه OpenCode بتواند یک سرور WSL اضافه کند لازم است",
+  "onboarding.wslNotInstalled.description":
+    "WSL (زیر سیستم Windows برای Linux) قبل از اینکه OpenCode بتواند یک سرور WSL اضافه کند لازم است",
   "onboarding.wslUnavailable.title": "WSL در دسترس نیست",
   "onboarding.wslUnavailable.description": "OpenCode نتوانست WSL را در این دستگاه تأیید کند.",
   "onboarding.installWsl": "WSL را نصب کنید",
-  "onboarding.windowsRestartRequired": "Windows را مجددا راه اندازی کنید تا نصب WSL به پایان برسد، سپس OpenCode را دوباره باز کنید.",
+  "onboarding.windowsRestartRequired":
+    "Windows را مجددا راه اندازی کنید تا نصب WSL به پایان برسد، سپس OpenCode را دوباره باز کنید.",
   "onboarding.allDistrosAdded": "همه توزیع‌های نصب‌شده قبلاً اضافه شده‌اند.",
   "onboarding.noDistros": "هنوز هیچ توزیعی شناسایی نشده است.",
   "onboarding.installDistro": "توزیع را نصب کنید",
@@ -41,7 +43,8 @@ export default {
   "error.opencodeMissing": "opencode در این توزیع نصب نشده است",
   "error.opencodeCannotRun": "opencode نصب شده است اما اجرا نمی شود",
   "error.opencodeNotInstalled": "OpenCode در {{distro}} نصب نشده است",
-  "error.updateVersion": "به‌روزرسانی OpenCode به پایان رسید، اما {{distro}} همچنان {{installed}} را گزارش می‌کند. مورد انتظار {{expected}}",
+  "error.updateVersion":
+    "به‌روزرسانی OpenCode به پایان رسید، اما {{distro}} همچنان {{installed}} را گزارش می‌کند. مورد انتظار {{expected}}",
   "error.noVersion": "بدون نسخه",
   "error.serverExited": "سرور WSL پس از راه اندازی خارج شد (کد={{code}} سیگنال={{signal}})",
   "error.serverExitedBeforeHealthy": "سرور WSL قبل از سالم شدن خارج شد (کد={{code}} سیگنال={{signal}}){{output}}",

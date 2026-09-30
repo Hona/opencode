@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Başka bir dağıtım mı gerekiyor?",
   "onboarding.needAnotherDistroHint": "WSL kataloğundan bir Linux dağıtımı kurun",
   "onboarding.wslNotInstalled.title": "WSL kurulu değil",
-  "onboarding.wslNotInstalled.description": "OpenCode'un WSL sunucusu ekleyebilmesi için önce WSL (Linux için Windows Alt Sistemi) kurulmalıdır",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode'un WSL sunucusu ekleyebilmesi için önce WSL (Linux için Windows Alt Sistemi) kurulmalıdır",
   "onboarding.wslUnavailable.title": "WSL kullanılamıyor",
   "onboarding.wslUnavailable.description": "OpenCode bu makinede WSL'yi doğrulayamadı.",
   "onboarding.installWsl": "WSL'yi kur",
-  "onboarding.windowsRestartRequired": "WSL kurulumunu tamamlamak için Windows'u yeniden başlatın, ardından OpenCode'u tekrar açın.",
+  "onboarding.windowsRestartRequired":
+    "WSL kurulumunu tamamlamak için Windows'u yeniden başlatın, ardından OpenCode'u tekrar açın.",
   "onboarding.allDistrosAdded": "Kurulu tüm dağıtımlar zaten eklenmiş.",
   "onboarding.noDistros": "Henüz dağıtım algılanmadı.",
   "onboarding.installDistro": "Dağıtım kur",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode bu dağıtımda kurulu değil",
   "error.opencodeCannotRun": "opencode kurulu ancak çalıştırılamadı",
   "error.opencodeNotInstalled": "OpenCode, {{distro}} içinde kurulu değil",
-  "error.updateVersion": "OpenCode güncellemesi tamamlandı ancak {{distro}} hâlâ {{installed}} sürümünü bildiriyor; beklenen sürüm: {{expected}}",
+  "error.updateVersion":
+    "OpenCode güncellemesi tamamlandı ancak {{distro}} hâlâ {{installed}} sürümünü bildiriyor; beklenen sürüm: {{expected}}",
   "error.noVersion": "sürüm yok",
   "error.serverExited": "WSL sunucusu başlatıldıktan sonra kapandı (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL sunucusu kullanıma hazır duruma gelmeden kapandı (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL sunucusu kullanıma hazır duruma gelmeden kapandı (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} Sidecar sistem durumu denetimi {{timeout}} ms sonra zaman aşımına uğradı",
   "error.commandTimeout": "{{command}} {{args}} komutu {{timeout}} ms sonra zaman aşımına uğradı",
   "error.failedPort": "Bağlantı noktası alınamadı",

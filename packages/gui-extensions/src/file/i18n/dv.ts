@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio އެވެ",
   "open.app.powershell": "PowerShell އެވެ",
   "open.app.sublimeText": "Sublime Text އެވެ",
-  "selectToOpen": "ހުޅުވަން ބޭނުންވާ ފައިލެއް ހޮވާށެވެ",
+  selectToOpen: "ހުޅުވަން ބޭނުންވާ ފައިލެއް ހޮވާށެވެ",
   "open.finder": "Finder އެވެ",
   "open.fileExplorer": "File Explorer އެވެ",
   "open.fileManager": "ފައިލް މެނޭޖަރ އެވެ",

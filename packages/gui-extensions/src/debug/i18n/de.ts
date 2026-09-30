@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Debug-Leiste ein-/ausblenden",
   "status.toggle": "Debugging-Tools umschalten",
-  "ariaLabel": "Leistungsdiagnose für die Entwicklung",
-  "providerAriaLabel": "Leistungsdiagnose des Anbieters",
-  "na": "n.v.",
+  ariaLabel: "Leistungsdiagnose für die Entwicklung",
+  providerAriaLabel: "Leistungsdiagnose des Anbieters",
+  na: "n.v.",
   "ttft.label": "TTFT",
   "ttft.tip": "Zeit vom Senden der Anbieteranfrage bis zur ersten Modellausgabe.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Zeit vom Senden der Anbieteranfrage bis zum Ende ihres Antwortstreams.",
   "nav.label": "NAV",
-  "nav.tip": "Letzter abgeschlossener Routenübergang zu einer Sitzungsseite, gemessen vom Start des Routers bis zum ersten Rendering nach Abschluss des Übergangs.",
+  "nav.tip":
+    "Letzter abgeschlossener Routenübergang zu einer Sitzungsseite, gemessen vom Start des Routers bis zum ersten Rendering nach Abschluss des Übergangs.",
   "fps.label": "FPS",
   "fps.tip": "Gleitender Mittelwert der Frames pro Sekunde in den letzten 5 Sekunden.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Schlechteste beobachtete Eingabeverzögerung in den letzten 5 Sekunden.",
   "inp.label": "INP",
-  "inp.tip": "Ungefähre Interaktionsdauer in den letzten 5 Sekunden. Dies ist INP-ähnlich, nicht das offizielle Web-Vitals-INP.",
+  "inp.tip":
+    "Ungefähre Interaktionsdauer in den letzten 5 Sekunden. Dies ist INP-ähnlich, nicht das offizielle Web-Vitals-INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulative Layoutverschiebung während der aktuellen App-Laufzeit.",
   "mem.label": "MEM",

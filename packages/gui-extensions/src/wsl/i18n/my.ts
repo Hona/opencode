@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "နောက်ထပ် distro တစ်ခုလိုပါသလား။",
   "onboarding.needAnotherDistroHint": "WSL ကတ်တလောက်မှ Linux ဖြန့်ဖြူးမှုကို ထည့်သွင်းပါ။",
   "onboarding.wslNotInstalled.title": "WSL ကို ထည့်သွင်းမထားပါ။",
-  "onboarding.wslNotInstalled.description": "WSL (Linux အတွက် Windows Subsystem) ကို OpenCode မှ WSL ဆာဗာ မထည့်မီတွင် လိုအပ်ပါသည်။",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Linux အတွက် Windows Subsystem) ကို OpenCode မှ WSL ဆာဗာ မထည့်မီတွင် လိုအပ်ပါသည်။",
   "onboarding.wslUnavailable.title": "WSL မရနိုင်ပါ။",
   "onboarding.wslUnavailable.description": "OpenCode သည် ဤစက်ပေါ်ရှိ WSL ကို အတည်မပြုနိုင်ပါ။",
   "onboarding.installWsl": "WSL ကို ထည့်သွင်းပါ။",
-  "onboarding.windowsRestartRequired": "WSL ထည့်သွင်းခြင်း အပြီးသတ်ရန် Windows ကို ပြန်လည်စတင်ပါ၊ ထို့နောက် OpenCode ကို ပြန်လည်ဖွင့်ပါ။",
+  "onboarding.windowsRestartRequired":
+    "WSL ထည့်သွင်းခြင်း အပြီးသတ်ရန် Windows ကို ပြန်လည်စတင်ပါ၊ ထို့နောက် OpenCode ကို ပြန်လည်ဖွင့်ပါ။",
   "onboarding.allDistrosAdded": "ထည့်သွင်းထားသည့် distros အားလုံးကို ထည့်သွင်းပြီးဖြစ်သည်။",
   "onboarding.noDistros": "မည်သည့် distros မှ ရှာမတွေ့သေးပါ။",
   "onboarding.installDistro": "distro ကို ထည့်သွင်းပါ။",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode ကို ဤ distro တွင် ထည့်သွင်းမထားပါ။",
   "error.opencodeCannotRun": "opencode ကို ထည့်သွင်းထားသော်လည်း မလည်ပတ်နိုင်ပါ။",
   "error.opencodeNotInstalled": "OpenCode ကို {{distro}} တွင် ထည့်သွင်းမထားပါ။",
-  "error.updateVersion": "OpenCode အပ်ဒိတ် ပြီးဆုံးသွားသော်လည်း {{distro}} သည် {{installed}} မှ ဆက်လက်တင်ပြနေပါသည်။ {{expected}} မျှော်လင့်ထားသည်။",
+  "error.updateVersion":
+    "OpenCode အပ်ဒိတ် ပြီးဆုံးသွားသော်လည်း {{distro}} သည် {{installed}} မှ ဆက်လက်တင်ပြနေပါသည်။ {{expected}} မျှော်လင့်ထားသည်။",
   "error.noVersion": "ဗားရှင်းမရှိပါ။",
   "error.serverExited": "စတင်ပြီးနောက် WSL ဆာဗာမှ ထွက်ခဲ့သည် (ကုဒ်={{code}} အချက်ပြ={{signal}})",
-  "error.serverExitedBeforeHealthy": "ကျန်းမာရေးမကောင်းမီ WSL ဆာဗာမှ ထွက်ခဲ့သည် (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "ကျန်းမာရေးမကောင်းမီ WSL ဆာဗာမှ ထွက်ခဲ့သည် (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} ကျန်းမာရေးစစ်ဆေးမှုအတွက် ဆိုက်ကားဆရာ {{timeout}}ms ပြီးနောက် အချိန်ကုန်သွားသည်",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms ပြီးနောက် အချိန်ကုန်သွားသည်",
   "error.failedPort": "ဆိပ်ကမ်းကို ရယူရန် မအောင်မြင်ပါ။",

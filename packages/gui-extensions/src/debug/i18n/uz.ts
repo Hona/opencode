@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Nosozliklarni tuzatish panelini almashtirish",
   "status.toggle": "Nosozliklarni tuzatish vositalarini yoqish/o‘chirish",
-  "ariaLabel": "Rivojlanish samaradorligi diagnostikasi",
-  "providerAriaLabel": "Provayder unumdorligi diagnostikasi",
-  "na": "yo'q",
+  ariaLabel: "Rivojlanish samaradorligi diagnostikasi",
+  providerAriaLabel: "Provayder unumdorligi diagnostikasi",
+  na: "yo'q",
   "ttft.label": "TTFT",
   "ttft.tip": "Provayderga so‘rov yuborilganidan modelning birinchi chiqishigacha bo‘lgan vaqt.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Provayderga so‘rov yuborilganidan javob oqimi tugagunigacha bo‘lgan vaqt.",
   "nav.label": "NAV",
-  "nav.tip": "Seans sahifasiga tegib oxirgi tugallangan marshrutga o'tish, marshrutizator boshlanishidan boshlab u o'rnatgandan keyingi birinchi bo'yoqgacha o'lchanadi.",
+  "nav.tip":
+    "Seans sahifasiga tegib oxirgi tugallangan marshrutga o'tish, marshrutizator boshlanishidan boshlab u o'rnatgandan keyingi birinchi bo'yoqgacha o'lchanadi.",
   "fps.label": "FPS",
   "fps.tip": "Oxirgi 5 soniya ichida sekundiga aylanayotgan kadrlar.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Oxirgi 5 soniya ichida kuzatilgan eng yomon kiritish kechikishi.",
   "inp.label": "INP",
-  "inp.tip": "Oxirgi 5 soniya davomida o'zaro ta'sir qilishning taxminiy davomiyligi. Bu INP-ga o'xshaydi, rasmiy Web Vitals INP emas.",
+  "inp.tip":
+    "Oxirgi 5 soniya davomida o'zaro ta'sir qilishning taxminiy davomiyligi. Bu INP-ga o'xshaydi, rasmiy Web Vitals INP emas.",
   "cls.label": "CLS",
   "cls.tip": "Joriy ilovaning ishlash muddati uchun joylashuvning umumiy siljishi.",
   "mem.label": "MEM",

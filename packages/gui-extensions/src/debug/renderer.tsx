@@ -10,12 +10,15 @@ const setup: Setup = (ctx) => {
     setVisible((value) => !value)
   }
 
-  ctx.add(Command, (): Command => ({
-    id: "toggle",
-    title: ctx.t("command.toggle"),
-    group: ctx.t("command.category.view"),
-    run: toggle,
-  }))
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "toggle",
+      title: ctx.t("command.toggle"),
+      group: ctx.t("command.category.view"),
+      run: toggle,
+    }),
+  )
 
   ctx.add(Slot, {
     at: "shell.bottom",
@@ -29,13 +32,16 @@ const setup: Setup = (ctx) => {
   })
 
   if (channel !== "dev" && channel !== "local") return
-  ctx.add(Status, (): Status => ({
-    id: "toggle",
-    placement: "channel",
-    label: ctx.t("status.toggle"),
-    pressed: visible(),
-    run: toggle,
-  }))
+  ctx.add(
+    Status,
+    (): Status => ({
+      id: "toggle",
+      placement: "channel",
+      label: ctx.t("status.toggle"),
+      pressed: visible(),
+      run: toggle,
+    }),
+  )
 }
 
 export default setup

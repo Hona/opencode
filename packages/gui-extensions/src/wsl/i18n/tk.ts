@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Başga bir distro gerekmi?",
   "onboarding.needAnotherDistroHint": "WSL katalogyndan Linux paýlanyşyny guruň",
   "onboarding.wslNotInstalled.title": "WSL gurulmady",
-  "onboarding.wslNotInstalled.description": "WSL (Linux üçin Windows kiçi ulgamy) OpenCode WSL serwerini goşmazdan ozal talap edilýär",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Linux üçin Windows kiçi ulgamy) OpenCode WSL serwerini goşmazdan ozal talap edilýär",
   "onboarding.wslUnavailable.title": "WSL elýeterli däl",
   "onboarding.wslUnavailable.description": "OpenCode bu enjamda WSL barlap bilmedi.",
   "onboarding.installWsl": "WSL guruň",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "açyk kod bu distroda gurlanok",
   "error.opencodeCannotRun": "opencode guruldy, ýöne işledip bilmedi",
   "error.opencodeNotInstalled": "OpenCode {{distro}} gurulmady",
-  "error.updateVersion": "OpenCode täzelenmesi gutardy, ýöne {{distro}} henizem {{installed}} habar berýär; garaşylýan {{expected}}",
+  "error.updateVersion":
+    "OpenCode täzelenmesi gutardy, ýöne {{distro}} henizem {{installed}} habar berýär; garaşylýan {{expected}}",
   "error.noVersion": "wersiýasy ýok",
   "error.serverExited": "WSL serweri işe başlandan soň çykdy (kod = {{code}} signal = {{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL serweri sagdyn bolmanka çykdy (kod = {{code}} signal = {{signal}}) {{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL serweri sagdyn bolmanka çykdy (kod = {{code}} signal = {{signal}}) {{output}}",
   "error.healthTimeout": "{{distro}} saglyk barlagy üçin Sidecar, {{timeout}}ms-den soň gutardy",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms-den soň gutardy",
   "error.failedPort": "Port alyp bilmedi",

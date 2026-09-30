@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "デバッグバーを切り替え",
   "status.toggle": "デバッグツールの切り替え",
-  "ariaLabel": "開発パフォーマンス診断",
-  "providerAriaLabel": "プロバイダーのパフォーマンス診断",
-  "na": "n/a",
+  ariaLabel: "開発パフォーマンス診断",
+  providerAriaLabel: "プロバイダーのパフォーマンス診断",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "プロバイダーへのリクエスト送信からモデルの最初の出力までの時間。",
   "ttfa.label": "TTFA",

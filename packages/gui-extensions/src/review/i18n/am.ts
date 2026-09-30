@@ -8,6 +8,6 @@ export default {
   "empty.branch": "ገና ምንም ቅርንጫፍ ምንም ለውጥ የለም",
   "git.title": "Git ማከማቻ ፍጠር",
   "git.description": "በዚህ ፕሮጀክት ላይ ለውጦችን ይከታተሉ፣ ይገምግሙ እና ይቀልብሱ",
-  "loadingChanges": "ለውጦችን በመጫን ላይ…",
-  "noChanges": "ምንም ለውጦች የሉም",
+  loadingChanges: "ለውጦችን በመጫን ላይ…",
+  noChanges: "ምንም ለውጦች የሉም",
 }

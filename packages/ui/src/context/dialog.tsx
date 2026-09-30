@@ -117,7 +117,11 @@ function init() {
     if (state.disposed) return
     const id = key ?? Math.random().toString(36).slice(2)
     // The layer follows the dialog's current place in the stack, so a new top dialog always renders above.
-    const layer = () => Math.max(0, stack().findIndex((item) => item.id === id))
+    const layer = () =>
+      Math.max(
+        0,
+        stack().findIndex((item) => item.id === id),
+      )
     const zIndex = () => String(50 + layer() * 10)
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined

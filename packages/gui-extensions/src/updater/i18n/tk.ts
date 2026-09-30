@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Döwrebap",
   "toast.latest.description": "OpenCode-iň iň soňky wersiýasyny işleýärsiňiz.",
   "migration.title": "Beta-dan Stable-a geç",
-  "migration.description": "Häzirlikçe OpenCode Beta OpenCode Stable-a geçýär. Täzelenmeleri almagy dowam etdirmek üçin {{version}} wersiýasyny ýükläp alyň, soňra OpenCode-y disk şekilinden guruň.",
+  "migration.description":
+    "Häzirlikçe OpenCode Beta OpenCode Stable-a geçýär. Täzelenmeleri almagy dowam etdirmek üçin {{version}} wersiýasyny ýükläp alyň, soňra OpenCode-y disk şekilinden guruň.",
   "section.title": "Täzelenmeler",
   "releaseNotes.title": "Bellikleri goýberiň",
   "releaseNotes.description": "Täzelenmelerden soň täze çykýanlary görkeziň",

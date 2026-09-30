@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Düzediş zolagyny aç/ýap",
   "status.toggle": "Düzediş gurallaryny aç/ýap",
-  "ariaLabel": "Ösüş öndürijiligini anyklaýyş",
-  "providerAriaLabel": "Hyzmat üpjünçiniň öndürijilik diagnostikasy",
-  "na": "n / a",
+  ariaLabel: "Ösüş öndürijiligini anyklaýyş",
+  providerAriaLabel: "Hyzmat üpjünçiniň öndürijilik diagnostikasy",
+  na: "n / a",
   "ttft.label": "TTFT",
   "ttft.tip": "Hyzmat üpjünçä haýyş iberilenden modeliň ilkinji çykyşyna çenli wagt.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Hyzmat üpjünçä haýyş iberilenden jogap akymynyň tamamlanmagyna çenli wagt.",
   "nav.label": "NAV",
-  "nav.tip": "Iň soňky tamamlanan marşrut geçiş, sessiýa sahypasyna degip, marşrutizatoryň başyndan başlap, birinji boýag kesgitlenýänçä ölçelýär.",
+  "nav.tip":
+    "Iň soňky tamamlanan marşrut geçiş, sessiýa sahypasyna degip, marşrutizatoryň başyndan başlap, birinji boýag kesgitlenýänçä ölçelýär.",
   "fps.label": "FPS",
   "fps.tip": "Soňky 5 sekuntda sekuntda aýlaw çarçuwalary.",
   "frame.label": "FRAME",

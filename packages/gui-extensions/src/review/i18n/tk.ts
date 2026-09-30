@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Entek hiç hili şahamça üýtgemeýär",
   "git.title": "Git ammary dörediň",
   "git.description": "Bu taslamadaky üýtgeşmeleri yzarlaň, gözden geçiriň we yzyna alyň",
-  "loadingChanges": "Üýtgeşmeler ýüklenýär …",
-  "noChanges": "Üýtgeşme ýok",
+  loadingChanges: "Üýtgeşmeler ýüklenýär …",
+  noChanges: "Üýtgeşme ýok",
 }

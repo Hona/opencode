@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "Та шинэчлэгдсэн байна",
   "toast.latest.description": "Та OpenCode-н хамгийн сүүлийн хувилбарыг ажиллуулж байна.",
   "migration.title": "Beta хувилбараас Stable хувилбар руу шилжих",
-  "migration.description": "Одоогоор OpenCode Beta нь OpenCode Stable руу шилжиж байна. Шинэчлэлтүүдийг үргэлжлүүлэн авахын тулд {{version}} хувилбарыг татаж аваад OpenCode-ийг дискний дүрсээс суулгана уу.",
+  "migration.description":
+    "Одоогоор OpenCode Beta нь OpenCode Stable руу шилжиж байна. Шинэчлэлтүүдийг үргэлжлүүлэн авахын тулд {{version}} хувилбарыг татаж аваад OpenCode-ийг дискний дүрсээс суулгана уу.",
   "section.title": "Шинэчлэлтүүд",
   "releaseNotes.title": "Гаргасан тэмдэглэл",
-  "releaseNotes.description": "Шинэчлэгдсэний дараа \"Ямар шинэ зүйл\" цонхыг харуул",
+  "releaseNotes.description": 'Шинэчлэгдсэний дараа "Ямар шинэ зүйл" цонхыг харуул',
   "check.title": "Шинэчлэлт байгаа эсэхийг шалгана уу",
   "check.description": "Шинэчлэлтүүдийг гараар шалгаж, боломжтой бол суулгана уу",
   "menu.check": "Шинэчлэлтүүдийг шалгана уу…",

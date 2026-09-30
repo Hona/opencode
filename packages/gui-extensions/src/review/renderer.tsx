@@ -36,12 +36,18 @@ const setup: Setup = (ctx) => {
   const [diff, setDiff] = storage.store("diff", {
     schema: DiffState,
     initial: { diffStyle: "split" },
-    from: { key: "layout", pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }) },
+    from: {
+      key: "layout",
+      pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }),
+    },
   })
   const [panel, setPanel] = storage.store("panel", {
     schema: PanelState,
     initial: { expandMode: "collapse" },
-    from: { key: "review-panel-v2", pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }) },
+    from: {
+      key: "review-panel-v2",
+      pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }),
+    },
   })
   // The host's inner sidebar preference, mirrored by the review render for the tab's focus rule.
   const [sidebar, setSidebar] = storage.memory("sidebar", { initial: { opened: true } })

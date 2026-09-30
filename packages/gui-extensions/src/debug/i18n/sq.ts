@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Shfaq ose fshih shiritin e diagnostikimit",
   "status.toggle": "Ndrysho mjetet e korrigjimit",
-  "ariaLabel": "Diagnostifikimi i performancës së zhvillimit",
-  "providerAriaLabel": "Diagnostikimi i performancës së ofruesit",
-  "na": "n/a",
+  ariaLabel: "Diagnostifikimi i performancës së zhvillimit",
+  providerAriaLabel: "Diagnostikimi i performancës së ofruesit",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Koha nga dërgimi i kërkesës te ofruesi deri te dalja e parë e modelit.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Koha nga dërgimi i kërkesës te ofruesi deri në përfundimin e rrjedhës së përgjigjes.",
   "nav.label": "NAV",
-  "nav.tip": "Tranzicioni i fundit i përfunduar i rrugës duke prekur një faqe sesioni, i matur nga fillimi i routerit deri në bojën e parë pasi të vendoset.",
+  "nav.tip":
+    "Tranzicioni i fundit i përfunduar i rrugës duke prekur një faqe sesioni, i matur nga fillimi i routerit deri në bojën e parë pasi të vendoset.",
   "fps.label": "FPS",
   "fps.tip": "Korniza rrotulluese për sekondë gjatë 5 sekondave të fundit.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Vonesa më e keqe e vërejtur e hyrjes në 5 sekondat e fundit.",
   "inp.label": "INP",
-  "inp.tip": "Kohëzgjatja e përafërt e ndërveprimit gjatë 5 sekondave të fundit. Ky është i ngjashëm me INP, jo Web Vitals zyrtar INP.",
+  "inp.tip":
+    "Kohëzgjatja e përafërt e ndërveprimit gjatë 5 sekondave të fundit. Ky është i ngjashëm me INP, jo Web Vitals zyrtar INP.",
   "cls.label": "CLS",
   "cls.tip": "Zhvendosja kumulative e paraqitjes për jetëgjatësinë aktuale të aplikacionit.",
   "mem.label": "MEM",

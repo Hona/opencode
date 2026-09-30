@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "තවත් බෙදාහැරීමක් අවශ්‍යද?",
   "onboarding.needAnotherDistroHint": "WSL නාමාවලියෙන් Linux බෙදාහැරීමක් ස්ථාපනය කරන්න",
   "onboarding.wslNotInstalled.title": "WSL ස්ථාපනය කර නැත",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Linux සඳහා උප පද්ධතිය) OpenCode WSL සේවාදායකයක් එක් කිරීමට පෙර අවශ්‍ය වේ",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Linux සඳහා උප පද්ධතිය) OpenCode WSL සේවාදායකයක් එක් කිරීමට පෙර අවශ්‍ය වේ",
   "onboarding.wslUnavailable.title": "WSL නොමැත",
   "onboarding.wslUnavailable.description": "OpenCode හට මෙම යන්ත්‍රයේ WSL සත්‍යාපනය කළ නොහැක.",
   "onboarding.installWsl": "WSL ස්ථාපනය කරන්න",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "මෙම distro හි opencode ස්ථාපනය කර නොමැත",
   "error.opencodeCannotRun": "opencode ස්ථාපනය කර ඇති නමුත් ධාවනය කල නොහැක",
   "error.opencodeNotInstalled": "OpenCode {{distro}} හි ස්ථාපනය කර නැත",
-  "error.updateVersion": "OpenCode යාවත්කාලීන කිරීම අවසන් නමුත් {{distro}} තවමත් වාර්තා කරන්නේ {{installed}}; අපේක්ෂිත {{expected}}",
+  "error.updateVersion":
+    "OpenCode යාවත්කාලීන කිරීම අවසන් නමුත් {{distro}} තවමත් වාර්තා කරන්නේ {{installed}}; අපේක්ෂිත {{expected}}",
   "error.noVersion": "අනුවාදයක් නැත",
   "error.serverExited": "WSL සේවාදායකය ආරම්භයෙන් පසු ඉවත් විය (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL සේවාදායකය නිරෝගී වීමට පෙර ඉවත් විය (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL සේවාදායකය නිරෝගී වීමට පෙර ඉවත් විය (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} සෞඛ්‍ය පරීක්‍ෂාව සඳහා සයිඩ්කාර් {{timeout}}ms ට පසුව කල් ඉකුත් විය",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}msට පසුව කාලය අවසන් විය",
   "error.failedPort": "වරාය ලබා ගැනීමට අසමත් විය",

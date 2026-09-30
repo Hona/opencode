@@ -10,6 +10,6 @@ export default {
   "empty.branch": "Nicio modificare pe ramură încă",
   "git.title": "Creează un depozit Git",
   "git.description": "Urmărește, revizuiește și anulează modificările din acest proiect",
-  "loadingChanges": "Se încarcă modificările…",
-  "noChanges": "Nicio modificare",
+  loadingChanges: "Se încarcă modificările…",
+  noChanges: "Nicio modificare",
 }

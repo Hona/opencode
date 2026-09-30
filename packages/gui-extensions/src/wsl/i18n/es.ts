@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "¿Necesitas otra distribución?",
   "onboarding.needAnotherDistroHint": "Instala una distribución de Linux desde el catálogo de WSL",
   "onboarding.wslNotInstalled.title": "WSL no está instalado",
-  "onboarding.wslNotInstalled.description": "Se necesita WSL (Subsistema de Windows para Linux) para que OpenCode pueda añadir un servidor WSL",
+  "onboarding.wslNotInstalled.description":
+    "Se necesita WSL (Subsistema de Windows para Linux) para que OpenCode pueda añadir un servidor WSL",
   "onboarding.wslUnavailable.title": "WSL no disponible",
   "onboarding.wslUnavailable.description": "OpenCode no pudo comprobar WSL en este equipo.",
   "onboarding.installWsl": "Instalar WSL",
-  "onboarding.windowsRestartRequired": "Reinicia Windows para terminar de instalar WSL y, después, vuelve a abrir OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Reinicia Windows para terminar de instalar WSL y, después, vuelve a abrir OpenCode.",
   "onboarding.allDistrosAdded": "Ya se han añadido todas las distribuciones instaladas.",
   "onboarding.noDistros": "Aún no se han detectado distribuciones.",
   "onboarding.installDistro": "Instalar distribución",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode no está instalado en esta distribución",
   "error.opencodeCannotRun": "opencode está instalado, pero no se pudo ejecutar",
   "error.opencodeNotInstalled": "OpenCode no está instalado en {{distro}}",
-  "error.updateVersion": "La actualización de OpenCode finalizó, pero {{distro}} sigue indicando {{installed}}; se esperaba {{expected}}",
+  "error.updateVersion":
+    "La actualización de OpenCode finalizó, pero {{distro}} sigue indicando {{installed}}; se esperaba {{expected}}",
   "error.noVersion": "sin versión",
   "error.serverExited": "El servidor WSL se cerró después de iniciarse (código={{code}} señal={{signal}})",
-  "error.serverExitedBeforeHealthy": "El servidor WSL se cerró antes de estar operativo (código={{code}} señal={{signal}}){{output}}",
-  "error.healthTimeout": "Se agotó el tiempo de espera de la comprobación de estado del sidecar de {{distro}} tras {{timeout}} ms",
+  "error.serverExitedBeforeHealthy":
+    "El servidor WSL se cerró antes de estar operativo (código={{code}} señal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Se agotó el tiempo de espera de la comprobación de estado del sidecar de {{distro}} tras {{timeout}} ms",
   "error.commandTimeout": "Se agotó el tiempo de espera de {{command}} {{args}} tras {{timeout}} ms",
   "error.failedPort": "No se pudo obtener el puerto",
   "server.default": "Predeterminado",

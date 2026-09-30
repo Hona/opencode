@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Treba ti druga distribucija?",
   "onboarding.needAnotherDistroHint": "Instaliraj Linux distribuciju iz WSL kataloga",
   "onboarding.wslNotInstalled.title": "WSL nije instaliran",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) je potreban da bi OpenCode mogao dodati WSL server",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) je potreban da bi OpenCode mogao dodati WSL server",
   "onboarding.wslUnavailable.title": "WSL nije dostupan",
   "onboarding.wslUnavailable.description": "OpenCode nije mogao provjeriti WSL na ovom uređaju.",
   "onboarding.installWsl": "Instaliraj WSL",
-  "onboarding.windowsRestartRequired": "Ponovo pokreni Windows da završiš instalaciju WSL-a, zatim ponovo otvori OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Ponovo pokreni Windows da završiš instalaciju WSL-a, zatim ponovo otvori OpenCode.",
   "onboarding.allDistrosAdded": "Sve instalirane distribucije su već dodane.",
   "onboarding.noDistros": "Još nema otkrivenih distribucija.",
   "onboarding.installDistro": "Instaliraj distribuciju",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "opencode nije instaliran u ovoj distribuciji",
   "error.opencodeCannotRun": "opencode je instaliran, ali se ne može pokrenuti",
   "error.opencodeNotInstalled": "OpenCode nije instaliran u distribuciji {{distro}}",
-  "error.updateVersion": "Ažuriranje OpenCode-a je završeno, ali {{distro}} i dalje prijavljuje {{installed}}; očekivano je {{expected}}",
+  "error.updateVersion":
+    "Ažuriranje OpenCode-a je završeno, ali {{distro}} i dalje prijavljuje {{installed}}; očekivano je {{expected}}",
   "error.noVersion": "nema verzije",
   "error.serverExited": "WSL server se zatvorio nakon pokretanja (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL server se zatvorio prije nego što je postao dostupan (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "Isteklo je vrijeme provjere dostupnosti komponente Sidecar za {{distro}} nakon {{timeout}} ms",
+  "error.serverExitedBeforeHealthy":
+    "WSL server se zatvorio prije nego što je postao dostupan (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "Isteklo je vrijeme provjere dostupnosti komponente Sidecar za {{distro}} nakon {{timeout}} ms",
   "error.commandTimeout": "Isteklo je vrijeme za {{command}} {{args}} nakon {{timeout}} ms",
   "error.failedPort": "Nije uspjelo dohvaćanje porta",
   "server.default": "Podrazumijevano",

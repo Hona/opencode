@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Oled kursis",
   "toast.latest.description": "Kasutate rakenduse OpenCode uusimat versiooni.",
   "migration.title": "Liigu beetaversioonilt stabiilsele versioonile",
-  "migration.description": "Praegu liigub OpenCode Beta versioonile OpenCode Stable. Laadi alla versioon {{version}} ja installi OpenCode kettatõmmiselt, et jätkata uuenduste saamist.",
+  "migration.description":
+    "Praegu liigub OpenCode Beta versioonile OpenCode Stable. Laadi alla versioon {{version}} ja installi OpenCode kettatõmmiselt, et jätkata uuenduste saamist.",
   "section.title": "Värskendused",
   "releaseNotes.title": "Väljalaske märkmed",
   "releaseNotes.description": "Kuva Mis on uut hüpikaknad pärast värskendusi",

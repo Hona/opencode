@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Aktifkan/nonaktifkan bilah debug",
   "status.toggle": "Alihkan alat debug",
-  "ariaLabel": "Diagnostik kinerja pengembangan",
-  "providerAriaLabel": "Diagnostik kinerja penyedia",
-  "na": "n/a",
+  ariaLabel: "Diagnostik kinerja pengembangan",
+  providerAriaLabel: "Diagnostik kinerja penyedia",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Waktu sejak permintaan dikirim ke penyedia hingga keluaran pertama model.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Waktu sejak permintaan dikirim ke penyedia hingga aliran responsnya berakhir.",
   "nav.label": "NAV",
-  "nav.tip": "Transisi rute terakhir yang mencapai halaman sesi, diukur sejak perute dimulai hingga render pertama setelah stabil.",
+  "nav.tip":
+    "Transisi rute terakhir yang mencapai halaman sesi, diukur sejak perute dimulai hingga render pertama setelah stabil.",
   "fps.label": "FPS",
   "fps.tip": "Frame per detik yang dihitung secara bergulir selama 5 detik terakhir.",
   "frame.label": "FRAME",

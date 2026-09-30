@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Þarftu aðra dreifingu?",
   "onboarding.needAnotherDistroHint": "Settu upp Linux dreifingu úr WSL vörulistanum",
   "onboarding.wslNotInstalled.title": "WSL ekki uppsett",
-  "onboarding.wslNotInstalled.description": "WSL (Windows undirkerfi fyrir Linux) þarf áður en OpenCode getur bætt við WSL netþjóni",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows undirkerfi fyrir Linux) þarf áður en OpenCode getur bætt við WSL netþjóni",
   "onboarding.wslUnavailable.title": "WSL ekki í boði",
   "onboarding.wslUnavailable.description": "OpenCode gat ekki staðfest WSL á þessari vél.",
   "onboarding.installWsl": "Settu upp WSL",
@@ -44,7 +45,8 @@ export default {
   "error.updateVersion": "Uppfærslu OpenCode lauk en {{distro}} tilkynnir enn {{installed}}; vænt var {{expected}}",
   "error.noVersion": "engin útgáfa",
   "error.serverExited": "WSL-þjónn hætti eftir ræsingu (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-þjónn hætti áður en hann varð starfhæfur (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL-þjónn hætti áður en hann varð starfhæfur (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Tímamörk heilsuprófunar hliðarferlis fyrir {{distro}} runnu út eftir {{timeout}} ms",
   "error.commandTimeout": "Tímamörk {{command}} {{args}} runnu út eftir {{timeout}} ms",
   "error.failedPort": "Ekki tókst að sækja gátt",

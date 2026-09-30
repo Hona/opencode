@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Preklopi vrstico za razhroščevanje",
   "status.toggle": "Preklop orodij za odpravljanje napak",
-  "ariaLabel": "Diagnostika uspešnosti razvoja",
-  "providerAriaLabel": "Diagnostika učinkovitosti ponudnika",
-  "na": "n/a",
+  ariaLabel: "Diagnostika uspešnosti razvoja",
+  providerAriaLabel: "Diagnostika učinkovitosti ponudnika",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Čas od pošiljanja zahteve ponudniku do prvega izhoda modela.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Čas od pošiljanja zahteve ponudniku do konca toka odgovora.",
   "nav.label": "NAV",
-  "nav.tip": "Zadnji zaključen prehod poti, ki se je dotaknil strani seje, merjeno od začetka usmerjevalnika do prve barve po tem, ko se poravna.",
+  "nav.tip":
+    "Zadnji zaključen prehod poti, ki se je dotaknil strani seje, merjeno od začetka usmerjevalnika do prve barve po tem, ko se poravna.",
   "fps.label": "FPS",
   "fps.tip": "Vrtenje sličic na sekundo v zadnjih 5 sekundah.",
   "frame.label": "FRAME",

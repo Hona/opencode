@@ -23,7 +23,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "ဖွင့်ရန် ဖိုင်တစ်ခုကို ရွေးပါ။",
+  selectToOpen: "ဖွင့်ရန် ဖိုင်တစ်ခုကို ရွေးပါ။",
   "open.finder": "ရှာဖွေသူ",
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "ဖိုင်မန်နေဂျာ",

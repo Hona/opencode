@@ -10,6 +10,6 @@ export default {
   "empty.branch": "Ancora nessuna modifica del branch",
   "git.title": "Crea un repository Git",
   "git.description": "Tieni traccia, rivedi e annulla le modifiche in questo progetto",
-  "loadingChanges": "Caricamento modifiche…",
-  "noChanges": "Nessuna modifica",
+  loadingChanges: "Caricamento modifiche…",
+  noChanges: "Nessuna modifica",
 }

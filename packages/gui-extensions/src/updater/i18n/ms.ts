@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Anda sudah terkini",
   "toast.latest.description": "Anda sedang menggunakan versi terkini OpenCode.",
   "migration.title": "Beralih daripada Beta kepada Stabil",
-  "migration.description": "Buat masa ini, OpenCode Beta sedang beralih kepada OpenCode Stabil. Muat turun versi {{version}}, kemudian pasang OpenCode daripada imej cakera untuk terus menerima kemas kini.",
+  "migration.description":
+    "Buat masa ini, OpenCode Beta sedang beralih kepada OpenCode Stabil. Muat turun versi {{version}}, kemudian pasang OpenCode daripada imej cakera untuk terus menerima kemas kini.",
   "section.title": "Kemas kini",
   "releaseNotes.title": "Nota keluaran",
   "releaseNotes.description": "Papar tetingkap Apa Yang Baharu selepas kemas kini",

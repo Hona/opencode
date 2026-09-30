@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Kell még egy disztró?",
   "onboarding.needAnotherDistroHint": "Telepítsen egy Linux disztribúciót a WSL katalógusból",
   "onboarding.wslNotInstalled.title": "A WSL nincs telepítve",
-  "onboarding.wslNotInstalled.description": "A WSL (Windows alrendszer a Linux számára) szükséges ahhoz, hogy a OpenCode hozzáadhasson egy WSL szervert",
+  "onboarding.wslNotInstalled.description":
+    "A WSL (Windows alrendszer a Linux számára) szükséges ahhoz, hogy a OpenCode hozzáadhasson egy WSL szervert",
   "onboarding.wslUnavailable.title": "A WSL nem elérhető",
   "onboarding.wslUnavailable.description": "A OpenCode nem tudta ellenőrizni a WSL jelet ezen a gépen.",
   "onboarding.installWsl": "Telepítse a WSL-t",
-  "onboarding.windowsRestartRequired": "Indítsa újra a Windows programot a WSL telepítésének befejezéséhez, majd nyissa meg újra a OpenCode programot.",
+  "onboarding.windowsRestartRequired":
+    "Indítsa újra a Windows programot a WSL telepítésének befejezéséhez, majd nyissa meg újra a OpenCode programot.",
   "onboarding.allDistrosAdded": "Az összes telepített disztribúció már hozzáadva van.",
   "onboarding.noDistros": "Még nem észleltek disztribúciót.",
   "onboarding.installDistro": "Telepítse a disztribúciót",
@@ -41,11 +43,14 @@ export default {
   "error.opencodeMissing": "Az opencode nincs telepítve ebben a disztribúcióban",
   "error.opencodeCannotRun": "Az opencode telepítve van, de nem futtatható",
   "error.opencodeNotInstalled": "Az OpenCode nincs telepítve ebben: {{distro}}",
-  "error.updateVersion": "Az OpenCode frissítése befejeződött, de a(z) {{distro}} továbbra is ezt jelenti: {{installed}}; a várt érték: {{expected}}",
+  "error.updateVersion":
+    "Az OpenCode frissítése befejeződött, de a(z) {{distro}} továbbra is ezt jelenti: {{installed}}; a várt érték: {{expected}}",
   "error.noVersion": "nincs verzió",
   "error.serverExited": "A WSL-kiszolgáló indítás után kilépett (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "A WSL-kiszolgáló azelőtt kilépett, hogy üzemkésszé vált volna (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "A(z) {{distro}} segédfolyamatának állapotellenőrzése {{timeout}} ms után időtúllépés miatt megszakadt",
+  "error.serverExitedBeforeHealthy":
+    "A WSL-kiszolgáló azelőtt kilépett, hogy üzemkésszé vált volna (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "A(z) {{distro}} segédfolyamatának állapotellenőrzése {{timeout}} ms után időtúllépés miatt megszakadt",
   "error.commandTimeout": "A(z) {{command}} {{args}} parancs {{timeout}} ms után időtúllépés miatt megszakadt",
   "error.failedPort": "A port lekérése sikertelen",
   "server.default": "Alapértelmezett",

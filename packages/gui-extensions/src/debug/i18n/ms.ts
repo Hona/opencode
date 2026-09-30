@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Togol bar nyahpepijat",
   "status.toggle": "Togol alat nyahpepijat",
-  "ariaLabel": "Diagnostik prestasi pembangunan",
-  "providerAriaLabel": "Diagnostik prestasi penyedia",
-  "na": "tiada",
+  ariaLabel: "Diagnostik prestasi pembangunan",
+  providerAriaLabel: "Diagnostik prestasi penyedia",
+  na: "tiada",
   "ttft.label": "TTFT",
   "ttft.tip": "Masa dari penghantaran permintaan penyedia hingga output pertama model.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Masa dari penghantaran permintaan penyedia hingga strim responsnya tamat.",
   "nav.label": "NAV",
-  "nav.tip": "Peralihan laluan terakhir yang melibatkan halaman sesi, diukur dari permulaan router hingga cat pertama selepas ia stabil.",
+  "nav.tip":
+    "Peralihan laluan terakhir yang melibatkan halaman sesi, diukur dari permulaan router hingga cat pertama selepas ia stabil.",
   "fps.label": "FPS",
   "fps.tip": "Bingkai sesaat bergolek dalam 5 saat terakhir.",
   "frame.label": "FRAME",

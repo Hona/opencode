@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Nepieciešama cita distribūcija?",
   "onboarding.needAnotherDistroHint": "Instalējiet Linux distribūciju no WSL kataloga",
   "onboarding.wslNotInstalled.title": "WSL nav instalēts",
-  "onboarding.wslNotInstalled.description": "Pirms OpenCode var pievienot WSL serveri, nepieciešams WSL (Windows Subsystem for Linux)",
+  "onboarding.wslNotInstalled.description":
+    "Pirms OpenCode var pievienot WSL serveri, nepieciešams WSL (Windows Subsystem for Linux)",
   "onboarding.wslUnavailable.title": "WSL nav pieejams",
   "onboarding.wslUnavailable.description": "OpenCode neizdevās pārbaudīt WSL šajā datorā.",
   "onboarding.installWsl": "Instalēt WSL",
-  "onboarding.windowsRestartRequired": "Restartējiet Windows, lai pabeigtu WSL instalēšanu, pēc tam atveriet OpenCode no jauna.",
+  "onboarding.windowsRestartRequired":
+    "Restartējiet Windows, lai pabeigtu WSL instalēšanu, pēc tam atveriet OpenCode no jauna.",
   "onboarding.allDistrosAdded": "Visas instalētās distribūcijas jau ir pievienotas.",
   "onboarding.noDistros": "Distribūcijas vēl nav atrastas.",
   "onboarding.installDistro": "Instalēt distribūciju",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode nav instalēts šajā distribūcijā",
   "error.opencodeCannotRun": "opencode ir instalēts, bet to nevar palaist",
   "error.opencodeNotInstalled": "OpenCode nav instalēts {{distro}}",
-  "error.updateVersion": "OpenCode atjaunināšana pabeigta, bet {{distro}} joprojām rāda {{installed}}; gaidīts {{expected}}",
+  "error.updateVersion":
+    "OpenCode atjaunināšana pabeigta, bet {{distro}} joprojām rāda {{installed}}; gaidīts {{expected}}",
   "error.noVersion": "nav versijas",
   "error.serverExited": "WSL serveris izslēdzās pēc palaišanas (kods={{code}} signāls={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL serveris izslēdzās pirms kļuva gatavs darbam (kods={{code}} signāls={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL serveris izslēdzās pirms kļuva gatavs darbam (kods={{code}} signāls={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} pārbaudes Sidecar laiks beidzās pēc {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} laiks beidzās pēc {{timeout}} ms",
   "error.failedPort": "Neizdevās iegūt portu",

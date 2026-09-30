@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "ཁྱོད་དུས་དང་བསྟུན།",
   "toast.latest.description": "ཁྱོད་ཀྱིས་ OpenCodeགི་ཐོན་རིམ་གསརཔ་འདི་གཡོག་བཀོལ་དོ།",
   "migration.title": "Beta ལས་ Stable ལུ་སྤོ།",
-  "migration.description": "ད་ལྟོའི་རིང་ལུ་ OpenCode Beta འདི་ OpenCode Stable ལུ་སྤོ་དོ། དུས་མཐུན་ཚུ་འཕྲོ་མཐུད་དེ་ཐོབ་ནི་ལུ་ ཐོན་རིམ་ {{version}} ཕབ་ལེན་འབད་དེ་ ཌིཀསི་གཟུགས་བརྙན་ལས་ OpenCode གཞི་བཙུགས་འབད།",
+  "migration.description":
+    "ད་ལྟོའི་རིང་ལུ་ OpenCode Beta འདི་ OpenCode Stable ལུ་སྤོ་དོ། དུས་མཐུན་ཚུ་འཕྲོ་མཐུད་དེ་ཐོབ་ནི་ལུ་ ཐོན་རིམ་ {{version}} ཕབ་ལེན་འབད་དེ་ ཌིཀསི་གཟུགས་བརྙན་ལས་ OpenCode གཞི་བཙུགས་འབད།",
   "section.title": "དུས་མཐུན།",
   "releaseNotes.title": "འགྲེམ་སྤེལ་དྲན་ཐོ།",
   "releaseNotes.description": "དུས་མཐུན་བཟོ་ཚར་བའི་ཤུལ་ལས་ པོཔ་ཨཔ་གསརཔ་ག་ཅི་ཡོདཔ་ཨིན་ན་སྟོན།",

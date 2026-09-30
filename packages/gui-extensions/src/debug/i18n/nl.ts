@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Debugbalk in-/uitschakelen",
   "status.toggle": "Debughulpmiddelen in-/uitschakelen",
-  "ariaLabel": "Diagnostiek voor ontwikkelprestaties",
-  "providerAriaLabel": "Prestatiediagnose van provider",
-  "na": "n.v.t.",
+  ariaLabel: "Diagnostiek voor ontwikkelprestaties",
+  providerAriaLabel: "Prestatiediagnose van provider",
+  na: "n.v.t.",
   "ttft.label": "TTFT",
   "ttft.tip": "Tijd vanaf het verzenden van de provideraanvraag tot de eerste modeluitvoer.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tijd vanaf het verzenden van de provideraanvraag tot het einde van de antwoordstream.",
   "nav.label": "NAV",
-  "nav.tip": "Laatst voltooide routenavigatie naar of binnen een sessiepagina, gemeten vanaf het starten van de router tot de eerste render nadat de navigatie is voltooid.",
+  "nav.tip":
+    "Laatst voltooide routenavigatie naar of binnen een sessiepagina, gemeten vanaf het starten van de router tot de eerste render nadat de navigatie is voltooid.",
   "fps.label": "FPS",
   "fps.tip": "Voortschrijdend aantal frames per seconde over de afgelopen 5 seconden.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "VERTRAGING",
   "delay.tip": "Slechtst waargenomen invoervertraging in de afgelopen 5 seconden.",
   "inp.label": "INP",
-  "inp.tip": "Geschatte interactieduur gedurende de afgelopen 5 seconden. Dit is INP-achtig, niet de officiële Web Vitals INP.",
+  "inp.tip":
+    "Geschatte interactieduur gedurende de afgelopen 5 seconden. Dit is INP-achtig, niet de officiële Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Cumulatieve lay-outverschuiving sinds de app is gestart.",
   "mem.label": "MEM",

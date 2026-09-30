@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "تسی تازہ ترین او",
   "toast.latest.description": "تسی OpenCode دا تازہ ترین ورژن چلا رئے او۔",
   "migration.title": "بیٹا توں مستحکم ورژن ول جاؤ",
-  "migration.description": "فی الحال OpenCode Beta نوں OpenCode Stable وچ منتقل کیتا جا ریا اے۔ ورژن ⁨{{version}}⁩ ڈاؤن لوڈ کرو، فیر اپ ڈیٹ ملدے رہن لئی ڈسک امیج توں OpenCode انسٹال کرو۔",
+  "migration.description":
+    "فی الحال OpenCode Beta نوں OpenCode Stable وچ منتقل کیتا جا ریا اے۔ ورژن ⁨{{version}}⁩ ڈاؤن لوڈ کرو، فیر اپ ڈیٹ ملدے رہن لئی ڈسک امیج توں OpenCode انسٹال کرو۔",
   "section.title": "اپ ڈیٹس",
   "releaseNotes.title": "ریلیز نوٹ",
   "releaseNotes.description": "اپ ڈیٹ پچھوں 'نواں کی اے' پاپ اپ وکھاؤ",

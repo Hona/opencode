@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Perlukan distro lain?",
   "onboarding.needAnotherDistroHint": "Pasang distribusi Linux daripada katalog WSL",
   "onboarding.wslNotInstalled.title": "WSL belum dipasang",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) diperlukan sebelum OpenCode boleh menambah pelayan WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) diperlukan sebelum OpenCode boleh menambah pelayan WSL",
   "onboarding.wslUnavailable.title": "WSL tidak tersedia",
   "onboarding.wslUnavailable.description": "OpenCode tidak dapat mengesahkan WSL pada mesin ini.",
   "onboarding.installWsl": "Pasang WSL",
-  "onboarding.windowsRestartRequired": "Mulakan semula Windows untuk menyiapkan pemasangan WSL, kemudian buka semula OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Mulakan semula Windows untuk menyiapkan pemasangan WSL, kemudian buka semula OpenCode.",
   "onboarding.allDistrosAdded": "Semua distro yang dipasang telah pun ditambah.",
   "onboarding.noDistros": "Tiada distro dikesan lagi.",
   "onboarding.installDistro": "Pasang distro",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode tidak dipasang dalam distro ini",
   "error.opencodeCannotRun": "opencode dipasang tetapi tidak dapat dijalankan",
   "error.opencodeNotInstalled": "OpenCode tidak dipasang dalam {{distro}}",
-  "error.updateVersion": "Kemas kini OpenCode selesai tetapi {{distro}} masih melaporkan {{installed}}; sepatutnya {{expected}}",
+  "error.updateVersion":
+    "Kemas kini OpenCode selesai tetapi {{distro}} masih melaporkan {{installed}}; sepatutnya {{expected}}",
   "error.noVersion": "tiada versi",
   "error.serverExited": "Pelayan WSL telah keluar selepas permulaan (kod={{code}} isyarat={{signal}})",
-  "error.serverExitedBeforeHealthy": "Pelayan WSL keluar sebelum menjadi sihat (kod={{code}} isyarat={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Pelayan WSL keluar sebelum menjadi sihat (kod={{code}} isyarat={{signal}}){{output}}",
   "error.healthTimeout": "Semakan kesihatan Sidecar untuk {{distro}} tamat masa selepas {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} tamat masa selepas {{timeout}}ms",
   "error.failedPort": "Gagal mendapatkan port",

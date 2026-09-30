@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Boshqa tarqatish kerakmi?",
   "onboarding.needAnotherDistroHint": "WSL katalogidan Linux distributivini o'rnating",
   "onboarding.wslNotInstalled.title": "WSL o'rnatilmagan",
-  "onboarding.wslNotInstalled.description": "OpenCode WSL serverini qoʻshishdan oldin WSL (Linux uchun Windows quyi tizimi) talab qilinadi.",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode WSL serverini qoʻshishdan oldin WSL (Linux uchun Windows quyi tizimi) talab qilinadi.",
   "onboarding.wslUnavailable.title": "WSL mavjud emas",
   "onboarding.wslUnavailable.description": "OpenCode WSL ni ushbu mashinada tasdiqlay olmadi.",
   "onboarding.installWsl": "WSL-ni o'rnating",
-  "onboarding.windowsRestartRequired": "WSL-ni o'rnatishni tugatish uchun Windows-ni qayta ishga tushiring, so'ngra OpenCode-ni qayta oching.",
+  "onboarding.windowsRestartRequired":
+    "WSL-ni o'rnatishni tugatish uchun Windows-ni qayta ishga tushiring, so'ngra OpenCode-ni qayta oching.",
   "onboarding.allDistrosAdded": "Barcha o'rnatilgan tarqatishlar allaqachon qo'shilgan.",
   "onboarding.noDistros": "Hali hech qanday tarqatish aniqlanmadi.",
   "onboarding.installDistro": "Distroni o'rnating",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "Opencode ushbu tarqatishda o'rnatilmagan",
   "error.opencodeCannotRun": "opencode o'rnatilgan, lekin ishga tushirilmadi",
   "error.opencodeNotInstalled": "OpenCode {{distro}} da o'rnatilmagan",
-  "error.updateVersion": "OpenCode yangilanishi tugallandi, lekin {{distro}} hali ham {{installed}} haqida xabar beradi; kutilgan {{expected}}",
+  "error.updateVersion":
+    "OpenCode yangilanishi tugallandi, lekin {{distro}} hali ham {{installed}} haqida xabar beradi; kutilgan {{expected}}",
   "error.noVersion": "versiya yo'q",
   "error.serverExited": "WSL server ishga tushirilgandan so'ng chiqdi (kod = {{code}} signal = {{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL serveri sog'lom bo'lgunga qadar chiqdi (kod={{code}} signali={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL serveri sog'lom bo'lgunga qadar chiqdi (kod={{code}} signali={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} sog'lig'ini tekshirish uchun yon mashina {{timeout}}ms dan keyin tugadi",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms dan keyin vaqt tugadi",
   "error.failedPort": "Port olinmadi",

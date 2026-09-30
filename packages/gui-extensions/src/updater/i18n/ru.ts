@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "У вас последняя версия",
   "toast.latest.description": "Вы используете последнюю версию OpenCode.",
   "migration.title": "Перейти с Beta на Stable",
-  "migration.description": "Сейчас OpenCode Beta переходит на OpenCode Stable. Скачайте версию {{version}}, затем установите OpenCode из образа диска, чтобы продолжать получать обновления.",
+  "migration.description":
+    "Сейчас OpenCode Beta переходит на OpenCode Stable. Скачайте версию {{version}}, затем установите OpenCode из образа диска, чтобы продолжать получать обновления.",
   "section.title": "Обновления",
   "releaseNotes.title": "Примечания к выпуску",
-  "releaseNotes.description": "Показывать всплывающие окна \"Что нового\" после обновлений",
+  "releaseNotes.description": 'Показывать всплывающие окна "Что нового" после обновлений',
   "check.title": "Проверить обновления",
   "check.description": "Проверить обновления вручную и установить, если доступны",
   "menu.check": "Проверить наличие обновлений…",

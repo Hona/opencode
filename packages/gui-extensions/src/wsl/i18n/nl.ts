@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Nog een distro nodig?",
   "onboarding.needAnotherDistroHint": "Installeer een Linux-distributie uit de WSL-catalogus",
   "onboarding.wslNotInstalled.title": "WSL niet geïnstalleerd",
-  "onboarding.wslNotInstalled.description": "WSL (Windows-subsysteem voor Linux) is vereist voordat OpenCode een WSL-server kan toevoegen",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows-subsysteem voor Linux) is vereist voordat OpenCode een WSL-server kan toevoegen",
   "onboarding.wslUnavailable.title": "WSL niet beschikbaar",
   "onboarding.wslUnavailable.description": "OpenCode kan WSL niet verifiëren op deze machine.",
   "onboarding.installWsl": "Installeer WSL",
-  "onboarding.windowsRestartRequired": "Start Windows opnieuw om de installatie van WSL te voltooien en open vervolgens OpenCode opnieuw.",
+  "onboarding.windowsRestartRequired":
+    "Start Windows opnieuw om de installatie van WSL te voltooien en open vervolgens OpenCode opnieuw.",
   "onboarding.allDistrosAdded": "Alle geïnstalleerde distributies zijn al toegevoegd.",
   "onboarding.noDistros": "Nog geen distributies gedetecteerd.",
   "onboarding.installDistro": "Distro installeren",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode is niet geïnstalleerd in deze distributie",
   "error.opencodeCannotRun": "opencode is geïnstalleerd, maar kan niet worden uitgevoerd",
   "error.opencodeNotInstalled": "OpenCode is niet geïnstalleerd in {{distro}}",
-  "error.updateVersion": "De OpenCode-update is voltooid, maar {{distro}} meldt nog steeds {{installed}}; verwacht: {{expected}}",
+  "error.updateVersion":
+    "De OpenCode-update is voltooid, maar {{distro}} meldt nog steeds {{installed}}; verwacht: {{expected}}",
   "error.noVersion": "geen versie",
   "error.serverExited": "WSL-server is na het opstarten afgesloten (code={{code}} signaal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL-server is afgesloten voordat deze gereed was (code={{code}} signaal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL-server is afgesloten voordat deze gereed was (code={{code}} signaal={{signal}}){{output}}",
   "error.healthTimeout": "Time-out bij statuscontrole van sidecar voor {{distro}} na {{timeout}} ms",
   "error.commandTimeout": "Time-out voor {{command}} {{args}} na {{timeout}} ms",
   "error.failedPort": "Kan poort niet ophalen",

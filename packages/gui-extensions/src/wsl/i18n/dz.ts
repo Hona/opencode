@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "གཞན་མི་ཌི་སི་ཊོ་དགོཔ་ཨིན་ན?",
   "onboarding.needAnotherDistroHint": "WSL ཐོ་གཞུང་ལས་ Linux བགོ་བཀྲམ་ཅིག་གཞི་བཙུགས་འབད།",
   "onboarding.wslNotInstalled.title": "WSL གཞི་བཙུགས་མ་འབད་བས།",
-  "onboarding.wslNotInstalled.description": "WSL (WindowsLinuxཡན་ལག་རིམ་ལུགས་)འདི་ OpenCodeགིས་ WSLསར་བར་ཁ་སྐོང་མ་འབད་བའི་ཧེ་མ་དགོཔ་ཨིན།",
+  "onboarding.wslNotInstalled.description":
+    "WSL (WindowsLinuxཡན་ལག་རིམ་ལུགས་)འདི་ OpenCodeགིས་ WSLསར་བར་ཁ་སྐོང་མ་འབད་བའི་ཧེ་མ་དགོཔ་ཨིན།",
   "onboarding.wslUnavailable.title": "WSL ཐོབ་མི་ཚུགས།",
   "onboarding.wslUnavailable.description": "OpenCodeགིས་ འཕྲུལ་ཆས་འདི་གུ་ WSL བདེན་སྦྱོར་འབད་མ་ཚུགས།",
   "onboarding.installWsl": "WSLགཞི་བཙུགས་འབད།",
-  "onboarding.windowsRestartRequired": "WSL གཞི་བཙུགས་འབད་ནི་མཇུག་བསྡུ་ནིའི་དོན་ལུ་ Windows ལོག་འགོ་བཙུགསཔ་དང་ དེ་ལས་ OpenCode ལོག་ཁ་ཕྱེ།",
+  "onboarding.windowsRestartRequired":
+    "WSL གཞི་བཙུགས་འབད་ནི་མཇུག་བསྡུ་ནིའི་དོན་ལུ་ Windows ལོག་འགོ་བཙུགསཔ་དང་ དེ་ལས་ OpenCode ལོག་ཁ་ཕྱེ།",
   "onboarding.allDistrosAdded": "གཞི་བཙུགས་འབད་ཡོད་པའི་ཌིསི་ཊོ་ཚུ་ཆ་མཉམ་ཧེ་མ་ལས་ཁ་སྐོང་བརྐྱབ་ཡོདཔ་ཨིན།",
   "onboarding.noDistros": "ད་ལྟོ་ཡང་ བཀྲམ་སྤེལ་འབད་མི་ཚུ་ ཤེས་རྟོགས་མ་བྱུང་པས།",
   "onboarding.installDistro": "ཌི་སི་ཊོ་གཞི་བཙུགས་འབད།",
@@ -41,11 +43,15 @@ export default {
   "error.opencodeMissing": "ཌིསི་ཊོ་འདི་ནང་ opencode གཞི་བཙུགས་མ་འབད་བས།",
   "error.opencodeCannotRun": "opencode འདི་གཞི་བཙུགས་འབད་ཡོད་རུང་ གཡོག་བཀོལ་མ་ཚུགས།",
   "error.opencodeNotInstalled": "OpenCode འདི་ {{distro}} ནང་གཞི་བཙུགས་མ་འབད་བས།",
-  "error.updateVersion": "OpenCode དུས་མཐུན་བཟོ་ཚར་ཡི་ དེ་འབདཝ་ད་ {{distro}}གིས་ ད་ལྟོ་ཡང་ {{installed}} སྙན་ཞུ་འབདཝ་ཨིན། རེ་བ་བསྐྱེད་པའི་ {{expected}}",
+  "error.updateVersion":
+    "OpenCode དུས་མཐུན་བཟོ་ཚར་ཡི་ དེ་འབདཝ་ད་ {{distro}}གིས་ ད་ལྟོ་ཡང་ {{installed}} སྙན་ཞུ་འབདཝ་ཨིན། རེ་བ་བསྐྱེད་པའི་ {{expected}}",
   "error.noVersion": "ཐོན་རིམ་མེད།",
-  "error.serverExited": "WSL སར་བར་འདི་ འགོ་བཙུགས་པའི་ཤུལ་ལས་ ཕྱིར་འཐོན་འབད་ཡོདཔ་ཨིན་ (ཨང་རྟགས་={{code}} བརྡ་རྟགས་={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL སར་བར་འདི་ གསོ་བའི་ཧེ་མ་ ཕྱིར་འཐོན་འབད་ཡོདཔ་ཨིན་ (ཨང་རྟགས་={{code}} བརྡ་རྟགས་={{signal}}){{output}}",
-  "error.healthTimeout": "{{timeout}}ms གི་ཤུལ་ལས་ {{distro}} གི་དོན་ལུ་ ཟུར་འཁོར་འདི་ གསོ་བའི་བརྟག་དཔྱད་དུས་ཚོད་རྫོགས་སོངཔ་ཨིན།",
+  "error.serverExited":
+    "WSL སར་བར་འདི་ འགོ་བཙུགས་པའི་ཤུལ་ལས་ ཕྱིར་འཐོན་འབད་ཡོདཔ་ཨིན་ (ཨང་རྟགས་={{code}} བརྡ་རྟགས་={{signal}})",
+  "error.serverExitedBeforeHealthy":
+    "WSL སར་བར་འདི་ གསོ་བའི་ཧེ་མ་ ཕྱིར་འཐོན་འབད་ཡོདཔ་ཨིན་ (ཨང་རྟགས་={{code}} བརྡ་རྟགས་={{signal}}){{output}}",
+  "error.healthTimeout":
+    "{{timeout}}ms གི་ཤུལ་ལས་ {{distro}} གི་དོན་ལུ་ ཟུར་འཁོར་འདི་ གསོ་བའི་བརྟག་དཔྱད་དུས་ཚོད་རྫོགས་སོངཔ་ཨིན།",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms གི་ཤུལ་ལས་ དུས་ཚོད་རྫོགས་སོང།",
   "error.failedPort": "འདྲེན་ལམ་ཐོབ་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "server.default": "འཐུས་ཤོར",

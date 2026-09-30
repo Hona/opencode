@@ -12,6 +12,6 @@ export default {
   "empty.branch": "Zatím žádné změny ve větvi",
   "git.title": "Vytvořte úložiště Git",
   "git.description": "Sledujte, kontrolujte a vracejte změny v tomto projektu",
-  "loadingChanges": "Načítání změn…",
-  "noChanges": "Žádné změny",
+  loadingChanges: "Načítání změn…",
+  noChanges: "Žádné změny",
 }

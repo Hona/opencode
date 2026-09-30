@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "已是最新版本",
   "toast.latest.description": "你正在使用最新版本的 OpenCode。",
   "migration.title": "从 Beta 版迁移到稳定版",
-  "migration.description": "OpenCode Beta 目前正在迁移至 OpenCode 稳定版。请下载 {{version}} 版本，然后从磁盘映像安装 OpenCode，以继续接收更新。",
+  "migration.description":
+    "OpenCode Beta 目前正在迁移至 OpenCode 稳定版。请下载 {{version}} 版本，然后从磁盘映像安装 OpenCode，以继续接收更新。",
   "section.title": "更新",
   "releaseNotes.title": "发行说明",
   "releaseNotes.description": "更新后显示“新功能”弹窗",

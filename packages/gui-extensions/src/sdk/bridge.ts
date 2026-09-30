@@ -38,7 +38,10 @@ export interface BridgeMenubarItem {
 }
 
 export interface Bridge {
-  call(input: { readonly remote: string; readonly method: string; readonly input: unknown }, signal?: AbortSignal): Promise<unknown>
+  call(
+    input: { readonly remote: string; readonly method: string; readonly input: unknown },
+    signal?: AbortSignal,
+  ): Promise<unknown>
   /** Starts state sync for this window. Resolves with the current availability and state. */
   subscribe(remote: string): Promise<{ readonly available: boolean; readonly state?: unknown }>
   on(listener: (message: BridgeMessage) => void): () => void

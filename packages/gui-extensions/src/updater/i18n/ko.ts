@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "최신 상태입니다",
   "toast.latest.description": "현재 최신 버전의 OpenCode를 사용 중입니다.",
   "migration.title": "베타에서 안정 버전으로 이동",
-  "migration.description": "현재 OpenCode Beta가 OpenCode 안정 버전으로 이동 중입니다. 계속 업데이트를 받으려면 {{version}} 버전을 다운로드한 다음 디스크 이미지에서 OpenCode를 설치하세요.",
+  "migration.description":
+    "현재 OpenCode Beta가 OpenCode 안정 버전으로 이동 중입니다. 계속 업데이트를 받으려면 {{version}} 버전을 다운로드한 다음 디스크 이미지에서 OpenCode를 설치하세요.",
   "section.title": "업데이트",
   "releaseNotes.title": "릴리스 노트",
   "releaseNotes.description": "업데이트 후 '새 소식' 팝업 표시",

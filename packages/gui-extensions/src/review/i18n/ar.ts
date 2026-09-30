@@ -16,6 +16,6 @@ export default {
   "empty.branch": "لا توجد تغييرات في الفرع بعد",
   "git.title": "إنشاء مستودع Git",
   "git.description": "تتبع ومراجعة والتراجع عن التغييرات في هذا المشروع",
-  "loadingChanges": "جارٍ تحميل التغييرات…",
-  "noChanges": "لا توجد تغييرات",
+  loadingChanges: "جارٍ تحميل التغييرات…",
+  noChanges: "لا توجد تغييرات",
 }

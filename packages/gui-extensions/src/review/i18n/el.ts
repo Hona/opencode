@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Δεν υπάρχουν ακόμη αλλαγές κλάδου",
   "git.title": "Δημιουργία αποθετηρίου Git",
   "git.description": "Παρακολούθηση, έλεγχος και αναίρεση αλλαγών σε αυτό το έργο",
-  "loadingChanges": "Φόρτωση αλλαγών…",
-  "noChanges": "Χωρίς αλλαγές",
+  loadingChanges: "Φόρτωση αλλαγών…",
+  noChanges: "Χωρίς αλλαγές",
 }

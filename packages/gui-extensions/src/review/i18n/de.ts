@@ -8,6 +8,6 @@ export default {
   "empty.branch": "Noch keine Branch-Änderungen",
   "git.title": "Git-Repository erstellen",
   "git.description": "Änderungen in diesem Projekt verfolgen, überprüfen und rückgängig machen",
-  "loadingChanges": "Änderungen werden geladen…",
-  "noChanges": "Keine Änderungen",
+  loadingChanges: "Änderungen werden geladen…",
+  noChanges: "Keine Änderungen",
 }

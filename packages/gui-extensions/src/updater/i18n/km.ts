@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "អ្នកទាន់សម័យហើយ។",
   "toast.latest.description": "អ្នកកំពុងដំណើរការកំណែចុងក្រោយបំផុតនៃ OpenCode ។",
   "migration.title": "ផ្លាស់ប្តូរពី Beta ទៅ Stable",
-  "migration.description": "សម្រាប់ពេលនេះ OpenCode Beta កំពុងផ្លាស់ប្តូរទៅ OpenCode Stable។ ទាញយកកំណែ {{version}} បន្ទាប់មកដំឡើង OpenCode ពីរូបភាពថាស ដើម្បីបន្តទទួលបានបច្ចុប្បន្នភាព។",
+  "migration.description":
+    "សម្រាប់ពេលនេះ OpenCode Beta កំពុងផ្លាស់ប្តូរទៅ OpenCode Stable។ ទាញយកកំណែ {{version}} បន្ទាប់មកដំឡើង OpenCode ពីរូបភាពថាស ដើម្បីបន្តទទួលបានបច្ចុប្បន្នភាព។",
   "section.title": "បច្ចុប្បន្នភាព",
   "releaseNotes.title": "កំណត់ចំណាំចេញផ្សាយ",
   "releaseNotes.description": "បង្ហាញអ្វីដែលថ្មីលេចឡើងបន្ទាប់ពីការអាប់ដេត",

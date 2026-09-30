@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Besoin d'une autre distribution ?",
   "onboarding.needAnotherDistroHint": "Installez une distribution Linux depuis le catalogue WSL",
   "onboarding.wslNotInstalled.title": "WSL n'est pas installé",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystem for Linux) est requis avant qu'OpenCode puisse ajouter un serveur WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystem for Linux) est requis avant qu'OpenCode puisse ajouter un serveur WSL",
   "onboarding.wslUnavailable.title": "WSL indisponible",
   "onboarding.wslUnavailable.description": "OpenCode n'a pas pu vérifier WSL sur cet appareil.",
   "onboarding.installWsl": "Installer WSL",
@@ -41,11 +42,14 @@ export default {
   "error.opencodeMissing": "opencode n'est pas installé dans cette distribution",
   "error.opencodeCannotRun": "opencode est installé, mais n'a pas pu s'exécuter",
   "error.opencodeNotInstalled": "OpenCode n'est pas installé dans {{distro}}",
-  "error.updateVersion": "La mise à jour d'OpenCode est terminée, mais {{distro}} indique toujours {{installed}} au lieu de {{expected}}",
+  "error.updateVersion":
+    "La mise à jour d'OpenCode est terminée, mais {{distro}} indique toujours {{installed}} au lieu de {{expected}}",
   "error.noVersion": "aucune version",
   "error.serverExited": "Le serveur WSL s'est arrêté après son démarrage (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Le serveur WSL s'est arrêté avant d'être opérationnel (code={{code}} signal={{signal}}){{output}}",
-  "error.healthTimeout": "La vérification de l'état du processus auxiliaire pour {{distro}} a dépassé le délai de {{timeout}} ms",
+  "error.serverExitedBeforeHealthy":
+    "Le serveur WSL s'est arrêté avant d'être opérationnel (code={{code}} signal={{signal}}){{output}}",
+  "error.healthTimeout":
+    "La vérification de l'état du processus auxiliaire pour {{distro}} a dépassé le délai de {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} a dépassé le délai de {{timeout}} ms",
   "error.failedPort": "Impossible d'obtenir le port",
   "server.default": "Défaut",

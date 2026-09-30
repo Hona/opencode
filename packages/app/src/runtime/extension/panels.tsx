@@ -83,7 +83,12 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
       const prefix = `${item.extension}:`
       const open = stored().flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
       return item.value.list(input.view, open).map(
-        (tab): RegionEntry => ({ key: panelKey(item.extension, tab.id), extension: item.extension, tab, provider: item.value }),
+        (tab): RegionEntry => ({
+          key: panelKey(item.extension, tab.id),
+          extension: item.extension,
+          tab,
+          provider: item.value,
+        }),
       )
     }),
   )
@@ -295,9 +300,14 @@ export function DockRegion(props: {
       .items(Panel)
       .filter((item) => item.value.region === "dock")
       .flatMap((item) =>
-        item.value
-          .list(props.view, [])
-          .map((tab): RegionEntry => ({ key: panelKey(item.extension, tab.id), extension: item.extension, tab, provider: item.value })),
+        item.value.list(props.view, []).map(
+          (tab): RegionEntry => ({
+            key: panelKey(item.extension, tab.id),
+            extension: item.extension,
+            tab,
+            provider: item.value,
+          }),
+        ),
       )
       .at(0),
   )
@@ -354,10 +364,7 @@ export function DockRegion(props: {
       }}
       style={{ height: panelHeight(), "--terminal-panel-height": contentHeight() }}
     >
-      <div
-        classList={{ "md:hidden": !stacked(), hidden: stacked() || props.embedded }}
-        onPointerDown={size.start}
-      >
+      <div classList={{ "md:hidden": !stacked(), hidden: stacked() || props.embedded }} onPointerDown={size.start}>
         <ResizeHandle
           class="-top-1"
           direction="vertical"
@@ -394,7 +401,9 @@ export function DockRegion(props: {
                 open: () => [],
               }}
             >
-              <Contribution extension={extension}>{() => entry()!.provider.render(() => entry()!.tab, props.view)}</Contribution>
+              <Contribution extension={extension}>
+                {() => entry()!.provider.render(() => entry()!.tab, props.view)}
+              </Contribution>
             </PanelContext.Provider>
           )}
         </Show>

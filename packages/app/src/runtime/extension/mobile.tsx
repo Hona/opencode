@@ -24,7 +24,9 @@ export function createMobileViews() {
       const mobile = item.value.mobile
       if (!mobile) return []
       const tab: PanelTab = { id: item.value.id, title: mobile.title }
-      return [{ key: panelKey(item.extension, item.value.id), extension: item.extension, tab, provider: item.value, mobile }]
+      return [
+        { key: panelKey(item.extension, item.value.id), extension: item.extension, tab, provider: item.value, mobile },
+      ]
     }),
   )
   const sorted = (kinds: readonly string[]) =>
@@ -61,7 +63,13 @@ export function MobileViewTabs(props: {
   })
   const drawer = createMemo(() => (store.last ? props.views.find(store.last) : undefined))
   // Opening a view from inside the drawer (e.g. the summary's Changes row) closes it.
-  createEffect(on(() => props.current, () => setStore("drawer", undefined), { defer: true }))
+  createEffect(
+    on(
+      () => props.current,
+      () => setStore("drawer", undefined),
+      { defer: true },
+    ),
+  )
   let trigger: HTMLButtonElement | undefined
   return (
     <div
@@ -109,9 +117,7 @@ export function MobileViewTabs(props: {
           variant="ghost-muted"
           size="normal"
           class="mx-1.5 shrink-0"
-          state={
-            props.views.menu().some((entry) => entry.key === props.current) || store.menu ? "pressed" : undefined
-          }
+          state={props.views.menu().some((entry) => entry.key === props.current) || store.menu ? "pressed" : undefined}
           aria-label={language.t("common.moreOptions")}
         />
         <Menu.Portal>

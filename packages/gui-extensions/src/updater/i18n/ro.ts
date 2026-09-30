@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Ești la zi",
   "toast.latest.description": "Folosești cea mai recentă versiune OpenCode.",
   "migration.title": "Treci de la Beta la Stabil",
-  "migration.description": "Deocamdată, OpenCode Beta trece la OpenCode Stabil. Descarcă versiunea {{version}}, apoi instalează OpenCode din imaginea de disc pentru a continua să primești actualizări.",
+  "migration.description":
+    "Deocamdată, OpenCode Beta trece la OpenCode Stabil. Descarcă versiunea {{version}}, apoi instalează OpenCode din imaginea de disc pentru a continua să primești actualizări.",
   "section.title": "Actualizări",
   "releaseNotes.title": "Note de lansare",
   "releaseNotes.description": "Afișează notificări cu noutăți după actualizări",

@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "다른 배포판이 필요하신가요?",
   "onboarding.needAnotherDistroHint": "WSL 카탈로그에서 Linux 배포판을 설치하세요",
   "onboarding.wslNotInstalled.title": "WSL이 설치되지 않음",
-  "onboarding.wslNotInstalled.description": "OpenCode에서 WSL 서버를 추가하려면 WSL (Windows Subsystem for Linux)이 필요합니다",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode에서 WSL 서버를 추가하려면 WSL (Windows Subsystem for Linux)이 필요합니다",
   "onboarding.wslUnavailable.title": "WSL을 사용할 수 없음",
   "onboarding.wslUnavailable.description": "OpenCode에서 이 컴퓨터의 WSL을 확인할 수 없습니다.",
   "onboarding.installWsl": "WSL 설치",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "이 배포판에 opencode가 설치되어 있지 않습니다",
   "error.opencodeCannotRun": "opencode가 설치되어 있지만 실행할 수 없습니다",
   "error.opencodeNotInstalled": "{{distro}}에 OpenCode가 설치되어 있지 않습니다",
-  "error.updateVersion": "OpenCode 업데이트가 완료되었지만 {{distro}}에서 여전히 {{installed}} 버전으로 표시됩니다. 예상 버전: {{expected}}",
+  "error.updateVersion":
+    "OpenCode 업데이트가 완료되었지만 {{distro}}에서 여전히 {{installed}} 버전으로 표시됩니다. 예상 버전: {{expected}}",
   "error.noVersion": "버전 없음",
   "error.serverExited": "WSL 서버가 시작 후 종료되었습니다(코드={{code}} 신호={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL 서버가 정상 상태가 되기 전에 종료되었습니다(코드={{code}} 신호={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL 서버가 정상 상태가 되기 전에 종료되었습니다(코드={{code}} 신호={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} 사이드카의 상태 확인이 {{timeout}}ms 후 시간 초과되었습니다",
   "error.commandTimeout": "{{command}} {{args}} 명령이 {{timeout}}ms 후 시간 초과되었습니다",
   "error.failedPort": "포트를 가져오지 못했습니다",

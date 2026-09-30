@@ -36,32 +36,35 @@ const setup: Setup = (ctx) => {
     render: (input) => <SessionContextUsage session={input.session} placement="bottom" />,
   })
 
-  ctx.add(Panel, (): Panel => ({
-    id: "main",
-    region: "side",
-    legacy: { context: "context" },
-    mobile: { title: ctx.t("mobile.title"), order: 10, kind: "menu" },
-    list: (session, open) => (open.includes("context") ? [tab(session)] : []),
-    render: (_tab, session) => {
-      const panel = usePanel()
-      return (
-        <Show
-          when={panel.placement() !== "mobile"}
-          fallback={
-            <Suspense>
-              <SessionContextTab session={session} />
-            </Suspense>
-          }
-        >
-          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-            <Suspense>
-              <SessionContextTab session={session} />
-            </Suspense>
-          </div>
-        </Show>
-      )
-    },
-  }))
+  ctx.add(
+    Panel,
+    (): Panel => ({
+      id: "main",
+      region: "side",
+      legacy: { context: "context" },
+      mobile: { title: ctx.t("mobile.title"), order: 10, kind: "menu" },
+      list: (session, open) => (open.includes("context") ? [tab(session)] : []),
+      render: (_tab, session) => {
+        const panel = usePanel()
+        return (
+          <Show
+            when={panel.placement() !== "mobile"}
+            fallback={
+              <Suspense>
+                <SessionContextTab session={session} />
+              </Suspense>
+            }
+          >
+            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+              <Suspense>
+                <SessionContextTab session={session} />
+              </Suspense>
+            </div>
+          </Show>
+        )
+      },
+    }),
+  )
 }
 
 export default setup

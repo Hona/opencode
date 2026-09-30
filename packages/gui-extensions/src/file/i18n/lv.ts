@@ -24,7 +24,7 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
-  "selectToOpen": "Izvēlies failu atvēršanai",
+  selectToOpen: "Izvēlies failu atvēršanai",
   "open.finder": "Finder",
   "open.fileExplorer": "Failu pārlūks",
   "open.fileManager": "Failu pārvaldnieks",

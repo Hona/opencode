@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Alternar barra de depuração",
   "status.toggle": "Alternar ferramentas de depuração",
-  "ariaLabel": "Diagnóstico de desempenho de desenvolvimento",
-  "providerAriaLabel": "Diagnóstico de desempenho do provedor",
-  "na": "n/a",
+  ariaLabel: "Diagnóstico de desempenho de desenvolvimento",
+  providerAriaLabel: "Diagnóstico de desempenho do provedor",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Tempo entre o envio da solicitação ao provedor e a primeira saída do modelo.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tempo entre o envio da solicitação ao provedor e o fim do fluxo de resposta.",
   "nav.label": "NAV",
-  "nav.tip": "Última transição de rota concluída tocando em uma página de sessão, medida desde o início do roteador até a primeira pintura após o estabelecimento.",
+  "nav.tip":
+    "Última transição de rota concluída tocando em uma página de sessão, medida desde o início do roteador até a primeira pintura após o estabelecimento.",
   "fps.label": "FPS",
   "fps.tip": "Quadros por segundo nos últimos 5 segundos.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Pior atraso de entrada observado nos últimos 5 segundos.",
   "inp.label": "INP",
-  "inp.tip": "Duração aproximada da interação nos últimos 5 segundos. Isso é semelhante ao INP, não o INP oficial do Web Vitals.",
+  "inp.tip":
+    "Duração aproximada da interação nos últimos 5 segundos. Isso é semelhante ao INP, não o INP oficial do Web Vitals.",
   "cls.label": "CLS",
   "cls.tip": "Mudança cumulativa de layout para o tempo de vida atual do aplicativo.",
   "mem.label": "MEM",

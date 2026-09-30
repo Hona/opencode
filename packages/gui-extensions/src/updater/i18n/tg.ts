@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "Шумо навсозӣ доред",
   "toast.latest.description": "Шумо версияи охирини OpenCode-ро иҷро карда истодаед.",
   "migration.title": "Аз Beta ба Stable гузаред",
-  "migration.description": "Ҳоло OpenCode Beta ба OpenCode Stable мегузарад. Версияи {{version}}-ро боргирӣ кунед ва сипас OpenCode-ро аз тасвири диск насб кунед, то гирифтани навсозиҳоро идома диҳед.",
+  "migration.description":
+    "Ҳоло OpenCode Beta ба OpenCode Stable мегузарад. Версияи {{version}}-ро боргирӣ кунед ва сипас OpenCode-ро аз тасвири диск насб кунед, то гирифтани навсозиҳоро идома диҳед.",
   "section.title": "Навсозиҳо",
   "releaseNotes.title": "Қайдҳои нашр",
-  "releaseNotes.description": "Пас аз навсозиҳо поп-апҳои \"Чӣ нав\"-ро нишон диҳед",
+  "releaseNotes.description": 'Пас аз навсозиҳо поп-апҳои "Чӣ нав"-ро нишон диҳед',
   "check.title": "Барои навсозиҳо санҷед",
   "check.description": "Навсозиро дастӣ тафтиш кунед ва агар дастрас бошад, насб кунед",
   "menu.check": "Навсозиро санҷед…",

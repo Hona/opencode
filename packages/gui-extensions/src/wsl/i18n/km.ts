@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "ត្រូវការអ្នកចែកចាយផ្សេងទៀតទេ?",
   "onboarding.needAnotherDistroHint": "ដំឡើងការចែកចាយលីនុចពីកាតាឡុក WSL",
   "onboarding.wslNotInstalled.title": "WSL មិនត្រូវបានដំឡើងទេ។",
-  "onboarding.wslNotInstalled.description": "WSL (ប្រព័ន្ធរងវីនដូសម្រាប់លីនុច) ត្រូវបានទាមទារ មុនពេល OpenCode អាចបន្ថែមម៉ាស៊ីនមេ WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (ប្រព័ន្ធរងវីនដូសម្រាប់លីនុច) ត្រូវបានទាមទារ មុនពេល OpenCode អាចបន្ថែមម៉ាស៊ីនមេ WSL",
   "onboarding.wslUnavailable.title": "WSL មិនអាចប្រើបានទេ។",
   "onboarding.wslUnavailable.description": "OpenCode មិនអាចផ្ទៀងផ្ទាត់ WSL នៅលើម៉ាស៊ីននេះបានទេ។",
   "onboarding.installWsl": "ដំឡើង WSL",
-  "onboarding.windowsRestartRequired": "ចាប់ផ្ដើម Windows ឡើងវិញ ដើម្បីបញ្ចប់ការដំឡើង WSL បន្ទាប់មកបើក OpenCode ឡើងវិញ។",
+  "onboarding.windowsRestartRequired":
+    "ចាប់ផ្ដើម Windows ឡើងវិញ ដើម្បីបញ្ចប់ការដំឡើង WSL បន្ទាប់មកបើក OpenCode ឡើងវិញ។",
   "onboarding.allDistrosAdded": "ការចែកចាយដែលបានដំឡើងទាំងអស់ត្រូវបានបន្ថែមរួចហើយ។",
   "onboarding.noDistros": "មិនបានរកឃើញការចែកចាយនៅឡើយទេ។",
   "onboarding.installDistro": "ដំឡើង distro",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode មិនត្រូវបានដំឡើងនៅក្នុង distro នេះទេ។",
   "error.opencodeCannotRun": "opencode ត្រូវបានដំឡើង ប៉ុន្តែមិនអាចដំណើរការបានទេ។",
   "error.opencodeNotInstalled": "OpenCode មិនត្រូវបានដំឡើងនៅក្នុង {{distro}} ទេ។",
-  "error.updateVersion": "ការធ្វើបច្ចុប្បន្នភាព OpenCode បានបញ្ចប់ ប៉ុន្តែ {{distro}} នៅតែរាយការណ៍ {{installed}}; {{expected}} រំពឹងទុក",
+  "error.updateVersion":
+    "ការធ្វើបច្ចុប្បន្នភាព OpenCode បានបញ្ចប់ ប៉ុន្តែ {{distro}} នៅតែរាយការណ៍ {{installed}}; {{expected}} រំពឹងទុក",
   "error.noVersion": "គ្មានកំណែ",
   "error.serverExited": "ម៉ាស៊ីនមេ WSL បានចាកចេញបន្ទាប់ពីការចាប់ផ្ដើម (កូដ={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "ម៉ាស៊ីនមេ WSL បានចេញមុនពេលមានសុខភាពល្អ (កូដ={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "ម៉ាស៊ីនមេ WSL បានចេញមុនពេលមានសុខភាពល្អ (កូដ={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Sidecar សម្រាប់ការពិនិត្យសុខភាព {{distro}} អស់ពេលបន្ទាប់ពី {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} អស់ពេលបន្ទាប់ពី {{timeout}}ms",
   "error.failedPort": "បរាជ័យក្នុងការទទួលបានច្រក",

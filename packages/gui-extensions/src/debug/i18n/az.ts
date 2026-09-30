@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Sazlama panelini göstər/gizlət",
   "status.toggle": "Sazlama alətlərini göstər/gizlət",
-  "ariaLabel": "Tərtibatçı performans diaqnostikası",
-  "providerAriaLabel": "Provayder performansının diaqnostikası",
-  "na": "yox",
+  ariaLabel: "Tərtibatçı performans diaqnostikası",
+  providerAriaLabel: "Provayder performansının diaqnostikası",
+  na: "yox",
   "ttft.label": "TTFT",
   "ttft.tip": "Provayder sorğusunun göndərilməsindən modelin ilk çıxışına qədər olan vaxt.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Provayder sorğusunun göndərilməsindən cavab axınının bitməsinə qədər olan vaxt.",
   "nav.label": "NAV",
-  "nav.tip": "Sessiya səhifəsinə aid son tamamlanmış marşrut keçidi; marşrutlaşdırıcının başladığı andan keçid tamamlandıqdan sonrakı ilk göstərilməyədək ölçülür.",
+  "nav.tip":
+    "Sessiya səhifəsinə aid son tamamlanmış marşrut keçidi; marşrutlaşdırıcının başladığı andan keçid tamamlandıqdan sonrakı ilk göstərilməyədək ölçülür.",
   "fps.label": "FPS",
   "fps.tip": "Son 5 saniyə üzrə saniyədə kadrların hərəkətli orta qiyməti.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Son 5 saniyədə müşahidə olunan ən uzun daxiletmə gecikməsi.",
   "inp.label": "INP",
-  "inp.tip": "Son 5 saniyədə təxmini qarşılıqlı əlaqə müddəti. Bu, rəsmi Web Vitals INP göstəricisi deyil, ona bənzər göstəricidir.",
+  "inp.tip":
+    "Son 5 saniyədə təxmini qarşılıqlı əlaqə müddəti. Bu, rəsmi Web Vitals INP göstəricisi deyil, ona bənzər göstəricidir.",
   "cls.label": "CLS",
   "cls.tip": "Tətbiqin cari işləmə müddəti üzrə məcmu tərtibat sürüşməsi.",
   "mem.label": "MEM",

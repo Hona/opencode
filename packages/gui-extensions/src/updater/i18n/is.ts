@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Þú ert uppfærður",
   "toast.latest.description": "Þú ert að keyra nýjustu útgáfuna af OpenCode.",
   "migration.title": "Fara úr Beta í Stöðuga útgáfu",
-  "migration.description": "OpenCode Beta er um sinn að færast yfir í OpenCode Stable. Sæktu útgáfu {{version}} og settu síðan OpenCode upp úr diskmyndinni til að halda áfram að fá uppfærslur.",
+  "migration.description":
+    "OpenCode Beta er um sinn að færast yfir í OpenCode Stable. Sæktu útgáfu {{version}} og settu síðan OpenCode upp úr diskmyndinni til að halda áfram að fá uppfærslur.",
   "section.title": "Uppfærslur",
   "releaseNotes.title": "Útgáfuskýrslur",
   "releaseNotes.description": "Sýna hvað er nýtt sprettiglugga eftir uppfærslur",

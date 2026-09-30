@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Ju jeni të përditësuar",
   "toast.latest.description": "Ju jeni duke ekzekutuar versionin më të fundit të OpenCode.",
   "migration.title": "Kalo nga Beta në versionin e qëndrueshëm",
-  "migration.description": "Për momentin, OpenCode Beta po kalon te OpenCode Stable. Shkarko versionin {{version}}, pastaj instalo OpenCode nga imazhi i diskut për të vazhduar marrjen e përditësimeve.",
+  "migration.description":
+    "Për momentin, OpenCode Beta po kalon te OpenCode Stable. Shkarko versionin {{version}}, pastaj instalo OpenCode nga imazhi i diskut për të vazhduar marrjen e përditësimeve.",
   "section.title": "Përditësimet",
   "releaseNotes.title": "Shënimet e publikimit",
   "releaseNotes.description": "Shfaq dritaret kërcyese Çfarë ka të re pas përditësimeve",

@@ -8,6 +8,6 @@ export default {
   "empty.branch": "尚無分支變更",
   "git.title": "建立 Git 儲存庫",
   "git.description": "追蹤、檢閱及復原此專案中的變更",
-  "loadingChanges": "正在載入變更…",
-  "noChanges": "沒有變更",
+  loadingChanges: "正在載入變更…",
+  noChanges: "沒有變更",
 }

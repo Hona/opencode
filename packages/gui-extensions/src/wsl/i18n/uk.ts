@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Потрібен інший дистрибутив?",
   "onboarding.needAnotherDistroHint": "Встановіть дистрибутив Linux із каталогу WSL",
   "onboarding.wslNotInstalled.title": "WSL не встановлено",
-  "onboarding.wslNotInstalled.description": "Для додавання сервера WSL в OpenCode потрібна WSL (Підсистема Windows для Linux)",
+  "onboarding.wslNotInstalled.description":
+    "Для додавання сервера WSL в OpenCode потрібна WSL (Підсистема Windows для Linux)",
   "onboarding.wslUnavailable.title": "WSL недоступна",
   "onboarding.wslUnavailable.description": "OpenCode не вдалося перевірити WSL на цьому комп'ютері.",
   "onboarding.installWsl": "Встановити WSL",
-  "onboarding.windowsRestartRequired": "Перезапустіть Windows, щоб завершити встановлення WSL, а потім знову відкрийте OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Перезапустіть Windows, щоб завершити встановлення WSL, а потім знову відкрийте OpenCode.",
   "onboarding.allDistrosAdded": "Усі встановлені дистрибутиви вже додано.",
   "onboarding.noDistros": "Дистрибутивів поки не виявлено.",
   "onboarding.installDistro": "Встановити дистрибутив",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode не встановлено в цьому дистрибутиві",
   "error.opencodeCannotRun": "opencode встановлено, але його не вдалося запустити",
   "error.opencodeNotInstalled": "OpenCode не встановлено в {{distro}}",
-  "error.updateVersion": "Оновлення OpenCode завершено, але {{distro}} усе ще повідомляє про версію {{installed}}; очікувалася {{expected}}",
+  "error.updateVersion":
+    "Оновлення OpenCode завершено, але {{distro}} усе ще повідомляє про версію {{installed}}; очікувалася {{expected}}",
   "error.noVersion": "версію не вказано",
   "error.serverExited": "Сервер WSL завершив роботу після запуску (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Сервер WSL завершив роботу, не досягнувши працездатного стану (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Сервер WSL завершив роботу, не досягнувши працездатного стану (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Час очікування перевірки працездатності sidecar для {{distro}} минув через {{timeout}}мс",
   "error.commandTimeout": "Час очікування {{command}} {{args}} минув через {{timeout}}мс",
   "error.failedPort": "Не вдалося отримати порт",

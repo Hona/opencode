@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "Ai nevoie de altă distribuție?",
   "onboarding.needAnotherDistroHint": "Instalează o distribuție Linux din catalogul WSL",
   "onboarding.wslNotInstalled.title": "WSL nu este instalat",
-  "onboarding.wslNotInstalled.description": "WSL (Subsistemul Windows pentru Linux) este necesar înainte ca OpenCode să poată adăuga un server WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Subsistemul Windows pentru Linux) este necesar înainte ca OpenCode să poată adăuga un server WSL",
   "onboarding.wslUnavailable.title": "WSL indisponibil",
   "onboarding.wslUnavailable.description": "OpenCode nu a putut verifica WSL pe acest calculator.",
   "onboarding.installWsl": "Instalează WSL",
@@ -41,10 +42,12 @@ export default {
   "error.opencodeMissing": "opencode nu este instalat în această distribuție",
   "error.opencodeCannotRun": "opencode este instalat, dar nu a putut fi pornit",
   "error.opencodeNotInstalled": "OpenCode nu este instalat în {{distro}}",
-  "error.updateVersion": "Actualizarea OpenCode s-a terminat, dar {{distro}} raportează tot {{installed}}; era așteptat {{expected}}",
+  "error.updateVersion":
+    "Actualizarea OpenCode s-a terminat, dar {{distro}} raportează tot {{installed}}; era așteptat {{expected}}",
   "error.noVersion": "nicio versiune",
   "error.serverExited": "Serverul WSL s-a oprit după pornire (cod={{code}} semnal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Serverul WSL s-a oprit înainte să fie funcțional (cod={{code}} semnal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Serverul WSL s-a oprit înainte să fie funcțional (cod={{code}} semnal={{signal}}){{output}}",
   "error.healthTimeout": "Verificarea stării pentru sidecar-ul {{distro}} a expirat după {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} a expirat după {{timeout}} ms",
   "error.failedPort": "Nu s-a putut obține portul",

@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Olet ajan tasalla",
   "toast.latest.description": "Käytät OpenCoden uusinta versiota.",
   "migration.title": "Siirry Betasta vakaaseen versioon",
-  "migration.description": "OpenCode Beta siirtyy toistaiseksi OpenCode Stableen. Lataa versio {{version}} ja asenna sitten OpenCode levykuvasta, jotta saat jatkossakin päivityksiä.",
+  "migration.description":
+    "OpenCode Beta siirtyy toistaiseksi OpenCode Stableen. Lataa versio {{version}} ja asenna sitten OpenCode levykuvasta, jotta saat jatkossakin päivityksiä.",
   "section.title": "Päivitykset",
   "releaseNotes.title": "Julkaisutiedot",
   "releaseNotes.description": "Näytä Mitä uutta -ponnahdusikkunat päivitysten jälkeen",

@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "هل تحتاج إلى توزيعة أخرى؟",
   "onboarding.needAnotherDistroHint": "ثبّت توزيعة Linux من كتالوج WSL",
   "onboarding.wslNotInstalled.title": "WSL غير مثبت",
-  "onboarding.wslNotInstalled.description": "يلزم WSL (نظام Windows الفرعي لـ Linux) قبل أن يتمكن OpenCode من إضافة خادم WSL",
+  "onboarding.wslNotInstalled.description":
+    "يلزم WSL (نظام Windows الفرعي لـ Linux) قبل أن يتمكن OpenCode من إضافة خادم WSL",
   "onboarding.wslUnavailable.title": "WSL غير متاح",
   "onboarding.wslUnavailable.description": "تعذر على OpenCode التحقق من WSL على هذا الجهاز.",
   "onboarding.installWsl": "تثبيت WSL",
@@ -41,7 +42,8 @@ export default {
   "error.opencodeMissing": "opencode غير مثبت في هذه التوزيعة",
   "error.opencodeCannotRun": "opencode مثبت، لكن تعذر تشغيله",
   "error.opencodeNotInstalled": "OpenCode غير مثبت في {{distro}}",
-  "error.updateVersion": "اكتمل تحديث OpenCode، لكن {{distro}} ما زالت تعرض الإصدار {{installed}}؛ الإصدار المتوقع هو {{expected}}",
+  "error.updateVersion":
+    "اكتمل تحديث OpenCode، لكن {{distro}} ما زالت تعرض الإصدار {{installed}}؛ الإصدار المتوقع هو {{expected}}",
   "error.noVersion": "لا يوجد إصدار",
   "error.serverExited": "خرج خادم WSL بعد بدء التشغيل (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy": "خرج خادم WSL قبل أن يصبح سليمًا (code={{code}} signal={{signal}}){{output}}",

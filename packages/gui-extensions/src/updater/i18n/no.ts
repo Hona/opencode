@@ -9,10 +9,11 @@ export default {
   "toast.latest.title": "OpenCode er oppdatert",
   "toast.latest.description": "Du bruker den nyeste versjonen av OpenCode.",
   "migration.title": "Bytt fra Beta til Stabil",
-  "migration.description": "OpenCode Beta flyttes foreløpig til OpenCode Stabil. Last ned versjon {{version}}, og installer deretter OpenCode fra diskavbildningen for å fortsette å motta oppdateringer.",
+  "migration.description":
+    "OpenCode Beta flyttes foreløpig til OpenCode Stabil. Last ned versjon {{version}}, og installer deretter OpenCode fra diskavbildningen for å fortsette å motta oppdateringer.",
   "section.title": "Oppdateringer",
   "releaseNotes.title": "Utgivelsesnotater",
-  "releaseNotes.description": "Vis \"Hva er nytt\"-vinduer etter oppdateringer",
+  "releaseNotes.description": 'Vis "Hva er nytt"-vinduer etter oppdateringer',
   "check.title": "Se etter oppdateringer",
   "check.description": "Se etter oppdateringer manuelt og installer hvis tilgjengelig",
   "menu.check": "Søk etter oppdateringer…",

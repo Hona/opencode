@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Potřebujete další distribuci?",
   "onboarding.needAnotherDistroHint": "Nainstalujte distribuci Linux z katalogu WSL",
   "onboarding.wslNotInstalled.title": "WSL není nainstalováno",
-  "onboarding.wslNotInstalled.description": "WSL (Windows Subsystém pro Linux) je vyžadován předtím, než OpenCode může přidat server WSL",
+  "onboarding.wslNotInstalled.description":
+    "WSL (Windows Subsystém pro Linux) je vyžadován předtím, než OpenCode může přidat server WSL",
   "onboarding.wslUnavailable.title": "WSL není k dispozici",
   "onboarding.wslUnavailable.description": "OpenCode nemohl ověřit WSL na tomto počítači.",
   "onboarding.installWsl": "Instalovat WSL",
-  "onboarding.windowsRestartRequired": "Restartujte Windows pro dokončení instalace WSL a poté znovu otevřete OpenCode.",
+  "onboarding.windowsRestartRequired":
+    "Restartujte Windows pro dokončení instalace WSL a poté znovu otevřete OpenCode.",
   "onboarding.allDistrosAdded": "Všechny nainstalované distribuce jsou již přidány.",
   "onboarding.noDistros": "Dosud nebyla zjištěna žádná distribuce.",
   "onboarding.installDistro": "Nainstalujte distro",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "opencode není v této distribuci nainstalováno",
   "error.opencodeCannotRun": "opencode je nainstalován, ale nelze jej spustit",
   "error.opencodeNotInstalled": "OpenCode není nainstalován v {{distro}}",
-  "error.updateVersion": "OpenCode aktualizace dokončena, ale {{distro}} stále hlásí {{installed}}; očekává se {{expected}}",
+  "error.updateVersion":
+    "OpenCode aktualizace dokončena, ale {{distro}} stále hlásí {{installed}}; očekává se {{expected}}",
   "error.noVersion": "žádná verze",
   "error.serverExited": "Server WSL byl po spuštění ukončen (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "Server WSL byl ukončen, než byl připraven (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "Server WSL byl ukončen, než byl připraven (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Postranní vozík pro {{distro}} kontrolu stavu vypršel po {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} vypršel po {{timeout}}ms",
   "error.failedPort": "Nepodařilo se získat port",

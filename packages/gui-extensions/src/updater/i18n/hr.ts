@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "U toku ste",
   "toast.latest.description": "Imate najnoviju verziju OpenCode.",
   "migration.title": "Prijelaz s Beta na Stable",
-  "migration.description": "OpenCode Beta zasad prelazi na OpenCode Stable. Preuzmite verziju {{version}}, a zatim instalirajte OpenCode iz slike diska kako biste nastavili primati ažuriranja.",
+  "migration.description":
+    "OpenCode Beta zasad prelazi na OpenCode Stable. Preuzmite verziju {{version}}, a zatim instalirajte OpenCode iz slike diska kako biste nastavili primati ažuriranja.",
   "section.title": "Ažuriranja",
   "releaseNotes.title": "Bilješke o izdanju",
   "releaseNotes.description": "Prikaži skočne prozore Što je novo nakon ažuriranja",

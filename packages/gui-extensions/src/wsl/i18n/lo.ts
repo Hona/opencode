@@ -20,7 +20,8 @@ export default {
   "onboarding.needAnotherDistro": "ຕ້ອງການ distro ອື່ນບໍ?",
   "onboarding.needAnotherDistroHint": "ຕິດຕັ້ງການແຈກຢາຍ Linux ຈາກລາຍການ WSL",
   "onboarding.wslNotInstalled.title": "WSL ບໍ່ໄດ້ຕິດຕັ້ງ",
-  "onboarding.wslNotInstalled.description": "WSL (ລະບົບຍ່ອຍຂອງ Windows ສໍາລັບ Linux) ກ່ອນທີ່ OpenCode ສາມາດເພີ່ມເຄື່ອງແມ່ຂ່າຍ WSL ໄດ້",
+  "onboarding.wslNotInstalled.description":
+    "WSL (ລະບົບຍ່ອຍຂອງ Windows ສໍາລັບ Linux) ກ່ອນທີ່ OpenCode ສາມາດເພີ່ມເຄື່ອງແມ່ຂ່າຍ WSL ໄດ້",
   "onboarding.wslUnavailable.title": "WSL ບໍ່ສາມາດໃຊ້ໄດ້",
   "onboarding.wslUnavailable.description": "OpenCode ບໍ່ສາມາດກວດສອບ WSL ໃນເຄື່ອງນີ້ໄດ້.",
   "onboarding.installWsl": "ຕິດຕັ້ງ WSL",

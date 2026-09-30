@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "تہانوں اک ہور ڈسٹرو دی لوڑ اے؟",
   "onboarding.needAnotherDistroHint": "WSL کیٹلاگ توں Linux ڈسٹری بیوشن انسٹال کرو",
   "onboarding.wslNotInstalled.title": "WSL انسٹال نئیں کیتا گیا",
-  "onboarding.wslNotInstalled.description": "OpenCode دے WSL سرور شامل کرن توں پہلاں WSL (Windows Subsystem for Linux) دی لوڑ اے",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode دے WSL سرور شامل کرن توں پہلاں WSL (Windows Subsystem for Linux) دی لوڑ اے",
   "onboarding.wslUnavailable.title": "WSL دستیاب نئیں",
   "onboarding.wslUnavailable.description": "OpenCode ایس مشین تے WSL دی تصدیق نئیں کر سکیا۔",
   "onboarding.installWsl": "WSL انسٹال کرو",
-  "onboarding.windowsRestartRequired": "WSL دی تنصیب پوری کرن لئی Windows نوں دوبارہ شروع کرو، فیر OpenCode دوبارہ کھولو۔",
+  "onboarding.windowsRestartRequired":
+    "WSL دی تنصیب پوری کرن لئی Windows نوں دوبارہ شروع کرو، فیر OpenCode دوبارہ کھولو۔",
   "onboarding.allDistrosAdded": "سارے انسٹال شدہ ڈسٹرو پہلے ای شامل کر دتے گئے ہن۔",
   "onboarding.noDistros": "ہلے تیکر کوئی ڈسٹرو نئیں لبھیا۔",
   "onboarding.installDistro": "ڈسٹرو انسٹال کرو",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "اس ڈسٹرو وچ opencode انسٹال نئیں اے",
   "error.opencodeCannotRun": "opencode انسٹال اے پر چل نئیں سکیا",
   "error.opencodeNotInstalled": "⁨{{distro}}⁩ وچ OpenCode انسٹال نئیں اے",
-  "error.updateVersion": "OpenCode دی اپ ڈیٹ پوری ہو گئی پر ⁨{{distro}}⁩ ہلے وی ⁨{{installed}}⁩ دس رہیا اے؛ ⁨{{expected}}⁩ چاہیدا سی",
+  "error.updateVersion":
+    "OpenCode دی اپ ڈیٹ پوری ہو گئی پر ⁨{{distro}}⁩ ہلے وی ⁨{{installed}}⁩ دس رہیا اے؛ ⁨{{expected}}⁩ چاہیدا سی",
   "error.noVersion": "کوئی ورژن نئیں",
   "error.serverExited": "WSL سرور شروع ہون پچھوں بند ہو گیا (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)",
-  "error.serverExitedBeforeHealthy": "WSL سرور ٹھیک حالت وچ آون توں پہلاں بند ہو گیا (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",
+  "error.serverExitedBeforeHealthy":
+    "WSL سرور ٹھیک حالت وچ آون توں پہلاں بند ہو گیا (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",
   "error.healthTimeout": "⁨{{distro}}⁩ دے sidecar دی صحت پڑتال لئی مقرر ویلا ⁨{{timeout}}⁩ms پچھوں مُک گیا",
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ لئی مقرر ویلا ⁨{{timeout}}⁩ms پچھوں مُک گیا",
   "error.failedPort": "پورٹ نئیں مل سکی",

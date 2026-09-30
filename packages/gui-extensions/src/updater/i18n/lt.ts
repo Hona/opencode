@@ -9,7 +9,8 @@ export default {
   "toast.latest.title": "Jūs esate atnaujintas",
   "toast.latest.description": "Naudojate naujausią OpenCode versiją.",
   "migration.title": "Pereiti iš beta į stabilią versiją",
-  "migration.description": "Kol kas „OpenCode Beta“ perkeliama į „OpenCode Stable“. Atsisiųskite {{version}} versiją, tada įdiekite „OpenCode“ iš disko atvaizdžio, kad ir toliau gautumėte naujinimus.",
+  "migration.description":
+    "Kol kas „OpenCode Beta“ perkeliama į „OpenCode Stable“. Atsisiųskite {{version}} versiją, tada įdiekite „OpenCode“ iš disko atvaizdžio, kad ir toliau gautumėte naujinimus.",
   "section.title": "Atnaujinimai",
   "releaseNotes.title": "Išleidimo pastabos",
   "releaseNotes.description": "Po atnaujinimų rodyti iššokančius langus „Kas naujo“.",

@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Visa eller dölj felsökningsfältet",
   "status.toggle": "Växla felsökningsverktyg",
-  "ariaLabel": "Utvecklingsprestandadiagnostik",
-  "providerAriaLabel": "Prestandadiagnostik för leverantör",
-  "na": "n/a",
+  ariaLabel: "Utvecklingsprestandadiagnostik",
+  providerAriaLabel: "Prestandadiagnostik för leverantör",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Tid från att leverantörsbegäran skickas tills modellen ger sin första utdata.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Tid från att leverantörsbegäran skickas tills svarsströmmen avslutas.",
   "nav.label": "NAV",
-  "nav.tip": "Senast slutförda ruttövergång som berör en sessionssida, mätt från routerns start till första bildrutans rendering efter att övergången har slutförts.",
+  "nav.tip":
+    "Senast slutförda ruttövergång som berör en sessionssida, mätt från routerns start till första bildrutans rendering efter att övergången har slutförts.",
   "fps.label": "FPS",
   "fps.tip": "Rullande bilder per sekund under de senaste 5 sekunderna.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Längsta observerade inmatningsfördröjning under de senaste 5 sekunderna.",
   "inp.label": "INP",
-  "inp.tip": "Ungefärlig interaktionslängd under de senaste 5 sekunderna. Detta är INP-liknande, inte den officiella Web Vitals INP.",
+  "inp.tip":
+    "Ungefärlig interaktionslängd under de senaste 5 sekunderna. Detta är INP-liknande, inte den officiella Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Kumulativ layoutförskjutning för den aktuella appens livslängd.",
   "mem.label": "MEM",

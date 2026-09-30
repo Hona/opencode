@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Prepnúť panel ladenia",
   "status.toggle": "Prepínanie nástrojov na ladenie",
-  "ariaLabel": "Diagnostika výkonu vývoja",
-  "providerAriaLabel": "Diagnostika výkonu poskytovateľa",
-  "na": "n/a",
+  ariaLabel: "Diagnostika výkonu vývoja",
+  providerAriaLabel: "Diagnostika výkonu poskytovateľa",
+  na: "n/a",
   "ttft.label": "TTFT",
   "ttft.tip": "Čas od odoslania požiadavky poskytovateľovi po prvý výstup modelu.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Čas od odoslania požiadavky poskytovateľovi po ukončenie prúdu odpovede.",
   "nav.label": "NAV",
-  "nav.tip": "Posledný dokončený prechod trasy dotýkajúci sa stránky relácie, merané od začiatku smerovača po prvé vykreslenie po ustálení.",
+  "nav.tip":
+    "Posledný dokončený prechod trasy dotýkajúci sa stránky relácie, merané od začiatku smerovača po prvé vykreslenie po ustálení.",
   "fps.label": "FPS",
   "fps.tip": "Priemerný počet snímok za sekundu za posledných 5 sekúnd.",
   "frame.label": "FRAME",

@@ -20,11 +20,13 @@ export default {
   "onboarding.needAnotherDistro": "Başqa distribütiv lazımdır?",
   "onboarding.needAnotherDistroHint": "WSL kataloqundan Linux paylamasını quraşdırın",
   "onboarding.wslNotInstalled.title": "WSL quraşdırılmayıb",
-  "onboarding.wslNotInstalled.description": "OpenCode WSL serveri əlavə etməzdən əvvəl WSL (Linux üçün Windows alt sistemi) tələb olunur",
+  "onboarding.wslNotInstalled.description":
+    "OpenCode WSL serveri əlavə etməzdən əvvəl WSL (Linux üçün Windows alt sistemi) tələb olunur",
   "onboarding.wslUnavailable.title": "WSL mövcud deyil",
   "onboarding.wslUnavailable.description": "OpenCode bu maşında WSL-i doğrulaya bilmədi.",
   "onboarding.installWsl": "WSL quraşdırın",
-  "onboarding.windowsRestartRequired": "WSL-nin quraşdırılmasını başa çatdırmaq üçün Windows-u yenidən başladın, sonra OpenCode-u yenidən açın.",
+  "onboarding.windowsRestartRequired":
+    "WSL-nin quraşdırılmasını başa çatdırmaq üçün Windows-u yenidən başladın, sonra OpenCode-u yenidən açın.",
   "onboarding.allDistrosAdded": "Bütün quraşdırılmış distribütivlər artıq əlavə edilib.",
   "onboarding.noDistros": "Hələ distribütiv aşkarlanmayıb.",
   "onboarding.installDistro": "Distribütiv quraşdırın",
@@ -41,10 +43,12 @@ export default {
   "error.opencodeMissing": "Bu distribütivdə opencode quraşdırılmayıb",
   "error.opencodeCannotRun": "opencode quraşdırılıb, lakin onu işə salmaq mümkün olmadı",
   "error.opencodeNotInstalled": "OpenCode {{distro}} distribütivində quraşdırılmayıb",
-  "error.updateVersion": "OpenCode yeniləməsi tamamlandı, lakin {{distro}} hələ də {{installed}} versiyasını bildirir; gözlənilən versiya: {{expected}}",
+  "error.updateVersion":
+    "OpenCode yeniləməsi tamamlandı, lakin {{distro}} hələ də {{installed}} versiyasını bildirir; gözlənilən versiya: {{expected}}",
   "error.noVersion": "versiya yoxdur",
   "error.serverExited": "WSL serveri başladıqdan sonra dayandı (code={{code}} signal={{signal}})",
-  "error.serverExitedBeforeHealthy": "WSL serveri işlək vəziyyətə gəlməzdən əvvəl dayandı (code={{code}} signal={{signal}}){{output}}",
+  "error.serverExitedBeforeHealthy":
+    "WSL serveri işlək vəziyyətə gəlməzdən əvvəl dayandı (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} üçün sidecar sağlamlıq yoxlamasının {{timeout}}ms gözləmə müddəti bitdi",
   "error.commandTimeout": "{{command}} {{args}} üçün {{timeout}}ms gözləmə müddəti bitdi",
   "error.failedPort": "Portu əldə etmək mümkün olmadı",

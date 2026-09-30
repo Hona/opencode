@@ -1,9 +1,9 @@
 export default {
   "command.toggle": "Przełącz pasek debugowania",
   "status.toggle": "Przełącz narzędzia debugowania",
-  "ariaLabel": "Diagnostyka wydajności w środowisku deweloperskim",
-  "providerAriaLabel": "Diagnostyka wydajności dostawcy",
-  "na": "n.d.",
+  ariaLabel: "Diagnostyka wydajności w środowisku deweloperskim",
+  providerAriaLabel: "Diagnostyka wydajności dostawcy",
+  na: "n.d.",
   "ttft.label": "TTFT",
   "ttft.tip": "Czas od wysłania żądania do dostawcy do pierwszego wyniku modelu.",
   "ttfa.label": "TTFA",
@@ -13,7 +13,8 @@ export default {
   "e2e.label": "E2E",
   "e2e.tip": "Czas od wysłania żądania do dostawcy do zakończenia strumienia odpowiedzi.",
   "nav.label": "NAV",
-  "nav.tip": "Ostatnie zakończone przejście między trasami obejmujące stronę sesji, mierzone od uruchomienia routera do pierwszego odrysowania po ustabilizowaniu widoku.",
+  "nav.tip":
+    "Ostatnie zakończone przejście między trasami obejmujące stronę sesji, mierzone od uruchomienia routera do pierwszego odrysowania po ustabilizowaniu widoku.",
   "fps.label": "FPS",
   "fps.tip": "Średnia liczba klatek na sekundę w ciągu ostatnich 5 sekund.",
   "frame.label": "FRAME",
@@ -25,7 +26,8 @@ export default {
   "delay.label": "DELAY",
   "delay.tip": "Najgorsze zaobserwowane opóźnienie wejścia w ciągu ostatnich 5 sekund.",
   "inp.label": "INP",
-  "inp.tip": "Przybliżony czas trwania interakcji w ciągu ostatnich 5 sekund. Jest to podobne do INP, a nie oficjalne Web Vitals INP.",
+  "inp.tip":
+    "Przybliżony czas trwania interakcji w ciągu ostatnich 5 sekund. Jest to podobne do INP, a nie oficjalne Web Vitals INP.",
   "cls.label": "CLS",
   "cls.tip": "Skumulowane przesunięcie układu od bieżącego uruchomienia aplikacji.",
   "mem.label": "MEM",
