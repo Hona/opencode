@@ -1,6 +1,3 @@
-import { useFile } from "@/workspaces/files/model"
-import { FileIcon } from "@opencode/ui/file-icon"
-import "@opencode/ui/file-tree.css"
 import {
   createEffect,
   createMemo,
@@ -12,27 +9,28 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@/runtime/server/types"
-import { Icon } from "@opencode/ui/icon"
-import { pathToFileUrl, withFileDragImage, type Kind } from "@/session/files/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import type { ChangeKind } from "../review/contract"
+import { Native, useExtension, type FileNode, type SessionView } from "../sdk"
+import { startFileDrag } from "./drag"
+import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
+import { resolveOpenInAppPath } from "./path"
 import {
   buildFileTreeV2Model,
   flattenFileTreeV2,
   flattenLiveFileTreeV2,
   normalizeFileTreeV2Path,
   type FileTreeV2Node,
-} from "@/session/files/file-tree-v2-model"
-import { virtualScrollElement } from "@/session/files/virtual-scroll"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useOpenInApp } from "@/session/files/open-in-app"
-import { OpenInAppContextMenuV2 } from "@/session/files/open-in-app-button"
-import { resolveOpenInAppPath } from "@/session/files/open-in-app-path"
-import { usePlatform } from "@/runtime/platform/platform"
-
-export type { Kind } from "@/session/files/file-tree"
+} from "./tree-model"
 
 const INDENT_STEP = 16
+
+export function virtualScrollElement(root: HTMLElement | undefined) {
+  if (!root?.isConnected) return null
+  return root.closest<HTMLDivElement>(".scroll-view__viewport")
+}
 
 function rowPaddingStart(level: number, type: FileNode["type"]) {
   if (type === "directory") return 8 + level * INDENT_STEP
@@ -44,13 +42,13 @@ function guideLineStart(level: number) {
   return rowPaddingStart(level, "directory") + 8
 }
 
-export const kindLabel = (kind: Kind) => {
+export const kindLabel = (kind: ChangeKind) => {
   if (kind === "add") return "A"
   if (kind === "del") return "D"
   return "M"
 }
 
-export const kindChange = (kind: Kind) => {
+export const kindChange = (kind: ChangeKind) => {
   if (kind === "add") return "added"
   if (kind === "del") return "deleted"
   return "modified"
@@ -64,7 +62,7 @@ const FileTreeNodeV2 = (
       level: number
       active?: string
       draggable: boolean
-      kinds?: ReadonlyMap<string, Kind>
+      kinds?: ReadonlyMap<string, ChangeKind>
       as?: "div" | "button"
     },
 ) => {
@@ -96,10 +94,7 @@ const FileTreeNodeV2 = (
       draggable={local.draggable}
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
-        event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-        event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
-        withFileDragImage(event)
+        startFileDrag(event, local.node.path)
       }}
       {...rest}
     >
@@ -133,24 +128,24 @@ function GuideLines(props: { level: number }) {
 }
 
 export default function FileTreeV2(props: {
+  session: SessionView
   active?: string
   allowed?: readonly string[]
-  kinds?: ReadonlyMap<string, Kind>
+  kinds?: ReadonlyMap<string, ChangeKind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
   onFileDoubleClick?: (file: FileNode) => void
 }) {
-  const file = useFile()
-  const location = useWorkspaceLocation()
-  const platform = usePlatform()
-  const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => location().directory }) : undefined
+  const ctx = useExtension()
+  const file = props.session.file
+  const openIn = ctx.use(Native) ? useOpenInApp({ session: props.session, path: () => file.root }) : undefined
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
   const model = createMemo(() => (live() ? undefined : buildFileTreeV2Model(props.allowed ?? [])))
   const expanded = (path: string) => file.tree.state(path)?.expanded ?? !live()
   const rows = createMemo(() => {
-    if (live()) return flattenLiveFileTreeV2((path) => file.tree.children(path), expanded)
+    if (live()) return flattenLiveFileTreeV2((path) => file.tree.list(path), expanded)
     return flattenFileTreeV2(model()!, expanded)
   })
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -179,22 +174,22 @@ export default function FileTreeV2(props: {
 
   createEffect(() => {
     if (!live()) return
-    void file.tree.list("")
+    void file.tree.sync("")
   })
 
   // Only scroll when the active path changes (or first appears in the tree).
   // Do not re-scroll when expand/collapse reshuffles `rows()`.
-  let scrolledActive: string | undefined
+  const scrolled = { active: undefined as string | undefined }
   createEffect(() => {
     const path = active()
     if (!path) {
-      scrolledActive = undefined
+      scrolled.active = undefined
       return
     }
     const index = rows().findIndex((row) => row.node.path === path)
     if (index < 0) return
-    if (scrolledActive === path) return
-    scrolledActive = path
+    if (scrolled.active === path) return
+    scrolled.active = path
     queueMicrotask(() => {
       const next = rows().findIndex((row) => row.node.path === path)
       if (next < 0) return
@@ -268,9 +263,7 @@ export default function FileTreeV2(props: {
                       fallback={
                         <OpenInAppContextMenuV2
                           state={openIn}
-                          path={() =>
-                            resolveOpenInAppPath(location().directory, row().node.absolute || row().node.originalPath)
-                          }
+                          path={() => resolveOpenInAppPath(file.root, row().node.absolute || row().node.originalPath)}
                         >
                           <FileTreeNodeV2
                             node={row().node}

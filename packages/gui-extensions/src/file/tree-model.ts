@@ -1,4 +1,4 @@
-import type { FileNode } from "@/runtime/server/types"
+import type { FileNode } from "../sdk"
 
 export type FileTreeV2Model = {
   children: ReadonlyMap<string, readonly FileTreeV2Node[]>
@@ -74,12 +74,6 @@ export function flattenFileTreeV2(model: FileTreeV2Model, expanded: (path: strin
   }
 
   return rows
-}
-
-export function sortFileTreeV2Paths(paths: readonly string[]) {
-  return flattenFileTreeV2(buildFileTreeV2Model(paths), () => true)
-    .filter((row) => row.node.type === "file")
-    .map((row) => row.node.originalPath)
 }
 
 export function flattenLiveFileTreeV2(

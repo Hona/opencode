@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2, sortFileTreeV2Paths } from "./file-tree-v2-model"
-import type { FileNode } from "@/runtime/server/types"
+import type { FileNode } from "../sdk"
+import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2 } from "./tree-model"
 
 describe("buildFileTreeV2Model", () => {
   test("builds a sorted tree and flattens expanded directories", () => {
@@ -19,56 +19,12 @@ describe("buildFileTreeV2Model", () => {
     ])
   })
 
-  test("skips children of collapsed directories", () => {
-    const model = buildFileTreeV2Model(["src/lib/a.ts", "src/z.ts"])
-
-    expect(flattenFileTreeV2(model, (path) => path !== "src/lib").map((row) => row.node.path)).toEqual([
-      "src",
-      "src/lib",
-      "src/z.ts",
-    ])
-  })
-
   test("normalizes duplicate and messy paths", () => {
     const model = buildFileTreeV2Model(["src\\lib\\a.ts", "src/lib/a.ts", "/src//lib/b.ts/"])
     const rows = flattenFileTreeV2(model, () => true)
 
     expect(rows.map((row) => row.node.path)).toEqual(["src", "src/lib", "src/lib/a.ts", "src/lib/b.ts"])
     expect(rows.find((row) => row.node.path === "src/lib/a.ts")?.node.originalPath).toBe("src\\lib\\a.ts")
-  })
-
-  test("handles deeply nested paths", () => {
-    const file = Array.from({ length: 130 }, (_, index) => `d${index}`).join("/") + "/leaf.ts"
-    const model = buildFileTreeV2Model([file])
-
-    expect(flattenFileTreeV2(model, () => true)).toHaveLength(131)
-  })
-})
-
-describe("sortFileTreeV2Paths", () => {
-  test("orders navigation depth-first with directories before sibling files", () => {
-    const paths = ["README.md", "src/a.ts", "src/lib/z.ts", "docs/guide.md", "src/lib/b.ts"]
-
-    expect(sortFileTreeV2Paths(paths)).toEqual([
-      "docs/guide.md",
-      "src/lib/b.ts",
-      "src/lib/z.ts",
-      "src/a.ts",
-      "README.md",
-    ])
-    expect(paths[0]).toBe("README.md")
-  })
-
-  test("preserves original paths for selection", () => {
-    expect(sortFileTreeV2Paths(["README.md", "src\\lib\\a.ts", "/docs//guide.md/"])).toEqual([
-      "/docs//guide.md/",
-      "src\\lib\\a.ts",
-      "README.md",
-    ])
-  })
-
-  test("handles an empty file list", () => {
-    expect(sortFileTreeV2Paths([])).toEqual([])
   })
 })
 

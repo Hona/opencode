@@ -1,10 +1,12 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
+  type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
 import { DiffChanges } from "@opencode/ui/diff-changes"
@@ -17,27 +19,33 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import FileTreeV2 from "@/session/files/file-tree-v2"
-import { sortFileTreeV2Paths } from "@/session/files/file-tree-v2-model"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
+import { FileTree } from "../file/contract"
+import { useExtension, usePanel, type PanelSidebar, type SessionView } from "../sdk"
 import {
+  applyFileListKeyDown,
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
   reviewDiffNeedsLoad,
+  sortReviewPaths,
   type RenderDiff,
-} from "@/session/review/review-diff-kinds"
-import type { ReviewPanelState } from "@/session/review/panel-state"
-import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
+} from "./kinds"
+import type { ReviewModel } from "./model"
+import { ReviewPanelEmpty, ReviewTitle } from "./parts"
 
-type ReviewDiff = FileDiffInfo
+type ReviewPanelState = {
+  sidebar: PanelSidebar
+  filter: () => string
+  setFilter: (value: string) => void
+  expandMode: () => SessionReviewExpandMode
+  setExpandMode: (mode: SessionReviewExpandMode) => void
+}
 
-export type ReviewPanelProps = {
+type ReviewPanelProps = {
+  session: SessionView
   title?: JSX.Element
   empty?: JSX.Element
-  diffs: ReviewDiff[]
+  diffs: FileDiffInfo[]
   diffsReady: boolean
   diffVersion?: number
   loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
@@ -53,29 +61,59 @@ export type ReviewPanelProps = {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
-  fileList?: "tree" | "flat"
 }
 
-export function ReviewPanel(props: ReviewPanelProps) {
-  const sdk = useWorkspaceLocation()
-  const serverSDK = useServerSDK()
+/** The desktop review panel. */
+export default function ReviewPanelContent(props: {
+  review: ReviewModel
+  session: SessionView
+  diffStyle: SessionReviewDiffStyle
+  onDiffStyleChange: (style: SessionReviewDiffStyle) => void
+  expandMode: SessionReviewExpandMode
+  onExpandModeChange: (mode: SessionReviewExpandMode) => void
+}) {
+  const panel = usePanel()
+  return (
+    <ReviewPanel
+      session={props.session}
+      title={<ReviewTitle review={props.review} />}
+      empty={<ReviewPanelEmpty review={props.review} />}
+      diffs={props.review.diffs()}
+      diffsReady={props.review.ready()}
+      diffVersion={props.review.diffVersion()}
+      loadDiff={props.review.loadDiff}
+      activeFile={props.review.activeFile()}
+      onSelectFile={props.review.focusFile}
+      diffStyle={props.diffStyle}
+      onDiffStyleChange={props.onDiffStyleChange}
+      state={{
+        sidebar: panel.sidebar,
+        filter: props.review.filter,
+        setFilter: props.review.setFilter,
+        expandMode: () => props.expandMode,
+        setExpandMode: props.onExpandModeChange,
+      }}
+      onLineComment={props.review.comments.add}
+      onLineCommentUpdate={props.review.comments.update}
+      onLineCommentDelete={props.review.comments.remove}
+      lineCommentActions={props.review.comments.actions()}
+      comments={props.review.comments.all()}
+      focusedComment={props.review.comments.focus()}
+      onFocusedCommentChange={props.review.comments.changeFocus}
+    />
+  )
+}
+
+function ReviewPanel(props: ReviewPanelProps) {
   const readFile = async (path: string) =>
-    serverSDK.api.file
-      .read({ path, location: { directory: sdk().directory } })
+    props.session.server.client.file
+      .read({ path, location: { directory: props.session.file.root } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })
         return undefined
       })
 
-  return <ReviewPanelView {...props} readFile={readFile} />
-}
-
-export function ReviewPanelView(
-  props: ReviewPanelProps & {
-    readFile?: (path: string) => Promise<{ type: "text"; content: string } | undefined>
-  },
-) {
   const diffs = createMemo(() => props.diffs.filter(filterRenderableDiff))
   const filteredFiles = createMemo(() =>
     filterReviewFiles(
@@ -84,9 +122,7 @@ export function ReviewPanelView(
     ),
   )
   const searching = createMemo(() => props.state.filter().trim().length > 0)
-  const navigationFiles = createMemo(() =>
-    searching() || props.fileList === "flat" ? filteredFiles() : sortFileTreeV2Paths(filteredFiles()),
-  )
+  const navigationFiles = createMemo(() => (searching() ? filteredFiles() : sortReviewPaths(filteredFiles())))
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
   // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
   const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
@@ -127,11 +163,12 @@ export function ReviewPanelView(
       title={props.title}
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
-      sidebarOpen={props.state.sidebarOpened()}
+      sidebarOpen={props.state.sidebar.opened()}
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
         <ReviewPanelSidebar
+          session={props.session}
           title={props.title}
           state={props.state}
           diffsReady={props.diffsReady}
@@ -141,7 +178,6 @@ export function ReviewPanelView(
           searching={searching()}
           kinds={treeKinds()}
           activeDiff={activeDiff()}
-          flat={props.fileList === "flat"}
         />
       }
       activeFile={activeDiff()}
@@ -164,7 +200,7 @@ export function ReviewPanelView(
                   diff={diff()}
                   diffStyle={props.diffStyle}
                   expandMode={props.state.expandMode()}
-                  readFile={props.readFile}
+                  readFile={readFile}
                   onLineComment={props.onLineComment}
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}
@@ -183,6 +219,7 @@ export function ReviewPanelView(
 }
 
 function ReviewPanelSidebar(props: {
+  session: SessionView
   title?: JSX.Element
   state: ReviewPanelState
   diffsReady: boolean
@@ -192,9 +229,10 @@ function ReviewPanelSidebar(props: {
   searching: boolean
   kinds: ReturnType<typeof reviewDiffKinds>
   activeDiff: string | undefined
-  flat: boolean
 }) {
-  const language = useLanguage()
+  const ctx = useExtension()
+  // The file extension draws the change tree; without it the list stays empty.
+  const views = ctx.use(FileTree)
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
   const highlightedPath = createMemo(() => {
     if (!props.searching) return undefined
@@ -215,15 +253,15 @@ function ReviewPanelSidebar(props: {
 
   return (
     <SessionReviewV2Sidebar
-      open={props.state.sidebarOpened()}
-      transition={props.state.sidebarTransition()}
+      open={props.state.sidebar.opened()}
+      transition={props.state.sidebar.transition()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs} />}
       filter={props.state.filter()}
       onFilterChange={props.state.setFilter}
       onFilterKeyDown={onFilterKeyDown}
-      width={props.state.sidebarWidth()}
-      onWidthChange={props.state.resizeSidebar}
+      width={props.state.sidebar.width()}
+      onWidthChange={props.state.sidebar.resize}
       minWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN}
       maxWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX}
     >
@@ -231,49 +269,48 @@ function ReviewPanelSidebar(props: {
         when={props.diffsReady}
         fallback={
           <div class="px-2 py-2 text-12-regular text-text-weak">
-            {language.t("common.loading")}
-            {language.t("common.loading.ellipsis")}
+            {ctx.t("common.loading")}
+            {ctx.t("common.loading.ellipsis")}
           </div>
         }
       >
         <Show
           when={props.searching}
           fallback={
-            <Show
-              when={props.flat}
-              fallback={
-                <FileTreeV2
+            <Show when={views()}>
+              {(views) => (
+                <Dynamic
+                  component={views().Tree}
+                  session={props.session}
                   allowed={props.filteredFiles}
                   kinds={props.kinds}
-                  draggable={false}
                   active={props.activeDiff}
-                  onFileClick={(node) => props.onSelectFile(node.path)}
+                  onFileClick={props.onSelectFile}
                 />
-              }
-            >
-              <SessionFileList
-                files={props.filteredFiles}
-                kinds={props.kinds}
-                active={props.activeDiff}
-                onFileClick={props.onSelectFile}
-              />
+              )}
             </Show>
           }
         >
           <Show
             when={props.filteredFiles.length > 0}
-            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
+            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("palette.empty")}</div>}
           >
-            <SessionFileList
-              files={props.filteredFiles}
-              kinds={props.kinds}
-              active={props.activeDiff}
-              highlighted={highlightedPath()}
-              onFileClick={(path) => {
-                setExplicitHighlight(path)
-                props.onSelectFile(path)
-              }}
-            />
+            <Show when={views()}>
+              {(views) => (
+                <Dynamic
+                  component={views().List}
+                  session={props.session}
+                  files={props.filteredFiles}
+                  kinds={props.kinds}
+                  active={props.activeDiff}
+                  highlighted={highlightedPath()}
+                  onFileClick={(path: string) => {
+                    setExplicitHighlight(path)
+                    props.onSelectFile(path)
+                  }}
+                />
+              )}
+            </Show>
           </Show>
         </Show>
       </Show>

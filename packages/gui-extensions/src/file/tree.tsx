@@ -1,8 +1,3 @@
-import { useFile } from "@/workspaces/files/model"
-import { encodeFilePath } from "@/workspaces/files/path"
-import { Collapsible } from "@opencode/ui/collapsible"
-import { FileIcon } from "@opencode/ui/file-icon"
-import { Icon } from "@opencode/ui/icon"
 import {
   createEffect,
   createMemo,
@@ -17,94 +12,56 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@/runtime/server/types"
+import { Collapsible } from "@opencode/ui/collapsible"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import type { ChangeKind } from "../review/contract"
+import type { FileNode, SessionView } from "../sdk"
+import { startFileDrag } from "./drag"
 
 const MAX_DEPTH = 128
 
-export function pathToFileUrl(filepath: string): string {
-  return `file://${encodeFilePath(filepath)}`
-}
-
-export type Kind = "add" | "del" | "mix"
-
-export type Filter = {
+type Filter = {
   files: Set<string>
   dirs: Set<string>
 }
 
-export function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
+function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
   if (input.level !== 0) return false
   if (input.dir?.loaded) return false
   if (input.dir?.loading) return false
   return true
 }
 
-export function shouldListExpanded(input: {
-  level: number
-  dir?: { expanded?: boolean; loaded?: boolean; loading?: boolean }
-}) {
-  if (input.level === 0) return false
-  if (!input.dir?.expanded) return false
-  if (input.dir.loaded) return false
-  if (input.dir.loading) return false
-  return true
-}
-
-export function dirsToExpand(input: {
-  level: number
-  filter?: { dirs: Set<string> }
-  expanded: (dir: string) => boolean
-}) {
+function dirsToExpand(input: { level: number; filter?: { dirs: Set<string> }; expanded: (dir: string) => boolean }) {
   if (input.level !== 0) return []
   if (!input.filter) return []
   return [...input.filter.dirs].filter((dir) => !input.expanded(dir))
 }
 
-const kindLabel = (kind: Kind) => {
+const kindLabel = (kind: ChangeKind) => {
   if (kind === "add") return "A"
   if (kind === "del") return "D"
   return "M"
 }
 
-const kindTextColor = (kind: Kind) => {
+const kindTextColor = (kind: ChangeKind) => {
   if (kind === "add") return "color: var(--icon-diff-add-base)"
   if (kind === "del") return "color: var(--icon-diff-delete-base)"
   return "color: var(--icon-diff-modified-base)"
 }
 
-const kindDotColor = (kind: Kind) => {
+const kindDotColor = (kind: ChangeKind) => {
   if (kind === "add") return "background-color: var(--icon-diff-add-base)"
   if (kind === "del") return "background-color: var(--icon-diff-delete-base)"
   return "background-color: var(--icon-diff-modified-base)"
 }
 
-export const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: Set<string>) => {
+const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, ChangeKind>, marks?: Set<string>) => {
   const kind = kinds?.get(node.path)
   if (!kind) return
   if (!marks?.has(node.path)) return
   return kind
-}
-
-const buildDragImage = (target: HTMLElement) => {
-  const icon = target.querySelector('[data-component="file-icon"]') ?? target.querySelector("svg")
-  const text = target.querySelector("span")
-  if (!icon || !text) return
-
-  const image = document.createElement("div")
-  image.className =
-    "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
-  image.style.position = "absolute"
-  image.style.top = "-1000px"
-  image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
-  return image
-}
-
-export const withFileDragImage = (event: DragEvent) => {
-  const image = buildDragImage(event.currentTarget as HTMLElement)
-  if (!image) return
-  document.body.appendChild(image)
-  event.dataTransfer?.setDragImage(image, 0, 12)
-  setTimeout(() => document.body.removeChild(image), 0)
 }
 
 const FileTreeNode = (
@@ -116,7 +73,7 @@ const FileTreeNode = (
       active?: string
       nodeClass?: string
       draggable: boolean
-      kinds?: ReadonlyMap<string, Kind>
+      kinds?: ReadonlyMap<string, ChangeKind>
       marks?: Set<string>
       as?: "div" | "button"
     },
@@ -156,10 +113,7 @@ const FileTreeNode = (
       draggable={local.draggable}
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
-        event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-        event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
-        withFileDragImage(event)
+        startFileDrag(event, local.node.path)
       }}
       {...rest}
     >
@@ -191,6 +145,7 @@ const FileTreeNode = (
 }
 
 export default function FileTree(props: {
+  session: SessionView
   path: string
   class?: string
   nodeClass?: string
@@ -198,7 +153,7 @@ export default function FileTree(props: {
   level?: number
   allowed?: readonly string[]
   modified?: readonly string[]
-  kinds?: ReadonlyMap<string, Kind>
+  kinds?: ReadonlyMap<string, ChangeKind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
   onFileDoubleClick?: (file: FileNode) => void
@@ -206,16 +161,16 @@ export default function FileTree(props: {
   _filter?: Filter
   _marks?: Set<string>
   _deeps?: Map<string, number>
-  _kinds?: ReadonlyMap<string, Kind>
+  _kinds?: ReadonlyMap<string, ChangeKind>
   _chain?: readonly string[]
 }) {
-  const file = useFile()
+  const file = props.session.file
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
 
   const key = (p: string) =>
     file
-      .normalize(p)
+      .resolve(p)
       .replace(/[\\/]+$/, "")
       .replaceAll("\\", "/")
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
@@ -273,7 +228,7 @@ export default function FileTree(props: {
       seen.add(id)
 
       const kids = file.tree
-        .children(dir)
+        .list(dir)
         .filter((node) => node.type === "directory" && (file.tree.state(node.path)?.expanded ?? false))
         .map((node) => node.path)
 
@@ -319,14 +274,14 @@ export default function FileTree(props: {
       (path) => {
         const dir = untrack(() => file.tree.state(path))
         if (!shouldListRoot({ level, dir })) return
-        void file.tree.list(path)
+        void file.tree.sync(path)
       },
       { defer: false },
     ),
   )
 
   const nodes = createMemo(() => {
-    const nodes = file.tree.children(props.path)
+    const nodes = file.tree.list(props.path)
     const current = filter()
     if (!current) return nodes
 
@@ -433,6 +388,7 @@ export default function FileTree(props: {
                       fallback={<div class="px-2 py-1 text-12-regular text-text-weak">…</div>}
                     >
                       <FileTree
+                        session={props.session}
                         path={node.path}
                         level={level + 1}
                         allowed={props.allowed}

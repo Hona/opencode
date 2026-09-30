@@ -1,61 +1,48 @@
-import { createMemo, createUniqueId, Show } from "solid-js"
+import { createEffect, createMemo, createUniqueId, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
-import FileTreeV2, { type Kind } from "@/session/files/file-tree-v2"
-import { useFile } from "@/workspaces/files/model"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { displayName } from "@/shell/layout/helpers"
-import { useSessionLayout } from "@/session/session-layout"
-import { SessionFileView } from "@/session/files/file-tabs"
-import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
-import { pathKey } from "@/workspaces/path-key"
-import { useServer } from "@/runtime/server/current"
+import { getFilename } from "@opencode/util/path"
+import type { ChangeKind } from "../review/contract"
+import { useExtension, usePanel, type PanelSidebar, type PanelTab, type SessionView } from "../sdk"
+import { useShared } from "./context"
+import SessionFileList, { applyFileListKeyDown } from "./list"
+import { fileTabPath, isFileTab } from "./path"
+import FileTreeV2 from "./tree-v2"
+import { SessionFileView } from "./view"
 
 const emptyFiles: string[] = []
 
-export type SessionFileBrowserState = {
-  sidebarOpened: () => boolean
-  sidebarWidth: () => number
-  sidebarTransition: () => boolean
-  resizeSidebar: (width: number) => void
-  toggleSidebar: () => void
-}
-
 export function SessionFileBrowserTab(props: {
-  tab: string
+  session: SessionView
+  /** The file tab to show; absent while browsing. */
+  id?: string
   placeholder: boolean
   active?: string
-  kinds: ReadonlyMap<string, Kind>
-  state: SessionFileBrowserState
+  kinds: ReadonlyMap<string, ChangeKind>
+  state: PanelSidebar
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
   filterRef?: (element: HTMLInputElement) => void
   mobile?: boolean
 }) {
-  const file = useFile()
-  const language = useLanguage()
-  const sdk = useWorkspaceLocation()
-  const server = useServer()
-  const serverSDK = useServerSDK()
-  const { workspaceKey } = useSessionLayout()
+  const ctx = useExtension()
+  const file = props.session.file
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [store, setStore] = createStore({ filter: "", explicitHighlight: undefined as string | undefined })
   const filter = () => store.filter
   const setFilter = (value: string) => setStore("filter", value)
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
-  const sidebarOpened = () => props.placeholder || props.state.sidebarOpened()
+  const sidebarOpened = () => props.placeholder || props.state.opened()
   const query = createMemo(() => filter().trim())
   const search = createQuery(() => {
     const value = query()
     return {
-      queryKey: [serverSDK.scope, "session-open-file", workspaceKey(), value] as const,
-      enabled: serverSDK.connection.status() === "connected" && value.length > 0,
-      queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
+      queryKey: [ctx.id, props.session.server.id, "session-open-file", file.root, value] as const,
+      enabled: props.session.server.connected && value.length > 0,
+      queryFn: ({ signal }) => file.search(value, { limit: 200, signal }),
       placeholderData: keepPreviousData,
     }
   })
@@ -72,16 +59,11 @@ export function SessionFileBrowserTab(props: {
   })
 
   const loading = createMemo(() => query().length > 0 && search.isPending)
-  const project = createMemo(() => {
-    const directory = pathKey(sdk().directory)
-    return server.ctx.projects
-      .list()
-      .find(
-        (item) =>
-          pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-      )
+  const title = createMemo(() => {
+    const project = props.session.project
+    const worktree = project?.worktree ?? file.root
+    return project?.name || getFilename(worktree) || worktree
   })
-  const title = createMemo(() => displayName(project() ?? { worktree: sdk().directory }))
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
@@ -105,7 +87,7 @@ export function SessionFileBrowserTab(props: {
       sidebar={
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
-          transition={props.state.sidebarTransition()}
+          transition={props.state.transition()}
           title={<span class="truncate">{title()}</span>}
           filter={filter()}
           onFilterChange={setFilter}
@@ -115,13 +97,14 @@ export function SessionFileBrowserTab(props: {
           filterControls={resultsID}
           filterActiveDescendant={highlighted() ? optionID(highlighted()!) : undefined}
           filterExpanded={query().length > 0 && files().length > 0}
-          width={props.state.sidebarWidth()}
-          onWidthChange={props.mobile ? undefined : props.state.resizeSidebar}
+          width={props.state.width()}
+          onWidthChange={props.mobile ? undefined : props.state.resize}
         >
           <Show
             when={query()}
             fallback={
               <FileTreeV2
+                session={props.session}
                 active={props.active}
                 kinds={props.kinds}
                 draggable={!props.mobile}
@@ -134,8 +117,8 @@ export function SessionFileBrowserTab(props: {
               when={!loading()}
               fallback={
                 <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
-                  {language.t("common.loading")}
-                  {language.t("common.loading.ellipsis")}
+                  {ctx.t("common.loading")}
+                  {ctx.t("common.loading.ellipsis")}
                 </div>
               }
             >
@@ -143,11 +126,12 @@ export function SessionFileBrowserTab(props: {
                 when={files().length > 0}
                 fallback={
                   <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
-                    {language.t("palette.empty")}
+                    {ctx.t("palette.empty")}
                   </div>
                 }
               >
                 <SessionFileList
+                  session={props.session}
                   id={resultsID}
                   role="listbox"
                   optionID={optionID}
@@ -174,19 +158,68 @@ export function SessionFileBrowserTab(props: {
             <div class="flex flex-col items-center gap-2 text-center text-text-weak">
               <Icon name="file-tree" size="large" class="mb-2" />
               <div class="text-[13px] font-medium leading-[13px] text-text-strong">
-                {language.t("command.file.open")}
+                {ctx.t("command.file.open")}
               </div>
-              <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
+              <div class="h-5 text-13-regular leading-5">{ctx.t("session.files.selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>
         }
       >
         <div class="min-h-0 flex-1">
-          <Show when={props.tab} keyed>
-            {(tab) => <SessionFileView tab={tab} />}
+          <Show when={props.id} keyed>
+            {(id) => <SessionFileView session={props.session} id={id} />}
           </Show>
         </div>
       </Show>
     </SessionFilePanelV2>
+  )
+}
+
+/** The side panel render every file tab and the "Open file" launcher share. */
+export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: SessionView }) {
+  const panel = usePanel()
+  const shared = useShared()
+  const id = () => props.tab().id
+  const placeholder = () => !isFileTab(id())
+  const empty = new Map<string, ChangeKind>()
+
+  // Change markers in the tree load while a file tab shows, as the side panel did.
+  createEffect(() => {
+    const changes = shared.changes()
+    if (!changes || !panel.visible() || placeholder()) return
+    onCleanup(changes.watch(props.session, "files"))
+  })
+
+  // Keep each file tab's last selection for the moment before a session's file view state loads.
+  createEffect(() => {
+    const file = props.session.file
+    if (!file.ready()) return
+    const files = Object.fromEntries(
+      panel
+        .open()
+        .filter(isFileTab)
+        .map((tab) => {
+          const path = fileTabPath(file, tab)
+          const selected = file.selection.get(path)
+          return [path, selected && "start" in selected && "end" in selected ? selected : null] as const
+        }),
+    )
+    shared.handoff.set(props.session.key, files)
+  })
+
+  return (
+    <SessionFileBrowserTab
+      session={props.session}
+      id={placeholder() ? undefined : id()}
+      placeholder={placeholder()}
+      active={placeholder() ? undefined : fileTabPath(props.session.file, id())}
+      kinds={shared.changes()?.kinds(props.session) ?? empty}
+      state={panel.sidebar}
+      onSelect={(path) => shared.open(props.session, path, { preview: true })}
+      onSelectPermanent={(path) => shared.open(props.session, path)}
+      filterRef={(element) => {
+        shared.filter.element = element
+      }}
+    />
   )
 }

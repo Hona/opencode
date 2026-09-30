@@ -8,8 +8,7 @@ import { ScrollView } from "@opencode/ui/scroll-view"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import type { FileContent } from "@/runtime/server/types"
-import { useLanguage } from "@/runtime/i18n/language"
+import { App, Links, useExtension, type FileContent, type SessionView } from "../sdk"
 import {
   artifactKind,
   blobUrlFromContent,
@@ -17,9 +16,9 @@ import {
   parseDelimited,
   resolveArtifactPath,
   type ArtifactKind,
-} from "@/workspaces/files/artifact"
-import { useArtifactOpener } from "@/session/files/open-artifact"
-import "./artifact-view.css"
+} from "./artifact"
+import { useShared } from "./context"
+import { workspaceFileUrl } from "./path"
 
 type ArtifactMode = "preview" | "source"
 
@@ -35,14 +34,21 @@ type MediaProps = {
 }
 
 /** Kinds that render a preview from their text and can toggle back to highlighted source. */
-const previewableKinds = new Set<ArtifactKind>(["svg", "html", "markdown", "mermaid", "table"])
+const previewableKinds: readonly ArtifactKind[] = ["svg", "html", "markdown", "mermaid", "table"]
 
 /**
  * Renders a loaded non-text file: media, documents, and data get a dedicated viewer with a toolbar;
  * previewable text kinds can switch to `source`, which the host supplies (its code view).
  */
-export function ArtifactView(props: { path: string; content: FileContent; cacheKey?: string; source: JSX.Element }) {
-  const language = useLanguage()
+export default function ArtifactView(props: {
+  session: SessionView
+  path: string
+  content: FileContent
+  cacheKey?: string
+  source: JSX.Element
+}) {
+  const ctx = useExtension()
+  const app = ctx.use(App)
   const [state, setState] = createStore({
     mode: "preview" as ArtifactMode,
     info: {} as ArtifactInfo,
@@ -64,16 +70,16 @@ export function ArtifactView(props: { path: string; content: FileContent; cacheK
   })
   const previewable = createMemo(() => {
     const value = kind()
-    return value !== "binary" && previewableKinds.has(value)
+    return value !== "binary" && previewableKinds.includes(value)
   })
   const meta = createMemo(() => {
     const info = state.info
     return [
       info.width && info.height ? `${info.width} × ${info.height}` : undefined,
       info.duration ? formatDuration(info.duration) : undefined,
-      info.rows !== undefined ? language.plural("file.view.table.rows", Math.max(0, info.rows - 1)) : undefined,
-      info.columns !== undefined ? language.plural("file.view.table.columns", info.columns) : undefined,
-      formatBytes(language.intl(), contentBytes(props.content)),
+      info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
+      info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
+      formatBytes(app.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
   })
 
@@ -84,7 +90,12 @@ export function ArtifactView(props: { path: string; content: FileContent; cacheK
         when={kind() === "markdown"}
         fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
       >
-        <ArtifactMarkdown path={props.path} text={props.content.content} cacheKey={props.cacheKey} />
+        <ArtifactMarkdown
+          session={props.session}
+          path={props.path}
+          text={props.content.content}
+          cacheKey={props.cacheKey}
+        />
       </Show>
     </ScrollView>
   )
@@ -97,7 +108,7 @@ export function ArtifactView(props: { path: string; content: FileContent; cacheK
         meta={meta()}
         actions={
           <Show when={kind() === "html"}>
-            <OpenInBrowserButton path={props.path} />
+            <OpenInBrowserButton session={props.session} path={props.path} />
           </Show>
         }
       />
@@ -123,7 +134,7 @@ export function ArtifactView(props: { path: string; content: FileContent; cacheK
           </Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           <Match when={kind() === "binary"}>
-            <ArtifactBinary path={props.path} size={formatBytes(language.intl(), contentBytes(props.content))} />
+            <ArtifactBinary path={props.path} size={formatBytes(app.locale(), contentBytes(props.content))} />
           </Match>
         </Switch>
       </Show>
@@ -156,7 +167,7 @@ function ArtifactToolbar(props: {
   meta: string[]
   actions?: JSX.Element
 }) {
-  const language = useLanguage()
+  const ctx = useExtension()
   return (
     <div data-slot="artifact-toolbar" class="flex h-10 shrink-0 items-center gap-3 px-4">
       <Show when={props.onModeChange}>
@@ -166,8 +177,8 @@ function ArtifactToolbar(props: {
             if (value === "preview" || value === "source") props.onModeChange?.(value)
           }}
         >
-          <SegmentedControlItem value="preview">{language.t("file.view.preview")}</SegmentedControlItem>
-          <SegmentedControlItem value="source">{language.t("file.view.source")}</SegmentedControlItem>
+          <SegmentedControlItem value="preview">{ctx.t("view.preview")}</SegmentedControlItem>
+          <SegmentedControlItem value="source">{ctx.t("view.source")}</SegmentedControlItem>
         </SegmentedControl>
       </Show>
       <div class="ms-auto flex min-w-0 items-center gap-3">
@@ -191,13 +202,18 @@ function ArtifactToolbar(props: {
   )
 }
 
-function OpenInBrowserButton(props: { path: string }) {
-  const language = useLanguage()
-  const artifacts = useArtifactOpener()
+function OpenInBrowserButton(props: { session: SessionView; path: string }) {
+  const ctx = useExtension()
+  const shared = useShared()
   return (
-    <Show when={artifacts.canOpenInBrowser(props.path)}>
-      <Button size="small" variant="ghost" icon="globe" onClick={() => artifacts.openInBrowser(props.path)}>
-        {language.t("file.view.openInBrowser")}
+    <Show when={shared.browser()?.canOpen(props.session, props.path)}>
+      <Button
+        size="small"
+        variant="ghost"
+        icon="globe"
+        onClick={() => shared.browser()?.open(props.session, workspaceFileUrl(props.session.file.root, props.path))}
+      >
+        {ctx.t("view.openInBrowser")}
       </Button>
     </Show>
   )
@@ -329,9 +345,10 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
   )
 }
 
-function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string }) {
+function ArtifactMarkdown(props: { session: SessionView; path: string; text: string; cacheKey?: string }) {
+  const ctx = useExtension()
+  const links = ctx.use(Links)
   const parent = useMarkdown()
-  const artifacts = useArtifactOpener()
   // getDirectory yields "/" for a root-level file, which would make relative links absolute.
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
@@ -339,7 +356,7 @@ function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string
   return (
     <MarkdownProvider
       readImage={(src, signal) => parent?.readImage?.(resolve(src), signal) ?? Promise.resolve(undefined)}
-      openLocalFile={(href) => artifacts.open(href, dir())}
+      openLocalFile={(href) => void links.open({ href, base: dir(), session: props.session })}
     >
       <div class="mx-auto w-full max-w-3xl px-8 py-6">
         <Markdown text={props.text} cacheKey={props.cacheKey} class="select-text" />
@@ -358,7 +375,7 @@ function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
 }
 
 function ArtifactTable(props: { path: string; text: string; onInfo: (info: ArtifactInfo) => void }) {
-  const language = useLanguage()
+  const ctx = useExtension()
   const parsed = createMemo(() => parseDelimited(props.text, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ","))
   createEffect(() => props.onInfo({ rows: parsed().total, columns: parsed().columns }))
   // Pad the header to the widest row so no data column is dropped.
@@ -386,7 +403,7 @@ function ArtifactTable(props: { path: string; text: string; onInfo: (info: Artif
       </table>
       <Show when={parsed().total > parsed().rows.length}>
         <div class="px-4 py-3 text-12-regular text-text-weak">
-          {language.t("file.view.table.truncated", { shown: parsed().rows.length - 1, total: parsed().total - 1 })}
+          {ctx.t("view.table.truncated", { shown: parsed().rows.length - 1, total: parsed().total - 1 })}
         </div>
       </Show>
     </div>
@@ -396,7 +413,7 @@ function ArtifactTable(props: { path: string; text: string; onInfo: (info: Artif
 const specimenSizes = [12, 16, 24, 40, 64]
 
 function ArtifactFont(props: { path: string; content: FileContent }) {
-  const language = useLanguage()
+  const ctx = useExtension()
   const url = createBlobUrl(() => props.content)
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
   createEffect(() => {
@@ -429,7 +446,7 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
                   {size}
                 </span>
                 <span class="text-text-base" style={{ "font-size": `${size}px`, "line-height": "1.25" }}>
-                  {language.t("file.view.fontSample")}
+                  {ctx.t("view.fontSample")}
                 </span>
               </div>
             )}
@@ -441,13 +458,13 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
 }
 
 function ArtifactBinary(props: { path: string; size: string }) {
-  const language = useLanguage()
+  const ctx = useExtension()
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1">
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <FileIcon node={{ path: props.path, type: "file" }} class="size-8 text-text-weak" />
         <div class="text-14-medium text-text-strong">{getFilename(props.path)}</div>
-        <div class="text-13-regular text-text-weak">{language.t("file.view.binary", { size: props.size })}</div>
+        <div class="text-13-regular text-text-weak">{ctx.t("view.binary", { size: props.size })}</div>
       </div>
     </div>
   )

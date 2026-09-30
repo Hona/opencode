@@ -153,9 +153,11 @@ export function SessionSidePanel(props: {
                                 {(entry) => (
                                   <PanelTrigger
                                     value={key}
+                                    extension={entry().extension}
                                     tab={entry().tab}
                                     index={tabs().all().indexOf(key)}
                                     active={props.region.active() === key}
+                                    preview={tabs().preview() === key}
                                     onClose={props.region.close}
                                     onPromote={(value) => void tabs().open(value)}
                                   />
@@ -202,7 +204,7 @@ export function SessionSidePanel(props: {
                         region={props.region}
                         view={props.view}
                         frame={{
-                          open: reviewOpen,
+                          shown: reviewOpen,
                           present: reviewVisible,
                           placement: () => "side",
                           reserve: () => false,

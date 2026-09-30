@@ -1,4 +1,4 @@
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, Match, Show, Switch, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Icon } from "@opencode/ui/icon"
@@ -9,20 +9,38 @@ import { Tabs } from "@opencode/ui/tabs"
 import type { PanelTab } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
+import { Contribution } from "@/runtime/extension/render"
 
 /** One side panel tab trigger. The extension supplies the content; the host owns close, drag, and ids. */
 export function PanelTrigger(props: {
   value: string
+  extension: string
   tab: PanelTab
   index: number
   active: boolean
+  preview: boolean
   onClose: (value: string) => void
   onPromote: (value: string) => void
 }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
   const closeKeybind = createMemo(() => command.keybindParts("file.close"))
-  const content = () => props.tab.label?.({ active: props.active }) ?? props.tab.title
+  // The label renders once per label function; state is read through getters so selection never remounts it.
+  const state = {
+    get active() {
+      return props.active
+    },
+    get preview() {
+      return props.preview
+    },
+  }
+  const label = createMemo(() => props.tab.label)
+  const rendered = createMemo(() => {
+    const render = label()
+    if (!render) return
+    return <Contribution extension={props.extension}>{() => untrack(() => render(state))}</Contribution>
+  })
+  const content = () => rendered() ?? props.tab.title
   const tooltip = (button: JSX.Element) => (
     <Tooltip
       value={
@@ -104,6 +122,7 @@ function SortableTrigger(props: {
   tab: PanelTab
   index: number
   active: boolean
+  preview: boolean
   content: JSX.Element
   close: JSX.Element
   onClose: (value: string) => void
@@ -127,7 +146,7 @@ function SortableTrigger(props: {
           aria-label={props.tab.missing ? props.tab.title : undefined}
           onMiddleClick={() => props.onClose(props.value)}
           onDblClick={() => {
-            if (props.tab.preview) props.onPromote(props.value)
+            if (props.preview) props.onPromote(props.value)
           }}
           closeButton={props.close}
           hideCloseButton

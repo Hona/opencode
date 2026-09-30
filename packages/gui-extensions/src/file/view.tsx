@@ -9,23 +9,27 @@ import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comm
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
-import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
-import { artifactKind } from "@/workspaces/files/artifact"
-import { ArtifactView } from "@/session/files/artifact-view"
-import { useComments } from "@/composer/comments"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useComposerState } from "@/composer/persistence"
-import { getSessionHandoff } from "@/session/handoff"
-import { useSessionLayout } from "@/session/session-layout"
-import { createSessionTabs } from "@/session/helpers"
+import { Layout, useExtension, type LineRange, type SessionView } from "../sdk"
+import { artifactKind } from "./artifact"
+import ArtifactView from "./artifact-view"
+import { useShared } from "./context"
+import { fileTabPath } from "./path"
 
-type SessionFileViewProps = {
-  tab: string
+type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
+
+function selectionFromLines(range: LineRange): FileSelection {
+  const startLine = Math.min(range.start, range.end)
+  const endLine = Math.max(range.start, range.end)
+  return {
+    startLine,
+    endLine,
+    startChar: 0,
+    endChar: 0,
+  }
 }
 
-const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+const selectionSide = (range: LineRange) => range.endSide ?? range.side ?? "additions"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -53,15 +57,20 @@ function FileCommentMenu(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
-  let scroll: HTMLDivElement | undefined
-  let scrollFrame: number | undefined
-  let restoreFrame: number | undefined
-  let pending: ScrollPos | undefined
+function createScrollSync(input: {
+  get: () => ScrollPos | undefined
+  set: (pos: ScrollPos) => void
+}) {
+  const state = {
+    scroll: undefined as HTMLDivElement | undefined,
+    scrollFrame: undefined as number | undefined,
+    restoreFrame: undefined as number | undefined,
+    pending: undefined as ScrollPos | undefined,
+  }
   const [code, setCode] = createSignal<HTMLElement[]>([])
 
   const getCode = () => {
-    const el = scroll
+    const el = state.scroll
     if (!el) return []
 
     const host = el.querySelector("diffs-container")
@@ -76,22 +85,22 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 
   const save = (next: ScrollPos) => {
-    pending = next
-    if (scrollFrame !== undefined) return
+    state.pending = next
+    if (state.scrollFrame !== undefined) return
 
-    scrollFrame = requestAnimationFrame(() => {
-      scrollFrame = undefined
+    state.scrollFrame = requestAnimationFrame(() => {
+      state.scrollFrame = undefined
 
-      const out = pending
-      pending = undefined
+      const out = state.pending
+      state.pending = undefined
       if (!out) return
 
-      input.view().setScroll(input.tab(), out)
+      input.set(out)
     })
   }
 
   const onCodeScroll = (event: Event) => {
-    const el = scroll
+    const el = state.scroll
     if (!el) return
 
     const target = event.currentTarget
@@ -111,10 +120,10 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 
   const restore = () => {
-    const el = scroll
+    const el = state.scroll
     if (!el) return
 
-    const pos = input.view().scroll(input.tab())
+    const pos = input.get()
     if (!pos) return
 
     sync()
@@ -131,10 +140,10 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 
   const queueRestore = () => {
-    if (restoreFrame !== undefined) return
+    if (state.restoreFrame !== undefined) return
 
-    restoreFrame = requestAnimationFrame(() => {
-      restoreFrame = undefined
+    state.restoreFrame = requestAnimationFrame(() => {
+      state.restoreFrame = undefined
       restore()
     })
   }
@@ -153,13 +162,13 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   })
 
   const setViewport = (el: HTMLDivElement) => {
-    scroll = el
+    state.scroll = el
     restore()
   }
 
   onCleanup(() => {
-    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
-    if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+    if (state.scrollFrame !== undefined) cancelAnimationFrame(state.scrollFrame)
+    if (state.restoreFrame !== undefined) cancelAnimationFrame(state.restoreFrame)
   })
 
   return {
@@ -169,57 +178,48 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 }
 
-export function FileTabContent(props: { tab: string }) {
-  return (
-    <Tabs.Content value={props.tab}>
-      <SessionFileView tab={props.tab} />
-    </Tabs.Content>
-  )
-}
-
-export function SessionFileView(props: SessionFileViewProps) {
-  const file = useFile()
-  const comments = useComments()
-  const language = useLanguage()
-  const prompt = useComposerState()
+export function SessionFileView(props: { session: SessionView; id: string }) {
+  const ctx = useExtension()
+  const layout = ctx.use(Layout)
+  const shared = useShared()
   const fileComponent = useFileComponent()
-  const { sessionKey, tabs, view } = useSessionLayout()
-  const activeFileTab = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
-  }).activeFileTab
+  const file = props.session.file
+  const comment = props.session.comment
+  const composer = props.session.composer
+  // The stored side tab key doubles as the scroll key, as it did before extensions.
+  const key = () => `file:${props.id}`
+  const active = () => shared.active(props.session, props.id)
 
-  let find: FileSearchHandle | null = null
+  const state = { find: null as FileSearchHandle | null }
 
   const search = {
     register: (handle: FileSearchHandle | null) => {
-      find = handle
+      state.find = handle
     },
   }
 
-  const path = createMemo(() => file.pathFromTab(props.tab))
-  const state = createMemo(() => {
+  const path = createMemo(() => fileTabPath(file, props.id))
+  const current = createMemo(() => {
     const p = path()
     if (!p) return
     return file.get(p)
   })
-  const contents = createMemo(() => state()?.content?.content ?? "")
+  const contents = createMemo(() => current()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
   // Plain text keeps the code view; every other kind is rendered by ArtifactView.
   const artifact = createMemo(() => {
-    const content = state()?.content
+    const content = current()?.content
     return content?.type === "binary" || artifactKind(path() ?? "") !== "text"
   })
-  const selectedLines = createMemo<SelectedLineRange | null>(() => {
+  const selectedLines = createMemo<LineRange | null>(() => {
     const p = path()
     if (!p) return null
-    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
-    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
+    if (file.ready()) return file.selection.get(p) ?? null
+    return shared.handoff.get(props.session.key, p) ?? null
   })
   const scrollSync = createScrollSync({
-    tab: () => props.tab,
-    view,
+    get: () => layout.scroll.get(props.session, key()),
+    set: (pos) => layout.scroll.set(props.session, key(), pos),
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
@@ -229,7 +229,7 @@ export function SessionFileView(props: SessionFileViewProps) {
     })
   }
 
-  const buildPreview = (filePath: string, lines: SelectedLineRange) => {
+  const buildPreview = (filePath: string, lines: LineRange) => {
     const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
     if (!source) return undefined
     return selectionPreview(source, selectionFromLines(lines))
@@ -237,7 +237,7 @@ export function SessionFileView(props: SessionFileViewProps) {
 
   const addCommentToContext = (input: {
     file: string
-    selection: SelectedLineRange
+    selection: LineRange
     comment: string
     preview?: string
     origin?: "review" | "file"
@@ -245,12 +245,12 @@ export function SessionFileView(props: SessionFileViewProps) {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, input.selection)
 
-    const saved = comments.add({
+    const saved = comment.add({
       file: input.file,
       selection: input.selection,
       comment: input.comment,
     })
-    prompt.context.add({
+    composer.attach({
       type: "file",
       path: input.file,
       selection,
@@ -261,53 +261,48 @@ export function SessionFileView(props: SessionFileViewProps) {
     })
   }
 
-  const updateCommentInContext = (input: {
-    id: string
-    file: string
-    selection: SelectedLineRange
-    comment: string
-  }) => {
-    comments.update(input.file, input.id, input.comment)
+  const updateCommentInContext = (input: { id: string; file: string; selection: LineRange; comment: string }) => {
+    comment.update(input.id, input.comment)
     const preview = input.file === path() ? buildPreview(input.file, input.selection) : undefined
-    prompt.context.updateComment(input.file, input.id, {
+    composer.update(input.id, {
       comment: input.comment,
       ...(preview ? { preview } : {}),
     })
   }
 
   const removeCommentFromContext = (input: { id: string; file: string }) => {
-    comments.remove(input.file, input.id)
-    prompt.context.removeComment(input.file, input.id)
+    comment.remove(input.id)
+    composer.detach(input.id)
   }
 
   const fileComments = createMemo(() => {
     const p = path()
     if (!p) return []
-    return comments.list(p)
+    return [...comment.list(p)]
   })
 
   const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
   const [note, setNote] = createStore({
     openedComment: null as string | null,
-    commenting: null as SelectedLineRange | null,
-    selected: null as SelectedLineRange | null,
+    commenting: null as LineRange | null,
+    selected: null as LineRange | null,
   })
 
-  const syncSelected = (range: SelectedLineRange | null) => {
+  const syncSelected = (range: LineRange | null) => {
     const p = path()
     if (!p) return
-    file.setSelectedLines(p, range ? cloneSelectedLineRange(range) : null)
+    file.selection.set(p, range ? cloneSelectedLineRange(range) : null)
   }
 
   const activeSelection = () => note.selected ?? selectedLines()
 
   const commentsUi = createLineCommentControllerV2({
     comments: fileComments,
-    label: language.t("ui.lineComment.submit"),
-    draftKey: () => path() ?? props.tab,
+    label: ctx.t("ui.lineComment.submit"),
+    draftKey: () => path() ?? props.id,
     mention: {
-      items: file.searchFilesAndDirectories,
+      items: (query) => file.search(query, { kind: "any" }),
     },
     getSide: selectionSide,
     state: {
@@ -335,12 +330,12 @@ export function SessionFileView(props: SessionFileViewProps) {
       if (!p) return
       removeCommentFromContext({ id: comment.id, file: p })
     },
-    editSubmitLabel: language.t("common.save"),
+    editSubmitLabel: ctx.t("common.save"),
     renderCommentActions: (_, controls) => (
       <FileCommentMenu
-        moreLabel={language.t("common.moreOptions")}
-        editLabel={language.t("common.edit")}
-        deleteLabel={language.t("common.delete")}
+        moreLabel={ctx.t("common.moreOptions")}
+        editLabel={ctx.t("common.edit")}
+        deleteLabel={ctx.t("common.delete")}
         onEdit={controls.edit}
         onDelete={controls.remove}
       />
@@ -351,13 +346,13 @@ export function SessionFileView(props: SessionFileViewProps) {
     if (typeof window === "undefined") return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (activeFileTab() !== props.tab) return
+      if (!active()) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
 
       event.preventDefault()
       event.stopPropagation()
-      find?.focus()
+      state.find?.focus()
     }
 
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
@@ -374,31 +369,30 @@ export function SessionFileView(props: SessionFileViewProps) {
   )
 
   createEffect(() => {
-    const focus = comments.focus()
+    const focus = comment.focus.current()
     const p = path()
     if (!focus || !p) return
     if (focus.file !== p) return
-    if (activeFileTab() !== props.tab) return
+    if (!active()) return
 
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
 
     commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
-    requestAnimationFrame(() => comments.clearFocus())
+    requestAnimationFrame(() => comment.focus.set(null))
   })
 
-  let prev = {
-    loaded: false,
-    ready: false,
-    active: false,
-  }
+  const previous = { loaded: false, ready: false, active: false }
 
   createEffect(() => {
-    const loaded = !!state()?.loaded
+    const loaded = !!current()?.loaded
     const ready = file.ready()
-    const active = activeFileTab() === props.tab
-    const restore = (loaded && !prev.loaded) || (ready && !prev.ready) || (active && loaded && !prev.active)
-    prev = { loaded, ready, active }
+    const shown = active()
+    const restore =
+      (loaded && !previous.loaded) || (ready && !previous.ready) || (shown && loaded && !previous.active)
+    previous.loaded = loaded
+    previous.ready = ready
+    previous.active = shown
     if (!restore) return
     scrollSync.queueRestore()
   })
@@ -423,10 +417,10 @@ export function SessionFileView(props: SessionFileViewProps) {
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
         renderGutterUtility={commentsUi.renderGutterUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
+        onLineSelected={(range: LineRange | null) => {
           commentsUi.onLineSelected(range)
         }}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
+        onLineSelectionEnd={(range: LineRange | null) => {
           if (!range) {
             commentsUi.note.select(null)
             commentsUi.note.cancelDraft()
@@ -434,7 +428,7 @@ export function SessionFileView(props: SessionFileViewProps) {
           }
           commentsUi.onLineSelectionEnd(range)
         }}
-        onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
+        onLineNumberSelectionEnd={(range: LineRange | null) => {
           commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
@@ -452,13 +446,14 @@ export function SessionFileView(props: SessionFileViewProps) {
     </ScrollView>
   )
 
-  const content = () => (
+  return (
     <div class="mt-3 relative h-full min-h-0 flex flex-col">
       <Switch>
-        <Match when={state()?.loaded ? state()?.content : undefined}>
+        <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
             <Show when={artifact()} fallback={codeView(value().content)}>
               <ArtifactView
+                session={props.session}
                 path={path() ?? ""}
                 content={value()}
                 cacheKey={cacheKey()}
@@ -467,16 +462,14 @@ export function SessionFileView(props: SessionFileViewProps) {
             </Show>
           )}
         </Match>
-        <Match when={state()?.loading}>
-          <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
+        <Match when={current()?.loading}>
+          <div class="px-6 py-4 text-text-weak">{ctx.t("common.loading")}…</div>
         </Match>
-        <Match when={state()?.notFound ? state()?.name : undefined}>
-          {(name) => <div class="px-6 py-4 text-text-weak">{language.t("file.error.notFound", { name: name() })}</div>}
+        <Match when={current()?.notFound ? current()?.name : undefined}>
+          {(name) => <div class="px-6 py-4 text-text-weak">{ctx.t("tab.notFound", { name: name() })}</div>}
         </Match>
-        <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+        <Match when={current()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
       </Switch>
     </div>
   )
-
-  return content()
 }

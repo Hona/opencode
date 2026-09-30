@@ -1,16 +1,13 @@
-import { FileIcon } from "@opencode/ui/file-icon"
-import "@opencode/ui/file-tree.css"
-import { getDirectory, getFilename } from "@opencode/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { kindChange, kindLabel, syncFileTreeV2Width, type Kind } from "@/session/files/file-tree-v2"
-import { normalizePath } from "@/session/review/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { virtualScrollElement } from "@/session/files/virtual-scroll"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useOpenInApp } from "@/session/files/open-in-app"
-import { OpenInAppContextMenuV2 } from "@/session/files/open-in-app-button"
-import { resolveOpenInAppPath } from "@/session/files/open-in-app-path"
-import { usePlatform } from "@/runtime/platform/platform"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { getDirectory, getFilename } from "@opencode/util/path"
+import type { ChangeKind } from "../review/contract"
+import { Native, useExtension, type SessionView } from "../sdk"
+import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
+import { resolveOpenInAppPath } from "./path"
+import { normalizeFileTreeV2Path } from "./tree-model"
+import { kindChange, kindLabel, syncFileTreeV2Width, virtualScrollElement } from "./tree-v2"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -43,23 +40,23 @@ export function applyFileListKeyDown(
 // row data-slots on purpose so file-tree-v2.css styles both. data-highlighted has
 // no CSS of its own — it folds into data-selected below and only exists as the
 // scrollIntoView query hook.
-export function SessionFileList(props: {
+export default function SessionFileList(props: {
+  session: SessionView
   files: readonly string[]
   active?: string
   highlighted?: string
-  kinds?: ReadonlyMap<string, Kind>
+  kinds?: ReadonlyMap<string, ChangeKind>
   id?: string
   role?: "listbox"
   optionID?: (path: string) => string
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
 }) {
-  const location = useWorkspaceLocation()
-  const platform = usePlatform()
-  const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => location().directory }) : undefined
-  const active = () => normalizePath(props.active ?? "")
-  const highlighted = () => normalizePath(props.highlighted ?? "")
-  const normalized = createMemo(() => props.files.map(normalizePath))
+  const ctx = useExtension()
+  const openIn = ctx.use(Native) ? useOpenInApp({ session: props.session, path: () => props.session.file.root }) : undefined
+  const active = () => normalizeFileTreeV2Path(props.active ?? "")
+  const highlighted = () => normalizeFileTreeV2Path(props.highlighted ?? "")
+  const normalized = createMemo(() => props.files.map(normalizeFileTreeV2Path))
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [focused, setFocused] = createSignal<string>()
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -122,7 +119,7 @@ export function SessionFileList(props: {
       <For each={virtualRowKeys()}>
         {(key) => {
           const path = key as string
-          const value = normalizePath(path)
+          const value = normalizeFileTreeV2Path(path)
           const selected = () => (highlighted() ? highlighted() === value : active() === value)
           const highlightedRow = () => highlighted() === value
           const kind = () => props.kinds?.get(value)
@@ -142,7 +139,10 @@ export function SessionFileList(props: {
                     transform: `translateY(${item().start}px)`,
                   }}
                 >
-                  <OpenInAppContextMenuV2 state={openIn} path={() => resolveOpenInAppPath(location().directory, path)}>
+                  <OpenInAppContextMenuV2
+                    state={openIn}
+                    path={() => resolveOpenInAppPath(props.session.file.root, path)}
+                  >
                     <button
                       type="button"
                       id={props.optionID?.(path)}

@@ -1,35 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { filterReviewFiles, reviewDiffDirectory, reviewDiffKinds, reviewDiffNeedsLoad } from "./review-diff-kinds"
-
-describe("reviewDiffKinds", () => {
-  test("maps file and directory kinds", () => {
-    const kinds = reviewDiffKinds([
-      { file: "src/a.ts", patch: "", additions: 1, deletions: 0, status: "added" },
-      { file: "src/b.ts", patch: "", additions: 0, deletions: 2, status: "deleted" },
-    ])
-
-    expect(kinds.get("src/a.ts")).toBe("add")
-    expect(kinds.get("src/b.ts")).toBe("del")
-    expect(kinds.get("src")).toBe("mix")
-  })
-
-  test("normalizes file and directory paths", () => {
-    const kinds = reviewDiffKinds([
-      { file: "\\src//lib/a.ts/", patch: "", additions: 1, deletions: 1, status: "modified" },
-    ])
-
-    expect(kinds.get("src/lib/a.ts")).toBe("mix")
-    expect(kinds.get("src/lib")).toBe("mix")
-  })
-})
-
-describe("filterReviewFiles", () => {
-  test("filters by path substring", () => {
-    const files = ["src/a.ts", "src/b.ts", "lib/c.ts"]
-    expect(filterReviewFiles(files, "b.ts")).toEqual(["src/b.ts"])
-    expect(filterReviewFiles(files, "")).toEqual(files)
-  })
-})
+import { reviewDiffDirectory, reviewDiffNeedsLoad, sortReviewPaths } from "./kinds"
 
 describe("reviewDiffNeedsLoad", () => {
   test("loads changed files whose aggregate patch has no hunks", () => {
@@ -72,5 +42,22 @@ describe("reviewDiffDirectory", () => {
     expect(reviewDiffDirectory("C:\\", "README.md")).toBe("C:\\")
     expect(reviewDiffDirectory("/", "src/a.ts")).toBe("/src")
     expect(reviewDiffDirectory("C:\\", "src/a.ts")).toBe("C:\\src")
+  })
+})
+
+describe("sortReviewPaths", () => {
+  test("orders navigation depth-first with directories before sibling files", () => {
+    const paths = ["README.md", "src/a.ts", "src/lib/z.ts", "docs/guide.md", "src/lib/b.ts"]
+
+    expect(sortReviewPaths(paths)).toEqual(["docs/guide.md", "src/lib/b.ts", "src/lib/z.ts", "src/a.ts", "README.md"])
+    expect(paths[0]).toBe("README.md")
+  })
+
+  test("preserves original paths for selection", () => {
+    expect(sortReviewPaths(["README.md", "src\\lib\\a.ts", "/docs//guide.md/"])).toEqual([
+      "/docs//guide.md/",
+      "src\\lib\\a.ts",
+      "README.md",
+    ])
   })
 })
