@@ -2,32 +2,13 @@ import { batch, createEffect, createSignal, getOwner, on, onCleanup, runWithOwne
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { Layout, Links, Sessions, type Context, type Link, type RemoteClient, type SessionRef } from "../sdk"
+import { Layout, Links, Sessions, type Context, type Link, type SessionRef } from "../sdk"
 import { readHref } from "./comment"
+import { createConnection, unavailable, type Connection, type InspectEvent, type Registration } from "./connection"
 import { isHtml, resolveLink, workspaceFileURL } from "./link"
 import { BrowserPane, type PaneEvent } from "./remote"
 
-type Client = RemoteClient<(typeof BrowserPane)["spec"]>
 type Session = Pick<SessionRef, "key">
-export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
-
-type Registration = {
-  /** Creates a restored tab's page, which then reports its surface. */
-  load(tabID: Browser.TabID): void
-  command(command: Browser.Action): Promise<void>
-  inspect(tabID: Browser.TabID, enabled: boolean): void
-  highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
-  close(): void
-}
-
-type ConnectionState = {
-  registration?: Registration
-  browser: Browser.State | null
-  /** Host surface per tab page of the current registration. */
-  surfaces: Readonly<Record<string, string>>
-  suspended: boolean
-  error?: string
-}
 
 /** What panels read. `registration` numbers each registration so a new one is observable. */
 type Attachment = {
@@ -40,7 +21,7 @@ type Attachment = {
 
 type Live = {
   ref: SessionRef
-  connection: ReturnType<typeof createConnection>
+  connection: Connection
   registration?: Registration
   revision: number
   /** Tab IDs of the last inventory, to tell new tabs from ones the user just closed. */
@@ -349,159 +330,4 @@ export function createModel(ctx: Context) {
       return () => setPanes((list) => list.filter((item) => item !== handle))
     },
   }
-}
-
-// Owns native registration, retry, and suspended tab metadata independently of the mounted session route.
-function createConnection(input: {
-  client: () => Client | undefined
-  listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
-  target: () => { server: string; session: string }
-  change: (state: ConnectionState) => void
-  focus: (tabID: Browser.TabID) => void
-  preview: (path: string) => void
-  inspect: (event: InspectEvent) => void
-}) {
-  const state: ConnectionState = { browser: null, surfaces: {}, suspended: false }
-  let disposed = false
-  let blocked = false
-  let attempts = 0
-  let retry: ReturnType<typeof setTimeout> | undefined
-  // The pane itself is unreachable while its main extension restarts. Keep the tabs, like an idle
-  // eviction; the next interaction or the pane's return registers again.
-  const suspend = (registration: Registration) => {
-    if (disposed || state.registration !== registration) return
-    registration.close()
-    state.registration = undefined
-    state.surfaces = {}
-    state.suspended = true
-    state.error = undefined
-    input.change({ ...state })
-  }
-  const register = () => {
-    if (disposed || blocked || state.registration) return
-    const current = input.client()
-    if (!current) return
-    clearTimeout(retry)
-    const registration: Registration = open(
-      current,
-      input.listen,
-      { ...input.target(), ...(state.browser ? { restore: state.browser } : {}) },
-      (event) => {
-        if (disposed || state.registration !== registration) return
-        if (event.type === "focus") return input.focus(event.tabID)
-        if (event.type === "preview") return input.preview(event.path)
-        if (event.type === "inspect") return input.inspect(event)
-        if (event.type === "surface") {
-          state.surfaces = { ...state.surfaces, [event.tabID]: event.surface }
-          return input.change({ ...state })
-        }
-        if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.replaced") {
-          blocked = true
-          registration.close()
-          state.registration = undefined
-          state.surfaces = {}
-          state.browser = null
-          state.error = event.error
-          input.change({ ...state })
-          return
-        }
-        if (event.error === "browser.pane.suspended" || event.error === "browser.pane.registration.closed") {
-          registration.close()
-          state.registration = undefined
-          state.surfaces = {}
-          state.suspended = event.error === "browser.pane.suspended"
-          if (state.suspended && event.state) state.browser = event.state
-          state.error = undefined
-          input.change({ ...state })
-          // Idle eviction has no retry timer. A user or Session execution wakes it on demand.
-          if (!state.suspended) retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
-          return
-        }
-        if (event.state) attempts = 0
-        state.browser = event.state
-        state.error = event.error
-        input.change({ ...state })
-      },
-      (error) => {
-        if (unavailable(error)) suspend(registration)
-      },
-    )
-    state.registration = registration
-    state.surfaces = {}
-    state.suspended = false
-    state.error = undefined
-    input.change({ ...state })
-  }
-  return {
-    wake: register,
-    command(command: Browser.Action) {
-      register()
-      const registration = state.registration
-      if (!registration) {
-        const error = new Error("browser.pane.unavailable")
-        return Promise.reject(input.client() ? error : Object.assign(error, { code: "unavailable" }))
-      }
-      return registration.command(command).catch((error: unknown) => {
-        if (unavailable(error)) suspend(registration)
-        throw error
-      })
-    },
-    inspect(tabID: Browser.TabID, enabled: boolean) {
-      state.registration?.inspect(tabID, enabled)
-    },
-    highlight(tabID: Browser.TabID, ref?: Browser.Ref) {
-      state.registration?.highlight(tabID, ref)
-    },
-    dispose() {
-      disposed = true
-      clearTimeout(retry)
-      state.registration?.close()
-      state.registration = undefined
-    },
-  }
-}
-
-function open(
-  client: Client,
-  listen: (binding: string, listener: (event: PaneEvent) => void) => () => void,
-  target: { server: string; session: string; restore?: Browser.State },
-  listener: (event: PaneEvent) => void,
-  failed: (error: unknown) => void,
-): Registration {
-  const binding = crypto.randomUUID()
-  const status = { closed: false }
-  const stop = listen(binding, (event) => {
-    if (!status.closed) listener(event)
-  })
-  const ready = client.register({ binding, ...target })
-  // Other failures reach the owner through the closed-state event; keep the bare promise handled.
-  void ready.catch(failed)
-  return {
-    load(tabID) {
-      if (status.closed) return
-      void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
-    },
-    command: (command) => ready.then(() => client.command({ binding, command })),
-    inspect(tabID, enabled) {
-      if (status.closed) return
-      void ready.then(() => client.inspect({ binding, tabID, enabled })).catch(() => undefined)
-    },
-    highlight(tabID, ref) {
-      if (status.closed) return
-      void ready
-        .then(() => client.highlight({ binding, tabID, ...(ref === undefined ? {} : { ref }) }))
-        .catch(() => undefined)
-    },
-    close() {
-      if (status.closed) return
-      status.closed = true
-      stop()
-      void ready.then(() => client.close({ binding })).catch(() => undefined)
-    },
-  }
-}
-
-// The bridge rejects with code "unavailable" while the pane's main extension is not running.
-function unavailable(error: unknown) {
-  return error instanceof Error && "code" in error && error.code === "unavailable"
 }
