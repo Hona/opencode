@@ -1,8 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
-import { mockOpenCodeServer } from "../utils/mock-server"
-import { openSettings, type WorkspaceInput } from "../utils/workspace"
+import { mockRemoteServer, openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
 const projectID = "proj_settings_demo"
@@ -35,18 +34,6 @@ function open(page: Page, input: Partial<WorkspaceInput> = {}) {
     })),
     ...input,
     seed: { tabs: [], ...input.seed },
-  })
-}
-
-// The seeded remote server answers as a second single-project server.
-function mockRemote(page: Page) {
-  return mockOpenCodeServer(page, {
-    server: REMOTE_SERVER,
-    directory: "/remote/settings-demo",
-    project: project({ id: "proj_remote_settings", directory: "/remote/settings-demo" }),
-    provider: NO_PROVIDER,
-    sessions: [],
-    pageMessages: () => ({ items: [] }),
   })
 }
 
@@ -89,8 +76,8 @@ test("a settings page survives refresh", async ({ page }) => {
 })
 
 test("another server's settings page survives refresh", async ({ page }) => {
-  await mockRemote(page)
-  const { settings } = await open(page, { seed: { servers: [REMOTE_SERVER] } })
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+  const { settings } = await open(page)
   const url = (value: URL) =>
     value.pathname === "/settings" &&
     value.searchParams.get("server") === REMOTE_SERVER &&
@@ -693,8 +680,8 @@ for (const row of [
 }
 
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {
-  await mockRemote(page)
-  const { settings } = await open(page, { seed: { servers: [REMOTE_SERVER] } })
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+  const { settings } = await open(page)
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" }).hover()
   await settings.getByRole("button", { name: "Add server" }).click()

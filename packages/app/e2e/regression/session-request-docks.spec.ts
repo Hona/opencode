@@ -80,16 +80,18 @@ test("shows a pending question dock", async ({ page }) => {
 
 test("shows a pending permission dock", async ({ page }) => {
   await mockServer(page, {
-    permissions: [
-      {
-        id: "permission-request",
-        sessionID,
-        permission: "shell",
-        patterns: ["git status", "git diff"],
-        metadata: {},
-        always: [],
-      },
-    ],
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "shell",
+          patterns: ["git status", "git diff"],
+          metadata: {},
+          always: [],
+        },
+      ],
+    },
   })
 
   await page.goto(sessionHref(sessionID))
@@ -176,6 +178,6 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-function mockServer(page: Page, requests: Pick<WorkspaceInput, "permissions" | "forms">) {
+function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "forms">) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }

@@ -254,6 +254,14 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionCommand", "/api/session/:sessionID/command", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: NoContent,
+      error: Unsupported,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionGenerate", "/api/session/:sessionID/generate", {
       params: SessionParams,
       payload: Schema.Struct({ prompt: Schema.String }),

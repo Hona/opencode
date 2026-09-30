@@ -1,9 +1,0 @@
-import { expect, test } from "bun:test"
-import { base64Encode } from "@opencode/util/encode"
-import { fixture, stressSessionHref } from "../../utils/session-fixture"
-
-test("builds stress session links for the benchmark server", () => {
-  expect(stressSessionHref(fixture.sourceID)).toBe(
-    `/server/${base64Encode("http://127.0.0.1:4096")}/session/${fixture.sourceID}`,
-  )
-})

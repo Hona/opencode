@@ -268,46 +268,23 @@ export async function setupTimeline(
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: input.cpuRate })
   }
 
+  // `delay` and `sendAll` pace benchmark workloads only; tests wait for the resulting UI state instead.
+  const send = async (input: TimelineEvent, delay = 0) => {
+    const events = timelineEvents(input)
+    if (events.length === 1) await transport.send(events[0]!, { marker: describeEvent(events[0]!) })
+    if (events.length > 1)
+      await transport.burst(
+        events,
+        events.map((item) => ({ marker: describeEvent(item) })),
+      )
+    if (delay) await page.waitForTimeout(delay)
+  }
   return {
     transport,
     pty: mock.pty,
-    // `delay` and `sendAll` pace benchmark workloads only; tests wait for the resulting UI state instead.
-    async send(input: TimelineEvent, delay = 0) {
-      const events = timelineEvents(input)
-      if (events.length === 1) await transport.send(events[0]!, { marker: describeEvent(events[0]!) })
-      if (events.length > 1)
-        await transport.burst(
-          events,
-          events.map((item) => ({ marker: describeEvent(item) })),
-        )
-      if (delay) await page.waitForTimeout(delay)
-    },
+    send,
     async sendAll(sequence: { event: TimelineEvent; delay: number }[]) {
-      for (const item of sequence) {
-        const events = timelineEvents(item.event)
-        if (events.length === 1) await transport.send(events[0]!, { marker: describeEvent(events[0]!) })
-        if (events.length > 1)
-          await transport.burst(
-            events,
-            events.map((event) => ({ marker: describeEvent(event) })),
-          )
-        await page.waitForTimeout(item.delay)
-      }
-    },
-    async settle(frames = 3) {
-      await page.evaluate(
-        (frames) =>
-          new Promise<void>((resolve) => {
-            let remaining = frames
-            const tick = () => {
-              remaining--
-              if (remaining <= 0) return resolve()
-              requestAnimationFrame(tick)
-            }
-            requestAnimationFrame(tick)
-          }),
-        frames,
-      )
+      for (const item of sequence) await send(item.event, item.delay)
     },
     async waitForPart(partID: string) {
       const part = page.locator(`[data-timeline-part-id="${renderedPartID(partID)}"]`)

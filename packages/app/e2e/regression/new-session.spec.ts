@@ -1,9 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
-import { SERVER, draftHref, expectPath, provider, seed, sessionHref } from "../utils/app"
-import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
-import { openDraft, openSession } from "../utils/workspace"
-import { expectAppVisible } from "../utils/waits"
+import { draftHref, expectPath, provider, sessionHref } from "../utils/app"
+import type { MockAnswer } from "../utils/mock-server"
+import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
 const workspace = "C:/OpenCode/pending-workspace"
@@ -17,6 +16,17 @@ const editor = (page: Page) => page.locator('[data-component="composer-editor"]'
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
 const tabLink = (page: Page, sessionID: string) =>
   page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
+// A draft on the local project (C:/OpenCode/WorkspacePending) beside one other session tab.
+const pendingDraft = {
+  name: "WorkspacePending",
+  draftID,
+  project: { id: projectID, name: "workspace-pending" },
+  provider: provider({ id: "pending-model", name: "Pending Model" }),
+  sessions: [{ id: otherID, title: "Other session" }],
+  createdSessionTitle: "Created workspace session",
+} satisfies WorkspaceInput & { draftID: string }
+const failFirstCreate = (_: unknown, attempt: number): MockAnswer | undefined =>
+  attempt === 1 ? { status: 500, body: { message: "Session creation failed in the fixture" } } : undefined
 
 test.use({
   serviceWorkers: "block",
@@ -65,7 +75,7 @@ test("the dark new session panel exposes no lighter background at its rounded co
 test("a pending worktree session shows immediately, keeps its draft, and hands off to the created session", async ({
   page,
 }) => {
-  const mock = await openWorktreeDraft(page, { untitled: true })
+  const mock = await openWorktreeDraft(page, { ...pendingDraft, createdSessionTitle: "" })
   const label = page.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
@@ -79,7 +89,7 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   await editor(page).press("ControlOrMeta+Enter")
   await page.locator('[data-component="composer"]').dispatchEvent("submit")
   await expect(editor(page)).toHaveText(followUp)
-  expect(mock.worktreeRequests).toEqual([expect.objectContaining({ from: directory })])
+  expect(mock.worktreeRequests.map((request) => request.body)).toEqual([expect.objectContaining({ from: directory })])
 
   await tabLink(page, otherID).click()
   await expectPath(page, sessionHref(otherID))
@@ -127,7 +137,7 @@ test("a pending worktree session keeps Session as its mobile title until the gen
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  const mock = await openWorktreeDraft(page, { untitled: true })
+  const mock = await openWorktreeDraft(page, { ...pendingDraft, createdSessionTitle: "" })
   const label = page.locator('[data-slot="mobile-tab-title"]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
@@ -143,7 +153,7 @@ test("a pending worktree session keeps Session as its mobile title until the gen
 })
 
 test("the title and message stay stable through worktree creation", async ({ page }) => {
-  const mock = await openWorktreeDraft(page)
+  const mock = await openWorktreeDraft(page, pendingDraft)
   const pending = await submitPending(page, mock)
   await draftFollowUp(page)
   await editor(page).press("ControlOrMeta+Home")
@@ -216,7 +226,10 @@ for (const row of [
   { failure: "worktree", followUp: false, calls: ["worktree"] },
 ]) {
   test(`a ${row.failure} failure restores the draft (follow-up: ${row.followUp})`, async ({ page }) => {
-    const mock = await openWorktreeDraft(page, { failSessionCreate: row.failure === "session" })
+    const mock = await openWorktreeDraft(page, {
+      ...pendingDraft,
+      onSessionCreate: row.failure === "session" ? failFirstCreate : undefined,
+    })
     const pending = await submitPending(page, mock)
     if (row.followUp) await draftFollowUp(page)
     if (row.failure === "prompt")
@@ -246,7 +259,7 @@ for (const row of [
 }
 
 test("retains the draft and reuses the created workspace after session creation fails", async ({ page }) => {
-  const mock = await openWorktreeDraft(page, { failSessionCreate: true })
+  const mock = await openWorktreeDraft(page, { ...pendingDraft, onSessionCreate: failFirstCreate })
   const pending = await submitPending(page, mock)
 
   mock.worktree.resolve({ status: 200, json: { directory: workspace } })
@@ -274,7 +287,7 @@ test("retains the draft and reuses the created workspace after session creation 
 })
 
 test("restores the draft after closing and revisiting a pending session that fails", async ({ page }) => {
-  const mock = await openWorktreeDraft(page)
+  const mock = await openWorktreeDraft(page, pendingDraft)
   const pending = await submitPending(page, mock)
   await draftFollowUp(page)
   const tab = tabLink(page, pending.sessionID)
@@ -313,30 +326,14 @@ test("restores the draft after closing and revisiting a pending session that fai
 })
 
 test("executes a selected slash command after creating its worktree", async ({ page }) => {
-  const mock = await openWorktreeDraft(page, { command: true })
-  const commands: { sessionID: string; body: Record<string, unknown> }[] = []
+  const commands: { sessionID: string; body: unknown }[] = []
+  const mock = await openWorktreeDraft(page, {
+    ...pendingDraft,
+    commands: [{ name: "review", description: "Review changes" }],
+    onCommand: (input) => commands.push(input),
+  })
   const expanded =
     "Review the latest commit for correctness and regressions. Check the relevant tests and report actionable findings."
-  await page.route("**/api/session/*/command", async (route) => {
-    if (route.request().method() !== "POST") return route.fallback()
-    const sessionID = new URL(route.request().url()).pathname.split("/")[3]!
-    commands.push({ sessionID, body: route.request().postDataJSON() })
-    await route.fulfill({ status: 204, headers })
-    // The server owns command expansion; the client receives the expanded inbox item.
-    await mock.push([
-      {
-        id: "evt_workspace_review",
-        type: "session.inbox.enqueued",
-        created: Date.now(),
-        durable: { aggregateID: sessionID, seq: 1, version: 1 },
-        data: {
-          sessionID,
-          inboxID: "msg_workspace_review",
-          item: { type: "user", payload: { text: expanded }, delivery: "steer" },
-        },
-      } as OpenCodeEvent,
-    ])
-  })
   await editor(page).fill("/review")
   const suggestion = page.getByRole("button", { name: "/review Review changes", exact: true })
   await suggestion.click()
@@ -354,6 +351,20 @@ test("executes a selected slash command after creating its worktree", async ({ p
         body: { name: "review", text: "latest commit", files: [], agents: [], skills: [], delivery: "steer" },
       },
     ])
+  // The server owns command expansion; the client receives the expanded inbox item.
+  await mock.push([
+    {
+      id: "evt_workspace_review",
+      type: "session.inbox.enqueued",
+      created: Date.now(),
+      durable: { aggregateID: pending.sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID: pending.sessionID,
+        inboxID: "msg_workspace_review",
+        item: { type: "user", payload: { text: expanded }, delivery: "steer" },
+      },
+    } as OpenCodeEvent,
+  ])
   await expect(pending.shimmer).toHaveCount(0)
   await expect(page.locator('[data-slot="user-message-text"]')).toHaveText(expanded)
   await expect(editor(page)).toHaveText(followUp)
@@ -473,122 +484,6 @@ async function draftFollowUp(page: Page) {
   await expect(editor(page)).toHaveText(followUp)
 }
 
-// A draft on the local project with "New worktree" selected. Worktree creation stays pending until
-// the test resolves it; sessions are created with the client-reserved ID.
-async function openWorktreeDraft(
-  page: Page,
-  options?: { failSessionCreate?: boolean; untitled?: boolean; command?: boolean },
-) {
-  const worktree = Promise.withResolvers<{ status: number; json: { directory?: string; message?: string } }>()
-  const calls: string[] = []
-  const worktreeRequests: Record<string, unknown>[] = []
-  const creates: Record<string, unknown>[] = []
-  const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
-  const project = {
-    id: projectID,
-    worktree: directory,
-    vcs: "git",
-    name: "workspace-pending",
-    time: { created: 1700000000000, updated: 1700000000000 },
-    sandboxes: [] as string[],
-  }
-  const sessions = [currentSession({ id: otherID, projectID, title: "Other session" }, directory)]
-  const mock = await mockOpenCodeServer(page, {
-    directory,
-    project,
-    provider: provider({ id: "pending-model", name: "Pending Model" }),
-    sessions,
-    pageMessages: () => ({ items: [] }),
-    onPrompt: (input) => prompts.push(input),
-  })
-  page.on("request", (request) => {
-    if (request.method() !== "POST") return
-    const path = new URL(request.url()).pathname
-    if (path === "/api/worktree") {
-      expect(new URL(request.url()).searchParams.has("location[directory]")).toBe(false)
-      expect(request.postDataJSON()).toMatchObject({ projectID })
-      calls.push("worktree")
-      worktreeRequests.push(request.postDataJSON())
-    }
-    if (path === "/api/session") calls.push("session")
-    if (/^\/api\/session\/[^/]+\/prompt$/.test(path)) calls.push("prompt")
-  })
-  await page.route(
-    (url) => url.pathname === "/api/worktree",
-    async (route) => {
-      if (route.request().method() !== "POST") return route.fallback()
-      const response = await worktree.promise
-      if (response.status === 200) project.sandboxes.push(workspace)
-      await route.fulfill({ ...response, headers })
-    },
-  )
-  await page.route("**/api/session", async (route) => {
-    if (route.request().method() !== "POST") return route.fallback()
-    const body: Record<string, unknown> = route.request().postDataJSON()
-    creates.push(body)
-    if (options?.failSessionCreate && creates.length === 1)
-      return route.fulfill({ status: 500, json: { message: "Session creation failed in the fixture" }, headers })
-    if (typeof body.id !== "string") throw new Error("Session creation must use the client-reserved ID")
-    const created = currentSession(
-      { ...body, id: body.id, projectID, title: options?.untitled ? "" : "Created workspace session" },
-      workspace,
-    )
-    sessions.push(created)
-    return route.fulfill({ json: { data: created }, headers })
-  })
-  // Every location, including the new worktree, belongs to the same project.
-  const locate = (url: string) => new URL(url).searchParams.get("location[directory]") ?? directory
-  await page.route("**/api/location?**", (route) =>
-    route.fulfill({
-      json: { directory: locate(route.request().url()), project: { id: projectID, directory, canonical: directory } },
-      headers,
-    }),
-  )
-  await page.route("**/api/agent?**", (route) =>
-    route.fulfill({
-      json: {
-        location: { directory: locate(route.request().url()) },
-        data: [
-          {
-            id: "build",
-            name: "Build",
-            mode: "primary",
-            hidden: false,
-            request: { settings: {}, headers: {}, body: {} },
-            permissions: [],
-          },
-        ],
-      },
-      headers,
-    }),
-  )
-  if (options?.command)
-    await page.route("**/api/command?**", (route) =>
-      route.fulfill({
-        json: {
-          location: { directory: locate(route.request().url()) },
-          data: [{ name: "review", description: "Review changes" }],
-        },
-        headers,
-      }),
-    )
-  await seed(page, {
-    projects: { local: [{ worktree: directory, expanded: true }] },
-    lastProject: { local: directory },
-    tabs: [
-      { draft: draftID, directory },
-      { session: otherID, server: SERVER },
-    ],
-  })
-  await page.goto(draftHref(draftID))
-  await expectAppVisible(editor(page))
-  await page.getByRole("button", { name: "Local", exact: true }).click()
-  await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
-  await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
-  await expect(editor(page)).toBeEditable()
-  return { worktree, worktreeRequests, calls, creates, prompts, push: mock.push }
-}
-
 async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openWorktreeDraft>>, prompt = text) {
   await editor(page).fill(prompt)
   await expect(submit(page)).toBeEnabled()
@@ -610,6 +505,9 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openWor
   await expect(shimmer).toContainText("Creating worktree")
   await expect(shimmer).toHaveAttribute("data-active", "true")
   await expect.poll(() => mock.calls).toEqual(["worktree"])
+  // Worktrees are created by project, without a location.
+  expect(mock.worktreeRequests.map((request) => request.url.searchParams.has("location[directory]"))).toEqual([false])
+  expect(mock.worktreeRequests.map((request) => request.body)).toEqual([expect.objectContaining({ projectID })])
   expect(mock.creates).toEqual([])
   expect(mock.prompts).toEqual([])
   return { url, sessionID, messageID, message, shimmer }

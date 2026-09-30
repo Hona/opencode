@@ -1,12 +1,3 @@
-// The stress-session helpers moved to e2e/utils/session-fixture.ts. Delete this re-export once no regression spec imports it.
-export {
-  installStressSessionTabs,
-  installTimelineSettings,
-  mockStressTimeline,
-  stressDraftHref,
-  stressSessionHref,
-} from "../../utils/session-fixture"
-
 export function createReviewDiffs() {
   return Array.from({ length: Number(process.env.REVIEW_PANE_DIFF_COUNT ?? 72) }, (_, index) => {
     const lines = index % 3 === 0 ? 300 : index % 3 === 1 ? 120 : 38

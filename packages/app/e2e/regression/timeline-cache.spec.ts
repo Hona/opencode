@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { expected, messages } from "../performance/timeline/session-tab-switch.fixture"
+import { expected, messages } from "../utils/markdown-sessions"
 import { seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"

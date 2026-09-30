@@ -24,7 +24,7 @@ export function captureConsoleWarnings(page: Page) {
 }
 
 export async function openCommandPalette(page: Page, home = false) {
-  await mockOpenCodeServer(page, {
+  const mock = await mockOpenCodeServer(page, {
     directory: paletteSession.directory,
     project: project({ id: paletteSession.projectID, directory: paletteSession.directory, name: "command-palette" }),
     provider: NO_PROVIDER,
@@ -46,5 +46,5 @@ export async function openCommandPalette(page: Page, home = false) {
   const input = dialog.getByRole("textbox")
   await expect(input).toBeFocused()
   await expect(dialog.getByRole("option")).not.toHaveCount(0)
-  return { dialog, input }
+  return { dialog, input, push: mock.push }
 }

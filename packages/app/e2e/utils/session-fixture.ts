@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test"
 import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { base64Encode } from "@opencode/util/encode"
 import { createTwoFilesPatch } from "diff"
-import { SERVER, draftHref, pageMessagesFrom, sessionHref } from "./app"
+import { SERVER, pageMessagesFrom } from "./app"
 import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
 
 // A long stress transcript: source (12 turns, links a child), target (72 mixed turns), and child (4 turns).
@@ -450,6 +450,3 @@ export async function installStressSessionTabs(page: Page, input?: { draftID?: s
     },
   )
 }
-
-export const stressSessionHref = (sessionID: string) => sessionHref(sessionID)
-export const stressDraftHref = draftHref

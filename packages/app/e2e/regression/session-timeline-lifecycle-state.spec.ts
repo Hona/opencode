@@ -8,7 +8,7 @@ import {
   setupTimeline,
   status,
   userMessage,
-} from "../performance/timeline-stability/fixture"
+} from "../utils/timeline"
 
 for (const transition of ["reasoning-end", "idle", "retry"] as const) {
   test(`stops active Thinking on ${transition} without a following tool`, async ({ page }) => {

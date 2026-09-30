@@ -48,19 +48,32 @@ export type SeedInput = {
 const seeds = { next: 0 }
 
 // Writes browser storage before the app boots, once per tab: reloads and later navigations keep what the app stored.
+// Object values merge one level deep into what an earlier seed wrote, so several helpers can seed one key.
 export async function seed(page: Page, input: SeedInput) {
   await page.addInitScript(
     ({ marker, entries }) => {
       if (window.top !== window) return
       if (sessionStorage.getItem(marker)) return
       sessionStorage.setItem(marker, "1")
-      entries.forEach(([key, value]) => localStorage.setItem(key, value))
+      const plain = (value: unknown): value is Record<string, unknown> =>
+        !!value && typeof value === "object" && !Array.isArray(value)
+      entries.forEach(([key, value, merge]) => {
+        const current: unknown = merge ? JSON.parse(localStorage.getItem(key) ?? "null") : undefined
+        if (!plain(current)) return localStorage.setItem(key, value)
+        const next: Record<string, unknown> = JSON.parse(value)
+        const merged = Object.entries({ ...current, ...next }).map(([field, item]) => {
+          const before = current[field]
+          const after = next[field]
+          return [field, plain(before) && plain(after) ? { ...before, ...after } : item]
+        })
+        localStorage.setItem(key, JSON.stringify(Object.fromEntries(merged)))
+      })
     },
     { marker: `opencode.e2e.seed.${seeds.next++}`, entries: storageEntries(input) },
   )
 }
 
-function storageEntries(input: SeedInput): [string, string][] {
+function storageEntries(input: SeedInput): [string, string, boolean][] {
   const server = {
     ...(input.servers
       ? {
@@ -87,7 +100,11 @@ function storageEntries(input: SeedInput): [string, string][] {
     ...(input.theme ? { "opencode-theme-id": input.theme.id, "opencode-color-scheme": input.theme.scheme } : {}),
     ...input.storage,
   }
-  return Object.entries(values).map(([key, value]) => [key, typeof value === "string" ? value : JSON.stringify(value)])
+  return Object.entries(values).map(([key, value]) => [
+    key,
+    typeof value === "string" ? value : JSON.stringify(value),
+    !!value && typeof value === "object" && !Array.isArray(value),
+  ])
 }
 
 function tabEntry(tab: TabSeed) {

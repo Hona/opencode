@@ -16,8 +16,6 @@ const sessionB = session({ id: "ses_server_b", directory: directoryB, title: "Se
 
 type Reply = { origin: string; sessionID: string; permissionID: string; body: unknown }
 
-const headers = { "access-control-allow-origin": "*" }
-
 test.use({ serviceWorkers: "block" })
 
 function pending(id: string, sessionID: string) {
@@ -58,16 +56,6 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
     },
     [REMOTE_SERVER]: config(REMOTE_SERVER, "Server B", directoryB, [sessionB]),
   })
-  // The mock also lists server A's global requests per session; keep that list to `sessionPermissions` so a
-  // reply proves the location sweep rather than the session sync.
-  await page.route(
-    (url) => url.origin === SERVER && /^\/api\/session\/[^/]+\/permission$/.test(url.pathname),
-    (route) => {
-      if (route.request().method() !== "GET") return route.fallback()
-      const id = new URL(route.request().url()).pathname.split("/")[3]!
-      return route.fulfill({ json: { data: input.a?.sessionPermissions?.[id] ?? [] }, headers })
-    },
-  )
   await seed(page, { servers: [REMOTE_SERVER], tabs: input.tabs })
   const listed = (origin: string, directory: string) =>
     expect

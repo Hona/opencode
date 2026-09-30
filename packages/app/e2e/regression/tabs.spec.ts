@@ -329,15 +329,7 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
       ] satisfies SessionMessageInfo[],
     }),
   })
-  // Each worktree session resolves to its own location in the shared project.
-  await page.route("**/api/location?*", (route) =>
-    route.fulfill({
-      json: {
-        directory: new URL(route.request().url()).searchParams.get("location[directory]"),
-        project: { id: fixture.project.id, directory: fixture.directory, canonical: fixture.directory },
-      },
-    }),
-  )
+  // Each worktree session resolves to its own location in the shared project (the mock echoes the requested one).
   await seed(page, {
     projects: { local: [{ worktree: fixture.directory, expanded: true }] },
     tabs: sessions.map((item) => item.id),
@@ -367,6 +359,18 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
     },
   ])
   await expect(page.getByText("Still receiving updates", { exact: true })).toBeVisible()
+})
+
+// Windows has no native menu bar: the titlebar menu owns Paste, which only the desktop edit action can perform.
+test("the Windows titlebar menu pastes through the desktop edit action", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
+  const paste = page.getByRole("menuitem", { name: /^Paste/ })
+  await expect(paste).toHaveText("PasteCtrl+V")
+  await paste.click()
+  await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
 
 // Server A is the default origin; B is a remote that answers only for its own directories.

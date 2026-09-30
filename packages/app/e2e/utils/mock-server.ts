@@ -9,6 +9,9 @@ import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
 
+// A hook's replacement response.
+export type MockAnswer = { status: number; body: unknown }
+
 export interface MockServerConfig {
   server?: string
   provider: unknown | (() => unknown)
@@ -56,9 +59,18 @@ export interface MockServerConfig {
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
   worktrees?: Resolvable<unknown[]>
-  // Without them, creating or removing a worktree answers 501 MockUnsupported.
-  onWorktreeCreate?: (input: unknown) => void | Promise<void>
+  // Without them, creating or removing a worktree answers 501 MockUnsupported. `onWorktreeCreate` may hold the request
+  // and return the answer; by default it creates `<directory>/<name>`. A created directory joins the project's sandboxes.
+  onWorktreeCreate?: (input: unknown) => void | MockAnswer | Promise<void | MockAnswer>
   onWorktreeRemove?: (input: unknown) => void | Promise<void>
+  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
+  onSessionCreate?: (body: Record<string, unknown>, attempt: number) => void | MockAnswer
+  // Title of created sessions (default: the request's title, else "New session").
+  createdSessionTitle?: string
+  // Slash commands served by `/api/command`.
+  commands?: Resolvable<unknown[]>
+  // Records POST /api/session/:id/command (204). Without it, commands answer 501 MockUnsupported.
+  onCommand?: (input: { sessionID: string; body: unknown }) => void
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
@@ -105,9 +117,8 @@ type MockStreamWindow = Window & {
   // Set to any value by benchmarks that bring their own event stream.
   __testSseTransport?: unknown
   __testSseTransports?: Record<string, unknown>
+  // Per-origin mock event streams; in-page benchmark probes push through them directly.
   __mockServerStreams?: Record<string, MockStream>
-  // The first installed stream, kept for specs that push to it directly.
-  __mockServerStream?: MockStream
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -139,7 +150,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         },
       }
       host.__mockServerStreams = { ...host.__mockServerStreams, [server]: stream }
-      host.__mockServerStream ??= stream
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
@@ -314,7 +324,9 @@ export function createMockServerHandler(config: MockServerConfig) {
   const pty = createPty(config)
   const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0, pty })),
+      Layer.provide(
+        mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0, sessionCreates: 0, pty }),
+      ),
       Layer.provide(HttpServer.layerServices),
     ),
     { disableLogger: true },
@@ -421,7 +433,7 @@ function createPty(config: MockServerConfig) {
     admit(id: string, url: URL) {
       const found = pty.list.find((item) => item.id === id)
       if (!found) return "PTY not found"
-      const directory = url.searchParams.get("location[directory]") ?? config.directory
+      const directory = url.searchParams.get("location[directory]") || config.directory
       if (!owns(found, directory)) return "PTY belongs to another workspace"
       const ticket = url.searchParams.get("ticket")
       const index = tickets.findIndex(
@@ -450,8 +462,15 @@ function ownedDirectories(config: MockServerConfig) {
   )
 }
 
+function addSandbox(config: MockServerConfig, directory: string) {
+  const project = config.project as { sandboxes?: string[] }
+  if (project.sandboxes?.includes(directory)) return
+  project.sandboxes = [...(project.sandboxes ?? []), directory]
+}
+
+// The requested `location[directory]`; absent or empty (a server-level read) means the server directory.
 function requestDirectory(config: MockServerConfig, request: { url: string }) {
-  return new URL(request.url, "http://localhost").searchParams.get("location[directory]") ?? config.directory
+  return new URL(request.url, "http://localhost").searchParams.get("location[directory]") || config.directory
 }
 
 function resolve<T>(value: Resolvable<T>) {
@@ -460,7 +479,12 @@ function resolve<T>(value: Resolvable<T>) {
 
 function mockHandlers(
   config: MockServerConfig,
-  state: { cursors: Map<string, string>; nextCursor: number; pty: ReturnType<typeof createPty> },
+  state: {
+    cursors: Map<string, string>
+    nextCursor: number
+    sessionCreates: number
+    pty: ReturnType<typeof createPty>
+  },
 ) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
@@ -502,6 +526,47 @@ function mockHandlers(
           return HttpServerResponse.uint8Array(new TextEncoder().encode(content))
         }),
       )
+      // Raw, so a hook's answer can replace the status and body.
+      .handleRaw("worktreeCreate", (ctx) =>
+        Effect.gen(function* () {
+          const create = config.onWorktreeCreate
+          if (!create) return yield* unsupported("create worktrees", "onWorktreeCreate")
+          const input = yield* Effect.orDie(ctx.request.json)
+          const payload = record(input) ? input : {}
+          const answer = (yield* Effect.promise(async () => create(input))) || {
+            status: 200,
+            body: {
+              directory: `${typeof payload.directory === "string" ? payload.directory : config.directory}/${
+                typeof payload.name === "string" ? payload.name : "copy"
+              }`,
+            },
+          }
+          if (answer.status === 200 && record(answer.body) && typeof answer.body.directory === "string")
+            addSandbox(config, answer.body.directory)
+          return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+        }),
+      )
+      .handleRaw("sessionCreate", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const payload = record(input) ? input : {}
+          state.sessionCreates += 1
+          const answer = config.onSessionCreate?.(payload, state.sessionCreates)
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+          const created = currentSession(
+            {
+              ...payload,
+              id: typeof payload.id === "string" ? payload.id : "ses_mock_created",
+              projectID: (config.project as { id?: string }).id,
+              title: config.createdSessionTitle ?? (typeof payload.title === "string" ? payload.title : "New session"),
+              parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
+            },
+            config.directory,
+          )
+          config.sessions.push(created)
+          return HttpServerResponse.jsonUnsafe({ data: created })
+        }),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -523,9 +588,9 @@ function mockHandlers(
             },
             data: [],
           }),
-        agent: () =>
+        agent: (ctx) =>
           Effect.succeed({
-            location: location(config),
+            location: location(config, requestDirectory(config, ctx.request)),
             data: [
               {
                 id: "build",
@@ -559,7 +624,11 @@ function mockHandlers(
             Effect.andThen(noContent),
           ),
         credentialRemove: () => noContent,
-        command: () => Effect.succeed({ location: location(config), data: [] }),
+        command: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.commands ?? []),
+          })),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
         mcp: () => Effect.sync(() => ({ location: location(config), data: resolve(config.mcp ?? []) })),
@@ -593,19 +662,6 @@ function mockHandlers(
               })),
             ]
           }),
-        worktreeCreate: (ctx) => {
-          const input = ctx.payload
-          const create = config.onWorktreeCreate
-          if (!create) return unsupported("create worktrees", "onWorktreeCreate")
-          return Effect.promise(async () => {
-            await create(input)
-            return {
-              directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
-                typeof input.name === "string" ? input.name : "copy"
-              }`,
-            }
-          })
-        },
         worktreeRemove: (ctx) => {
           const remove = config.onWorktreeRemove
           if (!remove) return unsupported("remove worktrees", "onWorktreeRemove")
@@ -613,7 +669,7 @@ function mockHandlers(
         },
         // Discovery against a static inventory changes nothing, and the app refreshes whenever worktree settings open.
         worktreeRefresh: () => noContent,
-        location: () => Effect.succeed(location(config)),
+        location: (ctx) => Effect.sync(() => location(config, requestDirectory(config, ctx.request))),
         permissionRequests: () =>
           Effect.suspend(() =>
             config.permissionListFailures?.()
@@ -676,7 +732,7 @@ function mockHandlers(
           ptyEnabled.pipe(
             Effect.map(() => {
               const directory = requestDirectory(config, ctx.request)
-              return { location: location(config), data: state.pty.owned(directory) }
+              return { location: location(config, directory), data: state.pty.owned(directory) }
             }),
           ),
         ptyCreate: (ctx) =>
@@ -690,17 +746,19 @@ function mockHandlers(
                 ctx.payload.cwd ?? directory,
               )
               state.pty.add(created, directory)
-              return { location: location(config), data: created }
+              return { location: location(config, directory), data: created }
             }),
           ),
         ptyGet: (ctx) =>
-          findPty(ctx.params.ptyID, ctx.request).pipe(Effect.map((data) => ({ location: location(config), data }))),
+          findPty(ctx.params.ptyID, ctx.request).pipe(
+            Effect.map((data) => ({ location: location(config, requestDirectory(config, ctx.request)), data })),
+          ),
         ptyUpdate: (ctx) =>
           findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
               state.pty.updates.push({ id: found.id, body: ctx.payload })
               if (ctx.payload.title) found.title = ctx.payload.title
-              return { location: location(config), data: found }
+              return { location: location(config, requestDirectory(config, ctx.request)), data: found }
             }),
           ),
         ptyRemove: (ctx) =>
@@ -714,13 +772,14 @@ function mockHandlers(
         ptyConnectToken: (ctx) =>
           findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
-              const ticket = state.pty.issue(found.id, requestDirectory(config, ctx.request))
+              const directory = requestDirectory(config, ctx.request)
+              const ticket = state.pty.issue(found.id, directory)
               state.pty.tokens.push({
                 id: found.id,
                 headers: Object.fromEntries(Object.entries(ctx.request.headers)),
                 ticket,
               })
-              return { location: location(config), data: { ticket, expires_in: 60 } }
+              return { location: location(config, directory), data: { ticket, expires_in: 60 } }
             }),
           ),
         sessionList: (ctx) => {
@@ -753,19 +812,6 @@ function mockHandlers(
             data: data.map((session) => currentSession(session, config.directory)),
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
-        },
-        sessionCreate: (ctx) => {
-          const payload = record(ctx.payload) ? ctx.payload : {}
-          const created = currentSession(
-            {
-              id: "ses_mock_created",
-              projectID: (config.project as { id?: string }).id,
-              title: typeof payload.title === "string" ? payload.title : "New session",
-              parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
-            },
-            config.directory,
-          )
-          return Effect.sync(() => config.sessions.push(created)).pipe(Effect.as({ data: created }))
         },
         sessionActive: () => {
           const statuses = (
@@ -841,18 +887,13 @@ function mockHandlers(
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,
-        sessionPermission: (ctx) => {
-          const permissions =
-            typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
-          return Effect.succeed({
-            data: [
-              ...permissions
-                .map(currentPermission)
-                .filter((permission) => permission.sessionID === ctx.params.sessionID),
-              ...(config.sessionPermissions?.[ctx.params.sessionID] ?? []).map(currentPermission),
-            ],
-          })
-        },
+        // Only the session's own list; location requests (`permissions`) come from `/api/permission/request`.
+        sessionPermission: (ctx) =>
+          Effect.sync(() => ({
+            data: (config.sessionPermissions?.[ctx.params.sessionID] ?? [])
+              .map(currentPermission)
+              .filter((permission) => permission.sessionID === ctx.params.sessionID),
+          })),
         sessionPermissionReply: (ctx) => {
           const reply = config.onPermissionReply
           if (!reply) return unsupported("record permission replies", "onPermissionReply")
@@ -860,7 +901,19 @@ function mockHandlers(
             reply({ sessionID: ctx.params.sessionID, permissionID: ctx.params.permissionID, body: ctx.payload }),
           ).pipe(Effect.andThen(noContent))
         },
-        sessionRename: () => noContent,
+        sessionRename: (ctx) =>
+          Effect.sync(() => {
+            const title = record(ctx.payload) ? ctx.payload.title : undefined
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+            if (session && typeof title === "string") session.title = title
+          }).pipe(Effect.andThen(noContent)),
+        sessionCommand: (ctx) => {
+          const recordCommand = config.onCommand
+          if (!recordCommand) return unsupported("run session commands", "onCommand")
+          return Effect.sync(() => recordCommand({ sessionID: ctx.params.sessionID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          )
+        },
         sessionInterrupt: () => noContent,
         sessionRevertStage: (ctx) => {
           const payload = record(ctx.payload) ? ctx.payload : {}
@@ -910,9 +963,10 @@ function mockHandlers(
   )
 }
 
-function location(config: MockServerConfig) {
+// The requested workspace (directory) inside the configured project.
+function location(config: MockServerConfig, directory = config.directory) {
   return {
-    directory: config.directory,
+    directory,
     project: { id: (config.project as { id?: string }).id, directory: config.directory, canonical: config.directory },
   }
 }

@@ -1,5 +1,17 @@
 import { expect, type Page } from "@playwright/test"
-import { SERVER, draftHref, project, provider, seed, session, sessionHref, type SeedInput, type TabSeed } from "./app"
+import {
+  NO_PROVIDER,
+  REMOTE_SERVER,
+  SERVER,
+  draftHref,
+  project,
+  provider,
+  seed,
+  session,
+  sessionHref,
+  type SeedInput,
+  type TabSeed,
+} from "./app"
 import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
 import { APP_READY_TIMEOUT, expectSessionTitle } from "./waits"
 
@@ -19,7 +31,7 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
 export async function mockWorkspace(page: Page, input: WorkspaceInput) {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
-  const projectID = `proj_${slug}`
+  const projectID = typeof input.project?.id === "string" ? input.project.id : `proj_${slug}`
   const sessions = (input.sessions ?? [{ id: `ses_${slug}`, title: input.name }]).map((item) =>
     session({ directory, projectID, ...item }),
   )
@@ -63,6 +75,77 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeEditable({ timeout: APP_READY_TIMEOUT })
   return { ...workspace, draftID, editor }
+}
+
+// Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
+// resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
+// recorded. The draft tab comes first, then a tab per session.
+export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
+  const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
+  const calls: string[] = []
+  const worktreeRequests: { url: URL; body: Record<string, unknown> }[] = []
+  const creates: Record<string, unknown>[] = []
+  const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return
+    const url = new URL(request.url())
+    if (url.pathname === "/api/worktree") {
+      calls.push("worktree")
+      worktreeRequests.push({ url, body: request.postDataJSON() })
+    }
+    if (url.pathname === "/api/session") calls.push("session")
+    if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) calls.push("prompt")
+  })
+  const draftID = input.draftID ?? `draft_${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
+  const directory = input.directory ?? `C:/OpenCode/${input.name}`
+  const sessions = input.sessions ?? []
+  const workspace = await mockWorkspace(page, {
+    ...input,
+    directory,
+    sessions,
+    onPrompt: (prompt) => {
+      prompts.push(prompt)
+      input.onPrompt?.(prompt)
+    },
+    onWorktreeCreate: async () => {
+      const answer = await worktree.promise
+      return { status: answer.status, body: answer.json }
+    },
+    onSessionCreate: (body, attempt) => {
+      creates.push(body)
+      return input.onSessionCreate?.(body, attempt)
+    },
+    seed: { tabs: [{ draft: draftID, directory }, ...sessions.map((item) => item.id)], ...input.seed },
+  })
+  await page.goto(draftHref(draftID))
+  const editor = page.locator('[data-component="composer-editor"]')
+  await expect(editor).toBeVisible({ timeout: APP_READY_TIMEOUT })
+  await page.getByRole("button", { name: "Local", exact: true }).click()
+  await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
+  await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
+  await expect(editor).toBeEditable()
+  return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }
+}
+
+// A second single-project server (default `REMOTE_SERVER`) listed in the server picker; seeds merge with
+// `openSettings`, `openSession`, and `mockWorkspace`.
+export async function mockRemoteServer(
+  page: Page,
+  input: Partial<Omit<MockServerConfig, "server">> & { server?: string; name?: string } = {},
+) {
+  const server = input.server ?? REMOTE_SERVER
+  const directory = input.directory ?? "/remote/project"
+  const mock = await mockOpenCodeServer(page, {
+    project: project({ id: "proj_remote", directory }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    ...input,
+    server,
+    directory,
+  })
+  await seed(page, { servers: [input.name ? { url: server, name: input.name } : server] })
+  return mock
 }
 
 // Opens Settings from Home (through the Tabs drawer below 800px) and waits until it has focus.
