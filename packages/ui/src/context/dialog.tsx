@@ -39,28 +39,41 @@ function init() {
   const [stack, setStack] = createSignal<Active[]>([])
   // A dialog is closing from the moment its close starts until its exit animation ends and it is disposed.
   const closing = new Map<string, ReturnType<typeof setTimeout> | undefined>()
+  // The same ids, reactive, so the top dialog that stays open owns the focus trap during an exit animation.
+  const [exiting, setExiting] = createSignal<ReadonlySet<string>>(new Set())
   const lock = { value: false }
+  const state = { disposed: false }
 
+  // Detach the stack before disposing, so cleanups that close dialogs find nothing to admit.
   const disposeAll = () => {
+    const items = stack()
+    setStack([])
     closing.forEach((timer) => clearTimeout(timer))
     closing.clear()
-    stack().forEach((item) => item.dispose())
+    setExiting(new Set<string>())
+    items.forEach((item) => item.dispose())
   }
 
-  onCleanup(disposeAll)
+  onCleanup(() => {
+    state.disposed = true
+    disposeAll()
+  })
 
   const finish = (current: Active) => {
-    current.onClose?.()
-    current.setClosing(true)
+    // Scheduled first, so the dialog still goes away when a callback throws.
     closing.set(
       current.id,
       setTimeout(() => {
-        current.dispose()
-        setStack((items) => items.filter((item) => item.id !== current.id))
         closing.delete(current.id)
         if (closing.size === 0) lock.value = false
+        setExiting((ids) => new Set([...ids].filter((id) => id !== current.id)))
+        setStack((items) => items.filter((item) => item.id !== current.id))
+        current.dispose()
       }, 100),
     )
+    setExiting((ids) => new Set([...ids, current.id]))
+    current.onClose?.()
+    current.setClosing(true)
   }
 
   /** Programmatic close. Without an id it closes the top dialog, one at a time; with an id it never waits. */
@@ -95,6 +108,8 @@ function init() {
   })
 
   const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, key?: string) => {
+    // A deferred open (e.g. from a focus callback) must not mount after the provider is gone.
+    if (state.disposed) return
     const id = key ?? Math.random().toString(36).slice(2)
     // The layer follows the dialog's current place in the stack, so a new top dialog always renders above.
     const layer = () => Math.max(0, stack().findIndex((item) => item.id === id))
@@ -111,7 +126,7 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal={stack().at(-1)?.id === id}
+            modal={stack().findLast((item) => !exiting().has(item.id))?.id === id}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dismiss(id)
@@ -158,7 +173,6 @@ function init() {
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
     disposeAll()
-    setStack([])
     lock.value = false
     mount(element, owner, onClose, id)
   }
