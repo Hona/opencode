@@ -3,7 +3,7 @@ import { expect, story } from "../../storybook/playwright/story"
 for (const open of [true, false]) {
   story(
     `preserves ${open ? "expanded" : "collapsed"} tool choices when calls join the group`,
-    async ({ mount }, info) => {
+    async ({ mount }) => {
       const root = await mount("current-session-file-changes--appending-tool-calls")
       const group = root.locator('[data-component="collapsed-tool-group"]')
       const trigger = group.getByRole("button", { name: /^Used \d+ Shell, Patch$/ })
@@ -37,9 +37,6 @@ for (const open of [true, false]) {
         )
         await expect(trigger).toHaveAccessibleName(`Used ${count} Shell, Patch`)
         await expect(diff).toBeVisible()
-        await root
-          .locator('[data-component="session-timeline"]')
-          .screenshot({ path: info.outputPath(`append-${count}.png`) })
         await expect(shell).toHaveAttribute("aria-expanded", String(open))
         await expect(first).toHaveAttribute("aria-expanded", String(open))
         await expect(second).toHaveAttribute("aria-expanded", "true")
