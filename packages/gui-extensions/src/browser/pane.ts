@@ -10,6 +10,7 @@ import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
 import { destinationOrigin, fileURLWithin } from "./policy"
+import { createRefs } from "./refs"
 import type { PaneEvent } from "./remote"
 import { createBrowserRestoreStore } from "./restore"
 
@@ -49,7 +50,7 @@ export function createBrowserPane(input: {
 }) {
   const entries = new Map<string, Entry>()
   const restore = createBrowserRestoreStore(input.storage)
-  const shared: Shared = { ref: 0 }
+  const shared: Shared = { ref: createRefs(input.storage) }
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
   let disposed = false

@@ -12,8 +12,8 @@ import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, nor
 import type { PaneElement } from "./remote"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
-/** State every page of the pane shares: the element ref counter and the app-wide trace recording. */
-export type Shared = { ref: number; recording?: Recording }
+/** State every page of the pane shares: the element ref allocator and the app-wide trace recording. */
+export type Shared = { ref: () => string; recording?: Recording }
 // Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
 const retainedOperations: readonly Browser.Method[] = [
   "navigate",
@@ -1158,7 +1158,7 @@ export function createBrowserPage(
           (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
         // A picked element keeps the ref its comment names, even when it is not otherwise actionable.
         const known = node.backendDOMNodeId ? pinned.get(`${frameID}:${node.backendDOMNodeId}`) : undefined
-        const ref = known ?? (actionable && node.backendDOMNodeId ? `e${++options.shared.ref}` : "")
+        const ref = known ?? (actionable && node.backendDOMNodeId ? options.shared.ref() : "")
         const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
         if (ref && element && !known) refs.set(ref, element)
         const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
@@ -1235,7 +1235,7 @@ export function createBrowserPage(
       options.inspect?.({ active: inspecting })
       return
     }
-    const ref = `e${++options.shared.ref}`
+    const ref = options.shared.ref()
     picked.set(ref, element)
     const zoom = contents.getZoomFactor()
     // The pick focused the page; the comment editor opens in the app window. Focus only moves
@@ -1281,22 +1281,25 @@ export function createBrowserPage(
     const root = owned.find((frame) => !frame.parentID || sessionFor(frame.parentID, tree) !== sessionID) ?? tree[0]
     const nested = owned.filter((frame) => frame !== root)
     if (!nested.length) return root.id
-    const node = await cdp.send("DOM.resolveNode", { backendNodeId: backendID }, sessionID)
-    const document = node.object.objectId
-      ? await cdp.send(
-          "Runtime.callFunctionOn",
-          { objectId: node.object.objectId, functionDeclaration: "function() { return this.ownerDocument; }" },
-          sessionID,
-        )
-      : undefined
-    const described = document?.result.objectId
-      ? await cdp.send("DOM.describeNode", { objectId: document.result.objectId }, sessionID)
-      : undefined
-    void Promise.all(
-      [node.object.objectId, document?.result.objectId].flatMap((objectId) =>
-        objectId ? [cdp.send("Runtime.releaseObject", { objectId }, sessionID).catch(() => undefined)] : [],
-      ),
-    )
+    // The node and its document join one object group, released even when a later call rejects.
+    const objectGroup = `frame-of-${crypto.randomUUID()}`
+    const described = await (async () => {
+      const node = await cdp.send("DOM.resolveNode", { backendNodeId: backendID, objectGroup }, sessionID)
+      const document = node.object.objectId
+        ? await cdp.send(
+            "Runtime.callFunctionOn",
+            {
+              objectId: node.object.objectId,
+              functionDeclaration: "function() { return this.ownerDocument; }",
+              objectGroup,
+            },
+            sessionID,
+          )
+        : undefined
+      return document?.result.objectId
+        ? await cdp.send("DOM.describeNode", { objectId: document.result.objectId }, sessionID)
+        : undefined
+    })().finally(() => void cdp.send("Runtime.releaseObjectGroup", { objectGroup }, sessionID).catch(() => undefined))
     const owners = await Promise.all(
       nested.map(async (frame) => {
         const owner = await cdp.send("DOM.getFrameOwner", { frameId: frame.id }, sessionID).catch(() => undefined)

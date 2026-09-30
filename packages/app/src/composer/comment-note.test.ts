@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
+import { createMemoryComposerState } from "./state"
 
 const durable = {
   type: "note" as const,
@@ -54,6 +55,20 @@ describe("extension notes", () => {
       },
       { path: "src/app.ts", comment: "Keep" },
     ])
+  })
+
+  test("update and detach by commentID reach notes as well as file comments", () => {
+    const context = createMemoryComposerState().context
+    context.add({ type: "file", path: "src/app.ts", comment: "Keep", commentID: "file" })
+    context.add({ ...note, commentID: "note" })
+    context.updateComment("note", { comment: "Rename that" })
+    context.updateComment("file", { comment: "Keep this" })
+    expect(context.items().map((item) => [item.commentID, item.comment])).toEqual([
+      ["file", "Keep this"],
+      ["note", "Rename that"],
+    ])
+    context.removeComment("note")
+    expect(context.items().map((item) => item.commentID)).toEqual(["file"])
   })
 
   test("return to the composer without their live part", () => {

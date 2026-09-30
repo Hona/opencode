@@ -114,18 +114,10 @@ export function createSessionView(session: SessionModel) {
     active: { current: comments.active, set: (value) => void comments.setActive(value) },
   }
 
-  const contextPath = (id: string) =>
-    composer.context.items().flatMap((item) => (item.type === "file" && item.commentID === id ? [item.path] : []))[0]
   const composerRef: Composer = {
     attach: (part) => composer.context.add(part),
-    update(id, patch) {
-      const path = contextPath(id)
-      if (path) composer.context.updateComment(path, id, patch)
-    },
-    detach(id) {
-      const path = contextPath(id)
-      if (path) composer.context.removeComment(path, id)
-    },
+    update: (id, patch) => composer.context.updateComment(id, patch),
+    detach: (id) => composer.context.removeComment(id),
   }
 
   const view: SessionView = {

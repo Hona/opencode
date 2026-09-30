@@ -170,7 +170,7 @@ export interface ComposerNote {
 
 export interface Composer {
   attach(part: ComposerFile | ComposerNote): void
-  /** id is the part's commentID. */
+  /** id is the part's commentID; update and detach reach files and notes alike. Notes take only comment. */
   update(id: string, patch: { readonly comment?: string; readonly preview?: string }): void
   detach(id: string): void
 }
