@@ -3,7 +3,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
-import { createMemoryComposerState } from "./state"
+import { createMemoryComposerState, type Prompt } from "./state"
 import { createComposerSubmit } from "./submit"
 import type { ComposerStateTarget } from "./submission-state"
 
@@ -288,7 +288,19 @@ describe("Composer submission", () => {
   })
 
   test("restores and retries an unacknowledged admission", async () => {
-    const state = createMemoryComposerState({ prompt: "retry me" }).capture()
+    const state = createMemoryComposerState().capture()
+    const prompt: Prompt = [
+      { type: "text", content: "retry ", start: 0, end: 6 },
+      { type: "file", path: "src/app.ts", content: "@src/app.ts", start: 6, end: 17 },
+      {
+        type: "image",
+        id: "attachment",
+        filename: "image.png",
+        mime: "image/png",
+        blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+      },
+    ]
+    state.set(prompt)
     const attempts: string[] = []
     const statuses: ("idle" | "running")[] = []
     const first = Promise.withResolvers<void>()
@@ -316,9 +328,12 @@ describe("Composer submission", () => {
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
-    expect(state.current()).toMatchObject([{ type: "text", content: "retry me" }])
+    expect(state.current()).toEqual(prompt)
+    // The caret returns after the mention text; attachments take no caret positions.
+    expect(state.cursor()).toBe(17)
     // The restored prompt is the draft again, so history does not also keep it (and its attachments).
-    expect(history).toEqual(["add:retry me", "remove:retry me", "add:retry me", "remove:retry me"])
+    const entry = "retry @src/app.tsimage"
+    expect(history).toEqual([`add:${entry}`, `remove:${entry}`, `add:${entry}`, `remove:${entry}`])
   })
 
   test("restores first-prompt comments into the promoted Session", async () => {
@@ -375,9 +390,9 @@ describe("Composer submission", () => {
     expect(new Set(attempts).size).toBe(1)
   })
 
-  test("hands off image-only first prompts before admission", async () => {
+  test("hands off image-only first prompts and admits them before cleanup is ready", async () => {
     const draft = createMemoryComposerState().capture()
-    draft.set([
+    const prompt: Prompt = [
       { type: "text", content: "", start: 0, end: 0 },
       {
         type: "image",
@@ -386,13 +401,25 @@ describe("Composer submission", () => {
         mime: "image/png",
         blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
       },
-    ])
+    ]
+    draft.set(prompt)
     const handedOff = Promise.withResolvers<SessionMessageUser>()
-    const target = session({ calls: [], handoff: { set: handedOff.resolve, clear() {} } })
+    const admitted = Promise.withResolvers<void>()
+    const cleanup = Promise.withResolvers<void>()
+    const target = session({
+      calls: [],
+      handoff: { set: handedOff.resolve, clear() {} },
+      prompt: async () => admitted.resolve(),
+    })
 
-    await submitInput(fresh(draft, async () => ({ session: target, cleanupReady: Promise.resolve() }))).submit(
-      new Event("submit"),
-    )
+    const submitted = submitInput(
+      fresh(draft, async () => ({ session: target, cleanupReady: cleanup.promise })),
+    ).submit(new Event("submit"))
+    await admitted.promise
+    expect(draft.current()).toEqual(prompt)
+    cleanup.resolve()
+    await submitted
+    expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
 
     expect(await handedOff.promise).toMatchObject({
       type: "user",

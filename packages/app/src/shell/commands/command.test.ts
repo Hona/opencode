@@ -78,14 +78,15 @@ describe("command keybinds", () => {
     expect(parseKeybind("")).toEqual([])
   })
 
-  const mod = parseKeybind("mod+k")[0]!
+  // happy-dom never reports a Mac platform, so mod is Ctrl here.
   test.each([
     { config: "ctrl+comma", event: { key: ",", ctrlKey: true }, match: true },
     { config: "shift+plus", event: { key: "+", shiftKey: true }, match: true },
     { config: "meta+space", event: { key: " ", metaKey: true }, match: true },
     { config: "ctrl+comma", event: { key: ",", ctrlKey: true, altKey: true }, match: false },
-    { config: "mod+alt+[", event: { key: "[", ctrlKey: mod.ctrl, metaKey: mod.meta, altKey: true }, match: true },
-    { config: "mod+alt+]", event: { key: "]", ctrlKey: mod.ctrl, metaKey: mod.meta, altKey: true }, match: true },
+    { config: "mod+alt+[", event: { key: "[", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+]", event: { key: "]", ctrlKey: true, altKey: true }, match: true },
+    { config: "mod+alt+[", event: { key: "[", metaKey: true, altKey: true }, match: false },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
   ])("matchKeybind $config with $event.key is $match", (row) => {

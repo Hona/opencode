@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, provider } from "../utils/app"
+import { NO_PROVIDER, T0, provider } from "../utils/app"
 import { openDraft, openSession } from "../utils/workspace"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
@@ -39,6 +39,7 @@ test("keeps a 25000-line crash report editable in a new session", async ({ page 
   await expect(input).toBeFocused()
   await expectCaretVisible(input)
   const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll.locator(".scroll-view__viewport")).toHaveCSS("scrollbar-width", "none")
   await expect(scroll.locator(".scroll-view__thumb")).toBeVisible()
   await page.keyboard.type("!")
   await expect.poll(async () => (await input.innerText()) === text + "!").toBe(true)
@@ -164,6 +165,39 @@ test("keeps a narrow session composer contained when invoking a built-in", async
 
   await expect(editor).toHaveText("keep me")
 })
+
+const followUp = "Add follow-up, / for commands, @ for context…"
+for (const row of [
+  { state: "an idle", copy: "Ask anything, / for commands, @ for context…" },
+  { state: "a running", copy: followUp, sessionStatus: { ses_placeholder: { type: "running" } } },
+  {
+    state: "an idle queued",
+    copy: followUp,
+    inbox: [
+      {
+        id: "inb_placeholder",
+        sessionID: "ses_placeholder",
+        time: { created: T0 },
+        type: "user",
+        payload: { text: "Queued follow-up" },
+        delivery: "queue",
+      },
+    ],
+  },
+]) {
+  test(`shows the placeholder for ${row.state} session and the shell example in shell mode`, async ({ page }) => {
+    const { editor } = await openSession(page, {
+      name: "ComposerPlaceholder",
+      sessions: [{ id: "ses_placeholder", title: "Placeholder" }],
+      sessionStatus: row.sessionStatus,
+      inbox: row.inbox,
+    })
+    const scroll = page.locator('[data-component="composer-scroll"]')
+    await expect(scroll).toHaveText(row.copy)
+    await editor.pressSequentially("!")
+    await expect(scroll).toHaveText("Enter shell command… git status")
+  })
+}
 
 test("shows thinking on hover or a non-default selection while preserving keyboard access", async ({ page }) => {
   const { editor: input } = await openSession(page, {

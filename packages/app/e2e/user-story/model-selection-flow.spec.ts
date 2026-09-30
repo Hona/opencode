@@ -146,6 +146,15 @@ test("restores each existing session's model and variant when switching tabs", a
   await expect(page).toHaveURL(hrefB)
   await expect(modelControl).toHaveText("Model B")
   await expect(variant).toHaveText("balanced")
+  await variant.click()
+  await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
+  await expect(variant).toHaveText("high")
+
+  // A new draft starts from the current session's non-default model and chosen variant.
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+  await expect(page).toHaveURL(/\/new-session\?draftId=/)
+  await expect(modelControl).toHaveText("Model B")
+  await expect(variant).toHaveText("high")
 
   await page.locator(`[data-titlebar-tab-link][href="${hrefA}"]`).click()
   await expect(page).toHaveURL(hrefA)

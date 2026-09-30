@@ -30,11 +30,7 @@ function key(key: string, input: { ctrl?: boolean; ids?: string[]; empty?: boole
   }
 }
 
-const menu = transitionComposer(
-  createComposerInteractionState(),
-  { type: "commands.open" },
-  persisted("existing text"),
-).state
+const menu = { popover: { type: "command-menu", query: "" }, focus: "command-search" } as const
 
 test.each<{
   name: string
@@ -42,10 +38,18 @@ test.each<{
   event: ComposerInteractionEvent
   draft?: ComposerPersistedState
   popover?: ComposerInteractionState["popover"]
+  focus?: ComposerInteractionState["focus"]
   mode?: ComposerInteractionState["mode"]
   command?: ComposerInteractionCommand
   handled?: true
 }>([
+  {
+    name: "opens the searchable command menu for a populated draft",
+    event: { type: "commands.open" },
+    draft: persisted("existing text"),
+    ...menu,
+    command: { type: "focus.command-search" },
+  },
   {
     name: "opens inline commands when slash is the entire prompt",
     event: { type: "input.changed", value: "/re" },
@@ -132,6 +136,7 @@ test.each<{
   )
 
   if (row.popover) expect(result.state.popover).toEqual(row.popover)
+  if (row.focus) expect(result.state.focus).toBe(row.focus)
   if (row.mode) expect(result.state.mode).toBe(row.mode)
   if (row.command) expect(result.commands).toContainEqual(row.command)
   expect(result.handled).toBe(row.handled ?? false)

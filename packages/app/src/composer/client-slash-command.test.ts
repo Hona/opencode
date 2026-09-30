@@ -10,6 +10,7 @@ const options = [
 test.each([
   { text: "/btw why this approach?", result: { id: "btw.ask", input: "why this approach?" } },
   { text: "/btw\nwhy this approach?", result: { id: "btw.ask", input: "why this approach?" } },
+  { text: "/btw", result: { id: "btw.ask", input: "" } },
   { text: "/btwx nope", result: undefined },
   { text: "/custom nope", result: undefined },
   { text: "/model opus", result: undefined },
