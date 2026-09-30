@@ -14,11 +14,46 @@ const note = { ...durable, live: { subject: 'the "button#save" element (browser 
 
 describe("extension notes", () => {
   test("read from message metadata beside file comments and skip malformed entries", () => {
+    // Metadata a build before extension notes sent for a browser element comment.
+    const browser = {
+      type: "browser",
+      tabID: "tab_00000000-0000-4000-8000-000000000000",
+      url: "http://localhost:5173/settings",
+      title: "Settings",
+      element: {
+        ref: "e42",
+        selector: "#settings > button.primary",
+        label: "button.primary",
+        role: "button",
+        name: "Save",
+        text: "Save",
+      },
+      comment: "Match @src/button.css",
+    }
     const value = readPromptPresentation({
       displayText: "hi",
-      comments: [note, { ...note, label: 42 }, { path: "src/app.ts", comment: "Keep" }],
+      comments: [
+        note,
+        { ...note, label: 42 },
+        browser,
+        { ...browser, element: { label: "button" } },
+        { path: "src/app.ts", comment: "Keep" },
+      ],
     })
-    expect(value?.comments).toEqual([note, { path: "src/app.ts", comment: "Keep" }])
+    expect(value?.comments).toEqual([
+      note,
+      {
+        type: "note",
+        origin: "browser",
+        label: "button.primary",
+        icon: "select-element",
+        subject:
+          'the "button.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save"; selector "#settings > button.primary")',
+        href: "tab_00000000-0000-4000-8000-000000000000",
+        comment: "Match @src/button.css",
+      },
+      { path: "src/app.ts", comment: "Keep" },
+    ])
   })
 
   test("return to the composer without their live part", () => {

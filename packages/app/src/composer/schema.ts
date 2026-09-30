@@ -157,6 +157,52 @@ export function durableNote<Note extends NoteComment>(note: Note) {
   return Struct.omit(note, ["live"])
 }
 
+// Legacy data: desktop builds before extension notes stored browser element comments as their own type, in drafts
+// and in message metadata. They read as the browser extension's note, without the element ref of their process.
+const LegacyBrowserComment = Persistence.struct({
+  type: Schema.Literal("browser"),
+  tabID: Schema.String,
+  url: Schema.String,
+  title: Persistence.optional(Schema.String),
+  element: Persistence.struct({
+    ref: Persistence.optional(Schema.String),
+    selector: Schema.String,
+    label: Schema.String,
+    role: Persistence.optional(Schema.String),
+    name: Persistence.optional(Schema.String),
+    text: Persistence.optional(Schema.String),
+  }),
+  comment: Schema.String,
+})
+export const LegacyBrowserNote = LegacyBrowserComment.pipe(
+  Schema.decodeTo(Schema.toType(NoteComment), {
+    decode: SchemaGetter.transform(legacyBrowserNote),
+    encode: SchemaGetter.forbidden(() => "Legacy browser comments are read-only"),
+  }),
+)
+
+// The subject those builds sent for an element whose ref no longer applies.
+function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment {
+  const element = item.element
+  const details = [
+    element.role ? `role ${element.role}` : undefined,
+    element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
+    element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
+    element.selector
+      ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`
+      : undefined,
+  ].filter((detail) => detail !== undefined)
+  return {
+    type: "note",
+    origin: "browser",
+    label: element.label,
+    icon: "select-element",
+    subject: `the ${JSON.stringify(element.label)} element in browser tab ${item.tabID} at ${item.url}${details.length ? ` (${details.join("; ")})` : ""}`,
+    href: item.tabID,
+    comment: item.comment,
+  }
+}
+
 export function contextItemKey(item: ContextItem) {
   if (item.type === "note") return `note:${item.origin}:c=${item.commentID}`
   const key = `${item.type}:${item.path}:${item.selection?.startLine}:${item.selection?.endLine}`
@@ -183,7 +229,20 @@ const NoteContextEntry = Schema.Struct({
     encode: SchemaGetter.transform((item) => item),
   }),
 )
-const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry])
+const LegacyBrowserContextEntry = Schema.Struct({
+  ...LegacyBrowserComment.fields,
+  commentID: Schema.String,
+  key: Persistence.optional(Schema.String),
+}).pipe(
+  Schema.decodeTo(Persistence.struct({ ...NoteContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
+    decode: SchemaGetter.transform((item) => {
+      const note = { ...legacyBrowserNote(item), commentID: item.commentID }
+      return { ...note, key: contextItemKey(note) }
+    }),
+    encode: SchemaGetter.forbidden(() => "Legacy browser comments are read-only"),
+  }),
+)
+const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry, LegacyBrowserContextEntry])
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 

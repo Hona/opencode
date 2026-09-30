@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
 import type { FileSelection } from "@/workspaces/files/model"
-import { durableNote, NoteComment, type ContextItem } from "./schema"
+import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
 
 export type PromptFileComment = {
   type?: "file"
@@ -13,6 +13,7 @@ export type PromptFileComment = {
 export type PromptComment = PromptFileComment | NoteComment
 
 const decodeNoteComment = Schema.decodeUnknownOption(NoteComment)
+const decodeLegacyBrowserNote = Schema.decodeUnknownOption(LegacyBrowserNote)
 
 /** An attachment the model receives as a path on the server rather than inline bytes. */
 export type PromptAttachmentReference = {
@@ -85,6 +86,7 @@ export function readPromptPresentation(value: unknown) {
     comments: comments.flatMap((item): PromptComment[] => {
       if (!item || typeof item !== "object") return []
       if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
+      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
       const path = (item as { path?: unknown }).path
       const comment = (item as { comment?: unknown }).comment
       if (typeof path !== "string" || typeof comment !== "string") return []
