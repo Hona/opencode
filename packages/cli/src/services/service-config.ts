@@ -33,9 +33,9 @@ export function filename(channel = OPENCODE_CHANNEL) {
 }
 
 // WSL distros share one network namespace, which WSL forwards to or mirrors with the Windows loopback, so a
-// service inside a distro takes a port of its own instead of the host's or a sibling distro's.
+// service inside a distro prefers a port of its own. Channels sharing a registration must share the port.
 export function defaultPort(channel = OPENCODE_CHANNEL, distro?: string) {
-  if (distro) return hashedPort(`${channel}:${distro}`)
+  if (distro) return hashedPort(`${filename(channel)}:${distro}`)
   if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
   return hashedPort(channel)

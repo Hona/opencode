@@ -168,7 +168,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
 
 // The service port elects one service per database: a contender that cannot bind it waits for the sibling
 // holding it to register, then exits. Hyper-V reserves blocks of the Windows ephemeral range, which holds
-// the channel default, and a reserved port accepts no connections, so no sibling can hold it. An unconfigured
+// the channel default, and a reserved port refuses connections, so no sibling can hold it. An unconfigured
 // service skips such ports; every contender skips the same ones and still meets at the first bindable port.
 const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
   readonly options: DiscoverOptions
@@ -177,7 +177,9 @@ const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
   readonly movable: boolean
   readonly launch: (port: number) => Effect.Effect<A, E, R>
 }) {
-  for (let port = input.port; port <= 65_535; port++) {
+  let port = input.port
+  let released = false
+  while (port <= 65_535) {
     const result = yield* Effect.result(input.launch(port))
     if (Result.isSuccess(result)) {
       if (port !== input.port)
@@ -189,9 +191,14 @@ const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
       return result.success
     }
     // Node reports Windows excluded ranges as EACCES; Bun reports them as EADDRINUSE.
-    if (!addressInUse(result.failure) && !(input.movable && accessDenied(result.failure)))
+    if (!hasCode(result.failure, "EADDRINUSE") && !(input.movable && hasCode(result.failure, "EACCES")))
       return yield* Effect.fail(result.failure)
-    if (input.movable && !(yield* accepting(input.hostname, port))) continue
+    if (input.movable && (yield* refused(input.hostname, port))) {
+      // A holder that just exited refuses connections too, so a port is skipped only once it refuses twice.
+      port = released ? port + 1 : port
+      released = !released
+      continue
+    }
     if (yield* recognizeIncumbent(input.options, input.hostname, port)) return undefined
     return yield* Effect.fail(
       new Error(
@@ -204,22 +211,23 @@ const claimServicePort = Effect.fnUntraced(function* <A, E, R>(input: {
   return yield* Effect.fail(new Error(`No managed service port is available on ${input.hostname}`))
 })
 
-// A sibling accepts connections as soon as it binds.
-function accepting(hostname: string, port: number) {
+// A sibling binds the same hostname and accepts connections as soon as it binds. Only an explicit refusal
+// rules one out; a timeout or any other failure leaves the port to incumbent recognition.
+function refused(hostname: string, port: number) {
   const host = hostname === "0.0.0.0" ? "127.0.0.1" : hostname === "::" ? "::1" : hostname
   return Effect.tryPromise(
     (signal) =>
-      new Promise<void>((resolve, reject) => {
+      new Promise<boolean>((resolve) => {
         const socket = createConnection({ host, port, signal })
         socket.once("connect", () => {
           socket.destroy()
-          resolve()
+          resolve(false)
         })
-        socket.once("error", reject)
+        socket.once("error", (error) => resolve(hasCode(error, "ECONNREFUSED")))
       }),
   ).pipe(
     Effect.timeoutOption("1 second"),
-    Effect.map(Option.isSome),
+    Effect.map(Option.getOrElse(() => false)),
     Effect.orElseSucceed(() => false),
   )
 }
@@ -241,16 +249,10 @@ function truthy(value?: string) {
   return value === "1" || value?.toLowerCase() === "true"
 }
 
-function addressInUse(error: unknown): boolean {
+function hasCode(error: unknown, code: string): boolean {
   if (typeof error !== "object" || error === null) return false
-  if ("code" in error && error.code === "EADDRINUSE") return true
-  return "cause" in error && addressInUse(error.cause)
-}
-
-function accessDenied(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false
-  if ("code" in error && error.code === "EACCES") return true
-  return "cause" in error && accessDenied(error.cause)
+  if ("code" in error && error.code === code) return true
+  return "cause" in error && hasCode(error.cause, code)
 }
 
 function waitForStdinClose() {

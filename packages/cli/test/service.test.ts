@@ -22,7 +22,8 @@ test("managed service ports are stable per installation channel", () => {
 })
 
 test("managed service ports inside WSL are stable per distro and leave the host port free", () => {
-  expect(ServiceConfig.defaultPort("latest", "Debian")).toBe(ServiceConfig.defaultPort("latest", "Debian"))
+  expect(ServiceConfig.defaultPort("dev", "Debian")).toBe(ServiceConfig.defaultPort("latest", "Debian"))
+  expect(ServiceConfig.defaultPort("next", "Debian")).toBe(ServiceConfig.defaultPort("latest", "Debian"))
   expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("latest"))
   expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("latest", "Ubuntu"))
   expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("local", "Debian"))
