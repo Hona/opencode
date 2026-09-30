@@ -1,7 +1,7 @@
 import { batch, createEffect, createMemo, lazy, on, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { Schema, Struct } from "effect"
 import { Icon } from "@opencode/ui/icon"
-import { getFilename } from "@opencode/util/path"
+import { encodeFilePath, getFilename } from "@opencode/util/path"
 import { Browser } from "../browser/contract"
 import { Changes } from "../review/contract"
 import {
@@ -28,7 +28,6 @@ import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import { FileTree } from "./contract"
 import { FileVisual } from "./label"
-import { encodeFilePath } from "@opencode/util/path"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
 

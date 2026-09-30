@@ -1,6 +1,5 @@
-import { getFilename } from "@opencode/util/path"
+import { encodeFilePath, getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
-import { encodeFilePath } from "@opencode/util/path"
 import type {
   AgentPart,
   ContextItem,
