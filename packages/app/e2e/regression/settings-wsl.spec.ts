@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { NO_PROVIDER, SERVER, project } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 
 test.use({ viewport: { width: 1280, height: 900 } })
@@ -7,19 +8,12 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
   test(`manages a ${mode} configured WSL server from nested settings`, async ({ page }) => {
     await mockOpenCodeServer(page, {
       directory: "/repo",
-      project: {
-        id: "proj_wsl_settings",
-        canonical: "/repo",
-        name: "WSL project",
-        sandboxes: [],
-        time: { created: 1, updated: 1 },
-      },
-      provider: { all: [], connected: [], default: {} },
+      project: project({ id: "proj_wsl_settings", directory: "/repo", name: "WSL project" }),
+      provider: NO_PROVIDER,
       sessions: [],
       pageMessages: () => ({ items: [] }),
     })
-    const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-    await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server, mode })}`)
+    await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode })}`)
     const settings = page.getByTestId("settings-screen")
     await expect(settings.getByRole("tab", { name: "Local Server", exact: true })).toBeEnabled()
     const ubuntu = settings.getByRole("tab", { name: "Ubuntu", exact: true })

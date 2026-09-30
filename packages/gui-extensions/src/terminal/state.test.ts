@@ -3,29 +3,27 @@ import { Schema } from "effect"
 import { TerminalState } from "./state"
 
 const decodeTerminalState = Schema.decodeUnknownSync(TerminalState)
-const roundTripTerminalState = (value: unknown) =>
-  decodeTerminalState(Schema.encodeSync(TerminalState)(decodeTerminalState(value)))
 
 describe("TerminalState", () => {
   test("drops invalid terminals and restores a valid active terminal", () => {
-    expect(
-      decodeTerminalState({
-        active: "missing",
-        all: [
-          null,
-          { id: "one", title: "Terminal 2" },
-          { id: "one", title: "duplicate", titleNumber: 9 },
-          { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80 },
-          { title: "no-id" },
-        ],
-      }),
-    ).toEqual({
+    const decoded = decodeTerminalState({
+      active: "missing",
+      all: [
+        null,
+        { id: "one", title: "Terminal 2" },
+        { id: "one", title: "duplicate", titleNumber: 9 },
+        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
+        { title: "no-id" },
+      ],
+    })
+    expect(decoded).toEqual({
       active: "one",
       all: [
         { id: "one", title: "Terminal 2", titleNumber: 2 },
-        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80 },
+        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
       ],
     })
+    expect(decodeTerminalState(Schema.encodeSync(TerminalState)(decoded))).toEqual(decoded)
   })
 
   test("defaults missing and malformed fields without dropping usable terminals", () => {
@@ -55,16 +53,5 @@ describe("TerminalState", () => {
         { id: "two", title: "", titleNumber: 0, buffer: "saved", cursor: 0 },
       ],
     })
-  })
-
-  test("round trips normalized terminal state", () => {
-    const value = {
-      active: "two",
-      all: [
-        { id: "one", title: "Terminal 1", titleNumber: 1 },
-        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
-      ],
-    }
-    expect(roundTripTerminalState(value)).toEqual(value)
   })
 })

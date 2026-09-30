@@ -1,6 +1,6 @@
 import { Schema, Struct } from "effect"
 
-export const OPEN_APPS = [
+const OPEN_APPS = [
   "vscode",
   "cursor",
   "zed",
