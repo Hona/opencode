@@ -103,7 +103,7 @@ function SurfaceView(props: SurfaceProps & { input: Input; bridge: Bridge }) {
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
     const shown = props.visible && store.visible && !props.input.dialog()
-    const cover = covered(rect)
+    const cover = !!props.frozen || covered(rect)
     if (shown && cover) freeze(id)
     if (!cover) thaw()
     const visible = shown && !(cover && store.snapshot?.id === id)
@@ -142,13 +142,23 @@ function SurfaceView(props: SurfaceProps & { input: Input; bridge: Bridge }) {
   }
 
   createEffect(
-    on([props.input.zoom, props.input.dialog, () => store.visible, () => props.visible, () => props.id], () => {
-      layout = undefined
-      // Native views are not clipped by the retained panel's DOM. Hide before the next
-      // animation frame so closing the panel cannot leave the surface above the app.
-      if (!props.visible || !store.visible || props.input.dialog() || !props.id) return hide()
-      schedule(300)
-    }),
+    on(
+      [
+        props.input.zoom,
+        props.input.dialog,
+        () => store.visible,
+        () => props.visible,
+        () => props.id,
+        () => props.frozen,
+      ],
+      () => {
+        layout = undefined
+        // Native views are not clipped by the retained panel's DOM. Hide before the next
+        // animation frame so closing the panel cannot leave the surface above the app.
+        if (!props.visible || !store.visible || props.input.dialog() || !props.id) return hide()
+        schedule(300)
+      },
+    ),
   )
   // ResizeObserver runs after layout in the same frame; measuring here instead of on the next
   // animation frame keeps the native view in step with a pane drag.

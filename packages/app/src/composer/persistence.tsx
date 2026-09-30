@@ -160,7 +160,7 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
         removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
         updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
           session().context.updateComment(path, commentID, next),
-        replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
+        replaceComments: (items: ContextItem[]) => session().context.replaceComments(items),
       },
       set: (prompt: Prompt, cursorPosition?: number, scope?: PromptScope) => pick(scope).set(prompt, cursorPosition),
       reset: (scope?: PromptScope) => pick(scope).reset(),

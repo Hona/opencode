@@ -3,16 +3,20 @@ import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import { Layout, Links, Sessions, type Context, type Link, type RemoteClient, type SessionRef } from "../sdk"
+import { readHref } from "./comment"
 import { isHtml, resolveLink, workspaceFileURL } from "./link"
 import { BrowserPane, type PaneEvent } from "./remote"
 
 type Client = RemoteClient<(typeof BrowserPane)["spec"]>
 type Session = Pick<SessionRef, "key">
+export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
 
 type Registration = {
   /** Creates a restored tab's page, which then reports its surface. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
+  inspect(tabID: Browser.TabID, enabled: boolean): void
+  highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   close(): void
 }
 
@@ -44,8 +48,15 @@ type Live = {
   dispose: () => void
 }
 
-/** A mounted pane; the newest one answers the reload command. */
-type PaneHandle = { visible: () => boolean; address: () => string; reload: () => void }
+/** A mounted pane; the newest one answers the reload and inspect commands. */
+type PaneHandle = {
+  visible: () => boolean
+  address: () => string
+  reload: () => void
+  inspectable: () => boolean
+  /** Turns the element picker on or off. */
+  inspect: () => void
+}
 
 export type Model = ReturnType<typeof createModel>
 
@@ -66,6 +77,7 @@ export function createModel(ctx: Context) {
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   const live = new Map<string, Live>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
+  const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
   createEffect(() => {
@@ -115,6 +127,7 @@ export function createModel(ctx: Context) {
         // so the side panel and browser tab are already selected when the user returns to it.
         focus: (tabID) => layout.open(key(tabID), ref, { select: true }),
         preview: (path) => preview(ref, path),
+        inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
         change: (next) => {
           if (next.error === "browser.pane.unsupported") {
             setState("unsupported", ref.server.id, true)
@@ -305,6 +318,31 @@ export function createModel(ctx: Context) {
       const found = target(link)
       if (found) openFile(found.view, found.path)
     },
+    /** The page's element picker starting, stopping, or picking an element. */
+    onInspect(session: Session, listener: (event: InspectEvent) => void) {
+      const set = inspectors.get(session.key) ?? new Set()
+      set.add(listener)
+      inspectors.set(session.key, set)
+      return () => {
+        set.delete(listener)
+        if (!set.size) inspectors.delete(session.key)
+      }
+    },
+    inspect(session: Session, tabID: Browser.TabID, enabled: boolean) {
+      live.get(session.key)?.connection.inspect(tabID, enabled)
+    },
+    /** Flashes a picked element, or clears any highlight when ref is omitted. */
+    highlight(session: Session, tabID: Browser.TabID, ref?: Browser.Ref) {
+      live.get(session.key)?.connection.highlight(tabID, ref)
+    },
+    /** Shows the browser tab a comment names and flashes its element while the page still has it. */
+    reveal(session: SessionRef, href: string) {
+      const target = readHref(href)
+      const item = target && tab(session, target.tabID)
+      if (!item) return
+      layout.open(key(item.id), session, { select: true })
+      if (target.ref) live.get(session.key)?.connection.highlight(item.id, target.ref)
+    },
     pane: () => panes()[0],
     mount(handle: PaneHandle) {
       setPanes((list) => [handle, ...list])
@@ -321,6 +359,7 @@ function createConnection(input: {
   change: (state: ConnectionState) => void
   focus: (tabID: Browser.TabID) => void
   preview: (path: string) => void
+  inspect: (event: InspectEvent) => void
 }) {
   const state: ConnectionState = { browser: null, surfaces: {}, suspended: false }
   let disposed = false
@@ -351,6 +390,7 @@ function createConnection(input: {
         if (disposed || state.registration !== registration) return
         if (event.type === "focus") return input.focus(event.tabID)
         if (event.type === "preview") return input.preview(event.path)
+        if (event.type === "inspect") return input.inspect(event)
         if (event.type === "surface") {
           state.surfaces = { ...state.surfaces, [event.tabID]: event.surface }
           return input.change({ ...state })
@@ -406,6 +446,12 @@ function createConnection(input: {
         throw error
       })
     },
+    inspect(tabID: Browser.TabID, enabled: boolean) {
+      state.registration?.inspect(tabID, enabled)
+    },
+    highlight(tabID: Browser.TabID, ref?: Browser.Ref) {
+      state.registration?.highlight(tabID, ref)
+    },
     dispose() {
       disposed = true
       clearTimeout(retry)
@@ -436,6 +482,16 @@ function open(
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
+    inspect(tabID, enabled) {
+      if (status.closed) return
+      void ready.then(() => client.inspect({ binding, tabID, enabled })).catch(() => undefined)
+    },
+    highlight(tabID, ref) {
+      if (status.closed) return
+      void ready
+        .then(() => client.highlight({ binding, tabID, ...(ref === undefined ? {} : { ref }) }))
+        .catch(() => undefined)
+    },
     close() {
       if (status.closed) return
       status.closed = true

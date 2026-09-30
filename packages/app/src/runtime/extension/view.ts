@@ -1,5 +1,13 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
-import type { BackgroundTask, Comments, Composer, Files, LineRange, ServerRef, SessionView } from "@opencode/gui-extensions/sdk"
+import type {
+  BackgroundTask,
+  Comments,
+  Composer,
+  Files,
+  LineRange,
+  ServerRef,
+  SessionView,
+} from "@opencode/gui-extensions/sdk"
 import { useComments } from "@/composer/comments"
 import { useComposerState } from "@/composer/persistence"
 import { useServer } from "@/runtime/server/current"
@@ -72,7 +80,10 @@ export function createSessionView(session: SessionModel) {
       set: (path, range) => void file.setSelectedLines(path, range),
     },
     scroll: {
-      get: (path) => ({ top: file.scrollTop(path) as number | undefined, left: file.scrollLeft(path) as number | undefined }),
+      get: (path) => ({
+        top: file.scrollTop(path) as number | undefined,
+        left: file.scrollLeft(path) as number | undefined,
+      }),
       set(path, value) {
         if (value.top !== undefined) file.setScrollTop(path, value.top)
         if (value.left !== undefined) file.setScrollLeft(path, value.left)
@@ -104,7 +115,7 @@ export function createSessionView(session: SessionModel) {
   }
 
   const contextPath = (id: string) =>
-    composer.context.items().find((item) => item.type === "file" && item.commentID === id)?.path
+    composer.context.items().flatMap((item) => (item.type === "file" && item.commentID === id ? [item.path] : []))[0]
   const composerRef: Composer = {
     attach: (part) => composer.context.add(part),
     update(id, patch) {

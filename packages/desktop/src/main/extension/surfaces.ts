@@ -13,6 +13,9 @@ type Entry = {
   cornerKey: string
   layout?: BridgeLayout
   shown: boolean
+  /** Whether the view was on screen after the last apply. */
+  onscreen: boolean
+  readonly listeners: Set<(visible: boolean) => void>
 }
 
 /**
@@ -61,12 +64,16 @@ export function createSurfaces() {
     }
     entry.view.setVisible(visible)
     entry.corners.forEach((corner) => corner.setVisible(visible && !!entry.cornerKey))
+    if (visible === entry.onscreen) return
+    entry.onscreen = visible
+    entry.listeners.forEach((listener) => listener(visible))
   }
 
   const release = (id: string) => {
     const entry = entries.get(id)
     if (!entry) return
     entries.delete(id)
+    entry.listeners.clear()
     if (entry.window.isDestroyed()) return
     entry.view.setVisible(false)
     entry.corners.forEach((corner) => entry.window.contentView.removeChildView(corner))
@@ -88,13 +95,29 @@ export function createSurfaces() {
         corner.setVisible(false)
         window.contentView.addChildView(corner)
       })
-      const entry: Entry = { extension, window, windowID: window.id, view, corners, cornerKey: "", shown: false }
+      const entry: Entry = {
+        extension,
+        window,
+        windowID: window.id,
+        view,
+        corners,
+        cornerKey: "",
+        shown: false,
+        onscreen: false,
+        listeners: new Set(),
+      }
       entries.set(id, entry)
       return {
         id,
         show(visible) {
           entry.shown = visible
           if (entries.get(id) === entry) apply(entry)
+        },
+        on(_event, handler) {
+          entry.listeners.add(handler)
+          return () => {
+            entry.listeners.delete(handler)
+          }
         },
         capture: () => capture(entry),
         dispose: () => release(id),

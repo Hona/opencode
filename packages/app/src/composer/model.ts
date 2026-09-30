@@ -89,7 +89,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
     return prompt.context.items().flatMap((item) => {
       const comment = item.comment?.trim()
-      if (!comment) return []
+      if (!comment || item.type !== "file") return []
       const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
       const nextSelection =
         selection ??
@@ -120,9 +120,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         time: item.time,
       })),
     )
-    prompt.context.replaceComments(
-      items.map((item) => ({
-        type: "file",
+    // History records file comments only; notes stay with the draft while it is browsed.
+    prompt.context.replaceComments([
+      ...prompt.context.items().filter((item) => item.type === "note"),
+      ...items.map((item) => ({
+        type: "file" as const,
         path: item.path,
         selection: selectionFromLines(item.selection),
         comment: item.comment,
@@ -130,7 +132,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         commentOrigin: item.origin,
         preview: item.preview,
       })),
-    )
+    ])
   }
 
   const referenceDescription = (reference: ReferenceInfo) =>
@@ -289,7 +291,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
       })),
     onContextRemove(item) {
-      if (item?.commentID) comments.remove(item.path, item.commentID)
+      if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
     openAttachment: (attachment) => {
       if (attachment.type !== "image") return
@@ -299,6 +301,12 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     openContext(key) {
       const item = controller.contextItem(key)
+      if (item?.type === "note") {
+        // The extension that attached the note reveals its subject.
+        const href = item.live?.href ?? item.href
+        if (href) links.open({ href, origin: item.origin, session: extensions.current() })
+        return
+      }
       if (item) openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {

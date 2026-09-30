@@ -1,9 +1,13 @@
 export default {
   "command.open": "Open browser",
   "command.reload": "Reload browser page",
+  "command.inspect": "Select an element in the browser page",
   "tab.title": "Browser",
   "address.label": "Browser address",
   "address.placeholder": "Enter URL",
+  inspect: "Select an element to comment on",
+  "inspect.active": "Click an element in the page to comment on it. Press Escape to cancel.",
+  "inspect.pageShortcut": "While the page has focus",
   "action.stop": "Stop",
   replaced: "Browser control moved to another desktop window.",
   unsupported: "This desktop app does not support the browser pane.",

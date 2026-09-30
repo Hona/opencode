@@ -281,6 +281,12 @@ export function createBrowserPane(input: {
     load(window: number, binding: string, tabID: Browser.TabID) {
       load(owned(window, binding), tabID)
     },
+    async inspect(window: number, binding: string, tabID: Browser.TabID, enabled: boolean) {
+      await owned(window, binding).pages.get(tabID)?.inspect(enabled)
+    },
+    async highlight(window: number, binding: string, tabID: Browser.TabID, ref?: Browser.Ref) {
+      await owned(window, binding).pages.get(tabID)?.highlight(ref)
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       const entry = owned(window, binding)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)
@@ -414,6 +420,9 @@ export function createBrowserPane(input: {
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
+      },
+      inspect: (event) => {
+        if (entry.pages.has(id)) report(entry, { type: "inspect", tabID: id, ...event })
       },
       popup: (popupOptions) => {
         const popup = create(entry, false, popupOptions)

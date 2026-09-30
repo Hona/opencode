@@ -15,6 +15,8 @@ export interface Surface {
   readonly id: string
   /** Page-side gate. The view shows only while the renderer lays it out AND show(true). */
   show(visible: boolean): void
+  /** Runs when the view goes on or off screen, including when the renderer paints a still in its place. */
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
   capture(): Promise<NativeImage | undefined>
   dispose(): void
 }

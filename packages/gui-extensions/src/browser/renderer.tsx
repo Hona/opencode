@@ -3,6 +3,7 @@ import { Icon } from "@opencode/ui/icon"
 import { App, Command, Link, Menu, onIdle, Panel, Sessions, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type { Model } from "./model"
+import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
 
 const setup: Setup = (ctx) => {
@@ -26,6 +27,7 @@ const setup: Setup = (ctx) => {
   if (ctx.use(App).platform !== "desktop") return
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
+  ctx.add(Style, commentStyles)
   const owner = getOwner()
   const status = { requested: false }
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
@@ -61,6 +63,19 @@ const setup: Setup = (ctx) => {
     }
   })
 
+  // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+    if (!pane) return undefined
+    return {
+      id: "inspect",
+      title: ctx.t("command.inspect"),
+      group: ctx.t("command.category.view"),
+      enabled: pane.visible() && pane.inspectable(),
+      run: pane.inspect,
+    }
+  })
+
   ctx.add(Menu, (): Menu | undefined => {
     const view = sessions.current()
     const value = model()
@@ -80,6 +95,14 @@ const setup: Setup = (ctx) => {
     priority: 10,
     match: (link) => !!model()?.match(link),
     open: (link) => model()?.openLink(link),
+  })
+  // A composer chip for a comment on a picked element.
+  ctx.add(Link, {
+    priority: 10,
+    match: (link) => link.origin === ctx.id && !!link.session,
+    open(link) {
+      if (link.session) model()?.reveal(link.session, link.href)
+    },
   })
 
   // Stable tab objects with live labels, so title and URL changes never remount a trigger.

@@ -69,6 +69,24 @@ describe("composer persistence schemas", () => {
     expect(decode({}).prompt).toEqual(DEFAULT_PROMPT)
   })
 
+  test("restores extension notes without the process-bound live part", () => {
+    const durable = {
+      type: "note" as const,
+      origin: "example",
+      label: "button#save",
+      icon: "select-element",
+      subject: 'the "button#save" element',
+      href: "tab_00000000-0000-4000-8000-000000000000",
+      comment: "Rename this",
+      commentID: "note",
+    }
+    const note = {
+      ...durable,
+      live: { subject: 'the "button#save" element (browser ref @e42)', href: `${durable.href}#e42` },
+    }
+    const value = decode({ context: { items: [note, { ...note, subject: null }] } })
+    expect(value.context.items).toEqual([{ ...durable, key: "note:example:c=note" }])
+  })
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {
     const value = decode({
       prompt: [

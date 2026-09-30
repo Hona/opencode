@@ -1,9 +1,9 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { expect, test, type Page } from "@playwright/test"
-import { SERVER, sessionHref } from "../utils/app"
+import { expectPath, SERVER, sessionHref } from "../utils/app"
 import { currentSession } from "../utils/mock-server"
-import { session, sessionID, setupTimeline } from "../utils/timeline"
+import { assistantMessage, session, sessionID, setupTimeline, textPart, userMessage } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace } from "../utils/workspace"
 
@@ -235,6 +235,41 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   await expect(page.getByText("This session cannot be found")).toBeVisible()
   await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
+})
+
+test.describe("session ID links", () => {
+  const target = "ses_0123456789abcdefghijklmnop"
+  const missing = "ses_abcdefghijklmnopqrstuvwxyz"
+
+  test("opens a verified session from agent prose or inline code with the keyboard", async ({ page }) => {
+    await setupTimeline(page, {
+      sessions: [session(), session({ id: target, title: "Linked session" })],
+      messages: [
+        userMessage(),
+        assistantMessage([textPart("prt_session_links", `Visit ${target} or \`${target}\` to see the result.`)]),
+      ],
+    })
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: `Visit ${target}` })
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    await expect(markdown.getByRole("button", { name: target })).toHaveCount(2)
+    await markdown
+      .getByRole("button", { name: target })
+      .filter({ has: page.locator("code") })
+      .press("Enter")
+    await expectPath(page, sessionHref(target))
+    await expect(page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`)).toContainText("Linked session")
+  })
+
+  test("does not navigate to an ID that is absent from the current server", async ({ page }) => {
+    await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([textPart("prt_session_missing", `See ${missing}.`)])],
+    })
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: `See ${missing}.` })
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    await markdown.getByRole("button", { name: missing }).click()
+    await expect(page.getByText("This session cannot be found")).toBeVisible()
+    await expectPath(page, sessionHref(sessionID))
+  })
 })
 
 async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 | 1 | 2 = 0) {

@@ -26,6 +26,10 @@ const setup: Setup = (ctx) => {
     register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
     load: async (input, caller) => (await existing()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await existing()).command(caller.window, input.binding, input.command),
+    inspect: async (input, caller) =>
+      (await existing()).inspect(caller.window, input.binding, input.tabID, input.enabled),
+    highlight: async (input, caller) =>
+      (await existing()).highlight(caller.window, input.binding, input.tabID, input.ref),
     close: async (input, caller) => (await existing()).close(caller.window, input.binding),
   })
   // Registered after the remote, so it runs first: windows still receive the suspended states.

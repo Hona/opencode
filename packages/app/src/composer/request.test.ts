@@ -106,6 +106,38 @@ describe("buildPromptRequest", () => {
     expect(result.text).toContain("focus here")
   })
 
+  test("sends an extension note with its live subject and attaches only the files it mentions", () => {
+    const note = {
+      type: "note" as const,
+      origin: "example",
+      label: "button.primary",
+      icon: "select-element",
+      subject:
+        'the "button.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save"; selector "#settings > button.primary")',
+      href: "tab_00000000-0000-4000-8000-000000000000",
+      live: {
+        subject:
+          'the "button.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save"; selector "#settings > button.primary"; browser ref @e42, usable as ref in any browser tool including browser.evaluate until the page navigates)',
+        href: "tab_00000000-0000-4000-8000-000000000000#e42",
+      },
+      comment: "Match @src/button.css",
+    }
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "tidy up", start: 0, end: 7 }],
+      context: [{ ...note, key: "note:example:c=1", commentID: "1" }],
+      images: [],
+      text: "tidy up",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.text).toBe(
+      'tidy up\nThe user made the following comment regarding the "button.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save"; selector "#settings > button.primary"; browser ref @e42, usable as ref in any browser tool including browser.evaluate until the page navigates): Match @src/button.css',
+    )
+    expect(result.comments).toEqual([note])
+    // A note has no file of its own; only files it mentions are attached.
+    expect(result.files).toEqual([{ uri: "file:///repo/src/button.css", mime: "text/plain", name: "button.css" }])
+  })
+
   test("keeps skill mentions out of file attachments", () => {
     const skill = {
       id: "skill-review",

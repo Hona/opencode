@@ -43,7 +43,7 @@ import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
-import { useCommand } from "@/shell/commands/command"
+import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -153,7 +153,8 @@ export function createExtensionServices() {
             return true
           },
           open(url) {
-            if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:") return platform.openLocalFile(url)
+            if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:")
+              return platform.openLocalFile(url)
             platform.openExternal(url)
           },
         }) satisfies System,
@@ -187,6 +188,7 @@ export function createExtensionServices() {
           routing: () => current()?.routing() ?? false,
           path: () => current()?.path() ?? "",
           keybind: (command) => current()?.keybind(command) ?? [],
+          keys: (bind) => formatKeybindParts(bind, language.t),
           matches: (command, event) => current()?.matches(command, event) ?? false,
           servers: () => current()?.servers() ?? [],
           on(_event, handler) {

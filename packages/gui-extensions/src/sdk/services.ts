@@ -4,7 +4,7 @@ import type { Schema } from "effect"
 import type { Accessor, JSX } from "solid-js"
 import type { Store } from "solid-js/store"
 import { Host, type Cleanup, type OS } from "./core"
-import type { Link } from "./points"
+import type { IconName, Link } from "./points"
 
 export interface ServerRef {
   /** Host key: "sidecar", an http URL, or `${extension}:${id}` for servers an extension contributes. */
@@ -144,8 +144,32 @@ export interface ComposerFile {
   commentOrigin?: "review" | "file"
 }
 
+/**
+ * A comment on something other than workspace lines, such as an element picked in a page. The model reads
+ * "The user made the following comment regarding <subject>: <comment>".
+ */
+export interface ComposerNote {
+  type: "note"
+  /** The extension that attached it. Opening the chip routes `Links.open({ href, origin })` to its Link handler. */
+  origin: string
+  commentID: string
+  /** Chip text naming the subject, e.g. `button#save`. */
+  label: string
+  /** Chip icon. */
+  icon: IconName
+  /** What the comment is about, for the model. Quote untrusted text such as page content. */
+  subject: string
+  comment: string
+  href?: string
+  /**
+   * Replaces `subject` and `href` while the note stays in this app process, for references only this process
+   * can resolve (e.g. a page element ref). A stored draft and a sent message restored by revert or fork drop it.
+   */
+  live?: { readonly subject: string; readonly href?: string }
+}
+
 export interface Composer {
-  attach(part: ComposerFile): void
+  attach(part: ComposerFile | ComposerNote): void
   /** id is the part's commentID. */
   update(id: string, patch: { readonly comment?: string; readonly preview?: string }): void
   detach(id: string): void
@@ -207,7 +231,10 @@ export interface Layout {
   project(server: string, title: string): void
 }
 
-export type StorageScope = "app" | { readonly server: string; readonly directory?: string } | { readonly session: SessionRef }
+export type StorageScope =
+  | "app"
+  | { readonly server: string; readonly directory?: string }
+  | { readonly session: SessionRef }
 
 export interface Storage {
   /** Durable, schema-decoded, synced across windows. */
@@ -265,11 +292,16 @@ export interface App {
   path(): string
   /** Display parts of a published command's effective keybind, e.g. ["Ctrl", "`\"]. Empty when unbound. */
   keybind(command: string): readonly string[]
+  /** Display parts of a chord the app does not own, e.g. "mod+shift+c" that a page handles itself. */
+  keys(bind: string): readonly string[]
   /** The event matches a published command's effective keybind. */
   matches(command: string, event: KeyboardEvent): boolean
   /** Ids of the servers the app lists (`ServerRef.id`). Reactive. */
   servers(): readonly string[]
-  on(event: "workspace.remove", handler: (value: { readonly server: string; readonly directory: string }) => void): Cleanup
+  on(
+    event: "workspace.remove",
+    handler: (value: { readonly server: string; readonly directory: string }) => void,
+  ): Cleanup
 }
 
 export interface Links {
@@ -302,6 +334,8 @@ export interface SurfaceProps {
   readonly id: string | undefined
   /** The surface should be on screen. The host also hides it while the window is hidden or a dialog is open. */
   readonly visible: boolean
+  /** Paints a still of the surface in place of the live view, so DOM content can float above it. */
+  readonly frozen?: boolean
   /** Radius of the bottom corners in CSS pixels. */
   readonly radius?: number
   /** CSS color the rounded corners show; defaults to the app backdrop behind the panel. */

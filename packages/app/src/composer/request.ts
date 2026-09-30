@@ -3,6 +3,7 @@ import type { FileSelection } from "@/workspaces/files/model"
 import { encodeFilePath } from "@opencode/util/path"
 import type {
   AgentPart,
+  ContextItem,
   FileAttachmentPart,
   ImageAttachmentPart,
   PathAttachmentPart,
@@ -12,6 +13,7 @@ import type {
 import {
   formatAttachmentReference,
   formatCommentNote,
+  formatNoteComment,
   type PromptAttachmentReference,
   type PromptComment,
 } from "@/composer/comment-note"
@@ -27,20 +29,9 @@ type PromptRequest = {
   attachments: PromptAttachmentReference[]
 }
 
-type ContextFile = {
-  key: string
-  type: "file"
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
-
 type BuildPromptRequestInput = {
   prompt: Prompt
-  context: ContextFile[]
+  context: (ContextItem & { key: string })[]
   images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
   text: string
   sessionDirectory: string
@@ -94,7 +85,29 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
 
   const used = new Set(files.map((file) => file.uri))
   const comments: PromptComment[] = []
+  const mentioned = (comment: string) =>
+    parseCommentMentions(comment).flatMap((path) => {
+      const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      if (used.has(uri)) return []
+      used.add(uri)
+      return [{ uri, mime: "text/plain", name: getFilename(path) }]
+    })
   const context = input.context.flatMap((item) => {
+    if (item.type === "note") {
+      const comment = item.comment.trim()
+      if (!comment) return []
+      comments.push({
+        type: "note",
+        origin: item.origin,
+        label: item.label,
+        icon: item.icon,
+        subject: item.subject,
+        ...(item.href ? { href: item.href } : {}),
+        ...(item.live ? { live: { ...item.live } } : {}),
+        comment,
+      })
+      return mentioned(comment)
+    }
     const path = absolute(input.sessionDirectory, item.path)
     const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
@@ -111,13 +124,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       preview: item.preview,
       origin: item.commentOrigin,
     })
-    const mentions = parseCommentMentions(comment).flatMap((path) => {
-      const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
-      if (used.has(uri)) return []
-      used.add(uri)
-      return [{ uri, mime: "text/plain", name: getFilename(path) }]
-    })
-    return [file, ...mentions]
+    return [file, ...mentioned(comment)]
   })
 
   const inline = input.images.map((attachment) => ({
@@ -134,7 +141,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     text: [
       ...(input.text.trim() ? [input.text] : []),
       ...attachments.map(formatAttachmentReference),
-      ...comments.map(formatCommentNote),
+      ...comments.map((comment) => (comment.type === "note" ? formatNoteComment(comment) : formatCommentNote(comment))),
     ].join("\n"),
     displayText: input.text,
     files: [...files, ...context, ...inline],

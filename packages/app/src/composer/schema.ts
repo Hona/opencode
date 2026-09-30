@@ -1,4 +1,4 @@
-import { Schema, SchemaGetter } from "effect"
+import { Schema, SchemaGetter, Struct } from "effect"
 import { checksum } from "@opencode/util/encode"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Skill } from "@opencode/schema/skill"
@@ -134,9 +134,31 @@ export const FileContextItem = Persistence.struct({
   preview: Persistence.optional(Schema.String),
 })
 export type FileContextItem = typeof FileContextItem.Type
-export type ContextItem = FileContextItem
+
+const NoteFields = {
+  type: Schema.Literal("note"),
+  origin: Schema.String,
+  label: Schema.String,
+  icon: Schema.String,
+  subject: Schema.String,
+  href: Persistence.optional(Schema.String),
+  live: Persistence.optional(Persistence.struct({ subject: Schema.String, href: Persistence.optional(Schema.String) })),
+  comment: Schema.String,
+}
+/** An extension's comment on something other than workspace lines, as sent in message metadata. */
+export const NoteComment = Persistence.struct(NoteFields)
+export type NoteComment = typeof NoteComment.Type
+export const NoteContextItem = Persistence.struct({ ...NoteFields, commentID: Schema.String })
+export type NoteContextItem = typeof NoteContextItem.Type
+export type ContextItem = FileContextItem | NoteContextItem
+
+/** A note's live part names state inside the app process that attached it; anything that may outlive it drops it. */
+export function durableNote<Note extends NoteComment>(note: Note) {
+  return Struct.omit(note, ["live"])
+}
 
 export function contextItemKey(item: ContextItem) {
+  if (item.type === "note") return `note:${item.origin}:c=${item.commentID}`
   const key = `${item.type}:${item.path}:${item.selection?.startLine}:${item.selection?.endLine}`
   if (item.commentID) return `${key}:c=${item.commentID}`
   const comment = item.comment?.trim()
@@ -145,12 +167,23 @@ export function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
-const ContextEntry = Schema.Struct({ ...FileContextItem.fields, key: Persistence.optional(Schema.String) }).pipe(
+const FileContextEntry = Schema.Struct({ ...FileContextItem.fields, key: Persistence.optional(Schema.String) }).pipe(
   Schema.decodeTo(Persistence.struct({ ...FileContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
     decode: SchemaGetter.transform((item) => ({ ...item, key: contextItemKey(item) })),
     encode: SchemaGetter.transform((item) => item),
   }),
 )
+const NoteContextEntry = Schema.Struct({
+  ...NoteContextItem.fields,
+  key: Persistence.optional(Schema.String),
+}).pipe(
+  Schema.decodeTo(Persistence.struct({ ...NoteContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
+    // A stored draft can outlive the app process that attached the note.
+    decode: SchemaGetter.transform((item) => ({ ...durableNote(item), key: contextItemKey(item) })),
+    encode: SchemaGetter.transform((item) => item),
+  }),
+)
+const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry])
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
