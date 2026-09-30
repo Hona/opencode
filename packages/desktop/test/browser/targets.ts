@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import type { BrowserWindow } from "electron"
+import type { BrowserPaneElement } from "@opencode/app/desktop"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { createBrowserPage } from "../../src/main/browser-chromium"
@@ -8,11 +9,13 @@ import { createCornerImages } from "../../src/main/browser/corners"
 export async function verifyTargets(win: BrowserWindow, url: string) {
   const children = win.contentView.children.length
   const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+  const inspections: { active: boolean; element?: BrowserPaneElement }[] = []
   const page = createBrowserPage(win, {
     id: tabID,
     partition: `target-test-${crypto.randomUUID()}`,
     network: null,
     publish() {},
+    inspect: (event) => inspections.push(event),
     fail() {
       throw new Error("Target test page failed")
     },
@@ -161,7 +164,74 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     assert.deepEqual(await inspect(fileAction), original)
     assert.equal(Buffer.from((await execute(fileAction, original)).files[0].data).toString(), "desktop download bytes")
 
+    // The element picker names the exact node, here one inside a shadow root.
     await execute({ type: "navigate", tabID, url })
+    await execute({
+      type: "evaluate",
+      tabID,
+      script: `const host = document.createElement('x-card'); host.id = 'card'; host.style.cssText = 'position:fixed;top:0;left:0;display:block;background:white'; host.attachShadow({ mode: 'open' }).innerHTML = '<div>Title</div><div><button class="act">Shadow action</button></div>'; document.body.prepend(host); null`,
+    })
+    page.setVisible(true)
+    await page.inspect(true)
+    assert.deepEqual(inspections.at(-1), { active: true })
+    const center = Schema.decodeUnknownSync(
+      Schema.Struct({ value: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) }),
+    )(
+      (
+        await execute({
+          type: "evaluate",
+          tabID,
+          script:
+            "(() => { const box = document.querySelector('#card').shadowRoot.querySelector('button').getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 } })()",
+        })
+      ).value,
+    ).value
+    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
+      await page.contents.debugger.sendCommand("Input.dispatchMouseEvent", {
+        type,
+        ...center,
+        button: "left",
+        clickCount: 1,
+      })
+    const element = await waitForPick()
+    assert.equal(element.selector, "#card >>> div:nth-of-type(2) > button")
+    assert.equal(element.label, "button.act")
+    assert.equal(element.role, "button")
+    assert.equal(element.name, "Shadow action")
+    const onElement = async (script: string) =>
+      Schema.decodeUnknownSync(Schema.Struct({ value: Schema.Unknown }))(
+        (await execute({ type: "evaluate", tabID, ref: element.ref, script })).value,
+      ).value
+    assert.equal(await onElement("(element) => element.textContent"), "Shadow action")
+    assert.equal(
+      await onElement(
+        `(element) => { const [host, inner] = ${JSON.stringify(element.selector)}.split(" >>> "); return document.querySelector(host).shadowRoot.querySelector(inner) === element }`,
+      ),
+      true,
+      "Each selector segment resolves within its own root",
+    )
+    const pickedSnapshot = Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(
+      (await execute({ type: "snapshot", tabID })).value,
+    ).content
+    assert(pickedSnapshot.includes(`@${element.ref} [button] "Shadow action"`), pickedSnapshot)
+    assert.equal(await onElement("function () { return this.className }"), "act", "A snapshot keeps picked refs")
+    assert.deepEqual(
+      (await inspect({ type: "evaluate", tabID, ref: element.ref, script: "(element) => element.id" })).resources,
+      [url + "/"],
+    )
+    await assert.rejects(onElement("document.title"), /needs a function that receives the element/)
+    await assert.rejects(
+      execute({ type: "evaluate", tabID, ref: element.ref, frameID: "main", script: "(element) => element.id" }),
+      /not both/,
+    )
+    await page.inspect(true)
+    await execute({ type: "hover", tabID, ref: element.ref })
+    assert.deepEqual(inspections.at(-1), { active: false }, "Agent pointer input turns the picker off first")
+    page.setVisible(false)
+    console.log("PASS native element picker targets a shadow DOM node by ref and selector")
+
+    await execute({ type: "navigate", tabID, url })
+    await assert.rejects(onElement("(element) => element.id"), /stale/)
     await execute({ type: "trace.start", tabID })
     await execute({ type: "navigate", tabID, url: "about:blank" })
     const traceTarget = await inspect({ type: "trace.stop", tabID })
@@ -187,5 +257,15 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
     throw new Error("Download did not complete")
+  }
+
+  async function waitForPick() {
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      const element = inspections.find((event) => event.element)?.element
+      if (element) return element
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    throw new Error("The element picker did not report a pick")
   }
 }

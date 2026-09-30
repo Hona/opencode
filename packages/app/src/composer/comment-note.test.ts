@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { commentContextItem, readPromptPresentation } from "./comment-note"
+import { commentContextItem, formatBrowserCommentNote, readPromptPresentation } from "./comment-note"
 
 const browser = {
   type: "browser" as const,
@@ -16,6 +16,13 @@ describe("browser element comments", () => {
       comments: [browser, { ...browser, element: { label: "button" } }, { path: "src/app.ts", comment: "Keep" }],
     })
     expect(value?.comments).toEqual([browser, { path: "src/app.ts", comment: "Keep" }])
+  })
+
+  test("explain a selector that crosses into a shadow root", () => {
+    expect(
+      formatBrowserCommentNote({ ...browser, element: { ...browser.element, selector: "#card >>> div > button" } }),
+    ).toContain('selector "#card >>> div > button" (">>>" enters a shadow root)')
+    expect(formatBrowserCommentNote(browser)).not.toContain("shadow root")
   })
 
   test("return to the composer without their element ref", () => {

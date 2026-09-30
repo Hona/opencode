@@ -565,25 +565,47 @@ export function createBrowserPage(
       case "find":
         return result({ tab: state(), ...(await snapshot(action)) })
       case "evaluate": {
+        if (action.ref && action.frameID)
+          throw new Error(
+            "Pass either ref or frameID to browser.evaluate, not both. A ref already runs in its element's frame.",
+          )
         const context = action.frameID ? contexts.get(action.frameID) : undefined
         if (action.frameID && !context)
           throw new Error(
             "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
           )
-        const value = await cdp.send(
-          "Runtime.evaluate",
-          {
-            expression: action.script,
-            contextId: context?.id,
-            awaitPromise: true,
-            returnByValue: true,
-            userGesture: true,
-          },
-          context?.sessionID,
-        )
+        const element = action.ref ? target(action.ref) : undefined
+        const objectId = element ? await resolve(element) : undefined
+        // With a ref, the script is a function that receives the element as its argument and as `this`.
+        const value = await (element && objectId
+          ? cdp
+              .send(
+                "Runtime.callFunctionOn",
+                {
+                  objectId,
+                  functionDeclaration: action.script,
+                  arguments: [{ objectId }],
+                  awaitPromise: true,
+                  returnByValue: true,
+                  userGesture: true,
+                },
+                element.sessionID,
+              )
+              .finally(() => cdp.send("Runtime.releaseObject", { objectId }, element.sessionID).catch(() => undefined))
+          : cdp.send(
+              "Runtime.evaluate",
+              {
+                expression: action.script,
+                contextId: context?.id,
+                awaitPromise: true,
+                returnByValue: true,
+                userGesture: true,
+              },
+              context?.sessionID,
+            ))
         if (value.exceptionDetails)
           throw new Error(
-            `Page JavaScript threw an exception. Check the script and frameID; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
+            `Page JavaScript threw an exception. Check the script and ${action.ref ? "ref" : "frameID"}; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
           )
         abortError(signal)
         return result({ tab: state(), value: value.result.value ?? null })
@@ -934,12 +956,7 @@ export function createBrowserPage(
   }
 
   async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
-    const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
-    const objectId = object.object.objectId
-    if (!objectId)
-      throw new Error(
-        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
-      )
+    const objectId = await resolve(element)
     try {
       const result = await cdp.send(
         "Runtime.callFunctionOn",
@@ -959,6 +976,15 @@ export function createBrowserPage(
     } finally {
       await cdp.send("Runtime.releaseObject", { objectId }, element.sessionID).catch(() => undefined)
     }
+  }
+
+  async function resolve(element: Element) {
+    const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
+    if (!object.object.objectId)
+      throw new Error(
+        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
+      )
+    return object.object.objectId
   }
 
   async function rect(element: Element, scroll = false) {
@@ -1239,8 +1265,9 @@ export function createBrowserPage(
     const ref = `e${++nextRef}`
     picked.set(ref, element)
     const zoom = contents.getZoomFactor()
-    // The pick focused the page; the comment editor opens in the app window.
-    if (!win.isDestroyed()) win.webContents.focus()
+    // The pick focused the page; the comment editor opens in the app window. Focus only moves
+    // within a focused window, so synthetic input never raises a background window.
+    if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
     options.inspect?.({
       active: false,
       element: {
@@ -1318,22 +1345,28 @@ export function createBrowserPage(
         `function() {
           const clip = (value, max) => (value.length > max ? value.slice(0, max - 1) + "\u2026" : value)
           const label = this.localName + (this.id ? "#" + this.id : "") + Array.from(this.classList, (name) => "." + name).join("")
-          const path = []
-          for (let node = this; node instanceof Element; node = node.parentElement) {
-            if (node.id && node.getRootNode().querySelectorAll("#" + CSS.escape(node.id)).length === 1) {
-              path.unshift("#" + CSS.escape(node.id))
-              break
+          // One segment per document or shadow root, outermost first; " >>> " steps into a host's shadow root.
+          const segments = []
+          for (let start = this; start; ) {
+            const root = start.getRootNode()
+            const path = []
+            for (let node = start; node; node = node.parentElement) {
+              if (node.id && root.querySelectorAll("#" + CSS.escape(node.id)).length === 1) {
+                path.unshift("#" + CSS.escape(node.id))
+                break
+              }
+              if (node === node.ownerDocument.body) {
+                path.unshift("body")
+                break
+              }
+              const same = Array.from(node.parentNode?.children ?? []).filter((child) => child.localName === node.localName)
+              path.unshift(CSS.escape(node.localName) + (same.length > 1 ? ":nth-of-type(" + (same.indexOf(node) + 1) + ")" : ""))
             }
-            if (node === node.ownerDocument.body) {
-              path.unshift("body")
-              break
-            }
-            const parent = node.parentElement
-            const same = parent ? Array.from(parent.children).filter((child) => child.localName === node.localName) : []
-            path.unshift(CSS.escape(node.localName) + (same.length > 1 ? ":nth-of-type(" + (same.indexOf(node) + 1) + ")" : ""))
+            segments.unshift(path.join(" > "))
+            start = root instanceof ShadowRoot ? root.host : undefined
           }
           const text = clip((this.innerText ?? this.textContent ?? "").replace(/\\s+/g, " ").trim(), 160)
-          return { label: clip(label, 200), selector: clip(path.join(" > "), 2000), ...(text ? { text } : {}) }
+          return { label: clip(label, 200), selector: clip(segments.join(" >>> "), 2000), ...(text ? { text } : {}) }
         }`,
       ),
     )

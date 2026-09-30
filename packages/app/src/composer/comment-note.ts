@@ -114,8 +114,10 @@ export function formatBrowserCommentNote(input: BrowserComment) {
     element.role ? `role ${element.role}` : undefined,
     element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
     element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
-    `selector ${JSON.stringify(element.selector)}`,
-    element.ref ? `browser ref @${element.ref}, valid until the page navigates` : undefined,
+    `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`,
+    element.ref
+      ? `browser ref @${element.ref}, usable as ref in any browser tool including browser.evaluate until the page navigates`
+      : undefined,
   ].filter((detail) => detail !== undefined)
   return `The user made the following comment regarding the ${JSON.stringify(element.label)} element in browser tab ${input.tabID} at ${input.url} (${details.join("; ")}): ${input.comment}`
 }
