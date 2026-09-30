@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "Revisión",
+  "tab.count.one": "{{count}} archivo cambiado",
+  "tab.count.many": "{{count}} archivos cambiados",
+  "tab.count.other": "{{count}} archivos cambiados",
+  "mobile.title.one": "Cambio",
+  "mobile.title.many": "Cambios",
+  "mobile.title.other": "Cambios",
+  "empty.git": "Aún no hay cambios sin confirmar",
+  "empty.branch": "Aún no hay cambios en la rama",
+  "git.title": "Crear repositorio Git",
+  "git.description": "Rastrea, revisa y deshaz cambios en este proyecto",
+}
