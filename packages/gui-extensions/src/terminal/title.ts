@@ -22,3 +22,18 @@ export function isDefaultTitle(title: string, number: number) {
 export function titleNumber(title: string, max: number) {
   return Array.from({ length: max }, (_, idx) => idx + 1).find((number) => isDefaultTitle(title, number))
 }
+
+export const terminalTabLabel = (input: {
+  title?: string
+  titleNumber?: number
+  t: (key: string, vars?: Record<string, string | number | boolean>) => string
+}) => {
+  const title = input.title ?? ""
+  const number = input.titleNumber ?? 0
+  const defaultTitle = Number.isFinite(number) && number > 0 && isDefaultTitle(title, number)
+
+  if (title && !defaultTitle) return title
+  if (number > 0) return input.t("title.numbered", { number })
+  if (title) return title
+  return input.t("terminal.title")
+}

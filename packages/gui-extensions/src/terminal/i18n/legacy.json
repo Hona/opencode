@@ -1,0 +1,12 @@
+{
+  "command.category": "command.category.terminal",
+  "command.toggle": "command.terminal.toggle",
+  "command.new": "command.terminal.new",
+  "command.new.description": "command.terminal.new.description",
+  "loading": "terminal.loading",
+  "title.numbered": "terminal.title.numbered",
+  "close": "terminal.close",
+  "connectionLost.title": "terminal.connectionLost.title",
+  "connectionLost.abnormalClose": "terminal.connectionLost.abnormalClose",
+  "connectionLost.description": "terminal.connectionLost.description"
+}

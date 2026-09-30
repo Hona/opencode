@@ -22,8 +22,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
-import { usePlatform } from "@/runtime/platform/platform"
-import { clearWorkspaceTerminals } from "@/session/terminal/context"
+import { useExtensionServices } from "@/runtime/extension/root"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
 import {
@@ -59,7 +58,7 @@ export const SettingsWorkspaces: Component<{
   const queryClient = useQueryClient()
   const data = server.ctx.data
   const tabs = useTabs()
-  const platform = usePlatform()
+  const extensions = useExtensionServices()
   const [store, setStore] = createStore({
     project: "all",
     transaction: undefined as "confirm" | "running" | undefined,
@@ -241,7 +240,7 @@ export const SettingsWorkspaces: Component<{
           worktree: undefined,
         })
       })
-      clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
+      extensions.workspaceRemoved({ server: context.server, directory: workspace.directory })
       await queryClient.invalidateQueries({
         queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.id),
       })

@@ -1,12 +1,11 @@
 import { lazy, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { Command, Layout, Panel, Sessions, type PanelTab, type Setup } from "../sdk"
+import { Command, Layout, onIdle, Panel, Sessions, type PanelTab, type Setup } from "../sdk"
 import { createBtw } from "./model"
 
 const setup: Setup = (ctx) => {
   const SessionBtwPanel = lazy(() => import("./panel"))
-  const idle = requestIdleCallback(() => void SessionBtwPanel.preload())
-  ctx.cleanup(() => cancelIdleCallback(idle))
+  ctx.cleanup(onIdle(() => void SessionBtwPanel.preload()))
   const layout = ctx.use(Layout)
   const sessions = ctx.use(Sessions)
   const btw = createBtw(ctx)

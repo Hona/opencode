@@ -41,3 +41,13 @@ export function usePanel() {
   if (!frame) throw new Error("usePanel must run inside a panel render")
   return frame
 }
+
+/** Runs n when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Returns a cancel. */
+export function onIdle(fn: () => void) {
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(fn)
+    return () => cancelIdleCallback(id)
+  }
+  const id = setTimeout(fn, 200)
+  return () => clearTimeout(id)
+}

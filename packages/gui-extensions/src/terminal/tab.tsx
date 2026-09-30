@@ -4,14 +4,19 @@ import { createStore } from "solid-js/store"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Tabs } from "@opencode/ui/tabs"
 import { Menu } from "@opencode/ui/menu"
-import { isDefaultTitle } from "@/session/terminal/title"
-import { useTerminal, type LocalPTY } from "@/session/terminal/context"
-import { useLanguage } from "@/runtime/i18n/language"
-import { focusTerminalById } from "@/session/helpers"
+import { useExtension } from "../sdk"
+import type { TerminalWorkspace } from "./model"
+import type { LocalPTY } from "./state"
+import { terminalTabLabel } from "./title"
+import { focusTerminalById } from "./focus"
 
-export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; onClose?: () => void }): JSX.Element {
-  const terminal = useTerminal()
-  const language = useLanguage()
+export function SortableTerminalTab(props: {
+  terminal: LocalPTY
+  workspace: TerminalWorkspace
+  index: number
+  onClose?: () => void
+}): JSX.Element {
+  const extension = useExtension()
   const sortable = useSortable({
     get id() {
       return props.terminal.id
@@ -29,25 +34,12 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
   let blurFrame: number | undefined
   let editRequested = false
 
-  const defaultTitle = () => {
-    const number = props.terminal.titleNumber
-    if (!Number.isFinite(number) || number <= 0) return false
-    return isDefaultTitle(props.terminal.title, number)
-  }
-
-  const label = () => {
-    language.locale()
-    if (props.terminal.title && !defaultTitle()) return props.terminal.title
-
-    const number = props.terminal.titleNumber
-    if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
-    if (props.terminal.title) return props.terminal.title
-    return language.t("terminal.title")
-  }
+  const label = () =>
+    terminalTabLabel({ title: props.terminal.title, titleNumber: props.terminal.titleNumber, t: extension.t })
 
   const close = () => {
-    const count = terminal.all().length
-    void terminal.close(props.terminal.id)
+    const count = props.workspace.all().length
+    void props.workspace.close(props.terminal.id)
     if (count === 1) {
       props.onClose?.()
     }
@@ -55,12 +47,12 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
 
   const focus = () => {
     if (store.editing) return
-    terminal.requestFocus(props.terminal.id)
-    terminal.open(props.terminal.id)
+    props.workspace.requestFocus(props.terminal.id)
+    props.workspace.open(props.terminal.id)
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     focusTerminalById(props.terminal.id)
     const input = document.getElementById(`terminal-wrapper-${props.terminal.id}`)?.querySelector("textarea")
-    if (input === document.activeElement) terminal.consumeFocus(props.terminal.id)
+    if (input === document.activeElement) props.workspace.consumeFocus(props.terminal.id)
   }
 
   const edit = (e?: Event) => {
@@ -79,7 +71,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
 
     const value = store.title.trim()
     if (value && value !== props.terminal.title) {
-      terminal.update({ id: props.terminal.id, title: value })
+      props.workspace.update({ id: props.terminal.id, title: value })
     }
     setStore("editing", false)
   }
@@ -131,7 +123,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
               focus()
             }}
             onMiddleClick={close}
-            closeButton={<Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={language.t("terminal.close")} />}
+            closeButton={<Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={extension.t("close")} />}
             hideCloseButton
           >
             <span
@@ -167,8 +159,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
               requestAnimationFrame(() => edit())
             }}
           >
-            <Menu.Item onSelect={() => (editRequested = true)}>{language.t("common.rename")}</Menu.Item>
-            <Menu.Item onSelect={close}>{language.t("common.close")}</Menu.Item>
+            <Menu.Item onSelect={() => (editRequested = true)}>{extension.t("common.rename")}</Menu.Item>
+            <Menu.Item onSelect={close}>{extension.t("common.close")}</Menu.Item>
           </Menu.Context.Content>
         </Menu.Context.Portal>
       </Menu.Context>

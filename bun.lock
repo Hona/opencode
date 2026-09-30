@@ -543,6 +543,7 @@
         "uqr": "0.1.3",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "20.0.11",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",

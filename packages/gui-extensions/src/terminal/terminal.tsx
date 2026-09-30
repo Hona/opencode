@@ -3,23 +3,18 @@ import { useTheme } from "@opencode/ui/theme/context"
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import { resolveThemeVariantV2 } from "@opencode/ui/theme/v2/resolve"
 import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
-import { showToast } from "@/shell/notifications/toast"
-import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
+import { showToast } from "@opencode/ui/toast"
+import { createPtyClient } from "@opencode/client/solid"
+import type { FitAddon, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
-import { SerializeAddon } from "@/session/terminal/serialize"
-import { matchKeybind, parseKeybind } from "@/shell/commands/command"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { terminalFontFamily, useSettings } from "@/settings/model"
-import type { LocalPTY } from "@/session/terminal/context"
-import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/session/terminal/runtime-adapters"
-import { terminalKeyInput } from "@/session/terminal/terminal-key-event"
-import { terminalWriter } from "@/session/terminal/writer"
+import { App, Native, System, useExtension, type ServerRef } from "../sdk"
+import type { TerminalModel } from "./model"
+import type { LocalPTY } from "./state"
+import { SerializeAddon } from "./serialize"
+import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
+import { terminalKeyInput } from "./terminal-key-event"
+import { terminalWriter } from "./writer"
 
-const TOGGLE_TERMINAL_ID = "terminal.toggle"
-const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 // Serialization on unmount is a synchronous O(rows x cols) walk on the main thread and the
 // result is written to localStorage or desktop state for every terminal in the workspace.
 // Persisting the most recent 2k scrollback rows keeps restore fidelity for the history users
@@ -28,25 +23,15 @@ const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 const persistedScrollbackRows = 2_000
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  server: ServerRef
+  directory: string
+  ghostty: TerminalModel["ghostty"]
   autoFocus?: boolean
   onAutoFocus?: () => void
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
-}
-
-let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
-
-const loadGhostty = () => {
-  if (shared) return shared
-  shared = import("ghostty-web")
-    .then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
-    .catch((err) => {
-      shared = undefined
-      throw err
-    })
-  return shared
 }
 
 type TerminalColors = {
@@ -176,17 +161,17 @@ const persistTerminal = (input: {
 }
 
 export const Terminal = (props: TerminalProps) => {
-  const platform = usePlatform()
-  const sdk = useWorkspaceLocation()
-  const serverSDK = useServerSDK()
-  const settings = useSettings()
+  const extension = useExtension()
+  const app = extension.use(App)
+  const system = extension.use(System)
+  const native = extension.use(Native)
   const theme = useTheme()
-  const language = useLanguage()
-  // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
-  const directory = sdk().directory
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
+    "server",
+    "directory",
+    "ghostty",
     "class",
     "classList",
     "autoFocus",
@@ -194,6 +179,10 @@ export const Terminal = (props: TerminalProps) => {
     "onConnect",
     "onConnectError",
   ])
+  // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and each
+  // cached surface belongs to one workspace.
+  const server = local.server
+  const directory = local.directory
   const id = local.pty.id
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
@@ -209,7 +198,6 @@ export const Terminal = (props: TerminalProps) => {
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -249,7 +237,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const pushSize = async (cols: number, rows: number) => {
-    return serverSDK.api.pty
+    return server.client.pty
       .update({
         ptyID: id,
         location: { directory },
@@ -335,15 +323,15 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   createEffect(() => {
-    const font = terminalFontFamily(settings.appearance.terminalFont())
+    const font = app.font("mono")
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
   })
 
-  let zoom = platform.webviewZoom?.()
+  let zoom = native?.zoom()
   createEffect(() => {
-    const next = platform.webviewZoom?.()
+    const next = native?.zoom()
     if (next === undefined) return
     if (next === zoom) return
     zoom = next
@@ -378,16 +366,12 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
-      platform.openLocalFile(text)
-      return
-    }
-    platform.openExternal(text)
+    system.open(text)
   }
 
   onMount(() => {
     const run = async () => {
-      const loaded = await loadGhostty()
+      const loaded = await local.ghostty()
       if (disposed) return
 
       const mod = loaded.mod
@@ -399,7 +383,7 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: terminalFontFamily(settings.appearance.terminalFont()),
+        fontFamily: app.font("mono"),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -411,7 +395,6 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      _ghostty = g
       term = t
       setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
       output = terminalWriter((data, done) =>
@@ -435,10 +418,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         // allow for toggle terminal keybinds in parent
-        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
-        const keybinds = parseKeybind(config)
-
-        return matchKeybind(keybinds, event)
+        return app.matches("terminal.toggle", event)
       })
 
       const fit = new mod.FitAddon()
@@ -541,7 +521,7 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = async () => {
-        return serverSDK.api.pty
+        return server.client.pty
           .get({ ptyID: id, location: { directory } })
           .then((result) => result.data.status === "exited")
           .catch((err) => {
@@ -574,7 +554,7 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const socket = await serverSDK.pty
+        const socket = await createPtyClient(server.client, { url: server.url })
           .connect({
             ptyID: id,
             location: { directory },
@@ -650,7 +630,7 @@ export const Terminal = (props: TerminalProps) => {
           socket.removeEventListener("close", handleClose)
           if (disposed) return
           if (event.code === 1000) return
-          retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
+          retry(new Error(extension.t("connectionLost.abnormalClose", { code: event.code })))
         }
 
         drop = stop
@@ -667,8 +647,8 @@ export const Terminal = (props: TerminalProps) => {
       if (disposed) return
       showToast({
         variant: "error",
-        title: language.t("terminal.connectionLost.title"),
-        description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
+        title: extension.t("connectionLost.title"),
+        description: err instanceof Error ? err.message : extension.t("connectionLost.description"),
       })
       local.onConnectError?.(err)
     })
