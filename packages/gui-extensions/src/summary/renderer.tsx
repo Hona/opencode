@@ -77,6 +77,7 @@ const setup: Setup = (ctx) => {
             <Suspense>
               <SummaryPanel
                 mobile
+                shown={frame.visible()}
                 session={session}
                 project={project()}
                 diffs={project().vcs ? changes()?.details(session) : []}

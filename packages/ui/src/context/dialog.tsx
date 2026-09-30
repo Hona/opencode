@@ -81,8 +81,8 @@ function init() {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number) => {
-    const id = Math.random().toString(36).slice(2)
+  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number, key?: string) => {
+    const id = key ?? Math.random().toString(36).slice(2)
     const zIndex = 50 + layer * 10
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
@@ -137,16 +137,16 @@ function init() {
     setStack((items) => [...items, active])
   }
 
-  const push = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const push = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
     }
     lock.value = false
-    mount(element, owner, onClose, stack().length)
+    mount(element, owner, onClose, stack().length, id)
   }
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
     for (const item of stack()) item.dispose()
     setStack([])
     if (timer.current !== undefined) {
@@ -154,7 +154,7 @@ function init() {
       timer.current = undefined
     }
     lock.value = false
-    mount(element, owner, onClose, 0)
+    mount(element, owner, onClose, 0, id)
   }
 
   return {
@@ -192,16 +192,17 @@ export function useDialog() {
     get active() {
       return ctx.stack().at(-1)
     },
-    show(element: DialogElement, onClose?: () => void) {
+    /** id lets the caller close this dialog later rather than whichever is on top. */
+    show(element: DialogElement, onClose?: () => void, id?: string) {
       const base = ctx.stack().at(-1)?.owner ?? owner
-      return startTransition(() => ctx.show(element, base, onClose))
+      return startTransition(() => ctx.show(element, base, onClose, id))
     },
-    push(element: DialogElement, onClose?: () => void) {
+    push(element: DialogElement, onClose?: () => void, id?: string) {
       const base = ctx.stack().at(-1)?.owner ?? owner
-      return startTransition(() => ctx.push(element, base, onClose))
+      return startTransition(() => ctx.push(element, base, onClose, id))
     },
-    close() {
-      ctx.close()
+    close(id?: string) {
+      ctx.close(id)
     },
   }
 }

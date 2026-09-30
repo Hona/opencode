@@ -138,22 +138,29 @@ function createHost(input: {
       const open = (method: "show" | "push") => (render: () => JSX.Element) => {
         const context = instances.get(extension)?.context
         if (!context) return
-        const release = context.cleanup(() => dialog.close())
+        const id = `extension:${extension}:${sequence.value++}`
+        // Closes this dialog, not whichever is on top, when the extension goes away.
+        const release = context.cleanup(() => dialog.close(id))
         void dialog[method](
-          () => (
-            <ErrorBoundary
-              fallback={(error) => {
-                onMount(() => {
-                  dialog.close()
-                  fail(extension, error)
-                })
-                return null
-              }}
-            >
-              <ExtensionContext.Provider value={context}>{untrack(render)}</ExtensionContext.Provider>
-            </ErrorBoundary>
-          ),
-          () => void release(),
+          () => {
+            // The dialog's root disposes when it closes or another dialog replaces it.
+            onCleanup(() => void release())
+            return (
+              <ErrorBoundary
+                fallback={(error) => {
+                  onMount(() => {
+                    dialog.close(id)
+                    fail(extension, error)
+                  })
+                  return null
+                }}
+              >
+                <ExtensionContext.Provider value={context}>{untrack(render)}</ExtensionContext.Provider>
+              </ErrorBoundary>
+            )
+          },
+          undefined,
+          id,
         )
       }
       return { show: open("show"), push: open("push"), close: () => dialog.close(), active: () => !!dialog.active }

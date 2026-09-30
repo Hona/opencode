@@ -12,7 +12,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { getFilename } from "@opencode/util/path"
+import { containsDirectory, getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { showToast } from "@/shell/notifications/toast"
@@ -26,7 +26,6 @@ import { useExtensionServices } from "@/runtime/extension/root"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
 import {
-  containsDirectory,
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
   managedWorkspaceDirectories,

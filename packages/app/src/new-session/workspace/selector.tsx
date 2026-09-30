@@ -6,7 +6,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { sameDirectory } from "@/workspaces/paths"
+import { sameDirectory } from "@opencode/util/path"
 
 export function PromptWorkspaceSelector(props: {
   value: string

@@ -1,11 +1,11 @@
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
-import { getFilename } from "@opencode/util/path"
+import { comparablePath, containsDirectory, getFilename, sameDirectory } from "@opencode/util/path"
 import { createStore } from "solid-js/store"
 import { For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import { useExtension, type Project, type SessionView } from "../sdk"
-import { containsDirectory, pathKey, sameDirectory, workspaceDirectories } from "./paths"
+import { workspaceDirectories } from "./paths"
 
 export function SessionWorkspaceMenu(props: {
   session: SessionView
@@ -24,7 +24,9 @@ export function SessionWorkspaceMenu(props: {
   const blocked = () => data.session.status(props.session.id) === "running"
   const currentWorkspace = () => store.directories.find((workspace) => containsDirectory(workspace, props.directory))
   const workspaces = () =>
-    store.directories.filter((workspace) => pathKey(workspace) !== pathKey(currentWorkspace() ?? props.directory))
+    store.directories.filter(
+      (workspace) => comparablePath(workspace) !== comparablePath(currentWorkspace() ?? props.directory),
+    )
   const update = (items: readonly { directory: string }[]) =>
     setStore(
       "directories",
@@ -93,7 +95,7 @@ export function SessionWorkspaceMenu(props: {
         <Menu.Content class="w-[200px]">
           <Menu.Group>
             <Menu.GroupLabel>{ctx.t("move.menu")}</Menu.GroupLabel>
-            <Show when={pathKey(props.directory) !== pathKey(props.project.worktree)}>
+            <Show when={comparablePath(props.directory) !== comparablePath(props.project.worktree)}>
               <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
                 <Icon name="monitor" />
                 {ctx.t("session.new.workspace.local")}

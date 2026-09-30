@@ -41,7 +41,7 @@ export function SummaryHeader(props: {
               session={props.session}
               shown={store.open}
               project={project()}
-              diffs={changes()?.details(props.session)}
+              diffs={project().vcs ? changes()?.details(props.session) : []}
               moveDismissed={store.dismissed}
               onMoveDismiss={() => setStore("dismissed", true)}
               onReview={

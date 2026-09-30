@@ -153,7 +153,7 @@ export function MobileViewTabs(props: {
                   entry={entry}
                   view={props.session}
                   sidebar={props.sidebar}
-                  visible
+                  visible={store.drawer === entry.key}
                   open={() => props.region.openFor(entry.extension)}
                 />
               )}
