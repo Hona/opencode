@@ -79,6 +79,50 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story("comments on a picked element over a still of the page", async ({ page }, testInfo) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(picker).toHaveAttribute("aria-pressed", "true")
+  await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await expect(editor).toBeFocused()
+  await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
+  // The native page hides behind its still so the editor can float over it.
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(root.locator("#browser-panel img")).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath("comment.png") })
+
+  await editor.fill("Make this the primary colour")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments")).toHaveText("button.primary @e7: Make this the primary colour")
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
+  await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("cancels the picker and a comment with Escape", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(picker).toHaveAttribute("aria-pressed", "true")
+  await page.keyboard.press("Escape")
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  await expect(root.getByText("Picker: off", { exact: true })).toBeVisible()
+
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await expect(editor).toBeFocused()
+  await editor.press("Escape")
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
+  await expect(root.getByTestId("fixture-comments")).toHaveText("")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
