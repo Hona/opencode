@@ -66,9 +66,9 @@ function signatureFromEvent(event: KeyboardEvent) {
   return signature(keyFromKeyboardEvent(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
-function isAllowedEditableKeybind(id: string | undefined) {
-  if (!id) return false
-  return EDITABLE_KEYBIND_IDS.has(actionId(id))
+function isAllowedEditableKeybind(option: CommandOption | undefined) {
+  if (!option) return false
+  return !!option.editable || EDITABLE_KEYBIND_IDS.has(actionId(option.id))
 }
 
 export type KeybindConfig = string
@@ -92,6 +92,8 @@ export interface CommandOption {
   suggested?: boolean
   disabled?: boolean
   hidden?: boolean
+  /** The keybind also fires while a text field has focus. */
+  editable?: boolean
   when?: (event: KeyboardEvent) => boolean
   onSelect?: (source?: "palette" | "keybind" | "slash", input?: string) => void | Promise<void>
   onHighlight?: () => (() => void) | void
@@ -408,7 +410,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab)
+      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option) && !modified && !isTab)
         return
 
       if (isPalette) {

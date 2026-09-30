@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import {
-  SESSION_OPEN_FILE_TAB,
-  closeSessionTab,
-  openSessionTab,
-  previewSessionTab,
-  type SessionTabState,
-} from "./session-tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabState } from "./session-tabs"
+
+const SESSION_OPEN_FILE_TAB = "file:open"
+const launchers = new Set([SESSION_OPEN_FILE_TAB])
 
 const state = (all: string[], active?: string, preview?: string): SessionTabState => ({
   tabs: { all, active },
@@ -39,7 +36,7 @@ describe("previewSessionTab", () => {
 
   test("replaces a restored Open File placeholder", () => {
     expect(
-      previewSessionTab(state(["file://a.ts", SESSION_OPEN_FILE_TAB], SESSION_OPEN_FILE_TAB), "file://b.ts"),
+      previewSessionTab(state(["file://a.ts", SESSION_OPEN_FILE_TAB], SESSION_OPEN_FILE_TAB), "file://b.ts", launchers),
     ).toEqual(state(["file://a.ts", "file://b.ts"], "file://b.ts", "file://b.ts"))
   })
 })
@@ -57,14 +54,8 @@ describe("openSessionTab", () => {
     )
   })
 
-  test("keeps the preview when switching to Review", () => {
-    expect(openSessionTab(state(["file://a.ts"], "file://a.ts", "file://a.ts"), "review")).toEqual(
-      state(["file://a.ts"], "review", "file://a.ts"),
-    )
-  })
-
   test("replaces a restored Open File placeholder with a direct open", () => {
-    expect(openSessionTab(state(["file://a.ts", SESSION_OPEN_FILE_TAB], SESSION_OPEN_FILE_TAB), "file://b.ts")).toEqual(
+    expect(openSessionTab(state(["file://a.ts", SESSION_OPEN_FILE_TAB], SESSION_OPEN_FILE_TAB), "file://b.ts", launchers)).toEqual(
       state(["file://a.ts", "file://b.ts"], "file://b.ts"),
     )
   })

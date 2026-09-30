@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { BrowserPaneCaptureRpc, BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
+import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload } from "./extensions"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
 import { SshState } from "@opencode/app/ssh"
@@ -48,6 +49,31 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
   revision: Schema.Number,
 }) {}
 
+// A main extension's remote state for this window, already encoded with the remote's schema.
+export class ExtensionState extends Schema.TaggedClass<ExtensionState>()("ExtensionState", {
+  remote: Schema.String,
+  state: ExtensionPayload,
+}) {}
+
+export class ExtensionEvent extends Schema.TaggedClass<ExtensionEvent>()("ExtensionEvent", {
+  remote: Schema.String,
+  name: Schema.String,
+  data: ExtensionPayload,
+}) {}
+
+export class ExtensionAvailable extends Schema.TaggedClass<ExtensionAvailable>()("ExtensionAvailable", {
+  remote: Schema.String,
+  available: Schema.Boolean,
+}) {}
+
+export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("ExtensionsChanged", {
+  list: Schema.Array(ExtensionInstalled),
+}) {}
+
+export class ExtensionMenubarChanged extends Schema.TaggedClass<ExtensionMenubarChanged>()("ExtensionMenubarChanged", {
+  items: Schema.Array(ExtensionMenubarItem),
+}) {}
+
 export const DesktopEvent = Schema.Union([
   BrowserPaneEvent,
   DeepLinksOpened,
@@ -59,6 +85,11 @@ export const DesktopEvent = Schema.Union([
   WindowPinchZoomChanged,
   WindowZoomChanged,
   StorageChanged,
+  ExtensionState,
+  ExtensionEvent,
+  ExtensionAvailable,
+  ExtensionsChanged,
+  ExtensionMenubarChanged,
 ])
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 

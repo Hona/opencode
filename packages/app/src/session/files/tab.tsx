@@ -1,4 +1,4 @@
-import { children, createMemo, Show } from "solid-js"
+import { createMemo, Match, Show, Switch } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Icon } from "@opencode/ui/icon"
@@ -6,93 +6,133 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Tabs } from "@opencode/ui/tabs"
-import { getFilename } from "@opencode/util/path"
-import { useFile } from "@/workspaces/files/model"
+import type { PanelTab } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
-import { FileVisual } from "./session-sortable-tab"
 
-export function SortableTab(props: {
-  tab: string
+/** One side panel tab trigger. The extension supplies the content; the host owns close, drag, and ids. */
+export function PanelTrigger(props: {
+  value: string
+  tab: PanelTab
   index: number
-  temporary?: boolean
-  onTabClose: (tab: string) => void
-  onTabDoubleClick?: (tab: string) => void
-  /** Replaces the file visual for non-file tabs such as the browser. */
-  children?: JSX.Element
-  id?: string
-  ariaControls?: string
+  active: boolean
+  onClose: (value: string) => void
+  onPromote: (value: string) => void
 }): JSX.Element {
-  const file = useFile()
   const language = useLanguage()
   const command = useCommand()
-  const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
+  const closeKeybind = createMemo(() => command.keybindParts("file.close"))
+  const content = () => props.tab.label?.({ active: props.active }) ?? props.tab.title
+  const tooltip = (button: JSX.Element) => (
+    <Tooltip
+      value={
+        <>
+          {language.t("common.closeTab")}
+          <Show when={closeKeybind().length > 0}>
+            <Keybind keys={closeKeybind()} variant="neutral" />
+          </Show>
+        </>
+      }
+      placement="bottom"
+      gutter={10}
+    >
+      {button}
+    </Tooltip>
+  )
+  const closeButton = (reveal: boolean) =>
+    tooltip(
+      <IconButton
+        size="small"
+        variant="ghost-muted"
+        class={reveal ? "hover-reveal relative z-10 group-hover:opacity-100" : undefined}
+        classList={reveal ? { "opacity-100": props.active } : undefined}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          props.onClose(props.value)
+        }}
+        icon={<Icon name="xmark-small" />}
+        aria-label={language.t("common.closeTab")}
+      />,
+    )
+  return (
+    <Switch fallback={<SortableTrigger {...props} content={content()} close={closeButton(false)} />}>
+      <Match when={props.tab.kind === "pinned"}>
+        <Tabs.Trigger
+          value={props.value}
+          id={props.tab.dom?.tab}
+          aria-controls={props.active ? props.tab.dom?.panel : undefined}
+        >
+          {content()}
+        </Tabs.Trigger>
+      </Match>
+      <Match when={props.tab.kind === "fixed"}>
+        <Tabs.Trigger
+          value={props.value}
+          id={props.tab.dom?.tab}
+          onMiddleClick={() => props.onClose(props.value)}
+          closeButton={tooltip(
+            <Tabs.CloseButton onClick={() => props.onClose(props.value)} aria-label={language.t("common.closeTab")} />,
+          )}
+          hideCloseButton
+        >
+          {content()}
+        </Tabs.Trigger>
+      </Match>
+      <Match when={props.tab.kind === "launcher"}>
+        <Tabs.Trigger
+          value={props.value}
+          id={props.tab.dom?.tab}
+          class="group"
+          onMiddleClick={() => props.onClose(props.value)}
+          closeButton={closeButton(true)}
+          hideCloseButton
+        >
+          {content()}
+        </Tabs.Trigger>
+      </Match>
+    </Switch>
+  )
+}
+
+function SortableTrigger(props: {
+  value: string
+  tab: PanelTab
+  index: number
+  active: boolean
+  content: JSX.Element
+  close: JSX.Element
+  onClose: (value: string) => void
+  onPromote: (value: string) => void
+}): JSX.Element {
   const sortable = useSortable({
     get id() {
-      return props.tab
+      return props.value
     },
     get index() {
       return props.index
     },
   })
-  const path = createMemo(() => file.pathFromTab(props.tab))
-  const notFound = createMemo(() => {
-    const value = path()
-    return value ? file.notFound(value) : false
-  })
-  const custom = children(() => props.children)
-  const content = createMemo(() => {
-    const value = path()
-    if (!value) return
-    return <FileVisual path={value} temporary={props.temporary} notFound={notFound()} />
-  })
   return (
     <div ref={sortable.ref} class="h-full flex items-center">
       <div class="relative">
         <Tabs.Trigger
-          value={props.tab}
-          id={props.id}
-          aria-controls={props.ariaControls}
-          aria-label={
-            notFound() && path() ? language.t("file.error.notFound", { name: getFilename(path()!) }) : undefined
-          }
-          onMiddleClick={() => props.onTabClose(props.tab)}
-          onDblClick={() => props.onTabDoubleClick?.(props.tab)}
-          closeButton={
-            <Tooltip
-              value={
-                <>
-                  {language.t("common.closeTab")}
-                  <Show when={closeTabKeybind().length > 0}>
-                    <Keybind keys={closeTabKeybind()} variant="neutral" />
-                  </Show>
-                </>
-              }
-              placement="bottom"
-              gutter={10}
-            >
-              <IconButton
-                size="small"
-                variant="ghost-muted"
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                }}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  props.onTabClose(props.tab)
-                }}
-                icon={<Icon name="xmark-small" />}
-                aria-label={language.t("common.closeTab")}
-              />
-            </Tooltip>
-          }
+          value={props.value}
+          id={props.tab.dom?.tab}
+          aria-controls={props.active ? props.tab.dom?.panel : undefined}
+          aria-label={props.tab.missing ? props.tab.title : undefined}
+          onMiddleClick={() => props.onClose(props.value)}
+          onDblClick={() => {
+            if (props.tab.preview) props.onPromote(props.value)
+          }}
+          closeButton={props.close}
           hideCloseButton
         >
-          <Show when={custom()} fallback={<Show when={content()}>{(value) => value()}</Show>}>
-            {custom()}
-          </Show>
+          {props.content}
         </Tabs.Trigger>
       </div>
     </div>

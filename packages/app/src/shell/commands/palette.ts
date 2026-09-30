@@ -7,12 +7,14 @@ import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/c
 import { useFile } from "@/workspaces/files/model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout, type LocalProject } from "@/shell/state/layout"
+import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName, resolveProjectForSession } from "@/shell/layout/helpers"
-import { createSessionTabs } from "@/session/helpers"
+import { createFileTabs } from "@/session/helpers"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { useExtensionAttachment } from "@/runtime/extension/services"
 import { useSessionLayout } from "@/session/session-layout"
 import { useServer } from "@/runtime/server/current"
 import { looksLikeSessionID } from "@/session/search"
@@ -64,18 +66,12 @@ export function createCommandPaletteFileEntry(path: string, category: string): C
 }
 
 export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => void) {
-  const file = useFile()
-  const layout = useLayout()
-  const { tabs, view } = useSessionLayout()
+  const links = useExtensionHost().links
+  const extensions = useExtensionAttachment()
 
   return (path: string) => {
-    const value = file.tab(path)
-    void tabs().open(value)
-    void file.load(path)
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.setTab("all")
+    links.open({ href: path, exact: true, session: extensions.current() })
     onOpenFile?.(path)
-    tabs().setActive(value)
   }
 }
 
@@ -111,14 +107,14 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     return sorted.map((option) => createCommandPaletteCommandEntry(option, category))
   })
 
-  const tabState = createSessionTabs({
+  const tabState = createFileTabs({
     tabs: sessionTabs,
     pathFromTab: file.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   })
   const recentFileEntries = createMemo(() => {
-    const all = tabState.openedTabs()
-    const active = tabState.activeFileTab()
+    const all = tabState.opened()
+    const active = tabState.active()
     const order = active ? [active, ...all.filter((item) => item !== active)] : all
     const seen = new Set<string>()
     const category = language.t("palette.group.files")

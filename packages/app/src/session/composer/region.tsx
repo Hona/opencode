@@ -28,11 +28,13 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
+import type { Region } from "@/runtime/extension/panels"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
   screen: SessionScreenLayout
   timeline: SessionTimelineInteraction
+  region: Region
   visible: Accessor<boolean>
 }) {
   const command = useCommand()
@@ -156,6 +158,7 @@ export function createActiveSessionRegion(input: {
   useComposerCommands()
   useSessionCommands({
     session: input.session,
+    region: input.region,
     background: {
       blocking: () => state.background.blocking().length > 0,
       move: state.background.move,

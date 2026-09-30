@@ -36,6 +36,7 @@
     "@effect/platform-node": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode/app": "workspace:*",
+    "@opencode/gui-extensions": "workspace:*",
     "@opencode/client": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",

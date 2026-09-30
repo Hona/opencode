@@ -1,0 +1,43 @@
+import { createContext, useContext, type Accessor } from "solid-js"
+import type { Context } from "./core"
+
+/** The host provides this around every contribution it renders. */
+export const ExtensionContext = createContext<Context>()
+
+export function useExtension() {
+  const context = useContext(ExtensionContext)
+  if (!context) throw new Error("useExtension must run inside an extension contribution")
+  return context
+}
+
+export interface PanelSidebar {
+  opened(): boolean
+  width(): number
+  /** False until the stored width loads, so the first layout does not animate. */
+  transition(): boolean
+  resize(width: number): void
+  toggle(): void
+}
+
+export interface PanelFrame {
+  /** Region open and this tab selected. */
+  readonly visible: Accessor<boolean>
+  /** Kept on screen while the region animates closed. */
+  readonly present: Accessor<boolean>
+  readonly placement: Accessor<"side" | "bottom" | "mobile">
+  /** Leave room at the end of a header for the host's region toggle. */
+  readonly reserve: Accessor<boolean>
+  /** Plays size animations; false while the user drags a region edge. */
+  readonly animate: Accessor<boolean>
+  /** One inner sidebar preference shared by every side panel, toggled from the tab strip. */
+  readonly sidebar: PanelSidebar
+}
+
+/** The host provides this around panel renders. */
+export const PanelContext = createContext<PanelFrame>()
+
+export function usePanel() {
+  const frame = useContext(PanelContext)
+  if (!frame) throw new Error("usePanel must run inside a panel render")
+  return frame
+}

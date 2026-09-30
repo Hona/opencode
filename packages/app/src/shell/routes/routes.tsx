@@ -11,6 +11,7 @@ import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 import { DesktopPairingCommand } from "@/shell/commands/desktop"
+import { ExtensionAttachment } from "@/runtime/extension/root"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
@@ -87,10 +88,12 @@ function AppLayout(props: ParentProps) {
     <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
-          <DesktopPairingCommand />
-          <BrowserAttachmentsProvider>
-            <Shell>{props.children}</Shell>
-          </BrowserAttachmentsProvider>
+          <ExtensionAttachment>
+            <DesktopPairingCommand />
+            <BrowserAttachmentsProvider>
+              <Shell>{props.children}</Shell>
+            </BrowserAttachmentsProvider>
+          </ExtensionAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>
     </Show>

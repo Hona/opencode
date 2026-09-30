@@ -3,6 +3,7 @@ import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
+import { createExtensionBridge } from "../extensions"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -97,6 +98,7 @@ export function createDesktopPlatform(
       info: () => api.pairInfo(),
       code: () => api.pairCode(),
     },
+    extensions: createExtensionBridge(),
   }
 }
 

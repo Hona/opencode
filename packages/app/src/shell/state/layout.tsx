@@ -18,7 +18,7 @@ import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
-import { closeSessionTab, openSessionTab, previewSessionTab, SESSION_BTW_TAB, type SessionTabs } from "./session-tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./session-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -98,9 +98,8 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
 const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   const path = sessionPath(key)
   return {
-    all: normalizeSessionTabList(path, tabs.all).filter((tab) => tab !== SESSION_BTW_TAB),
-    active:
-      tabs.active === SESSION_BTW_TAB ? undefined : tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+    all: normalizeSessionTabList(path, tabs.all),
+    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
   }
 }
 
@@ -680,6 +679,56 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
         }
       },
+      /** Side panel tabs for any session key, mounted or not. Reads are reactive. */
+      panel: {
+        state(session: string) {
+          return store.sessionTabs[session] ?? { all: [] }
+        },
+        open(session: string, tab: string, launchers?: ReadonlySet<string>) {
+          const next = openSessionTab(
+            { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+            normalizeSessionTab(sessionPath(session), tab),
+            launchers,
+          )
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        preview(session: string, tab: string, launchers?: ReadonlySet<string>) {
+          const next = previewSessionTab(
+            { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+            normalizeSessionTab(sessionPath(session), tab),
+            launchers,
+          )
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        focus(session: string, tab: string) {
+          if (!store.sessionTabs[session]) {
+            setStore("sessionTabs", session, { all: [], active: tab })
+            return
+          }
+          setStore("sessionTabs", session, "active", tab)
+        },
+        close(session: string, tab: string) {
+          const current = store.sessionTabs[session]
+          if (!current) return
+          const next = closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab)
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        scroll(session: string, tab: string) {
+          return scroll.scroll(session, tab)
+        },
+        setScroll(session: string, tab: string, pos: SessionScroll) {
+          scroll.setScroll(session, tab, pos)
+        },
+      },
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const path = createMemo(() => sessionPath(key()))
@@ -695,7 +744,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return {
           tabs,
           active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          all: createMemo(() => tabs().all),
           preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
@@ -708,7 +757,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setAll(all: string[]) {
             const session = key()
-            const next = normalizeAll(all).filter((tab) => tab !== "review")
+            const next = normalizeAll(all)
             batch(() => {
               if (!store.sessionTabs[session]) {
                 setStore("sessionTabs", session, { all: next, active: undefined })

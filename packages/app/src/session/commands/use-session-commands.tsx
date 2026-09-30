@@ -7,12 +7,12 @@ import { useLayout } from "@/shell/state/layout"
 import { useComposerState } from "@/composer/persistence"
 import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
-import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
+import type { Region } from "@/runtime/extension/panels"
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
@@ -20,11 +20,11 @@ type SessionCommandSource = {
   history: Pick<SessionModel["history"], "visibleUserMessages">
   layout: SessionModel["layout"]
   ownership: SessionModel["ownership"]
-  tabs: Pick<SessionModel["tabs"], "activeFileTab" | "closableTab">
 }
 
 export type SessionCommandContext = {
   session: SessionCommandSource
+  region: Region
   background: {
     blocking: () => boolean
     move: () => Promise<void>
@@ -49,7 +49,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const prompt = useComposerState()
   const serverSDK = useServerSDK()
   const settings = useSettings()
-  const terminal = useTerminal()
   const platform = usePlatform()
   const layout = useLayout()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
@@ -59,9 +58,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
   const shown = settings.visibility.fileTree
 
-  const showAllFiles = () => {
-    if (layout.fileTree.tab() !== "changes") return
-    layout.fileTree.setTab("all")
+  // The selected side tab when it is a file tab; any other selection (e.g. Review) has no line selection.
+  const activeFileTab = () => {
+    const tab = actions.region.active()
+    return tab && file.pathFromTab(tab) ? tab : undefined
+  }
+  // Pinned tabs such as Review stay open.
+  const closableTab = () => {
+    const entry = actions.region.selected()
+    return entry && entry.tab.kind !== "pinned" ? entry.key : undefined
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
@@ -76,7 +81,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const canAddSelectionContext = () => {
-    const tab = actions.session.tabs.activeFileTab()
+    const tab = activeFileTab()
     if (!tab) return false
     const path = file.pathFromTab(tab)
     if (!path) return false
@@ -91,7 +96,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
-  const terminalCommand = withCategory(language.t("command.category.terminal"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
@@ -163,18 +167,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const openFile = () => {
     void openDialog(
       () => import("@/shell/commands/dialog"),
-      (x) => dialog.show(() => <x.DialogCommandPalette onOpenFile={showAllFiles} />),
+      (x) => dialog.show(() => <x.DialogCommandPalette />),
     )
   }
 
   const closeTab = () => {
-    const tab = actions.session.tabs.closableTab()
-    if (!tab) return
-    actions.session.layout.tabs().close(tab)
+    const tab = closableTab()
+    if (tab) actions.region.close(tab)
   }
 
   const addSelection = () => {
-    const tab = actions.session.tabs.activeFileTab()
+    const tab = activeFileTab()
     if (!tab) return
 
     const path = file.pathFromTab(tab)
@@ -190,20 +193,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
 
     addSelectionToContext(path, selectionFromLines(range))
-  }
-
-  const openTerminal = () => {
-    actions.session.layout.view().terminal.open()
-    if (terminal.all().length > 0) terminal.new()
-    if (terminal.all().length === 0) terminal.requestFocus()
-  }
-
-  const closeTerminal = () => {
-    const id = terminal.active()
-    if (!id) return
-    const last = terminal.all().length === 1
-    void terminal.close(id)
-    if (last) actions.session.layout.view().terminal.close()
   }
 
   const chooseMcp = () => {
@@ -309,7 +298,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   ]
 
   const fileCmds = () => {
-    const tab = actions.session.tabs.closableTab()
+    const tab = closableTab()
     return [
       fileCommand({
         id: "file.open",
@@ -352,21 +341,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const viewCmds = () => [
     viewCommand({
-      id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => {
-        if (actions.session.layout.view().terminal.opened()) {
-          terminal.cancelFocus()
-          actions.session.layout.view().terminal.close()
-          return
-        }
-        actions.session.layout.view().terminal.open()
-        terminal.requestFocus(terminal.active())
-      },
-    }),
-    viewCommand({
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
@@ -387,24 +361,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
       onSelect: focusInput,
-    }),
-  ]
-
-  const terminalCmds = () => [
-    terminalCommand({
-      id: "terminal.close",
-      title: language.t("terminal.close"),
-      keybind: "mod+w",
-      hidden: true,
-      when: (event) => event.target instanceof Element && !!event.target.closest('[data-component="terminal"]'),
-      onSelect: closeTerminal,
-    }),
-    terminalCommand({
-      id: "terminal.new",
-      title: language.t("command.terminal.new"),
-      description: language.t("command.terminal.new.description"),
-      keybind: "ctrl+alt+t",
-      onSelect: openTerminal,
     }),
   ]
 
@@ -456,7 +412,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...fileCmds(),
     ...contextCmds(),
     ...viewCmds(),
-    ...terminalCmds(),
     ...messageCmds(),
     ...mcpCmds(),
     ...permissionsCmds(),

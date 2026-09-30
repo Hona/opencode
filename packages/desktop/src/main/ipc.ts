@@ -5,9 +5,11 @@ import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
+import { Extensions } from "./extension"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
+import { extensionHandlers } from "./ipc-handlers/extensions"
 import { fileHandlers } from "./ipc-handlers/files"
 import { menuHandlers } from "./ipc-handlers/menu"
 import { storageHandlers } from "./ipc-handlers/storage"
@@ -25,7 +27,7 @@ import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer, Extensions.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
@@ -36,6 +38,7 @@ const handlers = Layer.mergeAll(
   wslHandlers,
   sshHandlers,
   eventHandlers,
+  extensionHandlers,
 )
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
   Layer.provide(handlers),

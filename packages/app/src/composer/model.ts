@@ -1,6 +1,7 @@
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
+import type { Links, SessionView } from "@opencode/gui-extensions/sdk"
 import { createComponent, createEffect, createMemo, on } from "solid-js"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
@@ -8,12 +9,13 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { useExtensionAttachment } from "@/runtime/extension/services"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { useData, useServer } from "@/runtime/server/current"
-import { createSessionTabs } from "@/session/helpers"
+import { createFileTabs } from "@/session/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode/schema/skill"
@@ -36,7 +38,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const server = useServer()
   const available = () => server.conn.type !== "ssh" || server.ctx.sdk.connection.status() === "connected"
   const files = useFile()
-  const layout = useLayout()
+  const links = useExtensionHost().links
+  const extensions = useExtensionAttachment()
   const comments = useComments()
   const dialog = useDialog()
   const command = useCommand()
@@ -59,11 +62,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const mode = () => interaction[0].mode
   const history = createComposerHistory()
   const tabs = () => adapter.controls().session.tabs
-  const activeFileTab = createSessionTabs({
+  const activeFileTab = createFileTabs({
     tabs,
     pathFromTab: files.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
-  }).activeFileTab
+  }).active
   const recent = createMemo(() => {
     const all = tabs().all()
     const active = activeFileTab()
@@ -308,7 +311,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     openContext(key) {
       const item = controller.contextItem(key)
-      if (item) openComment(item, adapter.controls(), layout, files, comments)
+      if (item) openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {
       editor = element as HTMLDivElement
@@ -430,8 +433,8 @@ function composerErrorMessage(language: ReturnType<typeof useLanguage>, error: u
 
 function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
-  controls: ComposerControls,
-  layout: ReturnType<typeof useLayout>,
+  links: Links,
+  session: SessionView | undefined,
   files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
 ) {
@@ -448,17 +451,8 @@ function openComment(
       })
     })
   }
-  const review = item.commentOrigin === "review"
-  if (!controls.session.reviewPanel.opened()) controls.session.reviewPanel.open()
-  if (review) {
-    layout.fileTree.setTab("changes")
-    controls.session.tabs.setActive("review")
-    queueFocus()
-    return
-  }
-  layout.fileTree.setTab("all")
-  const tab = files.tab(item.path)
-  void controls.session.tabs.open(tab)
-  controls.session.tabs.setActive(tab)
+  // The extension that owns the comment's origin reveals it (the review diff or a file tab).
+  links.open({ href: item.path, origin: item.commentOrigin, exact: true, session })
+  if (item.commentOrigin === "review") return queueFocus()
   void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
 }

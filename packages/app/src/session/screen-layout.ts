@@ -1,14 +1,15 @@
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
-import { createSizing, shouldShowFileTree } from "./helpers"
+import { createSizing } from "./helpers"
 import type { SessionModel } from "./model"
 import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
-export function createSessionScreenLayout(session: SessionModel) {
+/** wide asks for the wider session minimum; sidebar is whether any extension fills the file tree sidebar. */
+export function createSessionScreenLayout(session: SessionModel, input: { wide: Accessor<boolean>; sidebar: Accessor<boolean> }) {
   const layout = useLayout()
   const settings = useSettings()
   const size = createSizing()
@@ -20,12 +21,7 @@ export function createSessionScreenLayout(session: SessionModel) {
   const bottomTerminal = createMemo(() => session.isDesktop() && settings.general.terminalPlacement() === "bottom")
   const sideTerminalOpen = createMemo(() => terminalOpen() && sideTerminal())
   const fileTreeOpen = createMemo(
-    () =>
-      session.isDesktop() &&
-      shouldShowFileTree({
-        visible: settings.visibility.fileTree(),
-        opened: layout.fileTree.opened(),
-      }),
+    () => session.isDesktop() && input.sidebar() && settings.visibility.fileTree() && layout.fileTree.opened(),
   )
   const resizable = createMemo(() => reviewPanelOpen() || sideTerminalOpen())
   const sidePanelOpen = createMemo(() => resizable() || fileTreeOpen())
@@ -40,7 +36,7 @@ export function createSessionScreenLayout(session: SessionModel) {
     if (width === undefined) return undefined
     return width - 8
   })
-  const splitReview = createMemo(() => reviewPanelOpen() && layout.review.diffStyle() === "split")
+  const splitReview = createMemo(() => reviewPanelOpen() && input.wide())
   const resizedWidth = createMemo(() =>
     clampSessionPanelWidth({
       width: view().reviewPanel.width(),

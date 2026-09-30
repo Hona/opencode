@@ -1,6 +1,7 @@
 import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
 import { app } from "electron"
 import { Effect, Layer } from "effect"
+import { Extensions } from "./extension"
 import { Ipc } from "./ipc"
 import { DesktopInitialization } from "./lifecycle/desktop-initialization"
 import { installContextMenu } from "./lifecycle/environment"
@@ -16,16 +17,19 @@ marks.bundle = Date.now()
 
 const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
+  const extensions = yield* Extensions.Service
   marks.layers = Date.now()
   yield* Effect.logInfo("layers ready", { marks })
   const ipc = yield* Ipc.registerIpcHandlers
   if (lifecycle.restoreWindows().length) ipc.installMenu()
   // The first window's renderer now has its IPC port and is hydrating its stores over it. The crash
-  // reporter (spawns a process) and the context menu (a dependency tree) are not worth answering late.
+  // reporter (spawns a process), the context menu (a dependency tree), and main GUI extensions are
+  // not worth answering late.
   yield* Effect.sleep("500 millis")
   const logging = yield* DesktopLogging.Service
   yield* logging.startCrashReporter
   yield* installContextMenu
+  yield* Effect.forkScoped(extensions.start)
   yield* Effect.callback<void>((resume) => {
     const quit = () => resume(Effect.void)
     app.once("will-quit", quit)
