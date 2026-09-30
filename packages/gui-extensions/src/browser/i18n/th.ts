@@ -12,4 +12,5 @@ export default {
   "empty.description": "หรือป้อนพรอมต์ \"เปิดในเบราว์เซอร์ของแอป\"",
   "failed.title": "เข้าถึง URL ไม่ได้",
   "failed.description": "ตรวจสอบ URL และการเชื่อมต่อ แล้วลองอีกครั้ง",
+  "action.reload": "โหลดใหม่",
 }

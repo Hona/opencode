@@ -28,4 +28,11 @@ export default {
   "configure": "Stillingarskrá",
   "copyConfigPath": "Afritaðu slóð stillingarskráar",
   "configFileMissing": "Engin stillingarskrá fannst",
+  "loadingChanges": "Hleður breytingum…",
+  "noChanges": "Engar breytingar",
+  "basedOn": "Byggt á {{branch}}",
+  "workspace.local": "Staðbundin geymsla",
+  "workspace.existing": "Vinnutré",
+  "workspace.new": "Nýtt vinnurými",
+  "mcp.interactiveAuth": "MCP þjónn {{name}} krefst gagnvirks auðkenningareyðublaðs",
 }

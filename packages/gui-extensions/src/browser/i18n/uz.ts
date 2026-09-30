@@ -12,4 +12,5 @@ export default {
   "empty.description": "Yoki “Ilova brauzerida ochish” so‘rovini yuboring",
   "failed.title": "URL manziliga kirib bo‘lmadi",
   "failed.description": "URL va ulanishingizni tekshiring, so‘ng qayta urinib ko‘ring.",
+  "action.reload": "Qayta yuklash",
 }

@@ -12,4 +12,5 @@ export default {
   "empty.description": "ან შეიყვანეთ მოთხოვნა „გახსენი აპის ბრაუზერში“",
   "failed.title": "URL მიუწვდომელია",
   "failed.description": "შეამოწმეთ URL და კავშირი, შემდეგ ხელახლა სცადეთ.",
+  "action.reload": "ხელახლა ჩატვირთვა",
 }

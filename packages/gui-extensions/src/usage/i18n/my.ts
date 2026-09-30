@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "စုစုပေါင်းကုန်ကျစရိတ်",
   "stats.sessionCreated": "ဆက်ရှင်ကို ဖန်တီးထားသည်။",
   "stats.lastActivity": "နောက်ဆုံးလုပ်ဆောင်ချက်",
+  "export.success.title": "စက်ရှင်ကို တင်ပို့ပြီးပါပြီ။",
+  "export.success.description": "စက်ရှင်ကို {{filename}} သို့ သိမ်းထားသည်။",
+  "export.failed.title": "စက်ရှင်ကို ထုတ်ယူ၍မရပါ။",
+  "export.failed.description": "စက်ရှင်ကို ထုတ်ယူနေစဉ် အမှားအယွင်းတစ်ခု ဖြစ်ပွားခဲ့သည်။",
 }

@@ -28,4 +28,11 @@ export default {
   "configure": "Konfigurationsfil",
   "copyConfigPath": "Kopiér konfigurationsfilstien",
   "configFileMissing": "Ingen konfigurationsfil fundet",
+  "loadingChanges": "Indlæser ændringer…",
+  "noChanges": "Ingen ændringer",
+  "basedOn": "Baseret på {{branch}}",
+  "workspace.local": "Lokalt repository",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Nyt arbejdsområde",
+  "mcp.interactiveAuth": "MCP server {{name}} kræver en interaktiv godkendelsesformular",
 }

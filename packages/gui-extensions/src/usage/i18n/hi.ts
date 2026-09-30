@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "कुल लागत",
   "stats.sessionCreated": "सेशन बनाया गया",
   "stats.lastActivity": "अंतिम गतिविधि",
+  "export.success.title": "सेशन निर्यात किया गया",
+  "export.success.description": "सेशन को {{filename}} में सहेजा गया",
+  "export.failed.title": "सेशन निर्यात करने में विफल",
+  "export.failed.description": "सेशन निर्यात करते समय एक त्रुटि हुई",
 }

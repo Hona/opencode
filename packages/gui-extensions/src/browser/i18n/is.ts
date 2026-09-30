@@ -12,4 +12,5 @@ export default {
   "empty.description": "Eða biddu um „Opna í vafra forritsins“",
   "failed.title": "Ekki næst í vefslóðina",
   "failed.description": "Athugaðu vefslóðina og tenginguna og reyndu aftur.",
+  "action.reload": "Endurhlaða",
 }

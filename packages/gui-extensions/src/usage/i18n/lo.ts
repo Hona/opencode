@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "ຄ່າໃຊ້ຈ່າຍທັງໝົດ",
   "stats.sessionCreated": "ສ້າງເຊດຊັນແລ້ວ",
   "stats.lastActivity": "ການເຄື່ອນໄຫວຫຼ້າສຸດ",
+  "export.success.title": "ສົ່ງອອກເຊດຊັນແລ້ວ",
+  "export.success.description": "ບັນທຶກເຊດຊັນໃສ່ {{filename}}",
+  "export.failed.title": "ລົ້ມເຫລວໃນການສົ່ງອອກເຊດຊັນ",
+  "export.failed.description": "ມີຂໍ້ຜິດພາດເກີດຂຶ້ນໃນຂະນະທີ່ສົ່ງອອກເຊດຊັນ",
 }

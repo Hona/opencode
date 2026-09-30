@@ -28,4 +28,11 @@ export default {
   "configure": "Yapılandırma dosyası",
   "copyConfigPath": "Yapılandırma dosyası yolunu kopyala",
   "configFileMissing": "Yapılandırma dosyası bulunamadı",
+  "loadingChanges": "Değişiklikler yükleniyor…",
+  "noChanges": "Değişiklik yok",
+  "basedOn": "Temel alınan dal: {{branch}}",
+  "workspace.local": "Yerel depo",
+  "workspace.existing": "Çalışma ağacı",
+  "workspace.new": "Yeni çalışma alanı",
+  "mcp.interactiveAuth": "MCP sunucusu {{name}} etkileşimli bir kimlik doğrulama formu gerektirir",
 }

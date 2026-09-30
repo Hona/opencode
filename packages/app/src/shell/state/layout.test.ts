@@ -103,7 +103,8 @@ describe("layout persistence", () => {
       sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b", "btw"], active: "btw" } },
       sessionView: { old: { scroll: {} }, [key]: { scroll: {} } },
     })
-    expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b"], active: undefined } })
+    // Transient tabs leave once the side region stops listing them, not during migration.
+    expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b", "btw"], active: "btw" } })
     expect(value.sessionView).toEqual({ [key]: { scroll: {} } })
   })
 })

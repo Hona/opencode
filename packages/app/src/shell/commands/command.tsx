@@ -90,6 +90,8 @@ export interface CommandOption {
   slash?: string
   slashArguments?: boolean
   suggested?: boolean
+  /** Listed when the command palette opens without a query. Host commands are listed by id instead. */
+  featured?: boolean
   disabled?: boolean
   hidden?: boolean
   /** The keybind also fires while a text field has focus. */

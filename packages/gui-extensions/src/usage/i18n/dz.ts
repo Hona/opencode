@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "འགྲོ་སོང་ཡོངས་བསྡོམས།",
   "stats.sessionCreated": "ལཱ་ཡུན་གསར་བསྐྲུན་འབད་ཡོདཔ།",
   "stats.lastActivity": "ལས་རིམ།",
+  "export.success.title": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་ཡོདཔ།",
+  "export.success.description": "{{filename}} ལུ་སྲུང་བཞག་འབད་ཡོད་པའི་ལཱ་ཡུན་འདི་ཨིན།",
+  "export.failed.title": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
+  "export.failed.description": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་བའི་སྐབས་འཛོལ་བ་བྱུང་ཡོདཔ།",
 }

@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "총 비용",
   "stats.sessionCreated": "세션 생성됨",
   "stats.lastActivity": "최근 활동",
+  "export.success.title": "세션을 내보냈습니다",
+  "export.success.description": "세션 저장 위치: {{filename}}",
+  "export.failed.title": "세션 내보내기 실패",
+  "export.failed.description": "세션을 내보내는 동안 오류가 발생했습니다",
 }

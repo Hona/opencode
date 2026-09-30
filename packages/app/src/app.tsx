@@ -22,15 +22,6 @@ import { ExtensionRoot } from "@/runtime/extension/root"
 
 export { preloadRoute }
 
-declare global {
-  interface Window {
-    api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark"; scheme?: "system" | "light" | "dark" }) => Promise<void>
-      exportDebugLogs?: () => Promise<string>
-    }
-  }
-}
-
 function QueryProvider(props: ParentProps) {
   const client = new QueryClient({
     defaultOptions: {
@@ -66,7 +57,6 @@ export function AppBaseProviders(
       <Font />
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
-          void window.api?.setTitlebar?.({ mode, scheme })
           props.onThemeApplied?.(mode, scheme)
         }}
       >

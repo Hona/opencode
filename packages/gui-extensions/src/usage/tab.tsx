@@ -200,14 +200,14 @@ export default function SessionContextTab(props: { session: SessionView }) {
         variant: "success",
         // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
         icon: (() => <Icon name="circle-check" />) as unknown as JSX.Element,
-        title: ctx.t("toast.session.export.success.title"),
-        description: ctx.t("toast.session.export.success.description", { filename }),
+        title: ctx.t("export.success.title"),
+        description: ctx.t("export.success.description", { filename }),
       })
     } catch (err) {
       showToast({
         variant: "error",
-        title: ctx.t("toast.session.export.failed.title"),
-        description: err instanceof Error ? err.message : ctx.t("toast.session.export.failed.description"),
+        title: ctx.t("export.failed.title"),
+        description: err instanceof Error ? err.message : ctx.t("export.failed.description"),
       })
     }
   }

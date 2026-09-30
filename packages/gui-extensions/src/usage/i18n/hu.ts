@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Teljes költség",
   "stats.sessionCreated": "Munkamenet létrehozva",
   "stats.lastActivity": "Utolsó tevékenység",
+  "export.success.title": "Munkamenet exportálva",
+  "export.success.description": "A munkamenet elmentve ide: {{filename}}",
+  "export.failed.title": "Nem sikerült exportálni a munkamenetet",
+  "export.failed.description": "Hiba történt a munkamenet exportálása közben",
 }

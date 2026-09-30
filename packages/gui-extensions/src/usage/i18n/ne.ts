@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "कुल लागत",
   "stats.sessionCreated": "सत्र सिर्जना गरियो",
   "stats.lastActivity": "पछिल्लो गतिविधि",
+  "export.success.title": "सत्र निर्यात गरियो",
+  "export.success.description": "सत्र {{filename}} मा सुरक्षित गरियो",
+  "export.failed.title": "सत्र निर्यात गर्न असफल भयो",
+  "export.failed.description": "सत्र निर्यात गर्दा त्रुटि भयो",
 }

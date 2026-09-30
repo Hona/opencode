@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "ต้นทุนทั้งหมด",
   "stats.sessionCreated": "สร้างเซสชันเมื่อ",
   "stats.lastActivity": "กิจกรรมล่าสุด",
+  "export.success.title": "ส่งออกเซสชันแล้ว",
+  "export.success.description": "บันทึกเซสชันไปยัง {{filename}} แล้ว",
+  "export.failed.title": "ไม่สามารถส่งออกเซสชัน",
+  "export.failed.description": "เกิดข้อผิดพลาดขณะส่งออกเซสชัน",
 }

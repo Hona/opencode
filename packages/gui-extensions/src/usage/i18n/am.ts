@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "ጠቅላላ ወጪ",
   "stats.sessionCreated": "ክፍለ ተፈጠረ",
   "stats.lastActivity": "የመጨረሻው እንቅስቃሴ",
+  "export.success.title": "ክፍለ ጊዜ ወደ ውጭ የተላከ",
+  "export.success.description": "የተቀመጠው ክፍለ ጊዜ ወደ {{filename}}",
+  "export.failed.title": "ክፍለ-ጊዜን ወደ ውጭ መላክ አልተሳካም",
+  "export.failed.description": "ክፍለ-ጊዜውን ወደ ውጭ በመላክ ላይ ስህተት ተፈጥሯል",
 }

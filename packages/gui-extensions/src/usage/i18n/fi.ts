@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Kokonaiskustannukset",
   "stats.sessionCreated": "Istunto luotu",
   "stats.lastActivity": "Viimeisin toiminta",
+  "export.success.title": "Istunto viety",
+  "export.success.description": "Istunto tallennettu tiedostoon {{filename}}",
+  "export.failed.title": "Istunnon vieminen epäonnistui",
+  "export.failed.description": "Istuntoa vietäessä tapahtui virhe",
 }

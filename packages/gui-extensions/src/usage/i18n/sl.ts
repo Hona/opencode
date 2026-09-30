@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Skupni stroški",
   "stats.sessionCreated": "Seja ustvarjena",
   "stats.lastActivity": "Zadnja dejavnost",
+  "export.success.title": "Seja izvožena",
+  "export.success.description": "Shranjena seja v {{filename}}",
+  "export.failed.title": "Seje ni bilo mogoče izvoziti",
+  "export.failed.description": "Pri izvozu seje je prišlo do napake",
 }

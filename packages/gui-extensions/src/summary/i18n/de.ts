@@ -28,4 +28,11 @@ export default {
   "configure": "Konfigurationsdatei",
   "copyConfigPath": "Pfad der Konfigurationsdatei kopieren",
   "configFileMissing": "Keine Konfigurationsdatei gefunden",
+  "loadingChanges": "Änderungen werden geladen…",
+  "noChanges": "Keine Änderungen",
+  "basedOn": "Basierend auf {{branch}}",
+  "workspace.local": "Lokales Repository",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Neuer Arbeitsbereich",
+  "mcp.interactiveAuth": "Der MCP-Server {{name}} erfordert ein interaktives Authentifizierungsformular",
 }

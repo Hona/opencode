@@ -28,4 +28,11 @@ export default {
   "configure": "ໄຟລ໌ການຕັ້ງຄ່າ",
   "copyConfigPath": "ຄັດລອກເສັ້ນທາງໄຟລ໌ການຕັ້ງຄ່າ",
   "configFileMissing": "ບໍ່ພົບໄຟລ໌ການຕັ້ງຄ່າ",
+  "loadingChanges": "ກຳລັງໂຫຼດການປ່ຽນແປງ…",
+  "noChanges": "ບໍ່ມີການປ່ຽນແປງ",
+  "basedOn": "ອີງໃສ່ {{branch}}",
+  "workspace.local": "ພື້ນທີ່ເກັບຂໍ້ມູນທ້ອງຖິ່ນ",
+  "workspace.existing": "Worktree",
+  "workspace.new": "ພື້ນທີ່ເຮັດວຽກໃໝ່",
+  "mcp.interactiveAuth": "MCP server {{name}} ຕ້ອງການແບບຟອມການຢືນຢັນຕົວຕົນແບບປະຕິບັດງານ",
 }

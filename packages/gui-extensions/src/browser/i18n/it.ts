@@ -12,4 +12,5 @@ export default {
   "empty.description": "Oppure chiedi “Apri nel browser dell’app”",
   "failed.title": "Impossibile raggiungere l’URL",
   "failed.description": "Controlla l’URL e la connessione, quindi riprova.",
+  "action.reload": "Ricarica",
 }

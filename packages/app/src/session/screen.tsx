@@ -16,7 +16,7 @@ import { createSessionView } from "@/runtime/extension/view"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { SessionSidePanel } from "./files/session-side-panel"
+import { SideRegion } from "@/runtime/extension/side-region"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
@@ -62,56 +62,53 @@ function SessionScreenContent(props: {
   })
   const messagesReady = timeline.ready
   const [store, setStore] = createStore({
-    bottomTerminalCached: false,
+    bottomDockCached: false,
     sideWidthMotion: false,
     timelineScrollbarHidden: false,
     sideHeightMotion: false,
     sideRegionPresent: false,
-    sideReviewPresent: false,
-    sideTerminalPresent: false,
-    mobileTerminalCached: false,
+    sideTabsPresent: false,
+    sideDockPresent: false,
+    mobileDockCached: false,
   })
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
-    bottomTerminal?: HTMLDivElement
+    bottomDock?: HTMLDivElement
   }>({})
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
-  const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
-  const bottomTerminalVisible = createMemo(() => isDesktop() && screen.terminal.open() && screen.terminal.bottom())
+  const sideDockVisible = createMemo(() => isDesktop() && screen.dock.side() && screen.dock.open())
+  const bottomDockVisible = createMemo(() => isDesktop() && screen.dock.open() && screen.dock.bottom())
   const sidePresence = createAnimatedPresence(
     () => sideVisible() || undefined,
     () => elements.side ?? null,
     session.layout.tabKey,
   )
-  const bottomTerminalPresence = createAnimatedPresence(
-    () => bottomTerminalVisible() || undefined,
-    () => elements.bottomTerminal ?? null,
+  const bottomDockPresence = createAnimatedPresence(
+    () => bottomDockVisible() || undefined,
+    () => elements.bottomDock ?? null,
     session.layout.tabKey,
   )
   const sideMotion = createMemo<{
     key?: string
     region: boolean
-    terminal: boolean
+    dock: boolean
     animateRegion: boolean
-    animateTerminal: boolean
+    animateDock: boolean
   }>((previous) => {
     const key = session.layout.tabKey()
     const region = screen.side.region.open()
-    const terminal = sideTerminalVisible()
+    const dock = sideDockVisible()
     const sameTab = previous?.key === key
     return {
       key,
       region,
-      terminal,
+      dock,
       animateRegion: !!previous && sameTab && previous.region !== region,
-      animateTerminal: !!previous && sameTab && previous.terminal !== terminal,
+      animateDock: !!previous && sameTab && previous.dock !== dock,
     }
   })
   const paneAnimating = () =>
-    sidePresence.animate() ||
-    sideMotion().animateRegion ||
-    sideMotion().animateTerminal ||
-    bottomTerminalPresence.animate()
+    sidePresence.animate() || sideMotion().animateRegion || sideMotion().animateDock || bottomDockPresence.animate()
   const trackSideWidthMotion = (event: TransitionEvent) => {
     if (event.currentTarget !== event.target || event.propertyName !== "width") return
     setStore("sideWidthMotion", event.type === "transitionrun")
@@ -123,37 +120,39 @@ function SessionScreenContent(props: {
     setStore("timelineScrollbarHidden", false)
   }
   createEffect(() => {
-    if (sideTerminalVisible()) setStore("sideTerminalPresent", true)
-    if (bottomTerminalVisible()) setStore("bottomTerminalCached", true)
+    if (sideDockVisible()) setStore("sideDockPresent", true)
+    if (bottomDockVisible()) setStore("bottomDockCached", true)
     if (!sideVisible()) setStore("sideHeightMotion", false)
   })
   createEffect(() => {
-    if (!isDesktop() || screen.terminal.bottom()) setStore("sideTerminalPresent", false)
-    if (isDesktop() && screen.terminal.side()) setStore("bottomTerminalCached", false)
+    if (!isDesktop() || screen.dock.bottom()) setStore("sideDockPresent", false)
+    if (isDesktop() && screen.dock.side()) setStore("bottomDockCached", false)
   })
   createEffect(() => {
     if (screen.side.region.open()) setStore("sideRegionPresent", true)
-    if (screen.review.panelOpen()) setStore("sideReviewPresent", true)
+    if (screen.side.tabs.open()) setStore("sideTabsPresent", true)
   })
 
   // The dock's narrow-screen view follows the dock's open state; other views are a selection.
   const dockView = createMemo(() => mobile.entries().find((entry) => entry.provider.region === "dock"))
-  const mobileView = createMemo(() => (screen.terminal.open() ? (dockView()?.key ?? "session") : attachment.mobile.current()))
+  const mobileView = createMemo(() =>
+    screen.dock.open() ? (dockView()?.key ?? "session") : attachment.mobile.current(),
+  )
   const mobileEntry = createMemo(() => {
     const key = mobileView()
     return key === "session" ? undefined : mobile.find(key)
   })
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
-    if (!isDesktop() && screen.terminal.open()) setStore("mobileTerminalCached", true)
+    if (!isDesktop() && screen.dock.open()) setStore("mobileDockCached", true)
   })
   const selectMobile = (key: string) => {
     if (key === dockView()?.key) {
-      session.layout.view().terminal.open()
+      session.layout.view().dock.open()
       return
     }
     attachment.mobile.select(key)
-    session.layout.view().terminal.close()
+    session.layout.view().dock.close()
   }
   const composer = createActiveSessionRegion({
     session,
@@ -234,7 +233,7 @@ function SessionScreenContent(props: {
         }}
       </Show>
       <div class="relative flex-1 min-h-0 overflow-hidden">
-        <Show when={!isDesktop() && store.mobileTerminalCached}>
+        <Show when={!isDesktop() && store.mobileDockCached}>
           <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
             <DockRegion view={props.view} sidebar={sidebar} fill embedded present contentHeight="100%" />
           </div>
@@ -273,11 +272,11 @@ function SessionScreenContent(props: {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
-          {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
+          {/* Keep the control outside panel animations; a side dock's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
               class="absolute end-3 top-0 z-30 flex items-center"
-              classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
+              classList={{ "h-[51px]": sideDockVisible(), "h-12": !sideDockVisible() }}
               data-slot="session-review-toggle"
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
@@ -320,14 +319,14 @@ function SessionScreenContent(props: {
                   max={screen.panel.max()}
                   onResize={(width) => {
                     screen.size.touch()
-                    session.layout.view().reviewPanel.resize(width)
+                    session.layout.view().session.resize(width)
                   }}
                 />
               </div>
             </Show>
           </div>
 
-          <Show when={sidePresence.present() || store.sideReviewPresent || store.sideTerminalPresent}>
+          <Show when={sidePresence.present() || store.sideTabsPresent || store.sideDockPresent}>
             <div
               ref={(element) => setElements("side", element)}
               data-slot="session-side-panel-presence"
@@ -366,17 +365,17 @@ function SessionScreenContent(props: {
                         if (event.currentTarget !== event.target) return
                         if (event.animationName !== "side-region-presence-out") return
                         if (screen.side.region.open()) return
-                        if (sideTerminalVisible()) return
+                        if (sideDockVisible()) return
                         setStore("sideRegionPresent", false)
-                        setStore("sideReviewPresent", false)
+                        setStore("sideTabsPresent", false)
                       }}
                     >
-                      <SessionSidePanel
+                      <SideRegion
                         view={props.view}
                         region={region}
                         sidebar={sidebar}
                         fileTree={screen.files.open()}
-                        present={store.sideReviewPresent}
+                        present={store.sideTabsPresent}
                         size={screen.size}
                         stacked={screen.side.layout().stacked}
                       />
@@ -399,15 +398,15 @@ function SessionScreenContent(props: {
                       <ResizeHandle
                         class="!relative !inset-auto !h-full !w-full !transform-none"
                         direction="vertical"
-                        size={session.layout.view().terminal.height()}
+                        size={session.layout.view().dock.height()}
                         min={100}
                         max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                         collapseThreshold={50}
                         onResize={(height) => {
                           screen.size.touch()
-                          session.layout.view().terminal.resize(height)
+                          session.layout.view().dock.resize(height)
                         }}
-                        onCollapse={() => session.layout.view().terminal.close()}
+                        onCollapse={() => session.layout.view().dock.close()}
                       />
                     </Show>
                   </div>
@@ -418,12 +417,12 @@ function SessionScreenContent(props: {
                       "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
                       "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
                     }}
-                    style={{ height: screen.side.terminal.height() }}
+                    style={{ height: screen.side.dock.height() }}
                   >
-                    <Show when={store.sideTerminalPresent}>
+                    <Show when={store.sideDockPresent}>
                       <div
                         data-slot="side-terminal-panel-presence"
-                        data-opened={sideMotion().animateTerminal ? sideMotion().terminal : undefined}
+                        data-opened={sideMotion().animateDock ? sideMotion().dock : undefined}
                         class="absolute inset-0 rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
@@ -432,9 +431,9 @@ function SessionScreenContent(props: {
                             sidebar={sidebar}
                             fill
                             framed={false}
-                            present={store.sideTerminalPresent}
-                            animate={sidePresence.animate() || sideMotion().animateTerminal}
-                            contentHeight={screen.side.terminal.contentHeight()}
+                            present={store.sideDockPresent}
+                            animate={sidePresence.animate() || sideMotion().animateDock}
+                            contentHeight={screen.side.dock.contentHeight()}
                             reserve={!screen.side.region.open()}
                           />
                         </div>
@@ -447,13 +446,13 @@ function SessionScreenContent(props: {
           </Show>
         </div>
 
-        <Show when={isDesktop() && (bottomTerminalPresence.present() || store.bottomTerminalCached)}>
+        <Show when={isDesktop() && (bottomDockPresence.present() || store.bottomDockCached)}>
           <div
-            ref={(element) => setElements("bottomTerminal", element)}
+            ref={(element) => setElements("bottomDock", element)}
             data-slot="terminal-panel-presence"
-            data-opened={bottomTerminalPresence.animate() ? bottomTerminalPresence.show() : undefined}
+            data-opened={bottomDockPresence.animate() ? bottomDockPresence.show() : undefined}
             classList={{
-              hidden: !bottomTerminalPresence.present(),
+              hidden: !bottomDockPresence.present(),
               "relative min-h-0 shrink-0": isDesktop(),
             }}
           >
@@ -462,15 +461,15 @@ function SessionScreenContent(props: {
                 <ResizeHandle
                   class="!relative !inset-auto !h-full !w-full !transform-none"
                   direction="vertical"
-                  size={session.layout.view().terminal.height()}
+                  size={session.layout.view().dock.height()}
                   min={100}
                   max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                   collapseThreshold={50}
                   onResize={(height) => {
                     screen.size.touch()
-                    session.layout.view().terminal.resize(height)
+                    session.layout.view().dock.resize(height)
                   }}
-                  onCollapse={() => session.layout.view().terminal.close()}
+                  onCollapse={() => session.layout.view().dock.close()}
                 />
               </div>
             </Show>
@@ -478,8 +477,8 @@ function SessionScreenContent(props: {
               view={props.view}
               sidebar={sidebar}
               stacked={isDesktop()}
-              present={store.bottomTerminalCached}
-              animate={bottomTerminalPresence.animate()}
+              present={store.bottomDockCached}
+              animate={bottomDockPresence.animate()}
             />
           </div>
         </Show>

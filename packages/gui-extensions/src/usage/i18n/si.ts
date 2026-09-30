@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "මුළු පිරිවැය",
   "stats.sessionCreated": "සැසිය නිර්මාණය කරන ලදී",
   "stats.lastActivity": "අවසාන ක්‍රියාකාරකම",
+  "export.success.title": "සැසිය අපනයනය කරන ලදී",
+  "export.success.description": "සැසිය {{filename}} වෙත සුරකින ලදී",
+  "export.failed.title": "සැසිය අපනයනය කිරීමට අසමත් විය",
+  "export.failed.description": "සැසිය නිර්යාත කිරීමේදී දෝෂයක් ඇති විය",
 }

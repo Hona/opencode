@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Нийт зардал",
   "stats.sessionCreated": "Сеанс үүсгэсэн",
   "stats.lastActivity": "Сүүлийн үйл ажиллагаа",
+  "export.success.title": "Сешн экспортлогдсон",
+  "export.success.description": "сессийг {{filename}}-д хадгалсан",
+  "export.failed.title": "Сешн экспорт хийж чадсангүй",
+  "export.failed.description": "Сешн экспортлох явцад алдаа гарлаа",
 }

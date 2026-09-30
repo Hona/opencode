@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "ގުޅުން ގެއްލިއްޖެއެވެ",
   "connectionLost.abnormalClose": "WebSocket އާދަޔާ ހިލާފަށް ބަންދުވެފައި: ⁨{{code}}⁩",
   "connectionLost.description": "ޓާމިނަލް ކަނެކްޝަން މެދުކެނޑުނެވެ. މިއީ ސަރވަރ އަލުން ސްޓާޓް ކުރުމުން ދިމާވެދާނެ ކަމެކެވެ.",
+  "tab.title": "ޓާމިނަލް އެވެ",
 }

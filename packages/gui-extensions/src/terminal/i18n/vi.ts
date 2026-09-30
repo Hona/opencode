@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Mất kết nối",
   "connectionLost.abnormalClose": "WebSocket đóng bất thường: {{code}}",
   "connectionLost.description": "Kết nối terminal bị gián đoạn. Điều này có thể xảy ra khi máy chủ khởi động lại.",
+  "tab.title": "Terminal",
 }

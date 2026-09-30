@@ -12,4 +12,5 @@ export default {
   "empty.description": "Və ya “Tətbiq brauzerində aç” sorğusunu göndərin",
   "failed.title": "URL əlçatan deyil",
   "failed.description": "URL-i və bağlantınızı yoxlayın, sonra yenidən cəhd edin.",
+  "action.reload": "Yenidən yüklə",
 }

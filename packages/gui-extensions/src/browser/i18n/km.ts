@@ -12,4 +12,5 @@ export default {
   "empty.description": "ឬបញ្ចូល prompt \"បើកក្នុងកម្មវិធីរុករករបស់កម្មវិធី\"",
   "failed.title": "មិនអាចចូលដល់ URL បានទេ",
   "failed.description": "ពិនិត្យ URL និងការតភ្ជាប់របស់អ្នក រួចសាកល្បងម្តងទៀត។",
+  "action.reload": "ផ្ទុកឡើងវិញ",
 }

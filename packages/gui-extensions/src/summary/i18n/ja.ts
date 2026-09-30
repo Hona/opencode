@@ -28,4 +28,11 @@ export default {
   "configure": "設定ファイル",
   "copyConfigPath": "設定ファイルのパスをコピー",
   "configFileMissing": "設定ファイルが見つかりません",
+  "loadingChanges": "変更を読み込み中…",
+  "noChanges": "変更なし",
+  "basedOn": "{{branch}}に基づく",
+  "workspace.local": "ローカルリポジトリ",
+  "workspace.existing": "ワークツリー",
+  "workspace.new": "新しいワークスペース",
+  "mcp.interactiveAuth": "MCPサーバー {{name}} はインタラクティブな認証フォームを必要とします",
 }

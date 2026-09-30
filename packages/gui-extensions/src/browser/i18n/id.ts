@@ -12,4 +12,5 @@ export default {
   "empty.description": "Atau masukkan prompt \"Buka di peramban aplikasi\"",
   "failed.title": "URL tidak dapat dijangkau",
   "failed.description": "Periksa URL dan koneksi Anda, lalu coba lagi.",
+  "action.reload": "Muat ulang",
 }

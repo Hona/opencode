@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "総コスト",
   "stats.sessionCreated": "セッション作成日時",
   "stats.lastActivity": "最終アクティビティ",
+  "export.success.title": "セッションをエクスポートしました",
+  "export.success.description": "セッションを {{filename}} に保存しました",
+  "export.failed.title": "セッションのエクスポートに失敗しました",
+  "export.failed.description": "セッションのエクスポート中にエラーが発生しました",
 }

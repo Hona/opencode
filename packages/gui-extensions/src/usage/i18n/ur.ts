@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "کل لاگت",
   "stats.sessionCreated": "سیشن بنایا گیا۔",
   "stats.lastActivity": "آخری سرگرمی",
+  "export.success.title": "سیشن برآمد کر دیا گیا",
+  "export.success.description": "سیشن کو ⁨{{filename}}⁩ میں محفوظ کر دیا گیا",
+  "export.failed.title": "سیشن برآمد کرنے میں ناکام",
+  "export.failed.description": "سیشن برآمد کرتے وقت ایک خرابی پیش آ گئی",
 }

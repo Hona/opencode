@@ -28,4 +28,11 @@ export default {
   "configure": "Sazlama faýly",
   "copyConfigPath": "Sazlama faýl ýoluny göçüriň",
   "configFileMissing": "Sazlama faýly tapylmady",
+  "loadingChanges": "Üýtgeşmeler ýüklenýär …",
+  "noChanges": "Üýtgeşme ýok",
+  "basedOn": "{{branch}} esasynda",
+  "workspace.local": "Localerli ammar",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Täze workspace",
+  "mcp.interactiveAuth": "MCP serweri {{name}} interaktiw tanamak formasyny talap edýär",
 }

@@ -23,4 +23,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "खोल्नको लागि फाइल चयन गर्नुहोस्",
+  "open.finder": "Finder",
+  "open.fileExplorer": "File Explorer",
+  "open.fileManager": "File Manager",
+  "command.open": "फाइल खोल्नुहोस्",
 }

@@ -275,7 +275,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                           <Show when={connecting()}>
                             <Spinner class="size-3.5" />
                           </Show>
-                          {props.language.t(connecting() ? "ssh.stage.connecting" : "ssh.action.authenticate")}
+                          {props.language.t(connecting() ? "server.status.connecting" : "server.action.authenticate")}
                         </Button>
                       </div>
                     </Show>
@@ -368,7 +368,7 @@ function HomeServerRow(props: {
       inactive={!incompatible() && !authentication()}
       value={
         authentication()
-          ? props.language.t("ssh.stage.authentication")
+          ? props.language.t("server.status.authentication")
           : props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })
       }
     >

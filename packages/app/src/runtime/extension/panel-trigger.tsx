@@ -9,7 +9,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import type { PanelTab } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
-import { Contribution } from "@/runtime/extension/render"
+import { Contribution } from "./render"
 
 /** One side panel tab trigger. The extension supplies the content; the host owns close, drag, and ids. */
 export function PanelTrigger(props: {

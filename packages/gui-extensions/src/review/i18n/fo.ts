@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Ongar greinarbroytingar enn",
   "git.title": "Stovna eitt Git goymslustað",
   "git.description": "Fylg við, kanna og angra broytingar í hesi verkætlan",
+  "loadingChanges": "Heinta broytingar…",
+  "noChanges": "Ongar broytingar",
 }

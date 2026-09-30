@@ -28,4 +28,11 @@ export default {
   "configure": "配置文件",
   "copyConfigPath": "复制配置文件路径",
   "configFileMissing": "未找到配置文件",
+  "loadingChanges": "正在加载更改…",
+  "noChanges": "无更改",
+  "basedOn": "基于 {{branch}}",
+  "workspace.local": "本地仓库",
+  "workspace.existing": "工作树",
+  "workspace.new": "新建工作区",
+  "mcp.interactiveAuth": "MCP 服务器 {{name}} 需要交互式身份验证表单",
 }

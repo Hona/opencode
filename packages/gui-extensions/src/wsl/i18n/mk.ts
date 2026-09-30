@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Страничната кола за {{distro}} здравствена проверка истече по {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} истече по {{timeout}}ms",
   "error.failedPort": "Не успеа да се добие порта",
+  "server.default": "Стандардно",
+  "menu.default": "Поставете како стандардно",
+  "menu.defaultRemove": "Отстрани стандардно",
+  "menu.remove": "Отстрани",
 }

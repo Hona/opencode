@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Umumiy xarajat",
   "stats.sessionCreated": "Sessiya yaratildi",
   "stats.lastActivity": "Oxirgi faoliyat",
+  "export.success.title": "Seans eksport qilindi",
+  "export.success.description": "Seans {{filename}}ga saqlandi",
+  "export.failed.title": "Seansni eksport qilib boʻlmadi",
+  "export.failed.description": "Seansni eksport qilishda xatolik yuz berdi",
 }

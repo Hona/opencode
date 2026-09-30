@@ -28,4 +28,11 @@ export default {
   "configure": "ไฟล์การกำหนดค่า",
   "copyConfigPath": "คัดลอกเส้นทางไฟล์การกำหนดค่า",
   "configFileMissing": "ไม่พบไฟล์การกำหนดค่า",
+  "loadingChanges": "กำลังโหลดการเปลี่ยนแปลง…",
+  "noChanges": "ไม่มีการเปลี่ยนแปลง",
+  "basedOn": "อิงจาก {{branch}}",
+  "workspace.local": "รีโพซิทอรีในเครื่อง",
+  "workspace.existing": "เวิร์กทรี",
+  "workspace.new": "พื้นที่ทำงานใหม่",
+  "mcp.interactiveAuth": "เซิร์ฟเวอร์ MCP {{name}} ต้องการฟอร์มการตรวจสอบสิทธิ์แบบโต้ตอบ",
 }

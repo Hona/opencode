@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "التكلفة الإجمالية",
   "stats.sessionCreated": "تم إنشاء الجلسة",
   "stats.lastActivity": "آخر نشاط",
+  "export.success.title": "تم تصدير الجلسة",
+  "export.success.description": "تم حفظ الجلسة في ⁨{{filename}}⁩",
+  "export.failed.title": "فشل تصدير الجلسة",
+  "export.failed.description": "حدث خطأ أثناء تصدير الجلسة",
 }

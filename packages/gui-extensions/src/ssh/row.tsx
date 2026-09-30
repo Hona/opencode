@@ -46,7 +46,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                     </Show>
                   }
                 >
-                  <span class="settings-servers-meta">{extension.t("ssh.stage.authentication")}</span>
+                  <span class="settings-servers-meta">{extension.t("stage.authentication")}</span>
                 </Show>
               </div>
             </div>
@@ -62,11 +62,11 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                   <Show when={pending()}>
                     <Spinner class="size-3.5" />
                   </Show>
-                  {pending() ? extension.t("session.connecting") : extension.t("ssh.action.authenticate")}
+                  {pending() ? extension.t("session.connecting") : extension.t("action.authenticate")}
                 </Button>
               </Show>
               <Show when={props.row.default.available() && props.row.default.current()}>
-                <Badge>{extension.t("dialog.server.status.default")}</Badge>
+                <Badge>{extension.t("server.default")}</Badge>
               </Show>
               <Menu gutter={4} modal={false} placement="bottom-end">
                 <Menu.Trigger
@@ -83,18 +83,16 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                       <props.row.Items />
                       <Show when={props.row.default.available() && !props.row.default.current()}>
                         <Menu.Item onSelect={() => props.row.default.set(true)}>
-                          {extension.t("dialog.server.menu.default")}
+                          {extension.t("menu.default")}
                         </Menu.Item>
                       </Show>
                       <Show when={props.row.default.available() && props.row.default.current()}>
                         <Menu.Item onSelect={() => props.row.default.set(false)}>
-                          {extension.t("dialog.server.menu.defaultRemove")}
+                          {extension.t("menu.defaultRemove")}
                         </Menu.Item>
                       </Show>
                       <Menu.Separator />
-                      <Menu.Item onSelect={() => void props.row.remove()}>
-                        {extension.t("dialog.server.menu.delete")}
-                      </Menu.Item>
+                      <Menu.Item onSelect={() => void props.row.remove()}>{extension.t("menu.delete")}</Menu.Item>
                     </Menu.Group>
                   </Menu.Content>
                 </Menu.Portal>

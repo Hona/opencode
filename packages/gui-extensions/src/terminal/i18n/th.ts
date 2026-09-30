@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "การเชื่อมต่อขาดหาย",
   "connectionLost.abnormalClose": "WebSocket ปิดอย่างผิดปกติ: {{code}}",
   "connectionLost.description": "การเชื่อมต่อเทอร์มินัลถูกขัดจังหวะ อาจเกิดขึ้นเมื่อเซิร์ฟเวอร์รีสตาร์ท",
+  "tab.title": "เทอร์มินัล",
 }

@@ -263,7 +263,7 @@ function RootSettings() {
     ...(multiple()
       ? [
           {
-            label: language.t("status.popover.tab.servers"),
+            label: language.t("settings.tab.servers"),
             action: <AddServerMenu compact onAddServer={addServer} />,
             items: ordered().map((server) => ({
               value: `server:${server.key}`,

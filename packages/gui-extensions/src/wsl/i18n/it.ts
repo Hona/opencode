@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Il controllo dello stato del sidecar per {{distro}} ha superato il tempo limite di {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} ha superato il tempo limite di {{timeout}}ms",
   "error.failedPort": "Impossibile ottenere la porta",
+  "server.default": "Predefinito",
+  "menu.default": "Imposta come predefinito",
+  "menu.defaultRemove": "Rimuovi predefinito",
+  "menu.remove": "Rimuovi",
 }

@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Ühendus katkes",
   "connectionLost.abnormalClose": "WebSocket on ebatavaliselt suletud: {{code}}",
   "connectionLost.description": "Terminali ühendus katkes. See võib juhtuda serveri taaskäivitamisel.",
+  "tab.title": "Terminal",
 }

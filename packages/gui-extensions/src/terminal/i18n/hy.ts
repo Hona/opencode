@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Կապը կորցրած",
   "connectionLost.abnormalClose": "WebSocket փակվել է աննորմալ՝ {{code}}",
   "connectionLost.description": "տերմինալի կապն ընդհատվել է։ Դա կարող է տեղի ունենալ, երբ սերվերը վերագործարկվի:",
+  "tab.title": "Տերմինալ",
 }

@@ -29,4 +29,11 @@ export default {
   "configure": "Fichier de configuration",
   "copyConfigPath": "Copier le chemin du fichier de configuration",
   "configFileMissing": "Aucun fichier de configuration trouvé",
+  "loadingChanges": "Chargement des modifications…",
+  "noChanges": "Aucune modification",
+  "basedOn": "Basé sur {{branch}}",
+  "workspace.local": "Dépôt local",
+  "workspace.existing": "Arbre de travail",
+  "workspace.new": "Nouvel espace de travail",
+  "mcp.interactiveAuth": "Serveur MCP {{name}} nécessite un formulaire d'authentification interactif",
 }

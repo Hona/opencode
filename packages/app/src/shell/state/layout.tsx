@@ -1,6 +1,6 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Schema, SchemaGetter } from "effect"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -10,33 +10,29 @@ import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
-import { decode64 } from "@/runtime/persistence/base64"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
-import { createPathHelpers } from "@/workspaces/files/path"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
-import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./session-tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab } from "./session-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
 const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
-const DEFAULT_TERMINAL_HEIGHT = 280
-const DEFAULT_REVIEW_PANEL_OPENED = false
+const DEFAULT_DOCK_HEIGHT = 280
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
-export type ReviewPanelSource = "context-button" | "other"
 export type TabPanes = {
-  terminalOpened: Accessor<boolean>
-  setTerminalOpened(opened: boolean): void
-  terminalHeight: Accessor<number | undefined>
-  setTerminalHeight(height: number): void
-  reviewOpened: Accessor<boolean>
-  setReviewOpened(opened: boolean): void
+  dockOpened: Accessor<boolean>
+  setDockOpened(opened: boolean): void
+  dockHeight: Accessor<number | undefined>
+  setDockHeight(height: number): void
+  sideOpened: Accessor<boolean>
+  setSideOpened(opened: boolean): void
   sessionWidth: Accessor<number | undefined>
   setSessionWidth(width: number): void
 }
@@ -47,38 +43,6 @@ export type LayoutRoute =
   | { type: "connect" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
-
-const sessionPath = (key: string) => {
-  const dir = SessionStateKey.route(key).split("/")[0]
-  if (!dir) return
-  const root = decode64(dir)
-  if (!root) return
-  return createPathHelpers(() => root)
-}
-
-const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
-  if (!tab.startsWith("file://")) return tab
-  if (!path) return tab
-  return path.tab(tab)
-}
-
-const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {
-  const seen = new Set<string>()
-  return all.flatMap((tab) => {
-    const value = normalizeSessionTab(path, tab)
-    if (seen.has(value)) return []
-    seen.add(value)
-    return [value]
-  })
-}
-
-const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
-  const path = sessionPath(key)
-  return {
-    all: normalizeSessionTabList(path, tabs.all),
-    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
-  }
-}
 
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
@@ -125,6 +89,7 @@ export const layoutSchema = Persistence.struct({
     workspaces: Persistence.record(Schema.Boolean),
     workspacesDefault: Schema.Boolean,
   }),
+  // The dock and side region state moved to per-tab panes; these fields stay so stored layouts keep decoding.
   terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
   review: Persistence.struct({
     panelOpened: Schema.Boolean,
@@ -193,7 +158,7 @@ export const layoutPersistence = Persistence.migrate(
         sessionTabs: Object.fromEntries(
           Object.entries(value.sessionTabs)
             .filter(([key]) => SessionStateKey.is(key))
-            .map(([key, tabs]) => [key, normalizeStoredSessionTabs(key, tabs)]),
+            .map(([key, tabs]) => [key, { all: [...new Set(tabs.all)], active: tabs.active }]),
         ),
         sessionView: Object.fromEntries(Object.entries(value.sessionView).filter(([key]) => SessionStateKey.is(key))),
       })),
@@ -205,8 +170,8 @@ export const layoutPersistence = Persistence.migrate(
 export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
-    terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
-    review: { panelOpened: DEFAULT_REVIEW_PANEL_OPENED },
+    terminal: { height: DEFAULT_DOCK_HEIGHT, opened: false },
+    review: { panelOpened: false },
     fileTree: { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" },
     session: { width: DEFAULT_SESSION_WIDTH },
     mobileSidebar: { opened: false },
@@ -229,9 +194,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
     const [ephemeral, setEphemeral] = createStore({
-      reviewPanelSource: "other" as ReviewPanelSource,
       sessionTabPreview: {} as Record<string, string | undefined>,
     })
+    // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
+    const [scoped, setScoped, , scopedReady] = persisted(
+      Persist.global("layout.scoped"),
+      Persistence.array(Schema.String),
+      [],
+    )
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
@@ -241,9 +211,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       used: new Map<string, number>(),
     }
 
-    const SESSION_STATE_KEYS = ["prompt", "terminal", "file-view"] as const
-
     const dropSessionState = (keys: string[]) => {
+      const names = ["prompt", "file-view", ...scoped]
       for (const key of keys) {
         const scope = SessionStateKey.scope(key)
         const parts = SessionStateKey.route(key).split("/")
@@ -251,7 +220,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const session = parts[1]
         if (!dir) continue
 
-        for (const entry of SESSION_STATE_KEYS) {
+        for (const entry of names) {
           const target = session
             ? Persist.serverSession(scope, dir, session, entry)
             : Persist.serverWorkspace(scope, dir, entry)
@@ -261,6 +230,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function prune(keep?: string) {
+      if (!scopedReady()) return
       const drop = pruneSessionKeys({
         keep,
         max: MAX_SESSION_KEYS,
@@ -297,7 +267,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       usage.active = sessionKey
       usage.used.set(sessionKey, Date.now())
 
-      if (!ready()) return
+      if (!ready() || !scopedReady()) return
       if (usage.pruned) return
 
       usage.pruned = true
@@ -324,7 +294,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
     createEffect(() => {
-      if (!ready()) return
+      if (!ready() || !scopedReady()) return
       if (usage.pruned) return
       const active = usage.active
       if (!active) return
@@ -356,10 +326,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("home", "selection", reconcile(selection))
         },
       },
-      terminal: {
-        height: createMemo(() => store.terminal.height),
-        resize(height: number) {
-          setStore("terminal", "height", height)
+      sessionState: {
+        /** Records a session-scoped store, so pruning a session's layout state drops it too. */
+        track(name: string) {
+          untrack(() => {
+            const add = () => setScoped((names) => (names.includes(name) ? names : [...names, name]))
+            if (scopedReady()) return add()
+            void scopedReady.promise?.then(add)
+          })
         },
       },
       fileTree: {
@@ -456,66 +430,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return message
         },
       },
-      view(sessionKey: string | Accessor<string>, panes?: TabPanes) {
+      /** The dock and side regions of a shell tab, and the session panel width beside them. */
+      view(sessionKey: string | Accessor<string>, panes: TabPanes) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const terminalOpened = panes?.terminalOpened ?? createMemo(() => store.terminal?.opened ?? false)
-        const terminalHeight = createMemo(() =>
-          panes
-            ? (panes.terminalHeight() ?? DEFAULT_TERMINAL_HEIGHT)
-            : (store.terminal?.height ?? DEFAULT_TERMINAL_HEIGHT),
-        )
-        const reviewPanelOpened =
-          panes?.reviewOpened ?? createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
-        const sessionWidth = createMemo(() =>
-          panes ? (panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH) : store.session.width,
-        )
-        const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
-
-        function setTerminalOpened(next: boolean) {
-          if (panes) {
-            panes.setTerminalOpened(next)
-            return
-          }
-          const current = store.terminal
-          if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
-            return
-          }
-
-          const value = current.opened ?? false
-          if (value === next) return
-          setStore("terminal", "opened", next)
-        }
-
-        function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
-          const nextSource = next ? source : "other"
-          if (panes) {
-            batch(() => {
-              panes.setReviewOpened(next)
-              setEphemeral("reviewPanelSource", nextSource)
-            })
-            return
-          }
-          const current = store.review
-          if (!current) {
-            batch(() => {
-              setStore("review", { panelOpened: next })
-              setEphemeral("reviewPanelSource", nextSource)
-            })
-            return
-          }
-
-          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
-          if (value === next) {
-            if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
-            return
-          }
-          batch(() => {
-            setStore("review", "panelOpened", next)
-            setEphemeral("reviewPanelSource", nextSource)
-          })
-        }
-
         return {
           scroll(tab: string) {
             return scroll.scroll(key(), tab)
@@ -523,46 +440,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
           },
-          terminal: {
-            opened: terminalOpened,
-            height: terminalHeight,
-            resize(height: number) {
-              if (panes) {
-                panes.setTerminalHeight(height)
-                return
-              }
-              setStore("terminal", "height", height)
-            },
+          dock: {
+            opened: panes.dockOpened,
+            height: createMemo(() => panes.dockHeight() ?? DEFAULT_DOCK_HEIGHT),
+            resize: panes.setDockHeight,
             open() {
-              setTerminalOpened(true)
+              panes.setDockOpened(true)
             },
             close() {
-              setTerminalOpened(false)
-            },
-            toggle() {
-              setTerminalOpened(!terminalOpened())
+              panes.setDockOpened(false)
             },
           },
-          reviewPanel: {
-            opened: reviewPanelOpened,
-            source: reviewPanelSource,
-            width: sessionWidth,
-            resize(width: number) {
-              if (panes) {
-                panes.setSessionWidth(width)
-                return
-              }
-              setStore("session", "width", width)
-            },
-            open(source: ReviewPanelSource = "other") {
-              setReviewPanelOpened(true, source)
-            },
-            close() {
-              setReviewPanelOpened(false, "other")
-            },
+          side: {
+            opened: panes.sideOpened,
             toggle() {
-              setReviewPanelOpened(!reviewPanelOpened(), "other")
+              panes.setSideOpened(!panes.sideOpened())
             },
+          },
+          session: {
+            width: createMemo(() => panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH),
+            resize: panes.setSessionWidth,
           },
         }
       },
@@ -574,7 +471,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(session: string, tab: string, launchers?: ReadonlySet<string>) {
           const next = openSessionTab(
             { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-            normalizeSessionTab(sessionPath(session), tab),
+            tab,
             launchers,
           )
           batch(() => {
@@ -585,7 +482,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         preview(session: string, tab: string, launchers?: ReadonlySet<string>) {
           const next = previewSessionTab(
             { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-            normalizeSessionTab(sessionPath(session), tab),
+            tab,
             launchers,
           )
           batch(() => {
@@ -595,11 +492,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         /** Adds a tab at the end of the strip without selecting it or touching the preview. */
         append(session: string, tab: string) {
-          const next = normalizeSessionTab(sessionPath(session), tab)
           const current = store.sessionTabs[session]
-          if (!current) return setStore("sessionTabs", session, { all: [next] })
-          if (current.all.includes(next)) return
-          setStore("sessionTabs", session, "all", current.all.length, next)
+          if (!current) return setStore("sessionTabs", session, { all: [tab] })
+          if (current.all.includes(tab)) return
+          setStore("sessionTabs", session, "all", current.all.length, tab)
         },
         focus(session: string, tab: string) {
           if (!store.sessionTabs[session]) {
@@ -626,10 +522,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const path = createMemo(() => sessionPath(key()))
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
-        const normalize = (tab: string) => normalizeSessionTab(path(), tab)
-        const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
         const apply = (session: string, next: ReturnType<typeof openSessionTab>) => {
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
@@ -643,24 +536,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
-            const next = tab ? normalize(tab) : tab
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: next })
+              setStore("sessionTabs", session, { all: [], active: tab })
             } else {
-              setStore("sessionTabs", session, "active", next)
+              setStore("sessionTabs", session, "active", tab)
             }
           },
           setAll(all: string[]) {
             const session = key()
-            const next = normalizeAll(all)
             batch(() => {
               if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: next, active: undefined })
+                setStore("sessionTabs", session, { all, active: undefined })
               } else {
-                setStore("sessionTabs", session, "all", next)
+                setStore("sessionTabs", session, "all", all)
               }
               const preview = ephemeral.sessionTabPreview[session]
-              if (preview && !next.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+              if (preview && !all.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
             })
           },
           async open(tab: string) {
@@ -669,7 +560,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               session,
               openSessionTab(
                 { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-                normalize(tab),
+                tab,
               ),
             )
           },
@@ -679,7 +570,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               session,
               previewSessionTab(
                 { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-                normalize(tab),
+                tab,
               ),
             )
           },
@@ -687,10 +578,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
-            apply(
-              session,
-              closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, normalize(tab)),
-            )
+            apply(session, closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab))
           },
           move(tab: string, to: number) {
             const session = key()

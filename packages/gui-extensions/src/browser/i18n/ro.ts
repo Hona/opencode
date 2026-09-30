@@ -12,4 +12,5 @@ export default {
   "empty.description": "Sau solicită „Deschide în browserul aplicației”",
   "failed.title": "Adresa URL nu poate fi accesată",
   "failed.description": "Verifică adresa URL și conexiunea, apoi încearcă din nou.",
+  "action.reload": "Reîncarcă",
 }

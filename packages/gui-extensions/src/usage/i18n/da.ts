@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Samlede omkostninger",
   "stats.sessionCreated": "Session oprettet",
   "stats.lastActivity": "Seneste aktivitet",
+  "export.success.title": "Session eksporteret",
+  "export.success.description": "Sessionen blev gemt i {{filename}}",
+  "export.failed.title": "Kunne ikke eksportere session",
+  "export.failed.description": "Der opstod en fejl under eksport af sessionen",
 }

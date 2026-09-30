@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "कनेक्शन टूट गया",
   "connectionLost.abnormalClose": "WebSocket असामान्य रूप से बंद हुआ: {{code}}",
   "connectionLost.description": "टर्मिनल कनेक्शन बाधित हो गया था। ऐसा तब हो सकता है जब सर्वर पुनरारंभ हो।",
+  "tab.title": "टर्मिनल",
 }

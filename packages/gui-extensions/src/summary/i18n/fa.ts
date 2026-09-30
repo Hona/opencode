@@ -28,4 +28,11 @@ export default {
   "configure": "پروندهٔ پیکربندی",
   "copyConfigPath": "رونوشت مسیر پروندهٔ پیکربندی",
   "configFileMissing": "هیچ پروندهٔ پیکربندی‌ای پیدا نشد",
+  "loadingChanges": "در حال بارگیری تغییرات…",
+  "noChanges": "بدون تغییر",
+  "basedOn": "بر پایه ⁨{{branch}}⁩",
+  "workspace.local": "مخزن محلی",
+  "workspace.existing": "ورک‌تری",
+  "workspace.new": "فضای کاری جدید",
+  "mcp.interactiveAuth": "سرور MCP با نام ⁨{{name}}⁩ به فرم احراز هویت تعاملی نیاز دارد",
 }

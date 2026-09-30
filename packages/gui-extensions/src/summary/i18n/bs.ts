@@ -29,4 +29,11 @@ export default {
   "configure": "Konfiguracijska datoteka",
   "copyConfigPath": "Kopiraj putanju konfiguracijske datoteke",
   "configFileMissing": "Konfiguracijska datoteka nije pronađena",
+  "loadingChanges": "Učitavanje izmjena…",
+  "noChanges": "Nema izmjena",
+  "basedOn": "Zasnovano na {{branch}}",
+  "workspace.local": "Lokalni repozitorij",
+  "workspace.existing": "Radno stablo",
+  "workspace.new": "Novi radni prostor",
+  "mcp.interactiveAuth": "MCP server {{name}} zahtijeva interaktivni obrazac za autentifikaciju",
 }

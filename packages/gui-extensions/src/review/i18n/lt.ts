@@ -12,4 +12,6 @@ export default {
   "empty.branch": "Šakoje pakeitimų dar nėra",
   "git.title": "Sukurkite Git saugyklą",
   "git.description": "Stebėkite, peržiūrėkite ir anuliuokite šio projekto pakeitimus",
+  "loadingChanges": "Įkeliami pakeitimai…",
+  "noChanges": "Jokių pakeitimų",
 }

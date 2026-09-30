@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ýa-da “Programmanyň brauzerinde aç” diýip soraň",
   "failed.title": "URL elýeterli däl",
   "failed.description": "URL-i we birikmäňizi barlaň, soňra gaýtadan synanyşyň.",
+  "action.reload": "Täzeden ýükle",
 }

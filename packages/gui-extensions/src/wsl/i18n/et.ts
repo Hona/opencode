@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "{{distro}} tervisekontrolli külgkorv aegus {{timeout}} ms pärast",
   "error.commandTimeout": "{{command}} {{args}} aegus {{timeout}} ms pärast",
   "error.failedPort": "Pordi hankimine ebaõnnestus",
+  "server.default": "Vaikimisi",
+  "menu.default": "Määra vaikeväärtuseks",
+  "menu.defaultRemove": "Eemalda vaikeseade",
+  "menu.remove": "Eemalda",
 }

@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Cost total",
   "stats.sessionCreated": "Sessió creada",
   "stats.lastActivity": "Última Activitat",
+  "export.success.title": "Sessió exportada",
+  "export.success.description": "Sessió desada a {{filename}}",
+  "export.failed.title": "No s'ha pogut exportar la sessió",
+  "export.failed.description": "S'ha produït un error en exportar la sessió",
 }

@@ -28,4 +28,11 @@ export default {
   "configure": "Тохиргооны файл",
   "copyConfigPath": "Тохиргооны файлын замыг хуулбарлах",
   "configFileMissing": "Тохиргооны файл олдсонгүй",
+  "loadingChanges": "Өөрчлөлтүүдийг ачаалж байна…",
+  "noChanges": "Өөрчлөлт байхгүй",
+  "basedOn": "{{branch}} салаанд суурилсан",
+  "workspace.local": "Орон нутгийн хадгалах газар",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Шинэ ажлын талбар",
+  "mcp.interactiveAuth": "MCP сервер {{name}} интерактив баталгаажуулах маягт шаарддаг",
 }

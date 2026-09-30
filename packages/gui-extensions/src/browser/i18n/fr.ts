@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ou demandez « Ouvrir dans le navigateur de l’application »",
   "failed.title": "L’URL est inaccessible",
   "failed.description": "Vérifiez l’URL et votre connexion, puis réessayez.",
+  "action.reload": "Recharger",
 }

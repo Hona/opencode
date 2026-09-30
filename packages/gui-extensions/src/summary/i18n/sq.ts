@@ -28,4 +28,11 @@ export default {
   "configure": "Skedari i konfigurimit",
   "copyConfigPath": "Kopjo shtegun e skedarit të konfigurimit",
   "configFileMissing": "Nuk u gjet asnjë skedar konfigurimi",
+  "loadingChanges": "Ndryshimet po ngarkohen…",
+  "noChanges": "Nuk ka ndryshime",
+  "basedOn": "Bazuar në {{branch}}",
+  "workspace.local": "Depo lokale",
+  "workspace.existing": "Pemë pune",
+  "workspace.new": "Hapësirë e re pune",
+  "mcp.interactiveAuth": "Serveri MCP {{name}} kërkon një formular vërtetimi interaktiv",
 }

@@ -41,10 +41,6 @@ function controls(): ComposerControls {
       select() {},
     },
     model: { selection, paid: true, loading: false },
-    session: {
-      tabs: { active: () => undefined, all: () => [], open() {}, setActive() {} },
-      reviewPanel: { opened: () => false, open() {} },
-    },
   }
 }
 

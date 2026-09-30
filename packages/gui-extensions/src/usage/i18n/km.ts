@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "តម្លៃសរុប",
   "stats.sessionCreated": "សម័យត្រូវបានបង្កើត",
   "stats.lastActivity": "សកម្មភាពចុងក្រោយ",
+  "export.success.title": "បាននាំចេញសម័យ",
+  "export.success.description": "បានរក្សាទុកសម័យទៅ {{filename}}",
+  "export.failed.title": "បរាជ័យក្នុងការនាំចេញសម័យ",
+  "export.failed.description": "កំហុសបានកើតឡើងខណៈពេលនាំចេញសម័យ",
 }

@@ -15,7 +15,6 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { useData, useServer } from "@/runtime/server/current"
-import { createFileTabs } from "@/session/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode/schema/skill"
@@ -62,21 +61,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   )
   const mode = () => interaction[0].mode
   const history = createComposerHistory()
-  const tabs = () => adapter.controls().session.tabs
-  const activeFileTab = createFileTabs({
-    tabs,
-    pathFromTab: files.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
-  }).active
   const recent = createMemo(() => {
-    const all = tabs().all()
-    const active = activeFileTab()
-    const order = active ? [active, ...all.filter((tab) => tab !== active)] : all
-    return order.reduce<string[]>((result, tab) => {
-      const path = files.pathFromTab(tab)
-      if (!path || result.includes(path)) return result
-      return [...result, path]
-    }, [])
+    const all = extensions.files.opened()
+    const active = extensions.files.active()
+    return active ? [active, ...all.filter((path) => path !== active)] : all
   })
   const attachments = createMemo(() => prompt.current().filter(isAttachment))
   const commentCount = createMemo(() => {

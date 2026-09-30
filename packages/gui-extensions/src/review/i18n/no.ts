@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Ingen grenendringer ennå",
   "git.title": "Opprett et Git-depot",
   "git.description": "Spor, gjennomgå og angre endringer i dette prosjektet",
+  "loadingChanges": "Laster endringer…",
+  "noChanges": "Ingen endringer",
 }

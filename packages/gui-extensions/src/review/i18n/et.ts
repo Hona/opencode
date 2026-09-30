@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Filiaali muudatusi veel pole",
   "git.title": "Loo Git hoidla",
   "git.description": "Selle projekti muudatuste jälgimine, ülevaatamine ja tagasivõtmine",
+  "loadingChanges": "Muudatuste laadimine…",
+  "noChanges": "Muudatusi pole",
 }

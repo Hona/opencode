@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ё дархости «Дар браузери барнома кушоед»-ро ворид кунед",
   "failed.title": "URL дастнорас аст",
   "failed.description": "URL ва пайвастшавиро санҷед ва аз нав кӯшиш кунед.",
+  "action.reload": "Аз нав бор кардан",
 }

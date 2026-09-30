@@ -28,4 +28,11 @@ export default {
   "configure": "Конфигурационен файл",
   "copyConfigPath": "Копиране на пътя до конфигурационния файл",
   "configFileMissing": "Не е намерен конфигурационен файл",
+  "loadingChanges": "Промените се зареждат…",
+  "noChanges": "Без промени",
+  "basedOn": "Въз основа на {{branch}}",
+  "workspace.local": "Локално хранилище",
+  "workspace.existing": "Работно дърво",
+  "workspace.new": "Ново работно пространство",
+  "mcp.interactiveAuth": "MCP сървърът {{name}} изисква интерактивен формуляр за удостоверяване",
 }

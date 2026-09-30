@@ -12,4 +12,5 @@ export default {
   "empty.description": "Atau masukkan prompt \"Buka dalam pelayar aplikasi\"",
   "failed.title": "URL tidak dapat dicapai",
   "failed.description": "Semak URL dan sambungan anda, kemudian cuba lagi.",
+  "action.reload": "Muat semula",
 }

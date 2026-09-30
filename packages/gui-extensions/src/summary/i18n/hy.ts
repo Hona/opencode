@@ -28,4 +28,11 @@ export default {
   "configure": "Конֆիգուրացիայի ֆայլ",
   "copyConfigPath": "Հարցաթղթի ֆայլի ճանապարհը պատճենել",
   "configFileMissing": "Փնտրած конфիգուրացիայի ֆայլը չի գտվել",
+  "loadingChanges": "Բեռնվում են փոփոխություններ…",
+  "noChanges": "Ոչ փոփոխություններ",
+  "basedOn": "Հիմնված է {{branch}} ճյուղի վրա",
+  "workspace.local": "Տեղական պահոց",
+  "workspace.existing": "Աշխատանքային ծառ",
+  "workspace.new": "Նոր աշխատանքային տարածք",
+  "mcp.interactiveAuth": "MCP սերվերը {{name}} պահանջում է ինտերակտիվ հավատարմագրման ձև",
 }

@@ -37,7 +37,7 @@ export default function SessionSummaryPanel(props: SummaryPanelProps) {
     props.mobile ? "top-end" : app.direction() === "rtl" ? "right-start" : "left-start",
   )
   const location = () => {
-    if (props.session.local) return ctx.t("session.new.workspace.local")
+    if (props.session.local) return ctx.t("workspace.local")
     const workspace = workspaceDirectories(props.project).find((item) =>
       containsDirectory(item, props.session.directory),
     )
@@ -81,9 +81,7 @@ export default function SessionSummaryPanel(props: SummaryPanelProps) {
                     {(base) => (
                       <>
                         <span class="text-v2-text-text-muted">·</span>
-                        <span class="truncate text-v2-text-text-faint">
-                          {ctx.t("session.summary.basedOn", { branch: base() })}
-                        </span>
+                        <span class="truncate text-v2-text-text-faint">{ctx.t("basedOn", { branch: base() })}</span>
                       </>
                     )}
                   </Show>
@@ -101,16 +99,12 @@ export default function SessionSummaryPanel(props: SummaryPanelProps) {
               <span class="session-summary-label flex items-center gap-2">
                 <Show
                   when={props.diffs}
-                  fallback={
-                    <span class="truncate text-v2-text-text-muted">{ctx.t("session.review.loadingChanges")}</span>
-                  }
+                  fallback={<span class="truncate text-v2-text-text-muted">{ctx.t("loadingChanges")}</span>}
                 >
                   {(diffs) => (
                     <Show
                       when={diffs().length > 0}
-                      fallback={
-                        <span class="truncate text-v2-text-text-muted">{ctx.t("session.review.noChanges")}</span>
-                      }
+                      fallback={<span class="truncate text-v2-text-text-muted">{ctx.t("noChanges")}</span>}
                     >
                       <span class="min-w-0 truncate">{ctx.plural("ui.sessionTurn.diffs.changed", diffs().length)}</span>
                       <span class="shrink-0 text-v2-text-text-muted">·</span>

@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "კავშირი დაიკარგა",
   "connectionLost.abnormalClose": "WebSocket დახურულია არანორმალურად: {{code}}",
   "connectionLost.description": "ტერმინალის კავშირი შეწყდა. ეს შეიძლება მოხდეს სერვერის გადატვირთვისას.",
+  "tab.title": "ტერმინალი",
 }

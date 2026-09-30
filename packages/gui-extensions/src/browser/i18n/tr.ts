@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ya da “Uygulama tarayıcısında aç” istemini kullanın",
   "failed.title": "URL’ye erişilemiyor",
   "failed.description": "URL’yi ve bağlantınızı kontrol edip yeniden deneyin.",
+  "action.reload": "Yeniden yükle",
 }

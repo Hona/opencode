@@ -32,4 +32,11 @@ export default {
   "configure": "ملف الإعداد",
   "copyConfigPath": "نسخ مسار ملف الإعداد",
   "configFileMissing": "لم يُعثر على ملف إعداد",
+  "loadingChanges": "جارٍ تحميل التغييرات…",
+  "noChanges": "لا توجد تغييرات",
+  "basedOn": "استنادًا إلى ⁨{{branch}}⁩",
+  "workspace.local": "المستودع المحلي",
+  "workspace.existing": "شجرة عمل",
+  "workspace.new": "مساحة عمل جديدة",
+  "mcp.interactiveAuth": "يتطلب خادم MCP المسمى ⁨{{name}}⁩ نموذج مصادقة تفاعليًا",
 }

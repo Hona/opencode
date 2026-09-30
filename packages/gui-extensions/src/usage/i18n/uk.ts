@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Загальна вартість",
   "stats.sessionCreated": "Сесію створено",
   "stats.lastActivity": "Остання активність",
+  "export.success.title": "Сесію експортовано",
+  "export.success.description": "Сесію збережено у файл {{filename}}",
+  "export.failed.title": "Не вдалося експортувати сесію",
+  "export.failed.description": "Під час експортування сесії сталася помилка",
 }

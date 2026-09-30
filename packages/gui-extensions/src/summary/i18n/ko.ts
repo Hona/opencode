@@ -28,4 +28,11 @@ export default {
   "configure": "구성 파일",
   "copyConfigPath": "구성 파일 경로 복사",
   "configFileMissing": "구성 파일을 찾을 수 없습니다",
+  "loadingChanges": "변경 사항 로드 중…",
+  "noChanges": "변경 없음",
+  "basedOn": "{{branch}} 기반",
+  "workspace.local": "로컬 저장소",
+  "workspace.existing": "워크트리",
+  "workspace.new": "새 작업 공간",
+  "mcp.interactiveAuth": "MCP 서버 {{name}}에는 대화형 인증 양식이 필요합니다",
 }

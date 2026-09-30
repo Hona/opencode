@@ -12,4 +12,5 @@ export default {
   "empty.description": "或輸入提示「在應用程式內建瀏覽器中開啟」",
   "failed.title": "無法連上 URL",
   "failed.description": "請檢查 URL 和網路連線，然後再試一次。",
+  "action.reload": "重新載入",
 }

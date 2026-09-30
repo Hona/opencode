@@ -29,4 +29,11 @@ export default {
   "configure": "קובץ תצורה",
   "copyConfigPath": "העתקת הנתיב של קובץ התצורה",
   "configFileMissing": "לא נמצא קובץ תצורה",
+  "loadingChanges": "טוען שינויים…",
+  "noChanges": "אין שינויים",
+  "basedOn": "מבוסס על {{branch}}",
+  "workspace.local": "מאגר מקומי",
+  "workspace.existing": "עץ עבודה",
+  "workspace.new": "סביבת עבודה חדשה",
+  "mcp.interactiveAuth": "שרת MCP בשם ⁨{{name}}⁩ דורש טופס אימות אינטראקטיבי",
 }

@@ -29,4 +29,11 @@ export default {
   "configure": "Фајл конфигурације",
   "copyConfigPath": "Копирај путању до фајла конфигурације",
   "configFileMissing": "Није пронађен фајл конфигурације",
+  "loadingChanges": "Учитавање промена…",
+  "noChanges": "Нема промена",
+  "basedOn": "На основу {{branch}}",
+  "workspace.local": "Локално спремиште",
+  "workspace.existing": "Радно стабло",
+  "workspace.new": "Нови радни простор",
+  "mcp.interactiveAuth": "MCP сервер {{name}} захтева интерактивни образац за аутентификацију",
 }

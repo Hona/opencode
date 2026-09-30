@@ -28,4 +28,11 @@ export default {
   "configure": "कॉन्फ़िगरेशन फ़ाइल",
   "copyConfigPath": "कॉन्फ़िगरेशन फ़ाइल पथ की प्रतिलिपि बनाएँ",
   "configFileMissing": "कोई कॉन्फ़िगरेशन फ़ाइल नहीं मिली",
+  "loadingChanges": "परिवर्तन लोड हो रहे हैं…",
+  "noChanges": "कोई परिवर्तन नहीं",
+  "basedOn": "{{branch}} पर आधारित",
+  "workspace.local": "स्थानीय रिपॉजिटरी",
+  "workspace.existing": "वर्कट्री",
+  "workspace.new": "नया वर्कस्पेस",
+  "mcp.interactiveAuth": "MCP सर्वर {{name}} को एक इंटरैक्टिव प्रमाणीकरण फॉर्म की आवश्यकता होती है",
 }

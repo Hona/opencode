@@ -24,4 +24,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "Seleccioneu un fitxer per obrir",
+  "open.finder": "Finder",
+  "open.fileExplorer": "File Explorer",
+  "open.fileManager": "Gestor de fitxers",
+  "command.open": "Obre el fitxer",
 }

@@ -12,4 +12,5 @@ export default {
   "empty.description": "या प्रॉम्प्ट दें “ऐप ब्राउज़र में खोलें”",
   "failed.title": "URL तक नहीं पहुँचा जा सका",
   "failed.description": "URL और अपना कनेक्शन जाँचें, फिर दोबारा कोशिश करें।",
+  "action.reload": "पुनः लोड करें",
 }

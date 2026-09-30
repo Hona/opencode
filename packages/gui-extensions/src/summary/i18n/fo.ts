@@ -28,4 +28,11 @@ export default {
   "configure": "Uppsetingarfíla",
   "copyConfigPath": "Avrita uppsetingarfíluslóð",
   "configFileMissing": "Eingin uppsetingarfíla funnin",
+  "loadingChanges": "Heinta broytingar…",
+  "noChanges": "Ongar broytingar",
+  "basedOn": "Grundað á {{branch}}",
+  "workspace.local": "Lokal goymsla",
+  "workspace.existing": "Arbeiðstræ",
+  "workspace.new": "Nýtt workspace",
+  "mcp.interactiveAuth": "MCP ambætarin {{name}} krevur eitt samvirkið sannroyndarblað",
 }

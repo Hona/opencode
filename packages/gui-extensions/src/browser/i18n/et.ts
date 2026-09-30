@@ -12,4 +12,5 @@ export default {
   "empty.description": "Või palu „Ava rakenduse brauseris”",
   "failed.title": "URL-ile ei pääse juurde",
   "failed.description": "Kontrolli URL-i ja ühendust ning proovi uuesti.",
+  "action.reload": "Laadi uuesti",
 }

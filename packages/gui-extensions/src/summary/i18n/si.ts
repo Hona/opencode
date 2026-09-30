@@ -28,4 +28,11 @@ export default {
   "configure": "මානකරන ගොනුව",
   "copyConfigPath": "වින්‍යාස ගොනු මාර්ගය පිටපත් කරන්න",
   "configFileMissing": "වින්‍යාස ගොනුවක් හමු නොවිණි",
+  "loadingChanges": "වෙනස්කම් පූරණය කරමින්…",
+  "noChanges": "වෙනස්කම් නොමැත",
+  "basedOn": "{{branch}} මත පදනම්ව",
+  "workspace.local": "දේශීය ගබඩාව",
+  "workspace.existing": "වර්ක්ට්‍රී",
+  "workspace.new": "නව වැඩබිම",
+  "mcp.interactiveAuth": "MCP සේවාදායකය {{name}} සඳහා අන්තර්ක්‍රියාකාරී සත්‍යාපන පෝරමයක් අවශ්‍ය වේ",
 }

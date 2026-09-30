@@ -28,4 +28,11 @@ export default {
   "configure": "Tệp cấu hình",
   "copyConfigPath": "Sao chép đường dẫn tệp cấu hình",
   "configFileMissing": "Không tìm thấy tệp cấu hình",
+  "loadingChanges": "Đang tải các thay đổi…",
+  "noChanges": "Không có thay đổi",
+  "basedOn": "Dựa trên {{branch}}",
+  "workspace.local": "Kho lưu trữ cục bộ",
+  "workspace.existing": "cây làm việc",
+  "workspace.new": "Không gian làm việc mới",
+  "mcp.interactiveAuth": "Máy chủ MCP {{name}} yêu cầu một biểu mẫu xác thực tương tác",
 }

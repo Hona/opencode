@@ -28,4 +28,11 @@ export default {
   "configure": "Файли конфигуратсия",
   "copyConfigPath": "Роҳи файли конфигуратсияро нусхабардорӣ кунед",
   "configFileMissing": "Ягон файли конфигуратсия ёфт нашуд",
+  "loadingChanges": "Тағйирот бор карда мешавад…",
+  "noChanges": "Тағйирот нест",
+  "basedOn": "Бар асоси {{branch}}",
+  "workspace.local": "Анбори маҳаллӣ",
+  "workspace.existing": "Git worktree",
+  "workspace.new": "Майдони нави корӣ",
+  "mcp.interactiveAuth": "Сервери MCP {{name}} шакли интерактивии аутентификатсияро талаб мекунад",
 }

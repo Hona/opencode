@@ -68,7 +68,7 @@ export function SshCover(props: { id: string; tab: () => string; ssh: SshControl
               {connecting()
                 ? extension.t("session.connecting")
                 : item().stage === "authentication"
-                  ? extension.t("ssh.action.authenticate")
+                  ? extension.t("action.authenticate")
                   : extension.t("session.reconnect")}
             </Button>
           </section>

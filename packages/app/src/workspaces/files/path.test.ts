@@ -8,9 +8,7 @@ describe("file path helpers", () => {
     expect(path.normalize("/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("./src/app.ts")).toBe("src/app.ts")
     expect(path.normalizeDir("src/components///")).toBe("src/components")
-    expect(path.tab("src/app.ts")).toBe("file://src/app.ts")
-    expect(path.pathFromTab("file://src/app.ts")).toBe("src/app.ts")
-    expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
+    expect(path.normalize("file://src/app.ts")).toBe("src/app.ts")
   })
 
   test("normalizes Windows absolute paths with mixed separators", () => {
@@ -21,22 +19,19 @@ describe("file path helpers", () => {
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
   })
 
-  test("keeps files outside the workspace absolute and round-trips them through tabs", () => {
+  test("keeps files outside the workspace absolute", () => {
     const posix = createPathHelpers(() => "/repo")
     expect(posix.normalize("/tmp/out/report.pdf")).toBe("/tmp/out/report.pdf")
     expect(posix.absolute("/tmp/out/report.pdf")).toBe(true)
     expect(posix.absolute("src/app.ts")).toBe(false)
-    expect(posix.tab("/tmp/out/report.pdf")).toBe("file:///tmp/out/report.pdf")
-    expect(posix.pathFromTab("file:///tmp/out/report.pdf")).toBe("/tmp/out/report.pdf")
+    expect(posix.normalize("file:///tmp/out/report.pdf")).toBe("/tmp/out/report.pdf")
     expect(posix.normalize("/repository/x.ts")).toBe("/repository/x.ts")
 
     const windows = createPathHelpers(() => "C:\\repo")
     expect(windows.normalize("C:\\tmp\\font.ttf")).toBe("C:\\tmp\\font.ttf")
     expect(windows.normalize("file:///C:/tmp/font.ttf")).toBe("C:/tmp/font.ttf")
     expect(windows.absolute("C:/tmp/font.ttf")).toBe(true)
-    expect(windows.tab("C:/tmp/font.ttf")).toBe("file:///C:/tmp/font.ttf")
-    expect(windows.pathFromTab("file:///C:/tmp/font.ttf")).toBe("C:/tmp/font.ttf")
-    expect(windows.pathFromTab("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(windows.normalize("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
   })
 
   test("normalizes Windows directory separators", () => {

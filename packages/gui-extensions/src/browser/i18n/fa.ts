@@ -12,4 +12,5 @@ export default {
   "empty.description": "یا درخواست «در مرورگر برنامه باز کن» را وارد کنید",
   "failed.title": "دسترسی به URL ممکن نیست",
   "failed.description": "URL و اتصال خود را بررسی کنید و دوباره تلاش کنید.",
+  "action.reload": "بارگیری مجدد",
 }

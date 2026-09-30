@@ -15,21 +15,27 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
-import { Menu as MenuPoint, type Menu as MenuItem, type PanelSidebar, type SessionView } from "@opencode/gui-extensions/sdk"
-import { PanelTrigger } from "@/session/files/tab"
+import {
+  Menu as MenuPoint,
+  type Menu as MenuItem,
+  type PanelSidebar,
+  type SessionView,
+} from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
-import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import { useSessionLayout } from "@/session/session-layout"
-import { useExtensionHost } from "@/runtime/extension/host"
-import { ExtensionSlot } from "@/runtime/extension/render"
-import { RegionContent, type Region } from "@/runtime/extension/panels"
 import type { Sizing } from "@/session/helpers"
+import { useExtensionHost } from "./host"
+import { PanelTrigger } from "./panel-trigger"
+import { RegionContent, type Region } from "./panels"
+import { ExtensionSlot } from "./render"
+import { createTabStripScroll } from "./tab-strip-scroll"
 
 const FILE_TREE_WIDTH_MIN = 240
 
-export function SessionSidePanel(props: {
+/** The side region: the tab strip with its "+" menu, the selected panel, and the inner sidebar. */
+export function SideRegion(props: {
   view: SessionView
   region: Region
   sidebar: PanelSidebar
@@ -40,20 +46,19 @@ export function SessionSidePanel(props: {
 }) {
   const layout = useLayout()
   const language = useLanguage()
-  const command = useCommand()
   const host = useExtensionHost()
   const { tabs, view, params } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const reviewVisible = createMemo(() => reviewOpen() || !!props.present)
+  const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
+  const tabsVisible = createMemo(() => tabsOpen() || !!props.present)
   const fileOpen = createMemo(() => isDesktop() && props.fileTree)
-  const open = createMemo(() => reviewOpen() || fileOpen())
-  const visible = createMemo(() => reviewVisible() || fileOpen())
+  const open = createMemo(() => tabsOpen() || fileOpen())
+  const visible = createMemo(() => tabsVisible() || fileOpen())
   const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const panelWidth = createMemo(() => {
     if (!visible()) return "0px"
-    if (reviewVisible()) return "auto"
+    if (tabsVisible()) return "auto"
     return `${fileTreeWidth()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
@@ -81,7 +86,7 @@ export function SessionSidePanel(props: {
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active(),
-          "flex-1": reviewVisible(),
+          "flex-1": tabsVisible(),
         }}
         style={{ width: panelWidth() }}
       >
@@ -91,7 +96,7 @@ export function SessionSidePanel(props: {
             class="h-full flex shrink-0"
             style={{ width: "var(--session-side-content-width, 100%)" }}
           >
-            <Show when={reviewVisible()}>
+            <Show when={tabsVisible()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
                 <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
                   <DragDropProvider
@@ -144,7 +149,7 @@ export function SessionSidePanel(props: {
                               (event) => (selectionEvent = event),
                               { capture: true },
                             )
-                            onCleanup(createFileTabListSync({ el, contextOpen: props.region.lead }))
+                            onCleanup(createTabStripScroll({ el, lead: props.region.lead }))
                           }}
                         >
                           <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky start-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
@@ -189,7 +194,7 @@ export function SessionSidePanel(props: {
                           onClick={(event) => event.stopPropagation()}
                         >
                           <ExtensionSlot at="session.panel.end" input={{ session: props.view }} />
-                          <Show when={reviewVisible()}>
+                          <Show when={tabsVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>
                         </div>
@@ -211,8 +216,8 @@ export function SessionSidePanel(props: {
                         region={props.region}
                         view={props.view}
                         frame={{
-                          shown: reviewOpen,
-                          present: reviewVisible,
+                          shown: tabsOpen,
+                          present: tabsVisible,
                           placement: () => "side",
                           reserve: () => false,
                           animate: () => !props.size.active(),
@@ -237,7 +242,7 @@ export function SessionSidePanel(props: {
               >
                 <div
                   class="h-full flex flex-col overflow-hidden group/filetree"
-                  classList={{ "border-l border-border-weaker-base": reviewOpen() }}
+                  classList={{ "border-l border-border-weaker-base": tabsOpen() }}
                 >
                   <ExtensionSlot at="session.panel.sidebar" input={{ session: props.view }} />
                 </div>

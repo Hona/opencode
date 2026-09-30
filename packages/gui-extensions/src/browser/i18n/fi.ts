@@ -12,4 +12,5 @@ export default {
   "empty.description": "Tai kehota ”Avaa sovelluksen selaimessa”",
   "failed.title": "URL-osoitetta ei tavoiteta",
   "failed.description": "Tarkista URL-osoite ja yhteys ja yritä uudelleen.",
+  "action.reload": "Lataa uudelleen",
 }

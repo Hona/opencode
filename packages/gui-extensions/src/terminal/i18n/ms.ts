@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Sambungan Terputus",
   "connectionLost.abnormalClose": "WebSocket ditutup secara tidak normal: {{code}}",
   "connectionLost.description": "Sambungan terminal telah terganggu. Ini boleh berlaku apabila pelayan dimulakan semula.",
+  "tab.title": "Terminal",
 }

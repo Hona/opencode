@@ -12,4 +12,5 @@ export default {
   "empty.description": 'Or prompt "Open in the app browser"',
   "failed.title": "URL can't be reached",
   "failed.description": "Check the URL and your connection, then try again.",
+  "action.reload": "Reload",
 }

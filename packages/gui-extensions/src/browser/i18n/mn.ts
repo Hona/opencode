@@ -12,4 +12,5 @@ export default {
   "empty.description": "Эсвэл “Аппын хөтөч дээр нээ” гэж хүсэлт өгнө үү",
   "failed.title": "URL-д хандах боломжгүй",
   "failed.description": "URL болон холболтоо шалгаад дахин оролдоно уу.",
+  "action.reload": "Дахин ачаалах",
 }

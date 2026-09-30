@@ -1,9 +1,0 @@
-{
-  "tab.title": "session.tab.review",
-  "tab.count": "session.review.filesChangedCount",
-  "mobile.title": "session.review.change",
-  "empty.git": "session.review.noUncommittedChanges",
-  "empty.branch": "session.review.noBranchChanges",
-  "git.title": "session.review.noVcs.createGit.title",
-  "git.description": "session.review.noVcs.createGit.description"
-}

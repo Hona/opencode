@@ -12,4 +12,5 @@ export default {
   "empty.description": "או לבקש „פתיחה בדפדפן היישום”",
   "failed.title": "לא ניתן להגיע לכתובת ה-URL",
   "failed.description": "יש לבדוק את כתובת ה-URL ואת החיבור ולנסות שוב.",
+  "action.reload": "טען מחדש",
 }

@@ -43,7 +43,7 @@ export default function WslRow(props: {
           </div>
           <div class="settings-servers-actions">
             <Show when={props.row.default.available() && props.row.default.current()}>
-              <Badge>{extension.t("dialog.server.status.default")}</Badge>
+              <Badge>{extension.t("server.default")}</Badge>
             </Show>
             <Show when={opencodeAction()}>
               {(label) => (
@@ -70,13 +70,11 @@ export default function WslRow(props: {
                     <Menu.GroupLabel>{extension.t("server.menu.label")}</Menu.GroupLabel>
                     <props.row.Items />
                     <Show when={props.row.default.available() && !props.row.default.current()}>
-                      <Menu.Item onSelect={() => props.row.default.set(true)}>
-                        {extension.t("dialog.server.menu.default")}
-                      </Menu.Item>
+                      <Menu.Item onSelect={() => props.row.default.set(true)}>{extension.t("menu.default")}</Menu.Item>
                     </Show>
                     <Show when={props.row.default.available() && props.row.default.current()}>
                       <Menu.Item onSelect={() => props.row.default.set(false)}>
-                        {extension.t("dialog.server.menu.defaultRemove")}
+                        {extension.t("menu.defaultRemove")}
                       </Menu.Item>
                     </Show>
                     <Menu.Separator />
@@ -84,7 +82,7 @@ export default function WslRow(props: {
                       disabled={props.pending(props.row.key)}
                       onSelect={() => props.request(props.row.key, () => props.row.remove())}
                     >
-                      {extension.t("dialog.server.menu.remove")}
+                      {extension.t("menu.remove")}
                     </Menu.Item>
                   </Menu.Group>
                 </Menu.Content>

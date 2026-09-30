@@ -12,4 +12,5 @@ export default {
   "empty.description": "Nebo zadejte pokyn „Otevřít v prohlížeči aplikace“",
   "failed.title": "URL není dostupná",
   "failed.description": "Zkontrolujte URL a připojení a zkuste to znovu.",
+  "action.reload": "Načíst znovu",
 }

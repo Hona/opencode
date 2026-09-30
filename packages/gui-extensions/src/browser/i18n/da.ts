@@ -12,4 +12,5 @@ export default {
   "empty.description": "Eller bed om ”Åbn i appbrowseren”",
   "failed.title": "URL-adressen kan ikke nås",
   "failed.description": "Kontrollér URL-adressen og din forbindelse, og prøv igen.",
+  "action.reload": "Genindlæs",
 }

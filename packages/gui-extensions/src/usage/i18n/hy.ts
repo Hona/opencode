@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Ընդհանուր արժեքը",
   "stats.sessionCreated": "Նիստը ստեղծվել է",
   "stats.lastActivity": "Վերջին գործունեությունը",
+  "export.success.title": "Նիստն արտահանվել է",
+  "export.success.description": "Նիստը պահվել է {{filename}}-ում",
+  "export.failed.title": "Չհաջողվեց արտահանել նիստը",
+  "export.failed.description": "Սխալ է տեղի ունեցել նիստը արտահանելիս",
 }

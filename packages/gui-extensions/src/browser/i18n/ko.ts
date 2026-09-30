@@ -12,4 +12,5 @@ export default {
   "empty.description": "또는 \"앱 브라우저에서 열어 줘\"라고 프롬프트 입력",
   "failed.title": "URL에 연결할 수 없음",
   "failed.description": "URL과 연결을 확인한 후 다시 시도하세요.",
+  "action.reload": "다시 로드",
 }

@@ -20,6 +20,7 @@ export function ExtensionCommands() {
       slash: item.value.slash?.name,
       slashArguments: item.value.slash?.arguments,
       suggested: item.value.suggested,
+      featured: item.value.featured,
       disabled: item.value.enabled === false,
       hidden: item.value.hidden,
       editable: item.value.editable,

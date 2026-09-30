@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Připojení ztraceno",
   "connectionLost.abnormalClose": "WebSocket abnormálně uzavřeno: {{code}}",
   "connectionLost.description": "Spojení terminálu bylo přerušeno. To se může stát, když se server restartuje.",
+  "tab.title": "Terminál",
 }

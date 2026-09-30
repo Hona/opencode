@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ali vnesite poziv »Odpri v brskalniku aplikacije«",
   "failed.title": "URL ni dosegljiv",
   "failed.description": "Preverite URL in povezavo ter poskusite znova.",
+  "action.reload": "Znova naloži",
 }

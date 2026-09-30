@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { createRoot, createSignal } from "solid-js"
-import {
-  normalizeSessionTab,
-  normalizeSessionTabs,
-  selectSessionUserMessages,
-  selectVisibleSessionUserMessages,
-} from "./session-domain"
+import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
 import { createSessionOwnership } from "./session-ownership"
 
 const user = (id: string): SessionMessageUser => ({
@@ -28,16 +23,6 @@ const assistant: SessionMessageAssistant = {
 }
 
 describe("session controller invariants", () => {
-  test("normalizes file tabs once while preserving non-file tabs and order", () => {
-    const normalize = (tab: string) => normalizeSessionTab(tab, (value) => value.toLowerCase())
-
-    expect(normalizeSessionTabs(["review", "file://SRC/A.TS", "file://src/a.ts", "context"], normalize)).toEqual([
-      "review",
-      "file://src/a.ts",
-      "context",
-    ])
-  })
-
   test("selects user history strictly before the revert boundary", () => {
     const messages: SessionMessageInfo[] = [user("msg_a"), assistant, user("msg_b"), user("msg_c")]
     const users = selectSessionUserMessages(messages)

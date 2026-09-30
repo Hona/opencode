@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "ការតភ្ជាប់បាត់",
   "connectionLost.abnormalClose": "WebSocket បានបិទមិនធម្មតា៖ {{code}}",
   "connectionLost.description": "ការតភ្ជាប់ស្ថានីយត្រូវបានរំខាន។ វាអាចកើតឡើងនៅពេលដែលម៉ាស៊ីនមេចាប់ផ្តើមឡើងវិញ។",
+  "tab.title": "ស្ថានីយ",
 }

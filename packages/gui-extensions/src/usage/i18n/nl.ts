@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Totale kosten",
   "stats.sessionCreated": "Sessie gemaakt",
   "stats.lastActivity": "Laatste activiteit",
+  "export.success.title": "Sessie geëxporteerd",
+  "export.success.description": "Sessie opgeslagen in {{filename}}",
+  "export.failed.title": "Kan sessie niet exporteren",
+  "export.failed.description": "Er is een fout opgetreden tijdens het exporteren van de sessie",
 }

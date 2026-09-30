@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Heildarkostnaður",
   "stats.sessionCreated": "Fundur búin til",
   "stats.lastActivity": "Síðasta virkni",
+  "export.success.title": "Session flutt út",
+  "export.success.description": "Vistað lota í {{filename}}",
+  "export.failed.title": "Mistókst að flytja út lotu",
+  "export.failed.description": "Villa kom upp við útflutning á lotunni",
 }

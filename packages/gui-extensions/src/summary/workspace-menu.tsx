@@ -98,7 +98,7 @@ export function SessionWorkspaceMenu(props: {
             <Show when={comparablePath(props.directory) !== comparablePath(props.project.worktree)}>
               <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
                 <Icon name="monitor" />
-                {ctx.t("session.new.workspace.local")}
+                {ctx.t("workspace.local")}
               </Menu.Item>
             </Show>
             <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
@@ -109,7 +109,7 @@ export function SessionWorkspaceMenu(props: {
               <Menu.Sub gutter={0} overlap overflowPadding={24}>
                 <Menu.SubTrigger>
                   <Icon name="outline-worktree" />
-                  {ctx.t("session.new.workspace.existingLabel")}
+                  {ctx.t("workspace.existing")}
                 </Menu.SubTrigger>
                 <Menu.Portal>
                   <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">

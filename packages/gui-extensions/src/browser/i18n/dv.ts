@@ -12,4 +12,5 @@ export default {
   "empty.description": "ނުވަތަ ”އެޕް ބްރައުޒަރުގައި ހުޅުވާ“ އޭ ޕްރޮމްޕްޓް ކުރަން",
   "failed.title": "URL އަށް ނުފޯރާ",
   "failed.description": "URL އާއި ތިޔަ ކަނެކްޝަން ޗެކްކޮށް، އަލުން މަސައްކަތް ކުރައްވާ۔",
+  "action.reload": "އަލުން ލޯޑްކުރުން",
 }

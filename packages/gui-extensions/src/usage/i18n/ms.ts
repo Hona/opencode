@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Jumlah Kos",
   "stats.sessionCreated": "Sesi Dicipta",
   "stats.lastActivity": "Aktiviti Terakhir",
+  "export.success.title": "Sesi dieksport",
+  "export.success.description": "Sesi disimpan ke {{filename}}",
+  "export.failed.title": "Gagal mengeksport sesi",
+  "export.failed.description": "Ralat berlaku semasa mengeksport sesi",
 }

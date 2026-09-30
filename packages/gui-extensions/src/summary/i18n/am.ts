@@ -28,4 +28,11 @@ export default {
   "configure": "ውቅር ፋይል",
   "copyConfigPath": "የውቅረት ፋይል ዱካ ይቅዱ",
   "configFileMissing": "ምንም የውቅር ፋይል አልተገኘም",
+  "loadingChanges": "ለውጦችን በመጫን ላይ…",
+  "noChanges": "ምንም ለውጦች የሉም",
+  "basedOn": "በ{{branch}} ላይ የተመሰረተ",
+  "workspace.local": "አካባቢያዊ ማከማቻ",
+  "workspace.existing": "Git worktree",
+  "workspace.new": "አዲስ workspace",
+  "mcp.interactiveAuth": "MCP አገልጋይ {{name}} በይነተገናኝ የማረጋገጫ ቅጽ ያስፈልገዋል",
 }

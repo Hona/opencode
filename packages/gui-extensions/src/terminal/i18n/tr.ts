@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Bağlantı kesildi",
   "connectionLost.abnormalClose": "WebSocket anormal şekilde kapandı: {{code}}",
   "connectionLost.description": "Terminal bağlantısı kesildi. Bu durum sunucu yeniden başladığında oluşabilir.",
+  "tab.title": "Terminal",
 }

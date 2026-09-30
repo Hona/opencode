@@ -42,8 +42,6 @@
     "@opencode/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",
-    "@solid-primitives/storage": "catalog:",
-    "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

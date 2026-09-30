@@ -28,4 +28,11 @@ export default {
   "configure": "کنفیگریشن فائل",
   "copyConfigPath": "کنفیگریشن فائل پاتھ کو کاپی کریں۔",
   "configFileMissing": "کوئی کنفیگریشن فائل نہیں ملی",
+  "loadingChanges": "تبدیلیاں لوڈ ہو رہی ہیں…",
+  "noChanges": "کوئی تبدیلی نہیں۔",
+  "basedOn": "⁨{{branch}}⁩ پر مبنی",
+  "workspace.local": "مقامی ذخیرہ",
+  "workspace.existing": "ورک ٹری",
+  "workspace.new": "نئی ورک اسپیس",
+  "mcp.interactiveAuth": "MCP سرور ⁨{{name}}⁩ کو ایک انٹرایکٹو تصدیقی فارم درکار ہے۔",
 }

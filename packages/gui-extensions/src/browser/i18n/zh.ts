@@ -12,4 +12,5 @@ export default {
   "empty.description": "或提示“在应用内浏览器中打开”",
   "failed.title": "无法访问 URL",
   "failed.description": "请检查 URL 和网络连接，然后重试。",
+  "action.reload": "重新加载",
 }

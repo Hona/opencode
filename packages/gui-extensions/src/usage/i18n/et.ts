@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Kogukulu",
   "stats.sessionCreated": "Seanss loodud",
   "stats.lastActivity": "Viimane tegevus",
+  "export.success.title": "Seanss eksporditud",
+  "export.success.description": "Seanss salvestatud asukohta {{filename}}",
+  "export.failed.title": "Seansi eksportimine ebaõnnestus",
+  "export.failed.description": "Seansi eksportimisel ilmnes viga",
 }

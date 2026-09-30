@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "總成本",
   "stats.sessionCreated": "建立時間",
   "stats.lastActivity": "最後活動",
+  "export.success.title": "工作階段已匯出",
+  "export.success.description": "已將工作階段儲存至 {{filename}}",
+  "export.failed.title": "匯出工作階段失敗",
+  "export.failed.description": "匯出工作階段時發生錯誤",
 }

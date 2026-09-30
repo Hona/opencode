@@ -32,12 +32,12 @@ export function ReviewEmpty(props: { review: ReviewModel; loadingClass: string }
   const text = () => {
     if (props.review.mode() === "git") return ctx.t("empty.git")
     if (props.review.mode() === "branch") return ctx.t("empty.branch")
-    return ctx.t("session.review.noChanges")
+    return ctx.t("noChanges")
   }
   return (
     <Switch>
       <Match when={loading()}>
-        <div class={props.loadingClass}>{ctx.t("session.review.loadingChanges")}</div>
+        <div class={props.loadingClass}>{ctx.t("loadingChanges")}</div>
       </Match>
       <Match when={noGit()}>
         <div class="h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6">
@@ -65,7 +65,7 @@ export function ReviewPanelEmpty(props: { review: ReviewModel }) {
   return (
     <Switch>
       <Match when={loading()}>
-        <div class="px-6 py-4 text-text-weak">{ctx.t("session.review.loadingChanges")}</div>
+        <div class="px-6 py-4 text-text-weak">{ctx.t("loadingChanges")}</div>
       </Match>
       <Match when={noGit()}>
         <div class="h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6">

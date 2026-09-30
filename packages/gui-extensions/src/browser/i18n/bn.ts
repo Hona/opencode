@@ -12,4 +12,5 @@ export default {
   "empty.description": "অথবা প্রম্পট করুন “অ্যাপ ব্রাউজারে খুলুন”",
   "failed.title": "URL-এ পৌঁছানো যাচ্ছে না",
   "failed.description": "URL এবং আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+  "action.reload": "পুনরায় লোড করুন",
 }

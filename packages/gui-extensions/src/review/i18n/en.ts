@@ -8,4 +8,6 @@ export default {
   "empty.branch": "No branch changes yet",
   "git.title": "Create a Git repository",
   "git.description": "Track, review, and undo changes in this project",
+  loadingChanges: "Loading changes…",
+  noChanges: "No changes",
 }

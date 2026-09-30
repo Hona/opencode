@@ -89,6 +89,7 @@ describe("tab migration", () => {
       tab: { title: "Title", directory: "/project" },
     })
     const panes = Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(panes).toEqual({ tab: { dock: true, dockHeight: 300 } })
     expect(Schema.encodeSync(TabStorage.Panes)(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
     expect(() => Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: "yes" } })).toThrow()
   })

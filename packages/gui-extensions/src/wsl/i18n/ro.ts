@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Verificarea stării pentru sidecar-ul {{distro}} a expirat după {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} a expirat după {{timeout}} ms",
   "error.failedPort": "Nu s-a putut obține portul",
+  "server.default": "Implicit",
+  "menu.default": "Setează ca implicit",
+  "menu.defaultRemove": "Elimină implicitul",
+  "menu.remove": "Eliminați",
 }

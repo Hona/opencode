@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Kopējās izmaksas",
   "stats.sessionCreated": "Sesija izveidota",
   "stats.lastActivity": "Pēdējā aktivitāte",
+  "export.success.title": "Sesija eksportēta",
+  "export.success.description": "Sesija saglabāta kā {{filename}}",
+  "export.failed.title": "Neizdevās eksportēt sesiju",
+  "export.failed.description": "Radās kļūda, eksportējot sesiju",
 }

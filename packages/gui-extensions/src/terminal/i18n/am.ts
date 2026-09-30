@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "ግንኙነቱ ተቋርጧል",
   "connectionLost.abnormalClose": "WebSocket ባልተለመደ ሁኔታ ተዘግቷል፡ {{code}}",
   "connectionLost.description": "የተርሚናል ግንኙነቱ ተቋርጧል። ይህ አገልጋዩ እንደገና ሲጀምር ሊከሰት ይችላል።",
+  "tab.title": "ተርሚናል",
 }

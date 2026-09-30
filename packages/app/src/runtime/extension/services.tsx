@@ -33,6 +33,7 @@ import {
   type StorageScope,
 } from "@opencode/gui-extensions/sdk"
 import { usePlatform } from "@/runtime/platform/platform"
+import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
@@ -47,12 +48,15 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
+import type { Region } from "./panels"
 import { createSurfaces } from "./surface"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
   current: Accessor<SessionView | undefined>
   scope: (server: string) => ServerScope
+  /** Records a session-scoped store so layout pruning drops it with the session. */
+  scoped: (name: string) => void
   layout: Omit<Layout, "narrow" | "settings" | "project">
   settings: (page?: string) => void
   project: (server: string, title: string) => void
@@ -91,6 +95,7 @@ export function createExtensionServices() {
     if ("session" in scope) {
       const location = scope.session.location
       if (!location) throw new Error("Session storage requires a session location")
+      connected.scoped(name)
       return {
         ...Persist.serverSession(
           connected.scope(scope.session.server.id),
@@ -360,9 +365,9 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
   const shellTab = (session: SessionRef) =>
     findSessionTab(tabs.store, ServerConnection.Key.make(session.server.id), session.id)
-  const sideOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "review")
-  const dockOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "terminal")
-  const setDock = (session: SessionRef, opened: boolean) => tabs.setPane(shellTab(session), "terminal", opened)
+  const sideOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "side")
+  const dockOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "dock")
+  const setDock = (session: SessionRef, opened: boolean) => tabs.setPane(shellTab(session), "dock", opened)
 
   // Keys are `${extension}:${tab id}`; the extension's panel decides the region.
   const provider = (key: string) => {
@@ -410,7 +415,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     if (options?.focus === false && !options.preview) return layout.panel.append(value, key)
     if (options?.select)
       return batch(() => {
-        if (!narrow()) tabs.setPane(shellTab(session), "review", true)
+        if (!narrow()) tabs.setPane(shellTab(session), "side", true)
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
@@ -421,7 +426,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
         setDock(session, false)
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
       }
-      if (!narrow()) tabs.setPane(shellTab(session), "review", true)
+      if (!narrow()) tabs.setPane(shellTab(session), "side", true)
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
       if (options?.preview) return layout.panel.preview(value, key, launchers)
@@ -441,7 +446,12 @@ export function createExtensionAttachment(services: ExtensionServices) {
   }
 
   // The routed session's side region, which knows the fallback selection the stored state lacks.
-  const [region, setRegion] = createSignal<{ active(): string | undefined }>()
+  const [region, setRegion] = createSignal<Region>()
+  const opened = createMemo(
+    () => Array.from(new Set((region()?.entries() ?? []).flatMap((entry) => entry.tab.file ?? []))),
+    [],
+    { equals: same },
+  )
 
   const state = (key: string, session: SessionRef): PanelState => {
     if (provider(key)?.value.region === "dock") return dockOpened(session) ? "visible" : "closed"
@@ -486,6 +496,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     sessions,
     current,
     scope,
+    scoped: layout.sessionState.track,
     project: (server, title) => setProjects((pending) => [...pending, { server, title }]),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
     routing: useIsRouting(),
@@ -511,7 +522,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
             close(key, session)
             // Closing the last panel the region was opened for also closes the region.
             if (openedFor.get(value) === key && layout.panel.state(value).all.length === 0)
-              tabs.setPane(shellTab(session), "review", false)
+              tabs.setPane(shellTab(session), "side", false)
           })
           return
         }
@@ -522,7 +533,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
       state,
       side: {
         opened: sideOpened,
-        toggle: (session) => tabs.setPane(shellTab(session), "review", !sideOpened(session)),
+        toggle: (session) => tabs.setPane(shellTab(session), "side", !sideOpened(session)),
       },
       dock: {
         opened: dockOpened,
@@ -545,11 +556,16 @@ export function createExtensionAttachment(services: ExtensionServices) {
   return {
     /** The routed, mounted session view. */
     current,
-    region(value: { active(): string | undefined }) {
+    region(value: Region) {
       setRegion(() => value)
       return () => {
         if (region() === value) setRegion(undefined)
       }
+    },
+    /** Workspace files the routed session's side tabs show, in strip order, and the selected one. */
+    files: {
+      opened,
+      active: () => region()?.selected()?.tab.file,
     },
     mobile: {
       current: mobileView,

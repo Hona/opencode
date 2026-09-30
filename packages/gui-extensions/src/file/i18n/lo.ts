@@ -23,4 +23,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "ເລືອກໄຟລ໌ທີ່ຈະເປີດ",
+  "open.finder": "ຊອກຫາ",
+  "open.fileExplorer": "File Explorer",
+  "open.fileManager": "ຜູ້ຈັດການໄຟລ໌",
+  "command.open": "ເປີດໄຟລ໌",
 }

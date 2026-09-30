@@ -10,4 +10,6 @@ export default {
   "empty.branch": "Aucune modification de branche pour l'instant",
   "git.title": "Créer un dépôt Git",
   "git.description": "Suivre, examiner et annuler les modifications dans ce projet",
+  "loadingChanges": "Chargement des modifications…",
+  "noChanges": "Aucune modification",
 }

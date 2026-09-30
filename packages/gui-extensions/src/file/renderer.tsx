@@ -138,12 +138,12 @@ const setup: Setup = (ctx) => {
   const launcher: PanelTab = {
     id: OPEN,
     get title() {
-      return ctx.t("command.file.open")
+      return ctx.t("command.open")
     },
     label: () => (
       <div class="flex items-center gap-1.5">
         <Icon name="file-tree" size="small" />
-        <span>{ctx.t("command.file.open")}</span>
+        <span>{ctx.t("command.open")}</span>
       </div>
     ),
     kind: "launcher",
@@ -164,6 +164,9 @@ const setup: Setup = (ctx) => {
       label: (state) => <FileVisual path={path()} temporary={state.preview} notFound={missing()} />,
       get missing() {
         return missing()
+      },
+      get file() {
+        return path()
       },
       group: GROUP,
       // A gone selection falls back to the first file tab.
@@ -222,7 +225,7 @@ const setup: Setup = (ctx) => {
     menu: "session.panel",
     id: "open",
     get title() {
-      return ctx.t("command.file.open")
+      return ctx.t("command.open")
     },
     icon: "file-tree",
     keybind: "file.open",

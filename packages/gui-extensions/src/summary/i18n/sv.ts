@@ -28,4 +28,11 @@ export default {
   "configure": "Konfigurationsfil",
   "copyConfigPath": "Kopiera sökvägen till konfigurationsfilen",
   "configFileMissing": "Ingen konfigurationsfil hittades",
+  "loadingChanges": "Läser in ändringar…",
+  "noChanges": "Inga ändringar",
+  "basedOn": "Baserat på {{branch}}",
+  "workspace.local": "Lokalt arkiv",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Ny arbetsyta",
+  "mcp.interactiveAuth": "MCP server {{name}} kräver ett interaktivt autentiseringsformulär",
 }

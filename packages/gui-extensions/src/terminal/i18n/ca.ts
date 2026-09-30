@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Connexió perduda",
   "connectionLost.abnormalClose": "WebSocket tancat anormalment: {{code}}",
   "connectionLost.description": "La connexió del terminal s'ha interromput. Això pot passar quan es reinicia el servidor.",
+  "tab.title": "Terminal",
 }

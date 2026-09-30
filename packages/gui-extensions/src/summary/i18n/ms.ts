@@ -28,4 +28,11 @@ export default {
   "configure": "Fail konfigurasi",
   "copyConfigPath": "Salin laluan fail konfigurasi",
   "configFileMissing": "Tiada fail konfigurasi dijumpai",
+  "loadingChanges": "Memuat perubahan…",
+  "noChanges": "Tiada perubahan",
+  "basedOn": "Berdasarkan {{branch}}",
+  "workspace.local": "Repositori setempat",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Ruang kerja baharu",
+  "mcp.interactiveAuth": "Pelayan MCP {{name}} memerlukan borang pengesahan interaktif",
 }

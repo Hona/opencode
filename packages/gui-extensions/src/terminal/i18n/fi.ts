@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Yhteys katkesi",
   "connectionLost.abnormalClose": "WebSocket sulkeutui poikkeavasti: {{code}}",
   "connectionLost.description": "Terminaaliyhteys katkesi. Näin voi tapahtua, kun palvelin käynnistyy uudelleen.",
+  "tab.title": "Terminaali",
 }

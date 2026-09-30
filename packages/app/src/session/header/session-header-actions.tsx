@@ -19,8 +19,8 @@ export function SessionReviewToggle() {
         reviewLabel: language.t("command.review.toggle"),
         reviewKeybind: reviewTooltipKeybind(command),
         reviewVisible: true,
-        reviewOpened: view().reviewPanel.opened(),
-        onReviewToggle: () => view().reviewPanel.toggle(),
+        reviewOpened: view().side.opened(),
+        onReviewToggle: () => view().side.toggle(),
       }}
     />
   )

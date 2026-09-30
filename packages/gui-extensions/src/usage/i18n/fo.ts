@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Samlaður kostnaður",
   "stats.sessionCreated": "Setan er stovnað",
   "stats.lastActivity": "Seinasta virksemi",
+  "export.success.title": "Seta útflutt",
+  "export.success.description": "Goymd seta til {{filename}}",
+  "export.failed.title": "Tað eydnaðist ikki at útflyta setu",
+  "export.failed.description": "Ein feilur hendi, meðan setan varð útflutt.",
 }

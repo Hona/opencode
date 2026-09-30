@@ -28,4 +28,11 @@ export default {
   "configure": "কনফিগারেশন ফাইল",
   "copyConfigPath": "কনফিগারেশন ফাইল পাথ কপি করুন",
   "configFileMissing": "কোন কনফিগারেশন ফাইল পাওয়া যায়নি",
+  "loadingChanges": "পরিবর্তনগুলি লোড হচ্ছে…",
+  "noChanges": "কোনো পরিবর্তন নেই",
+  "basedOn": "{{branch}}-এর ভিত্তিতে",
+  "workspace.local": "স্থানীয় সংগ্রহস্থল",
+  "workspace.existing": "ওয়ার্কট্রি",
+  "workspace.new": "নতুন ওয়ার্কস্পেস",
+  "mcp.interactiveAuth": "MCP সার্ভার {{name}} একটি ইন্টারেক্টিভ প্রমাণীকরণ ফর্ম প্রয়োজন৷",
 }

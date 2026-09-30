@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ella bið um „Lat upp í kaganum í appini“",
   "failed.title": "URL-adressan kann ikki røkkast",
   "failed.description": "Kanna URL-adressuna og sambandið og royn aftur.",
+  "action.reload": "Les inn aftur",
 }

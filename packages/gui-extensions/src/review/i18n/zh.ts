@@ -8,4 +8,6 @@ export default {
   "empty.branch": "尚无分支更改",
   "git.title": "创建 Git 仓库",
   "git.description": "在此项目中跟踪、审查和撤消更改",
+  "loadingChanges": "正在加载更改…",
+  "noChanges": "无更改",
 }

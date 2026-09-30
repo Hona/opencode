@@ -28,4 +28,11 @@ export default {
   "configure": "Konfiguratsioonifail",
   "copyConfigPath": "Kopeeri konfiguratsioonifaili tee",
   "configFileMissing": "Konfiguratsioonifaili ei leitud",
+  "loadingChanges": "Muudatuste laadimine…",
+  "noChanges": "Muudatusi pole",
+  "basedOn": "Põhineb harul {{branch}}",
+  "workspace.local": "Kohalik hoidla",
+  "workspace.existing": "Tööpuu",
+  "workspace.new": "Uus tööruum",
+  "mcp.interactiveAuth": "MCP server {{name}} nõuab interaktiivset autentimisvormi",
 }

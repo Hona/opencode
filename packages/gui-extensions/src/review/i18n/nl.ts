@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Er zijn nog geen branchwijzigingen",
   "git.title": "Maak een Git-repository",
   "git.description": "Wijzigingen in dit project bijhouden, beoordelen en ongedaan maken",
+  "loadingChanges": "Wijzigingen laden…",
+  "noChanges": "Geen wijzigingen",
 }

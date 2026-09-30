@@ -30,4 +30,11 @@ export default {
   "configure": "Файл конфигурации",
   "copyConfigPath": "Скопировать путь к файлу конфигурации",
   "configFileMissing": "Файл конфигурации не найден",
+  "loadingChanges": "Загрузка изменений…",
+  "noChanges": "Нет изменений",
+  "basedOn": "На основе {{branch}}",
+  "workspace.local": "Локальный репозиторий",
+  "workspace.existing": "Рабочее дерево",
+  "workspace.new": "Новое рабочее пространство",
+  "mcp.interactiveAuth": "Сервер MCP {{name}} требует интерактивную форму аутентификации",
 }

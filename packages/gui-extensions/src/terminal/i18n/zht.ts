@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "連線中斷",
   "connectionLost.abnormalClose": "WebSocket 異常關閉：{{code}}",
   "connectionLost.description": "終端機連線已中斷。這可能會在伺服器重新啟動時發生。",
+  "tab.title": "終端機",
 }

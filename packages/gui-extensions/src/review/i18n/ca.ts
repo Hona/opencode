@@ -10,4 +10,6 @@ export default {
   "empty.branch": "Encara no hi ha canvis de branca",
   "git.title": "Creeu un repositori Git.",
   "git.description": "Feu un seguiment, reviseu i desfer els canvis en aquest projecte",
+  "loadingChanges": "S'estan carregant els canvis…",
+  "noChanges": "Sense canvis",
 }

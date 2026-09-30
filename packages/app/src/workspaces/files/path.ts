@@ -135,16 +135,6 @@ export function createPathHelpers(scope: () => string) {
   /** Whether a normalized path points outside the workspace root. */
   const absolute = (path: string) => /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
 
-  const tab = (input: string) => {
-    const path = normalize(input)
-    return `file://${encodeFilePath(path)}`
-  }
-
-  const pathFromTab = (tabValue: string) => {
-    if (!tabValue.startsWith("file://")) return
-    return normalize(tabValue)
-  }
-
   const normalizeDir = (input: string) => {
     const path = normalize(input)
     const root = scope()
@@ -155,8 +145,6 @@ export function createPathHelpers(scope: () => string) {
   return {
     normalize,
     absolute,
-    tab,
-    pathFromTab,
     normalizeDir,
   }
 }

@@ -28,4 +28,11 @@ export default {
   "configure": "ކޮންފިގްރޭޝަން ފައިލް",
   "copyConfigPath": "ކޮންފިގްރޭޝަން ފައިލް މަގު ކޮޕީކުރުން",
   "configFileMissing": "ކޮންފިގްރޭޝަން ފައިލެއް ނުފެނެއެވެ",
+  "loadingChanges": "ބަދަލުތައް ލޯޑް ކުރަނީ…",
+  "noChanges": "އެއްވެސް ބަދަލެއް ނާދެއެވެ",
+  "basedOn": "⁨{{branch}}⁩ އަށް ބިނާކޮށް",
+  "workspace.local": "ލޯކަލް ރިޕޮޒިޓަރީ",
+  "workspace.existing": "ވޯކްޓްރީ",
+  "workspace.new": "އާ ވޯކްސްޕޭސް",
+  "mcp.interactiveAuth": "MCP ސަރވަރ ⁨{{name}}⁩ އަށް ބޭނުންވަނީ އިންޓަރެކްޓިވް އޮތެންޓިކޭޝަން ފޯމެކެވެ",
 }

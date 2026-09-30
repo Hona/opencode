@@ -12,4 +12,5 @@ export default {
   "empty.description": "أو اكتب الطلب «افتح في متصفح التطبيق»",
   "failed.title": "يتعذر الوصول إلى عنوان URL",
   "failed.description": "تحقق من عنوان URL واتصالك، ثم حاول مرة أخرى.",
+  "action.reload": "إعادة التحميل",
 }

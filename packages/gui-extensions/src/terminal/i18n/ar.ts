@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "فقد الاتصال",
   "connectionLost.abnormalClose": "تم إغلاق WebSocket بشكل غير طبيعي: {{code}}",
   "connectionLost.description": "انقطع اتصال المحطة الطرفية. يمكن أن يحدث هذا عند إعادة تشغيل الخادم.",
+  "tab.title": "محطة طرفية",
 }

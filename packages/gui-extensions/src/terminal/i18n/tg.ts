@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Пайвастшавӣ гум шуд",
   "connectionLost.abnormalClose": "WebSocket ғайримуқаррарӣ баста шуд: {{code}}",
   "connectionLost.description": "Пайвасти терминал қатъ шуд. Ин метавонад ҳангоми аз нав оғоз шудани сервер рӯй диҳад.",
+  "tab.title": "Терминал",
 }

@@ -8,4 +8,6 @@ export default {
   "empty.branch": "هنوز شعبه ای تغییر نکرده است",
   "git.title": "یک مخزن Git ایجاد کنید",
   "git.description": "ردیابی، بررسی، و لغو تغییرات در این پروژه",
+  "loadingChanges": "در حال بارگیری تغییرات…",
+  "noChanges": "بدون تغییر",
 }

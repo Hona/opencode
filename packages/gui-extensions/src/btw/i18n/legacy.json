@@ -1,9 +1,0 @@
-{
-  "command.title": "command.session.btw",
-  "command.description": "command.session.btw.description",
-  "tab.title": "session.tab.btw",
-  "question.required": "session.btw.questionRequired",
-  "error": "session.btw.error",
-  "retry": "session.btw.retry",
-  "copy": "session.btw.copy"
-}

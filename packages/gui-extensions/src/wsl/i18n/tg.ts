@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Санҷиши саломатии Sidecar барои {{distro}} пас аз {{timeout}} мс ба охир расид",
   "error.commandTimeout": "{{command}} {{args}} пас аз {{timeout}}мс ба охир расид",
   "error.failedPort": "Ба даст овардани порт муяссар нашуд",
+  "server.default": "Пешфарз",
+  "menu.default": "Ҳамчун пешфарз таъин кунед",
+  "menu.defaultRemove": "Пешфарзро хориҷ кунед",
+  "menu.remove": "Хориҷ кунед",
 }

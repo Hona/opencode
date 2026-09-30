@@ -23,4 +23,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "აირჩიეთ ფაილი გასახსნელად",
+  "open.finder": "Finder",
+  "open.fileExplorer": "ფაილების მენეჯერი",
+  "open.fileManager": "ფაილ მენეჯერი",
+  "command.open": "გახსენით ფაილი",
 }

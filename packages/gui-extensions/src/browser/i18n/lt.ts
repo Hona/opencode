@@ -12,4 +12,5 @@ export default {
   "empty.description": "Arba paprašykite „Atverti programos naršyklėje“",
   "failed.title": "URL nepasiekiamas",
   "failed.description": "Patikrinkite URL bei ryšį ir bandykite dar kartą.",
+  "action.reload": "Įkelti iš naujo",
 }

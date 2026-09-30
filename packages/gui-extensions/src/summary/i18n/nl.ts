@@ -28,4 +28,11 @@ export default {
   "configure": "Configuratiebestand",
   "copyConfigPath": "Kopieer het configuratiebestandspad",
   "configFileMissing": "Geen configuratiebestand gevonden",
+  "loadingChanges": "Wijzigingen laden…",
+  "noChanges": "Geen wijzigingen",
+  "basedOn": "Gebaseerd op {{branch}}",
+  "workspace.local": "Lokale repository",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Nieuwe werkruimte",
+  "mcp.interactiveAuth": "MCP-server {{name}} vereist een interactief authenticatieformulier",
 }

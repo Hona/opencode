@@ -12,4 +12,5 @@ export default {
   "empty.description": "Vagy kérje ezt: „Megnyitás az alkalmazás böngészőjében”",
   "failed.title": "Az URL-cím nem érhető el",
   "failed.description": "Ellenőrizze az URL-címet és a kapcsolatot, majd próbálja újra.",
+  "action.reload": "Újratöltés",
 }

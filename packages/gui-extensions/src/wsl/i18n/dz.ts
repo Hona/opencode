@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "{{timeout}}ms གི་ཤུལ་ལས་ {{distro}} གི་དོན་ལུ་ ཟུར་འཁོར་འདི་ གསོ་བའི་བརྟག་དཔྱད་དུས་ཚོད་རྫོགས་སོངཔ་ཨིན།",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms གི་ཤུལ་ལས་ དུས་ཚོད་རྫོགས་སོང།",
   "error.failedPort": "འདྲེན་ལམ་ཐོབ་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
+  "server.default": "འཐུས་ཤོར",
+  "menu.default": "སྔོན་སྒྲིག་སྦེ་གཞི་སྒྲིག་འབད།",
+  "menu.defaultRemove": "སྔོན་སྒྲིག་རྩ་བསྐྲད་གཏང་།",
+  "menu.remove": "བཏོན་བཏང་",
 }

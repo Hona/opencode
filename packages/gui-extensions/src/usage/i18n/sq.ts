@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Kostoja totale",
   "stats.sessionCreated": "Sesioni u krijua",
   "stats.lastActivity": "Aktiviteti i fundit",
+  "export.success.title": "Sesioni u eksportua",
+  "export.success.description": "Sesioni u ruajt në {{filename}}",
+  "export.failed.title": "Eksportimi i sesionit dështoi",
+  "export.failed.description": "Ndodhi një gabim gjatë eksportimit të sesionit",
 }

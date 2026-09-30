@@ -12,4 +12,5 @@ export default {
   "empty.description": "वा “एप ब्राउजरमा खोल्नुहोस्” भनेर प्रम्प्ट गर्नुहोस्",
   "failed.title": "URL मा पुग्न सकिएन",
   "failed.description": "URL र आफ्नो जडान जाँचेर फेरि प्रयास गर्नुहोस्।",
+  "action.reload": "पुनः लोड गर्नुहोस्",
 }

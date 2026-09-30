@@ -30,4 +30,11 @@ export default {
   "configure": "Konfigurační soubor",
   "copyConfigPath": "Kopírovat cestu ke konfiguračnímu souboru",
   "configFileMissing": "Nebyl nalezen žádný konfigurační soubor",
+  "loadingChanges": "Načítání změn…",
+  "noChanges": "Žádné změny",
+  "basedOn": "Na základě {{branch}}",
+  "workspace.local": "Místní úložiště",
+  "workspace.existing": "Pracovní strom",
+  "workspace.new": "Nový pracovní prostor",
+  "mcp.interactiveAuth": "Server MCP {{name}} vyžaduje interaktivní ověřovací formulář",
 }

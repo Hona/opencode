@@ -38,6 +38,8 @@ const setup: Setup = (ctx) => {
     id: "toggle",
     title: ctx.t("command.toggle"),
     group: ctx.t("command.category.view"),
+    section: "terminal",
+    featured: true,
     bind: "ctrl+`",
     slash: { name: "terminal" },
     editable: true,
@@ -60,6 +62,7 @@ const setup: Setup = (ctx) => {
     title: ctx.t("command.new"),
     description: ctx.t("command.new.description"),
     group: ctx.t("command.category"),
+    section: "terminal",
     bind: "ctrl+alt+t",
     editable: true,
     enabled: routed(),
@@ -76,6 +79,7 @@ const setup: Setup = (ctx) => {
     id: "close",
     title: ctx.t("close"),
     group: ctx.t("command.category"),
+    section: "terminal",
     bind: "mod+w",
     hidden: true,
     scope: '[data-component="terminal"]',
@@ -98,7 +102,7 @@ const setup: Setup = (ctx) => {
   const tab = {
     id: "main",
     get title() {
-      return ctx.t("terminal.title")
+      return ctx.t("tab.title")
     },
   }
   ctx.add(Panel, {
@@ -106,7 +110,7 @@ const setup: Setup = (ctx) => {
     region: "dock",
     mobile: {
       get title() {
-        return ctx.t("terminal.title")
+        return ctx.t("tab.title")
       },
       order: 30,
       kind: "tab",

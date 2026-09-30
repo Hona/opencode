@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "{{distro}} pārbaudes Sidecar laiks beidzās pēc {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} laiks beidzās pēc {{timeout}} ms",
   "error.failedPort": "Neizdevās iegūt portu",
+  "server.default": "Noklusējuma",
+  "menu.default": "Iestatīt kā noklusējumu",
+  "menu.defaultRemove": "Noņemt noklusējumu",
+  "menu.remove": "Noņemt",
 }

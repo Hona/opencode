@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Celkové náklady",
   "stats.sessionCreated": "Vytvorenie relácie",
   "stats.lastActivity": "Posledná aktivita",
+  "export.success.title": "Relácia exportovaná",
+  "export.success.description": "Relácia uložená do {{filename}}",
+  "export.failed.title": "Export relácie zlyhal",
+  "export.failed.description": "Pri exporte relácie došlo k chybe",
 }

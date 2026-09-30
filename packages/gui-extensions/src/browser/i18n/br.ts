@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ou peça “Abrir no navegador do aplicativo”",
   "failed.title": "Não foi possível acessar a URL",
   "failed.description": "Verifique a URL e sua conexão e tente novamente.",
+  "action.reload": "Recarregar",
 }

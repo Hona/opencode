@@ -28,4 +28,11 @@ export default {
   "configure": "កំណត់រចនាសម្ព័ន្ធ​ឯកសារ",
   "copyConfigPath": "ចម្លងផ្លូវឯកសារ​កំណត់រចនាសម្ព័ន្ធ",
   "configFileMissing": "មិនបានឃើញឯកសារ​កំណត់រចនាសម្ព័ន្ធ",
+  "loadingChanges": "កំពុងផ្ទុកការផ្លាស់ប្តូរ…",
+  "noChanges": "គ្មានការផ្លាស់ប្តូរទេ។",
+  "basedOn": "ផ្អែកលើ {{branch}}",
+  "workspace.local": "ឃ្លាំងមូលដ្ឋាន",
+  "workspace.existing": "Worktree",
+  "workspace.new": "កន្លែងធ្វើការថ្មី។",
+  "mcp.interactiveAuth": "MCP server {{name}} ត្រូវការផ្ទៀងផ្ទាត់ជាមួយទម្រង់ផ្ទាល់ខ្លួន",
 }

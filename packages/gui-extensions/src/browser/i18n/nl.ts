@@ -12,4 +12,5 @@ export default {
   "empty.description": "Of vraag ‘Openen in de appbrowser’",
   "failed.title": "URL is niet bereikbaar",
   "failed.description": "Controleer de URL en je verbinding en probeer het opnieuw.",
+  "action.reload": "Opnieuw laden",
 }

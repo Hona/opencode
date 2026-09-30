@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "ޖުމްލަ ހަރަދު",
   "stats.sessionCreated": "ސެޝަން އުފެދިއްޖެއެވެ",
   "stats.lastActivity": "އެންމެ ފަހުގެ ހަރަކާތް",
+  "export.success.title": "ސެޝަން އެކްސްޕޯޓް ކޮށްފި",
+  "export.success.description": "ސެޝަން ސޭވްކޮށްފައިވަނީ ⁨{{filename}}⁩ އަށެވެ",
+  "export.failed.title": "އެކްސްޕޯޓް ސެޝަން ނާކާމިޔާބުވެއްޖެ",
+  "export.failed.description": "ސެޝަން އެކްސްޕޯޓް ކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ",
 }

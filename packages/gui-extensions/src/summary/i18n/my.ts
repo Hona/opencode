@@ -28,4 +28,11 @@ export default {
   "configure": "ဖိုင်စည်းမျဉ်းဖိုင်",
   "copyConfigPath": "ဖိုင်စည်းမျဉ်းဖိုင်လမ်းကြောင်း ကူးပါ",
   "configFileMissing": "ဖိုင်စည်းမျဉ်းဖိုင် မတွေ့ရှိပါ",
+  "loadingChanges": "အပြောင်းအလဲများကို ဖွင့်နေသည်…",
+  "noChanges": "အပြောင်းအလဲမရှိပါ။",
+  "basedOn": "{{branch}} ကို အခြေခံထားသည်",
+  "workspace.local": "စက်တွင်းသိုလှောင်မှု",
+  "workspace.existing": "Worktree",
+  "workspace.new": "အလုပ်နေရာအသစ်",
+  "mcp.interactiveAuth": "MCP server {{name}} သည် အပြန်အလှန်အတည်ပြုမှုဖောင် လိုအပ်သည်",
 }

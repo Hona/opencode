@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Belum ada perubahan cabang",
   "git.title": "Buat repositori Git",
   "git.description": "Lacak, tinjau, dan urungkan perubahan di proyek ini",
+  "loadingChanges": "Memuat perubahan…",
+  "noChanges": "Tidak ada perubahan",
 }

@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Engar greinarbreytingar ennþá",
   "git.title": "Búðu til Git geymslu",
   "git.description": "Fylgstu með, skoðaðu og afturkallaðu breytingar á þessu verkefni",
+  "loadingChanges": "Hleður breytingum…",
+  "noChanges": "Engar breytingar",
 }

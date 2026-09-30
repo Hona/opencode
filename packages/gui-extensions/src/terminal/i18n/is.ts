@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Tenging rofin",
   "connectionLost.abnormalClose": "WebSocket lokað óeðlilega: {{code}}",
   "connectionLost.description": "Tengingin var rofin. Þetta getur gerst þegar þjónninn endurræsir sig.",
+  "tab.title": "Skel",
 }

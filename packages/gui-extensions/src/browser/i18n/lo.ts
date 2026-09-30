@@ -12,4 +12,5 @@ export default {
   "empty.description": "ຫຼືປ້ອນ prompt \"ເປີດໃນບຣາວເຊີຂອງແອັບ\"",
   "failed.title": "ເຂົ້າເຖິງ URL ບໍ່ໄດ້",
   "failed.description": "ກວດສອບ URL ແລະການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.",
+  "action.reload": "ໂຫຼດຄືນໃໝ່",
 }

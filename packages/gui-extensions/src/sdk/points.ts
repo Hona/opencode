@@ -18,8 +18,10 @@ export interface Command {
   /** Keep out of the command palette. */
   readonly hidden?: true
   readonly suggested?: boolean
+  /** Listed when the command palette opens without a query. */
+  readonly featured?: true
   readonly enabled?: boolean
-  /** CSS selector the keyboard focus must be inside for the binding to apply. */
+  /** CSS selector the keyboard focus must be inside for the binding to apply. Host tab shortcuts yield inside it. */
   readonly scope?: string
   /** The binding also fires while a text field has focus. */
   readonly editable?: true
@@ -63,6 +65,11 @@ export interface PanelTab {
   readonly group?: string
   /** Struck through, e.g. a file that no longer exists. */
   readonly missing?: boolean
+  /**
+   * The workspace path of the file the tab shows. The host lists these as the session's open files: recent
+   * files, the line selection `context.addSelection` adds, and reloads when the file changes on disk.
+   */
+  readonly file?: string
   /** The tab panel itself joins the tab order, for content without focusable elements. */
   readonly tabbable?: boolean
   /** Forces the panel's inner sidebar open and disables its toggle. */

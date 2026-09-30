@@ -107,7 +107,7 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
     })
   })
 
-  // Transient panels (e.g. btw) are not restored: their stored keys leave once the panel stops listing them.
+  // Transient panels are not restored: their stored keys leave once the panel stops listing them.
   createEffect(() => {
     const listed = new Set(entries().map((entry) => entry.key))
     const transient = providers().flatMap((item) => (item.value.transient ? [`${item.extension}:`] : []))
@@ -298,8 +298,8 @@ export function DockRegion(props: {
       )
       .at(0),
   )
-  const opened = createMemo(() => view().terminal.opened())
-  const height = createMemo(() => view().terminal.height())
+  const opened = createMemo(() => view().dock.opened())
+  const height = createMemo(() => view().dock.height())
   const max = () => store.viewport * 0.6
   const pane = () => Math.min(height(), max())
   const stacked = createMemo(() => isDesktop() && !!props.stacked)
@@ -364,9 +364,9 @@ export function DockRegion(props: {
           collapseThreshold={50}
           onResize={(next) => {
             size.touch()
-            view().terminal.resize(next)
+            view().dock.resize(next)
           }}
-          onCollapse={() => view().terminal.close()}
+          onCollapse={() => view().dock.close()}
         />
       </div>
       <div

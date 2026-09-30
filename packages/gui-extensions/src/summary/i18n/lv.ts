@@ -29,4 +29,11 @@ export default {
   "configure": "Konfigurācijas fails",
   "copyConfigPath": "Kopēt konfigurācijas faila ceļu",
   "configFileMissing": "Nav atrasts neviens konfigurācijas fails",
+  "loadingChanges": "Notiek izmaiņu ielāde…",
+  "noChanges": "Nav izmaiņu",
+  "basedOn": "Balstīts uz {{branch}}",
+  "workspace.local": "Lokālais repozitorijs",
+  "workspace.existing": "Darba koks",
+  "workspace.new": "Jauna darba vide",
+  "mcp.interactiveAuth": "MCP serverim {{name}} ir nepieciešama interaktīva autentifikācijas veidlapa",
 }

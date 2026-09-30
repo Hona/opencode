@@ -28,4 +28,11 @@ export default {
   "configure": "Konfigurációs fájl",
   "copyConfigPath": "Másolja a konfigurációs fájl elérési útját",
   "configFileMissing": "Nem található konfigurációs fájl",
+  "loadingChanges": "Módosítások betöltése…",
+  "noChanges": "Nincs változás",
+  "basedOn": "Alapja: {{branch}}",
+  "workspace.local": "Helyi adattár",
+  "workspace.existing": "Munkafa",
+  "workspace.new": "Új munkaterület",
+  "mcp.interactiveAuth": "A MCP szerver A {{name}} interaktív hitelesítési űrlapot igényel",
 }

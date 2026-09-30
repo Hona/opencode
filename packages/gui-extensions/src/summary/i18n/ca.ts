@@ -29,4 +29,11 @@ export default {
   "configure": "Fitxer de configuració",
   "copyConfigPath": "Copia el camí del fitxer de configuració",
   "configFileMissing": "No s'ha trobat cap fitxer de configuració",
+  "loadingChanges": "S'estan carregant els canvis…",
+  "noChanges": "Sense canvis",
+  "basedOn": "Basat en {{branch}}",
+  "workspace.local": "Repositori local",
+  "workspace.existing": "Arbre de treball",
+  "workspace.new": "Nou espai de treball",
+  "mcp.interactiveAuth": "El servidor MCP {{name}} requereix un formulari d'autenticació interactiu",
 }

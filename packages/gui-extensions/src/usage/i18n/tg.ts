@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Арзиши умумӣ",
   "stats.sessionCreated": "Сессия сохта шуд",
   "stats.lastActivity": "Фаъолияти охирин",
+  "export.success.title": "Сеанс содир карда шуд",
+  "export.success.description": "Сеанс ба {{filename}} захира карда шуд",
+  "export.failed.title": "Сеанс содир карда нашуд",
+  "export.failed.description": "Ҳангоми содироти сессия хатогӣ рӯй дод",
 }

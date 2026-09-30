@@ -2,32 +2,33 @@ type Input = {
   prevScrollWidth: number
   scrollWidth: number
   clientWidth: number
-  prevContextOpen: boolean
-  contextOpen: boolean
+  prevLeadOpen: boolean
+  leadOpen: boolean
 }
 
-export const nextTabListScrollLeft = (input: Input) => {
+/** A tab that opens at the lead of the strip scrolls to the start; other new tabs scroll to the end. */
+export const nextTabStripScrollLeft = (input: Input) => {
   if (input.scrollWidth <= input.prevScrollWidth) return
-  if (!input.prevContextOpen && input.contextOpen) return 0
+  if (!input.prevLeadOpen && input.leadOpen) return 0
   if (input.scrollWidth <= input.clientWidth) return
   return input.scrollWidth - input.clientWidth
 }
 
-export const createFileTabListSync = (input: { el: HTMLDivElement; contextOpen: () => boolean }) => {
+export const createTabStripScroll = (input: { el: HTMLDivElement; lead: () => boolean }) => {
   let frame: number | undefined
   let prevScrollWidth = input.el.scrollWidth
-  let prevContextOpen = input.contextOpen()
+  let prevLeadOpen = input.lead()
 
   const update = () => {
     const scrollWidth = input.el.scrollWidth
     const clientWidth = input.el.clientWidth
-    const contextOpen = input.contextOpen()
-    const left = nextTabListScrollLeft({
+    const leadOpen = input.lead()
+    const left = nextTabStripScrollLeft({
       prevScrollWidth,
       scrollWidth,
       clientWidth,
-      prevContextOpen,
-      contextOpen,
+      prevLeadOpen,
+      leadOpen,
     })
 
     if (left !== undefined) {
@@ -38,7 +39,7 @@ export const createFileTabListSync = (input: { el: HTMLDivElement; contextOpen: 
     }
 
     prevScrollWidth = scrollWidth
-    prevContextOpen = contextOpen
+    prevLeadOpen = leadOpen
   }
 
   const schedule = () => {

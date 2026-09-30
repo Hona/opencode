@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Tidsgränsen för hälsokontrollen av sidoprocessen för {{distro}} överskreds efter {{timeout}} ms",
   "error.commandTimeout": "Tidsgränsen för {{command}} {{args}} överskreds efter {{timeout}} ms",
   "error.failedPort": "Det gick inte att hämta porten",
+  "server.default": "Standard",
+  "menu.default": "Ställ in som standard",
+  "menu.defaultRemove": "Ta bort standard",
+  "menu.remove": "Ta bort",
 }

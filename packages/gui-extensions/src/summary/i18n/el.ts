@@ -28,4 +28,11 @@ export default {
   "configure": "Αρχείο διαμόρφωσης",
   "copyConfigPath": "Αντιγραφή διαδρομής αρχείου διαμόρφωσης",
   "configFileMissing": "Δεν βρέθηκε αρχείο διαμόρφωσης",
+  "loadingChanges": "Φόρτωση αλλαγών…",
+  "noChanges": "Χωρίς αλλαγές",
+  "basedOn": "Βασίζεται στον κλάδο {{branch}}",
+  "workspace.local": "Τοπικό αποθετήριο",
+  "workspace.existing": "Δέντρο εργασίας",
+  "workspace.new": "Νέος χώρος εργασίας",
+  "mcp.interactiveAuth": "Ο διακομιστής MCP Ο {{name}} απαιτεί μια διαδραστική φόρμα ελέγχου ταυτότητας",
 }

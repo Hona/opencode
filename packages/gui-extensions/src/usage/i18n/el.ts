@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Συνολικό κόστος",
   "stats.sessionCreated": "Η συνεδρία δημιουργήθηκε",
   "stats.lastActivity": "Τελευταία δραστηριότητα",
+  "export.success.title": "Εξαγωγή συνεδρίας",
+  "export.success.description": "Η συνεδρία αποθηκεύτηκε στο {{filename}}",
+  "export.failed.title": "Αποτυχία εξαγωγής συνεδρίας",
+  "export.failed.description": "Παρουσιάστηκε σφάλμα κατά την εξαγωγή της συνεδρίας",
 }

@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Jemi bahasy",
   "stats.sessionCreated": "Sessiýa döredildi",
   "stats.lastActivity": "Soňky işjeňlik",
+  "export.success.title": "Sessiýa eksport edildi",
+  "export.success.description": "Sessiýa {{filename}}-de saklandy",
+  "export.failed.title": "Sessiýa eksport edip bilmedi",
+  "export.failed.description": "Sessiýa eksport edilende säwlik ýüze çykdy",
 }

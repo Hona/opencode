@@ -30,4 +30,11 @@ export default {
   "configure": "Plik konfiguracyjny",
   "copyConfigPath": "Skopiuj ścieżkę pliku konfiguracyjnego",
   "configFileMissing": "Nie znaleziono pliku konfiguracyjnego",
+  "loadingChanges": "Ładowanie zmian…",
+  "noChanges": "Brak zmian",
+  "basedOn": "Na podstawie {{branch}}",
+  "workspace.local": "Lokalne repozytorium",
+  "workspace.existing": "Drzewo robocze",
+  "workspace.new": "Nowa przestrzeń robocza",
+  "mcp.interactiveAuth": "Serwer MCP {{name}} wymaga interaktywnego formularza uwierzytelniania",
 }

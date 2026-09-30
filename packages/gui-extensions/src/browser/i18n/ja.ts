@@ -12,4 +12,5 @@ export default {
   "empty.description": "または「アプリ内ブラウザで開く」とプロンプトに入力",
   "failed.title": "URLにアクセスできません",
   "failed.description": "URLと接続を確認して、もう一度お試しください。",
+  "action.reload": "再読み込み",
 }

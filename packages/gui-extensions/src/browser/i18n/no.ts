@@ -12,4 +12,5 @@ export default {
   "empty.description": "Eller be om «Åpne i appnettleseren»",
   "failed.title": "URL-en kan ikke nås",
   "failed.description": "Kontroller URL-en og tilkoblingen, og prøv på nytt.",
+  "action.reload": "Last inn på nytt",
 }

@@ -12,4 +12,5 @@ export default {
   "empty.description": "ወይም «በመተግበሪያው አሳሽ ክፈት» ብለው ይጠይቁ",
   "failed.title": "URL ላይ መድረስ አልተቻለም",
   "failed.description": "URL-ውን እና ግንኙነትዎን ይፈትሹ፣ ከዚያ እንደገና ይሞክሩ።",
+  "action.reload": "ዳግም ጫን",
 }

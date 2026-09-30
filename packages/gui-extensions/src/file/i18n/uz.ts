@@ -23,4 +23,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "Ochish uchun faylni tanlang",
+  "open.finder": "Finder",
+  "open.fileExplorer": "Fayl kuzatuvchisi",
+  "open.fileManager": "Fayl menejeri",
+  "command.open": "Faylni ochish",
 }

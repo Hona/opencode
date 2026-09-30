@@ -48,11 +48,11 @@ function openAppsForOS(os: OS) {
   return LINUX_OPEN_APPS
 }
 
-// The host's file manager names, shared with the project menus.
+// File manager names match the host's project menus.
 function fileManagerApp(os: OS) {
-  if (os === "macos") return { label: "session.header.open.finder", icon: "finder" } as const
-  if (os === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" } as const
-  return { label: "session.header.open.fileManager", icon: "finder" } as const
+  if (os === "macos") return { label: "open.finder", icon: "finder" } as const
+  if (os === "windows") return { label: "open.fileExplorer", icon: "file-explorer" } as const
+  return { label: "open.fileManager", icon: "finder" } as const
 }
 
 const showRequestError = (ctx: Context, err: unknown) => {

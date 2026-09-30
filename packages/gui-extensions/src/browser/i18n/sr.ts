@@ -12,4 +12,5 @@ export default {
   "empty.description": "Или задајте упит „Отвори у прегледачу апликације“",
   "failed.title": "URL није доступан",
   "failed.description": "Проверите URL и везу, па покушајте поново.",
+  "action.reload": "Поново учитај",
 }

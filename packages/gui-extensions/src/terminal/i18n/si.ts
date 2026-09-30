@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "සම්බන්ධතාවය නැති විය",
   "connectionLost.abnormalClose": "WebSocket අසාමාන්‍ය ලෙස වසා ඇත: {{code}}",
   "connectionLost.description": "පර්යන්ත සම්බන්ධතාවයට බාධා ඇති විය. සේවාදායකය නැවත ආරම්භ වන විට මෙය සිදු විය හැක.",
+  "tab.title": "පර්යන්තය",
 }

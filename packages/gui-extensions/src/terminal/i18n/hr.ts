@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Veza izgubljena",
   "connectionLost.abnormalClose": "WebSocket nenormalno zatvoren: {{code}}",
   "connectionLost.description": "Veza terminala je prekinuta. To se može dogoditi kada se poslužitelj ponovno pokrene.",
+  "tab.title": "Terminal",
 }

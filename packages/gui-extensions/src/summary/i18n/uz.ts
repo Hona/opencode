@@ -28,4 +28,11 @@ export default {
   "configure": "Konfiguratsiya fayli",
   "copyConfigPath": "Konfiguratsiya fayli yo'lini nusxalash",
   "configFileMissing": "Hech qanday konfiguratsiya fayli topilmadi",
+  "loadingChanges": "Oʻzgarishlar yuklanmoqda…",
+  "noChanges": "Oʻzgarishlar yoʻq",
+  "basedOn": "{{branch}} asosida",
+  "workspace.local": "Mahalliy ombor",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Yangi ish maydoni",
+  "mcp.interactiveAuth": "MCP server {{name}} interaktiv autentifikatsiya shaklini talab qiladi",
 }

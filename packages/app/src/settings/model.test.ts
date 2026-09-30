@@ -64,12 +64,8 @@ describe("settings schema", () => {
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {
-        autoSave: true,
         releaseNotes: true,
         showFileTree: false,
-        showNavigation: false,
-        showSearch: false,
-        showTerminal: false,
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
         mobileTitlebarPosition: "top",

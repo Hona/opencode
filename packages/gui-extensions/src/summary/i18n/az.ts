@@ -28,4 +28,11 @@ export default {
   "configure": "Konfiqurasiya faylı",
   "copyConfigPath": "Konfiqurasiya faylı yolunu kopyala",
   "configFileMissing": "Konfiqurasiya faylı tapılmadı",
+  "loadingChanges": "Dəyişikliklər yüklənir…",
+  "noChanges": "Dəyişiklik yoxdur",
+  "basedOn": "{{branch}} əsasında",
+  "workspace.local": "Yerli depo",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Yeni iş sahəsi",
+  "mcp.interactiveAuth": "MCP server {{name}} interaktiv autentifikasiya forması tələb edir",
 }

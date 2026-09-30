@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Ingen grenændringer endnu",
   "git.title": "Opret et Git-repository",
   "git.description": "Spor, gennemgå og fortryd ændringer i dette projekt",
+  "loadingChanges": "Indlæser ændringer…",
+  "noChanges": "Ingen ændringer",
 }

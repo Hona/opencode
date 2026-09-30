@@ -12,4 +12,6 @@ export default {
   "empty.branch": "Brak jeszcze zmian w gałęzi",
   "git.title": "Utwórz repozytorium Git",
   "git.description": "Śledź, przeglądaj i cofaj zmiany w tym projekcie",
+  "loadingChanges": "Ładowanie zmian…",
+  "noChanges": "Brak zmian",
 }

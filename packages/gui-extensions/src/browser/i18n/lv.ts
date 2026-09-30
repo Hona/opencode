@@ -12,4 +12,5 @@ export default {
   "empty.description": "Vai arī lūdziet “Atvērt lietotnes pārlūkā”",
   "failed.title": "URL nav sasniedzams",
   "failed.description": "Pārbaudiet URL un savienojumu un mēģiniet vēlreiz.",
+  "action.reload": "Ielādēt atkārtoti",
 }

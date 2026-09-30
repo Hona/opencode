@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "연결 끊김",
   "connectionLost.abnormalClose": "WebSocket이 비정상적으로 닫힘: {{code}}",
   "connectionLost.description": "터미널 연결이 중단되었습니다. 서버가 재시작하면 이런 일이 발생할 수 있습니다.",
+  "tab.title": "터미널",
 }

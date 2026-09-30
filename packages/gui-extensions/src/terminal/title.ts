@@ -35,5 +35,5 @@ export const terminalTabLabel = (input: {
   if (title && !defaultTitle) return title
   if (number > 0) return input.t("title.numbered", { number })
   if (title) return title
-  return input.t("terminal.title")
+  return input.t("tab.title")
 }

@@ -8,4 +8,6 @@ export default {
   "empty.branch": "A fióktelep még nem változott",
   "git.title": "Hozzon létre egy Git tárolót",
   "git.description": "Kövesse nyomon, tekintse át és vonja vissza a változtatásokat ebben a projektben",
+  "loadingChanges": "Módosítások betöltése…",
+  "noChanges": "Nincs változás",
 }

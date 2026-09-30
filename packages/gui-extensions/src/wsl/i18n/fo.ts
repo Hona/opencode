@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Síðuvognur til {{distro}} heilsukanning tíðaravmarkað eftir {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} tíðaravmarkað eftir {{timeout}}ms",
   "error.failedPort": "Tað eydnaðist ikki at fáa havn",
+  "server.default": "Forsett",
+  "menu.default": "Set sum forsett",
+  "menu.defaultRemove": "Strika forsett",
+  "menu.remove": "Strika",
 }

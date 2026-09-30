@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "کنکشن گواچ گیا",
   "connectionLost.abnormalClose": "WebSocket غیر معمولی طور تے بند کیتا گیا: ⁨{{code}}⁩",
   "connectionLost.description": "ٹرمینل کنکشن وچ رکاوٹ پے گئی۔ ایہ اودوں ہو سکدا اے جدوں سرور دوبارہ شروع ہوندا اے۔",
+  "tab.title": "Terminal",
 }

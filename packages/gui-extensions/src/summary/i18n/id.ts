@@ -28,4 +28,11 @@ export default {
   "configure": "Berkas konfigurasi",
   "copyConfigPath": "Salin jalur berkas konfigurasi",
   "configFileMissing": "Tidak ada berkas konfigurasi ditemukan",
+  "loadingChanges": "Memuat perubahan…",
+  "noChanges": "Tidak ada perubahan",
+  "basedOn": "Berdasarkan {{branch}}",
+  "workspace.local": "Repositori lokal",
+  "workspace.existing": "Worktree",
+  "workspace.new": "Ruang kerja baru",
+  "mcp.interactiveAuth": "Server MCP {{name}} memerlukan formulir autentikasi interaktif",
 }

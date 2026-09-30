@@ -121,7 +121,7 @@ export function DialogSsh(props: {
             </div>
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-name">
-                {extension.t("dialog.server.add.name")}
+                {extension.t("form.name")}
               </label>
               <TextInput
                 id="ssh-name"
@@ -130,7 +130,7 @@ export function DialogSsh(props: {
                 class="!w-full self-stretch"
                 dir="auto"
                 value={state.name}
-                placeholder={extension.t("dialog.server.add.namePlaceholder")}
+                placeholder={extension.t("form.namePlaceholder")}
                 disabled={busy() || !!prompt()}
                 onInput={(event) => setState("name", event.currentTarget.value)}
                 onKeyDown={keyDown}
@@ -206,18 +206,18 @@ export function DialogSsh(props: {
               onClick={() => start(item()?.stage === "incompatible")}
             >
               {busy()
-                ? extension.t("ssh.stage.connecting")
+                ? extension.t("stage.connecting")
                 : item()?.stage === "incompatible"
                   ? extension.t("update")
                   : props.config
                     ? extension.t("connect")
-                    : extension.t("dialog.server.add.button")}
+                    : extension.t("form.add")}
             </Button>
           }
         >
           {(prompt) => (
             <Button variant="contrast" disabled={waiting() || (!prompt().confirm && !state.response)} onClick={respond}>
-              {waiting() ? extension.t("ssh.stage.connecting") : extension.t(prompt().confirm ? "trust" : "continue")}
+              {waiting() ? extension.t("stage.connecting") : extension.t(prompt().confirm ? "trust" : "continue")}
             </Button>
           )}
         </Show>

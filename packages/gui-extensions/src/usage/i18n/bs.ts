@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Ukupni trošak",
   "stats.sessionCreated": "Sesija kreirana",
   "stats.lastActivity": "Posljednja aktivnost",
+  "export.success.title": "Sesija izvezena",
+  "export.success.description": "Sesija je sačuvana kao {{filename}}",
+  "export.failed.title": "Izvoz sesije nije uspio",
+  "export.failed.description": "Došlo je do greške prilikom izvoza sesije",
 }

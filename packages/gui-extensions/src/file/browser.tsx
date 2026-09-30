@@ -157,10 +157,8 @@ export function SessionFileBrowserTab(props: {
           <SessionFilePanelV2Empty>
             <div class="flex flex-col items-center gap-2 text-center text-text-weak">
               <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">
-                {ctx.t("command.file.open")}
-              </div>
-              <div class="h-5 text-13-regular leading-5">{ctx.t("session.files.selectToOpen")}</div>
+              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{ctx.t("command.open")}</div>
+              <div class="h-5 text-13-regular leading-5">{ctx.t("selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>
         }

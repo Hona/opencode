@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Tổng chi phí",
   "stats.sessionCreated": "Đã tạo phiên",
   "stats.lastActivity": "Hoạt động cuối cùng",
+  "export.success.title": "Đã xuất phiên",
+  "export.success.description": "Đã lưu phiên vào {{filename}}",
+  "export.failed.title": "Không thể xuất phiên",
+  "export.failed.description": "Đã xảy ra lỗi khi xuất phiên",
 }

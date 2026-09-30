@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Toplam Maliyet",
   "stats.sessionCreated": "Oturum Oluşturma",
   "stats.lastActivity": "Son Etkinlik",
+  "export.success.title": "Oturum dışa aktarıldı",
+  "export.success.description": "Oturum {{filename}} dosyasına kaydedildi",
+  "export.failed.title": "Oturum dışa aktarılamadı",
+  "export.failed.description": "Oturum dışa aktarılırken bir hata oluştu",
 }

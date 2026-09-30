@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "החיבור אבד",
   "connectionLost.abnormalClose": "WebSocket נסגר בצורה לא תקינה: {{code}}",
   "connectionLost.description": "החיבור למסוף נקטע. הדבר עשוי לקרות כשהשרת מופעל מחדש.",
+  "tab.title": "מסוף",
 }

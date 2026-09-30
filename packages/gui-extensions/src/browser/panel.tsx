@@ -111,7 +111,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           placement="top"
           value={
             <div class="flex items-center gap-2">
-              <span>{extension.t(state()?.loading ? "action.stop" : "error.page.action.reload")}</span>
+              <span>{extension.t(state()?.loading ? "action.stop" : "action.reload")}</span>
               <Show when={!state()?.loading}>
                 <Keybind keys={[...app.keybind("browser.reload")]} variant="neutral" />
               </Show>
@@ -121,7 +121,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           <IconButton
             {...button}
             disabled={!state()?.loading && !address()}
-            aria-label={extension.t(state()?.loading ? "action.stop" : "error.page.action.reload")}
+            aria-label={extension.t(state()?.loading ? "action.stop" : "action.reload")}
             onClick={() => {
               const tab = state()
               if (tab) command({ type: tab.loading ? "stop" : "reload", tabID: tab.id })

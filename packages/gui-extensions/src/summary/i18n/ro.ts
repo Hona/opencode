@@ -29,4 +29,11 @@ export default {
   "configure": "Fișier de configurare",
   "copyConfigPath": "Copiați calea fișierului de configurare",
   "configFileMissing": "Nu a fost găsit niciun fișier de configurare",
+  "loadingChanges": "Se încarcă modificările…",
+  "noChanges": "Nicio modificare",
+  "basedOn": "Bazat pe {{branch}}",
+  "workspace.local": "Depozit local",
+  "workspace.existing": "Arbore de lucru",
+  "workspace.new": "Spațiu de lucru nou",
+  "mcp.interactiveAuth": "Serverul MCP {{name}} necesită un formular de autentificare interactiv",
 }

@@ -25,4 +25,9 @@ export default {
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
   "open.app.sublimeText": "Sublime Text",
+  "selectToOpen": "Выберите файл, чтобы открыть",
+  "open.finder": "Finder",
+  "open.fileExplorer": "Проводник",
+  "open.fileManager": "Файловый менеджер",
+  "command.open": "Открыть файл",
 }

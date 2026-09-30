@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "总成本",
   "stats.sessionCreated": "创建时间",
   "stats.lastActivity": "最后活动",
+  "export.success.title": "会话已导出",
+  "export.success.description": "已将会话保存到 {{filename}}",
+  "export.failed.title": "导出会话失败",
+  "export.failed.description": "导出会话时发生错误",
 }

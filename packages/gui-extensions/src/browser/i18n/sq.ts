@@ -12,4 +12,5 @@ export default {
   "empty.description": "Ose kërko “Hap në shfletuesin e aplikacionit”",
   "failed.title": "URL-ja nuk mund të arrihet",
   "failed.description": "Kontrollo URL-në dhe lidhjen, pastaj provo përsëri.",
+  "action.reload": "Ringarko",
 }

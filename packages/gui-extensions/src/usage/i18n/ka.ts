@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "საერთო ღირებულება",
   "stats.sessionCreated": "სესია შეიქმნა",
   "stats.lastActivity": "ბოლო აქტივობა",
+  "export.success.title": "სესია ექსპორტირებული",
+  "export.success.description": "სესია შენახულია {{filename}}",
+  "export.failed.title": "სესიის ექსპორტი ვერ მოხერხდა",
+  "export.failed.description": "მოხდა შეცდომა სესიის ექსპორტის დროს",
 }

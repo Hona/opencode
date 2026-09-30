@@ -119,7 +119,7 @@ export function settingsSearchIndex(input: {
       title: server.name,
       description: "",
       keywords: "",
-      owner: input.translate("status.popover.tab.servers"),
+      owner: input.translate("settings.tab.servers"),
       page: input.translate("settings.server.section.connection"),
       server: server.key,
       view: view("general"),

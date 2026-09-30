@@ -20,9 +20,9 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   marks.layers = Date.now()
   yield* Effect.logInfo("layers ready", { marks })
   const ipc = yield* Ipc.registerIpcHandlers
-  // Main GUI extensions start with the window like the services they replaced: WSL sidecars and SSH
-  // restore feed the first paint's server list, and the updater and pairing own startup menu items.
-  // Their heavy modules load lazily on first use.
+  // Main GUI extensions start with the window: servers they restore feed the first paint's server
+  // list, and menu items they contribute are present at startup. Their heavy modules load lazily on
+  // first use.
   yield* Effect.forkScoped(extensions.start)
   if (lifecycle.restoreWindows().length) ipc.installMenu()
   // The first window's renderer now has its IPC port and is hydrating its stores over it. The crash

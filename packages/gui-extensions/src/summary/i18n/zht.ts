@@ -28,4 +28,11 @@ export default {
   "configure": "設定檔",
   "copyConfigPath": "複製設定檔路徑",
   "configFileMissing": "找不到設定檔",
+  "loadingChanges": "正在載入變更…",
+  "noChanges": "沒有變更",
+  "basedOn": "以 {{branch}} 為基礎",
+  "workspace.local": "本機儲存庫",
+  "workspace.existing": "工作樹",
+  "workspace.new": "新增工作區",
+  "mcp.interactiveAuth": "MCP 伺服器 {{name}} 需要互動式認證表單",
 }

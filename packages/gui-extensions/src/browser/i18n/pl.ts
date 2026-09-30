@@ -12,4 +12,5 @@ export default {
   "empty.description": "Lub wpisz polecenie „Otwórz w przeglądarce aplikacji”",
   "failed.title": "Nie można otworzyć adresu URL",
   "failed.description": "Sprawdź adres URL i połączenie, a następnie spróbuj ponownie.",
+  "action.reload": "Wczytaj ponownie",
 }

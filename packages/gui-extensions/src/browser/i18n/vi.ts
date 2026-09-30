@@ -12,4 +12,5 @@ export default {
   "empty.description": "Hoặc nhập lời nhắc \"Mở trong trình duyệt của ứng dụng\"",
   "failed.title": "Không thể truy cập URL",
   "failed.description": "Kiểm tra URL và kết nối, rồi thử lại.",
+  "action.reload": "Tải lại",
 }

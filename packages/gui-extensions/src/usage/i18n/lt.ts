@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Bendra kaina",
   "stats.sessionCreated": "Seansas sukurtas",
   "stats.lastActivity": "Paskutinė veikla",
+  "export.success.title": "Seansas eksportuotas",
+  "export.success.description": "Seansas išsaugotas {{filename}}",
+  "export.failed.title": "Nepavyko eksportuoti seanso",
+  "export.failed.description": "Eksportuojant seansą įvyko klaida",
 }

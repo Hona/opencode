@@ -12,6 +12,8 @@ import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
+import { Command } from "@opencode/gui-extensions/sdk"
+import { useExtensionHost } from "@/runtime/extension/host"
 import type { Region } from "@/runtime/extension/panels"
 
 type SessionCommandSource = {
@@ -51,6 +53,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const settings = useSettings()
   const platform = usePlatform()
   const layout = useLayout()
+  const host = useExtensionHost()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
     const value = await load()
@@ -58,16 +61,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
   const shown = settings.visibility.fileTree
 
-  // The selected side tab when it is a file tab; any other selection (e.g. Review) has no line selection.
-  const activeFileTab = () => {
-    const tab = actions.region.active()
-    return tab && file.pathFromTab(tab) ? tab : undefined
-  }
-  // Pinned tabs such as Review stay open.
+  // The file the selected side tab shows; other tabs have no line selection.
+  const activeFile = () => actions.region.selected()?.tab.file
+  // Pinned tabs stay open.
   const closableTab = () => {
     const entry = actions.region.selected()
     return entry && entry.tab.kind !== "pinned" ? entry.key : undefined
   }
+  // Focus inside an extension command's scope belongs to that extension, which binds its own shortcuts there.
+  const extensionScoped = (target: EventTarget | null) =>
+    target instanceof Element &&
+    host.items(Command).some((item) => !!item.value.scope && !!target.closest(item.value.scope))
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -81,9 +85,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const canAddSelectionContext = () => {
-    const tab = activeFileTab()
-    if (!tab) return false
-    const path = file.pathFromTab(tab)
+    const path = activeFile()
     if (!path) return false
     return file.selectedLines(path) != null
   }
@@ -177,10 +179,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const addSelection = () => {
-    const tab = activeFileTab()
-    if (!tab) return
-
-    const path = file.pathFromTab(tab)
+    const path = activeFile()
     if (!path) return
 
     const range = file.selectedLines(path) as SelectedLineRange | null | undefined
@@ -313,7 +312,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           id: "file.close",
           title: language.t("command.tab.close"),
           keybind: settings.keybinds.get("tab.close") ?? "mod+w",
-          when: (event) => !(event.target instanceof Element && event.target.closest('[data-component="terminal"]')),
+          when: (event) => !extensionScoped(event.target),
           onSelect: closeTab,
         }),
     ].filter((v) => !!v)
@@ -344,7 +343,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => actions.session.layout.view().reviewPanel.toggle(),
+      onSelect: () => actions.session.layout.view().side.toggle(),
     }),
     ...(shown()
       ? [

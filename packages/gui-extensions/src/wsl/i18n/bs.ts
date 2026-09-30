@@ -48,4 +48,8 @@ export default {
   "error.healthTimeout": "Isteklo je vrijeme provjere dostupnosti komponente Sidecar za {{distro}} nakon {{timeout}} ms",
   "error.commandTimeout": "Isteklo je vrijeme za {{command}} {{args}} nakon {{timeout}} ms",
   "error.failedPort": "Nije uspjelo dohvaćanje porta",
+  "server.default": "Podrazumijevano",
+  "menu.default": "Postavi kao podrazumijevano",
+  "menu.defaultRemove": "Ukloni podrazumijevano",
+  "menu.remove": "Ukloni",
 }

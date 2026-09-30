@@ -28,4 +28,11 @@ export default {
   "configure": "კონფიგურაციის ფაილი",
   "copyConfigPath": "კონფიგურაციის ფაილის გზის ასლები",
   "configFileMissing": "კონფიგურაციის ფაილი ვერ მოიძებნა",
+  "loadingChanges": "ცვლილებების ჩატვირთვა…",
+  "noChanges": "ცვლილებები არ არის",
+  "basedOn": "დაფუძნებულია {{branch}} ბრენჩზე",
+  "workspace.local": "ადგილობრივი საცავი",
+  "workspace.existing": "სამუშაო ხე",
+  "workspace.new": "ახალი სამუშაო სივრცე",
+  "mcp.interactiveAuth": "MCP სერვერს {{name}} სჭირდება ინტერაქტიული ავტენთიკაციის ფორმა",
 }

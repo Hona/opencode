@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Sambandið er mist",
   "connectionLost.abnormalClose": "WebSocket lukkað óvanliga: {{code}}",
   "connectionLost.description": "Terminalsambandið varð avbrotið. Hetta kann henda tá ambætarin byrjar aftur.",
+  "tab.title": "Farstøð",
 }

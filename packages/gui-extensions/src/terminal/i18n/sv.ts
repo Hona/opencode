@@ -9,4 +9,5 @@ export default {
   "connectionLost.title": "Anslutning förlorad",
   "connectionLost.abnormalClose": "WebSocket stängdes onormalt: {{code}}",
   "connectionLost.description": "Terminalanslutningen avbröts. Detta kan hända när servern startar om.",
+  "tab.title": "Terminal",
 }

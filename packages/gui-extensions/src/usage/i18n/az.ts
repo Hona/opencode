@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "Ümumi xərc",
   "stats.sessionCreated": "Sessiya yaradıldı",
   "stats.lastActivity": "Son fəaliyyət",
+  "export.success.title": "Sessiya ixrac edildi",
+  "export.success.description": "Sessiya {{filename}} faylına saxlanıldı",
+  "export.failed.title": "Sessiya ixrac edilə bilmədi",
+  "export.failed.description": "Sessiyanı ixrac edərkən xəta baş verdi",
 }

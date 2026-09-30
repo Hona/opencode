@@ -28,4 +28,11 @@ export default {
   "configure": "Asetustiedosto",
   "copyConfigPath": "Kopioi asetustiedoston polku",
   "configFileMissing": "Määritystiedostoa ei löytynyt",
+  "loadingChanges": "Ladataan muutoksia…",
+  "noChanges": "Ei muutoksia",
+  "basedOn": "Perustuu haaraan {{branch}}",
+  "workspace.local": "Paikallinen säilö",
+  "workspace.existing": "Työpuu",
+  "workspace.new": "Uusi työtila",
+  "mcp.interactiveAuth": "MCP-palvelin {{name}} vaatii interaktiivisen todennuslomakkeen",
 }

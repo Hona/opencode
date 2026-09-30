@@ -28,4 +28,11 @@ export default {
   configure: "Configuration file",
   copyConfigPath: "Copy configuration file path",
   configFileMissing: "No configuration file found",
+  loadingChanges: "Loading changes…",
+  noChanges: "No changes",
+  basedOn: "Based on {{branch}}",
+  "workspace.local": "Local repository",
+  "workspace.existing": "Worktree",
+  "workspace.new": "New worktree",
+  "mcp.interactiveAuth": "MCP server {{name}} requires an interactive authentication form",
 }

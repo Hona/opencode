@@ -12,4 +12,5 @@ export default {
   "empty.description": "Або надішліть запит «Відкрити у браузері застосунку»",
   "failed.title": "Не вдається відкрити URL",
   "failed.description": "Перевірте URL і з’єднання, а потім повторіть спробу.",
+  "action.reload": "Перезавантажити",
 }

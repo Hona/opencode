@@ -8,4 +8,6 @@ export default {
   "empty.branch": "Henüz dal değişikliği yok",
   "git.title": "Git deposu oluştur",
   "git.description": "Bu projedeki değişiklikleri takip et, incele ve geri al",
+  "loadingChanges": "Değişiklikler yükleniyor…",
+  "noChanges": "Değişiklik yok",
 }

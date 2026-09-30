@@ -12,4 +12,5 @@ export default {
   "empty.description": "یا پرامپٹ دیو ”ایپ براؤزر وچ کھولو“",
   "failed.title": "URL تک نہیں پہنچیا جا سکیا",
   "failed.description": "URL تے اپنا کنکشن چیک کرو، فیر کوشش کرو۔",
+  "action.reload": "دوبارہ لوڈ کرو",
 }

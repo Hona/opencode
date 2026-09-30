@@ -12,4 +12,5 @@ export default {
   "empty.description": "Կամ գրեք «Բացել հավելվածի դիտարկիչում»",
   "failed.title": "URL-ը հասանելի չէ",
   "failed.description": "Ստուգեք URL-ը և կապը, ապա կրկին փորձեք։",
+  "action.reload": "Վերբեռնել կրկին",
 }

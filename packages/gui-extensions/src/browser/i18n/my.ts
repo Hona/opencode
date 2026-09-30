@@ -12,4 +12,5 @@ export default {
   "empty.description": "သို့မဟုတ် \"အက်ပ်ဘရောက်ဇာတွင် ဖွင့်ပါ\" ဟု prompt ရိုက်ထည့်ပါ",
   "failed.title": "URL ကို ချိတ်ဆက်၍မရပါ",
   "failed.description": "URL နှင့် ချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်မံကြိုးစားပါ။",
+  "action.reload": "ပြန်လည်ဖွင့်ပါ",
 }

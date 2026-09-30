@@ -12,4 +12,5 @@ export default {
   "empty.description": "නැතහොත් “යෙදුම් බ්‍රවුසරයේ විවෘත කරන්න” යනුවෙන් ප්‍රේරකයක් දෙන්න",
   "failed.title": "URL වෙත ළඟා විය නොහැක",
   "failed.description": "URL එක සහ ඔබේ සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
+  "action.reload": "නැවත පූරණය කරන්න",
 }

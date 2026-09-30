@@ -171,7 +171,7 @@ export const serverSettings: Entry<SettingsServerTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "status.popover.tab.plugins" },
+  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
     tab: "general",
@@ -201,7 +201,7 @@ export const projectSettings: Entry<SettingsProjectTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "status.popover.tab.plugins" },
+  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   { tab: "extensions", subtab: "lsps", label: "project.settings.extensions.tab.lsps", keywords: "language servers" },
 ]

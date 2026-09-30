@@ -10,4 +10,6 @@ export default {
   "empty.branch": "Još nema promjena grane",
   "git.title": "Napravite Git spremište",
   "git.description": "Pratite, pregledajte i poništite promjene u ovom projektu",
+  "loadingChanges": "Učitavanje promjena…",
+  "noChanges": "Nema promjena",
 }

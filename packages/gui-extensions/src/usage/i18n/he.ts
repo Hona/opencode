@@ -24,4 +24,8 @@ export default {
   "stats.totalCost": "עלות כוללת",
   "stats.sessionCreated": "ההפעלה נוצרה",
   "stats.lastActivity": "פעילות אחרונה",
+  "export.success.title": "ההפעלה יוצאה",
+  "export.success.description": "ההפעלה נשמרה בקובץ {{filename}}",
+  "export.failed.title": "ייצוא ההפעלה נכשל",
+  "export.failed.description": "אירעה שגיאה במהלך ייצוא ההפעלה",
 }

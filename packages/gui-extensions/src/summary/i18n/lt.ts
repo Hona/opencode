@@ -30,4 +30,11 @@ export default {
   "configure": "Konfigūracijos failas",
   "copyConfigPath": "Nukopijuokite konfigūracijos failo kelią",
   "configFileMissing": "Konfigūracijos failas nerastas",
+  "loadingChanges": "Įkeliami pakeitimai…",
+  "noChanges": "Jokių pakeitimų",
+  "basedOn": "Pagrįsta {{branch}}",
+  "workspace.local": "Vietinė saugykla",
+  "workspace.existing": "Darbinis medis",
+  "workspace.new": "Nauja darbo vieta",
+  "mcp.interactiveAuth": "MCP serveriui {{name}} reikalinga interaktyvi autentifikavimo forma",
 }
