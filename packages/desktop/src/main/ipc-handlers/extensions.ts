@@ -1,7 +1,7 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { ExtensionRpcs } from "../../shared/ipc-rpc"
-import { extensionFailure } from "../extension/error"
+import { ExtensionError, extensionFailure } from "../extension/error"
 import type { ExtensionHost } from "../extension/host"
 import { Extensions } from "../extension"
 import { IpcPortHandoff } from "../ipc-transport"
@@ -20,8 +20,16 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
         throw new Error("extension.caller.invalid")
       return win.id
     }
+    // The manager (enable, reload, install archives) is a development tool until installed extensions have a trust
+    // model; packaged builds refuse it so no renderer can install and run main-process code.
     const manage = <A>(run: (host: ExtensionHost) => A | Promise<A>) =>
-      Effect.tryPromise({ try: () => extensions.host().then(run), catch: extensionFailure })
+      Effect.tryPromise({
+        try: () => {
+          if (app.isPackaged) throw new ExtensionError("unavailable")
+          return extensions.host().then(run)
+        },
+        catch: extensionFailure,
+      })
     return ExtensionRpcs.of({
       ExtensionCall: (request, context) =>
         Effect.tryPromise({
