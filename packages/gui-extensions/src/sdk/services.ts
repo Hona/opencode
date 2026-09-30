@@ -267,6 +267,8 @@ export interface App {
   keybind(command: string): readonly string[]
   /** The event matches a published command's effective keybind. */
   matches(command: string, event: KeyboardEvent): boolean
+  /** Ids of the servers the app lists (`ServerRef.id`). Reactive. */
+  servers(): readonly string[]
   on(event: "workspace.remove", handler: (value: { readonly server: string; readonly directory: string }) => void): Cleanup
 }
 

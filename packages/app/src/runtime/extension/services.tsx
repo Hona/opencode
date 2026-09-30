@@ -66,6 +66,7 @@ type Attached = {
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
   matches: (command: string, event: KeyboardEvent) => boolean
+  servers: Accessor<readonly string[]>
 }
 
 export type HostService = { readonly token: Host<unknown>; create(extension: string, owner: Owner | null): unknown }
@@ -187,6 +188,7 @@ export function createExtensionServices() {
           path: () => current()?.path() ?? "",
           keybind: (command) => current()?.keybind(command) ?? [],
           matches: (command, event) => current()?.matches(command, event) ?? false,
+          servers: () => current()?.servers() ?? [],
           on(_event, handler) {
             removed.add(handler)
             return () => {
@@ -503,6 +505,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     path: () => `${location.pathname}${location.search}`,
     keybind: command.keybindParts,
     matches: command.matches,
+    servers: () => global.servers.list().map(ServerConnection.key),
     preferences: {
       releaseNotes: settings.general.releaseNotes,
       setReleaseNotes: settings.general.setReleaseNotes,

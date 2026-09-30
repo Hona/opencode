@@ -50,7 +50,10 @@ export function SessionServerPanel(props: {
   onExpandedChange: (expanded: boolean) => void
 }) {
   const ctx = useExtension()
+  const app = ctx.use(App)
   const contentID = createUniqueId()
+  // With one server the card is generic; with several it names the session's server.
+  const name = () => (app.servers().length < 2 ? ctx.t("server") : props.session.server.name)
   const [store, setStore] = createStore<{ submenu?: Service }>({})
   createEffect(
     on([() => props.directory, () => props.shown, () => props.expanded], () => setStore("submenu", undefined)),
@@ -67,7 +70,7 @@ export function SessionServerPanel(props: {
       >
         <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
         <span dir="auto" class="session-summary-label">
-          {ctx.t("server")}
+          {name()}
         </span>
         <Icon name="chevron-down" size="small" class="session-summary-disclosure" />
       </button>
