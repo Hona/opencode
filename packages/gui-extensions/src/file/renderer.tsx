@@ -179,6 +179,9 @@ const setup: Setup = (ctx) => {
     id: "main",
     region: "side",
     legacy: { "open-file": OPEN },
+    // Older builds stored some files as absolute paths; one file is one tab once the workspace root is known.
+    normalize: (id, session) =>
+      isFileTab(id) && session.file.ready() ? fileTabId(session.file, fileTabPath(session.file, id)) : id,
     mobile: {
       get title() {
         return ctx.t("mobile.title")

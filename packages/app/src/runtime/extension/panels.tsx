@@ -88,22 +88,32 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
   )
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
 
-  // Rewrites keys stored before extensions (e.g. "context") once their panel is present.
+  // Rewrites stored keys once their panel is present: keys stored before extensions (e.g. "context") and ids a
+  // panel writes more than one way. Duplicates collapse, so one file stored two ways is one tab.
   createEffect(() => {
     const legacy = new Map(
       providers().flatMap((item) =>
         Object.entries(item.value.legacy ?? {}).map(([key, id]) => [key, panelKey(item.extension, id)] as const),
       ),
     )
-    if (legacy.size === 0) return
+    const normalizers = providers().flatMap((item) => (item.value.normalize ? [item] : []))
+    if (legacy.size === 0 && normalizers.length === 0) return
+    const rewrite = (key: string) => {
+      const moved = legacy.get(key)
+      if (moved) return moved
+      const item = normalizers.find((provider) => key.startsWith(`${provider.extension}:`))
+      if (!item?.value.normalize) return key
+      return panelKey(item.extension, item.value.normalize(key.slice(item.extension.length + 1), input.view))
+    }
     const all = stored()
+    const next = Array.from(new Set(all.map(rewrite)))
     const selected = input.tabs().active()
-    const stale = all.some((key) => legacy.has(key))
-    const staleActive = !!selected && legacy.has(selected)
-    if (!stale && !staleActive) return
+    const active = selected ? rewrite(selected) : selected
+    const changed = next.length !== all.length || next.some((key, index) => key !== all[index])
+    if (!changed && active === selected) return
     batch(() => {
-      if (stale) input.tabs().setAll(Array.from(new Set(all.map((key) => legacy.get(key) ?? key))))
-      if (staleActive) input.tabs().setActive(legacy.get(selected))
+      if (changed) input.tabs().setAll(next)
+      if (active !== selected) input.tabs().setActive(active)
     })
   })
 

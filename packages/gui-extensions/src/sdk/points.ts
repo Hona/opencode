@@ -94,6 +94,11 @@ export interface Panel {
   readonly transient?: boolean
   /** Stored tab keys from before extensions, mapped to this panel's tab ids. The host rewrites them once. */
   readonly legacy?: Readonly<Record<string, string>>
+  /**
+   * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
+   * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
+   */
+  normalize?(id: string, session: SessionView): string
   /** A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"`. */
   readonly mobile?: MobileView
   /**
