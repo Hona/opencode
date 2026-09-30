@@ -186,7 +186,8 @@ export function mountBrowserPane() {
           <For each={store.comments}>
             {(comment) => (
               <li>
-                {comment.element.label} @{comment.element.ref}: {comment.comment}
+                {comment.element.label} {comment.element.ref ? `@${comment.element.ref}` : "(no ref)"}:{" "}
+                {comment.comment}
               </li>
             )}
           </For>

@@ -1025,6 +1025,7 @@ export const dict = {
   "session.browser.address.placeholder": "Enter URL",
   "session.browser.inspect": "Select an element to comment on",
   "session.browser.inspect.active": "Click an element in the page to comment on it. Press Escape to cancel.",
+  "session.browser.inspect.pageShortcut": "While the page has focus",
   "session.browser.empty.title": "Enter URL",
   "session.browser.empty.description": 'Or prompt "Open in the app browser"',
   "session.browser.failed.title": "URL can't be reached",

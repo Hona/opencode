@@ -123,6 +123,37 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await editor.fill("Still misaligned after the reload")
+  await root.getByRole("button", { name: "Load current page", exact: true }).click()
+  await expect(editor).toHaveValue("Still misaligned after the reload")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments")).toHaveText(
+    "button.primary (no ref): Still misaligned after the reload",
+  )
+})
+
+story("keeps the comment editor and its actions inside the page", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  const editor = root.locator('[data-slot="browser-comment-editor"]')
+  // As if the user dragged the textarea's resize handle far past the page.
+  await editor.locator("textarea").evaluate((element) => {
+    element.style.height = "900px"
+  })
+  const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
+  const box = await editor.boundingBox()
+  expect(surface && box && box.y + box.height <= surface.y + surface.height).toBe(true)
+  const submit = editor.getByRole("button", { name: "Comment", exact: true })
+  await submit.scrollIntoViewIfNeeded()
+  await expect(submit).toBeInViewport()
+})
+
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()

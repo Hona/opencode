@@ -114,12 +114,15 @@ export function formatBrowserCommentNote(input: BrowserComment) {
     element.role ? `role ${element.role}` : undefined,
     element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
     element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
-    `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`,
+    // A selector too long to keep is empty rather than cut into invalid syntax.
+    element.selector
+      ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`
+      : undefined,
     element.ref
       ? `browser ref @${element.ref}, usable as ref in any browser tool including browser.evaluate until the page navigates`
       : undefined,
   ].filter((detail) => detail !== undefined)
-  return `The user made the following comment regarding the ${JSON.stringify(element.label)} element in browser tab ${input.tabID} at ${input.url} (${details.join("; ")}): ${input.comment}`
+  return `The user made the following comment regarding the ${JSON.stringify(element.label)} element in browser tab ${input.tabID} at ${input.url}${details.length ? ` (${details.join("; ")})` : ""}: ${input.comment}`
 }
 
 /** Restores a sent comment to the composer, for example after a revert or fork. */

@@ -12,16 +12,16 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneElement } from "@/runtime/platform/browser-pane"
 import { usePlatform } from "@/runtime/platform/platform"
-import { useCommand } from "@/shell/commands/command"
+import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { createSessionBrowser } from "./model"
 
-/** A comment on an element the user picked in the page. */
+/** A comment on an element the user picked in the page. The ref is absent once the page navigated. */
 export type SessionBrowserComment = {
   tabID: Browser.TabID
   url: string
   title: string
-  element: Omit<BrowserPaneElement, "rect">
+  element: Omit<BrowserPaneElement, "rect" | "ref"> & { ref?: Browser.Ref }
   comment: string
 }
 
@@ -53,7 +53,15 @@ export function SessionBrowserPane(props: {
     picking: undefined as Browser.TabID | undefined,
     // A picked element awaiting its comment. The page stays frozen as a still until it closes.
     comment: undefined as
-      | { tabID: Browser.TabID; url: string; title: string; element: BrowserPaneElement; draft: string }
+      | {
+          tabID: Browser.TabID
+          url: string
+          title: string
+          // The tab's navigation count at the pick; the element's ref dies when it changes.
+          generation: number
+          element: BrowserPaneElement
+          draft: string
+        }
       | undefined,
     size: { width: 0, height: 0 },
     editorHeight: 0,
@@ -80,12 +88,15 @@ export function SessionBrowserPane(props: {
   const submitComment = (value: string) => {
     const current = store.comment
     if (!current) return
+    const tab = state()
+    // The draft outlives a reload or agent navigation, but the ref no longer names anything.
+    const live = tab?.id === current.tabID && tab.generation === current.generation
     props.onComment?.({
       tabID: current.tabID,
       url: current.url,
       title: current.title,
       element: {
-        ref: current.element.ref,
+        ...(live ? { ref: current.element.ref } : {}),
         selector: current.element.selector,
         label: current.element.label,
         ...(current.element.role ? { role: current.element.role } : {}),
@@ -108,8 +119,10 @@ export function SessionBrowserPane(props: {
     if (!rect) return
     const gap = 8
     const width = Math.max(0, Math.min(400, store.size.width - gap * 2))
+    // The editor scrolls rather than growing past the surface, so its actions stay reachable.
+    const maxHeight = Math.max(0, store.size.height - gap * 2)
     // Until the editor has been measured once, assume its default three-row height.
-    const height = store.editorHeight || 176
+    const height = Math.min(store.editorHeight || 176, maxHeight)
     const left = Math.min(Math.max(gap, rect.x), Math.max(gap, store.size.width - width - gap))
     const below = rect.y + rect.height + gap
     const above = rect.y - gap - height
@@ -119,7 +132,7 @@ export function SessionBrowserPane(props: {
         : above >= gap
           ? above
           : Math.max(gap, store.size.height - height - gap)
-    return { left, top, width }
+    return { left, top, width, maxHeight }
   }
   let surface: HTMLDivElement | undefined
   let addressDisplay: HTMLDivElement | undefined
@@ -171,11 +184,18 @@ export function SessionBrowserPane(props: {
         if (store.picking === event.tabID) setStore("picking", undefined)
         if (!event.element) return
         const tab = state()
-        if (!props.onComment || tab?.id !== event.tabID) {
+        if (!props.onComment || tab?.id !== event.tabID || !props.visible || !store.visible) {
           registration()?.highlight(event.tabID)
           return
         }
-        setStore("comment", { tabID: tab.id, url: tab.url, title: tab.title, element: event.element, draft: "" })
+        setStore("comment", {
+          tabID: tab.id,
+          url: tab.url,
+          title: tab.title,
+          generation: tab.generation,
+          element: event.element,
+          draft: "",
+        })
       }),
     )
   })
@@ -435,11 +455,18 @@ export function SessionBrowserPane(props: {
           <Tooltip
             placement="top"
             value={
-              <div class="flex items-center gap-2">
-                <span>{language.t("session.browser.inspect")}</span>
-                <Show when={command.keybindParts("browser.inspect").length > 0}>
-                  <Keybind keys={command.keybindParts("browser.inspect")} variant="neutral" />
-                </Show>
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-2">
+                  <span>{language.t("session.browser.inspect")}</span>
+                  <Show when={command.keybindParts("browser.inspect").length > 0}>
+                    <Keybind keys={command.keybindParts("browser.inspect")} variant="neutral" />
+                  </Show>
+                </div>
+                {/* The page claims Chromium's picker chord itself; the app leaves it to the terminal. */}
+                <div class="flex items-center gap-2">
+                  <span>{language.t("session.browser.inspect.pageShortcut")}</span>
+                  <Keybind keys={formatKeybindParts("mod+shift+c", language.t)} variant="neutral" />
+                </div>
               </div>
             }
           >
@@ -577,11 +604,12 @@ export function SessionBrowserPane(props: {
                     }
                     data-slot="browser-comment-editor"
                     data-prevent-autofocus
-                    class="absolute"
+                    class="absolute overflow-y-auto rounded-[6px] shadow-[var(--v2-elevation-raised)]"
                     style={{
                       left: `${position().left}px`,
                       top: `${position().top}px`,
                       width: `${position().width}px`,
+                      "max-height": `${position().maxHeight}px`,
                     }}
                   >
                     <LineCommentEditor

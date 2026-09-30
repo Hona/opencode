@@ -148,6 +148,8 @@ export function createBrowserPage(
   // the element until the document changes.
   const picked = new Map<string, Element>()
   let inspecting = false
+  // Bumped by every picker toggle and hide, so a pick still being described can tell it was cancelled.
+  let picks = 0
   let flash: ReturnType<typeof setTimeout> | undefined
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
@@ -420,6 +422,12 @@ export function createBrowserPage(
       })
     },
     setVisible(value: boolean) {
+      // A hidden page cannot be picked from, and a comment's frozen still already shows the
+      // picked element, so hiding ends the picker, any pick in progress, and the highlight.
+      if (visible && !value) {
+        picks++
+        void (inspecting ? toggleInspect(false) : hideHighlight())
+      }
       visible = value
       updateVisibility()
     },
@@ -1230,6 +1238,7 @@ export function createBrowserPage(
   }
 
   async function toggleInspect(enabled: boolean) {
+    picks++
     if (enabled !== inspecting) {
       inspecting = enabled
       clearTimeout(flash)
@@ -1240,18 +1249,23 @@ export function createBrowserPage(
       )
       if (!enabled) await hideHighlight()
     }
-    options.inspect?.({ active: enabled })
+    // A later toggle may have finished first; report where the picker ended up.
+    options.inspect?.({ active: inspecting })
   }
 
   async function arm(sessionID?: string) {
     // The main target enables DOM at startup; frame targets only need it for the picker.
     if (sessionID) await cdp.send("DOM.enable", {}, sessionID)
     await cdp.send("Overlay.enable", {}, sessionID)
+    // The picker may have been turned off while the domains were enabling.
+    if (!inspecting) return
     await cdp.send("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: inspectHighlight }, sessionID)
   }
 
   async function inspected(backendID: number, sessionID?: string) {
     inspecting = false
+    const pick = ++picks
+    const navigation = generation
     await Promise.all(
       [undefined, ...sessions.values()].map((id) =>
         cdp.send("Overlay.setInspectMode", inspectOff, id).catch(() => undefined),
@@ -1262,6 +1276,13 @@ export function createBrowserPage(
     const element = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
     const [details, box, accessible] = await Promise.all([describe(element), rect(element), accessibility(element)])
     await painted(sessionID)
+    // Escape, a toggle, hiding, or navigation while the element was described cancels the pick.
+    if (closed) return
+    if (pick !== picks || navigation !== generation) {
+      if (!inspecting) await hideHighlight()
+      options.inspect?.({ active: inspecting })
+      return
+    }
     const ref = `e${++nextRef}`
     picked.set(ref, element)
     const zoom = contents.getZoomFactor()
@@ -1365,8 +1386,10 @@ export function createBrowserPage(
             segments.unshift(path.join(" > "))
             start = root instanceof ShadowRoot ? root.host : undefined
           }
+          const selector = segments.join(" >>> ")
           const text = clip((this.innerText ?? this.textContent ?? "").replace(/\\s+/g, " ").trim(), 160)
-          return { label: clip(label, 200), selector: clip(segments.join(" >>> "), 2000), ...(text ? { text } : {}) }
+          // A cut selector is invalid syntax; leave it out rather than pass it off as usable.
+          return { label: clip(label, 200), selector: selector.length > 2000 ? "" : selector, ...(text ? { text } : {}) }
         }`,
       ),
     )

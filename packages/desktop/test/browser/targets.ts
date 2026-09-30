@@ -186,14 +186,17 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
         })
       ).value,
     ).value
-    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-      await page.contents.debugger.sendCommand("Input.dispatchMouseEvent", {
-        type,
-        ...center,
-        button: "left",
-        clickCount: 1,
-      })
-    const element = await waitForPick()
+    const clickShadowButton = async () => {
+      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
+        await page.contents.debugger.sendCommand("Input.dispatchMouseEvent", {
+          type,
+          ...center,
+          button: "left",
+          clickCount: 1,
+        })
+    }
+    await clickShadowButton()
+    const element = await until(() => inspections.find((event) => event.element)?.element)
     assert.equal(element.selector, "#card >>> div:nth-of-type(2) > button")
     assert.equal(element.label, "button.act")
     assert.equal(element.role, "button")
@@ -227,7 +230,17 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     await page.inspect(true)
     await execute({ type: "hover", tabID, ref: element.ref })
     assert.deepEqual(inspections.at(-1), { active: false }, "Agent pointer input turns the picker off first")
+    // Turning the picker off while it is still arming must leave the page unarmed.
+    const arming = page.inspect(true)
+    await page.inspect(false)
+    await arming
+    assert.deepEqual(inspections.at(-1), { active: false })
+    await clickShadowButton()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    assert.equal(inspections.filter((event) => event.element).length, 1, "An unarmed page does not pick")
+    await page.inspect(true)
     page.setVisible(false)
+    await until(() => inspections.at(-1)?.active === false)
     console.log("PASS native element picker targets a shadow DOM node by ref and selector")
 
     await execute({ type: "navigate", tabID, url })
@@ -259,13 +272,13 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     throw new Error("Download did not complete")
   }
 
-  async function waitForPick() {
+  async function until<T>(check: () => T | undefined): Promise<T> {
     const deadline = Date.now() + 5_000
     while (Date.now() < deadline) {
-      const element = inspections.find((event) => event.element)?.element
-      if (element) return element
+      const value = check()
+      if (value) return value
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
-    throw new Error("The element picker did not report a pick")
+    throw new Error("The page did not reach the expected state in time")
   }
 }
