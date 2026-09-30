@@ -198,7 +198,8 @@ function ComposerStory(props: {
               : `Submitted: ${value}`,
           )
         },
-        onStop: () => setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
+        onStop: () =>
+          setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
       },
     },
   })
@@ -278,7 +279,7 @@ export const MixedAttachments = {
   ),
 }
 
-export const NoteComment = {
+export const BrowserElementComment = {
   render: () => (
     <ComposerStory
       prompt={text("Tidy up the settings page")}

@@ -6,7 +6,7 @@ export default {
   parameters: {
     docs: {
       description: {
-        component: "Production control for moving blocking work to the background.",
+        component: "Production controls for moving blocking work and inspecting active background tasks.",
       },
     },
   },
