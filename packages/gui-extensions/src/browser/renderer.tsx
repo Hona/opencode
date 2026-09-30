@@ -1,17 +1,34 @@
 import { createEffect, createRoot, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { App, Command, Link, Menu, Panel, Sessions, type PanelTab, type Setup } from "../sdk"
+import { App, Command, Link, Menu, Panel, preload, Sessions, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type { Model } from "./model"
+import tabStyles from "./tabs.css?inline"
 
 const setup: Setup = (ctx) => {
+  const sessions = ctx.use(Sessions)
+  const [model, setModel] = createSignal<Model>()
+  // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open.
+  ctx.add(Command, (): Command | undefined => {
+    const view = sessions.current()
+    if (!view) return undefined
+    const value = model()
+    return {
+      id: "open",
+      title: ctx.t("command.open"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+shift+b",
+      enabled: !!value?.available(view),
+      run: () => value?.open(view),
+    }
+  })
   // The native pane is a desktop feature.
   if (ctx.use(App).platform !== "desktop") return
+  // Tab trigger styles render with the strip, before the pane chunk loads.
+  ctx.add(Style, tabStyles)
   // The host calls setup after its root finishes, so setup owns its computations in a root of its own.
   return createRoot((dispose) => {
-    const sessions = ctx.use(Sessions)
     const owner = getOwner()
-    const [model, setModel] = createSignal<Model>()
     const status = { requested: false }
     // Everything here serves a mounted session, so the attachment model and the pane's protocol
     // schemas load when the first session opens instead of at startup.
@@ -30,20 +47,6 @@ const setup: Setup = (ctx) => {
       canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
       open: (session, url) => model()?.openURL(session, url),
       openFile: (session, path) => model()?.openFile(session, path),
-    })
-
-    ctx.add(Command, (): Command | undefined => {
-      const view = sessions.current()
-      const value = model()
-      if (!view || !value) return undefined
-      return {
-        id: "open",
-        title: ctx.t("command.open"),
-        group: ctx.t("command.category.view"),
-        bind: "mod+shift+b",
-        enabled: value.available(view),
-        run: () => value.open(view),
-      }
     })
 
     ctx.add(Command, (): Command | undefined => {
@@ -104,6 +107,7 @@ const setup: Setup = (ctx) => {
       }
     }
     const SessionBrowserPane = lazy(() => import("./panel"))
+    ctx.cleanup(preload(sessions, () => void SessionBrowserPane.preload()))
     ctx.add(Panel, {
       id: "main",
       region: "side",

@@ -131,7 +131,10 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
-  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  // Owned by the summary extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  sessionSummary: Schema.optional(
+    Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  ),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
@@ -248,7 +251,6 @@ export const defaultSettings: Settings = {
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
-  sessionSummary: { projectExpanded: true, serverExpanded: true },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
   permissions: { autoApprove: false },
@@ -349,22 +351,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
-        },
-      },
-      sessionSummary: {
-        projectExpanded: withFallback(
-          () => store.sessionSummary?.projectExpanded,
-          defaultSettings.sessionSummary.projectExpanded,
-        ),
-        serverExpanded: withFallback(
-          () => store.sessionSummary?.serverExpanded,
-          defaultSettings.sessionSummary.serverExpanded,
-        ),
-        setProjectExpanded(value: boolean) {
-          setStore("sessionSummary", "projectExpanded", value)
-        },
-        setServerExpanded(value: boolean) {
-          setStore("sessionSummary", "serverExpanded", value)
         },
       },
       visibility: {

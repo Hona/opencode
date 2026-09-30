@@ -1,5 +1,5 @@
 import { createEffect, lazy, onCleanup, Suspense } from "solid-js"
-import { Command, Native, Setting, Status, type Setup } from "../sdk"
+import { onIdle, Command, Native, Setting, Status, type Setup } from "../sdk"
 import { updaterAction } from "./action"
 import { Updater } from "./contract"
 
@@ -12,6 +12,8 @@ const setup: Setup = (ctx) => {
     if (client) void import("./actions").then((module) => module[name](ctx, client))
   }
   const Section = lazy(() => import("./section"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  ctx.cleanup(onIdle(() => void Section.preload()))
 
   ctx.add(Status, () => {
     const current = state()

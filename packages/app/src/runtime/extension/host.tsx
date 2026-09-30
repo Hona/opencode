@@ -129,15 +129,19 @@ function createHost(input: {
     const load = definition.renderer
     if (!load) return
     setState("status", definition.id, "loading")
-    const module = await load().catch((error: unknown) => {
-      fail(definition.id, error)
-      return undefined
-    })
+    // The current language's catalog loads with the entry, so the first render is already translated.
+    const [module, messages] = await Promise.all([
+      load().catch((error: unknown) => {
+        fail(definition.id, error)
+        return undefined
+      }),
+      loadMessages(definition.i18n, untrack(language.locale)),
+    ])
     if (!module) return
     if (input.disabled()?.has(definition.id) !== false || instances.has(definition.id)) return
     runWithOwner(owner, () =>
       createRoot((dispose) => {
-        const instance = createInstance(definition, dispose, getOwner())
+        const instance = createInstance(definition, dispose, getOwner(), messages)
         instances.set(definition.id, instance)
         // Setup runs synchronously inside the extension root so its effects and memos are owned.
         void Promise.try(() => untrack(() => module.default(instance.context))).then(
@@ -156,11 +160,19 @@ function createHost(input: {
     )
   }
 
-  const createInstance = (definition: Definition, dispose: () => void, root: Owner | null): Instance => {
+  const createInstance = (
+    definition: Definition,
+    dispose: () => void,
+    root: Owner | null,
+    initial: Messages,
+  ): Instance => {
     const extension = definition.id
     const controller = new AbortController()
     const cleanups = new Set<Cleanup>()
-    const messages = createMessages(definition.i18n, language.locale)
+    const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
+      initialValue: initial,
+    })
+    const messages = () => catalog.latest
     const created = new Map<string, unknown>()
     const own = (fn: Cleanup): Cleanup => {
       if (controller.signal.aborted) return () => {}
@@ -312,13 +324,11 @@ function createHost(input: {
   }
 }
 
-function createMessages(catalog: Catalog | undefined, locale: Accessor<string>): Accessor<Messages> {
+/** English merged under the locale's messages. A catalog that fails to load leaves English. */
+async function loadMessages(catalog: Catalog | undefined, locale: string): Promise<Messages> {
   const english = catalog?.en ?? {}
-  const [messages] = createResource(locale, async (value) => {
-    const source = catalog?.[value]
-    if (!source || value === "en") return english
-    const loaded = typeof source === "function" ? (await source()).default : source
-    return { ...english, ...loaded }
-  })
-  return () => messages.latest ?? english
+  const source = catalog?.[locale]
+  if (!source || locale === "en") return english
+  const loaded = typeof source === "function" ? await source().then((module) => module.default, () => ({})) : source
+  return { ...english, ...loaded }
 }

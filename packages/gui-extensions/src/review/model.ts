@@ -160,13 +160,19 @@ export function createReviewModel(input: { ctx: Context; view: SessionView; dema
     })
     onCleanup(stop)
   })
-  // Opening the side region refreshes changes a tree already shows.
+  // Opening the side region refreshes changes a tree already shows. Otherwise it loads them once, so the
+  // pinned tab reads "Files Changed N": v2 opened the region on the review tab before selecting another.
+  // A region restored open does not load them until something shows them.
   createEffect(
     on(
       () => !layout.narrow() && layout.side.opened(view),
       (open, previous) => {
-        if (!open || previous || input.demand.tree === 0 || vcsQuery.isFetching) return
-        refresh()
+        if (!open || previous || vcsQuery.isFetching) return
+        if (input.demand.tree > 0) {
+          refresh()
+          return
+        }
+        if (vcsMode() && view.server.connected && view.project?.vcs) void vcsQuery.refetch()
       },
       { defer: true },
     ),

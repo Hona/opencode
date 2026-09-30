@@ -1,12 +1,13 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
@@ -75,11 +76,16 @@ export interface Keybind {
   alt: boolean
 }
 
+export const CommandSection = Schema.Literals(["general", "session", "navigation", "model", "terminal", "prompt"])
+export type CommandSection = typeof CommandSection.Type
+
 export interface CommandOption {
   id: string
   title: string
   description?: string
   category?: string
+  /** Section of Settings > Shortcuts. Host commands leave it unset and are placed by id prefix. */
+  section?: CommandSection
   keybind?: KeybindConfig
   slash?: string
   slashArguments?: boolean
@@ -110,6 +116,7 @@ export const CommandCatalogItem = Persistence.struct({
   title: Schema.String,
   description: Schema.optional(Schema.String),
   category: Schema.optional(Schema.String),
+  section: Persistence.optional(CommandSection),
   keybind: Schema.optional(Schema.String),
   slash: Schema.optional(Schema.String),
   hidden: Schema.optional(Schema.Boolean),
@@ -319,12 +326,21 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
               title: opt.title,
               description: opt.description,
               category: opt.category,
+              section: opt.section,
               keybind: opt.keybind,
               slash: opt.slash,
             }),
           )
         }),
       )
+    })
+
+    // Built-in GUI extensions republished these commands under new ids. Drop the old entries so
+    // Settings > Shortcuts lists each command once.
+    createEffect(() => {
+      if (!catalogReady()) return
+      const stale = untrack(() => Object.keys(keybindRenames).filter((id) => id in catalog))
+      if (stale.length) setCatalog(produce((draft) => stale.forEach((id) => delete draft[id])))
     })
 
     const catalogOptions = createMemo(() => Object.entries(catalog).map(([id, meta]) => ({ id, ...meta })))

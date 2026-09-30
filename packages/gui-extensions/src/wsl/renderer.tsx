@@ -2,7 +2,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@opencode/ui/toast"
 import { lazy, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { App, ExtensionContext, Menu, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
+import { onIdle, App, ExtensionContext, Menu, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
 import { Wsl, type WslServerItem } from "./contract"
 
 const loadDialog = () => import("./dialog")
@@ -12,6 +12,8 @@ const setup: Setup = (ctx) => {
   const remote = ctx.use(Wsl)
   const dialog = useDialog()
   const Row = lazy(() => import("./row"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  ctx.cleanup(onIdle(() => void Row.preload()))
   const state = () => remote()?.state()
   const styled = { added: false }
   // Row actions of one server share a pending state, like one request per row.

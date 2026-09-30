@@ -210,7 +210,6 @@ export function createActiveSessionRegion(input: {
       } satisfies SessionUserActions,
     },
     requests: state,
-    workspaceMoveEligible: () => true,
   }
 }
 

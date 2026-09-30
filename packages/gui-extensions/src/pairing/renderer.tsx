@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "solid-js"
-import { Command, Layout, Native, Setting, type Setup } from "../sdk"
+import { onIdle, Command, Layout, Native, Setting, type Setup } from "../sdk"
 import { Pairing } from "./contract"
 
 const setup: Setup = (ctx) => {
@@ -7,6 +7,8 @@ const setup: Setup = (ctx) => {
   const pairing = ctx.use(Pairing)
   const layout = ctx.use(Layout)
   const Page = lazy(() => import("./page"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  ctx.cleanup(onIdle(() => void Page.preload()))
 
   ctx.add(Setting, {
     id: "pairing",

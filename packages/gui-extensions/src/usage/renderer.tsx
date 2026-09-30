@@ -1,11 +1,11 @@
 import { lazy, Show, Suspense } from "solid-js"
-import { onIdle, Panel, Slot, usePanel, type PanelTab, type SessionView, type Setup } from "../sdk"
+import { Panel, preload, Sessions, Slot, usePanel, type PanelTab, type SessionView, type Setup } from "../sdk"
 import { SessionContextUsage } from "./indicator"
 
 const setup: Setup = (ctx) => {
   const SessionContextTab = lazy(() => import("./tab"))
   // Load the tab chunk while idle so the first open renders at once, as the bundled v2 tab did.
-  ctx.cleanup(onIdle(() => void SessionContextTab.preload()))
+  ctx.cleanup(preload(ctx.use(Sessions), () => void SessionContextTab.preload()))
   // One tab object per session view, so strip updates never remount its trigger.
   const tabs = new WeakMap<SessionView, PanelTab>()
   const tab = (session: SessionView) => {

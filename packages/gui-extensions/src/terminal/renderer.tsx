@@ -1,5 +1,5 @@
 import { createEffect, createMemo, lazy, on } from "solid-js"
-import { App, Command, Layout, onIdle, Panel, Sessions, Storage, type Setup } from "../sdk"
+import { App, Command, Layout, Panel, preload, Sessions, Storage, type Setup } from "../sdk"
 import { createTerminalModel, type TerminalWorkspace } from "./model"
 
 const DOCK = "terminal:main"
@@ -93,7 +93,7 @@ const setup: Setup = (ctx) => {
 
   const TerminalPanel = lazy(() => import("./panel"))
   // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.
-  ctx.cleanup(onIdle(() => void TerminalPanel.preload()))
+  ctx.cleanup(preload(ctx.use(Sessions), () => void TerminalPanel.preload()))
   // Stable objects with live titles, so a locale change never remounts the dock's terminals.
   const tab = {
     id: "main",

@@ -34,7 +34,7 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
-  test("restores summary expansion and discards the retired status preference", () => {
+  test("keeps summary expansion for the summary extension and discards the retired status preference", () => {
     const settings = decode({
       general: { showStatus: true, showSearch: true },
       sessionSummary: { projectExpanded: false, serverExpanded: true },
@@ -77,7 +77,6 @@ describe("settings schema", () => {
         terminalPlacement: "side",
         followUpBehavior: "steer",
       },
-      sessionSummary: { projectExpanded: true, serverExpanded: true },
       appearance: {
         fontSize: 14,
         mono: "",

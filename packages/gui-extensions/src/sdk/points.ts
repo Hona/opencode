@@ -11,6 +11,8 @@ export interface Command {
   readonly title: string
   readonly description?: string
   readonly group?: string
+  /** Section of Settings > Shortcuts that lists the command. Defaults to general. */
+  readonly section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
   readonly bind?: string
   readonly slash?: { readonly name: string; readonly arguments?: true }
   /** Keep out of the command palette. */

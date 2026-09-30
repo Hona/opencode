@@ -5,17 +5,11 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createEffect, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { useLanguage } from "@/runtime/i18n/language"
+import { App, useExtension, type BackgroundTask } from "../sdk"
 
-export type BackgroundTask = {
-  id: string
-  type: "shell" | "subagent"
-  label: string
-  agent?: string
-}
-
-export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?: boolean }) {
-  const language = useLanguage()
+export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[]; mobile?: boolean }) {
+  const ctx = useExtension()
+  const app = ctx.use(App)
   const data = useData()
   const [store, setStore] = createStore({ open: false })
   createEffect(() => {
@@ -23,15 +17,15 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
     setStore("open", false)
   })
   const taskType = (task: BackgroundTask) => {
-    if (task.type === "shell") return language.t("ui.tool.shell")
-    if (!task.agent) return language.t("ui.tool.agent.default")
+    if (task.type === "shell") return ctx.t("ui.tool.shell")
+    if (!task.agent) return ctx.t("ui.tool.agent.default")
     return task.agent.slice(0, 1).toUpperCase() + task.agent.slice(1)
   }
 
   return (
     <Popover
       open={store.open}
-      placement={props.mobile ? "top-end" : language.direction() === "rtl" ? "right-end" : "left-end"}
+      placement={props.mobile ? "top-end" : app.direction() === "rtl" ? "right-end" : "left-end"}
       gutter={4}
       onOpenChange={(open) => setStore("open", open)}
     >
@@ -41,12 +35,12 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
           type="button"
           data-component="session-background-summary"
           class="session-summary-row"
-          aria-label={language.plural("session.background.tasksRunning", props.tasks.length)}
+          aria-label={ctx.plural("background.tasksRunning", props.tasks.length)}
         >
           <Icon name="outline-arrow-to-corner-top-right" class="shrink-0 text-v2-icon-icon-muted" />
           <TextShimmer
             as="span"
-            text={language.plural("session.background.tasksRunning", props.tasks.length)}
+            text={ctx.plural("background.tasksRunning", props.tasks.length)}
             active
             class="session-summary-label"
           />
@@ -56,7 +50,7 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
         <Popover.Content
           data-component="session-background-list"
           class="session-service-menu"
-          aria-label={language.plural("session.background.tasksRunning", props.tasks.length)}
+          aria-label={ctx.plural("background.tasksRunning", props.tasks.length)}
         >
           <For each={props.tasks.slice(0, 10)}>
             {(task) => (

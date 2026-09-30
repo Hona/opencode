@@ -8,6 +8,7 @@ export const keybindRenames: Readonly<Record<string, string>> = {
   "server.ssh.add": "ssh.add",
   "debugBar.toggle": "debug.toggle",
   "session.btw": "btw.ask",
+  "session.summary.toggle": "summary.toggle",
 }
 
 /** Moves renamed overrides once settings load. An override already stored under the new id wins. */

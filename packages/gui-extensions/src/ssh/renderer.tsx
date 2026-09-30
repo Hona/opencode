@@ -1,7 +1,7 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@opencode/ui/toast"
 import { createEffect, createRoot, lazy, Suspense, untrack, type JSX } from "solid-js"
-import { App, Command, ExtensionContext, Layout, Menu, Server, Style, type ServerEntry, type Setup } from "../sdk"
+import { onIdle, App, Command, ExtensionContext, Layout, Menu, Server, Style, type ServerEntry, type Setup } from "../sdk"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
 import { SshCover, type SshOffer } from "./cover"
 import { sshName, sshServerState } from "./name"
@@ -16,6 +16,8 @@ const setup: Setup = (ctx) => {
   const layout = ctx.use(Layout)
   const dialog = useDialog()
   const Row = lazy(() => import("./row"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  ctx.cleanup(onIdle(() => void Row.preload()))
   const state = () => remote()?.state()
   const ssh = createSshController({
     items: () => state()?.servers ?? [],

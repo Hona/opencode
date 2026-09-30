@@ -1,7 +1,7 @@
 import type { Setting } from "@opencode/gui-extensions/sdk"
 import type { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
-import { displayName } from "@/shell/layout/helpers"
+import { displayName } from "@opencode/ui/project-avatar"
 import { clientSettings, projectSettings, serverSettings } from "./search-catalog"
 import { pageIcons, pageLabels } from "./pages"
 import type { SettingsSearchResult } from "./search-results"

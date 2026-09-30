@@ -20,6 +20,7 @@ import {
   type PanelTab,
   type SessionView,
   type Setup,
+  preload,
 } from "../sdk"
 import { OpenAppPreferences } from "./apps"
 import { artifactKind, resolveArtifactPath } from "./artifact"
@@ -27,6 +28,7 @@ import { FileContext, type FileShared } from "./context"
 import { FileTree } from "./contract"
 import { FileVisual } from "./label"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import tabStyles from "./tabs.css?inline"
 
 const OPEN = "open"
 const GROUP = "browser"
@@ -111,6 +113,8 @@ const setup: Setup = (ctx) => {
   }
   const Provided = (props: ParentProps) => <FileContext.Provider value={shared}>{props.children}</FileContext.Provider>
 
+  // Tab trigger styles render with the strip, before any panel chunk loads.
+  ctx.add(Style, tabStyles)
   const style = { loaded: undefined as Promise<void> | undefined }
   const styled = <T,>(module: Promise<T>) => {
     style.loaded ??= import("./styles").then((css) => void ctx.add(Style, css.default))
@@ -121,6 +125,15 @@ const setup: Setup = (ctx) => {
   const Sidebar = lazy(() => styled(import("./sidebar")))
   const Tree = lazy(() => styled(import("./tree-v2")))
   const List = lazy(() => styled(import("./list")))
+  ctx.cleanup(
+    preload(sessions, () => {
+      void FileBrowser.preload()
+      void Sidebar.preload()
+      void Tree.preload()
+      void List.preload()
+      if (layout.narrow()) void MobileFiles.preload()
+    }),
+  )
 
   const launcher: PanelTab = {
     id: OPEN,
@@ -218,12 +231,17 @@ const setup: Setup = (ctx) => {
       const session = sessions.current()
       if (!session) return
       layout.open(`file:${OPEN}`, session, { preview: true })
-      queueMicrotask(() => shared.filter.element?.focus())
+      queueMicrotask(() => {
+        const element = shared.filter.element
+        if (element?.isConnected) return element.focus()
+        shared.filter.pending = true
+      })
     },
   })
 
   if (native) {
     const OpenInAppButton = lazy(() => import("./open-in-app"))
+    ctx.cleanup(preload(sessions, () => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (

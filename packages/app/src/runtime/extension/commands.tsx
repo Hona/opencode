@@ -15,6 +15,7 @@ export function ExtensionCommands() {
       title: item.value.title,
       description: item.value.description,
       category: item.value.group,
+      section: item.value.section,
       keybind: item.value.bind,
       slash: item.value.slash?.name,
       slashArguments: item.value.slash?.arguments,

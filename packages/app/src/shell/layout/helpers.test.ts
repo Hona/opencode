@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
+import { displayName } from "@opencode/ui/project-avatar"
 import {
   childSessionOnPath,
   closeHomeProject,
   compareSessionTime,
-  displayName,
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,

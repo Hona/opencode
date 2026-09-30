@@ -13,7 +13,6 @@ import { TabStorage } from "@/shell/tabs/schema"
 import { decode64 } from "@/runtime/persistence/base64"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
 import { createPathHelpers } from "@/workspaces/files/path"
-import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
@@ -21,30 +20,11 @@ import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } 
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
-export type { ProjectAvatarVariant }
-
 const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 const DEFAULT_REVIEW_PANEL_OPENED = false
-export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
-  if (key === "mint") return "cyan"
-  if (key === "lime") return "green"
-  if (
-    key === "orange" ||
-    key === "yellow" ||
-    key === "cyan" ||
-    key === "green" ||
-    key === "red" ||
-    key === "pink" ||
-    key === "blue" ||
-    key === "purple" ||
-    key === "gray"
-  )
-    return key
-  return "gray"
-}
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 export type HomeProjectSelection = typeof layoutSchema.Type.home.selection

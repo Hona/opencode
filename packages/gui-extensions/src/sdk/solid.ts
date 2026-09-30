@@ -1,4 +1,5 @@
-import { createContext, useContext, type Accessor } from "solid-js"
+import { createContext, createEffect, createRoot, useContext, type Accessor } from "solid-js"
+import type { Sessions } from "./services"
 import type { Context } from "./core"
 
 /** The host provides this around every contribution it renders. */
@@ -44,7 +45,7 @@ export function usePanel() {
   return frame
 }
 
-/** Runs n when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Returns a cancel. */
+/** Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Returns a cancel. */
 export function onIdle(fn: () => void) {
   if (typeof requestIdleCallback === "function") {
     const id = requestIdleCallback(fn)
@@ -52,4 +53,22 @@ export function onIdle(fn: () => void) {
   }
   const id = setTimeout(fn, 200)
   return () => clearTimeout(id)
+}
+
+/**
+ * Loads lazy chunks once the first session route mounts and the main thread is idle: the code v2 bundled
+ * with the session screen, so a panel's first open renders at once without adding to app start.
+ */
+export function preload(sessions: Sessions, load: () => void) {
+  return createRoot((dispose) => {
+    const state = { cancel: undefined as (() => void) | undefined }
+    createEffect(() => {
+      if (state.cancel || !sessions.current()) return
+      state.cancel = onIdle(load)
+    })
+    return () => {
+      state.cancel?.()
+      dispose()
+    }
+  })
 }

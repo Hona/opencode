@@ -219,6 +219,9 @@ export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: S
       onSelectPermanent={(path) => shared.open(props.session, path)}
       filterRef={(element) => {
         shared.filter.element = element
+        if (!shared.filter.pending) return
+        shared.filter.pending = false
+        queueMicrotask(() => element.focus())
       }}
     />
   )

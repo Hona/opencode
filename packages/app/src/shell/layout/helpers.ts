@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode/util/path"
 import type { SessionInfo } from "@opencode/client/promise"
+import { displayName } from "@opencode/ui/project-avatar"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -47,9 +47,6 @@ export const childSessionOnPath = (sessions: SessionInfo[] | undefined, rootID: 
   }
 }
 
-export const displayName = (project: { name?: string; worktree: string }) =>
-  project.name || getFilename(project.worktree) || project.worktree
-
 type ProjectAppearance = {
   name?: string
   worktree: string
@@ -94,15 +91,6 @@ export function homeProjectDirectories(result: string | string[] | null) {
 export function homeSessionServerStatus(active: boolean, status: () => { working: boolean; tint?: string }) {
   if (!active) return { working: false, tint: undefined }
   return status()
-}
-
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
-
-export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
-  if (icon?.override) return icon.override
-  if (icon?.color) return undefined
-  return icon?.url
 }
 
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
