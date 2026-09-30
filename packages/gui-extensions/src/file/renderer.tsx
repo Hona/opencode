@@ -20,7 +20,7 @@ import {
   type PanelTab,
   type SessionView,
   type Setup,
-  preload,
+  onIdle,
 } from "../sdk"
 import { OpenAppPreferences } from "./apps"
 import { artifactKind, resolveArtifactPath } from "./artifact"
@@ -126,7 +126,7 @@ const setup: Setup = (ctx) => {
   const Tree = lazy(() => styled(import("./tree-v2")))
   const List = lazy(() => styled(import("./list")))
   ctx.cleanup(
-    preload(sessions, () => {
+    onIdle(() => {
       void FileBrowser.preload()
       void Sidebar.preload()
       void Tree.preload()
@@ -248,7 +248,7 @@ const setup: Setup = (ctx) => {
 
   if (native) {
     const OpenInAppButton = lazy(() => import("./open-in-app"))
-    ctx.cleanup(preload(sessions, () => void OpenInAppButton.preload()))
+    ctx.cleanup(onIdle(() => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (

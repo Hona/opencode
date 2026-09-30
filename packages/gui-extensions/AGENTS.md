@@ -16,7 +16,7 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 
 ## Performance
 
-- Keep `renderer.tsx` small and put heavy UI behind `lazy()`. Load chunks with `preload(sessions, …)` or `onIdle(…)`, never at startup.
+- Keep `renderer.tsx` small and put heavy UI behind `lazy()`. Preload a chunk with `onIdle(() => void Chunk.preload())` from setup, so it compiles while the app idles (e.g. on Home) instead of when a session first opens. Never import it on the startup path.
 - Return stable objects from `Panel.list` and reactive contributions, so the host never remounts a trigger or a panel.
 - Never add work to timeline rows. The session header slot is the only timeline surface.
 

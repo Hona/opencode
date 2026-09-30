@@ -2,7 +2,7 @@ import { createEffect, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema, Struct } from "effect"
 import { Changes } from "../review/contract"
-import { Panel, preload, Sessions, Slot, Storage, Style, usePanel, type Setup } from "../sdk"
+import { onIdle, Panel, Sessions, Slot, Storage, Style, usePanel, type Setup } from "../sdk"
 import type { Disclosure } from "./panel"
 import { SummaryHeader } from "./popover"
 
@@ -40,8 +40,8 @@ const setup: Setup = (ctx) => {
       return panel
     }),
   )
-  // Load the panel once a session shows and the main thread is idle, so the first open renders at once.
-  ctx.cleanup(preload(sessions, () => void SummaryPanel.preload()))
+  // Compile the panel while the app idles, so the first open renders at once.
+  ctx.cleanup(onIdle(() => void SummaryPanel.preload()))
 
   ctx.add(Slot, {
     at: "session.header",

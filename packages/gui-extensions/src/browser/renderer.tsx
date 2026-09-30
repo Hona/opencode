@@ -1,6 +1,6 @@
 import { createEffect, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { App, Command, Link, Menu, Panel, preload, Sessions, Style, type PanelTab, type Setup } from "../sdk"
+import { App, Command, Link, Menu, onIdle, Panel, Sessions, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type { Model } from "./model"
 import tabStyles from "./tabs.css?inline"
@@ -105,7 +105,7 @@ const setup: Setup = (ctx) => {
     }
   }
   const SessionBrowserPane = lazy(() => import("./panel"))
-  ctx.cleanup(preload(sessions, () => void SessionBrowserPane.preload()))
+  ctx.cleanup(onIdle(() => void SessionBrowserPane.preload()))
   ctx.add(Panel, {
     id: "main",
     region: "side",

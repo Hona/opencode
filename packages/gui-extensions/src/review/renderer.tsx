@@ -13,7 +13,7 @@ import {
   type SessionRef,
   type SessionView,
   type Setup,
-  preload,
+  onIdle,
 } from "../sdk"
 import { Changes, type ChangeKind } from "./contract"
 import { createReviewModel, type Demand, type ReviewModel } from "./model"
@@ -116,7 +116,7 @@ const setup: Setup = (ctx) => {
 
   const ReviewPanel = lazy(() => import("./panel"))
   const MobileReview = lazy(() => import("./mobile"))
-  ctx.cleanup(preload(sessions, () => void (layout.narrow() ? MobileReview : ReviewPanel).preload()))
+  ctx.cleanup(onIdle(() => void (layout.narrow() ? MobileReview : ReviewPanel).preload()))
 
   ctx.add(Panel, {
     id: "main",
