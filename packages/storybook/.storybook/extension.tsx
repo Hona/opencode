@@ -47,21 +47,7 @@ function createStoryContext(definition: Definition) {
   const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
     initialValue: definition.i18n?.en ?? {},
   })
-  const app: App = {
-    channel: "dev",
-    platform: "web",
-    font: () => "var(--font-family-mono)",
-    locale: language.intl,
-    direction: language.direction,
-    setDirection: language.setDirection,
-    routing: () => false,
-    path: () => "/",
-    keybind: () => [],
-    keys: () => [],
-    matches: () => false,
-    servers: () => [],
-    on: () => () => {},
-  }
+  const app = createStoryApp("web")
   const controller = new AbortController()
   onCleanup(() => controller.abort())
   const unavailable = (name: string) => () => {
@@ -93,6 +79,26 @@ function createStoryContext(definition: Definition) {
       return language.plural(key as Parameters<typeof language.plural>[0], count, params)
     },
   } as unknown as Context
+}
+
+/** The host's App service for a story, outside any route. */
+export function createStoryApp(platform: App["platform"]): App {
+  const language = useLanguage()
+  return {
+    channel: "dev",
+    platform,
+    font: () => "var(--font-family-mono)",
+    locale: language.intl,
+    direction: language.direction,
+    setDirection: language.setDirection,
+    routing: () => false,
+    path: () => "/",
+    keybind: () => [],
+    keys: () => [],
+    matches: () => false,
+    servers: () => [],
+    on: () => () => {},
+  }
 }
 
 async function loadMessages(catalog: Catalog | undefined, locale: string): Promise<Messages> {

@@ -1,26 +1,29 @@
-import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { Menu } from "@opencode/ui/menu"
 import { showToast } from "@opencode/ui/toast"
 import { createContext, createEffect, createSignal, For, onCleanup, Show, untrack, useContext } from "solid-js"
 import type { ParentProps } from "solid-js"
 import { HomeProjectsView, type HomeProjectsViewProps } from "@/home/projects/view"
+import { ExtensionHostProvider, useExtensionHost } from "@/runtime/extension/host"
+import { Contribution, ExtensionStyles } from "@/runtime/extension/render"
+import { ExtensionServersProvider, useExtensionServers, useServerAddItems } from "@/runtime/extension/servers"
 import { useLanguage } from "@/runtime/i18n/language"
-import { PlatformProvider, type Platform } from "@/runtime/platform/platform"
+import { PlatformProvider, usePlatform, type Platform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCollectionController } from "@/servers/registry/controller"
 import { ServerHealthIndicator } from "@/servers/registry/row"
-import { useExtension, type RemoteClient, type ServerRow } from "../../../../gui-extensions/src/sdk"
+import { ServerRowItems } from "@/servers/registry/row-items"
+import { builtins } from "../../../../gui-extensions/src/renderer"
+import { App, Layout, type RemoteClient, type ServerRow } from "../../../../gui-extensions/src/sdk"
 import type { Ssh, SshConfig, SshHttp, SshItem, SshStart } from "../../../../gui-extensions/src/ssh/contract"
-import { SshCover, type SshOffer } from "../../../../gui-extensions/src/ssh/cover"
 import { DialogSsh } from "../../../../gui-extensions/src/ssh/dialog"
-import SshRow from "../../../../gui-extensions/src/ssh/row"
 import { createSshController } from "../../../../gui-extensions/src/ssh/state"
+import { createStoryApp } from "../../extension"
 // Settings rows render inside the app's settings page, which brings these styles.
 import "@/settings/settings.css"
 
-// The app API the SSH dialog stories were written against, before SSH moved into its GUI extension. Each piece
-// renders the extension's production component and wires it the way the extension's renderer setup does.
+// The app API the SSH dialog stories were written against, before SSH moved into its GUI extension. The SSH
+// extension's renderer runs in the app's extension host; only its main process and the host's app and layout
+// services are stood in for. Every piece below renders the renderer's contributions as the app does.
 
 export { useLanguage }
 export type { SshItem }
@@ -37,8 +40,12 @@ export type SshPlatform = {
   forget(id: string): Promise<void>
   openConfig(): Promise<void>
 }
+type SshRemote = RemoteClient<(typeof Ssh)["spec"]>
 
+const extension = builtins.find((definition) => definition.id === "ssh")!
+const none = new Set<string>()
 const SshPlatformContext = createContext<SshPlatform>()
+const SshRemoteContext = createContext<SshRemote>()
 
 function StoryPlatformProvider(props: ParentProps<{ value: Platform & { sshServers?: SshPlatform } }>) {
   return (
@@ -48,78 +55,120 @@ function StoryPlatformProvider(props: ParentProps<{ value: Platform & { sshServe
   )
 }
 
-const context = createSimpleContext({
-  name: "Ssh",
-  init: () => {
-    const platform = useContext(SshPlatformContext)
-    const language = useLanguage()
-    const [servers, setServers] = createSignal<readonly SshItem[]>([])
-    const refresh = () => platform?.getState().then((state) => setServers(state.servers)) ?? Promise.resolve()
-    void refresh()
-    const off = platform?.subscribe((state) => setServers(state.servers))
-    if (off) onCleanup(off)
-    const remote: RemoteClient<(typeof Ssh)["spec"]> | undefined = platform && {
-      state: () => ({ servers: servers(), revision: 0 }),
-      on: () => () => {},
-      start: (input) => platform.start(input).then(() => 0),
-      resolve: (input) => platform.resolve(input.id),
-      respond: (input) => platform.respond(input.id, input.prompt, input.value),
-      cancel: (input) => platform.cancel(input.id),
-      forget: (input) => platform.forget(input.id),
-    }
-    return {
-      get servers() {
-        return servers()
-      },
-      ...createSshController({
-        items: servers,
-        api: () => remote,
-        refresh,
-        error: () => showToast({ variant: "error", title: language.t("common.requestFailed") }),
-      }),
-    }
-  },
-})
-
-export const useSsh = () => context.use()
+// Stands in for the SSH extension's main entry: the story's platform fixture answers the remote.
+function createSshMain(platform: SshPlatform): SshRemote {
+  const [state, setState] = createSignal<{ servers: readonly SshItem[]; revision: number }>()
+  const publish = (next: SshState) =>
+    setState((current) => ({ servers: next.servers, revision: (current?.revision ?? 0) + 1 }))
+  void platform.getState().then(publish)
+  onCleanup(platform.subscribe(publish))
+  const revision = () => state()?.revision ?? 0
+  return {
+    state,
+    on: () => () => {},
+    // Background restores leave the fixture alone: the stories show saved servers this window has not reconnected,
+    // as they did when the app mounted its restore outside them.
+    start: (input) => (input.background ? Promise.resolve(revision()) : platform.start(input).then(revision)),
+    resolve: (input) => platform.resolve(input.id),
+    respond: (input) => platform.respond(input.id, input.prompt, input.value),
+    cancel: (input) => platform.cancel(input.id),
+    forget: (input) => platform.forget(input.id),
+  }
+}
 
 export function SshProvider(props: ParentProps) {
+  const platform = useContext(SshPlatformContext)
+  const remote = platform && createSshMain(platform)
+  const app = createStoryApp(usePlatform().platform)
+  const layout = new Proxy({} as Layout, {
+    get: () => () => {
+      throw new Error("The host layout is unavailable in SSH stories")
+    },
+  })
   return (
-    <context.provider>
-      <SshDialogs />
-      {props.children}
-    </context.provider>
+    <ExtensionHostProvider
+      definitions={[extension]}
+      disabled={() => none}
+      services={[
+        { token: App, create: () => app },
+        { token: Layout, create: () => layout },
+      ]}
+      remote={(token) => (token.id === extension.id ? remote : undefined)}
+    >
+      <SshRemoteContext.Provider value={remote}>
+        <SshHost>{props.children}</SshHost>
+      </SshRemoteContext.Provider>
+    </ExtensionHostProvider>
   )
 }
 
-// Challenges of an attempt started without its dialog open one of their own.
-function SshDialogs() {
-  const ssh = useSsh()
+// The app renders contributions once its extensions are active.
+function SshHost(props: ParentProps) {
+  const host = useExtensionHost()
+  return (
+    <ExtensionServersProvider failed={(id) => host.state.status[id] === "failed"}>
+      <ExtensionStyles />
+      <Show when={host.state.status[extension.id] === "active"}>{props.children}</Show>
+    </ExtensionServersProvider>
+  )
+}
+
+export function useSsh() {
+  const remote = useContext(SshRemoteContext)
+  const servers = useExtensionServers()
+  const entry = (id: string) => servers.entry(`ssh:${id}`)?.entry
+  return {
+    get servers() {
+      return remote?.state()?.servers ?? []
+    },
+    pending: (id: string) => entry(id)?.state === "starting",
+    connect: (config: SshConfig) => void entry(config.id)?.connect?.(),
+  }
+}
+
+export function useSshAuthenticate() {
+  return ServerConnection.authenticate
+}
+
+function StoryDialogSsh(props: { config?: SshConfig; connect?: boolean }) {
+  if (props.config) return <PresetDialogSsh config={props.config} connect={props.connect} />
+  return <AddDialogSsh />
+}
+
+// The story opens this inside a dialog of its own; the SSH extension's "server.add" menu item opens the real one.
+function AddDialogSsh() {
   const dialog = useDialog()
+  const items = useServerAddItems()
+  const state = { opened: false }
   createEffect(() => {
-    const item = ssh.dialog.next()
-    if (!item || dialog.active) return
-    ssh.dialog.opened(item.config.id)
-    const config = item.config
-    untrack(() => void dialog.push(() => <DialogSsh ssh={ssh} config={config} promptOnly />))
+    const item = items()[0]
+    if (!item || state.opened) return
+    state.opened = true
+    untrack(() => {
+      dialog.close()
+      item.run("")
+    })
   })
   return null
 }
 
-function StoryDialogSsh(props: { config?: SshConfig; connect?: boolean }) {
-  const ssh = useSsh()
-  return <DialogSsh ssh={ssh} config={props.config} connect={props.connect} />
-}
-
-export function useSshAuthenticate() {
-  const ssh = useSsh()
-  return (server: ServerConnection.Any) => {
-    if (server.type !== "extension" || server.extension !== "ssh" || !server.authenticationRequired) return false
-    const item = ssh.item(server.key.slice("ssh:".length))
-    if (!item) return false
-    ssh.connect(item.config)
-    return true
-  }
+// No production entry point opens the dialog with a preset host, so these stories render it with a controller of
+// their own over the same main process.
+function PresetDialogSsh(props: { config: SshConfig; connect?: boolean }) {
+  const remote = useContext(SshRemoteContext)
+  const language = useLanguage()
+  const ssh = createSshController({
+    items: () => remote?.state()?.servers ?? [],
+    api: () => remote,
+    // The stand-in main publishes an attempt's state before `start` resolves.
+    refresh: () => Promise.resolve(),
+    error: () => showToast({ variant: "error", title: language.t("common.requestFailed") }),
+  })
+  return (
+    <Contribution extension={extension.id}>
+      {() => <DialogSsh ssh={ssh} config={props.config} connect={props.connect} />}
+    </Contribution>
+  )
 }
 
 namespace StoryServerConnection {
@@ -136,96 +185,74 @@ namespace StoryServerConnection {
   export const key = (conn: Ssh) => ServerConnection.Key.make(`ssh:${conn.id ?? conn.host}`)
 }
 
-// The home list shows an SSH server as the extension server the SSH extension contributes.
+// The home list shows the server the SSH extension contributes for each story server.
 function StoryHomeProjectsView(
   props: Omit<HomeProjectsViewProps, "servers"> & { servers: StoryServerConnection.Ssh[] },
 ) {
-  const servers = props.servers.map(
-    (server): ServerConnection.Extension => ({
-      type: "extension",
-      key: StoryServerConnection.key(server),
-      extension: "ssh",
-      displayName: server.displayName,
-      label: server.label,
-      get state() {
-        if (server.authenticationRequired) return "auth"
-        return server.connecting ? "starting" : "ready"
-      },
-      get connecting() {
-        return !!server.connecting
-      },
-      get authenticationRequired() {
-        return !!server.authenticationRequired
-      },
-      managed: true,
-      http: server.http,
-    }),
+  const servers = useExtensionServers()
+  return (
+    <HomeProjectsView
+      {...props}
+      servers={servers
+        .list()
+        .filter((conn) =>
+          props.servers.some((server) => StoryServerConnection.key(server) === ServerConnection.key(conn)),
+        )}
+    />
   )
-  return <HomeProjectsView {...props} servers={servers} />
 }
 
-// The cover reads `pending` from the same controller and reconnects through it, as the story's props do.
+// The cover the SSH extension contributes over a session of a server that is not ready.
 export function SshConnectionPanel(props: { item: SshItem; pending?: boolean; onReconnect: () => void }) {
-  const ssh = useSsh()
-  const offer: SshOffer = { selection: undefined, offered: false }
-  return <SshCover id={props.item.config.id} tab={() => "story"} ssh={ssh} offer={offer} />
-}
-
-// Settings rows of saved SSH servers, with the parts the host passes to the extension's row.
-export function SshServerSettings(props: { filter: string; id?: string; domain: ServerCollectionController }) {
-  const ssh = useSsh()
-  const ids = () =>
-    ssh.servers
-      .filter(
-        (item) =>
-          item.saved &&
-          (!props.id || item.config.id === props.id) &&
-          `${item.config.name} ${item.config.target}`.toLowerCase().includes(props.filter.toLowerCase()),
-      )
-      .map((item) => item.config.id)
+  const servers = useExtensionServers()
   return (
-    <For each={ids()}>
-      {(id) => {
-        const key = ServerConnection.Key.make(`ssh:${id}`)
-        const row: ServerRow = {
-          key,
-          health: () => props.domain.collection.health()[key],
-          Indicator: (indicator) => (
-            <ServerHealthIndicator
-              health={indicator.health}
-              connecting={indicator.connecting}
-              authenticationRequired={indicator.auth}
-            />
-          ),
-          default: {
-            available: () => props.domain.defaults.available(),
-            current: () => props.domain.defaults.key() === key,
-            set: (value) => void props.domain.defaults.set(value ? key : null),
-          },
-          remove: () => props.domain.connection.remove(key),
-          Items: () => <SshRowItems id={id} />,
-        }
-        return <SshRow row={row} id={id} ssh={ssh} />
-      }}
-    </For>
-  )
-}
-
-// The SSH extension's "server.row" menu items.
-function SshRowItems(props: { id: string }) {
-  const ssh = useSsh()
-  const extension = useExtension()
-  return (
-    <Show when={ssh.item(props.id)}>
-      {(item) => (
-        <Show when={item().stage !== "ready"}>
-          <Menu.Item disabled={ssh.pending(props.id)} onSelect={() => ssh.connect(item().config)}>
-            {extension.t(item().stage === "authentication" ? "authenticate" : "connect")}
-          </Menu.Item>
-        </Show>
+    <Show when={servers.entry(`ssh:${props.item.config.id}`)}>
+      {(source) => (
+        <Contribution extension={source().extension}>{() => source().entry.cover?.({ tab: "story" })}</Contribution>
       )}
     </Show>
   )
+}
+
+// The settings page's rows for contributed servers, as `settings/servers/servers.tsx` renders them.
+export function SshServerSettings(props: { filter: string; id?: string; domain: ServerCollectionController }) {
+  const servers = useExtensionServers()
+  const keys = () =>
+    servers
+      .entries()
+      .filter(
+        (item) =>
+          item.extension === extension.id &&
+          (!props.id || item.entry.id === props.id) &&
+          item.entry.name.toLowerCase().includes(props.filter.toLowerCase()),
+      )
+      .map((item) => ServerConnection.Key.make(item.key))
+  return <For each={keys()}>{(key) => <ExtensionServerRow server={key} domain={props.domain} />}</For>
+}
+
+function ExtensionServerRow(props: { server: ServerConnection.Key; domain: ServerCollectionController }) {
+  const servers = useExtensionServers()
+  const source = untrack(() => servers.entry(props.server))
+  const row: ServerRow = {
+    key: props.server,
+    health: () => props.domain.collection.health()[props.server],
+    Indicator: (indicator) => (
+      <ServerHealthIndicator
+        health={indicator.health}
+        connecting={indicator.connecting}
+        authenticationRequired={indicator.auth}
+      />
+    ),
+    default: {
+      available: () => props.domain.defaults.available(),
+      current: () => props.domain.defaults.key() === props.server,
+      set: (value) => void props.domain.defaults.set(value ? props.server : null),
+    },
+    remove: () => props.domain.connection.remove(props.server),
+    Items: () => <ServerRowItems server={props.server} />,
+  }
+  if (!source) return null
+  return <Contribution extension={source.extension}>{() => untrack(() => source.entry.row?.(row))}</Contribution>
 }
 
 export {
