@@ -18,6 +18,7 @@ story("keeps grouped file choices when the Used group reopens", async ({ mount }
   }
   await disclosure.click()
   await disclosure.click()
+  await expect(files).toHaveCount(3)
   for (const file of await files.all()) {
     await expect(file.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "true")
     await expect(file.getByRole("region")).toBeVisible()

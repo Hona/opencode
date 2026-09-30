@@ -560,7 +560,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const all = Array.from(new Set(current.all.map(rewrite)))
             const active = current.active === undefined ? undefined : rewrite(current.active)
             const preview = ephemeral.sessionTabPreview[session]
-            const nextPreview = preview === undefined ? undefined : rewrite(preview)
+            // A preview that collapses into a kept tab becomes that kept tab: kept wins.
+            const kept = new Set(current.all.filter((tab) => tab !== preview).map(rewrite))
+            const renamed = preview === undefined ? undefined : rewrite(preview)
+            const nextPreview = renamed !== undefined && kept.has(renamed) ? undefined : renamed
             const changed = all.length !== current.all.length || all.some((tab, index) => tab !== current.all[index])
             if (!changed && active === current.active && nextPreview === preview) return
             batch(() => {
