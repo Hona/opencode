@@ -1,7 +1,6 @@
-import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@opencode/ui/toast"
 import { createEffect, createRoot, lazy, Suspense, untrack, type JSX } from "solid-js"
-import { onIdle, App, Command, ExtensionContext, Layout, Menu, Server, Style, type ServerEntry, type Setup } from "../sdk"
+import { App, Command, Dialogs, Layout, Menu, onIdle, Server, Style, type ServerEntry, type Setup } from "../sdk"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
 import { SshCover, type SshOffer } from "./cover"
 import { sshName, sshServerState } from "./name"
@@ -14,7 +13,7 @@ const setup: Setup = (ctx) => {
   if (ctx.use(App).platform !== "desktop") return
   const remote = ctx.use(Ssh)
   const layout = ctx.use(Layout)
-  const dialog = useDialog()
+  const dialog = ctx.use(Dialogs)
   const Row = lazy(() => import("./row"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
   ctx.cleanup(onIdle(() => void Row.preload()))
@@ -22,15 +21,21 @@ const setup: Setup = (ctx) => {
   const ssh = createSshController({
     items: () => state()?.servers ?? [],
     api: remote,
+    // Resolves once main publishes the revision; disabling the extension resolves it early.
     refresh: (revision) =>
       new Promise<void>((resolve) =>
-        createRoot((dispose) =>
-          createEffect(() => {
-            if ((state()?.revision ?? 0) < revision) return
+        createRoot((dispose) => {
+          const done = () => {
             dispose()
             resolve()
-          }),
-        ),
+          }
+          ctx.signal.addEventListener("abort", done, { once: true })
+          createEffect(() => {
+            if ((state()?.revision ?? 0) < revision) return
+            ctx.signal.removeEventListener("abort", done)
+            done()
+          })
+        }),
       ),
     error: () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
   })
@@ -43,7 +48,7 @@ const setup: Setup = (ctx) => {
       if (ctx.signal.aborted) return
       if (!styled.added) ctx.add(Style, module.css)
       styled.added = true
-      void dialog.push(() => <ExtensionContext.Provider value={ctx}>{render(module)}</ExtensionContext.Provider>)
+      dialog.push(() => render(module))
     })
   const add = (openProject: boolean) =>
     show((module) => (
@@ -149,7 +154,7 @@ const setup: Setup = (ctx) => {
   // Challenges of an attempt started without its dialog open one of their own.
   createEffect(() => {
     const item = ssh.dialog.next()
-    if (!item || dialog.active) return
+    if (!item || dialog.active()) return
     ssh.dialog.opened(item.config.id)
     const config = item.config
     untrack(() => show((module) => <module.DialogSsh ssh={ssh} config={config} promptOnly />))

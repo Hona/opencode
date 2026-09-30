@@ -284,9 +284,15 @@ export interface Preferences {
   mobileDiffWrap(): boolean
 }
 
+/** The render runs with this extension's context; the dialog closes when the extension goes away. */
 export interface Dialogs {
+  /** Replaces the open dialogs. */
   show(render: () => JSX.Element): void
+  /** Opens above the open dialog. */
+  push(render: () => JSX.Element): void
   close(): void
+  /** Some dialog is open. Reactive. */
+  active(): boolean
 }
 
 export interface SurfaceProps {

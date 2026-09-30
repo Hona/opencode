@@ -17,7 +17,6 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
 import {
   App,
-  Dialogs,
   Layout,
   Native,
   Panel,
@@ -190,14 +189,6 @@ export function createExtensionServices() {
             }
           },
         }) satisfies App,
-    },
-    {
-      token: Dialogs,
-      create: () =>
-        ({
-          show: (render) => dialog.show(render),
-          close: () => dialog.close(),
-        }) satisfies Dialogs,
     },
     {
       token: Sessions,

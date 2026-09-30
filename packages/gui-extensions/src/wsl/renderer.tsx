@@ -1,8 +1,7 @@
-import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@opencode/ui/toast"
 import { lazy, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { onIdle, App, ExtensionContext, Menu, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
+import { App, Dialogs, Menu, onIdle, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
 import { Wsl, type WslServerItem } from "./contract"
 
 const loadDialog = () => import("./dialog")
@@ -10,7 +9,7 @@ const loadDialog = () => import("./dialog")
 const setup: Setup = (ctx) => {
   if (ctx.use(App).platform !== "desktop") return
   const remote = ctx.use(Wsl)
-  const dialog = useDialog()
+  const dialog = ctx.use(Dialogs)
   const Row = lazy(() => import("./row"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
   ctx.cleanup(onIdle(() => void Row.preload()))
@@ -40,11 +39,7 @@ const setup: Setup = (ctx) => {
       if (ctx.signal.aborted) return
       if (!styled.added) ctx.add(Style, module.css)
       styled.added = true
-      void dialog.push(() => (
-        <ExtensionContext.Provider value={ctx}>
-          <module.DialogAddWslServer api={api} state={state} />
-        </ExtensionContext.Provider>
-      ))
+      dialog.push(() => <module.DialogAddWslServer api={api} state={state} />)
     })
   }
 

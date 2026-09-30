@@ -4,19 +4,25 @@ import {
   createMemo,
   createResource,
   createRoot,
+  ErrorBoundary,
   getOwner,
   onCleanup,
+  onMount,
   runWithOwner,
   untrack,
   useContext,
   type Accessor,
+  type JSX,
   type Owner,
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { resolveTemplate } from "@solid-primitives/i18n"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import {
+  Dialogs,
+  ExtensionContext,
   Link,
   Links,
   type Catalog,
@@ -124,6 +130,35 @@ function createHost(input: {
     },
   }
   hosts.set(Links.id, { token: Links, create: () => links })
+
+  const dialog = useDialog()
+  hosts.set(Dialogs.id, {
+    token: Dialogs,
+    create: (extension): Dialogs => {
+      const open = (method: "show" | "push") => (render: () => JSX.Element) => {
+        const context = instances.get(extension)?.context
+        if (!context) return
+        const release = context.cleanup(() => dialog.close())
+        void dialog[method](
+          () => (
+            <ErrorBoundary
+              fallback={(error) => {
+                onMount(() => {
+                  dialog.close()
+                  fail(extension, error)
+                })
+                return null
+              }}
+            >
+              <ExtensionContext.Provider value={context}>{untrack(render)}</ExtensionContext.Provider>
+            </ErrorBoundary>
+          ),
+          () => void release(),
+        )
+      }
+      return { show: open("show"), push: open("push"), close: () => dialog.close(), active: () => !!dialog.active }
+    },
+  })
 
   const activate = async (definition: Definition) => {
     const load = definition.renderer
@@ -277,13 +312,18 @@ function createHost(input: {
   const replaced = new Map<string, Definition>()
   const latest = (definition: Definition) => replaced.get(definition.id) ?? definition
 
-  const ready = createMemo(() =>
-    !!input.disabled() &&
-    input.definitions.every((definition) => {
-      if (!definition.renderer) return true
-      const status = state.status[definition.id]
-      return status === "active" || status === "failed" || status === "disabled"
-    }),
+  // The startup gate: once every entry settled it stays open, so enabling or reloading an extension later
+  // never unmounts the app.
+  const ready = createMemo<boolean>(
+    (settled) =>
+      settled ||
+      (!!input.disabled() &&
+        input.definitions.every((definition) => {
+          if (!definition.renderer) return true
+          const status = state.status[definition.id]
+          return status === "active" || status === "failed" || status === "disabled"
+        })),
+    false,
   )
 
   createMemo(() => {
