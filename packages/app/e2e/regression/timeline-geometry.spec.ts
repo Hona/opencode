@@ -57,20 +57,25 @@ test("remeasures a recent explored context group before the next paint", async (
   await expect(page.locator(following)).toBeVisible()
   await waitForVisualSettle(page, [contextSelector, following])
 
-  // Samples each painted frame after the click, so a stale row height shows up as overlap.
+  // Samples every painted frame after the click until the open group's row holds its measured content, so a
+  // stale row height shows up as overlap before the virtualizer catches up.
   const samples = await page.evaluate(
     ({ contextSelector, following }) =>
-      new Promise<{ frame: number; overlap: number; expanded: string | null }[]>((resolve) => {
+      new Promise<{ frame: number; overlap: number; expanded: string | null; measured: boolean }[]>((resolve) => {
         const context = document.querySelector<HTMLElement>(contextSelector)
         const text = document.querySelector<HTMLElement>(following)
         const scroller = context?.closest<HTMLElement>(".scroll-view__viewport")
         const trigger = context?.querySelector<HTMLElement>('[data-slot="collapsible-trigger"]')
         const contextRow = context?.closest<HTMLElement>('[data-timeline-row="AssistantPart"]')
+        const virtualRow = context?.closest<HTMLElement>("[data-timeline-key]")
         const textRow = text?.closest<HTMLElement>('[data-timeline-row="AssistantPart"]')
-        if (!scroller || !trigger || !contextRow || !textRow) throw new Error("missing regression nodes")
+        if (!scroller || !trigger || !contextRow || !virtualRow || !textRow) throw new Error("missing regression nodes")
         scroller.scrollTop = scroller.scrollHeight
-        const samples: { frame: number; overlap: number; expanded: string | null }[] = []
-        const capture = (frame: number) =>
+        const samples: { frame: number; overlap: number; expanded: string | null; measured: boolean }[] = []
+        const capture = (frame: number) => {
+          const content = context!.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
+          const allocated = virtualRow.getBoundingClientRect().height
+          const inner = virtualRow.firstElementChild?.getBoundingClientRect().height ?? Infinity
           samples.push({
             frame,
             overlap: Math.max(
@@ -78,14 +83,20 @@ test("remeasures a recent explored context group before the next paint", async (
               Math.round((contextRow.getBoundingClientRect().bottom - textRow.getBoundingClientRect().top) * 10) / 10,
             ),
             expanded: trigger.getAttribute("aria-expanded"),
+            measured:
+              !!content &&
+              Math.abs(content.getBoundingClientRect().height - content.scrollHeight) <= 1 &&
+              Math.abs(allocated - inner) <= 1,
           })
+        }
         capture(-1)
         trigger.click()
         capture(0)
         const tick = (frame: number) =>
           setTimeout(() => {
             capture(frame)
-            if (frame === 8) return resolve(samples)
+            const last = samples.at(-1)!
+            if (last.expanded === "true" && last.measured) return resolve(samples)
             requestAnimationFrame(() => tick(frame + 1))
           }, 0)
         requestAnimationFrame(() => tick(1))
@@ -95,7 +106,7 @@ test("remeasures a recent explored context group before the next paint", async (
 
   expect(samples[0]?.overlap).toBe(0)
   expect(samples.filter((sample) => sample.frame >= 1 && sample.overlap > 0.5)).toEqual([])
-  expect(samples.at(-1)?.expanded).toBe("true")
+  expect(samples.at(-1)).toMatchObject({ expanded: "true", measured: true })
 })
 
 test("keeps a grouped tool summary stable as its calls complete", async ({ page }) => {
@@ -107,8 +118,17 @@ test("keeps a grouped tool summary stable as its calls complete", async ({ page 
   })
   const context = page.locator(contextSelector)
   const label = "Used 4 Read, Glob, Grep, List"
-  await expect(context.getByRole("button")).toHaveAccessibleName(label)
+  const trigger = context.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+  await expect(trigger).toHaveAccessibleName(label)
+  // Open the group so each call shows whether it is still running.
+  await trigger.click()
+  const status = (tool: string) =>
+    context.locator(
+      `[data-slot="context-tool-group-item"] [data-component="text-shimmer"][aria-label="${tool[0]!.toUpperCase()}${tool.slice(1)}"]`,
+    )
+  for (const tool of contextTools) await expect(status(tool.tool)).toHaveAttribute("data-active", "true")
   const following = `[data-timeline-part-id="${renderedPartID("prt_after_context")}"]`
+  await waitForVisualSettle(page, [contextSelector, following])
   const regions = defineVisualRegions({
     status: { selector: `${contextSelector} [data-component="context-tool-group-trigger"]` },
     context: { selector: contextSelector, closest: '[data-timeline-row="AssistantPart"]' },
@@ -120,10 +140,12 @@ test("keeps a grouped tool summary stable as its calls complete", async ({ page 
     await timeline.send(
       partUpdated(toolPart(tool.id, tool.tool, "completed", tool.input, { output: output(tool.tool) })),
     )
+    await expect(status(tool.tool)).toHaveAttribute("data-active", "false")
     await waitForVisualSettle(page, [contextSelector, following])
   }
 
-  await expect(context.getByRole("button")).toHaveAccessibleName(label)
+  for (const tool of contextTools) await expect(status(tool.tool)).toHaveAttribute("data-active", "false")
+  await expect(trigger).toHaveAccessibleName(label)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
   const labels = trace.samples
     .map((sample) => sample.regions.status?.label)

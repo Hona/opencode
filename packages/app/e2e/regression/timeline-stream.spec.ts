@@ -460,6 +460,60 @@ for (const transition of ["idle", "retry"] as const) {
   })
 }
 
+// Separate placement keeps each part standalone, so the user's disclosure choice must survive completion.
+for (const shellDefault of ["collapsed", "expanded"] as const) {
+  test(`keeps separate shell and reasoning disclosure through completion from the ${shellDefault} shell default`, async ({
+    page,
+  }) => {
+    const reasoningID = `prt_separate_reasoning_${shellDefault}`
+    const shellID = `prt_separate_shell_${shellDefault}`
+    const output = (count: number) => Array.from({ length: count }, (_, index) => `line ${index + 1}`).join("\n")
+    const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
+    const timeline = await setupTimeline(page, {
+      messages: [userMessage(), assistant],
+      settings: {
+        timelineDetail: {
+          ...detailed,
+          thinking: { placement: "separate", details: "collapsed" },
+          shell: { placement: "separate", details: shellDefault },
+        },
+      },
+    })
+    const thought = page.locator(
+      `[data-timeline-part-id="${renderedPartID(reasoningID)}"] [data-slot="collapsible-trigger"]`,
+    )
+    const shellTrigger = page.locator(`[data-timeline-part-id="${shellID}"] [data-slot="collapsible-trigger"]`)
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    // One row opens the thought, the other opens and then closes it again.
+    const thoughtOpen = shellDefault === "collapsed"
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+    await expect(thought).toHaveAttribute("aria-expanded", "false")
+    await thought.click()
+    if (!thoughtOpen) await thought.click()
+    await expect(thought).toHaveAttribute("aria-expanded", String(thoughtOpen))
+
+    await timeline.send(partUpdated(shell(shellID, "running", output(3))))
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    await expect(group).toHaveCount(0)
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", String(shellDefault === "expanded"))
+    await shellTrigger.click()
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", String(shellDefault !== "expanded"))
+
+    await timeline.send(partUpdated(shell(shellID, "completed", output(6))))
+    await timeline.send(partUpdated(textPart(`prt_separate_sibling_${shellDefault}`, "Sibling content")))
+    await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
+    await timeline.send(status("idle"))
+    await expect(page.getByText("Sibling content", { exact: true })).toBeVisible()
+    await expect(page.locator(`[data-timeline-part-id="${shellID}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+      "data-active",
+      "false",
+    )
+    await expect(group).toHaveCount(0)
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", String(shellDefault !== "expanded"))
+    await expect(thought).toHaveAttribute("aria-expanded", String(thoughtOpen))
+  })
+}
+
 test.describe("Working", () => {
   test("shows Working between busy and reasoning states", async ({ page }) => {
     const timeline = await setupTimeline(page, {
@@ -875,9 +929,8 @@ test.describe("compaction", () => {
     await expect(page.locator('[data-component="session-working"]')).toBeVisible()
   })
 
-  for (const outcome of [
-    {
-      name: "failed",
+  const outcomes = {
+    failed: {
       reason: "auto",
       partial: "Partial summary that should be discarded.",
       error: {
@@ -887,54 +940,68 @@ test.describe("compaction", () => {
       label: "Session compaction failed",
       shown: "ProviderError: The provider rejected the summary.",
     },
-    {
-      name: "cancelled",
+    cancelled: {
       reason: "manual",
       partial: "Summary before cancellation.",
       error: { type: "aborted", message: "Cancellation detail should stay hidden." },
       label: "Session compaction cancelled",
+      shown: undefined,
     },
-    {
-      name: "interrupted",
+    interrupted: {
       reason: "auto",
       partial: "Partial automatic summary.",
       error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
       label: "Session compaction interrupted",
+      shown: undefined,
     },
-  ] as const) {
-    test(`ends a running compaction as ${outcome.name}`, async ({ page }) => {
+  } as const
+  const labels = Object.values(outcomes).map((outcome) => outcome.label)
+
+  // Failed then cancelled share one history, so each boundary must keep its own outcome.
+  for (const names of [["failed", "cancelled"], ["interrupted"]] as const) {
+    test(`ends running compactions as ${names.join(", then ")}`, async ({ page }) => {
       const timeline = await setupTimeline(page, {
         sessionMessages: [user, completed],
-        ...(outcome.name === "interrupted" ? { sessionStatus: { [sessionID]: { type: "busy" as const } } } : {}),
+        ...(names[0] === "interrupted" ? { sessionStatus: { [sessionID]: { type: "busy" as const } } } : {}),
       })
-      await timeline.send(compactionStarted({ sessionID, reason: outcome.reason, recent: "" }))
-      await timeline.send(compactionDelta({ sessionID, text: outcome.partial }))
-      const compaction = page.locator('[data-component="session-compaction-message"]')
-      await expect(compaction).toContainText(outcome.partial)
-      if (outcome.name === "interrupted") {
-        await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
-        const request = page.waitForRequest(
-          (request) =>
-            request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/interrupt`,
-        )
-        await page.getByRole("button", { name: "Stop", exact: true }).click()
-        await request
+      const compactions = page.locator('[data-component="session-compaction-message"]')
+      for (const [index, name] of names.entries()) {
+        const outcome = outcomes[name]
+        await timeline.send(compactionStarted({ sessionID, reason: outcome.reason, recent: "" }))
+        await timeline.send(compactionDelta({ sessionID, text: outcome.partial }))
+        await expect(compactions).toHaveCount(index + 1)
+        const compaction = compactions.nth(index)
+        await expect(compaction).toContainText(outcome.partial)
+        if (name === "interrupted") {
+          await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
+          const request = page.waitForRequest(
+            (request) =>
+              request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/interrupt`,
+          )
+          await page.getByRole("button", { name: "Stop", exact: true }).click()
+          await request
+        }
+        await timeline.send(compactionFailed({ sessionID, reason: outcome.reason, error: outcome.error }))
+        await expect(compaction.getByText(outcome.label, { exact: true })).toBeVisible()
       }
-      await timeline.send(compactionFailed({ sessionID, reason: outcome.reason, error: outcome.error }))
 
-      await expect(compaction.getByText("Session compaction started", { exact: true })).toBeVisible()
-      await expect(compaction.getByText(outcome.label, { exact: true })).toBeVisible()
-      await expect(compaction.getByText("Session compacted", { exact: true })).toHaveCount(0)
-      await expect(compaction.getByRole("status")).toHaveCount(0)
-      await expect(compaction).not.toContainText(outcome.partial)
-      if (outcome.shown) await expect(compaction.getByText(outcome.shown, { exact: true })).toBeVisible()
-      if (!outcome.shown) await expect(compaction).not.toContainText(outcome.error.message)
-      if (outcome.name === "interrupted")
-        await expect(compaction.getByText("Session compaction failed", { exact: true })).toHaveCount(0)
+      await expect(compactions).toHaveCount(names.length)
+      for (const [index, name] of names.entries()) {
+        const outcome = outcomes[name]
+        const compaction = compactions.nth(index)
+        await expect(compaction.getByText("Session compaction started", { exact: true })).toBeVisible()
+        await expect(compaction.getByText(outcome.label, { exact: true })).toBeVisible()
+        for (const other of labels.filter((label) => label !== outcome.label))
+          await expect(compaction.getByText(other, { exact: true })).toHaveCount(0)
+        await expect(compaction.getByText("Session compacted", { exact: true })).toHaveCount(0)
+        await expect(compaction.getByRole("status")).toHaveCount(0)
+        await expect(compaction).not.toContainText(outcome.partial)
+        if (outcome.shown) await expect(compaction.getByText(outcome.shown, { exact: true })).toBeVisible()
+        if (!outcome.shown) await expect(compaction).not.toContainText(outcome.error.message)
+      }
     })
   }
 })
-
 test("reducer-hardening: converges when idle arrives before final part and message completion", async ({ page }) => {
   const textID = "prt_event_order_text"
   const assistant = assistantMessage([textPart(textID, "Partial")], { completed: false })

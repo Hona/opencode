@@ -484,9 +484,14 @@ async function sampleTabPaint(page: Page, sessionID: string) {
         )
         if (root) {
           const view = root.getBoundingClientRect()
+          // A frame counts only when the row is painted: inside the viewport and not hidden by CSS.
           const inView = (element: Element) => {
             const rect = element.getBoundingClientRect()
-            return rect.bottom > view.top && rect.top < view.bottom
+            return (
+              rect.bottom > view.top &&
+              rect.top < view.bottom &&
+              element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+            )
           }
           const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
             .filter(inView)
