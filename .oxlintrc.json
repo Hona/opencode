@@ -18,5 +18,35 @@
       }
     ]
   },
+  "overrides": [
+    {
+      "files": ["packages/gui-extensions/src/*/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@opencode/(app|desktop)(/|$)",
+                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+              },
+              {
+                "regex": "^@/",
+                "message": "GUI extensions never import app internals. Use the SDK."
+              },
+              {
+                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
+                "message": "Import another extension only through its contract.ts."
+              },
+              {
+                "regex": "\\.css$",
+                "message": "Import CSS with ?inline and contribute it with ctx.add(Style, css)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
 }
