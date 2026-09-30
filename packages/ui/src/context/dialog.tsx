@@ -37,33 +37,48 @@ export function useDialogLayer() {
 
 function init() {
   const [stack, setStack] = createSignal<Active[]>([])
-  // Each closing dialog disposes after its own exit animation.
-  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  // A dialog is closing from the moment its close starts until its exit animation ends and it is disposed.
+  const closing = new Map<string, ReturnType<typeof setTimeout> | undefined>()
   const lock = { value: false }
-  const clearTimers = () => {
-    timers.forEach((timer) => clearTimeout(timer))
-    timers.clear()
+
+  const disposeAll = () => {
+    closing.forEach((timer) => clearTimeout(timer))
+    closing.clear()
+    stack().forEach((item) => item.dispose())
   }
 
-  onCleanup(clearTimers)
+  onCleanup(disposeAll)
 
-  const close = (id?: string) => {
-    const items = stack()
-    const current = id ? items.find((item) => item.id === id) : items.at(-1)
-    // One Escape or backdrop click closes one dialog; closing a dialog by id never waits for another.
-    if (!current || timers.has(current.id) || (!id && lock.value)) return
-    lock.value = true
+  const finish = (current: Active) => {
     current.onClose?.()
     current.setClosing(true)
-    timers.set(
+    closing.set(
       current.id,
       setTimeout(() => {
-        timers.delete(current.id)
         current.dispose()
         setStack((items) => items.filter((item) => item.id !== current.id))
-        if (timers.size === 0) lock.value = false
+        closing.delete(current.id)
+        if (closing.size === 0) lock.value = false
       }, 100),
     )
+  }
+
+  /** Programmatic close. Without an id it closes the top dialog, one at a time; with an id it never waits. */
+  const close = (id?: string) => {
+    const current = id ? stack().find((item) => item.id === id) : stack().at(-1)
+    if (!current || closing.has(current.id) || (!id && lock.value)) return
+    closing.set(current.id, undefined)
+    lock.value = true
+    finish(current)
+  }
+
+  /** Escape, a backdrop click, or Kobalte dismissing: only the top dialog, and one per exit animation. */
+  const dismiss = (id?: string) => {
+    const current = stack().at(-1)
+    if (!current || (id && current.id !== id) || closing.has(current.id) || lock.value) return
+    closing.set(current.id, undefined)
+    lock.value = true
+    finish(current)
   }
 
   createEffect(() => {
@@ -71,7 +86,7 @@ function init() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
-      close()
+      dismiss()
       event.preventDefault()
       event.stopPropagation()
     }
@@ -79,9 +94,11 @@ function init() {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number, key?: string) => {
+  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, key?: string) => {
     const id = key ?? Math.random().toString(36).slice(2)
-    const zIndex = 50 + layer * 10
+    // The layer follows the dialog's current place in the stack, so a new top dialog always renders above.
+    const layer = () => Math.max(0, stack().findIndex((item) => item.id === id))
+    const zIndex = () => String(50 + layer() * 10)
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
 
@@ -97,24 +114,23 @@ function init() {
             modal={stack().at(-1)?.id === id}
             open={!closing()}
             onOpenChange={(open: boolean) => {
-              if (open || stack().at(-1)?.id !== id) return
-              close(id)
+              if (!open) dismiss(id)
             }}
           >
             <Kobalte.Portal>
               <Kobalte.Overlay
                 data-component="dialog-overlay"
-                style={{ "z-index": String(zIndex) }}
+                style={{ "z-index": zIndex() }}
                 onClick={() => {
-                  if (backdropDismiss()) close(id)
+                  if (backdropDismiss()) dismiss(id)
                 }}
               />
               <div
-                data-dialog-layer={layer}
+                data-dialog-layer={layer()}
                 style={{
                   position: "fixed",
                   inset: "0",
-                  "z-index": String(zIndex),
+                  "z-index": zIndex(),
                   display: "flex",
                   "align-items": "center",
                   "justify-content": "center",
@@ -137,15 +153,14 @@ function init() {
 
   const push = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
     lock.value = false
-    mount(element, owner, onClose, stack().length, id)
+    mount(element, owner, onClose, id)
   }
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
-    for (const item of stack()) item.dispose()
+    disposeAll()
     setStack([])
-    clearTimers()
     lock.value = false
-    mount(element, owner, onClose, 0, id)
+    mount(element, owner, onClose, id)
   }
 
   return {
@@ -155,7 +170,6 @@ function init() {
     push,
   }
 }
-
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
   return (
