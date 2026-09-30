@@ -55,7 +55,7 @@ describe("settings server inventory", () => {
     ])
   })
 
-  test("joins a ready contributed server to its live connection", () => {
+  test("joins a ready contributed server to its live connection and withholds it while disconnected", () => {
     const ready = { ...ssh, entry: { ...ssh.entry, state: "ready" as const } }
     expect(settingsServers([connection], [ready])).toEqual([
       {
@@ -65,9 +65,6 @@ describe("settings server inventory", () => {
         source: ready,
       },
     ])
-  })
-
-  test("withholds stale connections while disconnected", () => {
     expect(settingsServers([connection], [ssh])[0].connection).toBeUndefined()
   })
 })

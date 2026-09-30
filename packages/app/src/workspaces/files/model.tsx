@@ -13,12 +13,9 @@ import { fileContentFromBytes } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
   hasFileContent,
   removeFileContentBytes,
   resetFileContentLru,
-  setFileContentBytes,
   touchFileContent,
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
@@ -36,15 +33,6 @@ import {
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
-export {
-  evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
-  removeFileContentBytes,
-  resetFileContentLru,
-  setFileContentBytes,
-  touchFileContent,
-}
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",

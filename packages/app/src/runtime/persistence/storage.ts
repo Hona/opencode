@@ -405,14 +405,6 @@ export function draftPersistedKeys() {
   return DRAFT_PERSISTED_KEYS
 }
 
-export const PersistTesting = {
-  localStorageDirect,
-  localStorageWithPrefix,
-  resolveTarget,
-  windowStorage,
-  workspaceStorage,
-}
-
 export const Persist = {
   global(key: string): PersistTarget {
     return { storage: GLOBAL_STORAGE, key }

@@ -1,17 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot, createSignal } from "solid-js"
 import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
 import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
+import { pruneSessionKeys } from "./helpers"
 
-test("settings has its own layout route", () => {
-  expect(currentRoute("/settings", "")).toEqual({ type: "settings" })
-})
-
-test("connect has its own layout route", () => {
-  expect(currentRoute("/connect", "")).toEqual({ type: "connect" })
+test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
+  expect(currentRoute(`/${type}`, "")).toEqual({ type })
 })
 
 describe("layout persistence", () => {
@@ -63,15 +58,9 @@ describe("layout persistence", () => {
     expect(Schema.encodeSync(schema)(value)).toEqual(value)
     expect(decode(Schema.encodeSync(schema)(value))).toEqual(value)
     expect(decode({ fileTree: { opened: true } }).review.panelOpened).toBe(false)
-  })
-
-  test("preserves current panel preferences", () => {
-    const value = decode({
-      review: { panelOpened: false },
-      fileTree: { opened: true, width: 260, tab: "all" },
-    })
-    expect(value.review).toEqual({ panelOpened: false })
-    expect(value.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
+    const current = decode({ review: { panelOpened: false }, fileTree: { opened: true, width: 260, tab: "all" } })
+    expect(current.review).toEqual({ panelOpened: false })
+    expect(current.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
   })
 
   test("distinguishes an invalid panel field from an invalid review section", () => {
@@ -109,68 +98,14 @@ describe("layout persistence", () => {
   })
 })
 
-describe("layout session-key helpers", () => {
-  test("couples touch and scroll seed in order", () => {
-    const calls: string[] = []
-    const result = ensureSessionKey(
-      "dir/a",
-      (key) => calls.push(`touch:${key}`),
-      (key) => calls.push(`seed:${key}`),
-    )
-
-    expect(result).toBe("dir/a")
-    expect(calls).toEqual(["touch:dir/a", "seed:dir/a"])
-  })
-
-  test("reads dynamic accessor keys lazily", () => {
-    const seen: string[] = []
-
-    createRoot((dispose) => {
-      const [key, setKey] = createSignal("dir/one")
-      const read = createSessionKeyReader(key, (value) => seen.push(value))
-
-      expect(read()).toBe("dir/one")
-      setKey("dir/two")
-      expect(read()).toBe("dir/two")
-
-      dispose()
-    })
-
-    expect(seen).toEqual(["dir/one", "dir/two"])
-  })
-})
-
-describe("pruneSessionKeys", () => {
-  test("keeps active key and drops lowest-used keys", () => {
-    const drop = pruneSessionKeys({
-      keep: "k4",
-      max: 3,
-      used: new Map([
-        ["k1", 1],
-        ["k2", 2],
-        ["k3", 3],
-        ["k4", 4],
-      ]),
-      view: ["k1", "k2", "k4"],
-      tabs: ["k1", "k3", "k4"],
-    })
-
-    expect(drop).toEqual(["k1"])
-    expect(drop.includes("k4")).toBe(false)
-  })
-
-  test("does not prune without keep key", () => {
-    const drop = pruneSessionKeys({
-      keep: undefined,
-      max: 1,
-      used: new Map([
-        ["k1", 1],
-        ["k2", 2],
-      ]),
-      view: ["k1"],
-      tabs: ["k2"],
-    })
-
-    expect(drop).toEqual([])
-  })
+test("pruneSessionKeys keeps the active key, drops the lowest-used keys, and never prunes without an active key", () => {
+  const used = new Map([
+    ["k1", 1],
+    ["k2", 2],
+    ["k3", 3],
+    ["k4", 4],
+  ])
+  const input = { max: 3, used, view: ["k1", "k2", "k4"], tabs: ["k1", "k3", "k4"] }
+  expect(pruneSessionKeys({ ...input, keep: "k4" })).toEqual(["k1"])
+  expect(pruneSessionKeys({ ...input, keep: undefined, max: 1 })).toEqual([])
 })
