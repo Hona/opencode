@@ -123,6 +123,7 @@ test("suspension retains tabs and reconnects once on demand using the current ta
   jest.useFakeTimers()
   const app = fixture()
   try {
+    const stale = app.listeners.get(app.calls[0].input.binding)!
     app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
     expect(app.listeners.has(app.calls[0].input.binding)).toBe(false)
     expect(app.states.at(-1)).toMatchObject({ registration: undefined, browser, suspended: true })
@@ -140,7 +141,8 @@ test("suspension retains tabs and reconnects once on demand using the current ta
       restore: browser,
     })
     expect(app.states.at(-1)?.suspended).toBe(false)
-    app.emit(0, { type: "state", state: null, error: "browser.pane.registration.closed" })
+    // A late event from the suspended binding must not close the new one.
+    stale({ type: "state", state: null, error: "browser.pane.registration.closed" })
     expect(app.states.at(-1)?.registration).toBeDefined()
   } finally {
     app.connection.dispose()
