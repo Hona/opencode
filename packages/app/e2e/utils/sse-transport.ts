@@ -55,13 +55,15 @@ type BrowserTransport = Window & {
   __testSseTransports?: Record<string, { command: (command: BrowserCommand<unknown>) => unknown }>
 }
 
+// `keepalive` (default true) writes an SSE comment every 15 s like the real server, so long scenarios do not trip the
+// client's stall watchdog. Set it to false only to test that watchdog.
 export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEvent>(
   page: Page,
-  options: { server: string; retry?: number },
+  options: { server: string; retry?: number; keepalive?: boolean },
 ): Promise<SseTransport<T>> {
   const server = new URL(options.server).origin
   await page.addInitScript(
-    ({ server, retry }) => {
+    ({ server, retry, keepalive }) => {
       type Connection = SseConnectionRecord & { controller: ReadableStreamDefaultController<Uint8Array> }
       type ProbeWindow = Window & {
         __visualStabilityProbe?: { startedAt: number; markers: { at: number; label: string }[] }
@@ -70,6 +72,11 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
       const connections: Connection[] = []
       const acknowledgements: SseDeliveryAcknowledgement[] = []
       const encoder = new TextEncoder()
+      const keepalives = new Map<number, ReturnType<typeof setInterval>>()
+      const stopKeepalive = (id: number) => {
+        clearInterval(keepalives.get(id))
+        keepalives.delete(id)
+      }
       let nextConnectionID = 0
       let nextDeliveryID = 0
 
@@ -113,6 +120,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
       const end = (mode: "close" | "disconnect" | "error", message?: string) => {
         const connection = current()
         if (!connection) throw new Error("SSE transport has no active connection")
+        stopKeepalive(connection.id)
         connection.endedAt = performance.now()
         connection.endedBy = mode
         if (message) connection.error = message
@@ -179,10 +187,16 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
             controller.enqueue(
               encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
             )
+            if (keepalive)
+              keepalives.set(
+                id,
+                setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000),
+              )
             request.signal.addEventListener(
               "abort",
               () => {
                 if (record.endedAt !== undefined) return
+                stopKeepalive(id)
                 record.endedAt = performance.now()
                 record.endedBy = "abort"
                 controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
@@ -191,6 +205,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
             )
           },
           cancel() {
+            stopKeepalive(id)
             if (record.endedAt !== undefined) return
             record.endedAt = performance.now()
             record.endedBy = "disconnect"
@@ -208,7 +223,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: options.retry },
+    { server, retry: options.retry, keepalive: options.keepalive !== false },
   )
 
   const command = <Result>(input: BrowserCommand<T>) =>

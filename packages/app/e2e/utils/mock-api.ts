@@ -1,5 +1,6 @@
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { Pty } from "@opencode/schema/pty"
 import { Worktree } from "@opencode/schema/worktree"
 
 const Json = Schema.Json.pipe(
@@ -23,7 +24,7 @@ const Query = Schema.Struct({
   mode: Schema.optional(Schema.String),
 })
 const SessionParams = { sessionID: Schema.String }
-const PtyParams = { ptyID: Schema.String }
+const PtyParams = { ptyID: Pty.ID }
 const NoContent = HttpApiSchema.NoContent
 
 export class MockNotFound extends Schema.TaggedError<MockNotFound>()("MockNotFound", {
@@ -37,6 +38,12 @@ export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBa
 export class MockInternal extends Schema.TaggedError<MockInternal>()("MockInternal", {
   message: Schema.String,
 }) {}
+
+// A mutation the scenario did not configure a handler for.
+export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("MockUnsupported", {
+  message: Schema.String,
+}) {}
+const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
 
 const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("info", "/api/info", { success: Json }))
@@ -102,12 +109,14 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.post("worktreeCreate", "/api/worktree", {
       payload: Worktree.CreateInput,
       success: Json,
+      error: Unsupported,
     }),
   )
   .add(
     HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
       payload: Worktree.RemoveInput,
       success: NoContent,
+      error: Unsupported,
     }),
   )
   .add(
@@ -144,7 +153,7 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("ptyCreate", "/api/pty", {
-      payload: JsonPayload,
+      payload: Pty.CreateInput,
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
     }),
@@ -159,7 +168,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.put("ptyUpdate", "/api/pty/:ptyID", {
       params: PtyParams,
-      payload: JsonPayload,
+      payload: Pty.UpdateInput,
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
     }),
@@ -289,6 +298,7 @@ const Group = HttpApiGroup.make("mock")
       params: { ...SessionParams, permissionID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: Unsupported,
     }),
   )
   .add(

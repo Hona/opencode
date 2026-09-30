@@ -4,7 +4,7 @@ import { Duration, Effect, Layer } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { SERVER } from "./app"
-import { MockApi, MockBadRequest, MockInternal, MockNotFound } from "./mock-api"
+import { MockApi, MockBadRequest, MockInternal, MockNotFound, MockUnsupported } from "./mock-api"
 import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
@@ -41,11 +41,14 @@ export interface MockServerConfig {
   onSession?: (sessionID: string) => void
   events?: () => OpenCodeEvent[]
   eventRetry?: number
+  // Idle event streams send a comment every 15 s like the real server. Set false only to test the client's stall watchdog.
+  keepalive?: boolean
   permissions?: unknown[] | (() => unknown[])
   // Requests only listed by `/api/session/:id/permission`, keyed by session ID.
   sessionPermissions?: Record<string, unknown[]>
   // Returning true fails the next `/api/permission/request` listing with a 500.
   permissionListFailures?: () => boolean
+  // Without it, permission replies answer 501 MockUnsupported.
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
   mcp?: Resolvable<unknown[]>
@@ -53,6 +56,7 @@ export interface MockServerConfig {
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
   worktrees?: Resolvable<unknown[]>
+  // Without them, creating or removing a worktree answers 501 MockUnsupported.
   onWorktreeCreate?: (input: unknown) => void | Promise<void>
   onWorktreeRemove?: (input: unknown) => void | Promise<void>
   fileList?: (path: string) => unknown | Promise<unknown>
@@ -63,8 +67,8 @@ export interface MockServerConfig {
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
-  // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are `${prefix}1`, `${prefix}2`, ...
-  pty?: { prefix?: string; initial?: { id: string; title: string }[] }
+  // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
+  pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string }[] }
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
 }
@@ -88,6 +92,8 @@ export type MockPty = {
   updates: { id: string; body: unknown }[]
   tokens: { id: string; headers: Record<string, string> }[]
   sockets: MockPtySocket[]
+  // WebSockets closed with 1008 because the PTY, its workspace, or an unused issued ticket did not match.
+  rejected: { id: string; url: URL; reason: string }[]
   // Writes output to the newest open socket, optionally for one PTY.
   send(data: string, id?: string): void
 }
@@ -106,8 +112,10 @@ type MockStreamWindow = Window & {
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const server = config.server ?? SERVER
 
+  mockedOrigins(page).add(server)
+
   await page.addInitScript(
-    ({ server, retry }) => {
+    ({ server, retry, keepalive: idle }) => {
       const host = window as MockStreamWindow
       if (host.__testSseTransport || host.__testSseTransports?.[server] || host.__mockServerStreams?.[server]) return
       const originalFetch = window.fetch.bind(window)
@@ -151,7 +159,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
             state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
             // Match the real server's idle stream so long scenarios do not
             // trigger the client's 45-second stall watchdog and reload history.
-            keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
+            if (idle) keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
             request.signal.addEventListener(
               "abort",
               () => {
@@ -180,7 +188,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: config.eventRetry },
+    { server, retry: config.eventRetry, keepalive: config.keepalive !== false },
   )
 
   // Delivers events on this server's mock stream; buffered until the app connects.
@@ -195,14 +203,26 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     )
 
   if (config.events) {
-    const pump = { busy: false }
+    // Batches stay queued until the page accepts them; failures other than a missing document fail the test.
+    const pump = { busy: false, pending: [] as OpenCodeEvent[] }
     const timer = setInterval(() => {
       if (pump.busy) return
-      const batch = config.events?.() ?? []
-      if (batch.length === 0) return
+      pump.pending.push(...(config.events?.() ?? []))
+      if (pump.pending.length === 0) return
       pump.busy = true
+      const batch = pump.pending.slice()
       void push(batch)
-        .catch(() => {})
+        .then(
+          () => {
+            pump.pending.splice(0, batch.length)
+          },
+          (error: unknown) => {
+            if (page.isClosed()) return clearInterval(timer)
+            if (retryableDelivery(error)) return
+            clearInterval(timer)
+            throw error
+          },
+        )
         .finally(() => {
           pump.busy = false
         })
@@ -214,18 +234,14 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
-    const appPort = new URL(
-      process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
-    ).port
-    // Only the default server also answers the app origin, which production builds use for the API.
-    if (url.origin !== server && (server !== SERVER || url.port !== appPort)) return route.fallback()
+    if (!answers(page, server, url)) return route.fallback()
     // Production serves the UI and API from one origin; leave app assets to Vite.
     if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
     const directory = url.searchParams.get("directory") ?? url.searchParams.get("location[directory]")
-    if (config.strictDirectory && directory && !ownedDirectories(config).includes(directory)) {
+    if (config.strictDirectory && directory && !ownedDirectories(config).has(directory)) {
       return route.fulfill({ status: 500, headers: corsHeaders, json: { name: "InvalidDirectory" } })
     }
 
@@ -251,8 +267,14 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       (url) => url.host === host && /^\/api\/pty\/[^/]+\/connect$/.test(url.pathname),
       (ws) => {
         const url = new URL(ws.url())
+        const id = decodeURIComponent(url.pathname.split("/")[3]!)
+        const reason = transport.pty.admit(id, url)
+        if (reason) {
+          transport.pty.rejected.push({ id, url, reason })
+          return ws.close({ code: 1008, reason })
+        }
         const socket: MockPtySocket = {
-          id: decodeURIComponent(url.pathname.split("/")[3]!),
+          id,
           url,
           input: [],
           closed: false,
@@ -275,7 +297,11 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
   return Object.fromEntries(
     await Promise.all(
       Object.entries(servers).map(async ([origin, config]) => {
-        const transport = await installSseTransport(page, { server: origin, retry: config.eventRetry })
+        const transport = await installSseTransport(page, {
+          server: origin,
+          retry: config.eventRetry,
+          keepalive: config.keepalive,
+        })
         const mock = await mockOpenCodeServer(page, { ...config, server: origin })
         return [origin, { transport, pty: mock.pty }] as const
       }),
@@ -302,42 +328,111 @@ const corsHeaders = {
   "access-control-expose-headers": "x-next-cursor",
 }
 
+const APP_ORIGIN = new URL(
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
+).origin
+const registeredOrigins = new WeakMap<Page, Set<string>>()
+
+function mockedOrigins(page: Page) {
+  const found = registeredOrigins.get(page)
+  if (found) return found
+  const created = new Set<string>()
+  registeredOrigins.set(page, created)
+  return created
+}
+
+// A server answers its own origin. Production builds call the API on the app origin, which the default server also
+// answers unless a server was configured for the app origin explicitly.
+function answers(page: Page, server: string, url: URL) {
+  if (url.origin === server) return true
+  return server === SERVER && url.origin === APP_ORIGIN && !mockedOrigins(page).has(APP_ORIGIN)
+}
+
+// The document is not loaded yet or is being replaced; the pump retries on its next tick.
+function retryableDelivery(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return [
+    "No mock event stream",
+    "Execution context was destroyed",
+    "Target page, context or browser has been closed",
+  ].some((text) => message.includes(text))
+}
+
+const PTY_TICKET = "e2e-ticket"
+
 function createPty(config: MockServerConfig) {
-  const info = (id: string, title: string): MockPtyInfo => ({
+  const info = (id: string, title: string, cwd = config.directory): MockPtyInfo => ({
     id,
     title,
     command: "cmd.exe",
     args: [],
-    cwd: config.directory,
+    cwd,
     status: "running",
     pid: 1,
   })
+  // Issued, not yet used connect tickets.
+  const tickets: { id: string; directory: string }[] = []
   const pty: MockPty = {
-    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title)),
+    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title, item.directory)),
     created: [],
     removed: [],
     updates: [],
     tokens: [],
     sockets: [],
+    rejected: [],
     send(data, id) {
       const socket = pty.sockets.findLast((item) => !item.closed && (id === undefined || item.id === id))
       if (!socket) throw new Error(`No open PTY socket${id ? ` for ${id}` : ""}`)
       socket.send(data)
     },
   }
-  return Object.assign(pty, { info })
+  return Object.assign(pty, {
+    info,
+    // The first `${prefix}<n>` no initial, created, or removed PTY has used.
+    allocate() {
+      const prefix = config.pty?.prefix ?? "pty_"
+      const used = new Set([...pty.list, ...pty.created].map((item) => item.id).concat(pty.removed))
+      const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find(
+        (value) => !used.has(`${prefix}${value}`),
+      )!
+      return { id: `${prefix}${number}`, number }
+    },
+    issue(id: string, directory: string) {
+      tickets.push({ id, directory })
+      return PTY_TICKET
+    },
+    // Returns why a connect URL is refused: the PTY must exist, belong to the requested workspace, and carry an unused issued ticket.
+    admit(id: string, url: URL) {
+      const found = pty.list.find((item) => item.id === id)
+      if (!found) return "PTY not found"
+      const directory = url.searchParams.get("location[directory]") ?? config.directory
+      if (directory !== found.cwd) return "PTY belongs to another workspace"
+      const index = tickets.findIndex((ticket) => ticket.id === id && ticket.directory === directory)
+      if (url.searchParams.get("ticket") !== PTY_TICKET || index < 0) return "No unused ticket was issued for this PTY"
+      tickets.splice(index, 1)
+    },
+  })
 }
 
+// Every directory this server's configuration names: its own, project and inventory worktrees, and session locations.
 function ownedDirectories(config: MockServerConfig) {
-  return [
-    config.directory,
-    ...((config.project as { sandboxes?: string[] }).sandboxes ?? []),
-    ...config.sessions.flatMap((session) => {
-      const location = session.location as { directory?: string } | undefined
-      const directory = location?.directory ?? session.directory
-      return typeof directory === "string" ? [directory] : []
-    }),
-  ]
+  const projects = [config.project, ...(config.projects ? resolve(config.projects) : [])].filter(record)
+  return new Set(
+    [
+      config.directory,
+      ...projects.flatMap((item) => [
+        item.worktree,
+        item.canonical,
+        ...(Array.isArray(item.sandboxes) ? item.sandboxes : []),
+      ]),
+      ...(config.worktrees ? resolve(config.worktrees) : []).filter(record).map((item) => item.directory),
+      ...config.sessions.map((session) => (record(session.location) ? session.location.directory : session.directory)),
+    ].filter((item): item is string => typeof item === "string"),
+  )
+}
+
+function requestDirectory(config: MockServerConfig, request: { url: string }) {
+  return new URL(request.url, "http://localhost").searchParams.get("location[directory]") ?? config.directory
 }
 
 function resolve<T>(value: Resolvable<T>) {
@@ -354,14 +449,20 @@ function mockHandlers(
   const ptyEnabled = Effect.suspend(() =>
     config.pty ? Effect.void : Effect.fail(new MockNotFound({ message: "PTY is not enabled for this mock server" })),
   )
-  const findPty = (id: string) =>
+  // PTYs are scoped to the workspace (`location[directory]`) they were created in, like the real server.
+  const findPty = (id: string, request: { url: string }) =>
     ptyEnabled.pipe(
       Effect.andThen(() =>
         Effect.suspend(() => {
-          const found = state.pty.list.find((item) => item.id === id)
+          const directory = requestDirectory(config, request)
+          const found = state.pty.list.find((item) => item.id === id && item.cwd === directory)
           return found ? Effect.succeed(found) : Effect.fail(new MockNotFound({ message: "PTY not found" }))
         }),
       ),
+    )
+  const unsupported = (operation: string, handler: string) =>
+    Effect.fail(
+      new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
     )
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
@@ -475,8 +576,10 @@ function mockHandlers(
           }),
         worktreeCreate: (ctx) => {
           const input = ctx.payload
+          const create = config.onWorktreeCreate
+          if (!create) return unsupported("create worktrees", "onWorktreeCreate")
           return Effect.promise(async () => {
-            await config.onWorktreeCreate?.(input)
+            await create(input)
             return {
               directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
                 typeof input.name === "string" ? input.name : "copy"
@@ -484,8 +587,12 @@ function mockHandlers(
             }
           })
         },
-        worktreeRemove: (ctx) =>
-          Effect.promise(async () => config.onWorktreeRemove?.(ctx.payload)).pipe(Effect.andThen(noContent)),
+        worktreeRemove: (ctx) => {
+          const remove = config.onWorktreeRemove
+          if (!remove) return unsupported("remove worktrees", "onWorktreeRemove")
+          return Effect.promise(async () => remove(ctx.payload)).pipe(Effect.andThen(noContent))
+        },
+        // Discovery against a static inventory changes nothing, and the app refreshes whenever worktree settings open.
         worktreeRefresh: () => noContent,
         location: () => Effect.succeed(location(config)),
         permissionRequests: () =>
@@ -546,33 +653,39 @@ function mockHandlers(
             })),
           ),
         shell: () => Effect.succeed({ location: location(config), data: [] }),
-        ptyList: () => ptyEnabled.pipe(Effect.as({ location: location(config), data: state.pty.list })),
+        ptyList: (ctx) =>
+          ptyEnabled.pipe(
+            Effect.map(() => {
+              const directory = requestDirectory(config, ctx.request)
+              return { location: location(config), data: state.pty.list.filter((item) => item.cwd === directory) }
+            }),
+          ),
         ptyCreate: (ctx) =>
           ptyEnabled.pipe(
             Effect.map(() => {
-              const payload = record(ctx.payload) ? ctx.payload : {}
-              const number = state.pty.created.length + 1
+              const next = state.pty.allocate()
               const created = state.pty.info(
-                `${config.pty?.prefix ?? "pty_"}${number}`,
-                typeof payload.title === "string" ? payload.title : `Terminal ${number}`,
+                next.id,
+                ctx.payload.title ?? `Terminal ${next.number}`,
+                requestDirectory(config, ctx.request),
               )
               state.pty.created.push(created)
               state.pty.list.push(created)
               return { location: location(config), data: created }
             }),
           ),
-        ptyGet: (ctx) => findPty(ctx.params.ptyID).pipe(Effect.map((data) => ({ location: location(config), data }))),
+        ptyGet: (ctx) =>
+          findPty(ctx.params.ptyID, ctx.request).pipe(Effect.map((data) => ({ location: location(config), data }))),
         ptyUpdate: (ctx) =>
-          findPty(ctx.params.ptyID).pipe(
+          findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
               state.pty.updates.push({ id: found.id, body: ctx.payload })
-              const title = record(ctx.payload) && typeof ctx.payload.title === "string" ? ctx.payload.title : undefined
-              if (title) found.title = title
+              if (ctx.payload.title) found.title = ctx.payload.title
               return { location: location(config), data: found }
             }),
           ),
         ptyRemove: (ctx) =>
-          findPty(ctx.params.ptyID).pipe(
+          findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
               state.pty.removed.push(found.id)
               state.pty.list.splice(state.pty.list.indexOf(found), 1)
@@ -580,10 +693,11 @@ function mockHandlers(
             }),
           ),
         ptyConnectToken: (ctx) =>
-          findPty(ctx.params.ptyID).pipe(
+          findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
               state.pty.tokens.push({ id: found.id, headers: Object.fromEntries(Object.entries(ctx.request.headers)) })
-              return { location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } }
+              const ticket = state.pty.issue(found.id, found.cwd)
+              return { location: location(config), data: { ticket, expires_in: 60 } }
             }),
           ),
         sessionList: (ctx) => {
@@ -716,14 +830,13 @@ function mockHandlers(
             ],
           })
         },
-        sessionPermissionReply: (ctx) =>
-          Effect.sync(() =>
-            config.onPermissionReply?.({
-              sessionID: ctx.params.sessionID,
-              permissionID: ctx.params.permissionID,
-              body: ctx.payload,
-            }),
-          ).pipe(Effect.andThen(noContent)),
+        sessionPermissionReply: (ctx) => {
+          const reply = config.onPermissionReply
+          if (!reply) return unsupported("record permission replies", "onPermissionReply")
+          return Effect.sync(() =>
+            reply({ sessionID: ctx.params.sessionID, permissionID: ctx.params.permissionID, body: ctx.payload }),
+          ).pipe(Effect.andThen(noContent))
+        },
         sessionRename: () => noContent,
         sessionInterrupt: () => noContent,
         sessionRevertStage: (ctx) => {

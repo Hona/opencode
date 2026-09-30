@@ -11,7 +11,7 @@ import type {
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
-import { expect, type Page } from "@playwright/test"
+import { expect, test, type Page, type TestInfo } from "@playwright/test"
 import { Schema } from "effect"
 import { SERVER, seed, sessionHref } from "./app"
 import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
@@ -113,6 +113,8 @@ type TimelineServerInput = Partial<
     | "fileContent"
     | "findFiles"
     | "pty"
+    | "keepalive"
+    | "onPermissionReply"
   >
 >
 
@@ -133,12 +135,52 @@ type ToolOptions<State extends ToolStatus> = State extends "streaming"
       : { output?: string; title?: string; metadata?: Record<string, unknown>; error?: never }
 
 type PartRef = { messageID: string; type: "text" | "reasoning" | "tool"; ordinal?: number }
-const partRefs = new Map<string, PartRef>()
-const nextOrdinals = new Map<string, { text: number; reasoning: number }>()
-const startedParts = new Set<string>()
-const toolStates = new Map<string, ToolStatus>()
-let eventSequence = 0
-let durableSequence = -1
+type TimelineState = {
+  partRefs: Map<string, PartRef>
+  nextOrdinals: Map<string, { text: number; reasoning: number }>
+  startedParts: Set<string>
+  toolStates: Map<string, ToolStatus>
+  eventSequence: number
+  durableSequence: number
+}
+
+// Builder state is owned by the running test attempt. Builders called outside a test (module scope, bun unit tests)
+// share the module state, and each test attempt starts from a copy of it.
+const moduleState: TimelineState = {
+  partRefs: new Map(),
+  nextOrdinals: new Map(),
+  startedParts: new Set(),
+  toolStates: new Map(),
+  eventSequence: 0,
+  durableSequence: -1,
+}
+const testStates = new WeakMap<TestInfo, TimelineState>()
+
+function scenario() {
+  const info = runningTest()
+  if (!info) return moduleState
+  const existing = testStates.get(info)
+  if (existing) return existing
+  const created: TimelineState = {
+    partRefs: new Map(moduleState.partRefs),
+    nextOrdinals: new Map([...moduleState.nextOrdinals].map(([id, next]) => [id, { ...next }])),
+    startedParts: new Set(moduleState.startedParts),
+    toolStates: new Map(moduleState.toolStates),
+    eventSequence: moduleState.eventSequence,
+    durableSequence: moduleState.durableSequence,
+  }
+  testStates.set(info, created)
+  return created
+}
+
+function runningTest() {
+  // Playwright offers no non-throwing check for a running test.
+  try {
+    return test.info()
+  } catch {
+    return undefined
+  }
+}
 
 export async function setupTimeline(
   page: Page,
@@ -159,8 +201,9 @@ export async function setupTimeline(
     tabs?: string[]
   } & TimelineServerInput = {},
 ) {
-  eventSequence = 0
-  durableSequence = -1
+  const state = scenario()
+  state.eventSequence = 0
+  state.durableSequence = -1
   const sessions = input.sessions ?? [session()]
   const messages =
     input.sessionMessages ??
@@ -171,7 +214,11 @@ export async function setupTimeline(
   const active = messages.findLast((message) => message.type === "assistant")
   const initialStatus: SessionStatus =
     active?.type === "assistant" && active.time.completed === undefined ? { type: "busy" } : { type: "idle" }
-  const transport = await installSseTransport(page, { server: SERVER, retry: input.eventRetry ?? 20 })
+  const transport = await installSseTransport(page, {
+    server: SERVER,
+    retry: input.eventRetry ?? 20,
+    keepalive: input.keepalive,
+  })
   const mock = await mockOpenCodeServer(page, {
     ...input,
     directory,
@@ -342,9 +389,10 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
       const expected = typeof message.metadata?.parentID === "string" ? message.metadata.parentID : parentID
       if (!expected || expected !== parentID)
         throw new Error(`Timeline assistant ${message.id} must reference a parent user in the fixture`)
+      const refs = scenario().partRefs
       message.content.forEach((part) => {
         if (part.type !== "tool") return
-        if (partRefs.has(part.id) && partRefs.get(part.id)?.messageID !== message.id)
+        if (refs.has(part.id) && refs.get(part.id)?.messageID !== message.id)
           throw new Error(`Timeline fixture has duplicate part ID: ${part.id}`)
       })
     }
@@ -411,6 +459,7 @@ export function historyMessages(count: number): TimelineMessage[] {
 
 export function partUpdated(part: PartSeed<"assistant">): readonly OpenCodeEvent[] {
   const messageID = part.messageID ?? assistantID
+  const startedParts = scenario().startedParts
   const started = startedParts.has(part.id)
   const ref = partRef(part.id, messageID, part.type)
   if (part.type === "text") {
@@ -462,13 +511,13 @@ export function partUpdated(part: PartSeed<"assistant">): readonly OpenCodeEvent
 }
 
 export function renderedPartID(partID: string) {
-  const ref = partRefs.get(partID)
+  const ref = scenario().partRefs.get(partID)
   if (!ref || ref.type === "tool") return partID
   return `${ref.messageID}:${ref.type}:${ref.ordinal}`
 }
 
 export function partDelta(partID: string, delta: string, messageID = assistantID) {
-  const ref = partRefs.get(partID)
+  const ref = scenario().partRefs.get(partID)
   if (!ref || ref.type !== "text" || ref.ordinal === undefined) throw new Error(`Unknown text part: ${partID}`)
   return makeEvent("session.text.delta", {
     sessionID,
@@ -577,7 +626,7 @@ export function assistantMessage(
   const created = input.created ?? 1700000001000
   const ordinals = { text: 0, reasoning: 0 }
   const content = parts.map((part) => messageContent(part, id, ordinals))
-  nextOrdinals.set(id, ordinals)
+  scenario().nextOrdinals.set(id, ordinals)
   return {
     id,
     type: "assistant",
@@ -720,12 +769,13 @@ function messageContent(
   messageID: string,
   ordinals: { text: number; reasoning: number },
 ): SessionMessageAssistant["content"][number] {
+  const owner = scenario()
   if (part.type === "tool") {
-    partRefs.set(part.id, { messageID, type: part.type })
-    toolStates.set(part.id, part.state.status)
+    owner.partRefs.set(part.id, { messageID, type: part.type })
+    owner.toolStates.set(part.id, part.state.status)
   } else {
-    partRefs.set(part.id, { messageID, type: part.type, ordinal: ordinals[part.type]++ })
-    startedParts.add(part.id)
+    owner.partRefs.set(part.id, { messageID, type: part.type, ordinal: ordinals[part.type]++ })
+    owner.startedParts.add(part.id)
   }
   if (part.type === "text") return { type: "text", text: part.text }
   if (part.type === "reasoning")
@@ -788,6 +838,7 @@ function messageContent(
 }
 
 function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[] {
+  const toolStates = scenario().toolStates
   const previous = toolStates.get(part.id)
   if (previous === "completed" || previous === "error") return []
 
@@ -872,17 +923,18 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
 }
 
 function partRef(id: string, messageID: string, type: PartRef["type"]): PartRef {
-  const current = partRefs.get(id)
+  const state = scenario()
+  const current = state.partRefs.get(id)
   if (current) return current
   if (type === "tool") {
     const ref = { messageID, type } satisfies PartRef
-    partRefs.set(id, ref)
+    state.partRefs.set(id, ref)
     return ref
   }
-  const next = nextOrdinals.get(messageID) ?? { text: 0, reasoning: 0 }
+  const next = state.nextOrdinals.get(messageID) ?? { text: 0, reasoning: 0 }
   const ref = { messageID, type, ordinal: next[type]++ } satisfies PartRef
-  nextOrdinals.set(messageID, next)
-  partRefs.set(id, ref)
+  state.nextOrdinals.set(messageID, next)
+  state.partRefs.set(id, ref)
   return ref
 }
 
@@ -890,15 +942,17 @@ function makeEvent<Type extends OpenCodeEvent["type"]>(
   type: Type,
   data: Extract<OpenCodeEvent, { type: Type }>["data"],
 ): OpenCodeEvent {
-  const id = `evt_timeline_${String(++eventSequence).padStart(4, "0")}`
-  const base = { id, created: 1700000002000 + eventSequence, type, data, location: { directory } }
+  const state = scenario()
+  const sequence = ++state.eventSequence
+  const id = `evt_timeline_${String(sequence).padStart(4, "0")}`
+  const base = { id, created: 1700000002000 + sequence, type, data, location: { directory } }
   const definition = EventManifest.ServerDefinitions.find((definition) => definition.type === type)
   if (!definition) throw new Error(`Unknown timeline event: ${type}`)
   const input =
     definition.durability === "durable"
       ? {
           ...base,
-          durable: { aggregateID: sessionID, seq: ++durableSequence, version: definition.durable.version },
+          durable: { aggregateID: sessionID, seq: ++state.durableSequence, version: definition.durable.version },
         }
       : base
   return Schema.decodeUnknownSync(definition)(input) as unknown as OpenCodeEvent
