@@ -122,9 +122,16 @@ export function SessionSidePanel(props: {
                     <Tabs
                       value={props.region.active() ?? "empty"}
                       onChange={(value) => {
-                        // Kobalte selects the first tab while triggers register.
-                        // Persist input events only; the region owns fallback selection.
-                        if (selectionEvent && selectionEvent.eventPhase !== Event.NONE) props.region.select(value)
+                        // Kobalte selects the first tab while triggers register, including while the
+                        // "+" menu's click is still dispatching. Persist input events on a tab only; the
+                        // region owns fallback selection.
+                        if (
+                          selectionEvent &&
+                          selectionEvent.eventPhase !== Event.NONE &&
+                          selectionEvent.target instanceof Element &&
+                          selectionEvent.target.closest('[role="tab"]')
+                        )
+                          props.region.select(value)
                       }}
                     >
                       <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">

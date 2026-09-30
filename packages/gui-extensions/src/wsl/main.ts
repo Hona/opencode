@@ -10,7 +10,8 @@ const Stored = Schema.Struct({ servers: Schema.Array(Schema.Unknown) })
 
 const setup: Setup = (ctx) => {
   const cli = ctx.use(Cli)
-  const packaged = ctx.use(MainApp).packaged
+  const app = ctx.use(MainApp)
+  const packaged = app.packaged
   const t = ctx.t
   const runtime = createWslRuntime(t)
   const saved = ctx
@@ -22,7 +23,7 @@ const setup: Setup = (ctx) => {
       ? undefined
       : { script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD, output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT }
   const log = (level: "info" | "error", message: string, data: Record<string, unknown>) =>
-    level === "info" ? console.info(`[wsl] ${message}`, data) : console.error(`[wsl] ${message}`, data)
+    app.log(level, `[wsl] ${message}`, data)
   const controller = createWslServersController({
     cli: { version: cli.version },
     runtime,

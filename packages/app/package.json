@@ -63,7 +63,6 @@
     "@opencode/client": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/gui-extensions": "workspace:*",
-    "@opencode/plugin-browser": "workspace:*",
     "@opencode/session-ui": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
