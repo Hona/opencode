@@ -1,5 +1,17 @@
 # Desktop package notes
 
+## Tests
+
+- Follow the Tests section of `packages/app/AGENTS.md`: every test protects a named contract with a credible regression, has one owner, and can fail.
+- Packaging, installer, IPC validation, credential, and SQLite migration and storage tests are contracts. Write them as tables: one table across channels, not one test per channel.
+- Never add test-only parameters or exports to production modules (`now`, `delay`, `budget`). Use `setSystemTime` from `bun:test`.
+- Test IPC through the raw message format the renderer sends, not through a mock client.
+- No source-grep or tombstone tests that assert a file, export or feature is gone.
+- Main-process code that belongs to a GUI extension is tested in `packages/gui-extensions`, not here.
+- `bun typecheck` does not cover test files. Run `bun test <file>` for every test file you touch.
+
+## Code
+
 - Follow Solid best practices, leave a comment when violating this: https://www.brenelz.com/posts/solid-js-best-practices/
 - Renderer process should only reach the main process through `window.electron` (exposed by `src/preload`) and the MessagePort RPC client in `src/renderer/api.ts`.
 - Main process should define IPC handlers in `src/main/ipc-handlers/*` and compose them in `src/main/ipc.ts`.
