@@ -1,17 +1,14 @@
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, Show, untrack, type Component } from "solid-js"
-import type { ServerRow } from "@opencode/gui-extensions/sdk"
+import { createMemo, Show, type Component } from "solid-js"
 import { ServerRowMenu } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
-import { ServerRowItems } from "@/servers/registry/row-items"
+import { ExtensionServerRow } from "@/servers/registry/extension-row"
 import { AddServerMenu } from "@/servers/registry/add-menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import { useServerCollectionController, type ServerCollectionController } from "@/servers/registry/controller"
+import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
-import { Contribution } from "@/runtime/extension/render"
-import { useExtensionServers } from "@/runtime/extension/servers"
 import { SettingsList } from "@/settings/list"
 import { ShellSetting } from "@/settings/general/general"
 import { createServerShellController } from "@/settings/general/controllers"
@@ -93,33 +90,6 @@ export const SettingsServerGeneral: Component<{
       </div>
     </>
   )
-}
-
-/** A contributed server's connection row; the extension renders it with the host's shared parts. */
-function ExtensionServerRow(props: { server: ServerConnection.Key; controller: ServerCollectionController }) {
-  const servers = useExtensionServers()
-  // The entry changes with every state update; its row follows the extension's state on its own.
-  const source = untrack(() => servers.entry(props.server))
-  const row: ServerRow = {
-    key: props.server,
-    health: () => props.controller.collection.health()[props.server],
-    Indicator: (indicator) => (
-      <ServerHealthIndicator
-        health={indicator.health}
-        connecting={indicator.connecting}
-        authenticationRequired={indicator.auth}
-      />
-    ),
-    default: {
-      available: () => props.controller.defaults.available(),
-      current: () => props.controller.defaults.key() === props.server,
-      set: (value) => void props.controller.defaults.set(value ? props.server : null),
-    },
-    remove: () => props.controller.connection.remove(props.server),
-    Items: () => <ServerRowItems server={props.server} />,
-  }
-  if (!source) return null
-  return <Contribution extension={source.extension}>{() => untrack(() => source.entry.row?.(row))}</Contribution>
 }
 
 function ServerShell(props: { server: ServerConnection.Any }) {

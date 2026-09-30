@@ -10,10 +10,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { PlatformProvider, usePlatform, type Platform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCollectionController } from "@/servers/registry/controller"
-import { ServerHealthIndicator } from "@/servers/registry/row"
-import { ServerRowItems } from "@/servers/registry/row-items"
+import { ExtensionServerRow } from "@/servers/registry/extension-row"
 import { builtins } from "../../../../gui-extensions/src/renderer"
-import { App, Layout, type RemoteClient, type ServerRow } from "../../../../gui-extensions/src/sdk"
+import { App, Layout, type RemoteClient } from "../../../../gui-extensions/src/sdk"
 import type { Ssh, SshConfig, SshHttp, SshItem, SshStart } from "../../../../gui-extensions/src/ssh/contract"
 import { DialogSsh } from "../../../../gui-extensions/src/ssh/dialog"
 import { createSshController } from "../../../../gui-extensions/src/ssh/state"
@@ -70,7 +69,13 @@ function createSshMain(platform: SshPlatform): SshRemote {
     // as they did when the app mounted its restore outside them.
     start: (input) => (input.background ? Promise.resolve(revision()) : platform.start(input).then(revision)),
     resolve: (input) => platform.resolve(input.id),
-    respond: (input) => platform.respond(input.id, input.prompt, input.value),
+    // Main answers only the challenge the server is waiting on: a confirmation with "yes", a secret with a value.
+    respond: (input) => {
+      const prompt = state()?.servers.find((item) => item.config.id === input.id)?.prompt
+      if (prompt?.id !== input.prompt || !(prompt.confirm ? input.value === "yes" : input.value))
+        return Promise.resolve()
+      return platform.respond(input.id, input.prompt, input.value)
+    },
     cancel: (input) => platform.cancel(input.id),
     forget: (input) => platform.forget(input.id),
   }
@@ -214,7 +219,7 @@ export function SshConnectionPanel(props: { item: SshItem; pending?: boolean; on
   )
 }
 
-// The settings page's rows for contributed servers, as `settings/servers/servers.tsx` renders them.
+// The settings page's rows for the servers the SSH extension contributes.
 export function SshServerSettings(props: { filter: string; id?: string; domain: ServerCollectionController }) {
   const servers = useExtensionServers()
   const keys = () =>
@@ -227,32 +232,7 @@ export function SshServerSettings(props: { filter: string; id?: string; domain: 
           item.entry.name.toLowerCase().includes(props.filter.toLowerCase()),
       )
       .map((item) => ServerConnection.Key.make(item.key))
-  return <For each={keys()}>{(key) => <ExtensionServerRow server={key} domain={props.domain} />}</For>
-}
-
-function ExtensionServerRow(props: { server: ServerConnection.Key; domain: ServerCollectionController }) {
-  const servers = useExtensionServers()
-  const source = untrack(() => servers.entry(props.server))
-  const row: ServerRow = {
-    key: props.server,
-    health: () => props.domain.collection.health()[props.server],
-    Indicator: (indicator) => (
-      <ServerHealthIndicator
-        health={indicator.health}
-        connecting={indicator.connecting}
-        authenticationRequired={indicator.auth}
-      />
-    ),
-    default: {
-      available: () => props.domain.defaults.available(),
-      current: () => props.domain.defaults.key() === props.server,
-      set: (value) => void props.domain.defaults.set(value ? props.server : null),
-    },
-    remove: () => props.domain.connection.remove(props.server),
-    Items: () => <ServerRowItems server={props.server} />,
-  }
-  if (!source) return null
-  return <Contribution extension={source.extension}>{() => untrack(() => source.entry.row?.(row))}</Contribution>
+  return <For each={keys()}>{(key) => <ExtensionServerRow server={key} controller={props.domain} />}</For>
 }
 
 export {

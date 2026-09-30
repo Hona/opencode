@@ -85,6 +85,8 @@ function createHost(input: {
   const instances = new Map<string, Instance>()
   const memos = new Map<string, Accessor<readonly Item<unknown>[]>>()
   const sequence = { value: 0 }
+  // An entry that finishes loading after the host is gone must not create a root nothing disposes.
+  const lifetime = { disposed: false }
 
   const items = <T,>(point: Point<T>) => {
     const existing = memos.get(point.id)
@@ -179,7 +181,7 @@ function createHost(input: {
       }),
       loadMessages(definition.i18n, untrack(language.locale)),
     ])
-    if (!module) return
+    if (!module || lifetime.disposed) return
     if (input.disabled()?.has(definition.id) !== false || instances.has(definition.id)) return
     runWithOwner(owner, () =>
       createRoot((dispose) => {
@@ -187,17 +189,17 @@ function createHost(input: {
         instances.set(definition.id, instance)
         // Setup runs synchronously inside the extension root so its effects and memos are owned.
         void Promise.try(() => untrack(() => module.default(instance.context))).then(
-            (cleanup) => {
-              if (instances.get(definition.id) !== instance) return
-              if (typeof cleanup === "function") instance.context.cleanup(cleanup)
-              setState("status", definition.id, "active")
-            },
-            (error: unknown) => {
-              if (instances.get(definition.id) !== instance) return
-              deactivate(definition.id)
-              fail(definition.id, error)
-            },
-          )
+          (cleanup) => {
+            if (instances.get(definition.id) !== instance) return
+            if (typeof cleanup === "function") instance.context.cleanup(cleanup)
+            setState("status", definition.id, "active")
+          },
+          (error: unknown) => {
+            if (instances.get(definition.id) !== instance) return
+            deactivate(definition.id)
+            fail(definition.id, error)
+          },
+        )
       }),
     )
   }
@@ -232,7 +234,9 @@ function createHost(input: {
         if (controller.signal.aborted) return () => {}
         // Work after an await in setup has no owner; fall back to the extension root.
         const value =
-          typeof item === "function" ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => unknown))! : () => item
+          typeof item === "function"
+            ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => unknown))!
+            : () => item
         const key = `${extension}/${++sequence.value}`
         setState("entries", point.id, (entries = []) => [...entries, { key, point: point.id, extension, value }])
         return own(() => setState("entries", point.id, (entries = []) => entries.filter((entry) => entry.key !== key)))
@@ -348,7 +352,10 @@ function createHost(input: {
       }),
     )
   })
-  onCleanup(() => Array.from(instances.keys()).forEach(deactivate))
+  onCleanup(() => {
+    lifetime.disposed = true
+    Array.from(instances.keys()).forEach(deactivate)
+  })
 
   return {
     state,
@@ -376,6 +383,12 @@ async function loadMessages(catalog: Catalog | undefined, locale: string): Promi
   const english = catalog?.en ?? {}
   const source = catalog?.[locale]
   if (!source || locale === "en") return english
-  const loaded = typeof source === "function" ? await source().then((module) => module.default, () => ({})) : source
+  const loaded =
+    typeof source === "function"
+      ? await source().then(
+          (module) => module.default,
+          () => ({}),
+        )
+      : source
   return { ...english, ...loaded }
 }
