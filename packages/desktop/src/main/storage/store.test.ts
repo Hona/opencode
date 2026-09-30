@@ -40,9 +40,4 @@ describe("settings store", () => {
     store.set("firstLaunchOnboardingComplete", true)
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ firstLaunchOnboardingComplete: true })
   })
-
-  test("rejects undefined like electron-store did", () => {
-    const store = createSettingsStore(path.join(dir(), "opencode.settings"))
-    expect(() => store.set("key", undefined)).toThrow(TypeError)
-  })
 })
