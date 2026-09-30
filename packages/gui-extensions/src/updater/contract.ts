@@ -1,7 +1,7 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Remote } from "../sdk"
 
-export const UpdaterStateSchema = Schema.Union([
+export const UpdaterState = Schema.Union([
   Schema.Struct({ status: Schema.Literal("disabled") }),
   Schema.Struct({ status: Schema.Literal("idle") }),
   Schema.Struct({ status: Schema.Literal("checking") }),
@@ -12,9 +12,19 @@ export const UpdaterStateSchema = Schema.Union([
   Schema.Struct({ status: Schema.Literal("installing"), version: Schema.String }),
   Schema.Struct({ status: Schema.Literal("error"), message: Schema.String }),
 ])
+export type UpdaterState = typeof UpdaterState.Type
 
-export const UpdaterSubscribe = Rpc.make("UpdaterSubscribe")
-export const UpdaterUnsubscribe = Rpc.make("UpdaterUnsubscribe")
-export const UpdaterCheck = Rpc.make("UpdaterCheck", { success: UpdaterStateSchema })
-export const UpdaterInstall = Rpc.make("UpdaterInstall")
-export const UpdaterRpcs = RpcGroup.make(UpdaterSubscribe, UpdaterUnsubscribe, UpdaterCheck, UpdaterInstall)
+/** The desktop app updater. Its state is app-wide; every window receives the same value. */
+export const Updater = Remote.define({
+  id: "updater",
+  state: UpdaterState,
+  methods: {
+    check: { output: UpdaterState },
+    /** Restarts into a staged update, or opens the installer download. */
+    install: {},
+  },
+  events: {
+    /** The app menu asks the focused window to check with in-app feedback (beta builds). */
+    check: Schema.Null,
+  },
+})

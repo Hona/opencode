@@ -1,19 +1,16 @@
-import { app, autoUpdater } from "electron"
+import { app, autoUpdater, shell } from "electron"
 import pkg from "electron-updater"
 import { Effect } from "effect"
-import { CHANNEL } from "../constants"
-import { openExternalURL } from "../files"
-import { setAppQuitting } from "../windows"
-import type { Platform } from "./index"
+import type { Platform } from "./machine"
 import { requiresStableMacInstaller, stableMacDownload } from "./migration"
 
 const updateClient = pkg.autoUpdater
 const restartTimeout = 10_000
 const stableArtifact = "https://opencode.ai/update/api/latest/desktop/opencode"
 
-export const make = Effect.gen(function* () {
-  const external = requiresStableMacInstaller(process.platform, CHANNEL)
-  const userAgent = `opencode/${CHANNEL === "prod" ? "latest" : CHANNEL}/${app.getVersion()}/desktop`
+export const make = Effect.fn("Updater.platform")(function* (channel: string) {
+  const external = requiresStableMacInstaller(process.platform, channel)
+  const userAgent = `opencode/${channel === "prod" ? "latest" : channel}/${app.getVersion()}/desktop`
   const runFork = Effect.runForkWith(yield* Effect.context())
   updateClient.logger = {
     info: (...args) => runFork(Effect.logInfo(...args)),
@@ -33,8 +30,6 @@ export const make = Effect.gen(function* () {
     allowDowngrade: updateClient.allowDowngrade,
     currentVersion: app.getVersion(),
   })
-  const beforeQuit = () => setAppQuitting()
-  autoUpdater.on("before-quit-for-update", beforeQuit)
 
   return {
     checkForUpdate: Effect.tryPromise({
@@ -54,8 +49,7 @@ export const make = Effect.gen(function* () {
     }),
     stageUpdate,
     installAndRestart,
-    externalInstall: external ? (url) => openExternalURL(url) : undefined,
-    dispose: () => autoUpdater.off("before-quit-for-update", beforeQuit),
+    externalInstall: external ? openExternal : undefined,
   } satisfies Platform
 })
 
@@ -122,6 +116,13 @@ const installAndRestart = Effect.callback<void, Error>((resume) => {
         Effect.andThen(Effect.fail(new Error("Update restart did not start"))),
       ),
   }),
-  Effect.tapError(() => Effect.sync(() => setAppQuitting(false))),
-  Effect.andThen(Effect.never),
 )
+
+// Only web links leave the app; a failure to open one is not an install error.
+function openExternal(url: string) {
+  if (!URL.canParse(url) || !["http:", "https:"].includes(new URL(url).protocol))
+    return Effect.logWarning("blocked external target", { url })
+  return Effect.tryPromise(() => shell.openExternal(url)).pipe(
+    Effect.catch((error) => Effect.logError("failed to open external target", { url, error })),
+  )
+}

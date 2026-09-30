@@ -1,10 +1,5 @@
-export * as Updater from "./index"
-
-import type { WebContents } from "electron"
-import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect"
-import type { UpdaterState } from "@opencode/app/updater"
-import { UpdaterStateChanged } from "../../shared/ipc-rpc/events"
-import { emitIpcEvent } from "../ipc-events"
+import { Deferred, Effect, Exit, Fiber } from "effect"
+import type { UpdaterState } from "./contract"
 
 export type UpdateTarget =
   | { readonly mode: "restart"; readonly version: string }
@@ -13,51 +8,34 @@ export type UpdateTarget =
 export type Platform = {
   readonly checkForUpdate: Effect.Effect<UpdateTarget | undefined, unknown>
   readonly stageUpdate: (options: { readonly differential: boolean }) => Effect.Effect<unknown, unknown>
-  readonly installAndRestart: Effect.Effect<never, unknown>
+  /** Starts quitAndInstall; succeeds once the app begins quitting for the update. */
+  readonly installAndRestart: Effect.Effect<void, unknown>
   readonly externalInstall?: (url: string) => Effect.Effect<void, unknown>
-  readonly dispose: () => void
 }
 
 export type Dependencies = {
   readonly currentVersion: string
   readonly platform?: Platform
-  readonly prepareToRestart: Effect.Effect<void, unknown>
+  /** Prepares the app to quit, then runs the handoff; resets the quitting state if the handoff fails. */
+  readonly restart: (handoff: Effect.Effect<void, unknown>) => Effect.Effect<void, unknown>
   readonly persistence: {
     readonly get: Effect.Effect<{ version: string } | undefined, unknown>
     readonly set: (value: { version: string }) => Effect.Effect<void, unknown>
     readonly clear: Effect.Effect<void, unknown>
   }
-  readonly show?: (
-    check: Effect.Effect<UpdaterState>,
-    install: Effect.Effect<void, unknown>,
-  ) => Effect.Effect<void, unknown>
+  readonly changed: (state: UpdaterState) => void
 }
 
-export interface Interface {
-  readonly subscribe: (sender: WebContents) => Effect.Effect<void>
-  readonly unsubscribe: (id: number) => Effect.Effect<void>
-  readonly check: Effect.Effect<UpdaterState>
-  readonly install: Effect.Effect<void>
-  readonly show: Effect.Effect<void>
-  readonly state: Effect.Effect<UpdaterState>
-  readonly started: Effect.Effect<void>
-}
-
-export class Service extends Context.Service<Service, Interface>()("opencode/desktop/Updater") {}
-
-export const layerWith = (dependencies: Dependencies) => Layer.effect(Service, make(dependencies))
-
+/** The update state machine. Fibers it forks belong to the caller's scope. */
 export const make = Effect.fn("Updater.make")(function* (dependencies: Dependencies) {
   const runFork = Effect.runForkWith(yield* Effect.context())
   let state: UpdaterState = dependencies.platform ? { status: "idle" } : { status: "disabled" }
   let pending: Deferred.Deferred<UpdaterState> | undefined
   let installing: Deferred.Deferred<void, unknown> | undefined
-  const listeners = new Set<(state: UpdaterState) => void>()
-  const subscriptions = new Map<number, () => void>()
   const transition = (next: UpdaterState) => {
     runFork(Effect.logInfo("updater state changed", { from: state.status, to: next.status }))
     state = next
-    listeners.forEach((listener) => listener(state))
+    dependencies.changed(state)
     return state
   }
   // electron-updater builds NSIS deltas against the installer of the running version but reads the "old" blockmap from
@@ -198,8 +176,9 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
     installing = deferred
     return Effect.gen(function* () {
       yield* pending ? Deferred.await(pending) : refreshStaged(platform, staged)
-      yield* dependencies.prepareToRestart
-      return yield* platform.installAndRestart
+      yield* dependencies.restart(platform.installAndRestart)
+      // The app is quitting into the installer.
+      return yield* Effect.never
     }).pipe(
       Effect.exit,
       Effect.flatMap((exit) =>
@@ -224,47 +203,16 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
     if (ready && ready.version !== dependencies.currentVersion) downloaded = ready.version
     yield* check
   })
-  const unsubscribe = (id: number) => {
-    subscriptions.get(id)?.()
-    subscriptions.delete(id)
-  }
   const starting = yield* start.pipe(Effect.forkScoped)
   yield* Effect.gen(function* () {
     yield* Effect.sleep("10 minutes")
     yield* check
   }).pipe(Effect.forever, Effect.forkScoped)
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      dependencies.platform?.dispose()
-      subscriptions.forEach((dispose) => dispose())
-      subscriptions.clear()
-    }),
-  )
 
-  return Service.of({
-    subscribe: (sender) =>
-      Effect.sync(() => {
-        const id = sender.id
-        subscriptions.get(id)?.()
-        subscriptions.set(
-          id,
-          (() => {
-            const listener = (state: UpdaterState) => {
-              if (sender.isDestroyed()) return unsubscribe(id)
-              emitIpcEvent(sender, new UpdaterStateChanged({ state }))
-            }
-            listeners.add(listener)
-            listener(state)
-            return () => listeners.delete(listener)
-          })(),
-        )
-        sender.once("destroyed", () => unsubscribe(id))
-      }),
-    unsubscribe: (id) => Effect.sync(() => unsubscribe(id)),
+  return {
     check,
-    install: install.pipe(Effect.orDie),
-    show: dependencies.show ? dependencies.show(check, install).pipe(Effect.orDie) : Effect.void,
-    state: Effect.sync(() => state),
+    install,
+    state: () => state,
     started: Fiber.join(starting).pipe(Effect.orDie),
-  })
+  }
 })

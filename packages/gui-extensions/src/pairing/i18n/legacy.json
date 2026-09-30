@@ -1,0 +1,15 @@
+{
+  "command.title": "command.server.pair",
+  "title": "settings.pairing.title",
+  "connection": "settings.pairing.connection",
+  "local.description": "pair.local.description",
+  "local.open": "pair.local.open",
+  "screenActive.title": "pair.screenActive.title",
+  "screenActive.description": "pair.screenActive.description",
+  "screenActive.error": "pair.screenActive.error",
+  "description": "pair.description",
+  "qr": "pair.qr",
+  "copy": "pair.copy",
+  "copy.error": "pair.copy.error",
+  "error": "pair.error"
+}

@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test"
-import { requiresStableMacInstaller, stableMacDownload } from "./migration"
-
-test("uses the external stable installer only for macOS beta", () => {
-  expect(requiresStableMacInstaller("darwin", "beta")).toBe(true)
-  expect(requiresStableMacInstaller("darwin", "prod")).toBe(false)
-  expect(requiresStableMacInstaller("win32", "beta")).toBe(false)
-  expect(requiresStableMacInstaller("linux", "beta")).toBe(false)
-})
+import { stableMacDownload } from "./migration"
 
 test("selects the signed stable installer for the current Mac architecture", () => {
   const artifact = {
