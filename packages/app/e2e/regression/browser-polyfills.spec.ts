@@ -12,9 +12,10 @@ test("loads home and the directory picker without newer browser APIs", async ({ 
     fileList: () => [],
   })
   await page.addInitScript((directory) => {
-    // Safari 16.6 has neither API. Remove them before the web entry runs.
+    // Safari 16.6 has none of these APIs. Remove them before the web entry runs.
     delete (Map as Partial<typeof Map>).groupBy
     delete (Promise as Partial<typeof Promise>).withResolvers
+    delete (Promise as Partial<typeof Promise>).try
     localStorage.setItem(
       "opencode.global.dat:server",
       JSON.stringify({

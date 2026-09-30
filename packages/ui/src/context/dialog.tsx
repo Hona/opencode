@@ -44,19 +44,24 @@ function init() {
   const lock = { value: false }
   const state = { disposed: false }
 
-  // Detach the stack before disposing, so cleanups that close dialogs find nothing to admit.
-  const disposeAll = () => {
+  // Detach the stack before disposing, so cleanups that close dialogs find nothing to admit. Every dialog is
+  // drained even when one throws. A replaced dialog that was not already closing still hears onClose.
+  const disposeAll = (notify: boolean) => {
     const items = stack()
+    const exited = new Set(closing.keys())
     setStack([])
     closing.forEach((timer) => clearTimeout(timer))
     closing.clear()
     setExiting(new Set<string>())
-    items.forEach((item) => item.dispose())
+    items.forEach((item) => {
+      if (notify && !exited.has(item.id)) isolate(() => item.onClose?.())
+      isolate(item.dispose)
+    })
   }
 
   onCleanup(() => {
     state.disposed = true
-    disposeAll()
+    disposeAll(false)
   })
 
   const finish = (current: Active) => {
@@ -72,7 +77,7 @@ function init() {
       }, 100),
     )
     setExiting((ids) => new Set([...ids, current.id]))
-    current.onClose?.()
+    isolate(() => current.onClose?.())
     current.setClosing(true)
   }
 
@@ -172,7 +177,7 @@ function init() {
   }
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void, id?: string) => {
-    disposeAll()
+    disposeAll(true)
     lock.value = false
     mount(element, owner, onClose, id)
   }
@@ -184,6 +189,15 @@ function init() {
     push,
   }
 }
+/** Runs a dialog callback so its throw is reported without stopping the caller's cleanup. */
+function isolate(fn: () => void) {
+  try {
+    fn()
+  } catch (error) {
+    console.error("[dialog]", error)
+  }
+}
+
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
   return (
