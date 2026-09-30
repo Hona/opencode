@@ -68,7 +68,8 @@ export interface MockServerConfig {
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
-  pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string }[] }
+  // `directory` is the owning workspace (Location); `cwd` is the reported working directory (default: `directory`).
+  pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
 }
@@ -90,7 +91,7 @@ export type MockPty = {
   created: MockPtyInfo[]
   removed: string[]
   updates: { id: string; body: unknown }[]
-  tokens: { id: string; headers: Record<string, string> }[]
+  tokens: { id: string; headers: Record<string, string>; ticket: string }[]
   sockets: MockPtySocket[]
   // WebSockets closed with 1008 because the PTY, its workspace, or an unused issued ticket did not match.
   rejected: { id: string; url: URL; reason: string }[]
@@ -370,10 +371,14 @@ function createPty(config: MockServerConfig) {
     status: "running",
     pid: 1,
   })
-  // Issued, not yet used connect tickets.
-  const tickets: { id: string; directory: string }[] = []
+  // Core scopes PTYs by Location, which can differ from the process cwd, so ownership is kept apart from `cwd`.
+  const owners = new Map((config.pty?.initial ?? []).map((item) => [item.id, item.directory ?? config.directory]))
+  // Issued, not yet used connect tickets, each bound to one PTY and workspace.
+  const tickets: { id: string; directory: string; ticket: string }[] = []
+  const issued = { count: 0 }
+  const owns = (item: MockPtyInfo, directory: string) => owners.get(item.id) === directory
   const pty: MockPty = {
-    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title, item.directory)),
+    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title, item.cwd ?? item.directory)),
     created: [],
     removed: [],
     updates: [],
@@ -397,18 +402,32 @@ function createPty(config: MockServerConfig) {
       )!
       return { id: `${prefix}${number}`, number }
     },
-    issue(id: string, directory: string) {
-      tickets.push({ id, directory })
-      return PTY_TICKET
+    add(created: MockPtyInfo, directory: string) {
+      owners.set(created.id, directory)
+      pty.created.push(created)
+      pty.list.push(created)
     },
-    // Returns why a connect URL is refused: the PTY must exist, belong to the requested workspace, and carry an unused issued ticket.
+    find: (id: string, directory: string) => pty.list.find((item) => item.id === id && owns(item, directory)),
+    owned: (directory: string) => pty.list.filter((item) => owns(item, directory)),
+    // Unique per server; the first stays `e2e-ticket` so single-terminal specs can assert a fixed value.
+    issue(id: string, directory: string) {
+      issued.count += 1
+      const ticket = issued.count === 1 ? PTY_TICKET : `${PTY_TICKET}-${issued.count}`
+      tickets.push({ id, directory, ticket })
+      return ticket
+    },
+    // Returns why a connect URL is refused: the PTY must exist, belong to the requested workspace, and carry the exact
+    // unused ticket issued for that PTY and workspace. Admission consumes the ticket.
     admit(id: string, url: URL) {
       const found = pty.list.find((item) => item.id === id)
       if (!found) return "PTY not found"
       const directory = url.searchParams.get("location[directory]") ?? config.directory
-      if (directory !== found.cwd) return "PTY belongs to another workspace"
-      const index = tickets.findIndex((ticket) => ticket.id === id && ticket.directory === directory)
-      if (url.searchParams.get("ticket") !== PTY_TICKET || index < 0) return "No unused ticket was issued for this PTY"
+      if (!owns(found, directory)) return "PTY belongs to another workspace"
+      const ticket = url.searchParams.get("ticket")
+      const index = tickets.findIndex(
+        (item) => item.id === id && item.directory === directory && item.ticket === ticket,
+      )
+      if (index < 0) return "No unused ticket was issued for this PTY"
       tickets.splice(index, 1)
     },
   })
@@ -455,7 +474,7 @@ function mockHandlers(
       Effect.andThen(() =>
         Effect.suspend(() => {
           const directory = requestDirectory(config, request)
-          const found = state.pty.list.find((item) => item.id === id && item.cwd === directory)
+          const found = state.pty.find(id, directory)
           return found ? Effect.succeed(found) : Effect.fail(new MockNotFound({ message: "PTY not found" }))
         }),
       ),
@@ -657,20 +676,20 @@ function mockHandlers(
           ptyEnabled.pipe(
             Effect.map(() => {
               const directory = requestDirectory(config, ctx.request)
-              return { location: location(config), data: state.pty.list.filter((item) => item.cwd === directory) }
+              return { location: location(config), data: state.pty.owned(directory) }
             }),
           ),
         ptyCreate: (ctx) =>
           ptyEnabled.pipe(
             Effect.map(() => {
               const next = state.pty.allocate()
+              const directory = requestDirectory(config, ctx.request)
               const created = state.pty.info(
                 next.id,
                 ctx.payload.title ?? `Terminal ${next.number}`,
-                requestDirectory(config, ctx.request),
+                ctx.payload.cwd ?? directory,
               )
-              state.pty.created.push(created)
-              state.pty.list.push(created)
+              state.pty.add(created, directory)
               return { location: location(config), data: created }
             }),
           ),
@@ -695,8 +714,12 @@ function mockHandlers(
         ptyConnectToken: (ctx) =>
           findPty(ctx.params.ptyID, ctx.request).pipe(
             Effect.map((found) => {
-              state.pty.tokens.push({ id: found.id, headers: Object.fromEntries(Object.entries(ctx.request.headers)) })
-              const ticket = state.pty.issue(found.id, found.cwd)
+              const ticket = state.pty.issue(found.id, requestDirectory(config, ctx.request))
+              state.pty.tokens.push({
+                id: found.id,
+                headers: Object.fromEntries(Object.entries(ctx.request.headers)),
+                ticket,
+              })
               return { location: location(config), data: { ticket, expires_in: 60 } }
             }),
           ),
