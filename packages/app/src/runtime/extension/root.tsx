@@ -34,6 +34,7 @@ export function ExtensionRoot(props: ParentProps) {
   const bridge = platform.extensions
   const menubar = createMenubar(bridge)
   const remotes = createRemotes(bridge)
+  onCleanup(remotes.dispose)
   const [installed, setInstalled] = createStore({ list: [] as Installed[] })
   const [loaded] = createResource(async () => {
     if (!bridge) return true

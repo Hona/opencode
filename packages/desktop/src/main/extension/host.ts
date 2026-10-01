@@ -112,6 +112,8 @@ export function createHost(input: {
   // The latest activation of each extension. Deactivating marks it stale, so it is never joined: the next
   // activation waits for it to settle and release what it created, then starts afresh.
   const launches = new Map<string, { readonly token: Launch; readonly settled: Promise<void> }>()
+  // An instance leaves `active` as its disposal starts; the next activation waits for its cleanups here.
+  const disposals = new Map<string, Promise<void>>()
   const errors = new Map<string, string>()
   const reloads = new Map<string, number>()
   const closed = new Set<(win: BrowserWindow) => void>()
@@ -257,6 +259,8 @@ export function createHost(input: {
     const controller = new AbortController()
     const cleanups = new Set<Cleanup>()
     const clients = new WeakMap<Provider, unknown>()
+    // Owns this instance's native surfaces, so releasing them never touches a replacement's.
+    const owner = {}
     const run = (fn: Cleanup) =>
       Promise.resolve()
         .then(fn)
@@ -290,7 +294,7 @@ export function createHost(input: {
           },
         } satisfies Windows,
       ],
-      [Surfaces.id, { create: (view, win) => surfaces.create(id, view, win) } satisfies Surfaces],
+      [Surfaces.id, { create: (view, win) => surfaces.create(owner, view, win) } satisfies Surfaces],
       [MainStorage.id, createMainStorage(input.state, id)],
       [Cli.id, input.cli],
       [MainApp.id, mainApp],
@@ -475,7 +479,7 @@ export function createHost(input: {
           }),
         ])
         clearTimeout(timer.id)
-        surfaces.releaseExtension(id)
+        surfaces.releaseOwner(owner)
       },
     }
     return instance
@@ -485,7 +489,9 @@ export function createHost(input: {
     const previous = launches.get(id)
     if (previous && !previous.token.stale) return previous.settled
     const token: Launch = { stale: false }
+    // Starts once the previous activation settled and the previous instance finished its cleanups.
     const settled = (previous?.settled ?? Promise.resolve())
+      .then(() => disposals.get(id))
       .then(() => launch(id, token))
       .finally(() => {
         if (launches.get(id)?.token === token) launches.delete(id)
@@ -505,7 +511,7 @@ export function createHost(input: {
     const instance = createInstance(id, loaded.i18n)
     active.set(id, instance)
     instance.messages = await resolveMessages(loaded.i18n).catch(() => instance.messages)
-    // Deactivated while the catalog loaded: the instance is already disposed, so its setup never runs.
+    // Deactivated while the catalog loaded: the instance is being disposed, so its setup never runs.
     if (token.stale) return
     const outcome = await Promise.resolve()
       .then(() => loaded.setup(instance.context))
@@ -527,9 +533,13 @@ export function createHost(input: {
     const launching = launches.get(id)
     if (launching) launching.token.stale = true
     const instance = active.get(id)
-    if (!instance) return
+    // Callers that deactivate during another caller's disposal still wait for its cleanups.
+    if (!instance) return disposals.get(id)
     active.delete(id)
-    await instance.dispose()
+    const disposal = instance.dispose()
+    disposals.set(id, disposal)
+    await disposal
+    if (disposals.get(id) === disposal) disposals.delete(id)
   }
 
   const known = (id: string) =>
@@ -704,7 +714,9 @@ export function createHost(input: {
       status.disposed = true
       stopWindows()
       stopLocale()
-      await Promise.all([...active.keys()].map(deactivate))
+      // Includes instances a reload or disable started disposing just before.
+      const stopping = [...active.keys()].map(deactivate)
+      await Promise.all([...stopping, ...disposals.values()])
     },
   }
 }

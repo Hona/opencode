@@ -93,7 +93,7 @@ export function createRemotes(bridge: Bridge | undefined) {
     client,
     /** A client typed by its token, for host code that uses one remote directly. */
     typed: <S extends RemoteSpec>(token: Remote<S>) => client(token) as RemoteClient<S> | undefined,
-    /** Stops listening to the bridge; for clients made outside the window's extension root. */
+    /** Stops listening to the bridge. Call it when the owner of these clients goes away. */
     dispose() {
       stop?.()
     },

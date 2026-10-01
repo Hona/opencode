@@ -5,7 +5,8 @@ import type { Surface } from "@opencode/gui-extensions/sdk/main"
 import { createCornerImages } from "../native/corners"
 
 type Entry = {
-  readonly extension: string
+  /** The extension instance that created the surface. */
+  readonly owner: object
   readonly window: BrowserWindow
   readonly windowID: number
   readonly view: WebContentsView
@@ -86,7 +87,7 @@ export function createSurfaces() {
   }
 
   return {
-    create(extension: string, view: WebContentsView, window: BrowserWindow): Surface {
+    create(owner: object, view: WebContentsView, window: BrowserWindow): Surface {
       const id = randomUUID()
       const corners = [new ImageView(), new ImageView()]
       view.setVisible(false)
@@ -96,7 +97,7 @@ export function createSurfaces() {
         window.contentView.addChildView(corner)
       })
       const entry: Entry = {
-        extension,
+        owner,
         window,
         windowID: window.id,
         view,
@@ -146,9 +147,10 @@ export function createSurfaces() {
         if (entry.windowID === windowID) release(id)
       })
     },
-    releaseExtension(extension: string) {
+    /** Releases one extension instance's surfaces; a replacement of the same extension keeps its own. */
+    releaseOwner(owner: object) {
       entries.forEach((entry, id) => {
-        if (entry.extension === extension) release(id)
+        if (entry.owner === owner) release(id)
       })
     },
   }
