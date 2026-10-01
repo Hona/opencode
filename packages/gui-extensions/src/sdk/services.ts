@@ -184,6 +184,7 @@ export interface BackgroundTask {
 
 /** A mounted session route. Slot inputs and panel renders receive this. */
 export interface SessionView extends SessionRef {
+  /** `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local overrides. */
   readonly project: Project | undefined
   readonly directory: string
   /** The session runs in the project root rather than a worktree. */

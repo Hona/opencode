@@ -87,6 +87,39 @@ test("summary disclosures import legacy settings and persist in extension storag
   await expect(summary.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
 })
 
+test("a session in a worktree subfolder names its worktree and lists cached worktrees at once", async ({ page }) => {
+  const root = "C:/OpenCode/SmokeWorktrees"
+  await mockStressTimeline(page, {
+    sessions: fixture.sessions.map((item) =>
+      item.id === fixture.targetID ? { ...item, directory: `${root}/feature/packages/app` } : { ...item },
+    ),
+    // Found on disk: the project's stored sandboxes stay empty.
+    worktrees: [
+      { directory: fixture.directory },
+      { directory: `${root}/feature`, strategy: "git" },
+      { directory: `${root}/other`, strategy: "git" },
+    ],
+  })
+  await page.goto(sessionHref(fixture.targetID))
+  const trigger = page.getByRole("button", { name: "Session details", exact: true })
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+  const location = summary.getByRole("button", { name: "feature", exact: true })
+  await trigger.click()
+  await expect(location).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(summary).toBeHidden()
+
+  // The reopened summary's menu lists the cached inventory while its own refresh stays held.
+  const list = await holdRoute(page, (url) => url.pathname === "/api/worktree", { method: "GET" })
+  await trigger.click()
+  await location.click()
+  await list.arrived
+  await page.getByRole("menuitem", { name: "Worktree", exact: true }).click()
+  await expect(page.getByRole("menuitem", { name: "other", exact: true })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "feature", exact: true })).toHaveCount(0)
+  list.release()
+})
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`summary overlays the view and submenus follow ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })

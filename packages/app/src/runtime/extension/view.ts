@@ -137,12 +137,11 @@ export function createSessionView(session: SessionModel) {
     get location() {
       return session.data.info()?.location
     },
-    // The user's local name and icon override the server's, as in the sidebar.
+    // Global sync adds the worktrees found on disk, and the user's local name and icon override the server's.
+    // Raw metadata stands in until global sync lists the project.
     get project() {
-      const base = session.project()
       const info = session.data.info()
-      const details = base && info ? server.ctx.projects.detailsForSession(info) : undefined
-      return base && details ? { ...base, name: details.name ?? base.name, icon: details.icon ?? base.icon } : base
+      return (info && server.ctx.projects.detailsForSession(info)) || session.project()
     },
     get directory() {
       return session.workspace.directory()
