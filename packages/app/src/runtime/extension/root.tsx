@@ -1,7 +1,6 @@
-import { createMemo, createResource, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
-import type { Installed } from "@opencode/gui-extensions/sdk/bridge"
+import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { builtins } from "./builtins"
+import { createInstalled } from "./installed"
 import { createMenubar, ExtensionMenubarProvider } from "./menubar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionHostProvider, useExtensionHost } from "./host"
@@ -35,19 +34,11 @@ export function ExtensionRoot(props: ParentProps) {
   const menubar = createMenubar(bridge)
   const remotes = createRemotes(bridge)
   onCleanup(remotes.dispose)
-  const [installed, setInstalled] = createStore({ list: [] as Installed[] })
-  const [loaded] = createResource(async () => {
-    if (!bridge) return true
-    setInstalled("list", reconcile([...(await bridge.manager.list())]))
-    return true
+  const installed = createInstalled(bridge)
+  const disabled = createMemo(() => {
+    if (!installed.loaded()) return undefined
+    return new Set(installed.list().flatMap((item) => (item.enabled ? [] : [item.id])))
   })
-  if (bridge)
-    onCleanup(
-      bridge.on((message) => message.type === "extensions" && setInstalled("list", reconcile([...message.list]))),
-    )
-  const disabled = createMemo(() =>
-    loaded() ? new Set(installed.list.filter((item) => !item.enabled).map((item) => item.id)) : undefined,
-  )
   const os = platform.platform === "desktop" ? platform.os : undefined
   // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
   const definitions = builtins.filter((definition) => !definition.os || (!!os && definition.os.includes(os)))
@@ -67,7 +58,7 @@ export function ExtensionRoot(props: ParentProps) {
         )}
         <ExtensionMenubarProvider value={menubar}>
           <ExtensionServersProvider
-            failed={(id) => installed.list.some((item) => item.id === id && item.error !== undefined)}
+            failed={(id) => installed.list().some((item) => item.id === id && item.error !== undefined)}
           >
             {props.children}
           </ExtensionServersProvider>

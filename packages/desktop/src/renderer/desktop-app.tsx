@@ -98,9 +98,13 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
       list.push(...extensions.list())
       return list
     })
-    // An extension's server that is not listed yet (e.g. a WSL distro still starting) cannot open the window.
-    const effectiveDefaultServer = createMemo(() => {
+    // Resolved once, when the window first becomes ready, so the app's lifetime never follows live server
+    // availability: an extension reloading its server would otherwise remount the whole app. A default that
+    // disappears later reads like any unavailable server.
+    const startupServer = createMemo<ServerConnection.Key | undefined>((resolved) => {
+      if (resolved || !ready()) return resolved
       const key = defaultServer.latest ?? "sidecar"
+      // An extension's server that is not listed yet (e.g. a WSL distro still starting) cannot open the window.
       if (key === "sidecar" || /^https?:\/\//.test(key) || extensions.list().some((conn) => conn.key === key))
         return ServerConnection.Key.make(key)
       return ServerConnection.Key.make("sidecar")
@@ -108,7 +112,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
     return (
       <Show when={ready()}>
-        <Show when={effectiveDefaultServer()} keyed>
+        <Show when={startupServer()} keyed>
           {(key) => (
             <AppInterface defaultServer={key} servers={servers()} router={router}>
               <DesktopStartupReady
