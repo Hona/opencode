@@ -186,6 +186,13 @@ export interface BackgroundTask {
 export interface SessionView extends SessionRef {
   /** `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local overrides. */
   readonly project: Project | undefined
+  /**
+   * The sidebar project whose worktree or a sandbox is this session's directory, with the user's local name and
+   * icon. Undefined when no listed project is opened there, e.g. for a session in a project subfolder.
+   */
+  readonly listedProject:
+    | { readonly worktree: string; readonly name?: string; readonly icon?: Project["icon"] }
+    | undefined
   readonly directory: string
   /** The session runs in the project root rather than a worktree. */
   readonly local: boolean
@@ -210,7 +217,10 @@ export interface Layout {
   narrow(): boolean
   /** Stored layout (tabs, scroll) has loaded. */
   ready(): boolean
-  /** Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. */
+  /**
+   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, opening a
+   * tab its panel does not list stores nothing and only selects the panel's mobile view.
+   */
   open(
     key: string,
     session: SessionRef,
@@ -221,6 +231,11 @@ export interface Layout {
   /** Closing the last panel the side region was opened for also closes the region. */
   toggle(key: string, session: SessionRef): void
   state(key: string, session: SessionRef): PanelState
+  /**
+   * This extension's tab ids stored in the session's side strip, mounted or not. Empty while the session's location
+   * is unknown, as `state` is then "closed". Reactive.
+   */
+  stored(session: SessionRef): readonly string[]
   readonly side: { opened(session: SessionRef): boolean; toggle(session: SessionRef): void }
   readonly dock: { opened(session: SessionRef): boolean; placement(): "side" | "bottom" }
   readonly scroll: {

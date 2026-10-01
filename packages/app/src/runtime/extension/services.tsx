@@ -59,7 +59,9 @@ type Attached = {
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
-  layout: Omit<Layout, "narrow" | "settings" | "project">
+  layout: Omit<Layout, "narrow" | "settings" | "project" | "stored"> & {
+    stored(extension: string, session: SessionRef): readonly string[]
+  }
   settings: (page?: string) => void
   project: (server: string, title: string) => void
   font: Accessor<string>
@@ -210,7 +212,7 @@ export function createExtensionServices() {
     },
     {
       token: Layout,
-      create: () =>
+      create: (extension) =>
         ({
           narrow,
           ready: () => current()?.layout.ready() ?? false,
@@ -218,6 +220,7 @@ export function createExtensionServices() {
           close: (key, session) => requireAttached(current()).layout.close(key, session),
           toggle: (key, session) => requireAttached(current()).layout.toggle(key, session),
           state: (key, session) => requireAttached(current()).layout.state(key, session),
+          stored: (session) => requireAttached(current()).layout.stored(extension, session),
           side: {
             opened: (session) => requireAttached(current()).layout.side.opened(session),
             toggle: (session) => requireAttached(current()).layout.side.toggle(session),
@@ -471,6 +474,8 @@ export function createExtensionAttachment(services: ExtensionServices) {
       if (narrow()) {
         setDock(session, false)
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
+        // A tab its panel does not list on narrow screens stays unstored: the open only selects the panel's view.
+        if (mountedView(session) && !known.some((entry) => entry.key === key)) return
       }
       if (!narrow()) tabs.setPane(shellTab(session), "side", true)
       // Pinned tabs are listed without being stored; opening one only selects it.
@@ -579,6 +584,14 @@ export function createExtensionAttachment(services: ExtensionServices) {
         if (opening && sideOpened(session)) openedFor.set(session.key, key)
       },
       state,
+      stored(extension, session) {
+        const value = stateKey(session)
+        if (!value) return []
+        const prefix = `${extension}:`
+        return layout.panel
+          .state(value)
+          .all.flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
+      },
       side: {
         opened: sideOpened,
         toggle: (session) => tabs.setPane(shellTab(session), "side", !sideOpened(session)),

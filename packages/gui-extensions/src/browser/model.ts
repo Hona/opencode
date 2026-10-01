@@ -24,8 +24,6 @@ type Live = {
   connection: Connection
   registration?: Registration
   revision: number
-  /** Tab IDs of the last inventory, to tell new tabs from ones the user just closed. */
-  tabs?: readonly Browser.TabID[]
   dispose: () => void
 }
 
@@ -73,21 +71,6 @@ export function createModel(ctx: Context) {
     setState("attachments", id, undefined)
   }
 
-  // Mirror the desktop's tab inventory into the session's side panel. Only tabs new since the last
-  // inventory are added, so a tab the user just closed is not reopened before the desktop confirms.
-  const mirror = (entry: Live, ids: readonly Browser.TabID[] | undefined) => {
-    const known = new Set(entry.tabs ?? [])
-    entry.tabs = ids
-    if (!ids) return
-    known.forEach((tabID) => {
-      if (!ids.includes(tabID) && layout.state(key(tabID), entry.ref) !== "closed") layout.close(key(tabID), entry.ref)
-    })
-    ids.forEach((tabID) => {
-      if (!known.has(tabID) && layout.state(key(tabID), entry.ref) === "closed")
-        layout.open(key(tabID), entry.ref, { focus: false })
-    })
-  }
-
   const attach = (ref: SessionRef) => {
     const id = ref.key
     if (live.has(id) || state.unsupported[ref.server.id] || !ref.server.compatible) return
@@ -109,7 +92,7 @@ export function createModel(ctx: Context) {
         focus: (tabID) => layout.open(key(tabID), ref, { select: true }),
         preview: (path) => preview(ref, path),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
-        change: (next) => {
+        change: (next, mirror) => {
           if (next.error === "browser.pane.unsupported") {
             setState("unsupported", ref.server.id, true)
             return close(id)
@@ -136,11 +119,15 @@ export function createModel(ctx: Context) {
               }),
             )
             // After the store: closing a strip tab asks this model whether the desktop still has it.
-            mirror(
-              entry,
-              next.browser?.tabs.map((item) => item.id),
-            )
+            mirror()
           })
+        },
+        strip: {
+          stored: () => layout.stored(ref),
+          open(tabID) {
+            if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { focus: false })
+          },
+          close: (tabID) => layout.close(key(tabID), ref),
         },
       }),
     }

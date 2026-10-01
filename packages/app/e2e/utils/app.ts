@@ -1,6 +1,6 @@
 import { expect, type Page, type Request } from "@playwright/test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { base64Encode } from "@opencode/util/encode"
+import { base64Encode, checksum } from "@opencode/util/encode"
 
 // The mocked default server. Production builds connect to their own origin, so CI points this at the app.
 export const SERVER = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
@@ -18,6 +18,12 @@ export function draftHref(draftID: string) {
 // Key of `opencode.window.browser.dat:tabs.panes` entries.
 export function tabKey(sessionID: string, server = SERVER) {
   return `${server}\n${sessionHref(sessionID, server)}`
+}
+
+// A default-server workspace storage key, as the app writes it for a forward-slash directory without a trailing slash.
+export function workspaceKey(directory: string, key: string) {
+  const head = directory.slice(0, 12).replace(/[^a-zA-Z0-9._-]/g, "-")
+  return `opencode.workspace.${head}.${checksum(directory) ?? "0"}.dat:workspace:${key}`
 }
 
 export async function expectPath(page: Page, href: string) {

@@ -60,9 +60,8 @@ export function SessionFileBrowserTab(props: {
 
   const loading = createMemo(() => query().length > 0 && search.isPending)
   const title = createMemo(() => {
-    const project = props.session.project
-    const worktree = project?.worktree ?? file.root
-    return project?.name || getFilename(worktree) || worktree
+    const project = props.session.listedProject ?? { worktree: file.root }
+    return project.name || getFilename(project.worktree) || project.worktree
   })
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
 

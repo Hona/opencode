@@ -23,12 +23,20 @@ type ConnectionState = {
   suspended: boolean
   error?: string
 }
-// Owns native registration, retry, and suspended tab metadata independently of the mounted session route.
+// Owns native registration, retry, and suspended tab metadata independently of the mounted session route, and
+// mirrors the desktop's tabs into the session's strip.
 export function createConnection(input: {
   client: () => Client | undefined
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
   target: () => { server: string; session: string }
-  change: (state: ConnectionState) => void
+  /** `mirror` applies the state's tabs to the strip; call it right after storing the state, in the same batch. */
+  change: (state: ConnectionState, mirror: () => void) => void
+  /** The session's strip: the browser tab IDs it stores, and quietly adding or removing one. */
+  strip: {
+    stored: () => readonly string[]
+    open: (tabID: Browser.TabID) => void
+    close: (tabID: string) => void
+  }
   focus: (tabID: Browser.TabID) => void
   preview: (path: string) => void
   inspect: (event: InspectEvent) => void
@@ -40,6 +48,30 @@ export function createConnection(input: {
   let retry: ReturnType<typeof setTimeout> | undefined
   // A registration was wanted while the pane's remote was gone; it registers once the remote is back.
   let lost = false
+  // Tab IDs of the last inventory, to tell new tabs from ones the user just closed.
+  let known: readonly Browser.TabID[] | undefined
+  // Reports the state with a mirror of its tabs into the strip, applied after the state so closing a strip tab already
+  // finds the desktop's answer. Only tabs new since the last inventory are added, so a tab the user just closed is not
+  // reopened before the desktop confirms. Only a native inventory removes: it closes every stored tab it lacks, so the
+  // desktop decides which tabs exist, while suspended, unavailable, and restoring states keep the tabs they will restore.
+  const publish = (native = false) => {
+    const previous = new Set<string>(known ?? [])
+    const ids = state.browser?.tabs.map((tab) => tab.id)
+    known = ids
+    input.change({ ...state }, () => {
+      if (!ids) return
+      if (native) {
+        const listed = new Set<string>(ids)
+        input.strip
+          .stored()
+          .filter((tabID) => !listed.has(tabID))
+          .forEach((tabID) => input.strip.close(tabID))
+      }
+      ids.forEach((tabID) => {
+        if (!previous.has(tabID)) input.strip.open(tabID)
+      })
+    })
+  }
   // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every
   // binding without reporting it. Keep the tabs, like an idle eviction, and register again when it returns.
   const suspend = (registration: Registration) => {
@@ -50,7 +82,7 @@ export function createConnection(input: {
     state.surfaces = {}
     state.suspended = true
     state.error = undefined
-    input.change({ ...state })
+    publish()
   }
   // Main closed the binding, or never took it (an SSH server's endpoint is missing while it reconnects).
   // Keep the tabs and register again with backoff; commands sent through it already failed and are not replayed.
@@ -61,7 +93,7 @@ export function createConnection(input: {
     state.surfaces = {}
     state.suspended = false
     state.error = undefined
-    input.change({ ...state })
+    publish()
     retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
   }
   const register = () => {
@@ -84,7 +116,7 @@ export function createConnection(input: {
         if (event.type === "inspect") return input.inspect(event)
         if (event.type === "surface") {
           state.surfaces = { ...state.surfaces, [event.tabID]: event.surface }
-          return input.change({ ...state })
+          return publish()
         }
         if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.replaced") {
           blocked = true
@@ -93,7 +125,7 @@ export function createConnection(input: {
           state.surfaces = {}
           state.browser = null
           state.error = event.error
-          input.change({ ...state })
+          publish()
           return
         }
         if (event.error === "browser.pane.registration.closed") return reopen(registration)
@@ -104,14 +136,14 @@ export function createConnection(input: {
           state.suspended = true
           if (event.state) state.browser = event.state
           state.error = undefined
-          input.change({ ...state })
+          publish()
           // Idle eviction has no retry timer. A user or Session execution wakes it on demand.
           return
         }
         if (event.state) attempts = 0
         state.browser = event.state
         state.error = event.error
-        input.change({ ...state })
+        publish(true)
       },
       (error) => (unavailable(error) ? suspend(registration) : reopen(registration)),
     )
@@ -119,7 +151,7 @@ export function createConnection(input: {
     state.surfaces = {}
     state.suspended = false
     state.error = undefined
-    input.change({ ...state })
+    publish()
   }
   return {
     wake: register,

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
 import type {
   BackgroundTask,
   Comments,
@@ -15,6 +15,7 @@ import { ServerConnection, serverName } from "@/runtime/server/registry"
 import type { SessionModel } from "@/session/model"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { pathKey } from "@/workspaces/path-key"
 import { useExtensionAttachment } from "./services"
 
 const noTasks: readonly BackgroundTask[] = []
@@ -120,6 +121,17 @@ export function createSessionView(session: SessionModel) {
     detach: (id) => composer.context.removeComment(id),
   }
 
+  // Only a project opened at this exact directory; a session in a project subfolder has none.
+  const listedProject = createMemo(() => {
+    const directory = pathKey(location().directory)
+    return server.ctx.projects
+      .list()
+      .find(
+        (item) =>
+          pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+      )
+  })
+
   const view: SessionView = {
     get key() {
       return `${server.key}\n${session.identity.sessionID() ?? ""}`
@@ -142,6 +154,9 @@ export function createSessionView(session: SessionModel) {
     get project() {
       const info = session.data.info()
       return (info && server.ctx.projects.detailsForSession(info)) || session.project()
+    },
+    get listedProject() {
+      return listedProject()
     },
     get directory() {
       return session.workspace.directory()

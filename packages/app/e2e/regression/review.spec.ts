@@ -1,6 +1,7 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
+import { workspaceKey } from "../utils/app"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -145,6 +146,39 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("Context")).toHaveCount(0)
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 })
+
+for (const listed of [false, true]) {
+  test(`the open file heading names a subfolder session ${listed ? "after its sidebar project" : "after its folder"}`, async ({
+    page,
+  }) => {
+    const root = "C:/OpenCode/BrowserRepo"
+    const directory = `${root}/packages/app`
+    await openSession(page, {
+      name: "BrowserRepo",
+      sessions: [{ id: "ses_browserrepo", title: "BrowserRepo", directory }],
+      fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
+      seed: {
+        panes: { ses_browserrepo: { review: true } },
+        // The user also opened the subfolder as its own sidebar project and renamed it there.
+        ...(listed && {
+          projects: {
+            local: [
+              { worktree: root, expanded: true },
+              { worktree: directory, expanded: true },
+            ],
+          },
+          storage: { [workspaceKey(directory, "project")]: { value: { name: "Custom app" } } },
+        }),
+      },
+    })
+    const panel = page.locator("#review-panel")
+    await panel.getByRole("button", { name: "Open file" }).click()
+    await expect(panel.getByRole("button", { name: "README.md" })).toBeVisible()
+    await expect(panel.locator('[data-slot="session-review-v2-sidebar-title"]')).toHaveText(
+      listed ? "Custom app" : "app",
+    )
+  })
+}
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
   await openSession(page, { name: "ReviewContextOpener" })

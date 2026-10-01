@@ -29,7 +29,8 @@ afterEach(() => {
 })
 
 // The client stands in for the pane's main entry: each register is one binding with its own events.
-function fixture() {
+// `strip` stands in for the browser tab IDs the session's layout stores.
+function fixture(strip: string[] = []) {
   const states: State[] = []
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const calls: { input: Parameters<Client["register"]>[0]; commands: Browser.Action[] }[] = []
@@ -70,7 +71,19 @@ function fixture() {
       return () => listeners.delete(binding)
     },
     target: () => ({ ...target }),
-    change: (state) => states.push(state),
+    change: (state, mirror) => {
+      states.push(state)
+      mirror()
+    },
+    strip: {
+      stored: () => strip,
+      open: (id) => {
+        if (!strip.includes(id)) strip.push(id)
+      },
+      close: (id) => {
+        if (strip.includes(id)) strip.splice(strip.indexOf(id), 1)
+      },
+    },
     focus: (tabID) => routed.focus.push(tabID),
     preview: (path) => routed.preview.push(path),
     inspect: (event) => routed.inspect.push(event),
@@ -78,7 +91,7 @@ function fixture() {
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)
   connection.wake()
   emit(0, { type: "state", state: browser })
-  return { connection, calls, states, target, remote, routed, highlights, closed, listeners, emit }
+  return { connection, calls, states, target, remote, routed, highlights, closed, listeners, emit, strip }
 }
 
 const element = {
@@ -172,6 +185,27 @@ test("a registration lost with the pane's remote registers again with its tabs o
       session: "ses_browser",
       restore: browser,
     })
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+test("only a native inventory, the first one included, closes stored tabs the desktop lacks", () => {
+  const stale = `tab_${crypto.randomUUID()}`
+  const app = fixture([tabID, stale])
+  try {
+    expect(app.strip).toEqual([tabID])
+    // Suspended, restoring, and unavailable states keep a stored tab until the desktop answers.
+    app.strip.push(stale)
+    app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
+    app.connection.wake()
+    app.remote.available = false
+    app.connection.refresh()
+    expect(app.strip).toEqual([tabID, stale])
+    app.remote.available = true
+    app.connection.refresh()
+    app.emit(2, { type: "state", state: browser })
+    expect(app.strip).toEqual([tabID])
   } finally {
     app.connection.dispose()
   }

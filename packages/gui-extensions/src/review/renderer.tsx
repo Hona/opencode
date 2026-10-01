@@ -131,7 +131,7 @@ const setup: Setup = (ctx) => {
     get wide() {
       return diff.diffStyle === "split"
     },
-    // The review tab is pinned, never stored; a key an open stores (narrow screens) leaves the strip again.
+    // The review tab is pinned, never stored; a stored key, such as one from before extensions, leaves the strip.
     transient: true,
     legacy: { review: TAB },
     mobile: {

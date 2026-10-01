@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { seed, sessionHref, type SeedInput } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { fileNode } from "../utils/workspace"
 
 // The source and target sessions; the child session is not a home row.
 const rows = 2
@@ -183,6 +184,44 @@ for (const position of ["top", "bottom"] as const) {
     await expect(page.locator("[data-session-title]")).toBeVisible()
   })
 }
+
+test("the summary's changes row switches the view and keeps the side tabs", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await mockStressTimeline(page, {
+    fileList: (path) => (path ? [] : [fileNode(fixture.directory, "README.md")]),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+  })
+  await openStress(page, { lastProject: { local: fixture.directory } })
+  await page.goto(sessionHref(fixture.targetID))
+
+  // One click previews the file in place of the Open file tab.
+  const panel = page.locator("#review-panel")
+  const readme = panel.getByRole("tab", { name: "README.md", exact: true })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await panel.getByRole("button", { name: "Open file", exact: true }).click()
+  await panel.getByRole("button", { name: "README.md", exact: true }).click()
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByRole("tab", { name: "Open file", exact: true })).toHaveCount(0)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const tabs = page.getByRole("tablist", { name: "Session view", exact: true })
+  const details = page.getByRole("dialog", { name: "Session details", exact: true })
+  await page
+    .locator('[data-slot="session-mobile-view-navigation"]')
+    .getByRole("button", { name: "More options", exact: true })
+    .click()
+  await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
+  await details.getByRole("button", { name: "No changes", exact: true }).click()
+  await expect(details).toBeHidden()
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("Changes")
+  await tabs.getByRole("tab", { name: "Files", exact: true }).click()
+  await expect(
+    page.getByRole("tablist", { name: "Open files", exact: true }).getByRole("tab", { name: "README.md", exact: true }),
+  ).toHaveAttribute("aria-selected", "true")
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+})
 
 test.describe("touch", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
