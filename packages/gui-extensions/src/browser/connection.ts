@@ -38,10 +38,13 @@ export function createConnection(input: {
   let blocked = false
   let attempts = 0
   let retry: ReturnType<typeof setTimeout> | undefined
-  // The pane itself is unreachable while its main extension restarts. Keep the tabs, like an idle
-  // eviction; the next interaction or the pane's return registers again.
+  // A registration was wanted while the pane's remote was gone; it registers once the remote is back.
+  let lost = false
+  // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every
+  // binding without reporting it. Keep the tabs, like an idle eviction, and register again when it returns.
   const suspend = (registration: Registration) => {
     if (disposed || state.registration !== registration) return
+    lost = true
     registration.close()
     state.registration = undefined
     state.surfaces = {}
@@ -52,7 +55,11 @@ export function createConnection(input: {
   const register = () => {
     if (disposed || blocked || state.registration) return
     const current = input.client()
-    if (!current) return
+    if (!current) {
+      lost = true
+      return
+    }
+    lost = false
     clearTimeout(retry)
     const registration: Registration = open(
       current,
@@ -106,6 +113,14 @@ export function createConnection(input: {
   }
   return {
     wake: register,
+    /** Follows the pane's remote going away and coming back. */
+    refresh() {
+      if (!input.client()) {
+        if (state.registration) suspend(state.registration)
+        return
+      }
+      if (lost) register()
+    },
     command(command: Browser.Action) {
       register()
       const registration = state.registration

@@ -191,11 +191,15 @@ export function createModel(ctx: Context) {
   // These are edges, not a reactive dependency on suspended state: eviction while the window
   // remains focused must not immediately reopen the browser and defeat resource cleanup.
   createEffect(on(() => sessions.current()?.key, wakeCurrent))
-  // The pane is reachable again after its main extension started or restarted.
+  // The pane's remote goes away while its main extension reloads or is disabled, taking every binding with it.
+  // Each attachment keeps its tabs and registers again once the remote is back.
   createEffect(
     on(
       () => !!client(),
-      (available) => available && wakeCurrent(),
+      (available) => {
+        live.forEach((entry) => entry.connection.refresh())
+        if (available) wakeCurrent()
+      },
       { defer: true },
     ),
   )

@@ -32,7 +32,7 @@ const setup: Setup = (ctx) => {
       (await existing()).highlight(caller.window, input.binding, input.tabID, input.ref),
     close: async (input, caller) => (await existing()).close(caller.window, input.binding),
   })
-  // Registered after the remote, so it runs first: windows still receive the suspended states.
+  // The host withdraws the remote before this runs, so windows hear nothing; they suspend on the remote going away.
   ctx.cleanup(async () => {
     if (loaded.pane) await (await loaded.pane).dispose()
   })

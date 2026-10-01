@@ -41,6 +41,8 @@ function fixture() {
     focus: [],
   }
   const target = { server: "browser-test", session: "ses_browser" }
+  // The remote is gone while the pane's main extension reloads or is disabled.
+  const remote = { available: true }
   const client: Client = {
     register: async (input) => {
       calls.push({ input, commands: [] })
@@ -60,7 +62,7 @@ function fixture() {
     on: () => () => undefined,
   }
   const connection = createConnection({
-    client: () => client,
+    client: () => (remote.available ? client : undefined),
     listen(binding, listener) {
       listeners.set(binding, listener)
       return () => listeners.delete(binding)
@@ -74,7 +76,7 @@ function fixture() {
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)
   connection.wake()
   emit(0, { type: "state", state: browser })
-  return { connection, calls, states, target, routed, highlights, closed, listeners, emit }
+  return { connection, calls, states, target, remote, routed, highlights, closed, listeners, emit }
 }
 
 const element = {
@@ -144,6 +146,30 @@ test("suspension retains tabs and reconnects once on demand using the current ta
     // A late event from the suspended binding must not close the new one.
     stale({ type: "state", state: null, error: "browser.pane.registration.closed" })
     expect(app.states.at(-1)?.registration).toBeDefined()
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+test("a registration lost with the pane's remote registers again with its tabs once the remote is back", () => {
+  const app = fixture()
+  try {
+    app.emit(0, { type: "surface", tabID, surface: "surface-1" })
+    expect(app.states.at(-1)?.surfaces).toEqual({ [tabID]: "surface-1" })
+    app.remote.available = false
+    app.connection.refresh()
+    expect(app.listeners.has(app.calls[0].input.binding)).toBe(false)
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: true })
+    app.remote.available = true
+    app.connection.refresh()
+    app.connection.refresh()
+    expect(app.calls).toHaveLength(2)
+    expect(app.calls[1].input).toEqual({
+      binding: expect.any(String),
+      server: "browser-test",
+      session: "ses_browser",
+      restore: browser,
+    })
   } finally {
     app.connection.dispose()
   }
