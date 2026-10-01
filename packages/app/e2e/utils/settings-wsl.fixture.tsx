@@ -3,17 +3,26 @@ import { createMemo, Show } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { render } from "solid-js/web"
 import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
-import type { WslServersState } from "../../../gui-extensions/src/wsl/contract"
+import type { WslServerRuntime, WslServersState } from "../../../gui-extensions/src/wsl/contract"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 import { ServerConnection } from "../../src/runtime/server/registry"
 import { useExtensionServers } from "../../src/runtime/extension/servers"
 
-export function mount(input: { server: string; mode: "failed" | "stopped" | "ready" }) {
+// `wsl` is the Ubuntu server's endpoint (default `server`); updating OpenCode restarts it on `restart` (default `wsl`).
+export function mount(input: {
+  server: string
+  mode: "failed" | "stopped" | "ready"
+  wsl?: string | null
+  restart?: string | null
+  path?: string | null
+}) {
   const root = document.getElementById("root")
   if (!root) throw new Error("Missing fixture root")
   const history = createMemoryHistory()
-  history.set({ value: "/settings", replace: true, scroll: false })
+  history.set({ value: input.path ?? "/settings", replace: true, scroll: false })
+  const endpoint = { url: input.wsl ?? input.server }
+  const ready = () => ({ kind: "ready" as const, url: endpoint.url, password: null })
   render(() => {
     const [store, setStore] = createStore<{ calls: string[]; state: WslServersState }>({
       calls: [],
@@ -29,7 +38,7 @@ export function mount(input: { server: string; mode: "failed" | "stopped" | "rea
             config: { id: "wsl:Ubuntu", distro: "Ubuntu" },
             runtime:
               input.mode === "ready"
-                ? { kind: "ready", url: input.server, password: null }
+                ? ready()
                 : input.mode === "failed"
                   ? { kind: "failed", message: "WSL failed to start" }
                   : { kind: "stopped" },
@@ -51,27 +60,31 @@ export function mount(input: { server: string; mode: "failed" | "stopped" | "rea
     const listeners = new Set<(message: BridgeMessage) => void>()
     const snapshot = () => structuredClone(unwrap(store.state))
     const publish = () => listeners.forEach((listener) => listener({ type: "state", remote: "wsl", state: snapshot() }))
+    // The contract state is deeply readonly, so each action replaces the changed branch.
+    const setRuntime = (id: string | undefined, runtime: WslServerRuntime) =>
+      setStore("state", (state) => ({
+        servers: state.servers.map((server) => (server.config.id === id ? { ...server, runtime } : server)),
+      }))
     const methods: Record<string, (input: { id?: string; name?: string }) => void> = {
-      // The contract state is deeply readonly, so each action replaces the changed branch.
+      // Like main: stops the distro's server, updates OpenCode, then starts the server again on a new endpoint.
       installOpencode(value) {
         const name = value.name ?? ""
+        const id = store.state.servers.find((server) => server.config.distro === name)?.config.id
         setStore("calls", (calls) => [...calls, `update:${value.name}`])
+        setRuntime(id, { kind: "stopped" })
+        publish()
         setStore("state", (state) => ({
           opencodeChecks: {
             ...state.opencodeChecks,
             [name]: { ...state.opencodeChecks[name]!, version: "current", matchesDesktop: true },
           },
         }))
+        endpoint.url = input.restart ?? endpoint.url
+        setRuntime(id, ready())
       },
       startServer(value) {
         setStore("calls", (calls) => [...calls, `start:${value.id}`])
-        setStore("state", (state) => ({
-          servers: state.servers.map((server) =>
-            server.config.id === value.id
-              ? { ...server, runtime: { kind: "ready" as const, url: input.server, password: null } }
-              : server,
-          ),
-        }))
+        setRuntime(value.id, ready())
       },
       removeServer(value) {
         setStore("calls", (calls) => [...calls, `remove:${value.id}`])

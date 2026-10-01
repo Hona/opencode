@@ -36,7 +36,7 @@ import {
 import { usePlatform } from "@/runtime/platform/platform"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
@@ -290,30 +290,51 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
   const connection = (id: string) => global.servers.list().find((item) => ServerConnection.key(item) === id)
 
+  // One ref per server id. A restarted server (e.g. an updated WSL server) gets a new controller under the same id,
+  // so the ref follows the live controller instead of the one it was created with.
+  const owner = getOwner()
+  const serverRefs = new Map<string, ServerRef>()
   const server = (id: string): ServerRef | undefined => {
     const conn = connection(id)
     if (!conn) return
-    const ctx = global.ensureServerCtx(conn)
-    return {
+    const existing = serverRefs.get(id)
+    if (existing) return existing
+    const key = ServerConnection.Key.make(id)
+    const live = runWithOwner(owner, () =>
+      createMemo<ServerCtx>((previous) => global.serverCtx(key) ?? previous, global.ensureServerCtx(conn)),
+    )!
+    const ref: ServerRef = {
       id,
-      name: serverName(conn) || id,
+      get name() {
+        return serverName(live().sdk.server) || id
+      },
       get url() {
-        return ctx.sdk.url
+        return live().sdk.url
       },
-      password: conn.http.password,
+      get password() {
+        return live().sdk.server.http.password
+      },
       get client() {
-        return ctx.sdk.api
+        return live().sdk.api
       },
-      data: ctx.data,
-      local: ServerConnection.local(conn),
-      builtin: ServerConnection.builtin(conn),
+      get data() {
+        return live().data
+      },
+      get local() {
+        return ServerConnection.local(live().sdk.server)
+      },
+      get builtin() {
+        return ServerConnection.builtin(live().sdk.server)
+      },
       get compatible() {
-        return !global.servers.health[ServerConnection.Key.make(id)]?.incompatible
+        return !global.servers.health[key]?.incompatible
       },
       get connected() {
-        return ctx.sdk.connection.status() === "connected"
+        return live().sdk.connection.status() === "connected"
       },
     }
+    serverRefs.set(id, ref)
+    return ref
   }
 
   const sessions = createMemo(() => {

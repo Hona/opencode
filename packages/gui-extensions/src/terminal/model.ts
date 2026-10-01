@@ -197,11 +197,14 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     })
   }
 
-  onCleanup(
-    input.server.data.on("pty.exited", (event) => {
-      if (event.location?.directory !== input.directory) return
-      removeExited(event.data.id)
-    }),
+  // A restarted server replaces its data under the same ref, so the subscription follows it.
+  createEffect(() =>
+    onCleanup(
+      input.server.data.on("pty.exited", (event) => {
+        if (event.location?.directory !== input.directory) return
+        removeExited(event.data.id)
+      }),
+    ),
   )
 
   const update = (pty: Partial<LocalPTY> & { id: string }) => {
