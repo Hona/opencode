@@ -181,7 +181,22 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  await openSession(page, { name: "ReviewContextOpener" })
+  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  await openSession(page, {
+    name: "ReviewContextOpener",
+    seed: {
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            [`local\u0000${base64Encode("C:/OpenCode/ReviewContextOpener")}/ses_reviewcontextopener`]: {
+              all: ["btw"],
+              active: "btw",
+            },
+          },
+        },
+      },
+    },
+  })
   const panel = page.locator("#review-panel")
   const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
   const contextButton = page.getByRole("button", { name: "View context usage" })
