@@ -146,6 +146,34 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 })
 
+test("context closes the side region only when its button opened it", async ({ page }) => {
+  await openSession(page, { name: "ReviewContextOpener" })
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const contextButton = page.getByRole("button", { name: "View context usage" })
+  const context = panel.getByRole("tab", { name: "Context", exact: true })
+
+  await contextButton.click()
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await contextButton.click()
+  await expect(context).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // Reopening the region by hand makes it the user's, so closing Context leaves Review open.
+  await contextButton.click()
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await contextButton.click()
+  await expect(context).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+})
+
 test("file tree expands Windows paths and scrolls long names in both directions", async ({ page }) => {
   const directory = "C:/OpenCode/OpenFileExpand"
   const longFilename = "a-very-long-file-name-that-must-overflow-the-file-sidebar-instead-of-being-truncated.ts"

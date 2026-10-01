@@ -146,12 +146,37 @@ for (const position of ["top", "bottom"] as const) {
     await expect(picker).toHaveText("Session")
     await expect(panel).toBeHidden()
 
+    // The view resets to Session whenever the routed session changes, including through Home.
+    const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
+    const openTabs = async () => {
+      await trigger.click()
+      await expect(drawer).not.toHaveAttribute("data-transitioning")
+    }
+    const openTab = async (title: string) => {
+      await openTabs()
+      await drawer.locator('[data-slot="tab-link"]').filter({ hasText: title }).click()
+      await expect(drawer).toBeHidden()
+      await expect(trigger).toContainText(title)
+    }
     await more.click()
     await page.getByRole("menuitem", { name: "Usage", exact: true }).click()
     await expect(page.getByText("Total Cost", { exact: true })).toBeVisible()
-    await page.goto(sessionHref(fixture.sourceID))
+    await openTab(fixture.expected.sourceTitle)
     await expect(picker).toHaveText("Session")
-    await expect(page.locator('[data-slot="mobile-tabs-trigger"]')).toContainText(fixture.expected.sourceTitle)
+    await tabs.getByRole("tab", { name: "Files", exact: true }).click()
+    await expect(picker).toHaveText("Files")
+    await openTab(fixture.expected.targetTitle)
+    await expect(picker).toHaveText("Session")
+    await openTab(fixture.expected.sourceTitle)
+    await expect(picker).toHaveText("Session")
+    await tabs.getByRole("tab", { name: "Files", exact: true }).click()
+    await expect(picker).toHaveText("Files")
+    await openTabs()
+    await drawer.getByRole("button", { name: "Home", exact: true }).click()
+    await expect(page).toHaveURL("/")
+    await expect(drawer).toBeHidden()
+    await openTab(fixture.expected.sourceTitle)
+    await expect(picker).toHaveText("Session")
 
     await page.setViewportSize({ width: 1280, height: 900 })
     await expect(picker).toBeHidden()
