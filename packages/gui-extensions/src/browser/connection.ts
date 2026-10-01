@@ -52,6 +52,18 @@ export function createConnection(input: {
     state.error = undefined
     input.change({ ...state })
   }
+  // Main closed the binding, or never took it (an SSH server's endpoint is missing while it reconnects).
+  // Keep the tabs and register again with backoff; commands sent through it already failed and are not replayed.
+  const reopen = (registration: Registration) => {
+    if (disposed || state.registration !== registration) return
+    registration.close()
+    state.registration = undefined
+    state.surfaces = {}
+    state.suspended = false
+    state.error = undefined
+    input.change({ ...state })
+    retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
+  }
   const register = () => {
     if (disposed || blocked || state.registration) return
     const current = input.client()
@@ -84,16 +96,16 @@ export function createConnection(input: {
           input.change({ ...state })
           return
         }
-        if (event.error === "browser.pane.suspended" || event.error === "browser.pane.registration.closed") {
+        if (event.error === "browser.pane.registration.closed") return reopen(registration)
+        if (event.error === "browser.pane.suspended") {
           registration.close()
           state.registration = undefined
           state.surfaces = {}
-          state.suspended = event.error === "browser.pane.suspended"
-          if (state.suspended && event.state) state.browser = event.state
+          state.suspended = true
+          if (event.state) state.browser = event.state
           state.error = undefined
           input.change({ ...state })
           // Idle eviction has no retry timer. A user or Session execution wakes it on demand.
-          if (!state.suspended) retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
           return
         }
         if (event.state) attempts = 0
@@ -101,9 +113,7 @@ export function createConnection(input: {
         state.error = event.error
         input.change({ ...state })
       },
-      (error) => {
-        if (unavailable(error)) suspend(registration)
-      },
+      (error) => (unavailable(error) ? suspend(registration) : reopen(registration)),
     )
     state.registration = registration
     state.surfaces = {}

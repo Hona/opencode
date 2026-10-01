@@ -42,10 +42,12 @@ function fixture() {
   }
   const target = { server: "browser-test", session: "ses_browser" }
   // The remote is gone while the pane's main extension reloads or is disabled.
-  const remote = { available: true }
+  // An endpoint main cannot resolve, e.g. an SSH server's while it reconnects, makes register reject.
+  const remote: { available: boolean; reject?: Error } = { available: true }
   const client: Client = {
     register: async (input) => {
       calls.push({ input, commands: [] })
+      if (remote.reject) throw remote.reject
     },
     load: async () => undefined,
     command: async (input) => {
@@ -170,6 +172,35 @@ test("a registration lost with the pane's remote registers again with its tabs o
       session: "ses_browser",
       restore: browser,
     })
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+test("a rejected registration clears itself and retries with its tabs after the backoff", async () => {
+  jest.useFakeTimers()
+  const app = fixture()
+  try {
+    app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
+    app.remote.reject = new Error("browser.pane.registration.invalid")
+    await expect(app.connection.command({ type: "reload", tabID })).rejects.toThrow("browser.pane.registration.invalid")
+    expect(app.listeners.has(app.calls[1].input.binding)).toBe(false)
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: false })
+    app.remote.reject = undefined
+    jest.advanceTimersByTime(999)
+    expect(app.calls).toHaveLength(2)
+    jest.advanceTimersByTime(1)
+    expect(app.calls).toHaveLength(3)
+    expect(app.calls[2].input).toEqual({
+      binding: expect.any(String),
+      server: "browser-test",
+      session: "ses_browser",
+      restore: browser,
+    })
+    // Let the new registration settle: a replayed command would reach it now.
+    jest.useRealTimers()
+    await Bun.sleep(0)
+    expect(app.calls.map((call) => call.commands)).toEqual([[], [], []])
   } finally {
     app.connection.dispose()
   }
