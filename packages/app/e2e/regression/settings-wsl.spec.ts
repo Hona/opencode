@@ -76,11 +76,59 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
   await settings.getByRole("button", { name: "Back to settings" }).click()
   await settings.getByRole("button", { name: "Back to app" }).click()
   await expectSessionTitle(page, wsl.title)
-  await page.keyboard.press("Control+Backquote")
 
-  // The stopped server no longer knows the terminal, so it is recreated on the restarted one.
+  // The tab and its open terminal outlive the restart. The stopped server no longer knows the terminal, so it is
+  // recreated on the restarted one.
   await expect.poll(() => servers[restarted]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_after1"])
   expect(servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
+})
+
+test("WSL session and draft tabs outlive the extension going away until the server is removed", async ({ page }) => {
+  const directory = "/home/ubuntu/project"
+  const wsl = session({ id: "ses_wsl_tabs", directory, title: "WSL tabs session" })
+  const config = {
+    directory,
+    project: project({ id: "proj_wsl_tabs", directory }),
+    provider: NO_PROVIDER,
+    sessions: [wsl],
+    pageMessages: () => ({ items: [] }),
+  }
+  await mockServers(page, { [SERVER]: { ...config, sessions: [] }, [REMOTE_SERVER]: config })
+  const href = `/server/${base64Encode("wsl:Ubuntu")}/session/${wsl.id}`
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", wsl: REMOTE_SERVER, path: href })}`,
+  )
+  await expectSessionTitle(page, wsl.title)
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+  await expect(page.getByRole("heading", { name: wsl.title })).toHaveCount(0)
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.fill("keep this draft")
+  await expect(editor).toHaveText("keep this draft")
+  const tabs = page.locator("a[data-titlebar-tab-link]")
+  const expectTabs = async () => {
+    await expect(tabs).toHaveCount(2)
+    await expect(tabs.nth(0)).toHaveAttribute("href", href)
+    await expect(tabs.nth(1)).toHaveAttribute("href", /^\/new-session\?draftId=/)
+  }
+  await expectTabs()
+
+  const extension = page.getByRole("checkbox", { name: "WSL extension" })
+  await extension.uncheck()
+  await expectTabs()
+  await expect(editor).toHaveText("keep this draft")
+  await extension.check()
+  await expectTabs()
+  await tabs.nth(0).click()
+  await expectSessionTitle(page, wsl.title)
+
+  await page.keyboard.press("Control+,")
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Ubuntu", exact: true }).click()
+  const connection = settings.locator('[data-component="settings-server-connection"]')
+  await connection.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await expect(page.getByLabel("WSL actions")).toHaveText("remove:wsl:Ubuntu")
+  await expect(tabs).toHaveCount(0)
 })
 
 test("an open session moves to the controller a new SSH sign-in creates", async ({ page }) => {

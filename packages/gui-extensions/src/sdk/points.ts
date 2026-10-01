@@ -171,7 +171,7 @@ export interface ServerEntry {
   /** Short badge after the name, e.g. "SSH". */
   readonly label?: string
   readonly state: ServerState
-  /** False keeps the entry out of the app's server list (home, tabs, routes); settings still shows it. */
+  /** False keeps the entry out of the app's server list (home, routes); settings still shows it and its tabs stay. */
   readonly listed?: boolean
   readonly http?: { readonly url: string; readonly username?: string; readonly password?: string }
   /**
@@ -193,7 +193,10 @@ export interface ServerEntry {
 }
 
 export interface Server {
-  /** Startup waits until every source is ready. */
+  /**
+   * Startup waits until every source is ready. A ready source's entries are its complete inventory: the host
+   * forgets a server, and closes its tabs, only when a ready source stops listing it.
+   */
   readonly ready: boolean
   /** Sources list in ascending order. */
   readonly order?: number

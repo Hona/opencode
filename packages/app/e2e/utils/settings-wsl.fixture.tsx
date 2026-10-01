@@ -28,8 +28,14 @@ export function mount(input: {
   const endpoint = { url: input.wsl ?? input.server }
   const ready = () => ({ kind: "ready" as const, url: endpoint.url, password: null })
   render(() => {
-    const [store, setStore] = createStore<{ calls: string[]; state: WslServersState; ssh: SshState }>({
+    const [store, setStore] = createStore<{
+      calls: string[]
+      available: boolean
+      state: WslServersState
+      ssh: SshState
+    }>({
       calls: [],
+      available: true,
       ssh: {
         revision: 0,
         servers: input.ssh
@@ -190,6 +196,20 @@ export function mount(input: {
       <PlatformProvider value={platform}>
         <AppBaseProviders locale="en">
           <output aria-label="WSL actions">{store.calls.join(",")}</output>
+          {/* The WSL extension's main side going away, as on a reload or failure, and coming back. */}
+          <label>
+            <input
+              type="checkbox"
+              checked={store.available}
+              onChange={(event) => {
+                const available = event.currentTarget.checked
+                setStore("available", available)
+                listeners.forEach((listener) => listener({ type: "available", remote: "wsl", available }))
+                if (available) publish("wsl")
+              }}
+            />
+            WSL extension
+          </label>
           {/* The SSH tunnel dropping, which only main notices. */}
           <Show when={input.ssh}>
             <button
