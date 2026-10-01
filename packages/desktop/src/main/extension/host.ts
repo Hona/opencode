@@ -72,13 +72,19 @@ type Provider = {
   readonly listeners: Set<(name: string, data: unknown) => void>
 }
 type Entry = { readonly point: string; readonly extension: string; readonly value: unknown }
+type Outcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown }
 type Instance = {
   readonly context: Context
   readonly catalog?: Catalog
   messages: Messages
+  /** Runs setup once. The cleanup it returns belongs to the instance, even when setup settles after disposal. */
+  start(setup: Setup): Promise<Outcome>
+  /**
+   * Withdraws everything the instance contributed at once, then settles once its cleanups and a setup still
+   * running have finished, or the timeout passed. Idempotent.
+   */
   dispose(): Promise<void>
 }
-type Launch = { stale: boolean }
 
 const os: OS = process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
 
@@ -109,11 +115,11 @@ export function createHost(input: {
   const services = new Map<string, { readonly extension: string; readonly impl: unknown }>()
   const remotes = new Map<string, Provider>()
   const active = new Map<string, Instance>()
-  // The latest activation of each extension. Deactivating marks it stale, so it is never joined: the next
-  // activation waits for it to settle and release what it created, then starts afresh.
-  const launches = new Map<string, { readonly token: Launch; readonly settled: Promise<void> }>()
-  // An instance leaves `active` as its disposal starts; the next activation waits for its cleanups here.
-  const disposals = new Map<string, Promise<void>>()
+  // One serialized lifecycle per extension: each operation starts after the previous one fully settled.
+  const queues = new Map<string, Promise<void>>()
+  // Each extension's current generation. Stopping aborts it, so the activations queued or running under it
+  // wind down at once; operations queued afterwards run under a fresh generation.
+  const generations = new Map<string, AbortController>()
   const errors = new Map<string, string>()
   const reloads = new Map<string, number>()
   const closed = new Set<(win: BrowserWindow) => void>()
@@ -257,18 +263,46 @@ export function createHost(input: {
 
   const createInstance = (id: string, catalog: Catalog | undefined): Instance => {
     const controller = new AbortController()
+    // The host's record of what the instance contributed; the host withdraws it the moment disposal starts.
+    const contributions = new Set<() => void>()
+    // The extension's own cleanups; they run after withdrawal, under a timeout.
     const cleanups = new Set<Cleanup>()
+    // Cleanups registered after disposal started, such as the one a late setup returns.
+    const late = new Set<Promise<void>>()
     const clients = new WeakMap<Provider, unknown>()
     // Owns this instance's native surfaces, so releasing them never touches a replacement's.
     const owner = {}
+    const lifecycle: { setup: Promise<unknown>; disposed?: Promise<void> } = { setup: Promise.resolve() }
     const run = (fn: Cleanup) =>
       Promise.resolve()
         .then(fn)
-        .catch((error: unknown) => input.log("extension cleanup failed", { id, error }))
-    // Work registered after disposal is released right away so a slow setup cannot leak it.
-    const own = (fn: Cleanup): Cleanup => {
+        .then(
+          () => undefined,
+          (error: unknown) => input.log("extension cleanup failed", { id, error }),
+        )
+    const withdraw = (fn: () => void) => {
+      // Host bookkeeping does not throw by design; isolating it keeps one failure from leaving the rest behind.
+      try {
+        fn()
+      } catch (error) {
+        input.log("extension withdrawal failed", { id, error })
+      }
+    }
+    const contribute = (fn: () => void): Cleanup => {
       if (controller.signal.aborted) {
-        void run(fn)
+        withdraw(fn)
+        return () => {}
+      }
+      const remove = () => {
+        if (contributions.delete(remove)) fn()
+      }
+      contributions.add(remove)
+      return remove
+    }
+    const own = (fn: Cleanup): Cleanup => {
+      // Registered after disposal started: it runs now, and disposal waits for it too.
+      if (controller.signal.aborted) {
+        late.add(run(fn))
         return () => {}
       }
       const cleanup = () => {
@@ -286,15 +320,25 @@ export function createHost(input: {
           list: getMainWindows,
           focused: () => getLastFocusedWindow() ?? undefined,
           on: (event, handler) => {
-            if (event === "open") return own(onMainWindow(handler))
+            if (event === "open") return contribute(onMainWindow(handler))
             closed.add(handler)
-            return own(() => {
+            return contribute(() => {
               closed.delete(handler)
             })
           },
         } satisfies Windows,
       ],
-      [Surfaces.id, { create: (view, win) => surfaces.create(owner, view, win) } satisfies Surfaces],
+      [
+        Surfaces.id,
+        {
+          create: (view, win) => {
+            const surface = surfaces.create(owner, view, win)
+            // Created by a setup that outlived its instance: taken down at once, like any late contribution.
+            if (controller.signal.aborted) withdraw(surface.dispose)
+            return surface
+          },
+        } satisfies Surfaces,
+      ],
       [MainStorage.id, createMainStorage(input.state, id)],
       [Cli.id, input.cli],
       [MainApp.id, mainApp],
@@ -305,7 +349,7 @@ export function createHost(input: {
       const key = `${id}/${++status.sequence}`
       entries.set(key, { point: point.id, extension: id, value: item })
       if (point.id === Menubar.id) scheduleMenubar()
-      return own(() => {
+      return contribute(() => {
         if (entries.delete(key) && point.id === Menubar.id) scheduleMenubar()
       })
     }
@@ -326,7 +370,7 @@ export function createHost(input: {
         if (controller.signal.aborted) return () => {}
         const entry = { extension: id, impl }
         services.set(token.id, entry)
-        return own(() => {
+        return contribute(() => {
           if (services.get(token.id) === entry) services.delete(token.id)
         })
       }
@@ -357,7 +401,7 @@ export function createHost(input: {
       const live = () => remotes.get(remote) === provider
       const dispose = controller.signal.aborted
         ? () => {}
-        : own(() => {
+        : contribute(() => {
             if (!live()) return
             remotes.delete(remote)
             broadcast(new ExtensionAvailable({ remote, available: false }))
@@ -402,26 +446,29 @@ export function createHost(input: {
         if (!provider) return undefined
         const cached = clients.get(provider)
         if (cached) return cached
-        const created = client(provider)
+        const created = client(token.id, provider)
         clients.set(provider, created)
         return created
       }
     }
 
     // Main-to-main calls skip the codecs: both sides already hold decoded values. They carry no window.
-    const client = (provider: Provider) => ({
+    const client = (remote: string, provider: Provider) => ({
       ...Object.fromEntries(
         [...provider.methods].map(([name, method]) => [
           name,
-          async (value: unknown, options?: { readonly signal?: AbortSignal }) =>
-            method(value, {
+          async (value: unknown, options?: { readonly signal?: AbortSignal }) => {
+            // A client kept past its provider's disposal reaches nothing.
+            if (remotes.get(remote) !== provider) throw new ExtensionError("unavailable")
+            return method(value, {
               window: 0,
               signal: AbortSignal.any([
                 controller.signal,
                 provider.signal,
                 ...(options?.signal ? [options.signal] : []),
               ]),
-            }),
+            })
+          },
         ]),
       ),
       state: () => provider.state?.(0),
@@ -430,7 +477,7 @@ export function createHost(input: {
           if (event === name) listener(data)
         }
         provider.listeners.add(handler)
-        return own(() => {
+        return contribute(() => {
           provider.listeners.delete(handler)
         })
       },
@@ -460,86 +507,122 @@ export function createHost(input: {
           return formatNativeTemplate(template, { ...params, count })
         },
       },
-      // Aborts in-flight calls first, then releases in reverse order, awaiting async cleanups.
-      // A stuck cleanup cannot hold up quit or a toggle past the timeout.
-      async dispose() {
-        if (controller.signal.aborted) return
+      start(setup) {
+        const outcome = Promise.resolve()
+          .then(() => setup(instance.context))
+          .then(
+            (cleanup): Outcome => {
+              // A setup that settles after disposal started has its cleanup run now; disposal waits for it.
+              if (typeof cleanup === "function") own(cleanup)
+              return { ok: true }
+            },
+            (error: unknown): Outcome => ({ ok: false, error }),
+          )
+        lifecycle.setup = outcome
+        return outcome
+      },
+      dispose() {
+        if (lifecycle.disposed) return lifecycle.disposed
         controller.abort()
+        // The host withdraws first and synchronously: a disposed instance is unreachable even if a cleanup hangs.
+        ;[...contributions].reverse().forEach(withdraw)
+        withdraw(() => surfaces.releaseOwner(owner))
+        const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined }
+        const deadline = new Promise<void>((resolve) => {
+          timer.id = setTimeout(() => {
+            input.log("extension cleanup timed out", { id })
+            resolve()
+          }, CLEANUP_TIMEOUT_MS)
+        })
+        // Cleanups run in reverse order; past the deadline the rest start without waiting, so a hung one
+        // holds up neither the others nor the extension's lifecycle.
         const released = [...cleanups]
           .reverse()
-          .reduce((chain: Promise<unknown>, cleanup) => chain.then(() => run(cleanup)), Promise.resolve())
-        const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined }
-        await Promise.race([
-          released,
-          new Promise<void>((resolve) => {
-            timer.id = setTimeout(() => {
-              input.log("extension cleanup timed out", { id })
-              resolve()
-            }, CLEANUP_TIMEOUT_MS)
-          }),
-        ])
-        clearTimeout(timer.id)
-        surfaces.releaseOwner(owner)
+          .reduce(
+            (chain: Promise<unknown>, cleanup) => chain.then(() => Promise.race([run(cleanup), deadline])),
+            Promise.resolve(),
+          )
+        // A setup still running settles, and the cleanups it registers late run, before the next lifecycle step.
+        const settled = Promise.race([lifecycle.setup.then(() => Promise.all(late)), deadline])
+        lifecycle.disposed = Promise.all([released, settled]).then(() => clearTimeout(timer.id))
+        return lifecycle.disposed
       },
     }
     return instance
   }
 
-  const activate = (id: string) => {
-    const previous = launches.get(id)
-    if (previous && !previous.token.stale) return previous.settled
-    const token: Launch = { stale: false }
-    // Starts once the previous activation settled and the previous instance finished its cleanups.
-    const settled = (previous?.settled ?? Promise.resolve())
-      .then(() => disposals.get(id))
-      .then(() => launch(id, token))
+  // The caller sees the step's own outcome; the queue only waits for it to settle, so a failed step never
+  // stalls the steps behind it.
+  const enqueue = (id: string, task: () => Promise<unknown>) => {
+    const step = (queues.get(id) ?? Promise.resolve()).then(task).then(() => undefined)
+    const tail: Promise<void> = step
+      .catch(() => undefined)
       .finally(() => {
-        if (launches.get(id)?.token === token) launches.delete(id)
+        if (queues.get(id) === tail) queues.delete(id)
       })
-    launches.set(id, { token, settled })
-    return settled
+    queues.set(id, tail)
+    return step
   }
 
-  const launch = async (id: string, token: Launch) => {
+  const generation = (id: string) => {
+    const current = generations.get(id)
+    if (current) return current.signal
+    const created = new AbortController()
+    generations.set(id, created)
+    return created.signal
+  }
+
+  const activate = (id: string) => {
+    const signal = generation(id)
+    return enqueue(id, () => launch(id, signal))
+  }
+
+  const launch = async (id: string, signal: AbortSignal) => {
     const load = loader(id)
-    const current = () => !token.stale && manager.enabled(id) && !status.disposed
+    const current = () => !signal.aborted && manager.enabled(id) && !status.disposed
     if (!load || active.has(id) || !current()) return
     errors.delete(id)
-    const loaded = await load().catch((error: unknown) => (token.stale ? undefined : fail(id, error)))
-    // Disabled, reloaded, replaced, or quitting while the code loaded: it belongs to an older revision.
+    const loaded = await until(
+      signal,
+      load().catch((error: unknown) => (current() ? fail(id, error) : undefined)),
+    )
+    // Stopped, disabled, or quitting while the code loaded: drop it, it may belong to an older revision.
     if (!loaded || active.has(id) || !current()) return
     const instance = createInstance(id, loaded.i18n)
     active.set(id, instance)
-    instance.messages = await resolveMessages(loaded.i18n).catch(() => instance.messages)
-    // Deactivated while the catalog loaded: the instance is being disposed, so its setup never runs.
-    if (token.stale) return
-    const outcome = await Promise.resolve()
-      .then(() => loaded.setup(instance.context))
-      .then(
-        (cleanup) => ({ ok: true as const, cleanup }),
-        (error: unknown) => ({ ok: false as const, error }),
-      )
-    if (outcome.ok) {
-      // A setup that settles after its instance was disposed releases its cleanup at once.
-      if (typeof outcome.cleanup === "function") instance.context.cleanup(outcome.cleanup)
-      return
+    instance.messages =
+      (await until(
+        signal,
+        resolveMessages(loaded.i18n).catch(() => instance.messages),
+      )) ?? instance.messages
+    // Stopping removed the instance and began disposing it; its setup never runs.
+    if (!current()) {
+      if (active.get(id) === instance) active.delete(id)
+      return instance.dispose()
     }
-    if (active.get(id) !== instance) return
+    // A stop during setup settles this step once the disposal has, however long setup takes.
+    const outcome = await Promise.race([instance.start(loaded.setup), aborted(signal).then(() => instance.dispose())])
+    if (!outcome || outcome.ok || active.get(id) !== instance) return
     fail(id, outcome.error)
-    await deactivate(id)
+    active.delete(id)
+    await instance.dispose()
   }
 
-  const deactivate = async (id: string) => {
-    const launching = launches.get(id)
-    if (launching) launching.token.stale = true
+  /**
+   * Stops the extension at once and queues its teardown: activations queued before it go stale, the instance
+   * withdraws everything it contributed now, and the queue moves on only after its disposal settled. `after`
+   * runs inside the queue once the teardown finished.
+   */
+  const deactivate = (id: string, after?: () => void) => {
+    generations.get(id)?.abort()
+    generations.delete(id)
     const instance = active.get(id)
-    // Callers that deactivate during another caller's disposal still wait for its cleanups.
-    if (!instance) return disposals.get(id)
     active.delete(id)
-    const disposal = instance.dispose()
-    disposals.set(id, disposal)
-    await disposal
-    if (disposals.get(id) === disposal) disposals.delete(id)
+    void instance?.dispose()
+    return enqueue(id, async () => {
+      await instance?.dispose()
+      after?.()
+    })
   }
 
   const known = (id: string) =>
@@ -646,6 +729,8 @@ export function createHost(input: {
             throw new ExtensionError("input", { cause: error, message: String(error) })
           })
         : undefined
+      // Withdrawn while the input decoded: the disposed instance is not called.
+      if (remotes.get(request.remote) !== provider) throw new ExtensionError("unavailable")
       const output = await method(value, {
         window: caller.window,
         signal: AbortSignal.any([caller.signal, provider.signal]),
@@ -696,10 +781,12 @@ export function createHost(input: {
     async remove(id: string) {
       if (local.some((definition) => definition.id === id)) throw new ExtensionError("builtin")
       if (!known(id)) throw new ExtensionError("notFound")
-      await deactivate(id)
-      manager.remove(id)
-      input.state.clear(namespace(id))
-      errors.delete(id)
+      // Inside the queue, so an activation queued meanwhile finds the extension already gone.
+      await deactivate(id, () => {
+        manager.remove(id)
+        input.state.clear(namespace(id))
+        errors.delete(id)
+      })
       changed()
     },
     source(id: string) {
@@ -714,11 +801,22 @@ export function createHost(input: {
       status.disposed = true
       stopWindows()
       stopLocale()
-      // Includes instances a reload or disable started disposing just before.
-      const stopping = [...active.keys()].map(deactivate)
-      await Promise.all([...stopping, ...disposals.values()])
+      // Every extension with an instance or a queued step stops; quitting waits for each lifecycle to settle.
+      await Promise.all([...new Set([...active.keys(), ...queues.keys()])].map((id) => deactivate(id)))
     },
   }
+}
+
+/** The promise's value, or undefined as soon as the signal aborts; the promise itself keeps running. */
+function until<T>(signal: AbortSignal, promise: Promise<T>) {
+  return Promise.race([promise, aborted(signal)])
+}
+
+function aborted(signal: AbortSignal) {
+  return new Promise<undefined>((resolve) => {
+    if (signal.aborted) return resolve(undefined)
+    signal.addEventListener("abort", () => resolve(undefined), { once: true })
+  })
 }
 
 function read(entry: Entry) {
