@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, project, session } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, project, provider, session } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -81,4 +81,55 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
   // The stopped server no longer knows the terminal, so it is recreated on the restarted one.
   await expect.poll(() => servers[restarted]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_after1"])
   expect(servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
+})
+
+test("an open session moves to the controller a new SSH sign-in creates", async ({ page }) => {
+  const directory = "/home/box/project"
+  const model = { id: "box-model", name: "Box Model" }
+  const box = session({
+    id: "ses_ssh",
+    directory,
+    title: "SSH session",
+    model: { id: model.id, providerID: "opencode" },
+  })
+  const remote = { password: "ssh-1" }
+  const prompts: unknown[] = []
+  const config = {
+    directory,
+    project: project({ id: "proj_ssh", directory }),
+    provider: provider(model),
+    sessions: [box],
+    pageMessages: () => ({ items: [] }),
+  }
+  const servers = await mockServers(page, {
+    [SERVER]: { ...config, sessions: [] },
+    [REMOTE_SERVER]: {
+      ...config,
+      password: () => remote.password,
+      onPrompt: (input) => prompts.push(input.body.text),
+    },
+  })
+  const path = `/server/${base64Encode("ssh:box")}/session/${box.id}`
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", ssh: REMOTE_SERVER, path })}`,
+  )
+  await expectSessionTitle(page, box.title)
+
+  // The remote server restarts behind the open tunnel with a new password and a renamed session. Health checks run
+  // every 10 s; the first one it rejects disposes the session's controller, which ends its event stream.
+  remote.password = "ssh-2"
+  box.title = "SSH session after restart"
+  await expect
+    .poll(async () => (await servers[REMOTE_SERVER]!.transport.connections()).map((item) => !!item.endedBy), {
+      timeout: 20_000,
+    })
+    .toEqual([true])
+
+  await page.getByRole("button", { name: "Drop SSH tunnel" }).click()
+  await page.getByRole("button", { name: "Reconnect", exact: true }).click()
+  await expectSessionTitle(page, box.title)
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.fill("after sign-in")
+  await editor.press("Enter")
+  await expect.poll(() => prompts).toEqual(["after sign-in"])
 })

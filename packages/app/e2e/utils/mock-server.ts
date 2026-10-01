@@ -105,6 +105,8 @@ export interface MockServerConfig {
   pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
+  // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
+  password?: Resolvable<string>
 }
 
 export type MockPtyInfo = {
@@ -282,6 +284,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
+    }
+    const password = config.password === undefined ? undefined : resolve(config.password)
+    if (
+      password !== undefined &&
+      (await route.request().headerValue("authorization")) !== `Basic ${btoa(`opencode:${password}`)}`
+    ) {
+      return route.fulfill({
+        status: 401,
+        headers: corsHeaders,
+        json: { _tag: "UnauthorizedError", message: "Authentication required" },
+      })
     }
     const directory = url.searchParams.get("directory") ?? url.searchParams.get("location[directory]")
     if (config.strictDirectory && directory && !ownedDirectories(config).has(directory)) {
