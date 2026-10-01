@@ -1,10 +1,10 @@
-import { createEffect, createMemo, For, lazy, on, Show, Suspense, type JSX } from "solid-js"
+import { createMemo, For, lazy, Show, Suspense, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode/ui/tabs"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
-import { Panel, type PanelSidebar, type PanelTab, type SessionView } from "@opencode/gui-extensions/sdk"
+import { DrawerContext, Panel, type PanelSidebar, type PanelTab, type SessionView } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
 import { MobilePanel, panelKey, type Region, type RegionEntry } from "./panels"
@@ -62,14 +62,6 @@ export function MobileViewTabs(props: {
     pending: undefined as string | undefined,
   })
   const drawer = createMemo(() => (store.last ? props.views.find(store.last) : undefined))
-  // Opening a view from inside the drawer (e.g. the summary's Changes row) closes it.
-  createEffect(
-    on(
-      () => props.current,
-      () => setStore("drawer", undefined),
-      { defer: true },
-    ),
-  )
   let trigger: HTMLButtonElement | undefined
   return (
     <div
@@ -155,13 +147,15 @@ export function MobileViewTabs(props: {
           >
             <Show when={drawer()} keyed>
               {(entry) => (
-                <MobilePanel
-                  entry={entry}
-                  view={props.session}
-                  sidebar={props.sidebar}
-                  visible={store.drawer === entry.key}
-                  open={() => props.region.openFor(entry.extension)}
-                />
+                <DrawerContext.Provider value={{ close: () => setStore("drawer", undefined) }}>
+                  <MobilePanel
+                    entry={entry}
+                    view={props.session}
+                    sidebar={props.sidebar}
+                    visible={store.drawer === entry.key}
+                    open={() => props.region.openFor(entry.extension)}
+                  />
+                </DrawerContext.Provider>
               )}
             </Show>
           </MobilePanelDrawer>

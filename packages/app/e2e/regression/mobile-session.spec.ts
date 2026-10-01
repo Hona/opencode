@@ -105,6 +105,12 @@ for (const position of ["top", "bottom"] as const) {
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("height", "40px")
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("padding-left", "8px")
     await expect(composer).toBeHidden()
+    await more.click()
+    await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
+    await details.getByRole("button", { name: "No changes", exact: true }).click()
+    await expect(details).toBeHidden()
+    await expect(picker).toHaveText("Changes")
+    await expect(page.getByText("No uncommitted changes yet", { exact: true })).toBeVisible()
 
     await tabs.getByRole("tab", { name: "Files", exact: true }).click()
     await expect(picker).toHaveText("Files")

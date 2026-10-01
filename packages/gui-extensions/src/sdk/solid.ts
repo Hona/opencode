@@ -44,6 +44,14 @@ export function usePanel() {
   return frame
 }
 
+/** The host provides this around a panel it shows in a narrow-screen drawer (`MobileView.kind` `"drawer"`). */
+export const DrawerContext = createContext<{ readonly close: () => void }>()
+
+/** The drawer showing this panel, or undefined outside one. Close it before an action that opens another view. */
+export function useDrawer() {
+  return useContext(DrawerContext)
+}
+
 /**
  * Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Returns a
  * cancel. Load lazy chunks this way from setup, so they are compiled before a session first opens.

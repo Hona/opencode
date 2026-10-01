@@ -2,7 +2,7 @@ import { createEffect, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema, Struct } from "effect"
 import { Changes } from "../review/contract"
-import { onIdle, Panel, Sessions, Slot, Storage, Style, usePanel, type Setup } from "../sdk"
+import { onIdle, Panel, Sessions, Slot, Storage, Style, useDrawer, usePanel, type Setup } from "../sdk"
 import type { Disclosure } from "./panel"
 import { SummaryHeader } from "./popover"
 
@@ -65,6 +65,7 @@ const setup: Setup = (ctx) => {
     list: () => [],
     render: (_tab, session) => {
       const frame = usePanel()
+      const drawer = useDrawer()
       const [store, setStore] = createStore({ dismissed: false })
       createEffect(() => {
         const service = changes()
@@ -83,7 +84,14 @@ const setup: Setup = (ctx) => {
                 diffs={project().vcs ? changes()?.details(session) : []}
                 moveDismissed={store.dismissed}
                 onMoveDismiss={() => setStore("dismissed", true)}
-                onReview={changes() ? () => changes()?.open(session) : undefined}
+                onReview={
+                  changes()
+                    ? () => {
+                        drawer?.close()
+                        changes()?.open(session)
+                      }
+                    : undefined
+                }
                 disclosure={disclosure}
               />
             </Suspense>
