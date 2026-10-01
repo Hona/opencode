@@ -22,7 +22,8 @@ type WslServersControllerOptions = {
   runtime: WslRuntime
   t: Context["t"]
   log: (level: "info" | "error", message: string, data: Record<string, unknown>) => void
-  spawnSidecar: (distro: string) => Promise<RunningSidecar>
+  /** Rejects once signal aborts, after any process it started has exited. */
+  spawnSidecar: (distro: string, signal: AbortSignal) => Promise<RunningSidecar>
   installCli: (distro: string, cli: WslCliBuild) => Promise<void>
   readServers: () => WslServerConfig[]
   writeServers: (servers: WslServerConfig[]) => void
@@ -40,7 +41,9 @@ export function createWslServersController(options: WslServersControllerOptions)
   let state: WslServersState = initialState()
   const listeners = new Set<() => void>()
   const sidecars = new Map<string, RunningSidecar>()
-  const starts = new Map<string, symbol>()
+  // Starts in flight. Stopping one aborts its CLI discovery and health polling and waits until its process exited,
+  // so a restart, reload, disable or quit never leaves a sidecar running beside or after it.
+  const starts = new Map<string, { readonly abort: AbortController; readonly done: Promise<void> }>()
   let closed = false
 
   const emit = () => {
@@ -137,13 +140,20 @@ export function createWslServersController(options: WslServersControllerOptions)
     if (!item) return
     await stopServer(id)
     if (closed) return
-    const token = Symbol()
-    starts.set(id, token)
+    const abort = new AbortController()
+    const startup = { abort, done: launch(id, item.config.distro, abort) }
+    starts.set(id, startup)
+    await startup.done
+  }
+
+  const launch = async (id: string, distro: string, abort: AbortController) => {
+    // A later start or a stop replaced this one.
+    const current = () => starts.get(id)?.abort === abort
     setRuntime(id, { kind: "starting" })
-    options.log("info", "wsl sidecar starting", { id, distro: item.config.distro })
+    options.log("info", "wsl sidecar starting", { id, distro })
     try {
-      const sidecar = await options.spawnSidecar(item.config.distro)
-      if (starts.get(id) !== token) {
+      const sidecar = await options.spawnSidecar(distro, abort.signal)
+      if (!current()) {
         await sidecar.stop()
         return
       }
@@ -159,26 +169,28 @@ export function createWslServersController(options: WslServersControllerOptions)
         sidecars.delete(id)
         const message = t("error.serverExited", { code: code ?? "null", signal: signal ?? "null" })
         setRuntime(id, { kind: "failed", message })
-        options.log("error", "wsl sidecar exited", { id, distro: item.config.distro, code, signal })
+        options.log("error", "wsl sidecar exited", { id, distro, code, signal })
       })
-      void refreshCliCheckSafely(id, item.config.distro)
-      options.log("info", "wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url })
+      void refreshCliCheckSafely(id, distro)
+      options.log("info", "wsl sidecar ready", { id, distro, url: sidecar.url })
     } catch (error) {
-      if (starts.get(id) !== token) return
+      if (!current()) return
       starts.delete(id)
       const message = error instanceof Error ? error.message : String(error)
       setRuntime(id, { kind: "failed", message })
-      options.log("error", "wsl sidecar failed to start", { id, distro: item.config.distro, message })
+      options.log("error", "wsl sidecar failed to start", { id, distro, message })
     }
   }
 
   const stopServer = async (id: string) => {
+    const startup = starts.get(id)
     starts.delete(id)
+    startup?.abort.abort()
+    await startup?.done
     const existing = sidecars.get(id)
-    if (!existing) return
     sidecars.delete(id)
-    await existing.stop()
-    setRuntime(id, { kind: "stopped" })
+    await existing?.stop()
+    if (startup || existing) setRuntime(id, { kind: "stopped" })
   }
 
   const runJob = async <T>(job: WslJob, runner: () => Promise<T>) => {
@@ -291,8 +303,13 @@ export function createWslServersController(options: WslServersControllerOptions)
 
     async stopServers() {
       closed = true
+      const pending = [...starts.values()]
       starts.clear()
-      await Promise.all([...sidecars.values()].map((sidecar) => sidecar.stop()))
+      pending.forEach((startup) => startup.abort.abort())
+      await Promise.all([
+        ...pending.map((startup) => startup.done),
+        ...[...sidecars.values()].map((sidecar) => sidecar.stop()),
+      ])
       sidecars.clear()
     },
   }

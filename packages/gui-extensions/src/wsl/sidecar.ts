@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import type { Context } from "../sdk/main"
@@ -17,15 +17,18 @@ export async function spawnWslSidecar(
     runtime: WslRuntime
     t: Context["t"]
     packaged: boolean
+    /** Aborts the start: CLI discovery, health polling, and the server process, which has exited when this rejects. */
+    signal: AbortSignal
     onLine?: (line: WslCommandLine) => void
     healthTimeoutMs?: number
   },
 ): Promise<WslSidecar> {
   const t = opts.t
-  const opencode = await opts.runtime.resolveCli(distro)
+  const opencode = await opts.runtime.resolveCli(distro, { signal: opts.signal })
   if (!opencode) throw new Error(t("error.opencodeNotInstalled", { distro }))
 
   const port = await allocatePort(t)
+  opts.signal.throwIfAborted()
   const password = randomUUID()
   const script = [
     "set -euo pipefail",
@@ -69,6 +72,9 @@ export async function spawnWslSidecar(
       ),
     )
   })
+  const aborted = Promise.withResolvers<never>()
+  const abort = () => aborted.reject(opts.signal.reason)
+  opts.signal.addEventListener("abort", abort, { once: true })
   const url = `http://127.0.0.1:${port}`
   const startup = new AbortController()
   const health = pollWslHealth(() => checkHealth(url, password), startup.signal)
@@ -82,27 +88,31 @@ export async function spawnWslSidecar(
       )),
   )
 
-  await Promise.race([health, exit, timedOut])
-    .catch((error) => {
-      child.kill()
+  await Promise.race([health, exit, timedOut, aborted.promise])
+    .catch(async (error) => {
+      await stop(child)
       throw error
     })
     .finally(() => {
       clearTimeout(timeout)
       startup.abort()
+      opts.signal.removeEventListener("abort", abort)
     })
   return {
-    stop: async () => {
-      if (child.exitCode !== null || child.signalCode !== null) return
-      await new Promise<void>((resolve) => {
-        child.once("exit", () => resolve())
-        child.kill()
-      })
-    },
+    stop: () => stop(child),
     onExit: (cb) => child.once("exit", cb),
     url,
     password,
   }
+}
+
+function stop(child: ChildProcess) {
+  // A process that never started or already exited has nothing to wait for.
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    child.once("exit", () => resolve())
+    child.kill()
+  })
 }
 
 async function checkHealth(url: string, password: string) {

@@ -46,12 +46,13 @@ const setup: Setup = (ctx) => {
           await runtime.installCli(distro, { version: cli.version, binary })
         }
       : (distro, build) => runtime.installCli(distro, build),
-    spawnSidecar: (distro) => {
+    spawnSidecar: (distro, signal) => {
       log("info", "spawning wsl sidecar", { distro })
       return spawnWslSidecar(distro, {
         runtime,
         t,
         packaged,
+        signal,
         onLine: (line) => log("info", "wsl sidecar", { distro, stream: line.stream, text: line.text }),
       })
     },
