@@ -51,6 +51,9 @@ export function createBrowserPane(input: {
   const entries = new Map<string, Entry>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.storage) }
+  // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
+  // for them so a replacement never starts beside old pages still recording.
+  const releasing = new Set<Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
   let disposed = false
@@ -304,6 +307,7 @@ export function createBrowserPane(input: {
     async dispose() {
       disposed = true
       entries.forEach((entry) => close(entry, "browser.pane.suspended"))
+      await Promise.all(releasing)
       await runtime.dispose()
     },
   }
@@ -326,9 +330,7 @@ export function createBrowserPane(input: {
     entry.requests.clear()
     const suspended = reason === "browser.pane.suspended"
     if (suspended) publishState(entry, reason)
-    entry.pages.forEach((page) => {
-      void page.dispose().catch(() => undefined)
-    })
+    entry.pages.forEach((page) => void release(page).catch(() => undefined))
     entry.pages.clear()
     entry.tabs.clear()
     entry.focusedTabID = null
@@ -352,8 +354,16 @@ export function createBrowserPane(input: {
     entry.pages.delete(tabID)
     entry.tabs.delete(tabID)
     if (focused) entry.focusedTabID = entry.tabs.keys().next().value ?? null
-    await page?.dispose()
+    if (page) await release(page)
     publishState(entry, error)
+  }
+
+  function release(page: BrowserPage) {
+    const done = page.dispose()
+    const settled = done.catch(() => undefined)
+    releasing.add(settled)
+    void settled.finally(() => releasing.delete(settled))
+    return done
   }
 
   function publishState(entry: Entry, error?: string) {
