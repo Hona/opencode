@@ -169,6 +169,8 @@ function createHost(input: {
           },
           undefined,
           id,
+          // The stack mounts in a later transition; disposal before then must still keep it closed.
+          context.signal,
         )
       }
       return {

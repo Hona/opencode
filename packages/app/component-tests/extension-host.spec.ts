@@ -93,3 +93,21 @@ story("a dialog service kept from before a reload opens and closes nothing under
   }, fixture)
   expect(result).toEqual({ stale: false, fresh: true })
 })
+
+story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
+  const shown = await page.evaluate(async (fixture) => {
+    const { mountExtensionHost } = await import(fixture)
+    const host = mountExtensionHost()
+    const services: Dialogs[] = []
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    host.load((ctx: Context) => void services.push(ctx.use({ kind: "host" as const, id: "dialog" }) as Dialogs), 0)
+    await wait(20)
+    services[0].push(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
+    host.reload()
+    await wait(300)
+    const outcome = !!document.body.textContent?.includes("same tick dialog")
+    host.unmount()
+    return outcome
+  }, fixture)
+  expect(shown).toBe(false)
+})

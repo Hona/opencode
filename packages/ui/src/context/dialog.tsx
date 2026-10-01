@@ -229,14 +229,23 @@ export function useDialog() {
     get active() {
       return ctx.stack().at(-1)
     },
-    /** id lets the caller close this dialog later rather than whichever is on top. */
-    show(element: DialogElement, onClose?: () => void, id?: string) {
+    /**
+     * id lets the caller close this dialog later rather than whichever is on top. Opening is deferred; once
+     * signal aborts, the open neither mounts nor replaces anything and onClose runs as for a replaced dialog.
+     */
+    show(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
       const base = ctx.stack().at(-1)?.owner ?? owner
-      return startTransition(() => ctx.show(element, base, onClose, id))
+      return startTransition(() => {
+        if (signal?.aborted) return isolate(() => onClose?.())
+        ctx.show(element, base, onClose, id)
+      })
     },
-    push(element: DialogElement, onClose?: () => void, id?: string) {
+    push(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
       const base = ctx.stack().at(-1)?.owner ?? owner
-      return startTransition(() => ctx.push(element, base, onClose, id))
+      return startTransition(() => {
+        if (signal?.aborted) return isolate(() => onClose?.())
+        ctx.push(element, base, onClose, id)
+      })
     },
     close(id?: string) {
       ctx.close(id)
