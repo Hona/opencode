@@ -57,7 +57,10 @@ export interface PanelTab {
    * - `launcher`: not draggable; the close button shows on hover or while selected.
    */
   readonly kind?: "pinned" | "fixed" | "launcher"
-  /** Renders before the tabs in stored order. */
+  /**
+   * Renders before the tabs in stored order. Opening it also stores it first and leaves the preview tab open, so
+   * closing it selects the first remaining tab.
+   */
   readonly first?: boolean
   /** Selected when the stored selection is gone. The highest value wins, then strip order. */
   readonly fallback?: number
@@ -109,8 +112,11 @@ export interface Panel {
   render(tab: Accessor<PanelTab>, session: SessionView): JSX.Element
   /** Runs after the host removes the tab from the strip. */
   close?(tab: PanelTab, session: SessionView): void
-  /** Runs when the tab becomes selected. */
-  focus?(tab: PanelTab, session: SessionView): void
+  /**
+   * Runs when the tab becomes selected. `restored` is true for the selection the side region mounts with, e.g. the
+   * tab selected before a reload, and false for every later selection change.
+   */
+  focus?(tab: PanelTab, session: SessionView, change: { readonly restored: boolean }): void
 }
 
 export interface SettingEntry {

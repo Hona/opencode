@@ -148,10 +148,12 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
       )?.key
   })
 
+  // The effect's own value marks its first run: the selection the region mounts with, stored or fallback.
   createEffect(
-    on(active, (key) => {
+    on(active, (key, _, restored: boolean = true) => {
       const entry = key ? byKey().get(key) : undefined
-      if (entry) entry.provider.focus?.(entry.tab, input.view)
+      if (entry) entry.provider.focus?.(entry.tab, input.view, { restored })
+      return false
     }),
   )
 

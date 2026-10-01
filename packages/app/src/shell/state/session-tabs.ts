@@ -43,12 +43,21 @@ export function previewSessionTab(
   }
 }
 
+/** A `first` tab is stored first and keeps the preview tab, so closing it selects the first remaining tab. */
 export function openSessionTab(
   current: SessionTabState,
   tab: string,
   launchers: ReadonlySet<string> = new Set(),
+  first = false,
 ): SessionTabState {
   const preview = sessionTabPreview(current, launchers)
+  if (first) {
+    return {
+      tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
+      preview,
+    }
+  }
+
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
   if (existingIndex !== -1) {

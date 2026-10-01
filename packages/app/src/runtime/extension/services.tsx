@@ -410,11 +410,12 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const mobileView = createMemo(() => (mobile.session === current()?.key ? mobile.view : "session"))
   const selectMobile = (session: SessionRef, view: string) => setMobile({ session: session.key, view })
 
-  // The side tabs a mounted session lists right now; unmounted sessions have none to inspect.
-  const listed = (session: SessionRef, value: string) => {
+  // The side tabs a mounted session lists right now, plus `adding` as if it were stored; unmounted sessions have none.
+  const listed = (session: SessionRef, value: string, adding?: string) => {
     const view = mountedView(session)
     if (!view) return []
-    const stored = layout.panel.state(value).all
+    const all = layout.panel.state(value).all
+    const stored = adding && !all.includes(adding) ? [...all, adding] : all
     return untrack(() =>
       host
         .items(Panel)
@@ -444,8 +445,10 @@ export function createExtensionAttachment(services: ExtensionServices) {
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
-    const known = listed(session, value)
+    // Lists the opened tab too, so its own fields apply before it is stored.
+    const known = listed(session, value, key)
     const launchers = new Set(known.flatMap((entry) => (entry.tab.kind === "launcher" ? [entry.key] : [])))
+    const first = known.some((entry) => entry.key === key && entry.tab.first)
     batch(() => {
       if (narrow()) {
         setDock(session, false)
@@ -455,7 +458,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
       if (options?.preview) return layout.panel.preview(value, key, launchers)
-      layout.panel.open(value, key, launchers)
+      layout.panel.open(value, key, launchers, first)
     })
   }
 

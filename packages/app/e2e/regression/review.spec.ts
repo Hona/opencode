@@ -46,6 +46,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
   await expect(sidebar).toBeHidden()
   await openFile.click()
   const filter = panel.getByRole("combobox", { name: "Filter files" })
@@ -133,6 +134,16 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await tab("file-78.ts").click()
   await expect(tab("file-78.ts")).toHaveAttribute("aria-selected", "true")
   await expectSidebarKept()
+
+  // Context opens in front and keeps the preview tab, so closing it selects the first remaining tab.
+  await tab("Context").click({ button: "middle" })
+  await expect(tab("Context")).toHaveCount(0)
+  await contextButton.click()
+  await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("file-79.ts")).toHaveCount(1)
+  await contextButton.click()
+  await expect(tab("Context")).toHaveCount(0)
+  await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 })
 
 test("file tree expands Windows paths and scrolls long names in both directions", async ({ page }) => {
@@ -220,6 +231,41 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend/app.ts"]').click()
   await expect(panel.getByRole("tab", { name: "app.ts" })).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
+})
+
+test("a restored file tab keeps the file tree on Files Changed", async ({ page }) => {
+  const directory = "C:/OpenCode/TreeRestore"
+  await openSession(page, {
+    name: "TreeRestore",
+    vcsDiff: [fileDiff("src/changed.ts")],
+    fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_treerestore: { review: true } },
+      settings: { general: { showFileTree: true } },
+      storage: { "opencode.global.dat:layout": { fileTree: { opened: true, width: 240, tab: "changes" } } },
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const tree = page.locator("#file-tree-panel")
+  const treeTab = (name: string) => tree.getByRole("tab", { name, exact: true })
+  const readme = panel.getByRole("tab", { name: "README.md", exact: true })
+
+  await treeTab("All files").click()
+  await tree.getByRole("button", { name: "README.md" }).click()
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+  await treeTab("Files Changed 1").click()
+  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+
+  await page.reload()
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
+  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+
+  // Selecting a file tab after load still shows it among all files.
+  await panel.locator("#session-side-panel-review-tab").click()
+  await readme.click()
+  await expect(treeTab("All files")).toHaveAttribute("aria-selected", "true")
 })
 
 test("rereads a file each time an artifact link opens it", async ({ page }) => {

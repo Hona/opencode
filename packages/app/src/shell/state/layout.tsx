@@ -471,11 +471,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         state(session: string) {
           return store.sessionTabs[session] ?? { all: [] }
         },
-        open(session: string, tab: string, launchers?: ReadonlySet<string>) {
+        open(session: string, tab: string, launchers?: ReadonlySet<string>, first?: boolean) {
           const next = openSessionTab(
             { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
             tab,
             launchers,
+            first,
           )
           batch(() => {
             setStore("sessionTabs", session, next.tabs)

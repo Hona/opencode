@@ -218,11 +218,12 @@ const setup: Setup = (ctx) => {
         </Provided>
       )
     },
-    focus(tab, session) {
+    focus(tab, session, change) {
       if (!isFileTab(tab.id)) return
       focused.set(session, tab.id)
       void session.file.sync(fileTabPath(session.file, tab.id))
-      if (tree.tab === "changes") shared.tree.setTab("all")
+      // A restored file tab keeps the tree tab the user left, e.g. Changes across a reload.
+      if (!change.restored && tree.tab === "changes") shared.tree.setTab("all")
     },
   })
 
