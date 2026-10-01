@@ -186,7 +186,9 @@ function createHost(input: {
 
   const activate = async (definition: Definition) => {
     const load = definition.renderer
-    if (!load) return
+    // A disabled extension, e.g. one reloaded from settings, stays disabled: marking it loading would make the
+    // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
+    if (!load || input.disabled()?.has(definition.id) !== false) return
     const attempt = {}
     const current = () => loads.get(definition.id) === attempt
     loads.set(definition.id, attempt)
@@ -202,7 +204,8 @@ function createHost(input: {
     if (!current()) return
     loads.delete(definition.id)
     if (!module || lifetime.disposed) return
-    if (input.disabled()?.has(definition.id) !== false || instances.has(definition.id)) return
+    // Disabling mid-load deactivates, which drops this load before it gets here.
+    if (instances.has(definition.id)) return
     runWithOwner(owner, () =>
       createRoot((dispose) => {
         const instance = createInstance(definition, dispose, getOwner(), messages)

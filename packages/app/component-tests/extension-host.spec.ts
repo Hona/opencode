@@ -111,3 +111,29 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
   }, fixture)
   expect(shown).toBe(false)
 })
+
+story("an extension reloaded while disabled starts when it is enabled again", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensionHost } = await import(fixture)
+    const host = mountExtensionHost()
+    const setups: string[] = []
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    host.load(() => void setups.push("first"), 0)
+    await wait(20)
+    host.disable()
+    await wait(20)
+    host.reload()
+    const afterReload = host.status()
+    // A load the reload started finishes while the extension is still disabled.
+    if (host.count() > 1) host.load(() => void setups.push("while disabled"), 1)
+    await wait(20)
+    host.enable()
+    await wait(20)
+    host.load(() => void setups.push("enabled"), host.count() - 1)
+    await wait(50)
+    const outcome = { afterReload, setups, status: host.status() }
+    host.unmount()
+    return outcome
+  }, fixture)
+  expect(result).toEqual({ afterReload: "disabled", setups: ["first", "enabled"], status: "active" })
+})

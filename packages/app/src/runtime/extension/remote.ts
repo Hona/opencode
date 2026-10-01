@@ -14,6 +14,16 @@ export function createRemotes(bridge: Bridge | undefined) {
   const clients = new Map<string, RemoteClient<RemoteSpec>>()
   const listeners = new Map<string, Set<(name: string, data: unknown) => void>>()
   const subscribed = new Set<string>()
+  // How many availability and state events reached each remote. Events are newer than any snapshot, so a
+  // subscribe reply only fills in what no event changed while it was in flight.
+  const changes = new Map<string, { available: number; state: number }>()
+  const changesOf = (id: string) => {
+    const existing = changes.get(id)
+    if (existing) return existing
+    const created = { available: 0, state: 0 }
+    changes.set(id, created)
+    return created
+  }
 
   const decodeState = (id: string, value: unknown) => {
     const schema = specs.get(id)?.state
@@ -23,10 +33,15 @@ export function createRemotes(bridge: Bridge | undefined) {
   const stop = bridge?.on((message) => {
     if (message.type === "state") {
       if (!specs.has(message.remote)) return
+      changesOf(message.remote).state++
       setState("values", message.remote, reconcile(decodeState(message.remote, message.state)))
       return
     }
     if (message.type === "available") {
+      const changed = changesOf(message.remote)
+      changed.available++
+      // Going away clears the state too.
+      if (!message.available) changed.state++
       batch(() => {
         setState("available", message.remote, message.available)
         if (!message.available) setState("values", message.remote, undefined)
@@ -43,12 +58,15 @@ export function createRemotes(bridge: Bridge | undefined) {
     if (subscribed.has(token.id)) return
     subscribed.add(token.id)
     specs.set(token.id, token.spec)
-    void connected.subscribe(token.id).then((result) =>
+    const before = { ...changesOf(token.id) }
+    void connected.subscribe(token.id).then((result) => {
+      const after = changesOf(token.id)
       batch(() => {
-        setState("available", token.id, result.available)
-        if (result.state !== undefined) setState("values", token.id, decodeState(token.id, result.state))
-      }),
-    )
+        if (after.available === before.available) setState("available", token.id, result.available)
+        if (after.state === before.state && result.state !== undefined)
+          setState("values", token.id, decodeState(token.id, result.state))
+      })
+    })
   }
 
   const create = (connected: Bridge, token: Remote): RemoteClient<RemoteSpec> => {
