@@ -5,7 +5,8 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import type { SurfaceProps, Surfaces } from "@opencode/gui-extensions/sdk"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
-const geometry = /^(width|height|inset|left|right|top|bottom|translate|transform|margin|padding|flex|grid)/
+const geometry =
+  /^(inset|left|right|top|bottom|translate|transform|scale|rotate|margin|padding|flex|grid|gap|row-gap|column-gap)|(^|-)(width|height)$/
 
 type Input = {
   readonly bridge: Bridge | undefined
@@ -171,7 +172,7 @@ function SurfaceView(props: SurfaceProps & { input: Input; bridge: Bridge }) {
   createEventListener(document, "transitionrun", (event) => {
     if (geometry.test(event.propertyName)) schedule(300)
   })
-  createEventListener(document, "transitionend", (event) => {
+  createEventListener(document, ["transitionend", "transitioncancel"], (event) => {
     if (geometry.test(event.propertyName)) schedule()
   })
   // Floating content portals directly into <body>; keep measuring briefly so
