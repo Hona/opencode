@@ -1,8 +1,11 @@
 import { Extension } from "../sdk"
+import { Ssh } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
   id: "ssh",
+  provides: { ssh: Ssh },
+  uses: { ssh: Ssh },
   i18n: {
     en,
     am: () => import("./i18n/am"),

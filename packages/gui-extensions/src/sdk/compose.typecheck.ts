@@ -77,6 +77,23 @@ export const unprovided: RemotesProvided<typeof renderer, typeof mainless> = tru
 
 equal<RemotesProvided<typeof renderer, typeof mainless>, MissingMain<"fixture.pane">>(true)
 
+// A reference types like its token, resolves from the full token, and is refused in `requires`.
+const PaneRef = Remote.ref<typeof Pane>("fixture.pane")
+
+const RefConsumer = Extension.define({ id: "ref", uses: { pane: PaneRef } })
+
+export const referenced: RemotesProvided<[typeof RefConsumer], typeof main> = true
+
+export const resolver: Setup<typeof RefConsumer> = (ctx) => {
+  const full = ctx.use(Pane)
+  equal<typeof full, typeof ctx.uses.pane>(true)
+  // @ts-expect-error the id must be the token's
+  Remote.ref<typeof Pane>("fixture.other")
+}
+
+// @ts-expect-error a reference cannot be required
+Extension.define({ id: "held", requires: { pane: PaneRef } })
+
 // The typed context exposes only what the definition declares.
 export const setup: Setup<typeof Consumer> = (ctx) => {
   equal<typeof ctx.uses.changes, Accessor<Live<{ count(): number }>>>(true)

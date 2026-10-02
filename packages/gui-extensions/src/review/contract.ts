@@ -33,4 +33,4 @@ export interface Changes {
 }
 
 /** Provided by the review extension. The summary's changes row reads the same data. */
-export const Changes = Service.define<Changes>("review.changes")
+export const Changes = Service.define<Changes, "review.changes">("review.changes")

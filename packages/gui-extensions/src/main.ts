@@ -1,4 +1,4 @@
-import type { Definition } from "./sdk/main"
+import { Extension } from "./sdk/main"
 import usage from "./usage"
 import btw from "./btw"
 import debug from "./debug"
@@ -12,8 +12,11 @@ import updater from "./updater"
 import ssh from "./ssh"
 import wsl from "./wsl"
 
-/** Built-in extensions with their main entries. Lists every built-in so their ids stay reserved. */
-export const builtins: readonly Definition[] = [
+/**
+ * Built-in extensions with their main entries. Lists every built-in so their ids stay reserved. `builtins.typecheck.ts`
+ * checks that it provides every remote the renderer composition uses.
+ */
+export const builtins = Extension.compose(
   usage,
   btw,
   debug,
@@ -26,4 +29,4 @@ export const builtins: readonly Definition[] = [
   { ...updater, main: () => import("./updater/main") },
   { ...ssh, main: () => import("./ssh/main") },
   { ...wsl, main: () => import("./wsl/main") },
-]
+)

@@ -46,7 +46,7 @@ export async function until(check: () => boolean) {
 
 /** Mounts the real extension host with one extension whose every renderer load settles when the test says so. */
 export function mountExtensionHost() {
-  const loads: PromiseWithResolvers<{ default: Setup }>[] = []
+  const loads: PromiseWithResolvers<{ default: Setup<Definition> }>[] = []
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
   const hosts: Host[] = []
   const container = document.createElement("div")
@@ -67,7 +67,7 @@ export function mountExtensionHost() {
               {
                 id: "fixture",
                 renderer: () => {
-                  const load = Promise.withResolvers<{ default: Setup }>()
+                  const load = Promise.withResolvers<{ default: Setup<Definition> }>()
                   loads.push(load)
 
                   return load.promise
@@ -91,7 +91,7 @@ export function mountExtensionHost() {
       container.remove()
     },
     /** Resolves the nth renderer load (the first by default) with this setup. */
-    load: (setup: Setup, index = 0) => loads[index].resolve({ default: setup }),
+    load: (setup: Setup<Definition>, index = 0) => loads[index].resolve({ default: setup }),
     /** Rejects the nth renderer load. */
     fail: (index: number, cause: unknown) => loads[index].reject(cause),
     /** Renderer loads requested so far. */
@@ -146,7 +146,6 @@ export function mountExtensions(input: {
       return persistedHandle({
         store: pair[0],
         update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
-        ready: pair[3],
         init: pair[3].promise,
       })
     },
@@ -167,6 +166,7 @@ export function mountExtensions(input: {
     state: () => "closed",
     stored: () => [],
     side: { opened: () => false, toggle() {} },
+    sidebar: { opened: () => true },
     dock: { opened: () => false, placement: () => "bottom" },
     scroll: { get: () => undefined, set() {} },
     settings() {},

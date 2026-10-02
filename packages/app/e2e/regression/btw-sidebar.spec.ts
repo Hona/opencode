@@ -11,14 +11,22 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   const generated = Promise.withResolvers<void>()
   const main = { id: "ses_btw_sidebar", title: "Side question session" }
   const other = { id: "ses_btw_sidebar_other", title: "Other side question session" }
+  const ownerWarnings: string[] = []
+  page.on("console", (message) => {
+    if (message.text().includes("computations created outside a `createRoot` or `render`"))
+      ownerWarnings.push(message.text())
+  })
+
   const { editor } = await openSession(page, {
     name: "BtwSidebar",
     sessions: [main, other],
     onPrompt: (input) => prompts.push(input),
     generate: async (input) => {
       generations.push(input)
+
       if (input.sessionID === other.id) return { text: "This answer belongs to the **other session**." }
       await generated.promise
+
       return {
         text: "The retry loop uses **exponential backoff** and stops after three attempts.\n\n```ts\nconst delay = 2 ** attempt\n```",
       }
@@ -69,4 +77,5 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expectSessionTitle(page, main.title)
   await expect(page.getByRole("tab", { name: "/btw" })).toHaveCount(0)
   await expect(panel).toHaveCount(0)
+  expect(ownerWarnings).toEqual([])
 })

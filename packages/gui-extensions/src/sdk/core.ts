@@ -1,5 +1,6 @@
 import type { Schema } from "effect"
 import type { Accessor } from "solid-js"
+import type { Scope } from "./scope"
 
 export type Cleanup = () => void | Promise<void>
 
@@ -16,8 +17,17 @@ export type Catalog = { readonly en: Messages } & {
 
 type Result = void | Cleanup | Promise<void | Cleanup>
 
-/** An entry that takes the context untyped by its definition. The main process still uses this form. */
+/** A main-process entry that does not read its instance's scope. */
 export type Setup = (ctx: Context) => Result
+
+/** The setup context in the main process: the shared context plus the instance's lifetime. */
+export interface MainContext extends Context {
+  /** The instance's lifetime: `signal` is its signal and `cleanup` adds its finalizers. */
+  readonly scope: Scope
+}
+
+/** A main-process entry. */
+export type MainSetup = (ctx: MainContext) => Result
 
 export interface Definition {
   /** Prefix of every id the extension creates: commands, panels, settings, storage, services, points. */
@@ -30,13 +40,14 @@ export interface Definition {
   readonly uses?: Tokens
   /**
    * Hard contracts. The host starts the extension only while every one is active and restarts it with them; the
-   * values are plain in `ctx.requires`. Use it only where the extension is meaningless without the contract.
+   * values are plain in `ctx.requires`. Use it only where the extension is meaningless without the contract. A
+   * reference (`Remote.ref`) is refused: it resolves only once code uses the full token, which setup would do.
    */
-  readonly requires?: Tokens
+  readonly requires?: Readonly<Record<string, Service<unknown> | Remote>>
   /** State the host stores for the extension and loads before it is read. See `Store`. */
   readonly stores?: Readonly<Record<string, StoreDeclaration>>
   readonly renderer?: () => Promise<{ readonly default: (ctx: never) => Result }>
-  readonly main?: () => Promise<{ readonly default: Setup }>
+  readonly main?: () => Promise<{ readonly default: MainSetup }>
 }
 
 // Loose on purpose: checking an entry's module while its definition is still being inferred would be circular.
@@ -91,8 +102,16 @@ export interface Remote<S extends RemoteSpec = RemoteSpec> {
   readonly spec: S
 }
 
+/** A Remote declared by id and typed by its token, with no spec at runtime. See `Remote.ref`. */
+export interface RemoteRef<S extends RemoteSpec = RemoteSpec> {
+  readonly kind: "remote"
+  readonly id: string
+  readonly spec?: undefined
+  readonly [brand]?: S
+}
+
 /** A contract one extension provides and others declare in `uses` or `requires`. */
-export type Token = Service<unknown> | Remote
+export type Token = Service<unknown> | Remote | RemoteRef
 
 export type Tokens = Readonly<Record<string, Token>>
 
@@ -113,7 +132,14 @@ export type RemoteClient<S extends RemoteSpec> = {
 }
 
 /** The value a token gives its users: the service itself, or the client of a remote. */
-export type TokenValue<T> = T extends Remote<infer S> ? RemoteClient<S> : T extends Service<infer V> ? V : never
+export type TokenValue<T> =
+  T extends Remote<infer S>
+    ? RemoteClient<S>
+    : T extends RemoteRef<infer S>
+      ? RemoteClient<S>
+      : T extends Service<infer V>
+        ? V
+        : never
 
 /**
  * A provider as its users see it. One object per transition, so a reader re-runs only when the provider changes.
@@ -262,7 +288,14 @@ export type DeclaredStores<D> = D extends { readonly stores?: infer M }
   : {}
 
 /** The id a token declares, for compile errors. */
-export type TokenId<T> = T extends Remote<infer S> ? S["id"] : T extends Service<unknown, infer Id> ? Id : never
+export type TokenId<T> =
+  T extends Remote<infer S>
+    ? S["id"]
+    : T extends RemoteRef<infer S>
+      ? S["id"]
+      : T extends Service<unknown, infer Id>
+        ? Id
+        : never
 
 /** `Extension.compose`: a `requires` token no extension in the composition provides. */
 export interface Missing<Id extends string> {
@@ -302,7 +335,7 @@ export type Composition<Ds extends readonly unknown[]> = [MissingIds<Ds>] extend
   : { readonly "missing provider": Missing<MissingIds<Ds>> }
 
 type RemoteIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
-  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Remote>>
+  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Remote | RemoteRef>>
   : never
 
 type MissingRemotes<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
@@ -338,22 +371,26 @@ export const Point = {
   define: <T>(id: string): Point<T> => ({ kind: "point", id }),
 }
 
-function defineService<T, const Id extends string>(id: Id): Service<T, Id>
-/** @deprecated Pass the id as a second type argument too, so composition errors can name it. */
-function defineService<T>(id: string): Service<T>
-function defineService(id: string) {
-  return { kind: "service", id }
-}
-
 export const Service = {
-  /** `Service.define<FileTree, "file.tree">("file.tree")`. */
-  define: defineService,
+  /** `Service.define<FileTree, "file.tree">("file.tree")`: the id is a type argument too, so composition errors name it. */
+  define: <T, const Id extends string>(id: Id): Service<T, Id> => ({ kind: "service", id }),
 }
 
 export const Host = {
   define: <T>(id: string): Host<T> => ({ kind: "host", id }),
 }
 
+type SpecOf<R> = R extends Remote<infer S> ? S : never
+
 export const Remote = {
   define: <const S extends RemoteSpec>(spec: S): Remote<S> => ({ kind: "remote", id: spec.id, spec }),
+  /**
+   * Declares a remote by id, typed from a type-only import of its token, so a definition can name it in `provides`,
+   * `uses` or `requires` without loading its schemas: `Remote.ref<typeof BrowserPane>("browser.pane")`. Composition
+   * checks and `Live` typing treat it as the token. In the renderer it resolves once code in the window uses the full
+   * token, e.g. `ctx.use(BrowserPane)` from a chunk that loads later (`use` accepts the full token of a declared
+   * reference), and it is pending until then. Declare it in `uses`: a `requires` would wait for a resolution that setup
+   * itself would make.
+   */
+  ref: <R extends Remote>(id: TokenId<R>): RemoteRef<SpecOf<R>> => ({ kind: "remote", id }),
 }

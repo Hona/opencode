@@ -6,7 +6,6 @@ import {
   createSignal,
   on,
   untrack,
-  type Accessor,
   type Owner,
 } from "solid-js"
 import type { Persisted, SessionRef } from "@opencode/gui-extensions/sdk"
@@ -15,12 +14,11 @@ const loads = new WeakMap<object, Promise<void>>()
 
 /**
  * What `Storage.store` returns: a `Persisted` whose `update` waits until the stored value has loaded, then applies in
- * call order, and the older `[store, update, ready]` tuple.
+ * call order.
  */
 export function persistedHandle<T extends object>(input: {
   readonly store: T
   readonly update: (mutation: (draft: T) => void) => void
-  readonly ready: Accessor<boolean>
   /** The storage read; undefined when storage answered synchronously. */
   readonly init: Promise<unknown> | undefined
 }) {
@@ -37,17 +35,17 @@ export function persistedHandle<T extends object>(input: {
 
   void load?.catch(() => undefined)
 
-  // SAFETY: the properties defined here are `Persisted`'s, so the tuple is both shapes.
-  const handle = Object.defineProperties([input.store, input.update, input.ready] as const, {
-    value: { get: () => (loaded() ? input.store : undefined) },
-    ready: { value: loaded },
-    update: {
-      value: (mutation: (draft: T) => void) => {
-        if (untrack(loaded)) return input.update(mutation)
-        queue.push(mutation)
-      },
+  const handle: Persisted<T> = {
+    get value() {
+      return loaded() ? input.store : undefined
     },
-  }) as readonly [T, (mutation: (draft: T) => void) => void, Accessor<boolean>] & Persisted<T>
+    ready: loaded,
+    update(mutation) {
+      if (untrack(loaded)) return input.update(mutation)
+
+      queue.push(mutation)
+    },
+  }
 
   if (load) loads.set(handle, load)
 
@@ -72,9 +70,10 @@ export function createSessionStore<T extends object>(input: {
   const create = (session: SessionRef) =>
     createRoot((dispose) => {
       const queue: ((draft: T) => void)[] = []
-      const directory = createMemo(() => session.location?.directory)
+      const pinned = pin(session)
+      const directory = createMemo(() => pinned.location?.directory)
       // A new directory opens the store again; the store from the old one disposes with the previous run.
-      const store = createMemo(on(directory, (value) => (value === undefined ? undefined : input.open(session))))
+      const store = createMemo(on(directory, (value) => (value === undefined ? undefined : input.open(pinned))))
       // Hands changes made before the location was known to the store, which applies them once it has loaded.
       createRenderEffect(() => {
         const current = store()
@@ -119,6 +118,32 @@ export function createSessionStore<T extends object>(input: {
     dispose() {
       entries.forEach((entry) => entry.dispose())
       entries.clear()
+    },
+  }
+}
+
+/**
+ * A ref that keeps naming the session `session` names now. A mounted `SessionView` follows the route to the next
+ * session, so its location is read only while it still names this one, and the last location it reported stands
+ * meanwhile. The store opens, and reads `server`, only when that location changes.
+ */
+function pin(session: SessionRef): SessionRef {
+  const key = session.key
+  const id = session.id
+  const tab = session.tab
+  const server = session.server
+  const location = createMemo<SessionRef["location"]>((last) => (session.key === key ? session.location : last))
+
+  return {
+    key,
+    id,
+    tab,
+    server,
+    get pending() {
+      return session.key === key && session.pending
+    },
+    get location() {
+      return location()
     },
   }
 }

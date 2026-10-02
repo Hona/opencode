@@ -27,4 +27,4 @@ export interface FileTree {
   List(props: FileListProps): JSX.Element
 }
 
-export const FileTree = Service.define<FileTree>("file.tree")
+export const FileTree = Service.define<FileTree, "file.tree">("file.tree")

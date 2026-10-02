@@ -1,20 +1,19 @@
-import { createEffect } from "solid-js"
-import type { SessionView } from "../sdk"
+import { createActive, type SessionView } from "../sdk"
 
 const location = (session: SessionView) => (session.directory ? { directory: session.directory } : undefined)
 
 /** Loads the provider and model catalogs of the session's location. */
 export function syncCatalog(session: SessionView) {
-  createEffect(() => {
-    if (!session.server.connected) return
-    const data = session.server.data
-    const ref = location(session)
-    void (async () => {
-      if (!ref) await data.location.syncInfo()
-      const resolved = ref ?? data.location.default()
-      await Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)])
-    })().catch(() => undefined)
-  })
+  // Loads again when the server reconnects or is replaced, and when the session moves to another directory.
+  createActive(
+    () => session.server.connected && { data: session.server.data, ref: location(session) },
+    (current) =>
+      void (async () => {
+        if (!current.ref) await current.data.location.syncInfo()
+        const resolved = current.ref ?? current.data.location.default()
+        await Promise.all([current.data.location.provider.sync(resolved), current.data.location.model.sync(resolved)])
+      })().catch(() => undefined),
+  )
 }
 
 /** The catalog entries of a message's model, matching the app's provider catalog: both lists must load, and deprecated models are skipped. */
@@ -22,9 +21,12 @@ export function catalogModel(session: SessionView, model: { readonly providerID:
   const ref = location(session)
   const providers = session.server.data.location.provider.list(ref)
   const models = session.server.data.location.model.list(ref)
+
   if (!providers || !models) return
   const provider = providers.findLast((item) => item.id === model.providerID)
+
   if (!provider) return
+
   return {
     provider,
     model: models.findLast(

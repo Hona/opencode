@@ -1,4 +1,4 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { checksum } from "@opencode/util/encode"
 import { Icon } from "@opencode/ui/icon"
@@ -11,7 +11,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { Layout, System, useExtension, type SessionView } from "../sdk"
+import { createActive, Layout, System, useExtension, type SessionView } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
@@ -28,6 +28,7 @@ function Stat(props: { label: string; value: JSX.Element }) {
 function RawMessageContent(props: { message: SessionMessageInfo; onRendered: () => void }) {
   const file = createMemo(() => {
     const contents = JSON.stringify(props.message, null, 2)
+
     return {
       name: `${props.message.type}-${props.message.id}.json`,
       contents,
@@ -90,7 +91,9 @@ export default function SessionContextTab(props: { session: SessionView }) {
   const messages = createMemo(
     () => {
       const id = props.session.id
+
       if (!id) return emptyMessages
+
       return data().session.message.list(id)
     },
     emptyMessages,
@@ -107,14 +110,17 @@ export default function SessionContextTab(props: { session: SessionView }) {
 
   const context = createMemo(() => {
     const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+
     if (message?.type !== "assistant" || !message.tokens) return
     const entry = catalogModel(props.session, message.model)
+
     const total =
       message.tokens.input +
       message.tokens.output +
       message.tokens.reasoning +
       message.tokens.cache.read +
       message.tokens.cache.write
+
     return {
       message,
       tokens: message.tokens,
@@ -126,6 +132,7 @@ export default function SessionContextTab(props: { session: SessionView }) {
       usage: entry?.model?.limit.context ? Math.round((total / entry.model.limit.context) * 100) : null,
     }
   })
+
   const formatter = createMemo(() => createSessionContextFormatter(i18n.locale()))
 
   const cost = createMemo(() => {
@@ -136,6 +143,7 @@ export default function SessionContextTab(props: { session: SessionView }) {
     const all = messages()
     const user = all.reduce((count, message) => count + (message.type === "user" ? 1 : 0), 0)
     const assistant = all.reduce((count, message) => count + (message.type === "assistant" ? 1 : 0), 0)
+
     return {
       all: all.length,
       user,
@@ -145,21 +153,28 @@ export default function SessionContextTab(props: { session: SessionView }) {
 
   const systemPrompt = createMemo(() => {
     const system = messages().findLast((message) => message.type === "system")?.text
+
     if (!system) return
     const trimmed = system.trim()
+
     if (!trimmed) return
+
     return trimmed
   })
 
   const providerLabel = createMemo(() => {
     const c = context()
+
     if (!c) return "—"
+
     return c.providerLabel
   })
 
   const modelLabel = createMemo(() => {
     const c = context()
+
     if (!c) return "—"
+
     return c.modelLabel
   })
 
@@ -188,18 +203,22 @@ export default function SessionContextTab(props: { session: SessionView }) {
 
   const exportSession = async () => {
     const sessionID = props.session.id
+
     if (!sessionID) return
+
     try {
       const data = await fetchSessionExport({
         sessionID,
         api: props.session.server.client,
       })
+
       const filename = sessionExportFilename(data.info)
+
       if (!(await system.save({ name: filename, content: JSON.stringify(data, null, 2) }))) return
       showToast({
         variant: "success",
         // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
-        icon: (() => <Icon name="circle-check" />) as unknown as JSX.Element,
+        icon: () => <Icon name="circle-check" />,
         title: ctx.t("export.success.title"),
         description: ctx.t("export.success.description", { filename }),
       })
@@ -215,14 +234,18 @@ export default function SessionContextTab(props: { session: SessionView }) {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
+
   const restoreScroll = () => {
     const el = scroll
+
     if (!el) return
 
     const s = layout.scroll.get(props.session, "context")
+
     if (!s) return
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
+
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
   }
 
@@ -231,6 +254,7 @@ export default function SessionContextTab(props: { session: SessionView }) {
       x: event.currentTarget.scrollLeft,
       y: event.currentTarget.scrollTop,
     }
+
     if (frame !== undefined) return
 
     frame = requestAnimationFrame(() => {
@@ -238,20 +262,17 @@ export default function SessionContextTab(props: { session: SessionView }) {
 
       const next = pending
       pending = undefined
+
       if (!next) return
 
       layout.scroll.set(props.session, "context", next)
     })
   }
 
-  createEffect(
-    on(
-      () => messages().length,
-      () => {
-        requestAnimationFrame(restoreScroll)
-      },
-      { defer: true },
-    ),
+  // Restores the stored scroll a frame after the messages change; on mount the viewport ref restores it.
+  createActive(
+    createMemo(on(messages, (list) => list, { defer: true })),
+    () => void requestAnimationFrame(restoreScroll),
   )
 
   onCleanup(() => {
@@ -310,7 +331,10 @@ export default function SessionContextTab(props: { session: SessionView }) {
 
 function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
   if (a === b) return true
+
   if (!a || !b) return false
+
   if (a.length !== b.length) return false
+
   return a.every((x, i) => x === b[i])
 }

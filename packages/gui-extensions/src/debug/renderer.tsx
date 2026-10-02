@@ -1,11 +1,13 @@
 import { createSignal, lazy, Show, Suspense } from "solid-js"
 import { App, Command, Slot, Status, type Setup } from "../sdk"
+import type Debug from "./index"
 
-const setup: Setup = (ctx) => {
+const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
   const channel = ctx.use(App).channel
   // Window-local; every window starts with the bar hidden.
   const [visible, setVisible] = createSignal(false)
+
   const toggle = () => {
     setVisible((value) => !value)
   }

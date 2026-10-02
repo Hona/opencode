@@ -1,7 +1,8 @@
-import { batch, createEffect, on, onCleanup } from "solid-js"
+import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { Layout, Sessions, type Context, type SessionView } from "../sdk"
+import { createActive, Layout, Sessions, type SessionView, type SetupContext } from "../sdk"
+import type Btw from "./index"
 
 const instructions = [
   "The user is asking a quick side question about the conversation so far.",
@@ -17,7 +18,7 @@ const empty = {
 }
 
 /** Side questions per session. Window-local: a reload drops them, and with them the tab. */
-export function createBtw(ctx: Context) {
+export function createBtw(ctx: SetupContext<typeof Btw>) {
   const sessions = ctx.use(Sessions)
   const layout = ctx.use(Layout)
   const [states, setStates] = createStore<Record<string, typeof empty>>({})
@@ -26,30 +27,32 @@ export function createBtw(ctx: Context) {
 
   const stop = (key: string) => {
     const controller = controllers.get(key)
+
     if (!controller) return
     controller.abort()
     controllers.delete(key)
+
     if (states[key]?.pending) setStates(key, { pending: false, error: true })
   }
 
   // Leaving a session abandons its in-flight question.
-  createEffect(
-    on(
-      () => sessions.current()?.key,
-      (key) => {
-        if (key) onCleanup(() => stop(key))
-      },
-    ),
+  createActive(
+    () => sessions.current(),
+    (view) => onCleanup(() => stop(view.key)),
   )
   ctx.cleanup(() => Array.from(controllers.keys()).forEach(stop))
 
   const ask = (value?: string) => {
     const question = value?.trim()
+
     if (!question) {
       showToast({ title: ctx.t("question.required") })
+
       return
     }
+
     const session = sessions.current()
+
     if (!session?.id) return
 
     const key = session.key
@@ -64,6 +67,7 @@ export function createBtw(ctx: Context) {
       setStates(key, { question, answer: "", error: false, pending: true })
       layout.open(`${ctx.id}:main`, session)
     })
+
     return session.server.client.session
       .generate(
         {

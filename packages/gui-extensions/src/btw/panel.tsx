@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, on, Show, Switch } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -13,19 +13,18 @@ import type { BtwModel } from "./model"
 export default function SessionBtwPanel(props: { btw: BtwModel; session: SessionView }) {
   const ctx = useExtension()
   const system = ctx.use(System)
-  const [copied, setCopied] = createSignal(false)
   const answer = () => props.btw.answer(props.session)
-
-  createEffect(() => {
-    answer()
-    setCopied(false)
-  })
+  // A new token for each answer, so the copied mark clears when the answer changes.
+  const shown = createMemo(on(answer, () => ({})))
+  const [copiedAnswer, setCopiedAnswer] = createSignal<object>()
+  const copied = () => copiedAnswer() === shown()
 
   const copy = () => {
     const value = answer()
+
     if (!value) return
     void system.copy(value).then(
-      () => setCopied(true),
+      () => setCopiedAnswer(shown()),
       () => showToast({ title: ctx.t("common.requestFailed") }),
     )
   }

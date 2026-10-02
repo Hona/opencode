@@ -1,8 +1,8 @@
-import { batch, createEffect, createMemo, on, onCleanup, onMount, Show } from "solid-js"
+import { batch, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { App, Native, Sessions, useExtension } from "../sdk"
+import { App, createActive, Native, Sessions, useExtension } from "../sdk"
 import {
   applyProviderMetricEvent,
   isProviderMetricEvent,
@@ -32,37 +32,57 @@ type Obs = PerformanceObserverInit & {
   durationThreshold?: number
 }
 
+type Readings = {
+  cls: number | undefined
+  delay: number | undefined
+  fps: number | undefined
+  gap: number | undefined
+  focus: boolean
+  heap: { limit: number | undefined; used: number | undefined }
+  inp: number | undefined
+  jank: number | undefined
+  long: { block: number | undefined; count: number | undefined; max: number | undefined }
+  nav: { dur: number | undefined; pending: boolean }
+}
+
 const span = 5000
 
 const ms = (n?: number, d = 0) => {
   if (n === undefined || Number.isNaN(n)) return
+
   return `${n.toFixed(d)}ms`
 }
 
 const time = (n?: number) => {
   if (n === undefined || Number.isNaN(n)) return
+
   return `${Math.round(n)}`
 }
 
 const fixed = (n?: number, digits = 0) => {
   if (n === undefined || Number.isNaN(n)) return
+
   return n.toFixed(digits)
 }
 
 const mb = (n?: number) => {
   if (n === undefined || Number.isNaN(n)) return
   const v = n / 1024 / 1024
+
   return `${v >= 1024 ? v.toFixed(0) : v.toFixed(1)}MB`
 }
 
 const duration = (n?: number) => {
   if (n === undefined || Number.isNaN(n)) return
+
   if (n < 1_000) return `${Math.round(n)}ms`
+
   return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}s`
 }
 
 const bad = (n: number | undefined, limit: number, low = false) => {
   if (n === undefined || Number.isNaN(n)) return false
+
   return low ? n < limit : n > limit
 }
 
@@ -176,82 +196,89 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
   const app = ctx.use(App)
   const native = ctx.use(Native)
   const sessions = ctx.use(Sessions)
-  const [state, setState] = createStore({
-    cls: undefined as number | undefined,
-    delay: undefined as number | undefined,
-    fps: undefined as number | undefined,
-    gap: undefined as number | undefined,
+
+  const [state, setState] = createStore<Readings>({
+    cls: undefined,
+    delay: undefined,
+    fps: undefined,
+    gap: undefined,
     focus: false,
     heap: {
-      limit: undefined as number | undefined,
-      used: undefined as number | undefined,
+      limit: undefined,
+      used: undefined,
     },
-    inp: undefined as number | undefined,
-    jank: undefined as number | undefined,
+    inp: undefined,
+    jank: undefined,
     long: {
-      block: undefined as number | undefined,
-      count: undefined as number | undefined,
-      max: undefined as number | undefined,
+      block: undefined,
+      count: undefined,
+      max: undefined,
     },
     nav: {
-      dur: undefined as number | undefined,
+      dur: undefined,
       pending: false,
     },
-    live: undefined as ProviderMetrics | undefined,
   })
 
   const target = createMemo(
     () => {
       const session = sessions.current()
+
       if (!session?.id) return
+
       return { server: session.server, data: session.server.data, id: session.id }
     },
     undefined,
     { equals: (a, b) => a?.data === b?.data && a?.id === b?.id },
   )
+
   // History comes from the already-loaded message projection; live requests refine it in place.
   const projected = createMemo(() => {
     const current = target()
+
     if (!current) return
+
     return projectedProviderMetrics(current.data.session.message.list(current.id))
   })
-  const metrics = () => state.live ?? projected()
 
-  // Missed events during an outage are never replayed; the refreshed projection must win.
-  createEffect(
-    on(
-      () => target()?.server.connected,
-      (connected) => {
-        if (!connected) setState("live", undefined)
-      },
-      { defer: true },
-    ),
-  )
+  // Missed events during an outage are never replayed, so live metrics hold only for the target and the outage count
+  // they were measured under: after a disconnect the refreshed projection wins until the next live request.
+  const outages = createMemo((count: number = 0) => (target()?.server.connected ? count : count + 1))
+  const [live, setLive] = createSignal<{ target: object; outages: number; metrics: ProviderMetrics }>()
 
-  createEffect(
-    on(target, (current) => {
-      setState("live", undefined)
-      if (!current) return
-      const accumulator: ProviderMetricState = {}
-      onCleanup(
-        current.data.listen(({ details }) => {
-          if (!isProviderMetricEvent(details) || details.data.sessionID !== current.id) return
-          applyProviderMetricEvent(accumulator, details)
-          if (accumulator.latest) setState("live", accumulator.latest)
-        }),
-      )
-    }),
-  )
+  const metrics = () => {
+    const current = live()
+
+    return current && current.target === target() && current.outages === outages() ? current.metrics : projected()
+  }
+
+  createActive(target, (current) => {
+    const accumulator: ProviderMetricState = {}
+
+    onCleanup(
+      current.data.listen(({ details }) => {
+        if (!isProviderMetricEvent(details) || details.data.sessionID !== current.id) return
+        applyProviderMetricEvent(accumulator, details)
+
+        if (accumulator.latest) setLive({ target: current, outages: outages(), metrics: accumulator.latest })
+      }),
+    )
+  })
 
   const na = () => ctx.t("na").toUpperCase()
   const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
+
   const heapv = () => {
     const value = heap()
+
     if (value === undefined) return na()
+
     return `${Math.round(value * 100)}%`
   }
+
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
   const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
+
   const toggleFocus = async () => {
     if (!native) return
     const enabled = !state.focus
@@ -269,50 +296,60 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
   let one = 0
   let two = 0
 
-  createEffect(() => {
-    if (!props.diagnostics) return
-    const busy = app.routing()
-    const next = app.path()
+  // Times navigations to and from a session: from the route starting to change until two frames after it settles.
+  createActive(
+    () => props.diagnostics && { busy: app.routing(), next: app.path() },
+    (route) => {
+      const next = route.next
 
-    if (!init) {
-      init = true
-      prev = next
-      return
-    }
+      if (!init) {
+        init = true
+        prev = next
 
-    if (busy) {
-      if (one !== 0) cancelAnimationFrame(one)
-      if (two !== 0) cancelAnimationFrame(two)
-      one = 0
-      two = 0
-      if (start !== 0) return
-      start = performance.now()
-      if (session(prev)) setState("nav", { dur: undefined, pending: true })
-      return
-    }
+        return
+      }
 
-    if (start === 0) {
-      prev = next
-      return
-    }
+      if (route.busy) {
+        if (one !== 0) cancelAnimationFrame(one)
 
-    const at = start
-    const from = prev
-    start = 0
-    prev = next
-
-    if (!(session(from) || session(next))) return
-
-    if (one !== 0) cancelAnimationFrame(one)
-    if (two !== 0) cancelAnimationFrame(two)
-    one = requestAnimationFrame(() => {
-      one = 0
-      two = requestAnimationFrame(() => {
+        if (two !== 0) cancelAnimationFrame(two)
+        one = 0
         two = 0
-        setState("nav", { dur: performance.now() - at, pending: false })
+
+        if (start !== 0) return
+        start = performance.now()
+
+        if (session(prev)) setState("nav", { dur: undefined, pending: true })
+
+        return
+      }
+
+      if (start === 0) {
+        prev = next
+
+        return
+      }
+
+      const at = start
+      const from = prev
+
+      start = 0
+      prev = next
+
+      if (!(session(from) || session(next))) return
+
+      if (one !== 0) cancelAnimationFrame(one)
+
+      if (two !== 0) cancelAnimationFrame(two)
+      one = requestAnimationFrame(() => {
+        one = 0
+        two = requestAnimationFrame(() => {
+          two = 0
+          setState("nav", { dur: performance.now() - at, pending: false })
+        })
       })
-    })
-  })
+    },
+  )
 
   onMount(() => {
     if (!props.diagnostics) return
@@ -354,12 +391,15 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
       for (const [key, entry] of seen) {
         if (at - entry.at > span) seen.delete(key)
       }
+
       let delay = 0
       let inp = 0
+
       for (const entry of seen.values()) {
         delay = Math.max(delay, entry.delay)
         inp = Math.max(inp, entry.dur)
       }
+
       batch(() => {
         setState("delay", delay > 0 ? delay : undefined)
         setState("inp", inp > 0 ? inp : undefined)
@@ -367,7 +407,9 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     }
 
     const syncHeap = () => {
-      const mem = (performance as Mem).memory
+      const timing: Mem = performance
+      const mem = timing.memory
+
       if (!mem) return
       setState("heap", { limit: mem.jsHeapSizeLimit, used: mem.usedJSHeapSize })
     }
@@ -384,20 +426,25 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
         setState("jank", undefined)
         setState("delay", undefined)
         setState("inp", undefined)
+
         if (hasLong) setState("long", { block: 0, count: 0, max: 0 })
       })
     }
 
     const watch = (type: string, init: Obs, fn: (entries: PerformanceEntry[]) => void) => {
       if (typeof PerformanceObserver === "undefined") return false
+
       if (!(PerformanceObserver.supportedEntryTypes ?? []).includes(type)) return false
       const ob = new PerformanceObserver((list) => fn(list.getEntries()))
+
       try {
         ob.observe(init)
         obs.push(ob)
+
         return true
       } catch {
         ob.disconnect()
+
         return false
       }
     }
@@ -405,10 +452,14 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     if (
       watch("layout-shift", { buffered: true, type: "layout-shift" }, (entries) => {
         const add = entries.reduce((sum, entry) => {
+          // SAFETY: this observer subscribes to "layout-shift" entries alone, which carry these fields.
           const item = entry as Shift
+
           if (item.hadRecentInput) return sum
+
           return sum + item.value
         }, 0)
+
         if (add === 0) return
         setState("cls", (value) => (value ?? 0) + add)
       })
@@ -429,12 +480,16 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
 
     watch("event", { buffered: true, durationThreshold: 16, type: "event" }, (entries) => {
       for (const raw of entries) {
+        // SAFETY: this observer subscribes to "event" entries alone, which carry these optional fields.
         const entry = raw as Evt
+
         if (entry.duration < 16) continue
+
         const key =
           entry.interactionId && entry.interactionId > 0
             ? entry.interactionId
             : `${entry.name}:${Math.round(entry.startTime)}`
+
         const prev = seen.get(key)
         const delay = Math.max(0, (entry.processingStart ?? entry.startTime) - entry.startTime)
         seen.set(key, {
@@ -442,22 +497,27 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
           delay: Math.max(prev?.delay ?? 0, delay),
           dur: Math.max(prev?.dur ?? 0, entry.duration),
         })
+
         if (seen.size <= 200) continue
         const first = seen.keys().next().value
+
         if (first !== undefined) seen.delete(first)
       }
+
       syncInp()
     })
 
     const loop = (at: number) => {
       if (document.visibilityState !== "visible") {
         raf = 0
+
         return
       }
 
       if (last === 0) {
         last = at
         raf = requestAnimationFrame(loop)
+
         return
       }
 
@@ -475,6 +535,7 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     const stop = () => {
       if (raf !== 0) cancelAnimationFrame(raf)
       raf = 0
+
       if (poll === undefined) return
       clearInterval(poll)
       poll = undefined
@@ -482,6 +543,7 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
 
     const start = () => {
       if (document.visibilityState !== "visible") return
+
       if (poll === undefined) {
         poll = window.setInterval(() => {
           syncLong()
@@ -489,6 +551,7 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
           syncHeap()
         }, 1000)
       }
+
       if (raf !== 0) return
       raf = requestAnimationFrame(loop)
     }
@@ -496,8 +559,10 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     const vis = () => {
       if (document.visibilityState !== "visible") {
         stop()
+
         return
       }
+
       reset()
       start()
     }
@@ -508,8 +573,10 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
 
     onCleanup(() => {
       if (one !== 0) cancelAnimationFrame(one)
+
       if (two !== 0) cancelAnimationFrame(two)
       stop()
+
       for (const ob of obs) ob.disconnect()
     })
   })

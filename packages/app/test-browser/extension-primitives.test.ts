@@ -27,9 +27,11 @@ const first = { status: "active", value: "first", generation: 1 } as const
 const second = { status: "active", value: "second", generation: 2 } as const
 
 /** A session the store and layout code can key and locate; they read nothing else. */
-function session(key: string, location: Accessor<{ directory: string } | undefined>) {
+function session(key: Accessor<string>, location: Accessor<{ directory: string } | undefined>) {
   const value = {
-    key,
+    get key() {
+      return key()
+    },
     get location() {
       return location()
     },
@@ -214,7 +216,6 @@ describe("extension primitives", () => {
           const handle = persistedHandle({
             store: pair[0],
             update: (mutation: (draft: (typeof Items)["Type"]) => void) => pair[1](produce(mutation)),
-            ready: pair[3],
             init: pair[3].promise,
           })
 
@@ -230,7 +231,7 @@ describe("extension primitives", () => {
           store.dispose()
           dispose()
         },
-        handle: store.get(session("server\nses_store", location)),
+        handle: store.get(session(() => "server\nses_store", location)),
       }
     })
 
@@ -250,9 +251,55 @@ describe("extension primitives", () => {
     root.dispose()
   })
 
+  test("a session store opened through the route-following view keeps reading its own session", () => {
+    const [routed, setRouted] = createSignal("a")
+    const [located, setLocated] = createSignal<readonly string[]>(["a"])
+
+    // A mounted `SessionView`: one object whose key and location follow the routed session.
+    const view = session(
+      () => `server\n${routed()}`,
+      () => (located().includes(routed()) ? { directory: `/${routed()}` } : undefined),
+    )
+
+    const opened: string[] = []
+
+    const root = createRoot((dispose) => ({
+      dispose,
+      store: createSessionStore({
+        open: (target) => {
+          const directory = target.location?.directory ?? ""
+          opened.push(directory)
+
+          return persistedHandle({ store: { directory }, update: () => undefined, init: undefined })
+        },
+        owner: null,
+      }),
+    }))
+
+    const a = root.store.get(view)
+    const read = (handles: readonly Persisted<{ directory: string }>[]) => handles.map((handle) => handle.value?.directory)
+
+    setRouted("b")
+    const b = root.store.get(view)
+    const pending = read([a, b])
+    setLocated(["a", "b"])
+    const known = read([a, b])
+    setRouted("a")
+    const back = read([a, b])
+
+    expect({ pending, known, back, opened }).toEqual({
+      pending: ["/a", undefined],
+      known: ["/a", "/b"],
+      back: ["/a", "/b"],
+      opened: ["/a", "/b"],
+    })
+    root.store.dispose()
+    root.dispose()
+  })
+
   test("a layout write held while the session location is unknown runs once, in order, when it is known", () => {
     const [location, setLocation] = createSignal<{ directory: string } | undefined>()
-    const target = session("server\nses_layout", location)
+    const target = session(() => "server\nses_layout", location)
     const log: string[] = []
     const root = createRoot((dispose) => ({ dispose, writes: createLocatedWrites() }))
 

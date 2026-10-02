@@ -1,6 +1,5 @@
 import {
   batch,
-  createContext,
   createEffect,
   createMemo,
   createSignal,
@@ -9,7 +8,6 @@ import {
   onCleanup,
   runWithOwner,
   untrack,
-  useContext,
   type Accessor,
   type Owner,
 } from "solid-js"
@@ -27,6 +25,7 @@ import {
   Storage,
   Surfaces,
   System,
+  type PanelSidebar,
   type PanelState,
   type ServerRef,
   type SessionRef,
@@ -137,11 +136,9 @@ export function createExtensionServices() {
               persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
             )!
 
-            // A `Persisted` for typed contexts and the older tuple for the rest, as `PersistedStorage` documents.
             return persistedHandle({
               store: pair[0],
               update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
-              ready: pair[3],
               init: pair[3].promise,
             })
           },
@@ -254,6 +251,7 @@ export function createExtensionServices() {
             opened: (session) => requireAttached(current()).layout.side.opened(session),
             toggle: (session) => requireAttached(current()).layout.side.toggle(session),
           },
+          sidebar: { opened: () => requireAttached(current()).layout.sidebar.opened() },
           dock: {
             opened: (session) => requireAttached(current()).layout.dock.opened(session),
             placement: () => requireAttached(current()).layout.dock.placement(),
@@ -295,17 +293,7 @@ export function createExtensionServices() {
 
 export type ExtensionServices = ReturnType<typeof createExtensionServices>
 
-const AttachmentContext = createContext<ReturnType<typeof createExtensionAttachment>>()
-
-export function useExtensionAttachment() {
-  const value = useContext(AttachmentContext)
-
-  if (!value) throw new Error("Extension attachment is unavailable")
-
-  return value
-}
-
-export const ExtensionAttachmentProvider = AttachmentContext.Provider
+export { ExtensionAttachmentProvider, useExtensionAttachment } from "./attachment"
 
 /** Attaches session and layout services from inside the app interface. */
 export function createExtensionAttachment(services: ExtensionServices) {
@@ -587,6 +575,8 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
   // The routed session's side region, which knows the fallback selection the stored state lacks.
   const [region, setRegion] = createSignal<Region>()
+  // The session screen's inner sidebar preference, which its side panels share.
+  const [sidebar, setSidebar] = createSignal<PanelSidebar>()
 
   const opened = createMemo(
     () => Array.from(new Set((region()?.entries() ?? []).flatMap((entry) => entry.tab.file ?? []))),
@@ -713,6 +703,8 @@ export function createExtensionAttachment(services: ExtensionServices) {
         opened: sideOpened,
         toggle: (session) => tabs.setPane(shellTab(session), "side", !sideOpened(session)),
       },
+      // Open is the stored preference's default, which holds until a session screen shows the preference.
+      sidebar: { opened: () => sidebar()?.opened() ?? true },
       dock: {
         opened: dockOpened,
         placement: settings.general.terminalPlacement,
@@ -738,6 +730,14 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
       return () => {
         if (region() === value) setRegion(undefined)
+      }
+    },
+    /** The session screen's inner sidebar preference, which `Layout.sidebar` reads. */
+    sidebar(value: PanelSidebar) {
+      setSidebar(() => value)
+
+      return () => {
+        if (sidebar() === value) setSidebar(undefined)
       }
     },
     /** Workspace files the routed session's side tabs show, in strip order, and the selected one. */

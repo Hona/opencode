@@ -4,43 +4,53 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
-import { App, Dialogs, type Context, type RemoteClient } from "../sdk"
+import { App, Dialogs, type RemoteClient, type SetupContext } from "../sdk"
 import type { Updater } from "./contract"
+import type definition from "./index"
 
 type Client = RemoteClient<typeof Updater.spec>
+
+type Context = SetupContext<typeof definition>
 
 /** Restarts into the staged update. A beta build moving to stable confirms the installer download first. */
 export function install(ctx: Context, client: Client) {
   const download = () =>
-    client.install().catch((error: unknown) => {
+    client.install().catch((cause: unknown) => {
       showToast({
         title: ctx.t("common.requestFailed"),
-        description: error instanceof Error && error.message ? error.message : ctx.t("common.requestFailed"),
+        description: cause instanceof Error && cause.message ? cause.message : ctx.t("common.requestFailed"),
       })
     })
+
   const state = client.state()
+
   if (state?.status !== "download-required") {
     void download()
+
     return
   }
+
   ctx.use(Dialogs).show(() => <DialogStableDownload ctx={ctx} version={state.version} download={download} />)
 }
 
 export async function check(ctx: Context, client: Client) {
   const state = await client.check()
+
   if (state.status === "download-required") {
     install(ctx, client)
+
     return
   }
+
   if (state.status === "up-to-date") {
     showToast({
       variant: "success",
-      // The toast renders the icon under its own owner.
-      icon: (() => <Icon name="circle-check" />) as unknown as JSX.Element,
+      icon: () => <Icon name="circle-check" />,
       title: ctx.t("toast.latest.title"),
       description: ctx.t("toast.latest.description", { version: ctx.use(App).version ?? "" }),
     })
   }
+
   if (state.status === "error") {
     showToast({ title: ctx.t("common.requestFailed"), description: state.message })
   }
@@ -49,6 +59,7 @@ export async function check(ctx: Context, client: Client) {
 function DialogStableDownload(props: { ctx: Context; version: string; download: () => Promise<void> }) {
   const ctx = props.ctx
   const dialog = useDialog()
+
   const download = () => {
     dialog.close()
     void props.download()

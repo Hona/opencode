@@ -1,10 +1,8 @@
-import { batch, createEffect, createMemo, lazy, on, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { Schema, Struct } from "effect"
+import { batch, createMemo, lazy, on, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
-import { Browser } from "../browser/contract"
-import { Changes } from "../review/contract"
 import {
+  createActive,
   ExtensionContext,
   Layout,
   Link,
@@ -15,6 +13,7 @@ import {
   Slot,
   Storage,
   Style,
+  useExtension,
   usePanel,
   type LineRange,
   type PanelTab,
@@ -22,59 +21,64 @@ import {
   type Setup,
   onIdle,
 } from "../sdk"
-import { OpenAppPreferences } from "./apps"
 import { artifactKind } from "@opencode/util/artifact"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import { FileTree } from "./contract"
+import type File from "./index"
 import { FileVisual } from "./label"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
 
 const OPEN = "open"
+
 const GROUP = "browser"
+
 const TABPANEL = "session-side-panel-file-browser-tabpanel"
+
 const HANDOFF_SESSIONS = 40
 
-const TreeState = Schema.Struct({ tab: Schema.Literals(["changes", "all"]) }).mapFields(Struct.map(Schema.mutableKey))
+type Handoff = { sessions: Record<string, Record<string, LineRange | null>> }
 
-const setup: Setup = (ctx) => {
+type StyleLoad = { loaded?: Promise<void> }
+
+const setup: Setup<typeof File> = (ctx) => {
   const sessions = ctx.use(Sessions)
   const layout = ctx.use(Layout)
   const storage = ctx.use(Storage)
   const native = ctx.use(Native)
-  const changes = ctx.use(Changes)
-  const browser = ctx.use(Browser)
-
-  const [tree, setTree] = storage.store("tree", {
-    schema: TreeState,
-    initial: { tab: "changes" },
-    from: { key: "layout", pick: (value: { fileTree?: { tab?: unknown } } | null) => ({ tab: value?.fileTree?.tab }) },
-  })
-  const [handoff, setHandoff] = storage.memory("handoff", {
-    initial: { sessions: {} as Record<string, Record<string, LineRange | null>> },
-  })
-  const preference = native
-    ? storage.store("app", { schema: OpenAppPreferences, initial: { app: "finder" }, from: "open.app" })
-    : undefined
+  // The extension's context as other extensions' views receive it.
+  const context = useExtension()
+  const tree = ctx.stores.tree
+  const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
+  const preference = native ? ctx.stores.app : undefined
 
   // Tab objects per routed view, reused so strip updates never rebuild a trigger. `close` prunes them.
   const tabs = new WeakMap<SessionView, Map<string, PanelTab>>()
+
   const tabsOf = (session: SessionView) => {
     const existing = tabs.get(session)
+
     if (existing) return existing
+
     const created = new Map<string, PanelTab>()
+
     tabs.set(session, created)
+
     return created
   }
+
   // The file tab each view last selected, for reloads the side panel does not see.
   const focused = new WeakMap<SessionView, string>()
 
   const key = (session: SessionView, path: string) => `file:${fileTabId(session.file, path)}`
+
   const active = (session: SessionView, id: string) => {
     const state = layout.state(`file:${id}`, session)
+
     return state === "active" || state === "visible"
   }
+
   const open = (
     session: SessionView,
     path: string,
@@ -85,21 +89,21 @@ const setup: Setup = (ctx) => {
   }
 
   const shared: FileShared = {
-    changes,
-    browser,
+    changes: ctx.uses.changes,
+    browser: ctx.uses.browser,
     tree: {
-      tab: () => tree.tab,
+      tab: () => tree.value.tab,
       setTab: (tab) =>
-        setTree((draft) => {
+        tree.update((draft) => {
           draft.tab = tab
         }),
     },
     filter: {},
     installed: new Map(),
     app: preference && {
-      current: () => preference[0].app,
+      current: () => preference.value.app,
       set: (app) =>
-        preference[1]((draft) => {
+        preference.update((draft) => {
           draft.app = app
         }),
     },
@@ -110,32 +114,40 @@ const setup: Setup = (ctx) => {
           delete draft.sessions[session]
           draft.sessions[session] = files
           const keys = Object.keys(draft.sessions)
+
           keys.slice(0, Math.max(0, keys.length - HANDOFF_SESSIONS)).forEach((item) => delete draft.sessions[item])
         }),
     },
     active,
     open,
   }
+
   const Provided = (props: ParentProps) => <FileContext.Provider value={shared}>{props.children}</FileContext.Provider>
 
   // Tab trigger styles render with the strip, before any panel chunk loads.
   ctx.add(Style, tabStyles)
-  const style = { loaded: undefined as Promise<void> | undefined }
+
+  const style: StyleLoad = {}
+
   const styled = <T,>(module: Promise<T>) => {
     style.loaded ??= import("./styles").then((css) => void ctx.add(Style, css.default))
+
     return Promise.all([module, style.loaded]).then(([value]) => value)
   }
+
   const FileBrowser = lazy(() => styled(import("./browser")))
   const MobileFiles = lazy(() => styled(import("./mobile")))
   const Sidebar = lazy(() => styled(import("./sidebar")))
   const Tree = lazy(() => styled(import("./tree-v2")))
   const List = lazy(() => styled(import("./list")))
+
   ctx.cleanup(
     onIdle(() => {
       void FileBrowser.preload()
       void Sidebar.preload()
       void Tree.preload()
       void List.preload()
+
       if (layout.narrow()) void MobileFiles.preload()
     }),
   )
@@ -160,10 +172,12 @@ const setup: Setup = (ctx) => {
   const fileTab = (session: SessionView, id: string): PanelTab => {
     const path = () => fileTabPath(session.file, id)
     const missing = () => session.file.missing(path())
+
     return {
       id,
       get title() {
         const name = getFilename(path())
+
         return missing() ? ctx.t("tab.notFound", { name }) : name
       },
       label: (state) => <FileVisual path={path()} temporary={state.preview} notFound={missing()} />,
@@ -197,13 +211,20 @@ const setup: Setup = (ctx) => {
     },
     list(session, stored) {
       const cache = tabsOf(session)
+
       return stored.flatMap((id) => {
         if (id === OPEN) return [launcher]
+
         if (!isFileTab(id)) return []
+
         const existing = cache.get(id)
+
         if (existing) return [existing]
+
         const created = fileTab(session, id)
+
         cache.set(id, created)
+
         return [created]
       })
     },
@@ -212,6 +233,7 @@ const setup: Setup = (ctx) => {
     },
     render: (tab, session) => {
       const panel = usePanel()
+
       return (
         <Provided>
           <Suspense>
@@ -224,10 +246,12 @@ const setup: Setup = (ctx) => {
     },
     focus(tab, session, change) {
       if (!isFileTab(tab.id)) return
+
       focused.set(session, tab.id)
       void session.file.sync(fileTabPath(session.file, tab.id))
+
       // A restored file tab keeps the tree tab the user left, e.g. Changes across a reload.
-      if (!change.restored && tree.tab === "changes") shared.tree.setTab("all")
+      if (!change.restored && tree.value.tab === "changes") shared.tree.setTab("all")
     },
   })
 
@@ -242,11 +266,15 @@ const setup: Setup = (ctx) => {
     order: 10,
     run() {
       const session = sessions.current()
+
       if (!session) return
+
       layout.open(`file:${OPEN}`, session, { preview: true })
       queueMicrotask(() => {
         const element = shared.filter.element
+
         if (element?.isConnected) return element.focus()
+
         shared.filter.pending = true
       })
     },
@@ -254,6 +282,7 @@ const setup: Setup = (ctx) => {
 
   if (native) {
     const OpenInAppButton = lazy(() => import("./open-in-app"))
+
     ctx.cleanup(onIdle(() => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
@@ -281,7 +310,7 @@ const setup: Setup = (ctx) => {
   // The review panel lists its changed files with the browser's tree; it renders under this extension.
   ctx.provide(FileTree, {
     Tree: (props) => (
-      <ExtensionContext.Provider value={ctx}>
+      <ExtensionContext.Provider value={context}>
         <Provided>
           <Suspense>
             <Tree
@@ -297,7 +326,7 @@ const setup: Setup = (ctx) => {
       </ExtensionContext.Provider>
     ),
     List: (props) => (
-      <ExtensionContext.Provider value={ctx}>
+      <ExtensionContext.Provider value={context}>
         <Provided>
           <Suspense>
             <List
@@ -323,11 +352,16 @@ const setup: Setup = (ctx) => {
     const root = session.file.root.replaceAll("\\", "/").replace(/\/+$/, "")
     // Agents cite locations as path:line or path:line:col; the file is what opens.
     const value = href.replaceAll("\\", "/").replace(/:\d+(?::\d+)?$/, "")
+
     if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return session.file.resolve(value)
+
     const relative = resolveArtifactPath(base ?? "", value)
+
     if (relative !== undefined) return session.file.resolve(relative)
+
     // Climbing past the workspace root: resolve from the referencing folder's absolute location.
     const dir = base ? `${root}/${base.replace(/\/+$/, "")}` : root
+
     return session.file.resolve(resolveArtifactPath(dir, value) ?? value)
   }
 
@@ -337,30 +371,44 @@ const setup: Setup = (ctx) => {
     match: () => true,
     open(link) {
       const session = sessions.current()
+
       if (!session || (link.session && link.session.key !== session.key)) return
+
       // A known workspace file (the palette, a file comment) opens at once with every file listed.
       if (link.exact || link.origin === "file") {
         const path = session.file.resolve(link.href)
+
         if (!path) return
+
         batch(() => {
           open(session, path, { background: link.background })
           shared.tree.setTab("all")
         })
+
         return
       }
+
       const path = resolve(session, link.href, link.base)
+
       if (!path) return
-      const pane = browser()
-      if (artifactKind(path) === "html" && pane?.canOpen(session, path)) {
-        pane.open(session, workspaceFileUrl(session.file.root, path))
+
+      // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
+      const pane = ctx.uses.browser()
+
+      if (artifactKind(path) === "html" && pane.status === "active" && pane.value.canOpen(session, path)) {
+        pane.value.open(session, workspaceFileUrl(session.file.root, path))
+
         return
       }
+
       // Inline paths are guessed from text, so confirm the file exists before a tab appears for it.
       // Always reread: V2 publishes no workspace file change events, so a cached copy can be stale.
       void session.file.sync(path, { force: true }).then(() => {
         if (!session.file.get(path)?.loaded) return
+
         batch(() => {
           layout.open(key(session, path), session, { background: link.background })
+
           // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
           if (layout.narrow() && !layout.side.opened(session)) layout.side.toggle(session)
         })
@@ -369,26 +417,21 @@ const setup: Setup = (ctx) => {
   })
 
   // Review reveals a change: the tree shows the changed files.
-  createEffect(() => {
-    const service = changes()
-    if (!service) return
-    onCleanup(service.onReveal(() => shared.tree.setTab("changes")))
-  })
+  createActive(ctx.uses.changes, (changes) => onCleanup(changes.onReveal(() => shared.tree.setTab("changes"))))
 
   // A new workspace directory drops loaded files; reload the selected file tab.
   const root = createMemo<string | undefined>((previous) => sessions.current()?.file.root ?? previous)
-  createEffect(
-    on(
-      root,
-      () => {
-        const session = sessions.current()
-        if (!session) return
-        const id = focused.get(session)
-        if (id && active(session, id)) void session.file.sync(fileTabPath(session.file, id), { force: true })
-      },
-      { defer: true },
-    ),
-  )
+  const moved = createMemo(on(root, () => ({}), { defer: true }))
+
+  createActive(moved, () => {
+    const session = sessions.current()
+
+    if (!session) return
+
+    const id = focused.get(session)
+
+    if (id && active(session, id)) void session.file.sync(fileTabPath(session.file, id), { force: true })
+  })
 }
 
 export default setup

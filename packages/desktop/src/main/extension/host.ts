@@ -11,6 +11,7 @@ import {
   type Caller,
   type Catalog,
   type Cleanup,
+  type Definition,
   type Host,
   type MainContext,
   type MainServer,
@@ -24,7 +25,7 @@ import {
   type RemoteImpl,
   type RemoteSpec,
   type Service,
-  type Setup,
+  type MainSetup,
 } from "@opencode/gui-extensions/sdk/main"
 import { Exit, Match, Predicate, Schema } from "effect"
 import type { Accessor } from "solid-js"
@@ -60,7 +61,7 @@ import { createSurfaces } from "./surfaces"
 
 export type ExtensionHost = ReturnType<typeof createHost>
 
-type Loaded = { readonly setup: Setup; readonly i18n?: Catalog }
+type Loaded = { readonly setup: MainSetup; readonly i18n?: Catalog }
 
 /** A remote method with its spec erased: remotes of every spec share one table, and `call` runs the spec's codecs. */
 type Method = RemoteImpl<RemoteSpec>[string]
@@ -111,11 +112,12 @@ export function createHost(input: {
     data: Data,
   ) => void
 }) {
-  const local = builtins.filter((definition) => !definition.os || definition.os.includes(os))
+  const definitions: readonly Definition[] = builtins
+  const local = definitions.filter((definition) => !definition.os || definition.os.includes(os))
 
   const manager = createManager(
     input.db,
-    (id) => id.startsWith("opencode") || builtins.some((definition) => definition.id === id),
+    (id) => id.startsWith("opencode") || definitions.some((definition) => definition.id === id),
   )
 
   const surfaces = createSurfaces()

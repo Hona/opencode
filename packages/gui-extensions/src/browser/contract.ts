@@ -11,5 +11,5 @@ export interface Browser {
   openFile(session: SessionRef, path: string): void
 }
 
-/** Provided by the browser extension on desktop. Undefined on web or while the extension is off. */
-export const Browser = Service.define<Browser>("browser")
+/** Provided by the browser extension on desktop. Inactive on web or while the extension is off. */
+export const Browser = Service.define<Browser, "browser">("browser")

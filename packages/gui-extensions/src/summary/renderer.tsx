@@ -1,35 +1,24 @@
-import { createEffect, lazy, onCleanup, Show, Suspense } from "solid-js"
+import { createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Schema, Struct } from "effect"
-import { Changes } from "../review/contract"
-import { onIdle, Panel, Sessions, Slot, Storage, Style, useDrawer, usePanel, type Setup } from "../sdk"
+import { createActive, onIdle, Panel, Sessions, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
+import type Summary from "./index"
 import type { Disclosure } from "./panel"
 import { SummaryHeader } from "./popover"
 
-const Prefs = Schema.Struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
-
-const setup: Setup = (ctx) => {
+const setup: Setup<typeof Summary> = (ctx) => {
   const sessions = ctx.use(Sessions)
-  const changes = ctx.use(Changes)
-  const [prefs, setPrefs] = ctx.use(Storage).store("prefs", {
-    schema: Prefs,
-    initial: { projectExpanded: true, serverExpanded: true },
-    from: {
-      key: "settings.v3",
-      pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary,
-    },
-  })
+  const changes = ctx.uses.changes
+  const prefs = ctx.stores.prefs
+
   const disclosure: Disclosure = {
-    project: () => prefs.projectExpanded,
-    server: () => prefs.serverExpanded,
+    project: () => prefs.value.projectExpanded,
+    server: () => prefs.value.serverExpanded,
     setProject: (expanded) =>
-      setPrefs((draft) => {
+      prefs.update((draft) => {
         draft.projectExpanded = expanded
       }),
     setServer: (expanded) =>
-      setPrefs((draft) => {
+      prefs.update((draft) => {
         draft.serverExpanded = expanded
       }),
   }
@@ -37,9 +26,11 @@ const setup: Setup = (ctx) => {
   const SummaryPanel = lazy(() =>
     Promise.all([import("./panel"), import("./summary.css?inline")]).then(([panel, css]) => {
       ctx.add(Style, css.default)
+
       return panel
     }),
   )
+
   // Compile the panel while the app idles, so the first open renders at once.
   ctx.cleanup(onIdle(() => void SummaryPanel.preload()))
 
@@ -67,11 +58,27 @@ const setup: Setup = (ctx) => {
       const frame = usePanel()
       const drawer = useDrawer()
       const [store, setStore] = createStore({ dismissed: false })
-      createEffect(() => {
-        const service = changes()
-        if (!service || !frame.visible()) return
-        onCleanup(service.watch(session, "details"))
+
+      // Review is optional: the changes row offers it only while the review extension is active.
+      const review = createMemo(() => {
+        const live = changes()
+
+        if (live.status !== "active") return
+
+        return {
+          details: () => live.value.details(session),
+          open: () => {
+            drawer?.close()
+            live.value.open(session)
+          },
+        }
       })
+
+      // The changes row loads the session directory's changes only while the drawer shows.
+      createActive(changes, (service) =>
+        createActive(frame.visible, () => onCleanup(service.watch(session, "details"))),
+      )
+
       return (
         <Show when={session.project}>
           {(project) => (
@@ -81,17 +88,10 @@ const setup: Setup = (ctx) => {
                 shown={frame.visible()}
                 session={session}
                 project={project()}
-                diffs={project().vcs ? changes()?.details(session) : []}
+                diffs={project().vcs ? review()?.details() : []}
                 moveDismissed={store.dismissed}
                 onMoveDismiss={() => setStore("dismissed", true)}
-                onReview={
-                  changes()
-                    ? () => {
-                        drawer?.close()
-                        changes()?.open(session)
-                      }
-                    : undefined
-                }
+                onReview={review()?.open}
                 disclosure={disclosure}
               />
             </Suspense>
@@ -100,9 +100,12 @@ const setup: Setup = (ctx) => {
       )
     },
   }
+
   ctx.add(Panel, () => {
     const session = sessions.current()
+
     if (!session?.project || session.server.data.session.get(session.id)?.parentID) return
+
     return panel
   })
 }

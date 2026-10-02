@@ -1,8 +1,22 @@
-import { Extension } from "../sdk"
+import { Schema, Struct } from "effect"
+import { Changes } from "../review/contract"
+import { Extension, Store } from "../sdk"
 import en from "./i18n/en"
+
+const Prefs = Schema.Struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }).mapFields(
+  Struct.map(Schema.mutableKey),
+)
 
 export default Extension.define({
   id: "summary",
+  uses: { changes: Changes },
+  stores: {
+    prefs: Store.app(
+      Prefs,
+      { projectExpanded: true, serverExpanded: true },
+      { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },
+    ),
+  },
   i18n: {
     en,
     am: () => import("./i18n/am"),

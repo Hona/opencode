@@ -1,4 +1,4 @@
-import type { Definition, Setup } from "./sdk"
+import { Extension, type Definition } from "./sdk"
 import usage from "./usage"
 import usageRenderer from "./usage/renderer"
 import btw from "./btw"
@@ -26,10 +26,14 @@ import wslRenderer from "./wsl/renderer"
 
 // The window renders once every built-in is active, so the small renderer entries load with the app, like the
 // features they replaced. Heavy UI stays behind `lazy()` inside them.
-const eager = (setup: Setup) => () => Promise.resolve({ default: setup })
+const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["default"]) => () =>
+  Promise.resolve({ default: setup })
 
-/** Built-in extensions with their renderer entries. The only place host builds name extensions. */
-export const builtins: readonly Definition[] = [
+/**
+ * Built-in extensions with their renderer entries. The only place host builds name extensions. `builtins.typecheck.ts`
+ * checks this composition against the main one.
+ */
+export const builtins = Extension.compose(
   { ...usage, renderer: eager(usageRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
@@ -42,4 +46,4 @@ export const builtins: readonly Definition[] = [
   { ...updater, renderer: eager(updaterRenderer) },
   { ...ssh, renderer: eager(sshRenderer) },
   { ...wsl, renderer: eager(wslRenderer) },
-]
+)

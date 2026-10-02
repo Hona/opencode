@@ -9,25 +9,19 @@ import type {
   Live,
   Persisted,
   Remote,
-  RemoteClient,
-  RemoteSpec,
+  RemoteRef,
   Service,
   StoreDeclaration,
   TokenValue,
 } from "./core"
-import type { PersistedStorage, SessionRef, Storage } from "./services"
+import type { SessionRef } from "./services"
 
-/** What every renderer entry gets. */
+/**
+ * What every renderer entry gets. Contracts other extensions provide are read through `Setup<typeof Definition>`, from
+ * the tokens the definition declares.
+ */
 export interface Context extends BaseContext {
   use<T>(token: Host<T>): T
-  /**
-   * @deprecated Declare the token in `uses` and read `ctx.uses` (or `use` it from `Setup<typeof Definition>`), which
-   * follows the provider through `Live`: one object per transition, so every action can answer while the provider is
-   * pending or inactive. An undeclared token gives this older accessor, undefined while there is no provider.
-   */
-  use<T>(token: Service<T>): Accessor<T | undefined>
-  /** @deprecated See `use(Service)`. */
-  use<S extends RemoteSpec>(token: Remote<S>): Accessor<RemoteClient<S> | undefined>
 }
 
 type Handle<S> =
@@ -41,13 +35,17 @@ type Provides<D> = Declared<D, "provides">[keyof Declared<D, "provides">]
 
 type Uses<D> = Declared<D, "uses">[keyof Declared<D, "uses">]
 
+/** The full token of a declared reference (`Remote.ref`). */
+type Full<T> = T extends RemoteRef<infer S> ? Remote<S> : never
+
 /** The context `Setup<typeof Definition>` receives: the host's members, and only the contracts the definition declares. */
 export interface SetupContext<D> extends Omit<Context, "use" | "provide"> {
-  /** `Storage.store` returns a `Persisted` here; see `PersistedStorage`. */
-  use(token: Host<Storage>): PersistedStorage
   use<T>(token: Host<T>): T
-  /** The accessor `uses` holds for a declared token: the provider followed through `Live`. */
-  use<T extends Uses<D>>(token: T): Accessor<Live<TokenValue<T>>>
+  /**
+   * The accessor `uses` holds for a declared token: the provider followed through `Live`. The full token of a declared
+   * reference also resolves that reference.
+   */
+  use<T extends Uses<D> | Full<Uses<D>>>(token: T): Accessor<Live<TokenValue<T>>>
   /** Provides a service the definition declares in `provides`. */
   provide<T extends Extract<Provides<D>, Service<unknown>>>(token: T, impl: TokenValue<T>): Cleanup
   /** Each optional contract, followed live. */
@@ -60,10 +58,5 @@ export interface SetupContext<D> extends Omit<Context, "use" | "provide"> {
 
 type Result = void | Cleanup | Promise<void | Cleanup>
 
-/**
- * A renderer entry. `Setup<typeof Definition>` types the context from the definition's declarations.
- * A bare `Setup` takes the older untyped context; new entries should pass their definition.
- */
-export type Setup<D extends Definition = never> = [D] extends [never]
-  ? (ctx: Context) => Result
-  : (ctx: SetupContext<D>) => Result
+/** A renderer entry: `Setup<typeof Definition>` types the context from the definition's declarations. */
+export type Setup<D extends Definition> = (ctx: SetupContext<D>) => Result

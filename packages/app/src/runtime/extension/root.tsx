@@ -1,4 +1,5 @@
 import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import type { Definition } from "@opencode/gui-extensions/sdk"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
 import { createMenubar, ExtensionMenubarProvider } from "./menubar"
@@ -46,8 +47,12 @@ export function ExtensionRoot(props: ParentProps) {
   })
 
   const os = platform.platform === "desktop" ? platform.os : undefined
+
   // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
-  const definitions = builtins.filter((definition) => !definition.os || (!!os && definition.os.includes(os)))
+  const definitions = builtins.filter(
+    (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
+  )
+
   const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
 
   return (

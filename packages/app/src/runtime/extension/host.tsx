@@ -6,6 +6,7 @@ import {
   createRenderEffect,
   createResource,
   createRoot,
+  createSignal,
   ErrorBoundary,
   getOwner,
   on,
@@ -43,6 +44,7 @@ import {
   type Point,
   type Remote,
   type RemoteClient,
+  type RemoteRef,
   type RemoteSpec,
   type Service,
   type SessionRef,
@@ -56,7 +58,7 @@ type Entry = { key: string; point: string; extension: string; value: Accessor<un
 
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
 
-/** The context the host builds: every `Setup<D>` of the definition receives it, and so does the untyped form. */
+/** The context the host builds: every `Setup<D>` of the definition receives it, and contributions read it as `Context`. */
 type InstanceContext = SetupContext<Definition> & Context
 
 type Instance = {
@@ -191,6 +193,18 @@ function createHost(input: HostInput) {
     return provided.get(token.id)?.live ?? absent(token.id, generations.get(token.id) ?? 0, false)
   }
 
+  // Full remote tokens by id. A reference (`Remote.ref`) carries no spec and resolves through the full token once code
+  // in this window uses it; until then it is absent, as pending as its provider allows.
+  const [known, setKnown] = createSignal<ReadonlyMap<string, Remote>>(new Map())
+
+  const learn = (token: Token) => {
+    if (token.kind !== "remote" || !token.spec || untrack(known).has(token.id)) return
+
+    setKnown((map) => new Map(map).set(token.id, token))
+  }
+
+  const resolve = (token: Remote | RemoteRef) => (token.spec ? token : known().get(token.id))
+
   // One object per remote generation, so reading a provider allocates nothing while it is unchanged.
   const actives = new Map<string, Provider & { readonly status: "active" }>()
 
@@ -199,9 +213,11 @@ function createHost(input: HostInput) {
 
     if (!input.remote) return inactive.disabled
 
-    if (!input.remote(token)) return absent(token.id, input.generation?.(token) ?? 0, true)
+    const full = resolve(token)
 
-    const generation = input.generation?.(token) ?? 1
+    if (!full || !input.remote(full)) return absent(token.id, full ? (input.generation?.(full) ?? 0) : 0, true)
+
+    const generation = input.generation?.(full) ?? 1
     const cached = actives.get(token.id)
 
     if (cached?.generation === generation) return cached
@@ -391,7 +407,7 @@ function createHost(input: HostInput) {
           })
         }
 
-        // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition, and the untyped one.
+        // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
         const setup = module.default as (ctx: InstanceContext) => void | Cleanup | Promise<void | Cleanup>
 
         const start = () =>
@@ -481,14 +497,15 @@ function createHost(input: HostInput) {
     const clients = new Map<string, { client: RemoteClient<RemoteSpec>; live: Live<unknown> }>()
 
     // One accessor per token, and one Live object per transition, so readers re-run only when the provider changes.
-    const remoteLive = (token: Remote): Live<unknown> => {
+    const remoteLive = (token: Remote | RemoteRef): Live<unknown> => {
       if (!input.remote) return inactive.disabled
 
-      const client = input.remote(token)
+      const full = resolve(token)
+      const client = full && input.remote(full)
 
-      if (!client) return absent(token.id, input.generation?.(token) ?? 0, true)
+      if (!full || !client) return absent(token.id, full ? (input.generation?.(full) ?? 0) : 0, true)
 
-      const generation = input.generation?.(token) ?? 1
+      const generation = input.generation?.(full) ?? 1
       const cached = clients.get(token.id)
 
       if (cached?.client === client && cached.live.status === "active" && cached.live.generation === generation)
@@ -525,25 +542,8 @@ function createHost(input: HostInput) {
       return current.status === "active" ? current.value : undefined
     }
 
-    // Declared tokens are followed through Live; an undeclared one keeps the older accessor, undefined while absent.
-    const declared = new Set(
-      [...Object.values(definition.uses ?? {}), ...Object.values(definition.requires ?? {})].map((token) => token.id),
-    )
-
-    const legacies = new Map<string, Accessor<unknown>>()
-
-    const legacyOf = (token: Token) => {
-      const existing = legacies.get(token.id)
-
-      if (existing) return existing
-
-      const read = liveOf(token)
-      const legacy = () => value(read)
-
-      legacies.set(token.id, legacy)
-
-      return legacy
-    }
+    Object.values(definition.uses ?? {}).forEach(learn)
+    Object.values(definition.requires ?? {}).forEach(learn)
 
     const stores: Stores = {}
 
@@ -596,7 +596,12 @@ function createHost(input: HostInput) {
         })
       },
       use(token: Host<unknown> | Token) {
-        if (token.kind !== "host") return declared.has(token.id) ? liveOf(token) : legacyOf(token)
+        if (token.kind !== "host") {
+          // A full token resolves the references to it, here and in other extensions.
+          learn(token)
+
+          return liveOf(token)
+        }
 
         if (created.has(token.id)) return created.get(token.id)
 

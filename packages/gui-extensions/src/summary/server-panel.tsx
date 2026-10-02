@@ -7,9 +7,9 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { getDirectory } from "@opencode/util/path"
 import { useMutation } from "@tanstack/solid-query"
 import {
-  createEffect,
   createMemo,
   createResource,
+  createSignal,
   createUniqueId,
   For,
   Index,
@@ -19,7 +19,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { App, Native, System, useExtension, type SessionView } from "../sdk"
+import { App, createActive, Native, System, useExtension, type SessionView } from "../sdk"
 import { configuredLsps } from "./configured-lsp"
 
 const services = [
@@ -54,10 +54,15 @@ export function SessionServerPanel(props: {
   const contentID = createUniqueId()
   // With one server the card is generic; with several it names the session's server.
   const name = () => (app.servers().length < 2 ? ctx.t("server") : props.session.server.name)
-  const [store, setStore] = createStore<{ submenu?: Service }>({})
-  createEffect(
-    on([() => props.directory, () => props.shown, () => props.expanded], () => setStore("submenu", undefined)),
-  )
+  // A new scope whenever the directory, the summary's visibility or the disclosure changes closes the open submenu.
+  const scope = createMemo(on([() => props.directory, () => props.shown, () => props.expanded], () => ({})))
+  const [submenu, setSubmenu] = createSignal<{ readonly scope: object; readonly service: Service }>()
+
+  const open = () => {
+    const current = submenu()
+
+    return current?.scope === scope() ? current.service : undefined
+  }
 
   return (
     <section class="session-summary-card" data-section="server">
@@ -84,9 +89,9 @@ export function SessionServerPanel(props: {
                   service={service}
                   directory={directory}
                   shown={props.shown}
-                  open={store.submenu === service.type}
+                  open={open() === service.type}
                   mobile={props.mobile}
-                  onOpenChange={(open) => setStore("submenu", open ? service.type : undefined)}
+                  onOpenChange={(value) => setSubmenu(value ? { scope: scope(), service: service.type } : undefined)}
                 />
               )}
             </For>
@@ -99,30 +104,38 @@ export function SessionServerPanel(props: {
 
 function ServiceMenu(props: ServiceMenuProps) {
   if (props.service.type === "mcp") return <McpMenu {...props} />
+
   if (props.service.type === "lsp") return <LspMenu {...props} />
+
   return <ServiceCatalog {...props} />
 }
 
 function LspMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
   const data = props.session.server.data
+
   const [load, { refetch }] = createResource(
     () => props.shown && props.directory,
     (directory) => {
       data.location.config.invalidate({ directory })
+
       return data.location.config.sync({ directory })
     },
   )
+
   const names = createMemo(() => configuredLsps(data.location.config.list({ directory: props.directory }) ?? []))
-  createEffect(() => {
-    const directory = props.directory
-    onCleanup(
-      data.on("config.updated", (event) => {
-        if (event.location?.directory !== directory) return
-        void refetch()
-      }),
-    )
-  })
+
+  createActive(
+    () => props.directory,
+    (directory) =>
+      onCleanup(
+        data.on("config.updated", (event) => {
+          if (event.location?.directory !== directory) return
+          void refetch()
+        }),
+      ),
+  )
+
   return (
     <ServicePopover
       {...props}
@@ -160,36 +173,47 @@ function McpMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
   const system = ctx.use(System)
   const data = props.session.server.data
+
   const toggle = useMutation(() => ({
     mutationFn: async (input: { name: string; enabled: boolean }) => {
       const client = props.session.server.client
       const ref = { directory: props.directory }
       const server = (await client.mcp.list({ location: ref })).data.find((item) => item.name === input.name)
+
       if (!server) return
+
       if (!input.enabled) {
         await client.mcp.disconnect({ server: input.name, location: ref })
       }
+
       if (input.enabled && server.status.status !== "needs_auth") {
         await client.mcp.connect({ server: input.name, location: ref })
       }
+
       data.location.mcp.server.invalidate(ref)
       await data.location.mcp.server.sync(ref)
       const current = data.location.mcp.server.list(ref)?.find((item) => item.name === input.name)
+
       if (input.enabled && current?.status.status === "needs_auth" && current.integrationID) {
         const integration = await client.integration.get({ integrationID: current.integrationID, location: ref })
         const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.form?.length)
+
         if (!method || method.type !== "oauth") throw new Error(ctx.t("mcp.interactiveAuth", { name: input.name }))
+
         const attempt = await client.integration.oauth.connect({
           integrationID: current.integrationID,
           methodID: method.id,
           location: ref,
         })
+
         system.open(attempt.data.url)
       }
+
       data.location.mcp.resource.invalidate(ref)
       await data.location.mcp.resource.sync(ref)
       // A successful HTTP response can still leave the MCP connection in a failed state.
       const status = current?.status
+
       if (status?.status === "failed") throw new Error(`${input.name}: ${status.error}`)
     },
     onError: (error) =>
@@ -199,6 +223,7 @@ function McpMenu(props: ServiceMenuProps) {
         description: error instanceof Error ? error.message : String(error),
       }),
   }))
+
   const [load, { refetch }] = createResource(
     () => props.shown && props.directory,
     async (directory) => {
@@ -206,6 +231,7 @@ function McpMenu(props: ServiceMenuProps) {
       await data.location.mcp.server.sync({ directory })
     },
   )
+
   const servers = createMemo(() =>
     (data.location.mcp.server.list({ directory: props.directory }) ?? []).toSorted((a, b) =>
       a.name.localeCompare(b.name),
@@ -232,21 +258,30 @@ function McpMenu(props: ServiceMenuProps) {
           {(server) => {
             const enabled = () => server().status.status !== "disabled"
             const pending = () => toggle.isPending || server().status.status === "pending"
+
             const error = () => {
               const status = server().status
+
               return status.status === "failed" ? status.error : undefined
             }
+
             const label = () => {
               const status = server().status.status
+
               if (status === "failed") return ctx.t("failed")
+
               if (status === "pending") return ctx.t("connecting")
+
               if (status === "needs_auth") return ctx.t("needsAuth")
+
               return undefined
             }
+
             const change = (value: boolean) => {
               if (pending()) return
               toggle.mutate({ name: server().name, enabled: value })
             }
+
             return (
               <Switch
                 class="session-mcp-row [&_[data-slot=switch-description]]:sr-only"
@@ -262,11 +297,14 @@ function McpMenu(props: ServiceMenuProps) {
                     event.target.closest('[data-slot="switch-control"], [data-slot="switch-input"]')
                   )
                     return
+
                   // Outside the switch itself, a row that requires sign-in starts sign-in instead of toggling.
                   if (server().status.status === "needs_auth") {
                     event.preventDefault()
+
                     return change(true)
                   }
+
                   if (event.target === event.currentTarget) change(!enabled())
                 }}
                 title={error() ?? server().name}
@@ -297,11 +335,13 @@ function McpMenu(props: ServiceMenuProps) {
 function ServiceCatalog(props: ServiceMenuProps) {
   const ctx = useExtension()
   const data = props.session.server.data
+
   const [items, { refetch }] = createResource(
     () => props.shown && props.directory,
     async (directory) => {
       if (props.service.type === "plugins") {
         const result = await props.session.server.client.plugin.list({ location: { directory } })
+
         return result.data
           .filter((plugin) => plugin.source.type !== "builtin")
           .map((plugin) => ({
@@ -310,12 +350,16 @@ function ServiceCatalog(props: ServiceMenuProps) {
             error: plugin.state.status === "failed" ? plugin.state.error : undefined,
           }))
       }
+
       data.location.skill.invalidate({ directory })
       await data.location.skill.sync({ directory })
+
       return undefined
     },
   )
+
   const loaded = () => items.state === "ready" || items.state === "refreshing"
+
   const list = createMemo(() => {
     const entries =
       props.service.type === "plugins"
@@ -327,17 +371,21 @@ function ServiceCatalog(props: ServiceMenuProps) {
             status: "active",
             error: undefined,
           }))
+
     return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
-  createEffect(() => {
-    const directory = props.directory
-    onCleanup(
-      data.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
-        if (event.location?.directory !== directory) return
-        void refetch()
-      }),
-    )
-  })
+
+  createActive(
+    () => props.directory,
+    (directory) =>
+      onCleanup(
+        data.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
+          if (event.location?.directory !== directory) return
+          void refetch()
+        }),
+      ),
+  )
+
   return (
     <ServicePopover
       {...props}
@@ -392,20 +440,23 @@ function ServicePopover(
     ready: boolean
     empty: boolean
     error: unknown
-    retry: () => unknown
+    retry: () => void
     children: JSX.Element
   },
 ) {
   const ctx = useExtension()
   const app = ctx.use(App)
+
   const placement = createMemo(() =>
     props.mobile ? "top-end" : app.direction() === "rtl" ? "right-start" : "left-start",
   )
+
   return (
     <Popover
       open={props.open}
       onOpenChange={(open) => {
         props.onOpenChange(open)
+
         if (open && !props.loading) void props.retry()
       }}
       placement={placement()}
@@ -461,11 +512,11 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
   const local = () => props.session.server.local
   const [store, setStore] = createStore({ opening: false, copied: false })
   const label = () => ctx.t(local() ? "configure" : "copyConfigPath")
-  createEffect(() => {
-    if (!store.copied) return
-    const timeout = setTimeout(() => setStore("copied", false), 2000)
-    onCleanup(() => clearTimeout(timeout))
-  })
+  // Clears the copied mark two seconds after the latest copy.
+  let reset: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => clearTimeout(reset))
+
   const activate = async () => {
     if (store.opening || (local() && !native)) return
     setStore({ opening: true, copied: false })
@@ -476,18 +527,24 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
         const documents = entries
           .filter((entry) => entry.type === "document")
           .filter((entry) => entry.path !== undefined && /\.jsonc?$/.test(entry.path))
+
         const path =
           documents.findLast((entry) => entry.info[props.service] !== undefined)?.path ?? documents.at(-1)?.path
+
         if (!local()) {
           if (!path) throw new Error(ctx.t("configFileMissing"))
           await system.copy(path)
           setStore("copied", true)
+          clearTimeout(reset)
+          reset = setTimeout(() => setStore("copied", false), 2000)
+
           return
         }
+
         if (path && (await native?.reveal(path))) return
         await native?.launch(path ? getDirectory(path) : directory)
       })
-      .catch((error: unknown) =>
+      .catch((error) =>
         showToast({
           variant: "error",
           title: ctx.t("common.requestFailed"),
@@ -496,6 +553,7 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
       )
       .finally(() => setStore("opening", false))
   }
+
   return (
     <>
       <span class="session-service-config-separator" role="separator" />
@@ -553,7 +611,10 @@ function ServiceEmpty(props: { session: SessionView; title: string; directory: s
 
 function pluginLabel(plugin: PluginInfo) {
   if (plugin.id) return plugin.id
+
   if (plugin.source.type === "package") return plugin.source.target
+
   if (plugin.source.type === "local") return plugin.source.path
+
   return plugin.source.type
 }

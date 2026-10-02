@@ -1,17 +1,11 @@
 import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
 import type { Schema } from "effect"
-import { Host, Point, type Cleanup, type Context } from "./core"
+import { Host, Point, type Cleanup } from "./core"
 import type { Scope } from "./scope"
 
 export * from "./core"
 
 export * from "./scope"
-
-/** The setup context in the main process. */
-export interface MainContext extends Context {
-  /** The instance's lifetime: `signal` is its signal and `cleanup` adds its finalizers. */
-  readonly scope: Scope
-}
 
 export interface Windows {
   get(id: number): BrowserWindow | undefined

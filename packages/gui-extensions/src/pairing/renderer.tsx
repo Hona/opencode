@@ -1,10 +1,9 @@
 import { lazy, Suspense } from "solid-js"
 import { onIdle, Command, Layout, Native, Setting, type Setup } from "../sdk"
-import { Pairing } from "./contract"
+import type definition from "./index"
 
-const setup: Setup = (ctx) => {
+const setup: Setup<typeof definition> = (ctx) => {
   if (!ctx.use(Native)) return
-  const pairing = ctx.use(Pairing)
   const layout = ctx.use(Layout)
   const Page = lazy(() => import("./page"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
@@ -30,7 +29,7 @@ const setup: Setup = (ctx) => {
     },
     render: () => (
       <Suspense>
-        <Page pairing={pairing} />
+        <Page pairing={ctx.uses.pairing} />
       </Suspense>
     ),
   })

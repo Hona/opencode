@@ -1,8 +1,16 @@
-import { Extension } from "../sdk"
+import { Extension, Remote } from "../sdk"
+import { Browser } from "./contract"
 import en from "./i18n/en"
+import type { BrowserPane } from "./remote"
+
+// The pane's remote, which the main entry provides and the renderer's model uses once a session opens. A reference,
+// so its protocol schemas load with the model instead of at startup.
+const Pane = Remote.ref<typeof BrowserPane>("browser.pane")
 
 export default Extension.define({
   id: "browser",
+  provides: { browser: Browser, pane: Pane },
+  uses: { pane: Pane },
   i18n: {
     en,
     am: () => import("./i18n/am"),

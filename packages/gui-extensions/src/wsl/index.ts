@@ -1,9 +1,12 @@
 import { Extension } from "../sdk"
+import { Wsl } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
   id: "wsl",
   os: ["windows"],
+  provides: { wsl: Wsl },
+  uses: { wsl: Wsl },
   i18n: {
     en,
     am: () => import("./i18n/am"),

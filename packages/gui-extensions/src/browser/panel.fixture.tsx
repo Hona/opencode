@@ -47,6 +47,26 @@ type Host = {
   useLanguage(): { t(key: string): string }
 }
 
+type PaneFixtureState = {
+  session: string
+  mounted: boolean
+  visible: boolean
+  url: string | undefined
+  loading: boolean
+  generation: number
+  delayNavigation: boolean
+  pendingURL: string | undefined
+  loadErrors: Record<string, string | undefined>
+  error: string | undefined
+  layouts: Record<string, BridgeLayout | undefined>
+  covered: boolean
+  captures: number
+  holdCapture: boolean
+  picker: Record<string, boolean | undefined>
+  highlights: string[]
+  comments: ComposerNote[]
+}
+
 // Component-test fixture: the real pane on the real host surface, with the desktop faked at its two
 // boundaries: the model's main-process pane (tab state, picker events) and the host bridge that shows native views.
 export function mountBrowserPane(input: Host) {
@@ -54,31 +74,36 @@ export function mountBrowserPane(input: Host) {
   host.dataset.testid = "browser-pane-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+
   function Fixture() {
     const language = input.useLanguage()
-    const [store, setStore] = createStore({
+    const messages = new Map(Object.entries(browserEn))
+
+    const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
       mounted: true,
       visible: true,
-      url: undefined as string | undefined,
+      url: undefined,
       loading: false,
       generation: 0,
       delayNavigation: false,
-      pendingURL: undefined as string | undefined,
-      loadErrors: {} as Record<string, string | undefined>,
-      error: undefined as string | undefined,
-      layouts: {} as Record<string, BridgeLayout | undefined>,
+      pendingURL: undefined,
+      loadErrors: {},
+      error: undefined,
+      layouts: {},
       covered: false,
       captures: 0,
       holdCapture: false,
-      picker: {} as Record<string, boolean | undefined>,
-      highlights: [] as string[],
-      comments: [] as ComposerNote[],
+      picker: {},
+      highlights: [],
+      comments: [],
     })
+
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
     const held: (() => void)[] = []
     const inspectors = new Set<(event: InspectEvent) => void>()
     const emitInspect = (event: InspectEvent) => inspectors.forEach((listener) => listener(event))
+
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
       title: name,
@@ -88,32 +113,48 @@ export function mountBrowserPane(input: Host) {
       canGoForward: false,
       generation: 0,
     }))
+
     const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
-    const bridge = {
-      surface: (id: string, layout?: BridgeLayout) => setStore("layouts", id, layout),
+
+    const bridge: Pick<Bridge, "surface" | "capture"> = {
+      surface: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
         setStore("captures", (count) => count + 1)
+
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
         const canvas = new OffscreenCanvas(4, 4)
         const paint = canvas.getContext("2d")
+
         if (paint) {
           paint.fillStyle = "#3b82f6"
           paint.fillRect(0, 0, 4, 4)
         }
+
         return new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg" })).arrayBuffer())
       },
     }
-    const surfaces = input.createSurfaces({ bridge: bridge as unknown as Bridge, zoom: () => 1, dialog: () => false })
-    const hosts: Record<string, unknown> = {
-      [App.id]: { keybind: () => [], keys: (bind: string) => bind.split("+") },
-      [Native.id]: { zoom: () => 1 },
-      [Surfaces.id]: surfaces,
-    }
-    const extension = {
+
+    // SAFETY: the host surface calls only `surface` and `capture` on its bridge (`runtime/extension/surface.tsx`).
+    const surfaces = input.createSurfaces({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
+    const app = { keybind: () => [], keys: (bind: string) => bind.split("+") }
+    const native = { zoom: () => 1 }
+
+    const services = new Map<string, typeof app | typeof native | Surfaces>([
+      [App.id, app],
+      [Native.id, native],
+      [Surfaces.id, surfaces],
+    ])
+
+    const fake = {
       id: "browser",
-      use: (token: { id: string }) => hosts[token.id],
-      t: (key: string) => (browserEn as Record<string, string>)[key] ?? language.t(key),
-    } as unknown as Context
+      use: (token: { id: string }) => services.get(token.id),
+      t: (key: string) => messages.get(key) ?? language.t(key),
+    }
+
+    // SAFETY: the pane reads only `id`, `t`, and `use` of App, Native and Surfaces from its extension's context.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const extension = fake as unknown as Context
+
     const panel: PanelFrame = {
       visible: () => store.visible,
       present: () => store.visible,
@@ -123,17 +164,28 @@ export function mountBrowserPane(input: Host) {
       sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
       open: () => [],
     }
-    const session = {
+
+    const view = {
       get key() {
         return store.session
       },
       file: { search: async () => [] },
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
-    } as unknown as SessionView
-    const model = {
-      tab: (_session: unknown, id: string) => {
+    }
+
+    // SAFETY: the pane reads only `key`, `file.search` and `composer.attach` of its session.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const session = view as unknown as SessionView
+
+    const fakeModel: Pick<
+      Model,
+      "tab" | "suspended" | "surface" | "error" | "mount" | "load" | "command" | "inspect" | "highlight" | "onInspect"
+    > = {
+      tab: (_session, id) => {
         const tab = current()
+
         if (tab.id !== id) return
+
         return {
           ...tab,
           url: store.url ?? tab.url,
@@ -143,34 +195,43 @@ export function mountBrowserPane(input: Host) {
         }
       },
       suspended: () => false,
-      surface: (_session: unknown, id: string) => `surface-${tabs.find((tab) => tab.id === id)?.title}`,
+      surface: (_session, id) => `surface-${tabs.find((tab) => tab.id === id)?.title}`,
       error: () => store.error ?? (store.loadErrors[store.session] ? "Request failed" : undefined),
-      mount: () => () => undefined,
+      mount: () => () => [],
       load: () => undefined,
-      command: (_session: unknown, command: Browser.Action) => {
+      command: (_session, command) => {
         setStore("error", undefined)
+
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
+
         if (command.type === "navigate") {
           if (store.delayNavigation) {
             setStore("pendingURL", command.url)
+
             return
           }
+
           setStore({ url: command.url, loading: false, generation: store.generation + 1 })
         }
+
         if (command.type === "stop") setStore("loading", false)
       },
       // The desktop confirms each picker change, as the page does once inspect mode is armed.
-      inspect: (_session: unknown, tabID: Browser.TabID, enabled: boolean) => {
+      inspect: (_session, tabID, enabled) => {
         setStore("picker", store.session, enabled)
         emitInspect({ type: "inspect", tabID, active: enabled })
       },
-      highlight: (_session: unknown, _tabID: Browser.TabID, ref?: Browser.Ref) =>
-        setStore("highlights", (items) => [...items, ref ?? "clear"]),
-      onInspect: (_session: unknown, listener: (event: InspectEvent) => void) => {
+      highlight: (_session, _tabID, ref) => setStore("highlights", (items) => [...items, ref ?? "clear"]),
+      onInspect: (_session, listener) => {
         inspectors.add(listener)
+
         return () => inspectors.delete(listener)
       },
-    } as unknown as Model
+    }
+
+    // SAFETY: these are every member of its model the pane reads (`props.model.*` in `./panel`).
+    const model = fakeModel as Model
+
     const pick = () =>
       emitInspect({
         type: "inspect",
@@ -185,6 +246,7 @@ export function mountBrowserPane(input: Host) {
           rect: { x: 48, y: 40, width: 160, height: 36 },
         },
       })
+
     return (
       <ExtensionContext.Provider value={extension}>
         <PanelContext.Provider value={panel}>
@@ -302,6 +364,8 @@ type StripTabs = {
   remap(rewrite: (tab: string) => string): void
 }
 
+type PaneClient = RemoteClient<(typeof BrowserPane)["spec"]>
+
 /** The app's extension host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
 type RegionHost = {
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
@@ -311,9 +375,9 @@ type RegionHost = {
       disabled: Accessor<ReadonlySet<string> | undefined>
       services: readonly {
         readonly token: { readonly kind: "host"; readonly id: string }
-        create(extension: string): unknown
+        create(extension: string): object | undefined
       }[]
-      remote: (token: Remote) => unknown
+      remote: (token: Remote) => PaneClient | undefined
     }>
   >
   useExtensionHost(): { ready(): boolean }
@@ -326,6 +390,15 @@ type RegionHost = {
   definitions: readonly Definition[]
 }
 
+type RegionFixtureState = {
+  session: string
+  strips: Record<string, { all: string[]; active?: string }>
+  /** Each registration of a pane binding, with how many tabs it asked main to restore. */
+  registrations: { binding: string; session: string; restore: number }[]
+  /** The pane's remote is gone, as while its main extension reloads or is disabled. */
+  away: boolean
+}
+
 // Component-test fixture: the real side region over the real browser and file extensions, with the host's
 // session, layout, and storage services and the pane's main-process remote faked at their boundaries. Alpha was
 // left on a file tab; Beta on a browser tab whose page the desktop reports only with its first inventory.
@@ -334,30 +407,37 @@ export function mountBrowserRegion(input: RegionHost) {
   host.dataset.testid = "browser-region-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+
   function Fixture() {
     const alpha = "browser-test\nses_alpha"
     const beta = "browser-test\nses_beta"
     const tabID = Browser.TabID.make("tab_33333333-3333-3333-3333-333333333333")
-    const [store, setStore] = createStore({
+
+    const [store, setStore] = createStore<RegionFixtureState>({
       session: alpha,
       strips: {
         [alpha]: { all: ["file://alpha.ts"], active: "file://alpha.ts" },
         [beta]: { all: ["file://beta.ts", `browser:${tabID}`], active: `browser:${tabID}` },
-      } as Record<string, { all: string[]; active?: string }>,
-      registrations: [] as { binding: string; session: string }[],
+      },
+      registrations: [],
+      away: false,
     })
+
     // The file tree's state, Changes or All files, as the file extension stores it.
     const [tree, setTree] = createSignal<object>()
     const strip = (session: string) => store.strips[session] ?? { all: [] }
     const setAll = (session: string, all: string[]) => setStore("strips", session, "all", all)
+
     const close = (session: string, key: string) =>
       batch(() => {
         setAll(
           session,
           strip(session).all.filter((item) => item !== key),
         )
+
         if (strip(session).active === key) setStore("strips", session, "active", undefined)
       })
+
     const server = {
       id: "browser-test",
       name: "Browser test",
@@ -368,11 +448,16 @@ export function mountBrowserRegion(input: RegionHost) {
       compatible: true,
       connected: true,
     }
+
     const location = { directory: "/repo" }
+
     const refs = [alpha, beta].map(
+      // SAFETY: the extensions read only these fields of a listed session, and of its server the ones `server` has.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
       (key) => ({ key, id: key.split("\n")[1], tab: key, server, pending: false, location }) as unknown as SessionRef,
     )
-    const view = {
+
+    const routed = {
       get key() {
         return store.session
       },
@@ -398,18 +483,25 @@ export function mountBrowserRegion(input: RegionHost) {
         sync: async () => undefined,
         search: async () => [],
       },
-    } as unknown as SessionView
+    }
+
+    // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const view = routed as unknown as SessionView
+
     const layout = (extension: string): Layout => ({
       narrow: () => false,
       ready: () => true,
       open(key, session, options) {
         if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
+
         if (options?.focus !== false) setStore("strips", session.key, "active", key)
       },
       close: (key, session) => close(session.key, key),
       toggle() {},
       state(key, session) {
         if (strip(session.key).active === key) return "visible"
+
         return strip(session.key).all.includes(key) ? "open" : "closed"
       },
       stored: (session) =>
@@ -417,21 +509,32 @@ export function mountBrowserRegion(input: RegionHost) {
           key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [],
         ),
       side: { opened: () => true, toggle() {} },
+      sidebar: { opened: () => true },
       dock: { opened: () => false, placement: () => "side" },
       scroll: { get: () => undefined, set() {} },
       settings() {},
       project() {},
     })
+
     const keep = <T extends object>(key: string, initial: T) => {
       const [value, set] = createStore<T>(structuredClone(initial))
+
       if (key === "file:tree") setTree(() => value)
+
       return [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const
     }
+
+    // Loaded at once.
     const storage = (extension: string): Storage => ({
-      store: (key, options) => [...keep(`${extension}:${key}`, options.initial), () => true] as const,
+      store: (key, options) => {
+        const [value, update] = keep(`${extension}:${key}`, options.initial)
+
+        return { value, ready: () => true, update }
+      },
       memory: (key, options) => keep(`${extension}:${key}`, options.initial),
       remove() {},
     })
+
     const app: App = {
       channel: "dev",
       platform: "desktop",
@@ -447,10 +550,15 @@ export function mountBrowserRegion(input: RegionHost) {
       servers: () => [server.id],
       on: () => () => undefined,
     }
+
     const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
-    const pane: RemoteClient<(typeof BrowserPane)["spec"]> = {
+
+    const pane: PaneClient = {
       register: async (value) => {
-        setStore("registrations", (items) => [...items, { binding: value.binding, session: value.session }])
+        setStore("registrations", (items) => [
+          ...items,
+          { binding: value.binding, session: value.session, restore: value.restore?.tabs.length ?? 0 },
+        ])
       },
       load: async () => undefined,
       command: async () => undefined,
@@ -462,9 +570,11 @@ export function mountBrowserRegion(input: RegionHost) {
         // SAFETY: the pane's remote has one event, so every listener takes that event's payload.
         const added = listener as (value: { binding: string; event: PaneEvent }) => void
         listeners.add(added)
+
         return () => void listeners.delete(added)
       },
     }
+
     const services = [
       { token: App, create: () => app },
       { token: Native, create: () => undefined },
@@ -472,10 +582,15 @@ export function mountBrowserRegion(input: RegionHost) {
       { token: Layout, create: layout },
       { token: Storage, create: storage },
     ]
+
+    const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
+
     // The desktop answers Beta's latest registration with the tab it restored.
     const inventory = () => {
-      const binding = store.registrations.filter((item) => item.session === "ses_beta").at(-1)?.binding
+      const binding = latest()?.binding
+
       if (!binding) return
+
       const tab = {
         id: tabID,
         url: "http://localhost:4173/",
@@ -485,6 +600,7 @@ export function mountBrowserRegion(input: RegionHost) {
         canGoForward: false,
         generation: 0,
       }
+
       listeners.forEach((listener) =>
         listener({ binding, event: { type: "state", state: { tabs: [tab], focusedTabID: tabID } } }),
       )
@@ -504,10 +620,12 @@ export function mountBrowserRegion(input: RegionHost) {
           remap(rewrite) {
             const all = strip(view.key).all
             const next = Array.from(new Set(all.map(rewrite)))
+
             if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view.key, next)
           },
         }),
       })
+
       return (
         <>
           {/* The host strip draws a trigger for each of these keys. */}
@@ -524,8 +642,10 @@ export function mountBrowserRegion(input: RegionHost) {
         </>
       )
     }
+
     function Ready(props: ParentProps) {
       const extensions = input.useExtensionHost()
+
       return <Show when={extensions.ready()}>{props.children}</Show>
     }
 
@@ -535,14 +655,17 @@ export function mountBrowserRegion(input: RegionHost) {
           definitions={input.definitions}
           disabled={() => new Set<string>()}
           services={services}
-          remote={(token) => (token.id === BrowserPane.id ? pane : undefined)}
+          remote={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
         >
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
           <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>
             <button onClick={() => setStore("session", beta)}>Beta</button>
             <button onClick={inventory}>First inventory</button>
+            <button onClick={() => setStore("away", true)}>Pane away</button>
+            <button onClick={() => setStore("away", false)}>Pane back</button>
           </nav>
           <p>Registrations: {store.registrations.length}</p>
+          <p>Beta restores: {latest()?.restore ?? 0}</p>
           <p data-testid="tree">{JSON.stringify(tree())}</p>
           <Ready>
             <Strip />

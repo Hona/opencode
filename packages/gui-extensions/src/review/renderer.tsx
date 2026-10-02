@@ -1,13 +1,12 @@
-import { batch, createEffect, createRoot, createSignal, lazy, on, onCleanup, Show, Suspense, untrack } from "solid-js"
+import { batch, createRoot, createSignal, getOwner, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Schema, Struct } from "effect"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
+  createActive,
   Layout,
   Link,
   Panel,
   Sessions,
-  Storage,
   usePanel,
   type PanelTab,
   type SessionRef,
@@ -16,93 +15,97 @@ import {
   onIdle,
 } from "../sdk"
 import { Changes, type ChangeKind } from "./contract"
+import type Review from "./index"
 import { createReviewModel, type Demand, type ReviewModel } from "./model"
 
 const TAB = "changes"
+
 const KEY = `review:${TAB}`
 
-const DiffState = Schema.Struct({ diffStyle: Schema.Literals(["unified", "split"]) }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
-const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "collapse"]) }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
-
-const setup: Setup = (ctx) => {
+const setup: Setup<typeof Review> = (ctx) => {
+  const owner = getOwner()
   const sessions = ctx.use(Sessions)
   const layout = ctx.use(Layout)
-  const storage = ctx.use(Storage)
+  const diff = ctx.stores.diff
+  const panel = ctx.stores.panel
 
-  const [diff, setDiff] = storage.store("diff", {
-    schema: DiffState,
-    initial: { diffStyle: "split" },
-    from: {
-      key: "layout",
-      pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }),
-    },
-  })
-  const [panel, setPanel] = storage.store("panel", {
-    schema: PanelState,
-    initial: { expandMode: "collapse" },
-    from: {
-      key: "review-panel-v2",
-      pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }),
-    },
-  })
-  // The host's inner sidebar preference, mirrored by the review render for the tab's focus rule.
-  const [sidebar, setSidebar] = storage.memory("sidebar", { initial: { opened: true } })
   // Who shows a view's changes: the review render, the file tree, and file tabs. A view follows its route,
   // so a session switch keeps the demand.
   const demands = new WeakMap<SessionView, ReturnType<typeof createStore<Demand>>>()
+
   const demand = (view: SessionView) => {
     const existing = demands.get(view)
+
     if (existing) return existing
+
     const created = createStore<Demand>({ tree: 0, files: 0, panel: 0, details: 0 })
+
     demands.set(view, created)
+
     return created
   }
+
   const watch = (view: SessionView, source: keyof Demand) => {
     const set = demand(view)[1]
+
     set(source, (count) => count + 1)
+
     return () => set(source, (count) => Math.max(0, count - 1))
   }
 
   // One review model for the routed session screen, like the review the screen created before extensions.
   const [entry, setEntry] = createSignal<{ view: SessionView; model: ReviewModel; dispose: () => void }>()
-  createEffect(
-    on(sessions.current, (view) => {
+
+  createActive(
+    () => sessions.current(),
+    (view) => {
       const current = untrack(entry)
-      if (view && current?.view === view) return
-      if (!view) {
-        // A session switch unmounts and remounts the routed view in one update; keep the model through it.
+
+      if (current?.view === view) return
+
+      current?.dispose()
+      setEntry(
+        createRoot(
+          (dispose) => ({
+            view,
+            model: createReviewModel({ ctx, view, demand: demand(view)[0] }),
+            dispose,
+          }),
+          owner,
+        ),
+      )
+    },
+    {
+      // A session switch unmounts and remounts the routed view in one update; keep the model through it.
+      otherwise: () => {
+        const current = untrack(entry)
+
         queueMicrotask(() => {
           if (sessions.current() || untrack(entry) !== current) return
+
           current?.dispose()
           setEntry(undefined)
         })
-        return
-      }
-      current?.dispose()
-      setEntry(
-        createRoot((dispose) => ({
-          view,
-          model: createReviewModel({ ctx, view, demand: demand(view)[0] }),
-          dispose,
-        })),
-      )
-    }),
+      },
+    },
   )
   onCleanup(() => untrack(entry)?.dispose())
+
   const modelFor = (session: SessionRef) => {
     const current = entry()
+
     return current && current.view.key === session.key ? current.model : undefined
   }
 
   const tabs = new WeakMap<SessionView, PanelTab>()
+
   const tab = (session: SessionView) => {
     const existing = tabs.get(session)
+
     if (existing) return existing
+
     const count = () => modelFor(session)?.count() ?? 0
+
     const created: PanelTab = {
       id: TAB,
       get title() {
@@ -111,17 +114,20 @@ const setup: Setup = (ctx) => {
       kind: "pinned",
       // Without focusable content the panel itself joins the tab order.
       get tabbable() {
-        return !(count() > 0 || sidebar.opened)
+        return !(count() > 0 || layout.sidebar.opened())
       },
       fallback: 1,
       dom: { tab: "session-side-panel-review-tab", panel: "session-side-panel-review-tabpanel" },
     }
+
     tabs.set(session, created)
+
     return created
   }
 
   const ReviewPanel = lazy(() => import("./panel"))
   const MobileReview = lazy(() => import("./mobile"))
+
   ctx.cleanup(onIdle(() => void (layout.narrow() ? MobileReview : ReviewPanel).preload()))
 
   ctx.add(Panel, {
@@ -129,7 +135,7 @@ const setup: Setup = (ctx) => {
     region: "side",
     // The split diff needs the wider session minimum while the side region is open.
     get wide() {
-      return diff.diffStyle === "split"
+      return diff.value.diffStyle === "split"
     },
     // The review tab is pinned, never stored; a stored key, such as one from before extensions, leaves the strip.
     transient: true,
@@ -144,19 +150,12 @@ const setup: Setup = (ctx) => {
     list: (session) => (!layout.narrow() && session.project ? [tab(session)] : []),
     render: (_tab, session) => {
       const frame = usePanel()
-      createEffect(() => {
-        const opened = frame.sidebar.opened()
-        setSidebar((draft) => {
-          draft.opened = opened
-        })
-      })
+
       return (
         <Show when={modelFor(session)} keyed>
           {(model) => {
-            createEffect(() => {
-              if (!frame.visible()) return
-              onCleanup(watch(session, "panel"))
-            })
+            createActive(frame.visible, () => onCleanup(watch(session, "panel")))
+
             return (
               <Show
                 when={frame.placement() === "mobile"}
@@ -167,15 +166,15 @@ const setup: Setup = (ctx) => {
                         <ReviewPanel
                           review={model}
                           session={session}
-                          diffStyle={diff.diffStyle}
+                          diffStyle={diff.value.diffStyle}
                           onDiffStyleChange={(style) =>
-                            setDiff((draft) => {
+                            diff.update((draft) => {
                               draft.diffStyle = style
                             })
                           }
-                          expandMode={panel.expandMode}
+                          expandMode={panel.value.expandMode}
                           onExpandModeChange={(mode) =>
-                            setPanel((draft) => {
+                            panel.update((draft) => {
                               draft.expandMode = mode
                             })
                           }
@@ -204,10 +203,13 @@ const setup: Setup = (ctx) => {
     match: (link) => link.origin === "review",
     open(link) {
       const session = sessions.current()
+
       if (!session || (link.session && link.session.key !== session.key)) return
+
       batch(() => {
         // Narrow screens keep their view, as they did before extensions.
         if (!layout.narrow() && session.project) layout.open(KEY, session)
+
         reveals.forEach((listener) => listener())
         modelFor(session)?.focusFile(link.href)
       })
@@ -216,6 +218,7 @@ const setup: Setup = (ctx) => {
 
   const none: readonly FileDiffInfo[] = []
   const noKinds: ReadonlyMap<string, ChangeKind> = new Map()
+
   ctx.provide(Changes, {
     diffs: (session) => modelFor(session)?.diffs() ?? none,
     ready: (session) => modelFor(session)?.ready() ?? false,
@@ -226,11 +229,13 @@ const setup: Setup = (ctx) => {
     open(session) {
       // The summary's changes row: narrow screens switch to the Changes view; wide ones open the side region.
       if (layout.narrow()) return layout.open(KEY, session)
+
       if (!layout.side.opened(session)) layout.side.toggle(session)
     },
     watch: (session, source) => watch(session, source),
     onReveal(listener) {
       reveals.add(listener)
+
       return () => {
         reveals.delete(listener)
       }

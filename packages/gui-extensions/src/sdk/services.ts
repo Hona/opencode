@@ -251,6 +251,11 @@ export interface Layout {
    */
   stored(session: SessionRef): readonly string[]
   readonly side: { opened(session: SessionRef): boolean; toggle(session: SessionRef): void }
+  /**
+   * The inner sidebar preference every side panel shares, which `usePanel().sidebar` also reads inside a panel render.
+   * One value for the app, for code outside a render such as a tab's fields. Reactive.
+   */
+  readonly sidebar: { opened(): boolean }
   readonly dock: { opened(session: SessionRef): boolean; placement(): "side" | "bottom" }
   readonly scroll: {
     get(session: SessionRef, key: string): { readonly x: number; readonly y: number } | undefined
@@ -279,25 +284,16 @@ export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>>
 
 export interface Storage {
   /**
-   * @deprecated The `[store, update, ready]` tuple lets code read and write before the value loads. Declare `stores`
-   * in the definition for keys known up front; for dynamic keys, `Setup<typeof Definition>` types this as a
-   * `Persisted` (see `PersistedStorage`). Durable, schema-decoded, synced across windows.
+   * Durable, schema-decoded, synced across windows. For keys only known at runtime, such as one per server and
+   * directory; declare `stores` in the definition for keys known up front.
    */
-  store<S extends Schema.ConstraintCodec<object, unknown>>(
-    key: string,
-    options: StoreOptions<S>,
-  ): readonly [Store<S["Type"]>, (mutation: (draft: S["Type"]) => void) => void, Accessor<boolean>]
+  store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>): Persisted<S["Type"]>
   /** Window-local and kept across extension reloads. */
   memory<T extends object>(
     key: string,
     options: { readonly initial: T },
   ): readonly [Store<T>, (mutation: (draft: T) => void) => void]
   remove(key: string, options?: { readonly scope?: StorageScope }): void
-}
-
-/** `Storage` as `Setup<typeof Definition>` sees it: `store` is for dynamic keys and returns a `Persisted`. */
-export interface PersistedStorage extends Omit<Storage, "store"> {
-  store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>): Persisted<S["Type"]>
 }
 
 export interface System {

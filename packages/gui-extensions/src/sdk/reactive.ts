@@ -11,29 +11,36 @@ import {
   type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Live, type Remote, type RemoteClient, type Service, type Token } from "./core"
+import {
+  Live,
+  type Definition,
+  type Remote,
+  type RemoteClient,
+  type RemoteRef,
+  type Service,
+  type Token,
+} from "./core"
 import { Sessions } from "./services"
 import { LifetimeContext, useExtension } from "./solid"
 
 type Falsy = undefined | null | false
 
-/**
- * A token, a `Live` accessor such as `ctx.uses.name`, or any accessor. A token the definition declares is followed
- * through `Live`; an undeclared one follows the identity of its provider's value.
- */
+/** A token the definition declares or a `Live` accessor such as `ctx.uses.name`, both followed through `Live`, or any accessor. */
 export type ActiveSource = Token | Accessor<unknown>
 
 /** What a source gives while it is active. A plain accessor is active while its value is not undefined, null or false. */
 export type ActiveValue<S> =
   S extends Remote<infer Spec>
     ? RemoteClient<Spec>
-    : S extends Service<infer T>
-      ? T
-      : S extends Accessor<Live<infer T>>
+    : S extends RemoteRef<infer Spec>
+      ? RemoteClient<Spec>
+      : S extends Service<infer T>
         ? T
-        : S extends Accessor<infer T>
-          ? Exclude<T, Falsy>
-          : never
+        : S extends Accessor<Live<infer T>>
+          ? T
+          : S extends Accessor<infer T>
+            ? Exclude<T, Falsy>
+            : never
 
 /** One run of `createActive`: the source's value, or none while it is not active. */
 type Run = { readonly value: unknown; readonly generation?: number } | undefined
@@ -100,9 +107,7 @@ function isToken(source: ActiveSource): source is Token {
 
 /** The extension context's accessor for a token. */
 function follow(token: Token): Accessor<unknown> {
-  const ctx = useExtension()
-
-  return token.kind === "service" ? ctx.use(token) : ctx.use(token)
+  return useExtension<Definition>().use(token)
 }
 
 /**

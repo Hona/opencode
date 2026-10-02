@@ -1,8 +1,11 @@
 import { Extension } from "../sdk"
+import { Updater } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
   id: "updater",
+  provides: { updater: Updater },
+  uses: { updater: Updater },
   i18n: {
     en,
     am: () => import("./i18n/am"),
