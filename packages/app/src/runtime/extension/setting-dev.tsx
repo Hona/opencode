@@ -14,7 +14,8 @@ export function GuiExtensionsSettings() {
   const language = useLanguage()
   const host = useExtensionHost()
   const bridge = usePlatform().extensions
-  const [installed, setInstalled] = createStore({ list: [] as Installed[] })
+  const [installed, setInstalled] = createStore<{ list: Installed[] }>({ list: [] })
+
   if (bridge) {
     void bridge.manager.list().then((list) => setInstalled("list", reconcile([...list])))
     onCleanup(
@@ -23,15 +24,23 @@ export function GuiExtensionsSettings() {
       }),
     )
   }
+
   const enabled = (id: string) => installed.list.find((item) => item.id === id)?.enabled ?? true
+
   const status = (id: string) => {
     const value = host.state.status[id] ?? "loading"
+
     if (value === "active") return language.t("settings.guiExtensions.status.active")
+
     if (value === "failed") return language.t("settings.guiExtensions.status.failed")
+
     if (value === "disabled") return language.t("settings.guiExtensions.status.disabled")
+
     return language.t("settings.guiExtensions.status.loading")
   }
+
   const toggle = (id: string, next: boolean) => void (next ? bridge?.manager.enable(id) : bridge?.manager.disable(id))
+
   // Main entries reload through the manager; the renderer entry reloads here.
   const reload = (id: string) => {
     host.reload(id)
@@ -60,7 +69,7 @@ export function GuiExtensionsSettings() {
                   description={
                     <>
                       {status(definition.id)}
-                      <Show when={host.state.errors[definition.id]}>
+                      <Show when={host.state.failures[definition.id]?.error}>
                         {(error) => <pre class="mt-1 whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
                       </Show>
                     </>

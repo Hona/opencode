@@ -77,16 +77,20 @@ export function createSessionView(session: SessionModel) {
     search: (query, options) =>
       options?.kind === "any" ? file.searchFilesAndDirectories(query) : file.searchFiles(query, options),
     selection: {
+      // SAFETY: the file model returns the view cache's selection for the path, which its schema types as a line range.
       get: (path) => file.selectedLines(path) as LineRange | null | undefined,
       set: (path, range) => void file.setSelectedLines(path, range),
     },
     scroll: {
       get: (path) => ({
+        // SAFETY: the file model returns the view cache's offsets for the path, which its schema types as numbers.
         top: file.scrollTop(path) as number | undefined,
+        // SAFETY: as above.
         left: file.scrollLeft(path) as number | undefined,
       }),
       set(path, value) {
         if (value.top !== undefined) file.setScrollTop(path, value.top)
+
         if (value.left !== undefined) file.setScrollLeft(path, value.left)
       },
     },
@@ -100,15 +104,18 @@ export function createSessionView(session: SessionModel) {
   }
 
   const commentFile = (id: string) => comments.all().find((item) => item.id === id)?.file
+
   const comment: Comments = {
     list: (path) => (path ? comments.list(path) : comments.all()),
     add: comments.add,
     update(id, text) {
       const path = commentFile(id)
+
       if (path) comments.update(path, id, text)
     },
     remove(id) {
       const path = commentFile(id)
+
       if (path) comments.remove(path, id)
     },
     focus: { current: comments.focus, set: (value) => void comments.setFocus(value) },
@@ -124,6 +131,7 @@ export function createSessionView(session: SessionModel) {
   // Only a project opened at this exact directory; a session in a project subfolder has none.
   const listedProject = createMemo(() => {
     const directory = pathKey(location().directory)
+
     return server.ctx.projects
       .list()
       .find(
@@ -142,6 +150,9 @@ export function createSessionView(session: SessionModel) {
     get tab() {
       return session.layout.tabKey() ?? ""
     },
+    get visit() {
+      return attachment.visit()
+    },
     server: serverRef,
     get pending() {
       return server.ctx.data.session.creating(session.identity.sessionID() ?? "")
@@ -153,6 +164,7 @@ export function createSessionView(session: SessionModel) {
     // Raw metadata stands in until global sync lists the project.
     get project() {
       const info = session.data.info()
+
       return (info && server.ctx.projects.detailsForSession(info)) || session.project()
     },
     get listedProject() {

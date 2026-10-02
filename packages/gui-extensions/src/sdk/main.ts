@@ -1,8 +1,17 @@
 import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
 import type { Schema } from "effect"
-import { Host, Point, type Cleanup } from "./core"
+import { Host, Point, type Cleanup, type Context } from "./core"
+import type { Scope } from "./scope"
 
 export * from "./core"
+
+export * from "./scope"
+
+/** The setup context in the main process. */
+export interface MainContext extends Context {
+  /** The instance's lifetime: `signal` is its signal and `cleanup` adds its finalizers. */
+  readonly scope: Scope
+}
 
 export interface Windows {
   get(id: number): BrowserWindow | undefined
@@ -63,12 +72,18 @@ export interface MainApp {
   readonly packaged: boolean
   server(id: string): MainServer | undefined
   /**
-   * Marks the app as quitting and disposes every other extension, then runs handoff (e.g. quitAndInstall) or
-   * relaunches. The caller stays active through the handoff and keeps running when it fails (the promise rejects).
+   * Marks the app as quitting and disposes every extension but the one whose `keep` scope is passed (the caller's
+   * `ctx.scope` by default), then runs handoff (e.g. quitAndInstall) or relaunches. The kept scope outlives shutdown
+   * until the handoff settles, and keeps running when it fails (the promise rejects). Only an extension's `ctx.scope`
+   * can be kept.
    */
-  restart(handoff?: () => void | Promise<void>): Promise<void>
-  /** Writes to the desktop log file (included in exported debug logs). */
-  log(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void
+  restart(handoff?: () => void | Promise<void>, options?: { readonly keep?: Scope }): Promise<void>
+  /** Writes to the desktop log file (included in exported debug logs); each field of `data` is serialized as it is. */
+  log<Data extends Readonly<Record<string, unknown>>>(
+    level: "debug" | "info" | "warn" | "error",
+    message: string,
+    data?: Data,
+  ): void
 }
 
 export interface Menubar {
@@ -81,8 +96,13 @@ export interface Menubar {
 }
 
 export const Windows = Host.define<Windows>("window")
+
 export const Surfaces = Host.define<Surfaces>("surface")
+
 export const MainStorage = Host.define<MainStorage>("storage")
+
 export const Cli = Host.define<Cli>("cli")
+
 export const MainApp = Host.define<MainApp>("app")
+
 export const Menubar = Point.define<Menubar>("menubar")

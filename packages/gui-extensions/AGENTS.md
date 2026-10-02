@@ -8,6 +8,7 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 - `src/renderer.ts` and `src/main.ts` are the only files that list the built-ins. Main never imports renderer code.
 - Another extension may import only your `contract.ts` (tokens and schemas, no runtime code). Every consumer must still work when the provider is disabled: `ctx.use(Service)` is an accessor that can return `undefined` (see "Failure is part of the contract").
 - Never import `@opencode/app`, `@opencode/desktop`, or `@/` paths. Import CSS with `?inline` and contribute it through `ctx.add(Style, css)`. No module-level state: keep state inside `setup`. `bun run lint` enforces these rules.
+- `bun run lint:changed` must pass before you finish: every file you add or edit has no oxlint problem at all, including the warn-level anti-slop rules (`unknown` parameters and returns, unchecked type assertions, widened types, unsafe dictionaries, missing spacing). Touching a file means leaving the whole file clean, older warnings included. Fix the code; suppress only with a `SAFETY:` comment that states a real checked invariant.
 
 ## Host boundary
 
@@ -21,7 +22,7 @@ An instance lives from `setup` until it is disabled, reloaded, removed, or its w
 - Everything registered through `ctx` (contributions, services, remotes, menu items, surfaces) is withdrawn by the host when the instance goes away. Anything else you start (timers, DOM or remote listeners, subscriptions) needs `ctx.cleanup`. A cleanup registered after disposal runs at once.
 - `setup` may be async. After every `await`, return if `ctx.signal.aborted` before touching state or contributing. Pass `ctx.signal`, or a signal derived from it, to remote calls and long work.
 - Never keep a value from a shorter lifetime in a longer one. Read a server's `client`, `data` and `url` from its live `ServerRef` each time: a restarted or re-authenticated server gets a new controller under the same id. Keep per-session state in a session-scoped store, or in a map keyed by session that you prune.
-- Main: `MainApp.restart(handoff)` keeps the calling extension active until the handoff settles; when it rejects, return to a state the user can retry from.
+- Main: `MainApp.restart(handoff, { keep: ctx.scope })` keeps the extension that owns `ctx.scope` (the caller by default) active until the handoff settles; when it rejects, return to a state the user can retry from. `ctx.cleanup` adds a finalizer to `ctx.scope`.
 
 ## Failure is part of the contract
 

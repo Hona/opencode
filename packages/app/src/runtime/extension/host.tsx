@@ -1,11 +1,14 @@
 import {
   batch,
+  catchError,
   createContext,
   createMemo,
+  createRenderEffect,
   createResource,
   createRoot,
   ErrorBoundary,
   getOwner,
+  on,
   onCleanup,
   onMount,
   runWithOwner,
@@ -23,8 +26,12 @@ import { pluralCategory } from "@opencode/ui/context/i18n"
 import {
   Dialogs,
   ExtensionContext,
+  LifetimeContext,
   Link,
   Links,
+  Live,
+  Sessions,
+  Storage,
   type Catalog,
   type Cleanup,
   type Context,
@@ -32,59 +39,111 @@ import {
   type Host,
   type LinkHandler,
   type Messages,
+  type Persisted,
   type Point,
   type Remote,
+  type RemoteClient,
   type RemoteSpec,
   type Service,
+  type SessionRef,
+  type SetupContext,
+  type Token,
 } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createSessionStore, whenLoaded } from "./stores"
 
 type Entry = { key: string; point: string; extension: string; value: Accessor<unknown> }
+
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
-type Instance = { definition: Definition; context: Context; dispose: () => void }
-type Bound = readonly {
+
+/** The context the host builds: every `Setup<D>` of the definition receives it, and so does the untyped form. */
+type InstanceContext = SetupContext<Definition> & Context
+
+type Instance = {
+  definition: Definition
+  context: InstanceContext
+  dispose: () => void
+  /** Opens the declared stores. Settles once the app stores have loaded. */
+  prepare(): Promise<readonly void[]>
+  /** Starts loading the declared session stores for a mounted session. */
+  preload(session: SessionRef): void
+}
+
+/** A host service. `register` withdraws what it returns with the caller's owner, else with the extension. */
+export type HostService = {
   readonly token: Host<unknown>
-  create(extension: string, owner: Owner | null, context: Context): unknown
-}[]
+  // SAFETY: each service returns the value its token types; `use` hands it back only through that token's overload.
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
+  create(extension: string, owner: Owner | null, context: Context, register: (fn: Cleanup) => Cleanup): unknown
+}
+
+type Bound = readonly HostService[]
+
 export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
+
+/** The last error an extension raised: in its setup or an effect, or while one of its contributions rendered. */
+export type ExtensionFailure = { readonly phase: "setup" | "render"; readonly error: string }
+
+type Absent = Exclude<Live<never>, { readonly status: "active" }>
+
+/** A provider as the gate and `requires` see it: its generation while active, else why it is absent. */
+type Provider = Absent | { readonly status: "active"; readonly generation: number }
+
+type HostState = {
+  entries: Record<string, Entry[] | undefined>
+  services: Record<string, number | undefined>
+  status: Record<string, ExtensionStatus | undefined>
+  failures: Record<string, ExtensionFailure | undefined>
+}
+
+type Stores = Record<string, Persisted<object> | ((session: SessionRef) => Persisted<object>)>
+
+const pending: Absent = { status: "pending" }
+
+const inactive = {
+  disabled: { status: "inactive", reason: "disabled" },
+  failed: { status: "inactive", reason: "failed" },
+  restarting: { status: "inactive", reason: "restarting" },
+} as const satisfies Record<string, Absent>
 
 const HostContext = createContext<ReturnType<typeof createHost>>()
 
 export function useExtensionHost() {
   const host = useContext(HostContext)
+
   if (!host) throw new Error("Extension host is unavailable")
+
   return host
 }
 
-export function ExtensionHostProvider(
-  props: ParentProps<{
-    definitions: readonly Definition[]
-    disabled: Accessor<ReadonlySet<string> | undefined>
-    services: Bound
-    remote?: (token: Remote) => unknown
-  }>,
-) {
-  const host = createHost(props)
-  return <HostContext.Provider value={host}>{props.children}</HostContext.Provider>
-}
-
-function createHost(input: {
+type HostInput = {
   definitions: readonly Definition[]
   disabled: Accessor<ReadonlySet<string> | undefined>
   services: Bound
-  remote?: (token: Remote) => unknown
-}) {
+  /** The renderer client of a remote while it is available; omitted where there is no main process. */
+  remote?: (token: Remote) => RemoteClient<RemoteSpec> | undefined
+  /** How many times a remote became available. Reactive. */
+  generation?: (token: Remote) => number
+  /** An extension's main entry failed. Reactive. */
+  failed?: (id: string) => boolean
+}
+
+export function ExtensionHostProvider(props: ParentProps<HostInput>) {
+  const host = createHost(props)
+
+  return <HostContext.Provider value={host}>{props.children}</HostContext.Provider>
+}
+
+function createHost(input: HostInput) {
   const language = useLanguage()
   const owner = getOwner()
   const hosts = new Map(input.services.map((service) => [service.token.id, service]))
-  const provided = new Map<string, { extension: string; impl: unknown }>()
+  const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
+  const generations = new Map<string, number>()
+
   // Entries are indexed by point and services versioned by token, so a change wakes only its own readers.
-  const [state, setState] = createStore({
-    entries: {} as Record<string, Entry[] | undefined>,
-    services: {} as Record<string, number | undefined>,
-    status: {} as Record<string, ExtensionStatus | undefined>,
-    errors: {} as Record<string, string | undefined>,
-  })
+  const [state, setState] = createStore<HostState>({ entries: {}, services: {}, status: {}, failures: {} })
+
   const instances = new Map<string, Instance>()
   const memos = new Map<string, Accessor<readonly Item<unknown>[]>>()
   const sequence = { value: 0 }
@@ -94,34 +153,117 @@ function createHost(input: {
   // neither sets up nor reports a failure over its replacement.
   const loads = new Map<string, object>()
 
-  const items = <T,>(point: Point<T>) => {
-    const existing = memos.get(point.id)
-    if (existing) return existing() as readonly Item<T>[]
-    // Reuse each item object while its value is unchanged so keyed renders do not remount.
+  // The extension that provides a token: the one declaring it in `provides`, else the one whose id prefixes it.
+  const providers = new Map<string, string | undefined>()
+
+  const providerOf = (id: string) => {
+    if (providers.has(id)) return providers.get(id)
+
+    const found =
+      input.definitions.find((definition) =>
+        Object.values(definition.provides ?? {}).some((token) => token.id === id),
+      ) ?? input.definitions.find((definition) => definition.id === id || id.startsWith(`${definition.id}.`))
+
+    providers.set(id, found?.id)
+
+    return found?.id
+  }
+
+  // Why a token has no active provider. Main-side providers report through the installed list.
+  const absent = (id: string, generation: number, main: boolean): Absent => {
+    const extension = providerOf(id)
+
+    if (!extension) return inactive.disabled
+
+    if (main ? input.disabled()?.has(extension) : state.status[extension] === "disabled") return inactive.disabled
+
+    if (main ? input.failed?.(extension) : state.status[extension] === "failed") return inactive.failed
+
+    // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
+    if (!main && state.status[extension] === "active") return inactive.disabled
+
+    return generation > 0 ? inactive.restarting : pending
+  }
+
+  const serviceLive = (token: Service<unknown>): Live<unknown> => {
+    void state.services[token.id]
+
+    return provided.get(token.id)?.live ?? absent(token.id, generations.get(token.id) ?? 0, false)
+  }
+
+  // One object per remote generation, so reading a provider allocates nothing while it is unchanged.
+  const actives = new Map<string, Provider & { readonly status: "active" }>()
+
+  const providerState = (token: Token): Provider => {
+    if (token.kind === "service") return serviceLive(token)
+
+    if (!input.remote) return inactive.disabled
+
+    if (!input.remote(token)) return absent(token.id, input.generation?.(token) ?? 0, true)
+
+    const generation = input.generation?.(token) ?? 1
+    const cached = actives.get(token.id)
+
+    if (cached?.generation === generation) return cached
+
+    const active = { status: "active", generation } as const
+
+    actives.set(token.id, active)
+
+    return active
+  }
+
+  const satisfied = (definition: Definition) =>
+    Object.values(definition.requires ?? {}).every((token) => untrack(() => providerState(token)).status === "active")
+
+  // Reuses each item object while its value is unchanged so keyed renders do not remount.
+  const createItems = (id: string) => {
     const cache = new Map<string, Item<unknown>>()
+
     const created = runWithOwner(owner, () =>
       createMemo(() => {
-        const next = (state.entries[point.id] ?? []).flatMap((entry) => {
+        const next = (state.entries[id] ?? []).flatMap((entry) => {
           const value = entry.value()
+
           if (value === undefined) return []
+
           const previous = cache.get(entry.key)
+
           if (previous?.value === value) return [previous]
+
           const item = { key: entry.key, extension: entry.extension, value }
+
           cache.set(entry.key, item)
+
           return [item]
         })
+
         if (cache.size > next.length) {
           const live = new Set(next.map((item) => item.key))
+
           cache.forEach((_, key) => {
             if (!live.has(key)) cache.delete(key)
           })
         }
+
         return next
       }),
-    )!
-    memos.set(point.id, created)
-    return created() as unknown as readonly Item<T>[]
+    )
+
+    const memo = created ?? (() => [])
+
+    memos.set(id, memo)
+
+    return memo
   }
+
+  const items = <T,>(point: Point<T>) => {
+    const memo = memos.get(point.id) ?? createItems(point.id)
+
+    // SAFETY: only `add` stores entries, under the id of the typed point it was given, so this point's items are T.
+    return memo() as readonly Item<T>[]
+  }
+
   const list = <T,>(point: Point<T>) => items(point).map((item) => item.value)
 
   const links: Links = {
@@ -132,34 +274,43 @@ function createHost(input: {
           (best, item) => (!best || (item.priority ?? 0) > (best.priority ?? 0) ? item : best),
           undefined,
         )
+
       if (!handler) return false
+
       handler.open(link)
+
       return true
     },
   }
+
   hosts.set(Links.id, { token: Links, create: () => links })
 
   const dialog = useDialog()
+
   hosts.set(Dialogs.id, {
     token: Dialogs,
     // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
-    create: (extension, _, context): Dialogs => {
+    create: (extension, _, context, register): Dialogs => {
       const open = (method: "show" | "push") => (render: () => JSX.Element) => {
         if (context.signal.aborted) return
+
         const id = `extension:${extension}:${sequence.value++}`
-        // Closes this dialog, not whichever is on top, when the extension goes away.
-        const release = context.cleanup(() => dialog.close(id))
+        // Closes this dialog, not whichever is on top, when the extension or the scope that opened it goes away.
+        const release = register(() => dialog.close(id))
+
         void dialog[method](
           () => {
             // The dialog's root disposes when it closes or another dialog replaces it.
             onCleanup(() => void release())
+
             return (
               <ErrorBoundary
                 fallback={(error) => {
                   onMount(() => {
                     dialog.close(id)
-                    fail(extension, error)
+                    fail(extension, error, "render")
                   })
+
                   return null
                 }}
               >
@@ -173,6 +324,7 @@ function createHost(input: {
           context.signal,
         )
       }
+
       return {
         show: open("show"),
         push: open("push"),
@@ -186,44 +338,85 @@ function createHost(input: {
 
   const activate = async (definition: Definition) => {
     const load = definition.renderer
+
     // A disabled extension, e.g. one reloaded from settings, stays disabled: marking it loading would make the
     // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
     if (!load || input.disabled()?.has(definition.id) !== false) return
+
+    setState("status", definition.id, "loading")
+
+    // Waits for its hard contracts; the requirement watcher starts it once they are active.
+    if (!satisfied(definition)) return
+
     const attempt = {}
     const current = () => loads.get(definition.id) === attempt
+
     loads.set(definition.id, attempt)
-    setState("status", definition.id, "loading")
+
     // The current language's catalog loads with the entry, so the first render is already translated.
     const [module, messages] = await Promise.all([
-      load().catch((error: unknown) => {
-        if (current()) fail(definition.id, error)
+      load().catch((cause: unknown) => {
+        if (current()) fail(definition.id, cause)
+
         return undefined
       }),
       loadMessages(definition.i18n, untrack(language.locale)),
     ])
+
     if (!current()) return
+
     loads.delete(definition.id)
+
     if (!module || lifetime.disposed) return
+
     // Disabling mid-load deactivates, which drops this load before it gets here.
     if (instances.has(definition.id)) return
+
     runWithOwner(owner, () =>
       createRoot((dispose) => {
-        const instance = createInstance(definition, dispose, getOwner(), messages)
+        const root = getOwner()
+        const instance = createInstance(definition, dispose, root, messages)
+
         instances.set(definition.id, instance)
-        // Setup runs synchronously inside the extension root so its effects and memos are owned.
-        void Promise.try(() => untrack(() => module.default(instance.context))).then(
-          (cleanup) => {
-            // Registered first: if the extension already went away, the cleanup runs now.
-            if (typeof cleanup === "function") instance.context.cleanup(cleanup)
-            if (instances.get(definition.id) !== instance) return
-            setState("status", definition.id, "active")
-          },
-          (error: unknown) => {
-            if (instances.get(definition.id) !== instance) return
+
+        // Setup and every scope under it read the extension's context, e.g. `createActive` with a token.
+        if (root) root.context = { ...root.context, [ExtensionContext.id]: instance.context }
+
+        const crash = (cause: unknown) => {
+          if (instances.get(definition.id) !== instance) return
+
+          batch(() => {
             deactivate(definition.id)
-            fail(definition.id, error)
-          },
-        )
+            fail(definition.id, cause)
+          })
+        }
+
+        // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition, and the untyped one.
+        const setup = module.default as (ctx: InstanceContext) => void | Cleanup | Promise<void | Cleanup>
+
+        const start = () =>
+          void Promise.try(() =>
+            // Errors from the extension's own effects, at setup or later, fail the extension and nothing else.
+            catchError(
+              () => untrack(() => setup(instance.context)),
+              (cause) => queueMicrotask(() => crash(cause)),
+            ),
+          ).then((cleanup) => {
+            // Registered first: if the extension already went away, the cleanup runs now.
+            if (cleanup) instance.context.cleanup(cleanup)
+
+            if (instances.get(definition.id) !== instance) return
+
+            setState("status", definition.id, "active")
+          }, crash)
+
+        // Setup runs synchronously inside the extension root so its effects and memos are owned.
+        if (Object.keys(definition.stores ?? {}).length === 0) return start()
+
+        // App stores load in their storage namespace's one read before setup, so setup reads them as plain values.
+        Promise.try(instance.prepare).then(() => {
+          if (instances.get(definition.id) === instance) runWithOwner(root, start)
+        }, crash)
       }),
     )
   }
@@ -237,84 +430,259 @@ function createHost(input: {
     const extension = definition.id
     const controller = new AbortController()
     const cleanups = new Set<Cleanup>()
+
     const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
       initialValue: initial,
     })
+
     const messages = () => catalog.latest
-    const created = new Map<string, unknown>()
+    const created = new Map<string, ReturnType<Bound[number]["create"]>>()
+
     // Promise.try runs the cleanup synchronously and isolates a throw from the others.
     const release = (fn: Cleanup) =>
-      void Promise.try(fn).catch((error: unknown) => console.error(`[extension] ${extension}`, error))
+      void Promise.try(fn).catch((cause: unknown) => console.error(`[extension] ${extension}`, cause))
+
     const own = (fn: Cleanup): Cleanup => {
       // Work that outlives the extension, e.g. after an await in setup, is released as soon as it registers.
       if (controller.signal.aborted) {
         release(fn)
+
         return () => {}
       }
+
       const cleanup = () => {
         if (cleanups.delete(cleanup)) return fn()
       }
+
       cleanups.add(cleanup)
+
       return cleanup
     }
+
+    // The extension went away, or the scope registering (e.g. through a captured owner) already ended.
+    const late = () => controller.signal.aborted || !!useContext(LifetimeContext)?.ended
+
+    // Withdrawn with the current owner, or with the extension when there is none (after an await).
+    const register = (fn: Cleanup): Cleanup => {
+      if (late()) {
+        release(fn)
+
+        return () => {}
+      }
+
+      const cleanup = own(fn)
+      const scope = getOwner()
+
+      if (scope && scope !== root) onCleanup(() => void cleanup())
+
+      return cleanup
+    }
+
+    const clients = new Map<string, { client: RemoteClient<RemoteSpec>; live: Live<unknown> }>()
+
+    // One accessor per token, and one Live object per transition, so readers re-run only when the provider changes.
+    const remoteLive = (token: Remote): Live<unknown> => {
+      if (!input.remote) return inactive.disabled
+
+      const client = input.remote(token)
+
+      if (!client) return absent(token.id, input.generation?.(token) ?? 0, true)
+
+      const generation = input.generation?.(token) ?? 1
+      const cached = clients.get(token.id)
+
+      if (cached?.client === client && cached.live.status === "active" && cached.live.generation === generation)
+        return cached.live
+
+      const value = Object.assign({}, client, {
+        on: (name: string, listener: Parameters<typeof client.on>[1]) => register(client.on(name, listener)),
+      })
+
+      const live = { status: "active", value, generation } as const
+
+      clients.set(token.id, { client, live })
+
+      return live
+    }
+
+    const lives = new Map<string, Accessor<Live<unknown>>>()
+
+    const liveOf = (token: Token) => {
+      const existing = lives.get(token.id)
+
+      if (existing) return existing
+
+      const read = Live.accessor(token.kind === "service" ? () => serviceLive(token) : () => remoteLive(token))
+
+      lives.set(token.id, read)
+
+      return read
+    }
+
+    const value = (read: Accessor<Live<unknown>>) => {
+      const current = read()
+
+      return current.status === "active" ? current.value : undefined
+    }
+
+    // Declared tokens are followed through Live; an undeclared one keeps the older accessor, undefined while absent.
+    const declared = new Set(
+      [...Object.values(definition.uses ?? {}), ...Object.values(definition.requires ?? {})].map((token) => token.id),
+    )
+
+    const legacies = new Map<string, Accessor<unknown>>()
+
+    const legacyOf = (token: Token) => {
+      const existing = legacies.get(token.id)
+
+      if (existing) return existing
+
+      const read = liveOf(token)
+      const legacy = () => value(read)
+
+      legacies.set(token.id, legacy)
+
+      return legacy
+    }
+
+    const stores: Stores = {}
+
     const context = {
       id: extension,
       signal: controller.signal,
       cleanup: own,
-      add(point: Point<unknown>, item: unknown) {
-        if (controller.signal.aborted) return () => {}
+      add<T>(point: Point<T>, item: T | (() => T | undefined)) {
+        if (late()) return () => {}
+
         // Work after an await in setup has no owner; fall back to the extension root.
-        const value =
+        const read =
+          // SAFETY: a function item is the SDK's reactive form; points take no function values.
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
           typeof item === "function"
-            ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => unknown))!
+            ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => T | undefined))
             : () => item
+
         const key = `${extension}/${++sequence.value}`
-        setState("entries", point.id, (entries = []) => [...entries, { key, point: point.id, extension, value }])
-        return own(() => setState("entries", point.id, (entries = []) => entries.filter((entry) => entry.key !== key)))
+
+        setState("entries", point.id, (entries = []) => [
+          ...entries,
+          { key, point: point.id, extension, value: read ?? (() => undefined) },
+        ])
+
+        return register(() =>
+          setState("entries", point.id, (entries = []) => entries.filter((entry) => entry.key !== key)),
+        )
       },
       list,
-      provide(token: Service<unknown> | Remote, impl: unknown) {
+      provide<T>(token: Service<T> | Remote, impl: T) {
         if (token.kind === "remote") throw new Error("Remotes are provided by an extension's main entry")
-        if (controller.signal.aborted) return () => {}
-        provided.set(token.id, { extension, impl })
-        setState("services", token.id, (value = 0) => value + 1)
-        return own(() => {
-          if (provided.get(token.id)?.extension !== extension) return
+
+        if (late()) return () => {}
+
+        const generation = (generations.get(token.id) ?? 0) + 1
+
+        generations.set(token.id, generation)
+
+        const entry = { live: { status: "active", value: impl, generation } as const }
+
+        provided.set(token.id, entry)
+        setState("services", token.id, (version = 0) => version + 1)
+
+        return register(() => {
+          if (provided.get(token.id) !== entry) return
+
           provided.delete(token.id)
-          setState("services", token.id, (value = 0) => value + 1)
+          setState("services", token.id, (version = 0) => version + 1)
         })
       },
-      use(token: Host<unknown> | Service<unknown> | Remote<RemoteSpec>) {
-        if (token.kind === "host") {
-          if (created.has(token.id)) return created.get(token.id)
-          const service = hosts.get(token.id)
-          if (!service) throw new Error(`Host service "${token.id}" is unavailable`)
-          const value = service.create(extension, root, context)
-          created.set(token.id, value)
-          return value
-        }
-        if (token.kind === "service")
-          return () => {
-            void state.services[token.id]
-            return provided.get(token.id)?.impl
-          }
-        return () => input.remote?.(token)
+      use(token: Host<unknown> | Token) {
+        if (token.kind !== "host") return declared.has(token.id) ? liveOf(token) : legacyOf(token)
+
+        if (created.has(token.id)) return created.get(token.id)
+
+        const service = hosts.get(token.id)
+
+        if (!service) throw new Error(`Host service "${token.id}" is unavailable`)
+
+        const made = service.create(extension, root, typed, register)
+
+        created.set(token.id, made)
+
+        return made
       },
+      uses: Object.fromEntries(Object.entries(definition.uses ?? {}).map(([name, token]) => [name, liveOf(token)])),
+      // The host starts the extension only while every hard contract is active, and restarts it when one changes.
+      requires: Object.fromEntries(
+        Object.entries(definition.requires ?? {}).map(([name, token]) => [name, untrack(() => value(liveOf(token)))]),
+      ),
+      stores,
       t(key: string, params?: Record<string, string | number | boolean>) {
         const template = messages()[key]
+
         if (template !== undefined) return resolveTemplate(template, params)
+
+        // SAFETY: a key the extension's catalog lacks is one of the app's shared keys, such as `common.*`.
         return language.t(key as Parameters<typeof language.t>[0], params)
       },
       plural(key: string, count: number, params?: Record<string, string | number | boolean>) {
         const current = messages()
         const template = current[`${key}.${pluralCategory(language.intl(), count)}`] ?? current[`${key}.other`]
+
         if (template !== undefined) return resolveTemplate(template, { ...params, count })
+
+        // SAFETY: a key the extension's catalog lacks is one of the app's shared keys, such as `common.*`.
         return language.plural(key as Parameters<typeof language.plural>[0], count, params)
       },
-    } as unknown as Context
+    }
+
+    // SAFETY: one implementation serves the overloads of `Context` and `SetupContext`; each method checks its token kind.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const typed = context as unknown as InstanceContext
+
+    const sessions: ReturnType<typeof createSessionStore<object>>[] = []
+
     return {
       definition,
-      context,
+      context: typed,
+      prepare() {
+        const storage = typed.use(Storage)
+
+        const app = Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) => {
+          if (declaration.scope === "app") {
+            const handle = storage.store(name, { ...declaration, scope: "app" })
+
+            stores[name] = handle
+
+            return [whenLoaded(handle)]
+          }
+
+          const store = createSessionStore({
+            open: (session) => storage.store(name, { ...declaration, scope: { session } }),
+            owner: root,
+          })
+
+          stores[name] = store.get
+          sessions.push(store)
+
+          return []
+        })
+
+        if (sessions.length > 0) {
+          own(() => sessions.forEach((store) => store.dispose()))
+
+          const list = typed.use(Sessions)
+
+          // Drops the stores of sessions whose tabs closed.
+          createRenderEffect(() => {
+            const keys = new Set(list.list().map((session) => session.key))
+
+            untrack(() => sessions.forEach((store) => store.prune(keys)))
+          })
+        }
+
+        return Promise.all(app)
+      },
+      preload: (session) => sessions.forEach((store) => store.get(session)),
       dispose() {
         controller.abort()
         // One batch: every contribution and service of the extension disappears in the same frame.
@@ -323,6 +691,7 @@ function createHost(input: {
           cleanups.clear()
           Object.entries(state.entries).forEach(([point, entries]) => {
             if (!entries?.some((entry) => entry.extension === extension)) return
+
             setState("entries", point, (list = []) => list.filter((entry) => entry.extension !== extension))
           })
         })
@@ -334,17 +703,25 @@ function createHost(input: {
 
   const deactivate = (id: string) => {
     loads.delete(id)
+
     const instance = instances.get(id)
+
     if (!instance) return
+
     instances.delete(id)
     instance.dispose()
   }
 
-  const fail = (id: string, error: unknown) => {
-    console.error(`[extension] ${id}`, error)
+  const fail = (id: string, cause: unknown, phase: ExtensionFailure["phase"] = "setup") => {
+    console.error(`[extension] ${id}`, cause)
     batch(() => {
-      setState("status", id, "failed")
-      setState("errors", id, error instanceof Error ? (error.stack ?? error.message) : String(error))
+      // A contribution that fails to render renders nothing; the extension and its other contributions stay.
+      if (phase === "setup") setState("status", id, "failed")
+
+      setState("failures", id, {
+        phase,
+        error: cause instanceof Error ? (cause.stack ?? cause.message) : String(cause),
+      })
     })
   }
 
@@ -352,34 +729,87 @@ function createHost(input: {
   const latest = (definition: Definition) => replaced.get(definition.id) ?? definition
 
   // The startup gate: once every entry settled it stays open, so enabling or reloading an extension later
-  // never unmounts the app.
+  // never unmounts the app. An entry waiting on a hard contract that is disabled or failed has settled too.
   const ready = createMemo<boolean>(
     (settled) =>
       settled ||
       (!!input.disabled() &&
         input.definitions.every((definition) => {
           if (!definition.renderer) return true
+
           const status = state.status[definition.id]
-          return status === "active" || status === "failed" || status === "disabled"
+
+          if (status === "active" || status === "failed" || status === "disabled") return true
+
+          return Object.values(definition.requires ?? {}).some((token) => {
+            const provider = providerState(token)
+
+            return provider.status === "inactive" && provider.reason !== "restarting"
+          })
         })),
     false,
   )
 
   createMemo(() => {
     const disabled = input.disabled()
+
     if (!disabled) return
+
     untrack(() =>
-      input.definitions.forEach((definition) => {
-        if (disabled.has(definition.id)) {
-          deactivate(definition.id)
-          setState("status", definition.id, "disabled")
-          return
-        }
-        if (instances.has(definition.id) || state.status[definition.id] === "loading") return
-        void activate(latest(definition))
-      }),
+      batch(() =>
+        input.definitions.forEach((definition) => {
+          if (disabled.has(definition.id)) {
+            deactivate(definition.id)
+            setState("status", definition.id, "disabled")
+
+            return
+          }
+
+          if (instances.has(definition.id) || state.status[definition.id] === "loading") return
+
+          void activate(latest(definition))
+        }),
+      ),
     )
   })
+
+  // `requires` gating: an extension starts once every hard contract is active and restarts with a new generation of
+  // any of them. Activation is never ordered by the graph; only these extensions wait, and only for their contracts.
+  input.definitions.forEach((definition) => {
+    const tokens = Object.values(definition.requires ?? {})
+
+    if (tokens.length === 0) return
+
+    const key = createMemo(() => {
+      const providers = tokens.map(providerState)
+
+      return providers.every((provider) => provider.status === "active")
+        ? providers.map((provider) => (provider.status === "active" ? provider.generation : 0)).join(",")
+        : undefined
+    })
+
+    createRenderEffect(
+      on(
+        key,
+        (value) =>
+          untrack(() =>
+            batch(() => {
+              const id = definition.id
+
+              deactivate(id)
+
+              if (input.disabled()?.has(id) !== false) return
+
+              if (value === undefined) return setState("status", id, "loading")
+
+              void activate(latest(definition))
+            }),
+          ),
+        { defer: true },
+      ),
+    )
+  })
+
   onCleanup(() => {
     lifetime.disposed = true
     loads.clear()
@@ -393,16 +823,25 @@ function createHost(input: {
     items,
     links,
     definitions: () => input.definitions.map(latest),
-    context: (id: string) => instances.get(id)?.context,
+    context: (id: string): Context | undefined => instances.get(id)?.context,
     fail,
+    /** Starts loading every active extension's declared session stores for a session that mounts. */
+    preload(session: SessionRef) {
+      instances.forEach((instance) => instance.preload(session))
+    },
     /** `next` replaces the definition, e.g. after a development hot update. */
     reload(id: string, next?: Definition) {
       const definition = next ?? input.definitions.find((item) => item.id === id)
+
       if (!definition) return
+
       if (next) replaced.set(id, next)
-      deactivate(id)
-      setState("errors", id, undefined)
-      void activate(latest(definition))
+
+      batch(() => {
+        deactivate(id)
+        setState("failures", id, undefined)
+        void activate(latest(definition))
+      })
     },
   }
 }
@@ -411,13 +850,18 @@ function createHost(input: {
 async function loadMessages(catalog: Catalog | undefined, locale: string): Promise<Messages> {
   const english = catalog?.en ?? {}
   const source = catalog?.[locale]
+
   if (!source || locale === "en") return english
+
   const loaded =
+    // SAFETY: a catalog entry is either inline messages or the loader of a locale module, as `Catalog` types it.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
     typeof source === "function"
       ? await source().then(
           (module) => module.default,
           () => ({}),
         )
       : source
+
   return { ...english, ...loaded }
 }

@@ -3,7 +3,7 @@ import type { LocationRef, OpenCodeClient, ProjectListOutput, WorktreeDirectory 
 import type { Schema } from "effect"
 import type { Accessor, JSX } from "solid-js"
 import type { Store } from "solid-js/store"
-import { Host, type Cleanup, type OS } from "./core"
+import { Host, type Cleanup, type OS, type Persisted, type StoreFrom } from "./core"
 import type { IconName, Link } from "./points"
 
 export interface ServerRef {
@@ -184,6 +184,8 @@ export interface BackgroundTask {
 
 /** A mounted session route. Slot inputs and panel renders receive this. */
 export interface SessionView extends SessionRef {
+  /** A new object each time the session is routed, e.g. after Home and back. Keep per-visit state keyed by it. */
+  readonly visit: object
   /** `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local overrides. */
   readonly project: Project | undefined
   /**
@@ -221,6 +223,7 @@ export interface Layout {
    * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, a plain or
    * `preview` open selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
    * launcher, stores nothing. A launcher is never selected on narrow screens, but a stored one stays the preview slot.
+   * Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown wait until it is known.
    */
   open(
     key: string,
@@ -263,30 +266,26 @@ export type StorageScope =
   | { readonly server: string; readonly directory?: string }
   | { readonly session: SessionRef }
 
+export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>> {
+  readonly schema: S
+  readonly initial: S["Type"]
+  readonly scope?: StorageScope
+  /**
+   * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal").
+   * With pick, only the picked part of the old JSON is copied and the old key stays for its other owners.
+   */
+  readonly from?: StoreFrom
+}
+
 export interface Storage {
-  /** Durable, schema-decoded, synced across windows. */
+  /**
+   * @deprecated The `[store, update, ready]` tuple lets code read and write before the value loads. Declare `stores`
+   * in the definition for keys known up front; for dynamic keys, `Setup<typeof Definition>` types this as a
+   * `Persisted` (see `PersistedStorage`). Durable, schema-decoded, synced across windows.
+   */
   store<S extends Schema.ConstraintCodec<object, unknown>>(
     key: string,
-    options: {
-      readonly schema: S
-      readonly initial: S["Type"]
-      readonly scope?: StorageScope
-      /**
-       * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal").
-       * With pick, only the picked part of the old JSON is copied and the old key stays for its other owners.
-       */
-      readonly from?:
-        | string
-        | {
-            readonly key: string
-            /**
-             * For session scope: `key` is an app key (e.g. "layout") whose field `sessions` holds every session's
-             * state by the host's session key. pick receives only this session's entry, or undefined.
-             */
-            readonly sessions?: string
-            pick(value: unknown): unknown
-          }
-    },
+    options: StoreOptions<S>,
   ): readonly [Store<S["Type"]>, (mutation: (draft: S["Type"]) => void) => void, Accessor<boolean>]
   /** Window-local and kept across extension reloads. */
   memory<T extends object>(
@@ -294,6 +293,11 @@ export interface Storage {
     options: { readonly initial: T },
   ): readonly [Store<T>, (mutation: (draft: T) => void) => void]
   remove(key: string, options?: { readonly scope?: StorageScope }): void
+}
+
+/** `Storage` as `Setup<typeof Definition>` sees it: `store` is for dynamic keys and returns a `Persisted`. */
+export interface PersistedStorage extends Omit<Storage, "store"> {
+  store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>): Persisted<S["Type"]>
 }
 
 export interface System {
@@ -393,12 +397,21 @@ export interface Surfaces {
 }
 
 export const Sessions = Host.define<Sessions>("session")
+
 export const Layout = Host.define<Layout>("layout")
+
 export const Storage = Host.define<Storage>("storage")
+
 export const System = Host.define<System>("system")
+
 export const Native = Host.define<Native | undefined>("native")
+
 export const App = Host.define<App>("app")
+
 export const Dialogs = Host.define<Dialogs>("dialog")
+
 export const Links = Host.define<Links>("link")
+
 export const Preferences = Host.define<Preferences>("preferences")
+
 export const Surfaces = Host.define<Surfaces>("surface")
