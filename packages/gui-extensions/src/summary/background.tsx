@@ -4,11 +4,11 @@ import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, createSignal, For, on, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { Locale, useExtension, type BackgroundTask } from "../sdk"
+import { useExtension, type BackgroundTask } from "../sdk"
 
 export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[]; mobile?: boolean }) {
   const ctx = useExtension()
-  const locale = ctx.use(Locale)
+  const locale = ctx.locale
   const data = useData()
   const running = createMemo(() => props.tasks.length > 0)
   // A new period each time work starts or ends: the list closes when the last task ends and stays closed when work returns.

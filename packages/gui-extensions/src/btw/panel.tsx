@@ -7,12 +7,12 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { Markdown } from "@opencode/session-ui/markdown"
-import { System, useExtension, type MountedSession } from "../sdk"
+import { useExtension, type MountedSession } from "../sdk"
 import type { BtwModel } from "./model"
 
 export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession }) {
   const ctx = useExtension()
-  const system = ctx.use(System)
+  const system = ctx.system
   const answer = () => props.btw.answer(props.session)
   // A new token for each answer, so the copied mark clears when the answer changes.
   const shown = createMemo(on(answer, () => ({})))

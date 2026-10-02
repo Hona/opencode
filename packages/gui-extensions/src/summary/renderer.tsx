@@ -1,12 +1,12 @@
 import { createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, onIdle, Panel, Sessions, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
+import { createKeyed, onIdle, Panel, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
 import type Summary from "./index"
 import type { Disclosure } from "./panel"
 import { SummaryHeader } from "./popover"
 
 const setup: Setup<typeof Summary> = (ctx) => {
-  const sessions = ctx.use(Sessions)
+  const sessions = ctx.sessions
   const changes = ctx.uses.changes
   const prefs = ctx.stores.prefs
 
@@ -32,7 +32,7 @@ const setup: Setup<typeof Summary> = (ctx) => {
   )
 
   // Compile the panel while the app idles, so the first open renders at once.
-  ctx.cleanup(onIdle(() => void SummaryPanel.preload()))
+  onCleanup(onIdle(() => void SummaryPanel.preload()))
 
   ctx.add(Slot, {
     at: "session.header",

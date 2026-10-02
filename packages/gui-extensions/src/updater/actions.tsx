@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
-import { Build, Dialogs, type IpcClient, type SetupContext } from "../sdk"
+import type { IpcClient, SetupContext } from "../sdk"
 import type { Updater } from "./contract"
 import type definition from "./index"
 
@@ -30,7 +30,7 @@ export function install(ctx: Context, client: Client) {
     return
   }
 
-  ctx.use(Dialogs).show(() => <DialogStableDownload ctx={ctx} version={state.version} download={download} />)
+  ctx.dialogs.show(() => <DialogStableDownload ctx={ctx} version={state.version} download={download} />)
 }
 
 export async function check(ctx: Context, client: Client) {
@@ -47,7 +47,7 @@ export async function check(ctx: Context, client: Client) {
       variant: "success",
       icon: () => <Icon name="circle-check" />,
       title: ctx.t("toast.latest.title"),
-      description: ctx.t("toast.latest.description", { version: ctx.use(Build).version ?? "" }),
+      description: ctx.t("toast.latest.description", { version: ctx.build.version }),
     })
   }
 

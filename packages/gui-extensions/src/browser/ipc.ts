@@ -30,8 +30,8 @@ export const PaneEvent = Schema.Union([
     state: Schema.NullOr(Browser.State),
     error: Schema.optionalKey(Schema.String),
   }),
-  // A tab's page exists; the renderer lays it out through this host surface.
-  Schema.Struct({ type: Schema.Literal("surface"), tabID: Browser.TabID, surface: text(256) }),
+  // A tab's page exists; the renderer lays it out through this host embed.
+  Schema.Struct({ type: Schema.Literal("embed"), tabID: Browser.TabID, embed: text(256) }),
   // The page's element picker started, stopped, or picked an element.
   Schema.Struct({
     type: Schema.Literal("inspect"),

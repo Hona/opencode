@@ -1,13 +1,13 @@
-import { lazy, Suspense } from "solid-js"
-import { onIdle, Command, Desktop, Layout, SettingsPage, type Setup } from "../sdk"
+import { lazy, onCleanup, Suspense } from "solid-js"
+import { onIdle, Command, SettingsPage, type Setup } from "../sdk"
 import type definition from "./index"
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (!ctx.use(Desktop)) return
-  const layout = ctx.use(Layout)
+  if (!ctx.desktop) return
+  const layout = ctx.layout
   const Page = lazy(() => import("./page"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
-  ctx.cleanup(onIdle(() => void Page.preload()))
+  onCleanup(onIdle(() => void Page.preload()))
 
   ctx.add(SettingsPage, {
     id: "pairing",

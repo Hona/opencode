@@ -4,18 +4,15 @@ import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
   createKeyed,
   ExtensionContext,
-  Layout,
   LinkHandler,
   MenuItem,
-  Desktop,
   Panel,
-  Sessions,
   Slot,
-  Storage,
   Style,
   useExtension,
   usePanel,
   type LineRange,
+  type OpenOptions,
   type PanelTab,
   type MountedSession,
   type Setup,
@@ -43,10 +40,10 @@ type Handoff = { sessions: Record<string, Record<string, LineRange | null>> }
 type StyleLoad = { loaded?: Promise<void> }
 
 const setup: Setup<typeof File> = (ctx) => {
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
-  const storage = ctx.use(Storage)
-  const desktop = ctx.use(Desktop)
+  const sessions = ctx.sessions
+  const layout = ctx.layout
+  const storage = ctx.storage
+  const desktop = ctx.desktop
   // The extension's context as other extensions' views receive it.
   const context = useExtension()
   const tree = ctx.stores.tree
@@ -79,11 +76,7 @@ const setup: Setup<typeof File> = (ctx) => {
     return state === "active" || state === "visible"
   }
 
-  const open = (
-    session: MountedSession,
-    path: string,
-    options?: { readonly preview?: boolean; readonly background?: boolean },
-  ) => {
+  const open = (session: MountedSession, path: string, options?: OpenOptions) => {
     layout.open(key(session, path), session, options)
     void session.file.sync(path)
   }
@@ -143,7 +136,7 @@ const setup: Setup<typeof File> = (ctx) => {
   const Tree = lazy(() => styled(import("./tree-v2")))
   const List = lazy(() => styled(import("./list")))
 
-  ctx.cleanup(
+  onCleanup(
     onIdle(() => {
       void FileBrowser.preload()
       void Sidebar.preload()
@@ -165,7 +158,8 @@ const setup: Setup<typeof File> = (ctx) => {
         <span>{ctx.t("command.open")}</span>
       </div>
     ),
-    kind: "launcher",
+    draggable: false,
+    closable: "hover",
     sidebar: "locked",
     group: GROUP,
     dom: { panel: TABPANEL },
@@ -271,7 +265,7 @@ const setup: Setup<typeof File> = (ctx) => {
 
       if (!session) return
 
-      layout.open(`file:${OPEN}`, session, { preview: true })
+      layout.open(`file:${OPEN}`, session, { tab: "preview" })
       queueMicrotask(() => {
         const element = shared.filter.element
 
@@ -285,7 +279,7 @@ const setup: Setup<typeof File> = (ctx) => {
   if (desktop) {
     const OpenInAppButton = lazy(() => import("./open-in-app"))
 
-    ctx.cleanup(onIdle(() => void OpenInAppButton.preload()))
+    onCleanup(onIdle(() => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (

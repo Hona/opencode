@@ -21,12 +21,13 @@ export function mount(input: { server: string }) {
 
     // No main-process extensions run in this fixture.
     const bridge: Bridge = {
+      packaged: false,
       call: unused,
       subscribe: async () => ({ available: false }),
       on: () => () => undefined,
       embed: () => undefined,
       capture: async () => undefined,
-      menubar: () => undefined,
+      runMenubarItem: () => undefined,
       configure: () => undefined,
       manager: {
         list: async () => [],

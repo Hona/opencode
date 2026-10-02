@@ -32,18 +32,18 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
 
 // A main extension's Ipc state for this window, already encoded with the Ipc's schema.
 export class ExtensionState extends Schema.TaggedClass<ExtensionState>()("ExtensionState", {
-  remote: Schema.String,
+  ipc: Schema.String,
   state: ExtensionPayload,
 }) {}
 
 export class ExtensionEvent extends Schema.TaggedClass<ExtensionEvent>()("ExtensionEvent", {
-  remote: Schema.String,
+  ipc: Schema.String,
   name: Schema.String,
   data: ExtensionPayload,
 }) {}
 
 export class ExtensionAvailable extends Schema.TaggedClass<ExtensionAvailable>()("ExtensionAvailable", {
-  remote: Schema.String,
+  ipc: Schema.String,
   available: Schema.Boolean,
 }) {}
 
@@ -51,9 +51,10 @@ export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("
   list: Schema.Array(ExtensionInstalled),
 }) {}
 
-export class ExtensionMenubarChanged extends Schema.TaggedClass<ExtensionMenubarChanged>()("ExtensionMenubarChanged", {
-  items: Schema.Array(ExtensionMenubarItem),
-}) {}
+export class ExtensionMenubarItemsChanged extends Schema.TaggedClass<ExtensionMenubarItemsChanged>()(
+  "ExtensionMenubarItemsChanged",
+  { items: Schema.Array(ExtensionMenubarItem) },
+) {}
 
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
@@ -66,7 +67,7 @@ export const DesktopEvent = Schema.Union([
   ExtensionEvent,
   ExtensionAvailable,
   ExtensionsChanged,
-  ExtensionMenubarChanged,
+  ExtensionMenubarItemsChanged,
 ])
 
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>

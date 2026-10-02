@@ -16,26 +16,17 @@ import { Predicate, type Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
 import {
-  Appearance,
-  Build,
-  Desktop,
-  Embeds,
-  Keybinds,
-  Layout,
-  Locale,
   Panel,
-  Preferences,
-  Router,
-  Servers,
-  Sessions,
-  Storage,
-  System,
-  Workspaces,
+  type Build,
+  type Layout,
+  type MountedSession,
+  type OpenOptions,
   type PanelSidebar,
   type PanelState,
+  type Preferences,
   type ServerRef,
   type SessionRef,
-  type MountedSession,
+  type Storage,
   type StorageScope,
   type StoreFrom,
   type StoreOptions,
@@ -56,7 +47,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createEmbeds } from "./embeds"
-import { useExtensionHost, type HostApiFactory } from "./host"
+import { useExtensionHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
 import type { Region } from "./panels"
 import { persistedHandle } from "./stores"
@@ -131,186 +122,138 @@ export function createHostApis() {
     return { ...Persist.serverWorkspace(connected.scope(scope.server), base64Encode(scope.directory), name), copyFrom }
   }
 
-  const apis: HostApiFactory[] = [
-    {
-      token: Storage,
-      create: (extension, owner) =>
-        ({
-          store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>) {
-            // Persistence owns effects and resources; code after an await in setup has no owner.
-            const pair = runWithOwner(getOwner() ?? owner, () =>
-              persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
-            )!
+  const apis: HostApiFactories = {
+    storage: (extension, owner) => ({
+      store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>) {
+        // Persistence owns effects and resources; code after an await in setup has no owner.
+        const pair = runWithOwner(getOwner() ?? owner, () =>
+          persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
+        )!
 
-            return persistedHandle({
-              store: pair[0],
-              update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
-              init: pair[3].promise,
-            })
-          },
-          memory<T extends object>(key: string, options: { readonly initial: T }) {
-            const name = `${extension}.${key}`
-            const existing = memory.get(name)
+        return persistedHandle({
+          store: pair[0],
+          update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
+          init: pair[3].promise,
+        })
+      },
+      memory<T extends object>(key: string, options: { readonly initial: T }) {
+        const name = `${extension}.${key}`
+        const existing = memory.get(name)
 
-            if (existing) {
-              // SAFETY: a memory key is one extension's store, which that extension always opens with the same shape.
-              return existing as readonly [Store<T>, (mutation: (draft: T) => void) => void]
-            }
+        if (existing) {
+          // SAFETY: a memory key is one extension's store, which that extension always opens with the same shape.
+          return existing as readonly [Store<T>, (mutation: (draft: T) => void) => void]
+        }
 
-            const [store, setStore] = createStore(options.initial)
-            const value = [store, (mutation: (draft: T) => void) => setStore(produce(mutation))] as const
+        const [store, setStore] = createStore(options.initial)
+        const value = [store, (mutation: (draft: T) => void) => setStore(produce(mutation))] as const
 
-            memory.set(name, value)
+        memory.set(name, value)
 
-            return value
-          },
-          remove(key, options) {
-            removePersisted(target(extension, key, options?.scope, undefined), platform)
-          },
-        }) satisfies Storage,
-    },
-    {
-      token: System,
-      create: () =>
-        ({
-          copy: (text) => platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text),
-          async save(file) {
-            if (platform.saveFile) return platform.saveFile({ defaultPath: file.name }, file.content)
-            const url = URL.createObjectURL(new Blob([file.content], { type: "application/octet-stream" }))
-            const link = document.createElement("a")
-            link.href = url
-            link.download = file.name
-            link.click()
-            URL.revokeObjectURL(url)
+        return value
+      },
+      remove(key, options) {
+        removePersisted(target(extension, key, options?.scope, undefined), platform)
+      },
+    }),
+    system: () => ({
+      copy: (text) => platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text),
+      async save(file) {
+        if (platform.saveFile) return platform.saveFile({ defaultPath: file.name }, file.content)
+        const url = URL.createObjectURL(new Blob([file.content], { type: "application/octet-stream" }))
+        const link = document.createElement("a")
+        link.href = url
+        link.download = file.name
+        link.click()
+        URL.revokeObjectURL(url)
 
-            return true
-          },
-          open(url) {
-            if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:")
-              return platform.openLocalFile(url)
-            platform.openExternal(url)
-          },
-        }) satisfies System,
-    },
-    {
-      token: Desktop,
-      create: () =>
-        platform.platform === "desktop"
-          ? ({
-              os: platform.os ?? "linux",
-              window: platform.windowID,
-              zoom: () => platform.webviewZoom?.() ?? 1,
-              launch: (path, app) => platform.openPath?.(path, app) ?? Promise.resolve(),
-              reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
-              installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
-              forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
-            } satisfies NonNullable<Desktop>)
-          : undefined,
-    },
-    {
-      token: Build,
-      create: () =>
-        ({
-          version: platform.version,
-          // SAFETY: the build sets VITE_OPENCODE_CHANNEL to one of the release channels, or leaves it unset locally.
-          channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as Build["channel"],
-          platform: platform.platform,
-        }) satisfies Build,
-    },
-    {
-      token: Locale,
-      create: () =>
-        ({
-          locale: language.intl,
-          direction: language.direction,
-          setDirection: language.setDirection,
-        }) satisfies Locale,
-    },
-    {
-      token: Appearance,
-      create: () => ({ font: () => requireAttached(current()).font() }) satisfies Appearance,
-    },
-    {
-      token: Router,
-      create: () =>
-        ({
-          routing: () => current()?.routing() ?? false,
-          path: () => current()?.path() ?? "",
-        }) satisfies Router,
-    },
-    {
-      token: Keybinds,
-      create: () =>
-        ({
-          keybind: (command) => current()?.keybind(command) ?? [],
-          keys: (bind) => formatKeybindParts(bind, language.t),
-          matches: (command, event) => current()?.matches(command, event) ?? false,
-        }) satisfies Keybinds,
-    },
-    {
-      token: Servers,
-      create: () => ({ list: () => current()?.servers() ?? [] }) satisfies Servers,
-    },
-    {
-      token: Workspaces,
-      create: (_extension, _owner, _context, register) =>
-        ({
-          on(_event, handler) {
-            removed.add(handler)
+        return true
+      },
+      openExternal(url) {
+        if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:")
+          return platform.openLocalFile(url)
+        platform.openExternal(url)
+      },
+    }),
+    desktop: () =>
+      platform.platform === "desktop"
+        ? {
+            os: platform.os ?? "linux",
+            window: platform.windowID,
+            zoom: () => platform.webviewZoom?.() ?? 1,
+            launch: (path, app) => platform.openPath?.(path, app) ?? Promise.resolve(),
+            reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
+            installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
+            forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
+          }
+        : undefined,
+    build: () => ({
+      version: platform.version ?? "",
+      // SAFETY: the build sets VITE_OPENCODE_CHANNEL to one of the release channels, or leaves it unset locally.
+      channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as Build["channel"],
+      platform: platform.platform,
+      packaged: platform.extensions?.packaged ?? false,
+    }),
+    locale: () => ({
+      locale: language.intl,
+      direction: language.direction,
+      setDirection: language.setDirection,
+    }),
+    appearance: () => ({ font: () => requireAttached(current()).font() }),
+    router: () => ({
+      routing: () => current()?.routing() ?? false,
+      path: () => current()?.path() ?? "",
+    }),
+    keybinds: () => ({
+      keybind: (command) => current()?.keybind(command) ?? [],
+      keys: (bind) => formatKeybindParts(bind, language.t),
+      matches: (command, event) => current()?.matches(command, event) ?? false,
+    }),
+    servers: () => ({ list: () => current()?.servers() ?? [] }),
+    workspaces: (_extension, _owner, _context, register) => ({
+      on(_event, handler) {
+        removed.add(handler)
 
-            return register(() => {
-              removed.delete(handler)
-            })
-          },
-        }) satisfies Workspaces,
-    },
-    {
-      token: Sessions,
-      create: () =>
-        ({
-          list: () => current()?.sessions() ?? [],
-          current: () => current()?.current(),
-        }) satisfies Sessions,
-    },
-    {
-      token: Layout,
-      create: (extension) =>
-        ({
-          narrow,
-          ready: () => current()?.layout.ready() ?? false,
-          open: (key, session, options) => requireAttached(current()).layout.open(key, session, options),
-          close: (key, session) => requireAttached(current()).layout.close(key, session),
-          toggle: (key, session) => requireAttached(current()).layout.toggle(key, session),
-          state: (key, session) => requireAttached(current()).layout.state(key, session),
-          stored: (session) => requireAttached(current()).layout.stored(extension, session),
-          side: {
-            opened: (session) => requireAttached(current()).layout.side.opened(session),
-            toggle: (session) => requireAttached(current()).layout.side.toggle(session),
-          },
-          sidebar: { opened: () => requireAttached(current()).layout.sidebar.opened() },
-          dock: {
-            opened: (session) => requireAttached(current()).layout.dock.opened(session),
-            placement: () => requireAttached(current()).layout.dock.placement(),
-          },
-          scroll: {
-            get: (session, key) => requireAttached(current()).layout.scroll.get(session, key),
-            set: (session, key, value) => requireAttached(current()).layout.scroll.set(session, key, value),
-          },
-          settings: (page) => requireAttached(current()).settings(page),
-          project: (server, title) => requireAttached(current()).project(server, title),
-        }) satisfies Layout,
-    },
-    {
-      token: Preferences,
-      create: () =>
-        ({
-          releaseNotes: () => requireAttached(current()).preferences.releaseNotes(),
-          setReleaseNotes: (value) => requireAttached(current()).preferences.setReleaseNotes(value),
-          mobileDiffWrap: () => requireAttached(current()).preferences.mobileDiffWrap(),
-        }) satisfies Preferences,
-    },
-    { token: Embeds, create: () => embeds },
-  ]
+        return register(() => {
+          removed.delete(handler)
+        })
+      },
+    }),
+    sessions: () => ({
+      list: () => current()?.sessions() ?? [],
+      current: () => current()?.current(),
+    }),
+    layout: (extension) => ({
+      narrow,
+      ready: () => current()?.layout.ready() ?? false,
+      open: (key, session, options) => requireAttached(current()).layout.open(key, session, options),
+      close: (key, session) => requireAttached(current()).layout.close(key, session),
+      toggle: (key, session) => requireAttached(current()).layout.toggle(key, session),
+      state: (key, session) => requireAttached(current()).layout.state(key, session),
+      stored: (session) => requireAttached(current()).layout.stored(extension, session),
+      side: {
+        opened: (session) => requireAttached(current()).layout.side.opened(session),
+        toggle: (session) => requireAttached(current()).layout.side.toggle(session),
+      },
+      sidebar: { opened: () => requireAttached(current()).layout.sidebar.opened() },
+      dock: {
+        opened: (session) => requireAttached(current()).layout.dock.opened(session),
+        placement: () => requireAttached(current()).layout.dock.placement(),
+      },
+      scroll: {
+        get: (session, key) => requireAttached(current()).layout.scroll.get(session, key),
+        set: (session, key, value) => requireAttached(current()).layout.scroll.set(session, key, value),
+      },
+      settings: (page) => requireAttached(current()).settings(page),
+      project: (server, title) => requireAttached(current()).project(server, title),
+    }),
+    preferences: () => ({
+      releaseNotes: () => requireAttached(current()).preferences.releaseNotes(),
+      setReleaseNotes: (value) => requireAttached(current()).preferences.setReleaseNotes(value),
+      mobileDiffWrap: () => requireAttached(current()).preferences.mobileDiffWrap(),
+    }),
+    embeds: () => embeds,
+  }
 
   return {
     apis,
@@ -552,27 +495,28 @@ export function createExtensionAttachment(apis: HostApis) {
   // Writes made before a session's location is known wait for it rather than being dropped.
   const located = createLocatedWrites()
 
-  const open = (key: string, session: SessionRef, options?: Parameters<Layout["open"]>[2]) => {
+  const open = (key: string, session: SessionRef, options?: OpenOptions) => {
     const item = provider(key)
 
     if (item?.value.region === "dock") return setDock(session, true)
     const value = stateKey(session)
 
     if (!value) return located.hold(session, () => open(key, session, options))
+    const placement = options?.tab ?? "open"
 
-    // focus: false adds the tab quietly: no selection, no region change, no preview replacement.
-    if (options?.focus === false && !options.preview) return layout.panel.append(value, key)
+    // An append adds the tab quietly: no selection, no region change, no preview replacement.
+    if (placement === "append") return layout.panel.append(value, key)
 
     // A select keeps the narrow-screen view and dock, as a background open does, and opens the side region too.
-    if (options?.select)
+    if (placement === "select")
       return batch(() => {
         tabs.setRegion(shellTab(session), "side", true)
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
-    // Lists the opened tab too, so its own fields apply before it is stored.
+    // Lists the opened tab too, so its own fields apply before it is stored. A hover-closable tab is a launcher.
     const known = listed(session, value, key)
-    const launchers = new Set(known.flatMap((entry) => (entry.tab.kind === "launcher" ? [entry.key] : [])))
+    const launchers = new Set(known.flatMap((entry) => (entry.tab.closable === "hover" ? [entry.key] : [])))
     const first = known.some((entry) => entry.key === key && entry.tab.first)
     batch(() => {
       if (narrow() && !options?.background) {
@@ -581,7 +525,7 @@ export function createExtensionAttachment(apis: HostApis) {
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
 
         // A tab its panel does not list, or a launcher, stays unstored: the open only selects the panel's view.
-        if (mountedSession(session) && !known.some((entry) => entry.key === key && entry.tab.kind !== "launcher"))
+        if (mountedSession(session) && !known.some((entry) => entry.key === key && entry.tab.closable !== "hover"))
           return
       }
 
@@ -589,9 +533,9 @@ export function createExtensionAttachment(apis: HostApis) {
       if (!narrow() || options?.background) tabs.setRegion(shellTab(session), "side", true)
 
       // Pinned tabs are listed without being stored; opening one only selects it.
-      if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
+      if (known.some((entry) => entry.key === key && entry.tab.pinned)) return layout.panel.focus(value, key)
 
-      if (options?.preview) return layout.panel.preview(value, key, launchers)
+      if (placement === "preview") return layout.panel.preview(value, key, launchers)
       layout.panel.open(value, key, launchers, first)
     })
   }

@@ -10,12 +10,12 @@ const block = 10_000
  */
 export function createRefs(storage: Storage) {
   const reserved = storage.store("refs", { schema: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), initial: 0 })
-  const state = { next: reserved.get(), end: reserved.get() }
+  const state = { next: reserved.value, end: reserved.value }
 
   return () => {
     if (state.next >= state.end) {
       state.end = state.next + block
-      reserved.set(state.end)
+      reserved.update(() => state.end)
     }
 
     return `e${++state.next}`

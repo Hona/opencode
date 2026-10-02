@@ -13,8 +13,8 @@ const empty: Stored = { tabs: [], focusedTabID: null }
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
 export function createBrowserRestoreStore(storage: Storage) {
-  const open = (key: string) =>
-    storage.store(`restore:${key}`, { schema: Stored, initial: empty, from: `state:opencode.browser.dat/${key}` })
+  const from = (key: string) => `state:opencode.browser.dat/${key}`
+  const open = (key: string) => storage.store(`restore:${key}`, { schema: Stored, initial: empty, from: from(key) })
 
   const stores = new Map<string, ReturnType<typeof open>>()
 
@@ -29,16 +29,16 @@ export function createBrowserRestoreStore(storage: Storage) {
   }
 
   return {
-    load: (key: string) => store(key).get(),
+    load: (key: string) => store(key).value,
     save(key: string, state: Stored) {
       const target = store(key)
       const value = { tabs: state.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: state.focusedTabID }
 
-      if (JSON.stringify(target.get()) !== JSON.stringify(value)) target.set(value)
+      if (JSON.stringify(target.value) !== JSON.stringify(value)) target.update(() => value)
     },
     // Also drops the unimported desktop row, as the pane's own close always did.
     remove(key: string) {
-      store(key).remove()
+      storage.remove(`restore:${key}`, { from: from(key) })
       stores.delete(key)
     },
   }

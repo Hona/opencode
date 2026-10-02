@@ -233,7 +233,7 @@ export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: M
       active={placeholder() ? undefined : fileTabPath(props.session.file, id())}
       kinds={changes()?.kinds(props.session) ?? empty}
       state={panel.sidebar}
-      onSelect={(path) => shared.open(props.session, path, { preview: true })}
+      onSelect={(path) => shared.open(props.session, path, { tab: "preview" })}
       onSelectPermanent={(path) => shared.open(props.session, path)}
       filterRef={(element) => {
         shared.filter.element = element

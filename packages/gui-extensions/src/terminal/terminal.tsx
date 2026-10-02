@@ -8,7 +8,7 @@ import { createPtyClient } from "@opencode/client/solid"
 import type { FitAddon, Terminal as Term } from "ghostty-web"
 import { Option, Predicate, Schema } from "effect"
 import { type ComponentProps, createMemo, onCleanup, onMount, splitProps } from "solid-js"
-import { Appearance, createKeyed, Desktop, Keybinds, System, useExtension, type ServerRef } from "../sdk"
+import { createKeyed, useExtension, type ServerRef } from "../sdk"
 import type { TerminalModel } from "./model"
 import type { LocalPTY } from "./state"
 import { SerializeAddon } from "./serialize"
@@ -182,10 +182,10 @@ const persistTerminal = (input: {
 
 export const Terminal = (props: TerminalProps) => {
   const extension = useExtension()
-  const appearance = extension.use(Appearance)
-  const keybinds = extension.use(Keybinds)
-  const system = extension.use(System)
-  const desktop = extension.use(Desktop)
+  const appearance = extension.appearance
+  const keybinds = extension.keybinds
+  const system = extension.system
+  const desktop = extension.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
 
@@ -421,7 +421,7 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    system.open(text)
+    system.openExternal(text)
   }
 
   onMount(() => {

@@ -8,7 +8,9 @@ import {
   Contract,
   Store,
   type Composition,
+  type Desktop,
   type Duplicate,
+  type IpcClient,
   type Live,
   type Missing,
   type MissingMain,
@@ -23,8 +25,6 @@ const equal = <A, B>(value: Equal<A, B>) => value
 const Tree = Contract.define<{ open(path: string): void }, "fixture.tree">("fixture.tree")
 
 const Changes = Contract.define<{ count(): number }, "fixture.changes">("fixture.changes")
-
-const Unlisted = Contract.define<{ ping(): void }, "fixture.unlisted">("fixture.unlisted")
 
 const Pane = Ipc.define({ id: "fixture.pane", methods: { open: { input: Schema.String } } })
 
@@ -85,8 +85,10 @@ const RefConsumer = Extension.define({ id: "ref", uses: { pane: PaneRef } })
 export const referenced: IpcsProvided<[typeof RefConsumer], typeof main> = true
 
 export const resolver: Setup<typeof RefConsumer> = (ctx) => {
-  const full = ctx.use(Pane)
-  equal<typeof full, typeof ctx.uses.pane>(true)
+  const full = ctx.uses.pane.load(Pane)
+  equal<typeof full, Accessor<Live<IpcClient<(typeof Pane)["spec"]>>>>(true)
+  // @ts-expect-error the full token must be the reference's
+  ctx.uses.pane.load(Ipc.define({ id: "fixture.other", methods: {} }))
   // @ts-expect-error the id must be the token's
   Ipc.ref<typeof Pane>("fixture.other")
 }
@@ -97,16 +99,18 @@ Extension.define({ id: "held", requires: { pane: PaneRef } })
 // The typed context exposes only what the definition declares.
 export const setup: Setup<typeof Consumer> = (ctx) => {
   equal<typeof ctx.uses.changes, Accessor<Live<{ count(): number }>>>(true)
-  const changes = ctx.use(Changes)
-  equal<typeof changes, Accessor<Live<{ count(): number }>>>(true)
   ctx.requires.tree.open("a.ts")
   void ctx.requires.pane.open("https://example.com")
   equal<typeof ctx.stores.view.value, { readonly open: boolean }>(true)
   equal<ReturnType<typeof ctx.stores.draft>["value"], { readonly open: boolean } | undefined>(true)
-  // @ts-expect-error fixture.unlisted is not declared in uses
-  ctx.use(Unlisted)
+  // Host APIs are properties of the context; the desktop one is undefined on the web.
+  equal<typeof ctx.desktop, Desktop | undefined>(true)
+  // @ts-expect-error host APIs are properties, not tokens
+  void ctx.use
+  // @ts-expect-error nothing named unlisted is declared in uses
+  void ctx.uses.unlisted
   // @ts-expect-error fixture.tree is required, not used: its value is `ctx.requires.tree`
-  ctx.use(Tree)
+  void ctx.uses.tree
   // @ts-expect-error the consumer declares no provides
   ctx.provide(Tree, { open: () => undefined })
   // @ts-expect-error no store named missing

@@ -11,35 +11,24 @@ import {
   type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Live, type Contract, type Definition, type Ipc, type IpcClient, type IpcRef, type Token } from "./core"
-import { Sessions } from "./host-apis"
+import { Live } from "./core"
 import { LifetimeContext, useExtension } from "./solid"
 
 type Falsy = undefined | null | false
 
-/** A token the definition declares or a `Live` accessor such as `ctx.uses.name`, both followed through `Live`, or any accessor. */
-export type KeyedSource = Token | Accessor<unknown>
+/** A `Live` accessor such as `ctx.uses.name`, followed through its generations, or any accessor. */
+export type KeyedSource = Accessor<unknown>
 
 /** What a source gives while it is active. A plain accessor is active while its value is not undefined, null or false. */
 export type KeyedValue<S> =
-  S extends Ipc<infer Spec>
-    ? IpcClient<Spec>
-    : S extends IpcRef<infer Spec>
-      ? IpcClient<Spec>
-      : S extends Contract<infer T>
-        ? T
-        : S extends Accessor<Live<infer T>>
-          ? T
-          : S extends Accessor<infer T>
-            ? Exclude<T, Falsy>
-            : never
+  S extends Accessor<Live<infer T>> ? T : S extends Accessor<infer T> ? Exclude<T, Falsy> : never
 
 /** One run of `createKeyed`: the source's value, or none while it is not active. */
 type Run = { readonly value: unknown; readonly generation?: number } | undefined
 
 /**
- * Runs `fn` once per key, like `<Show keyed>`: each active generation of a token or `Live` accessor, or each identity of
- * a plain accessor's value. Each run, and each run of `otherwise` while there is no key, has its own owner: its
+ * Runs `fn` once per key, like `<Show keyed>`: each active generation of a `Live` accessor, or each identity of a plain
+ * accessor's value. Each run, and each run of `otherwise` while there is no key, has its own owner: its
  * `onCleanup` and its registrations end with it. This is the way extension code runs side effects reactively.
  */
 export function createKeyed<S extends KeyedSource>(
@@ -47,8 +36,7 @@ export function createKeyed<S extends KeyedSource>(
   fn: (value: KeyedValue<S>) => void,
   options?: { readonly otherwise?: () => void },
 ) {
-  const input: KeyedSource = source
-  const read = isToken(input) ? follow(input) : input
+  const read: KeyedSource = source
 
   const active = Live.is(read)
     ? createMemo<Run>(
@@ -93,15 +81,6 @@ export function createKeyed<S extends KeyedSource>(
   )
 }
 
-function isToken(source: KeyedSource): source is Token {
-  return "kind" in source
-}
-
-/** The extension context's accessor for a token. */
-function follow(token: Token): Accessor<unknown> {
-  return useExtension<Definition>().use(token)
-}
-
 /**
  * The latest result of `fetch` for the source's current value. Never suspends. A new value aborts the previous request
  * through its signal and drops its reply; so does the owner going away. `latest` keeps the last result meanwhile.
@@ -140,7 +119,7 @@ export function createLatest<S extends KeyedSource, T>(
 
 /** State that returns to `initial` on every routing visit of the current session (`MountedSession.visit`). */
 export function createVisitState<T>(initial: T) {
-  const sessions = useExtension().use(Sessions)
+  const sessions = useExtension().sessions
   const visit = () => sessions.current()?.visit
 
   const [state, setState] = createSignal<{ readonly visit: object | undefined; readonly value: T }>({

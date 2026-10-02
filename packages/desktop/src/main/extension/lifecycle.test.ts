@@ -16,8 +16,8 @@ type Plan = {
   readonly setupFails?: boolean
   /** The finalizer setup adds before its await. */
   readonly cleanup?: Wait
-  /** The cleanup setup returns. */
-  readonly returned?: Wait
+  /** The finalizer setup adds after its await, as it finishes. */
+  readonly late?: Wait
 }
 
 type Made = { readonly id: string; readonly revision: string; readonly label: string; readonly instance: Instance }
@@ -110,12 +110,12 @@ function world() {
           openers.add(opener)
           contribute(owner, "listener", undefined, () => openers.delete(opener))
           events.push(`ready ${owner.label}`)
-
-          return async () => {
-            events.push(`returned ${owner.label}`)
-            await wait(plan.returned)
-            events.push(`returned ${owner.label} done`)
-          }
+          // Added without checking the signal: a stopped instance runs it at once, and its disposal waits for it.
+          instance.scope.addFinalizer(async () => {
+            events.push(`late ${owner.label}`)
+            await wait(plan.late)
+            events.push(`late ${owner.label} done`)
+          })
         },
       }
     }
@@ -241,7 +241,7 @@ describe("extension lifecycle contracts", () => {
     { name: "reinstall", stop: (w: World) => w.install("a") },
   ])("$name during async setup stops the instance at once and starts the next after its late cleanup", async (row) => {
     const w = world()
-    w.revise("a", { setup: 50, returned: 30 })
+    w.revise("a", { setup: 50, late: 30 })
     void w.lifecycle.activate("a")
     await advance(10)
     expect(w.events).toEqual(["setup a1#1"])
@@ -254,15 +254,15 @@ describe("extension lifecycle contracts", () => {
     expect(done.settled).toBe(true)
     const next = w.made[1]
     expect(w.live("a")).toEqual([next])
-    // The setup that outlived its instance contributed nothing that stayed, and its returned cleanup finished
-    // before the next instance's setup started.
+    // The setup that outlived its instance contributed nothing that stayed, and its late finalizer finished before
+    // the next instance's setup started.
     expect(w.events).toEqual([
       "setup a1#1",
       "cleanup a1#1",
       "cleanup a1#1 done",
       "ready a1#1",
-      "returned a1#1",
-      "returned a1#1 done",
+      "late a1#1",
+      "late a1#1 done",
       `setup ${next.label}`,
       `ready ${next.label}`,
     ])
@@ -286,8 +286,8 @@ describe("extension lifecycle contracts", () => {
     expect(w.events).toEqual([
       "setup a1#1",
       "ready a1#1",
-      "returned a1#1",
-      "returned a1#1 done",
+      "late a1#1",
+      "late a1#1 done",
       "cleanup a1#1",
       "cleanup a1#1 done",
       "setup a1#2",
@@ -470,7 +470,7 @@ const plan = (rng: Random): Plan => ({
   setup: delay(rng, 0.05, 60),
   setupFails: rng.chance(0.12),
   cleanup: delay(rng, 0.1, 50),
-  returned: delay(rng, 0.05, 30),
+  late: delay(rng, 0.05, 30),
 })
 
 const SEEDS = 1_000

@@ -2,7 +2,7 @@ import { batch, createMemo, createSignal, onCleanup, onMount, Show } from "solid
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createKeyed, Desktop, Locale, Router, Sessions, useExtension } from "../sdk"
+import { createKeyed, useExtension } from "../sdk"
 import {
   applyProviderMetricEvent,
   isProviderMetricEvent,
@@ -193,10 +193,10 @@ function ToggleCell(props: {
 
 export default function DebugBar(props: { diagnostics?: boolean; inline?: boolean }) {
   const ctx = useExtension()
-  const router = ctx.use(Router)
-  const locale = ctx.use(Locale)
-  const desktop = ctx.use(Desktop)
-  const sessions = ctx.use(Sessions)
+  const router = ctx.router
+  const locale = ctx.locale
+  const desktop = ctx.desktop
+  const sessions = ctx.sessions
 
   const [state, setState] = createStore<Readings>({
     cls: undefined,

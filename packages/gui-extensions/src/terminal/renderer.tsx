@@ -1,17 +1,18 @@
-import { createMemo, lazy, on, Suspense } from "solid-js"
-import { Command, createKeyed, Layout, onIdle, Panel, Sessions, Storage, Workspaces, type Setup } from "../sdk"
+import { createMemo, lazy, on, onCleanup, Suspense } from "solid-js"
+import { Command, createKeyed, onIdle, Panel, type Setup } from "../sdk"
 import type Terminal from "./index"
 import { createTerminalModel, type TerminalWorkspace } from "./model"
 
 const DOCK = "terminal:main"
 
 const setup: Setup<typeof Terminal> = (ctx) => {
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
-  const model = createTerminalModel({ storage: ctx.use(Storage), sessions })
+  const sessions = ctx.sessions
+  const layout = ctx.layout
+  const model = createTerminalModel({ storage: ctx.storage, sessions })
 
-  ctx.cleanup(model.dispose)
-  ctx.cleanup(ctx.use(Workspaces).on("remove", model.remove))
+  onCleanup(model.dispose)
+  // The host withdraws the listener with the extension.
+  ctx.workspaces.on("remove", model.remove)
 
   // The routed session's workspace stays loaded while no panel renders it, like the session route did.
   const workspace = createMemo<TerminalWorkspace | undefined>((previous) => {
@@ -125,7 +126,7 @@ const setup: Setup<typeof Terminal> = (ctx) => {
   const TerminalPanel = lazy(() => import("./panel"))
 
   // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.
-  ctx.cleanup(onIdle(() => void TerminalPanel.preload()))
+  onCleanup(onIdle(() => void TerminalPanel.preload()))
   // A dock stored open renders with its session at startup, so its chunk loads with the app, not when it idles.
   createKeyed(
     () => sessions.list().some((session) => layout.dock.opened(session)),

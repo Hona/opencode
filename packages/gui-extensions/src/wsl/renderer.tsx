@@ -1,19 +1,19 @@
 import { showToast } from "@opencode/ui/toast"
-import { lazy, Suspense } from "solid-js"
+import { lazy, onCleanup, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Build, Dialogs, MenuItem, onIdle, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
+import { MenuItem, onIdle, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
 import type { WslServerItem } from "./contract"
 import type definition from "./index"
 
 const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (ctx.use(Build).platform !== "desktop") return
+  if (ctx.build.platform !== "desktop") return
   const ipc = ctx.uses.wsl
-  const dialog = ctx.use(Dialogs)
+  const dialog = ctx.dialogs
   const Row = lazy(() => import("./row"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
-  ctx.cleanup(onIdle(() => void Row.preload()))
+  onCleanup(onIdle(() => void Row.preload()))
 
   const client = () => {
     const live = ipc()

@@ -19,7 +19,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, Desktop, Locale, Servers, System, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { configuredLsps } from "./configured-lsp"
 
 const services = [
@@ -50,7 +50,7 @@ export function SessionServerPanel(props: {
   onExpandedChange: (expanded: boolean) => void
 }) {
   const ctx = useExtension()
-  const servers = ctx.use(Servers)
+  const servers = ctx.servers
   const contentID = createUniqueId()
   // With one server the card is generic; with several it names the session's server.
   const name = () => (servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
@@ -171,7 +171,7 @@ function LspMenu(props: ServiceMenuProps) {
 
 function McpMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
-  const system = ctx.use(System)
+  const system = ctx.system
   const data = props.session.server.data
 
   const toggle = useMutation(() => ({
@@ -206,7 +206,7 @@ function McpMenu(props: ServiceMenuProps) {
           location: ref,
         })
 
-        system.open(attempt.data.url)
+        system.openExternal(attempt.data.url)
       }
 
       data.location.mcp.resource.invalidate(ref)
@@ -445,7 +445,7 @@ function ServicePopover(
   },
 ) {
   const ctx = useExtension()
-  const locale = ctx.use(Locale)
+  const locale = ctx.locale
 
   const placement = createMemo(() =>
     props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-start" : "left-start",
@@ -507,8 +507,8 @@ function ServicePopover(
 
 function ServiceConfigLink(props: { session: MountedSession; directory: string; service: Service }) {
   const ctx = useExtension()
-  const desktop = ctx.use(Desktop)
-  const system = ctx.use(System)
+  const desktop = ctx.desktop
+  const system = ctx.system
   const local = () => props.session.server.local
   const [store, setStore] = createStore({ opening: false, copied: false })
   const label = () => ctx.t(local() ? "configure" : "copyConfigPath")

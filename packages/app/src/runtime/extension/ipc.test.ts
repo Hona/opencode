@@ -11,19 +11,19 @@ type Reply = { readonly available: boolean; readonly state?: unknown }
 test.each<[string, BridgeMessage, Reply, { available: boolean; state: unknown }]>([
   [
     "the Ipc appearing",
-    { type: "available", remote: "fixture", available: true },
+    { type: "available", ipc: "fixture", available: true },
     { available: false },
     { available: true, state: undefined },
   ],
   [
     "the Ipc going away",
-    { type: "available", remote: "fixture", available: false },
+    { type: "available", ipc: "fixture", available: false },
     { available: true, state: { count: 1 } },
     { available: false, state: undefined },
   ],
   [
     "a state push",
-    { type: "state", remote: "fixture", state: { count: 2 } },
+    { type: "state", ipc: "fixture", state: { count: 2 } },
     { available: true, state: { count: 1 } },
     { available: true, state: { count: 2 } },
   ],
@@ -44,6 +44,7 @@ function fakeBridge() {
   const pending = Promise.withResolvers<Reply>()
 
   const value: Bridge = {
+    packaged: false,
     call: () => Promise.reject(new Error("no calls in this test")),
     subscribe: () => pending.promise,
     on: (listener) => {
@@ -55,7 +56,7 @@ function fakeBridge() {
     },
     embed: () => {},
     capture: async () => undefined,
-    menubar: () => {},
+    runMenubarItem: () => {},
     configure: () => {},
     manager: {
       list: async () => [],

@@ -83,17 +83,17 @@ export type ExtensionMenubarItem = typeof ExtensionMenubarItem.Type
 
 export const ExtensionRpcs = RpcGroup.make(
   Rpc.make("ExtensionCall", {
-    payload: { remote: id, method: id, input: Schema.optionalKey(ExtensionPayload) },
+    payload: { ipc: id, method: id, input: Schema.optionalKey(ExtensionPayload) },
     success: ExtensionPayload,
     error: ExtensionFailure,
   }),
   Rpc.make("ExtensionSubscribe", {
-    payload: { remote: id },
+    payload: { ipc: id },
     success: Schema.Struct({ available: Schema.Boolean, state: Schema.optionalKey(ExtensionPayload) }),
   }),
-  Rpc.make("ExtensionSurface", { payload: { id, layout: Schema.optionalKey(ExtensionLayout) } }),
+  Rpc.make("ExtensionEmbed", { payload: { id, layout: Schema.optionalKey(ExtensionLayout) } }),
   Rpc.make("ExtensionCapture", { payload: { id }, success: Schema.NullOr(Transferable.Uint8Array) }),
-  Rpc.make("ExtensionMenubar", { payload: { id } }),
+  Rpc.make("ExtensionMenubarItem", { payload: { id } }),
   Rpc.make("ExtensionMenubarItems", { success: Schema.Array(ExtensionMenubarItem) }),
   Rpc.make("ExtensionConfigure", { payload: { servers: Schema.Array(ExtensionEndpoint) } }),
   Rpc.make("ExtensionList", { success: Schema.Array(ExtensionInstalled) }),

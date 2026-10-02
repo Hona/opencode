@@ -30,20 +30,21 @@ story("an extension that finishes loading after the host unmounts is never set u
 
 story("an async setup that resolves after the host unmounts releases everything it registers", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
-    const { mountExtensionHost } = await import(fixture)
+    const { mountExtensionHost, onCleanup } = await import(fixture)
     const host = mountExtensionHost()
     const started = Promise.withResolvers<void>()
     const resume = Promise.withResolvers<void>()
     const cleaned: string[] = []
     const point = { kind: "point" as const, id: "fixture-point" }
+    const resumed = { aborted: false }
     host.load(async (ctx: Context) => {
       ctx.add(point, "before")
+      onCleanup(() => void cleaned.push("owner"))
       started.resolve()
       await resume.promise
+      // After an await there is no owner: the signal tells the setup it outlived its instance.
+      resumed.aborted = ctx.signal.aborted
       ctx.add(point, "after")
-      ctx.cleanup(() => void cleaned.push("registered"))
-
-      return () => void cleaned.push("returned")
     })
     await started.promise
     const before = host.entries(point.id)
@@ -51,10 +52,10 @@ story("an async setup that resolves after the host unmounts releases everything 
     resume.resolve()
     await new Promise((resolve) => setTimeout(resolve, 100))
 
-    return { before, after: host.entries(point.id), cleaned }
+    return { before, after: host.entries(point.id), cleaned, aborted: resumed.aborted }
   }, fixture)
 
-  expect(result).toEqual({ before: 1, after: 0, cleaned: ["registered", "returned"] })
+  expect(result).toEqual({ before: 1, after: 0, cleaned: ["owner"], aborted: true })
 })
 
 story("older loads neither set up nor fail over the replacement after reloads", async ({ page }) => {
@@ -80,10 +81,10 @@ story("older loads neither set up nor fail over the replacement after reloads", 
 
 story("a dialog service kept from before a reload opens and closes nothing under the replacement", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
-    const { mountExtensionHost, Dialogs } = await import(fixture)
+    const { mountExtensionHost } = await import(fixture)
     const host = mountExtensionHost()
     const dialogs: Dialogs[] = []
-    const setup = (ctx: Context) => void dialogs.push(ctx.use(Dialogs))
+    const setup = (ctx: Context) => void dialogs.push(ctx.dialogs)
     const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
     const shown = (value: string) => !!document.body.textContent?.includes(value)
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -109,11 +110,11 @@ story("a dialog service kept from before a reload opens and closes nothing under
 
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
-    const { mountExtensionHost, Dialogs } = await import(fixture)
+    const { mountExtensionHost } = await import(fixture)
     const host = mountExtensionHost()
     const dialogs: Dialogs[] = []
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-    host.load((ctx: Context) => void dialogs.push(ctx.use(Dialogs)), 0)
+    host.load((ctx: Context) => void dialogs.push(ctx.dialogs), 0)
     await wait(20)
     dialogs[0].push(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
     host.reload()
@@ -211,19 +212,19 @@ story("a contribution that throws renders nothing and records the error; the oth
           renderer: async () => ({
             default: (ctx: Context) => {
               ctx.add(Slot, {
-                at: "shell.bottom",
+                at: "window.bottom",
                 render: () => {
                   throw new Error("broken contribution")
                 },
               })
-              ctx.add(Slot, { at: "shell.bottom", render: text("kept") })
+              ctx.add(Slot, { at: "window.bottom", render: text("kept") })
             },
           }),
         },
         {
           id: "other",
           renderer: async () => ({
-            default: (ctx: Context) => void ctx.add(Slot, { at: "shell.bottom", render: text("other") }),
+            default: (ctx: Context) => void ctx.add(Slot, { at: "window.bottom", render: text("other") }),
           }),
         },
       ],
@@ -252,7 +253,7 @@ story("a contribution that throws renders nothing and records the error; the oth
 
 story("an extension that requires a contract starts once it is active and restarts with it", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
-    const { mountExtensions, until, Contract } = await import(fixture)
+    const { mountExtensions, until, Contract, onCleanup } = await import(fixture)
     const Tree: Contract<{ version: number }, "provider.tree"> = Contract.define("provider.tree")
     const providerLoad = Promise.withResolvers<void>()
     const log: string[] = []
@@ -275,7 +276,7 @@ story("an extension that requires a contract starts once it is active and restar
           default: (ctx: Context & { requires: { tree: { version: number } } }) => {
             const version = ctx.requires.tree.version
             log.push(`setup ${version}`)
-            ctx.cleanup(() => void log.push(`cleanup ${version}`))
+            onCleanup(() => void log.push(`cleanup ${version}`))
           },
         }),
       },

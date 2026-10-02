@@ -1,7 +1,7 @@
 import { createContext, useContext, type Accessor } from "solid-js"
 import type { Browser } from "../browser/contract"
 import type { Changes } from "../review/contract"
-import type { LineRange, Live, MountedSession } from "../sdk"
+import type { LineRange, Live, MountedSession, OpenOptions } from "../sdk"
 import type { OpenApp } from "./apps"
 
 export type TreeTab = "changes" | "all"
@@ -29,7 +29,7 @@ export interface FileShared {
   }
   /** The tab is the session's selected side tab. */
   active(session: MountedSession, id: string): boolean
-  open(session: MountedSession, path: string, options?: { readonly preview?: boolean }): void
+  open(session: MountedSession, path: string, options?: OpenOptions): void
 }
 
 export const FileContext = createContext<FileShared>()

@@ -1,4 +1,4 @@
-import { lazy, Show, Suspense } from "solid-js"
+import { lazy, onCleanup, Show, Suspense } from "solid-js"
 import { onIdle, Panel, Slot, usePanel, type PanelTab, type MountedSession, type Setup } from "../sdk"
 import type Usage from "./index"
 import { SessionContextUsage } from "./indicator"
@@ -6,7 +6,7 @@ import { SessionContextUsage } from "./indicator"
 const setup: Setup<typeof Usage> = (ctx) => {
   const SessionContextTab = lazy(() => import("./tab"))
   // Compile the tab while the app idles, so the first open renders at once.
-  ctx.cleanup(onIdle(() => void SessionContextTab.preload()))
+  onCleanup(onIdle(() => void SessionContextTab.preload()))
   // One tab object per mounted session, so strip updates never remount its trigger.
   const tabs = new WeakMap<MountedSession, PanelTab>()
 
@@ -20,7 +20,8 @@ const setup: Setup<typeof Usage> = (ctx) => {
       get title() {
         return ctx.t("tab.title")
       },
-      kind: "fixed",
+      draggable: false,
+      closable: "compact",
       first: true,
       fallback: 2,
       label: () => (

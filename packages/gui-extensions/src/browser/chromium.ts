@@ -443,7 +443,7 @@ export function createBrowserPage(
     state,
     ready,
     /** The host embed the renderer lays this page out with. */
-    surface: embed.id,
+    embed: embed.id,
     async inspect(enabled: boolean) {
       if (closed) return
       await ready

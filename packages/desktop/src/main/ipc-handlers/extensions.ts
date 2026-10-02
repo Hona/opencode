@@ -42,13 +42,14 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
           try: (signal) => extensions.host().then((host) => host.call(request, { window: caller(context), signal })),
           catch: extensionFailure,
         }),
-      ExtensionSubscribe: ({ remote }, context) => Effect.sync(() => extensions.subscribe(remote, caller(context))),
-      ExtensionSurface: ({ id, layout }, context) =>
+      ExtensionSubscribe: ({ ipc }, context) => Effect.sync(() => extensions.subscribe(ipc, caller(context))),
+      ExtensionEmbed: ({ id, layout }, context) =>
         Effect.sync(() => extensions.loaded()?.embed(caller(context), id, layout)),
       ExtensionCapture: ({ id }, context) =>
         Effect.promise(async () => (await extensions.loaded()?.capture(caller(context), id)) ?? null),
-      ExtensionMenubar: ({ id }, context) => Effect.sync(() => extensions.loaded()?.runMenubar(caller(context), id)),
-      ExtensionMenubarItems: () => Effect.sync(() => extensions.loaded()?.menubar() ?? []),
+      ExtensionMenubarItem: ({ id }, context) =>
+        Effect.sync(() => extensions.loaded()?.runMenubarItem(caller(context), id)),
+      ExtensionMenubarItems: () => Effect.sync(() => extensions.loaded()?.listMenubarItems() ?? []),
       ExtensionConfigure: ({ servers }, context) => Effect.sync(() => extensions.configure(caller(context), servers)),
       ExtensionList: () => Effect.promise(() => extensions.host().then((host) => host.list())),
       ExtensionEnable: ({ id }) => manage((host) => host.enable(id)),

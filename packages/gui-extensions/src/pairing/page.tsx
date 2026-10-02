@@ -6,7 +6,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { renderSVG } from "uqr"
-import { Dialogs, System, useExtension, type Live, type IpcClient } from "../sdk"
+import { useExtension, type Live, type IpcClient } from "../sdk"
 import type { Pairing } from "./contract"
 
 type Client = IpcClient<typeof Pairing.spec>
@@ -25,7 +25,7 @@ export default function PairingPage(props: { pairing: Accessor<Live<Client>> }) 
 function SettingsPairing(props: { client: Client }) {
   const ctx = useExtension()
   // The extension's dialogs close with it, so disabling pairing also stops the dialog's code polling.
-  const dialogs = ctx.use(Dialogs)
+  const dialogs = ctx.dialogs
   const queryClient = useQueryClient()
 
   const local = useQuery(() => ({
@@ -122,7 +122,7 @@ type CopiedTimer = { timeout?: ReturnType<typeof setTimeout> }
 
 function DialogPairing(props: { title: string; host: string; code: () => Promise<string> }) {
   const ctx = useExtension()
-  const system = ctx.use(System)
+  const system = ctx.system
 
   // Codes are single-use, so keep replacing the link while the dialog is open.
   const code = useQuery(() => ({

@@ -2,19 +2,19 @@ import { createResource, onCleanup, type JSX } from "solid-js"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
-  Appearance,
-  Build,
   ExtensionContext,
-  Keybinds,
-  Locale,
-  Router,
-  Servers,
-  Workspaces,
+  type Appearance,
+  type Build,
   type Catalog,
   type Context,
   type Definition,
+  type Keybinds,
+  type Locale,
   type Messages,
   type Params,
+  type Router,
+  type Servers,
+  type Workspaces,
 } from "../../gui-extensions/src/sdk"
 
 const definitions = import.meta.glob<Definition>(
@@ -59,21 +59,15 @@ function createStoryContext(definition: Definition) {
   const unavailable = (name: string) => () => {
     throw new Error(`${name} is unavailable in extension stories`)
   }
-  return {
+  const context = {
     id: definition.id,
     signal: controller.signal,
-    cleanup: (fn: () => void) => {
-      onCleanup(fn)
-      return fn
-    },
     add: unavailable("ctx.add"),
     list: () => [],
     provide: unavailable("ctx.provide"),
-    use: (token: { id: string }) => {
-      const api = apis.find((item) => item.token.id === token.id)
-      if (api) return api.create()
-      throw new Error(`HostApi "${token.id}" is unavailable in extension stories`)
-    },
+    ...Object.fromEntries(Object.entries(apis).map(([name, create]) => [name, create()])),
+    // Stories render on the web, outside any route.
+    desktop: undefined,
     t: (key: string, params?: Params) => {
       const template = catalog.latest[key]
       if (template !== undefined) return resolveTemplate(template, params)
@@ -85,28 +79,33 @@ function createStoryContext(definition: Definition) {
       if (template !== undefined) return resolveTemplate(template, { ...params, count })
       return language.plural(key as Parameters<typeof language.plural>[0], count, params)
     },
-  } as unknown as Context
+  }
+  // The HostApis a story has no stand-in for fail when read.
+  ;["layout", "sessions", "storage", "system", "dialogs", "links", "embeds", "preferences"].forEach((name) =>
+    Object.defineProperty(context, name, { get: unavailable(`ctx.${name}`) }),
+  )
+  return context as unknown as Context
 }
 
-/** The host's build, locale, appearance, router, keybind, server and workspace APIs for a story, outside any route. */
+/** The host's build, locale, appearance, router, keybind, server and workspace APIs for a story, by context property. */
 export function createStoryHostApis(platform: Build["platform"]) {
   const language = useLanguage()
-  const build: Build = { channel: "dev", platform }
+  const build: Build = { version: "", channel: "dev", platform, packaged: false }
   const locale: Locale = { locale: language.intl, direction: language.direction, setDirection: language.setDirection }
   const appearance: Appearance = { font: () => "var(--font-family-mono)" }
   const router: Router = { routing: () => false, path: () => "/" }
   const keybinds: Keybinds = { keybind: () => [], keys: () => [], matches: () => false }
   const servers: Servers = { list: () => [] }
   const workspaces: Workspaces = { on: () => () => {} }
-  return [
-    { token: Build, create: () => build },
-    { token: Locale, create: () => locale },
-    { token: Appearance, create: () => appearance },
-    { token: Router, create: () => router },
-    { token: Keybinds, create: () => keybinds },
-    { token: Servers, create: () => servers },
-    { token: Workspaces, create: () => workspaces },
-  ]
+  return {
+    build: () => build,
+    locale: () => locale,
+    appearance: () => appearance,
+    router: () => router,
+    keybinds: () => keybinds,
+    servers: () => servers,
+    workspaces: () => workspaces,
+  }
 }
 
 async function loadMessages(catalog: Catalog | undefined, locale: string): Promise<Messages> {

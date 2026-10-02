@@ -3,7 +3,7 @@ import type { LocationRef, OpenCodeClient, ProjectListOutput, WorktreeDirectory 
 import type { Schema } from "effect"
 import type { Accessor, JSX } from "solid-js"
 import type { Store } from "solid-js/store"
-import { HostApi, type Cleanup, type OS, type Persisted, type StoreFrom } from "./core"
+import type { Cleanup, OS, Persisted, StoreFrom } from "./core"
 import type { IconName, Link } from "./points"
 
 export interface ServerRef {
@@ -214,33 +214,37 @@ export interface Sessions {
 
 export type PanelState = "closed" | "open" | "active" | "visible"
 
+/** How `Layout.open` places a tab. */
+export interface OpenOptions {
+  /**
+   * How the tab lands in the strip. Defaults to `open`.
+   * - `open`: select it, reusing the preview slot.
+   * - `preview`: select it as the new preview tab.
+   * - `append`: add it at the end without selecting it, changing neither the region nor the preview tab.
+   * - `select`: add it at the end and select it, keeping the preview tab. Like `background`, it keeps the
+   *   narrow-screen view and the dock, and opens the side region.
+   */
+  readonly tab?: "open" | "preview" | "append" | "select"
+  /**
+   * On narrow screens, keep the current view and the dock, and open the side region so the tab shows when the window
+   * is wide.
+   */
+  readonly background?: boolean
+}
+
 export interface Layout {
   /** Viewport under 768px. */
   narrow(): boolean
   /** Stored layout (tabs, scroll) has loaded. */
   ready(): boolean
   /**
-   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, a plain or
-   * `preview` open selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
-   * launcher, stores nothing. A launcher is never selected on narrow screens, but a stored one stays the preview slot.
-   * Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown wait until it is known.
+   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, an `open` or
+   * `preview` selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
+   * launcher (`closable: "hover"`), stores nothing. A launcher is never selected on narrow screens, but a stored one
+   * stays the preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown
+   * wait until it is known.
    */
-  open(
-    key: string,
-    session: SessionRef,
-    /**
-     * `select`: append at the end if missing and select it, leaving the preview tab alone. Like `background`, it keeps
-     * the narrow-screen view and the dock and opens the side region.
-     * `background`: on narrow screens, keep the current view and the dock, and open the side region so the tab
-     * shows when the window is wide.
-     */
-    options?: {
-      readonly preview?: boolean
-      readonly focus?: boolean
-      readonly select?: boolean
-      readonly background?: boolean
-    },
-  ): void
+  open(key: string, session: SessionRef, options?: OpenOptions): void
   close(key: string, session: SessionRef): void
   /** Closing the last panel the side region was opened for also closes the region. */
   toggle(key: string, session: SessionRef): void
@@ -300,10 +304,10 @@ export interface System {
   copy(text: string): Promise<void>
   save(file: { readonly name: string; readonly content: string }): Promise<boolean>
   /** Opens a URL in the system browser; desktop opens file:// URLs with the default app. */
-  open(url: string): void
+  openExternal(url: string): void
 }
 
-/** Desktop-only abilities; the token gives undefined on the web. */
+/** Desktop-only abilities; `ctx.desktop` is undefined on the web. */
 export interface Desktop {
   readonly os: OS
   readonly window: string
@@ -313,13 +317,6 @@ export interface Desktop {
   forceFocus(enabled: boolean): Promise<void>
   reveal(path: string): Promise<boolean>
   installed(app: string): Promise<boolean>
-}
-
-/** The running build. */
-export interface Build {
-  readonly version?: string
-  readonly channel: "local" | "dev" | "beta" | "prod"
-  readonly platform: "web" | "desktop"
 }
 
 /** The interface language and its writing direction. */
@@ -415,35 +412,3 @@ export interface Embeds {
   /** A JPEG still of a shown embed; undefined while it is hidden, and always on the web. */
   capture(id: string): Promise<Uint8Array | undefined>
 }
-
-export const Sessions = HostApi.define<Sessions>("session")
-
-export const Layout = HostApi.define<Layout>("layout")
-
-export const Storage = HostApi.define<Storage>("storage")
-
-export const System = HostApi.define<System>("system")
-
-export const Desktop = HostApi.define<Desktop | undefined>("desktop")
-
-export const Build = HostApi.define<Build>("build")
-
-export const Locale = HostApi.define<Locale>("locale")
-
-export const Appearance = HostApi.define<Appearance>("appearance")
-
-export const Router = HostApi.define<Router>("router")
-
-export const Keybinds = HostApi.define<Keybinds>("keybinds")
-
-export const Servers = HostApi.define<Servers>("servers")
-
-export const Workspaces = HostApi.define<Workspaces>("workspaces")
-
-export const Dialogs = HostApi.define<Dialogs>("dialog")
-
-export const Links = HostApi.define<Links>("link")
-
-export const Preferences = HostApi.define<Preferences>("preferences")
-
-export const Embeds = HostApi.define<Embeds>("embed")

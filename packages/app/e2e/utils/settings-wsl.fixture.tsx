@@ -112,10 +112,10 @@ export function mount(input: {
 
     // The main-process WSL and SSH extensions, as the extension bridge sees them.
     const listeners = new Set<(message: BridgeMessage) => void>()
-    const snapshot = (remote: string) => structuredClone(unwrap(remote === "ssh" ? store.ssh : store.state))
+    const snapshot = (ipc: string) => structuredClone(unwrap(ipc === "ssh" ? store.ssh : store.state))
 
-    const publish = (remote: string) =>
-      listeners.forEach((listener) => listener({ type: "state", remote, state: snapshot(remote) }))
+    const publish = (ipc: string) =>
+      listeners.forEach((listener) => listener({ type: "state", ipc, state: snapshot(ipc) }))
 
     // The contract state is deeply readonly, so each action replaces the changed branch.
     const setRuntime = (id: string | undefined, runtime: WslServerRuntime) =>
@@ -172,18 +172,19 @@ export function mount(input: {
     ])
 
     const bridge: Bridge = {
+      packaged: false,
       async call(request) {
-        const method = methods.get(request.remote)?.[request.method]
+        const method = methods.get(request.ipc)?.[request.method]
 
         if (!method) throw new Error("Unexpected fixture action")
         // SAFETY: every WSL and SSH method the fixture answers takes a struct of these optional string fields.
         const result = method(request.input as FixtureInput)
-        publish(request.remote)
+        publish(request.ipc)
 
         return result ?? null
       },
-      async subscribe(remote) {
-        if (remote === "wsl" || remote === "ssh") return { available: true, state: snapshot(remote) }
+      async subscribe(ipc) {
+        if (ipc === "wsl" || ipc === "ssh") return { available: true, state: snapshot(ipc) }
 
         return { available: false }
       },
@@ -194,7 +195,7 @@ export function mount(input: {
       },
       embed: () => undefined,
       capture: async () => undefined,
-      menubar: () => undefined,
+      runMenubarItem: () => undefined,
       configure: () => undefined,
       manager: {
         list: async () => [],
@@ -256,7 +257,7 @@ export function mount(input: {
               onChange={(event) => {
                 const available = event.currentTarget.checked
                 setStore("available", available)
-                listeners.forEach((listener) => listener({ type: "available", remote: "wsl", available }))
+                listeners.forEach((listener) => listener({ type: "available", ipc: "wsl", available }))
 
                 if (available) publish("wsl")
               }}
@@ -270,7 +271,7 @@ export function mount(input: {
               checked
               onChange={(event) => {
                 const available = event.currentTarget.checked
-                listeners.forEach((listener) => listener({ type: "available", remote: "ssh", available }))
+                listeners.forEach((listener) => listener({ type: "available", ipc: "ssh", available }))
 
                 if (available) publish("ssh")
               }}

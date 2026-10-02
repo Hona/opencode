@@ -7,7 +7,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createLatest, Desktop, useExtension, type Context, type OS, type MountedSession } from "../sdk"
+import { createLatest, useExtension, type Context, type OS, type MountedSession } from "../sdk"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
 import { openInAppParentPath } from "./path"
@@ -70,7 +70,7 @@ const showRequestError = (ctx: Context, err: Error | string) => {
 
 export function useOpenInApp(input: { session: MountedSession; path: () => string }) {
   const ctx = useExtension()
-  const desktop = ctx.use(Desktop)
+  const desktop = ctx.desktop
   const shared = useShared()
 
   const os = () => desktop?.os ?? "linux"

@@ -6,7 +6,8 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 
 - One folder per extension: `index.ts` (`Extension.define({ id, os?, i18n })`), `contract.ts`, `renderer.tsx`, optional `main.ts`, and `i18n/<locale>.ts`.
 - `src/renderer.ts` and `src/main.ts` are the only files that list the built-ins, each through `Extension.compose`. Main never imports renderer code. `src/builtins.typecheck.ts` fails the typecheck when a renderer `uses` or `requires` an Ipc that no main entry provides.
-- Another extension may import only your `contract.ts` (tokens and schemas, no runtime code). Declare what you use in `uses` (or `requires`); every consumer must still work when the provider is disabled (see "Failure is part of the contract"). To declare an Ipc without loading its schemas at startup, use `Ipc.ref<typeof Token>("id")` and `ctx.use(Token)` from the chunk that loads them.
+- Another extension may import only your `contract.ts` (tokens and schemas, no runtime code). Declare what you use in `uses` (or `requires`); every consumer must still work when the provider is disabled (see "Failure is part of the contract"). To declare an Ipc without loading its schemas at startup, use `Ipc.ref<typeof Token>("id")` and `ctx.uses.name.load(Token)` from the chunk that loads them.
+- The APIs the host always provides are context properties (`ctx.layout`, `ctx.sessions`, `ctx.storage`, `ctx.desktop`, …; in main `ctx.storage`, `ctx.windows`, `ctx.serverEndpoints`, …), and `useExtension()` returns the same context in components. Points and contracts stay tokens: `ctx.add(Point, item)`, `ctx.provide(Contract, impl)`.
 - Never import `@opencode/app`, `@opencode/desktop`, or `@/` paths. Import CSS with `?inline` and contribute it through `ctx.add(Style, css)`. No module-level state: keep state inside `setup`. `bun run lint` enforces these rules.
 - `bun run lint:changed` must pass before you finish: every file you add or edit has no oxlint problem at all, including the warn-level anti-slop rules (`unknown` parameters and returns, unchecked type assertions, widened types, unsafe dictionaries, missing spacing). Touching a file means leaving the whole file clean, older warnings included. Fix the code; suppress only with a `SAFETY:` comment that states a real checked invariant.
 
@@ -19,10 +20,10 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 
 An instance lives from `setup` until it is disabled, reloaded, removed, or its window closes. A reload can land at any `await`, so code that outlives a tick must prove it still belongs to the live instance.
 
-- Everything registered through `ctx` (contributions, contracts, Ipcs, menu items, embeds) is withdrawn by the host when the instance goes away. Anything else you start (timers, DOM or Ipc listeners, subscriptions) needs `ctx.cleanup`. A cleanup registered after disposal runs at once.
-- `setup` may be async. After every `await`, return if `ctx.signal.aborted` before touching state or contributing. Pass `ctx.signal`, or a signal derived from it, to Ipc calls and long work.
+- Everything registered through `ctx` (contributions, contracts, Ipcs, menu items, embeds) is withdrawn by the host when the instance goes away. Anything else you start (timers, DOM or Ipc listeners, subscriptions) needs teardown: in the window, Solid's `onCleanup` (setup runs under the extension's root owner); in main, `ctx.scope.addFinalizer`, which runs at once when the instance is already gone. `setup` returns nothing.
+- `setup` may be async. After every `await`, return if the signal aborted (`ctx.signal` in the window, `ctx.scope.signal` in main) before touching state or contributing; there is no owner after an `await`, so window teardown that starts later listens to `ctx.signal`. Pass the signal, or one derived from it, to Ipc calls and long work.
 - Never keep a value from a shorter lifetime in a longer one. Read a server's `client`, `data` and `url` from its live `ServerRef` each time: a restarted or re-authenticated server gets a new controller under the same id. Keep per-session state in a session-scoped store, or in a map keyed by session that you prune.
-- Main: `Lifecycle.restart(handoff, { keep: ctx.scope })` keeps the extension that owns `ctx.scope` (the caller by default) active until the handoff settles; when it rejects, return to a state the user can retry from. `ctx.cleanup` adds a finalizer to `ctx.scope`.
+- Main: `ctx.lifecycle.restart(handoff, { keep: ctx.scope })` keeps the extension that owns `ctx.scope` (the caller by default) active until the handoff settles; when it rejects, return to a state the user can retry from.
 
 ## Failure is part of the contract
 
@@ -35,7 +36,7 @@ An instance lives from `setup` until it is disabled, reloaded, removed, or its w
 
 - Desktop storage loads over IPC; web storage is synchronous, so a read before load passes every web e2e test and still breaks desktop. Declare stores (`Store.global`, `Store.session`): a global store is loaded before setup, a session store's `value` is undefined until it loads, and `update` waits for the load. `Storage.store`, for keys only known at runtime, returns the same `Persisted`; derive nothing from it, such as a request, before `value` is defined.
 - Moving a stored value goes through `from` (and `from.sessions` for one session's slice of an app key). Keep the old field readable until every user has migrated; never drop user data.
-- Main `Storage` writes reach disk at once; do not batch them yourself.
+- Main `Storage.store` returns the same `Persisted`, always loaded; its `update` may also return the next value, which is how a number, `null` or a new list is written. Its writes reach disk at once; do not batch them yourself.
 
 ## Panels and layout
 
@@ -44,7 +45,7 @@ An instance lives from `setup` until it is disabled, reloaded, removed, or its w
 - Map keys stored before extensions with `Panel.legacy`. A `transient` panel's stored keys are dropped once it stops listing them.
 - `Layout.stored(session)` returns your stored tab ids. Layout reads return nothing while `session.location` is undefined (for example after a server re-authenticates); writes made meanwhile wait and apply in order once it is known.
 - `Layout.sidebar.opened()` is the inner sidebar preference side panels share, readable outside a panel render (for example in a tab's fields); do not mirror `usePanel().sidebar` into a store.
-- Narrow screens: a plain open switches to the panel's mobile view and closes the dock. Pass `background` when the user stays where they are (a palette pick, a composer chip) or the agent opened the tab, and `select` to append and select without replacing the preview.
+- Narrow screens: a plain open switches to the panel's mobile view and closes the dock. Pass `background` when the user stays where they are (a palette pick, a composer chip) or the agent opened the tab, and `tab: "select"` to append and select without replacing the preview.
 
 ## Solid
 

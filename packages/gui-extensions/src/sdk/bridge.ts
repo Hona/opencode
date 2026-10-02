@@ -1,8 +1,7 @@
 /**
  * Host-internal contract between the renderer host (packages/app) and the main host (packages/desktop).
  * Extensions never use this directly; they use Ipc tokens.
- * Payloads are structured-clone values already encoded with the Ipc's schemas. The `remote` fields name an Ipc by id;
- * they keep the IPC message format's field name.
+ * Payloads are structured-clone values already encoded with the Ipc's schemas. The `ipc` fields name an Ipc by id.
  */
 
 export interface BridgeLayout {
@@ -24,11 +23,11 @@ export interface Installed {
 }
 
 export type BridgeMessage =
-  | { readonly type: "state"; readonly remote: string; readonly state: unknown }
-  | { readonly type: "event"; readonly remote: string; readonly name: string; readonly data: unknown }
-  | { readonly type: "available"; readonly remote: string; readonly available: boolean }
+  | { readonly type: "state"; readonly ipc: string; readonly state: unknown }
+  | { readonly type: "event"; readonly ipc: string; readonly name: string; readonly data: unknown }
+  | { readonly type: "available"; readonly ipc: string; readonly available: boolean }
   | { readonly type: "extensions"; readonly list: readonly Installed[] }
-  | { readonly type: "menubar"; readonly items: readonly BridgeMenubarItem[] }
+  | { readonly type: "menubarItems"; readonly items: readonly BridgeMenubarItem[] }
 
 export interface BridgeMenubarItem {
   readonly menu: string
@@ -39,10 +38,12 @@ export interface BridgeMenubarItem {
 }
 
 export interface Bridge {
+  /** The app runs packaged, as main's `Build.packaged` says; the window's `Build` reports the same. */
+  readonly packaged: boolean
   // SAFETY: the reply is the method's output as its schema encoded it; the renderer host decodes it with that schema.
   /* oxlint-disable anti-slop/no-unknown-returns -- see SAFETY above */
   call(
-    input: { readonly remote: string; readonly method: string; readonly input: unknown },
+    input: { readonly ipc: string; readonly method: string; readonly input: unknown },
     signal?: AbortSignal,
   ): Promise<unknown>
   /* oxlint-enable anti-slop/no-unknown-returns */
@@ -52,8 +53,8 @@ export interface Bridge {
   embed(id: string, layout?: BridgeLayout): void
   capture(id: string): Promise<Uint8Array | undefined>
   /** Runs a native menubar item from the in-app (Windows) menu. */
-  menubar(id: string): void
-  /** Tells main the current server endpoints so `Servers.get(id)` can resolve them. */
+  runMenubarItem(id: string): void
+  /** Tells main the current server endpoints so `ServerEndpoints.get(id)` can resolve them. */
   configure(
     servers: readonly {
       readonly id: string

@@ -12,6 +12,18 @@ type Cached<T> = { value?: { current: T } }
  */
 export function createStorage(state: StateStore, id: string): Storage {
   const name = namespace(id)
+  // Resets the caches of the stores opened on each key since its last removal, so they read `initial` again.
+  const opened = new Map<string, Set<() => void>>()
+
+  const remove = (key: string, from: string | undefined) => {
+    // The old copy goes too, or the next read would import it again.
+    if (from) source(state, from).remove()
+
+    if (state.get(name, key) !== null) state.delete(name, key)
+    state.flush()
+    opened.get(key)?.forEach((reset) => reset())
+    opened.delete(key)
+  }
 
   return {
     store(key, options) {
@@ -34,27 +46,40 @@ export function createStorage(state: StateStore, id: string): Storage {
         return decoded
       }
 
+      const current = () => {
+        cached.value ??= { current: Option.getOrElse(read(), () => options.initial) }
+
+        return cached.value.current
+      }
+
+      const write = (value: typeof options.initial) => {
+        state.set(name, key, JSON.stringify(Schema.encodeSync(codec)(value)))
+        state.flush()
+        cached.value = { current: value }
+      }
+
+      const resets = opened.get(key) ?? new Set()
+
+      resets.add(() => {
+        cached.value = { current: options.initial }
+      })
+      opened.set(key, resets)
+
       return {
-        get() {
-          cached.value ??= { current: Option.getOrElse(read(), () => options.initial) }
-
-          return cached.value.current
+        get value() {
+          return current()
         },
-        set(value) {
-          state.set(name, key, JSON.stringify(Schema.encodeSync(codec)(value)))
-          state.flush()
-          cached.value = { current: value }
-        },
-        remove() {
-          // The old copy goes too, or the next read would import it again.
-          legacy?.remove()
+        ready: () => true,
+        // The draft is a decoded copy, so a mutation never touches the cached value until it is written.
+        update(mutation: (draft: typeof options.initial) => typeof options.initial | undefined) {
+          const draft = Schema.decodeSync(codec)(Schema.encodeSync(codec)(current()))
+          const next = mutation(draft)
 
-          if (state.get(name, key) !== null) state.delete(name, key)
-          state.flush()
-          cached.value = { current: options.initial }
+          write(next === undefined ? draft : next)
         },
       }
     },
+    remove: (key, options) => remove(key, options?.from),
   }
 }
 

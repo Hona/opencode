@@ -11,7 +11,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
-import { createKeyed, Keybinds, useExtension, usePanel, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, usePanel, type MountedSession } from "../sdk"
 import type { TerminalModel, TerminalWorkspace } from "./model"
 import type { LocalPTY } from "./state"
 import { SortableTerminalTab } from "./tab"
@@ -37,7 +37,7 @@ type TerminalPanelState = {
 
 export default function TerminalPanel(props: { model: TerminalModel; session: MountedSession; onClose: () => void }) {
   const extension = useExtension()
-  const keybinds = extension.use(Keybinds)
+  const keybinds = extension.keybinds
   const frame = usePanel()
   const terminal = createMemo(() => props.model.load(props.session))
   const workspaceKey = () => terminal().key

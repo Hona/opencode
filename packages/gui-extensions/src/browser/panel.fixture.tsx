@@ -15,29 +15,27 @@ import { createStore, produce } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
 import type { Bridge, BridgeLayout } from "../sdk/bridge"
 import {
-  Appearance,
-  Build,
-  Desktop,
-  Embeds,
   ExtensionContext,
-  Keybinds,
-  Layout,
-  Locale,
   PanelContext,
-  Router,
-  Servers,
-  Sessions,
-  Storage,
-  Workspaces,
+  type Appearance,
+  type Build,
   type ComposerNote,
   type Context,
   type Definition,
-  type PanelFrame,
-  type PanelTab,
+  type Embeds,
   type Ipc,
   type IpcClient,
-  type SessionRef,
+  type Keybinds,
+  type Layout,
+  type Locale,
   type MountedSession,
+  type PanelFrame,
+  type PanelTab,
+  type Router,
+  type Servers,
+  type SessionRef,
+  type Storage,
+  type Workspaces,
 } from "../sdk"
 import type { InspectEvent } from "./connection"
 import browserEn from "./i18n/en"
@@ -142,22 +140,16 @@ export function mountBrowserPane(input: PaneHost) {
 
     // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
     const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
-    const keybinds = { keybind: () => [], keys: (bind: string) => bind.split("+") }
-    const desktop = { zoom: () => 1 }
-
-    const apis = new Map<string, typeof keybinds | typeof desktop | Embeds>([
-      [Keybinds.id, keybinds],
-      [Desktop.id, desktop],
-      [Embeds.id, embeds],
-    ])
 
     const fake = {
       id: "browser",
-      use: (token: { id: string }) => apis.get(token.id),
+      keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
+      desktop: { zoom: () => 1 },
+      embeds,
       t: (key: string) => messages.get(key) ?? language.t(key),
     }
 
-    // SAFETY: the pane reads only `id`, `t`, and `use` of Keybinds, Desktop and Embeds from its extension's context.
+    // SAFETY: the pane reads only `id`, `t`, `keybinds`, `desktop` and `embeds` of its extension's context.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const extension = fake as unknown as Context
 
@@ -185,7 +177,7 @@ export function mountBrowserPane(input: PaneHost) {
 
     const fakeModel: Pick<
       Model,
-      "tab" | "suspended" | "surface" | "error" | "mount" | "load" | "command" | "inspect" | "highlight" | "onInspect"
+      "tab" | "suspended" | "embed" | "error" | "mount" | "load" | "command" | "inspect" | "highlight" | "onInspect"
     > = {
       tab: (_session, id) => {
         const tab = current()
@@ -201,7 +193,7 @@ export function mountBrowserPane(input: PaneHost) {
         }
       },
       suspended: () => false,
-      surface: (_session, id) => `surface-${tabs.find((tab) => tab.id === id)?.title}`,
+      embed: (_session, id) => `embed-${tabs.find((tab) => tab.id === id)?.title}`,
       error: () => store.error ?? (store.loadErrors[store.session] ? "Request failed" : undefined),
       mount: () => () => [],
       load: () => undefined,
@@ -337,10 +329,10 @@ export function mountBrowserPane(input: PaneHost) {
             {(tab) => (
               <div
                 data-testid={`native-${tab.title}`}
-                data-visible={!!store.layouts[`surface-${tab.title}`]?.visible}
+                data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >
-                {tab.title}: {store.layouts[`surface-${tab.title}`]?.visible ? "visible" : "hidden"}
+                {tab.title}: {store.layouts[`embed-${tab.title}`]?.visible ? "visible" : "hidden"}
               </div>
             )}
           </For>
@@ -379,10 +371,8 @@ type RegionHost = {
     ParentProps<{
       definitions: readonly Definition[]
       disabled: Accessor<ReadonlySet<string> | undefined>
-      apis: readonly {
-        readonly token: { readonly kind: "hostapi"; readonly id: string }
-        create(extension: string): object | undefined
-      }[]
+      /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
+      apis: { readonly [api: string]: (extension: string) => object | undefined }
       ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
@@ -501,7 +491,7 @@ export function mountBrowserRegion(input: RegionHost) {
       open(key, session, options) {
         if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
 
-        if (options?.focus !== false) setStore("strips", session.key, "active", key)
+        if (options?.tab !== "append") setStore("strips", session.key, "active", key)
       },
       close: (key, session) => close(session.key, key),
       toggle() {},
@@ -541,7 +531,7 @@ export function mountBrowserRegion(input: RegionHost) {
       remove() {},
     })
 
-    const build: Build = { channel: "dev", platform: "desktop" }
+    const build: Build = { version: "", channel: "dev", platform: "desktop", packaged: false }
     const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
     const appearance: Appearance = { font: () => "monospace" }
     const router: Router = { routing: () => false, path: () => "/" }
@@ -573,19 +563,19 @@ export function mountBrowserRegion(input: RegionHost) {
       },
     }
 
-    const apis = [
-      { token: Build, create: () => build },
-      { token: Locale, create: () => locale },
-      { token: Appearance, create: () => appearance },
-      { token: Router, create: () => router },
-      { token: Keybinds, create: () => keybinds },
-      { token: Servers, create: () => servers },
-      { token: Workspaces, create: () => workspaces },
-      { token: Desktop, create: () => undefined },
-      { token: Sessions, create: () => ({ list: () => refs, current: () => view }) },
-      { token: Layout, create: layout },
-      { token: Storage, create: storage },
-    ]
+    const apis = {
+      build: () => build,
+      locale: () => locale,
+      appearance: () => appearance,
+      router: () => router,
+      keybinds: () => keybinds,
+      servers: () => servers,
+      workspaces: () => workspaces,
+      desktop: () => undefined,
+      sessions: () => ({ list: () => refs, current: () => view }),
+      layout,
+      storage,
+    }
 
     const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
 

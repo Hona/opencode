@@ -57,16 +57,16 @@ export function createIpcClients(bridge: Bridge | undefined) {
 
   const stop = bridge?.on((message) => {
     if (message.type === "state") {
-      if (!specs.has(message.remote)) return
+      if (!specs.has(message.ipc)) return
 
-      changesOf(message.remote).state++
-      setState("values", message.remote, reconcile(decodeState(message.remote, message.state)))
+      changesOf(message.ipc).state++
+      setState("values", message.ipc, reconcile(decodeState(message.ipc, message.state)))
 
       return
     }
 
     if (message.type === "available") {
-      const changed = changesOf(message.remote)
+      const changed = changesOf(message.ipc)
 
       changed.available++
 
@@ -74,9 +74,9 @@ export function createIpcClients(bridge: Bridge | undefined) {
       if (!message.available) changed.state++
 
       batch(() => {
-        setAvailable(message.remote, message.available)
+        setAvailable(message.ipc, message.available)
 
-        if (!message.available) setState("values", message.remote, undefined)
+        if (!message.available) setState("values", message.ipc, undefined)
       })
 
       return
@@ -84,10 +84,10 @@ export function createIpcClients(bridge: Bridge | undefined) {
 
     if (message.type !== "event") return
 
-    const schema = specs.get(message.remote)?.events?.[message.name]
+    const schema = specs.get(message.ipc)?.events?.[message.name]
     const data = schema ? Schema.decodeUnknownSync(schema)(message.data) : message.data
 
-    listeners.get(message.remote)?.forEach((listener) => listener(message.name, data))
+    listeners.get(message.ipc)?.forEach((listener) => listener(message.name, data))
   })
 
   const subscribe = (connected: Bridge, token: Ipc) => {
@@ -116,7 +116,7 @@ export function createIpcClients(bridge: Bridge | undefined) {
         name,
         async (input: Decoded, options?: { signal?: AbortSignal }) => {
           const encoded = method.input ? Schema.encodeUnknownSync(method.input)(input) : null
-          const output = await connected.call({ remote: token.id, method: name, input: encoded }, options?.signal)
+          const output = await connected.call({ ipc: token.id, method: name, input: encoded }, options?.signal)
 
           return method.output ? Schema.decodeUnknownSync(method.output)(output) : undefined
         },

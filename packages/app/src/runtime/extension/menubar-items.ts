@@ -9,13 +9,13 @@ export function createMenubarItems(bridge: Bridge | undefined) {
   if (bridge)
     onCleanup(
       bridge.on((message) => {
-        if (message.type === "menubar") setState("items", reconcile([...message.items], { key: "id" }))
+        if (message.type === "menubarItems") setState("items", reconcile([...message.items], { key: "id" }))
       }),
     )
 
   return {
     items: () => state.items,
-    run: (id: string) => bridge?.menubar(id),
+    run: (id: string) => bridge?.runMenubarItem(id),
   }
 }
 

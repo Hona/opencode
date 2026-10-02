@@ -1,18 +1,6 @@
-import { createMemo, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
+import { createMemo, createSignal, getOwner, lazy, onCleanup, runWithOwner, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import {
-  Build,
-  Command,
-  createKeyed,
-  LinkHandler,
-  MenuItem,
-  onIdle,
-  Panel,
-  Sessions,
-  Style,
-  type PanelTab,
-  type Setup,
-} from "../sdk"
+import { Command, createKeyed, LinkHandler, MenuItem, onIdle, Panel, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type definition from "./index"
 import type { Model } from "./model"
@@ -20,7 +8,7 @@ import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
 
 const setup: Setup<typeof definition> = (ctx) => {
-  const sessions = ctx.use(Sessions)
+  const sessions = ctx.sessions
   const [model, setModel] = createSignal<Model>()
   // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open.
   ctx.add(Command, (): Command | undefined => {
@@ -40,7 +28,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   })
 
   // The native pane is a desktop feature.
-  if (ctx.use(Build).platform !== "desktop") return
+  if (ctx.build.platform !== "desktop") return
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
@@ -156,7 +144,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   }
 
   const SessionBrowserPane = lazy(() => import("./panel"))
-  ctx.cleanup(onIdle(() => void SessionBrowserPane.preload()))
+  onCleanup(onIdle(() => void SessionBrowserPane.preload()))
   ctx.add(Panel, {
     id: "main",
     region: "side",

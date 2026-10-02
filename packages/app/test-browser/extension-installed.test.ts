@@ -8,6 +8,7 @@ test("a list main pushes while the initial list is pending wins over the older r
   const reply = Promise.withResolvers<readonly Installed[]>()
 
   const bridge: Bridge = {
+    packaged: false,
     call: () => Promise.reject(new Error("no calls in this test")),
     subscribe: async () => ({ available: false }),
     on: (listener) => {
@@ -19,7 +20,7 @@ test("a list main pushes while the initial list is pending wins over the older r
     },
     embed: () => {},
     capture: async () => undefined,
-    menubar: () => {},
+    runMenubarItem: () => {},
     configure: () => {},
     manager: {
       list: () => reply.promise,

@@ -11,7 +11,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { createKeyed, Layout, System, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
@@ -80,8 +80,8 @@ const emptyMessages: SessionMessageInfo[] = []
 
 export default function SessionContextTab(props: { session: MountedSession }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
-  const system = ctx.use(System)
+  const layout = ctx.layout
+  const system = ctx.system
   const i18n = useI18n()
   const data = () => props.session.server.data
   syncCatalog(props.session)

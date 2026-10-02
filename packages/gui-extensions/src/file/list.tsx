@@ -3,7 +3,7 @@ import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtua
 import { FileIcon } from "@opencode/ui/file-icon"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, Desktop, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
 import { normalizeFileTreeV2Path } from "./tree-model"
@@ -56,9 +56,7 @@ export default function SessionFileList(props: {
 }) {
   const ctx = useExtension()
 
-  const openIn = ctx.use(Desktop)
-    ? useOpenInApp({ session: props.session, path: () => props.session.file.root })
-    : undefined
+  const openIn = ctx.desktop ? useOpenInApp({ session: props.session, path: () => props.session.file.root }) : undefined
 
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
   const highlighted = () => normalizeFileTreeV2Path(props.highlighted ?? "")

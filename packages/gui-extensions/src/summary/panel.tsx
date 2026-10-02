@@ -2,7 +2,7 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Icon } from "@opencode/ui/icon"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { createMemo, Show } from "solid-js"
-import { Locale, useExtension, type Project, type MountedSession } from "../sdk"
+import { useExtension, type Project, type MountedSession } from "../sdk"
 import { BackgroundWorkSummary } from "./background"
 import { workspaceDirectories } from "./paths"
 import { ProjectSummaryCard } from "./project-card"
@@ -31,7 +31,7 @@ export type SummaryPanelProps = {
 
 export default function SessionSummaryPanel(props: SummaryPanelProps) {
   const ctx = useExtension()
-  const locale = ctx.use(Locale)
+  const locale = ctx.locale
   const data = props.session.server.data
 
   const placement = createMemo(() =>

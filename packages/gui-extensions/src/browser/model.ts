@@ -2,7 +2,7 @@ import { batch, createRoot, createSignal, getOwner, onCleanup, runWithOwner } fr
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, Layout, Links, Sessions, type Link, type SessionRef, type SetupContext } from "../sdk"
+import { createKeyed, type Link, type SessionRef, type SetupContext } from "../sdk"
 import { readHref } from "./comment"
 import { createConnection, unavailable, type Connection, type InspectEvent, type Registration } from "./connection"
 import type definition from "./index"
@@ -15,7 +15,7 @@ type Session = Pick<SessionRef, "key">
 type Attachment = {
   registration?: number
   browser: Browser.State | null
-  surfaces: Readonly<Record<string, string>>
+  embeds: Readonly<Record<string, string>>
   suspended: boolean
   error?: string
 }
@@ -52,12 +52,12 @@ export type Model = ReturnType<typeof createModel>
 // Attachments belong to the shell session tab, not the session route: native pages and the agent's
 // browser survive visiting Settings or another tab and close when the session tab does.
 export function createModel(ctx: SetupContext<typeof definition>) {
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
-  const links = ctx.use(Links)
+  const sessions = ctx.sessions
+  const layout = ctx.layout
+  const links = ctx.links
   // The extension's own main entry provides the pane. `uses` declares it by reference; its full token, which this chunk
   // loads with the protocol schemas, resolves it.
-  const pane = ctx.use(BrowserPane)
+  const pane = ctx.uses.pane.load(BrowserPane)
 
   const client = () => {
     const current = pane()
@@ -130,7 +130,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             return
           }
 
-          layout.open(key(tabID), ref, { select: true })
+          layout.open(key(tabID), ref, { tab: "select" })
         },
         preview: (path) => preview(ref, path),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
@@ -154,7 +154,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
               reconcile({
                 registration: next.registration ? entry.revision : undefined,
                 browser: next.browser,
-                surfaces: next.surfaces,
+                embeds: next.embeds,
                 suspended: next.suspended,
                 error:
                   next.error === "browser.pane.replaced"
@@ -173,7 +173,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         strip: {
           stored: () => layout.stored(ref),
           open(tabID) {
-            if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { focus: false })
+            if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { tab: "append" })
           },
           close: (tabID) => layout.close(key(tabID), ref),
         },
@@ -181,7 +181,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     }
 
     live.set(id, entry)
-    setState("attachments", id, { browser: null, surfaces: {}, suspended: false })
+    setState("attachments", id, { browser: null, embeds: {}, suspended: false })
     // A new session appears in the UI before its server-side creation finishes. The listener
     // belongs to this model, not to the route effect that happened to call attach().
     const data = ref.server.data
@@ -206,7 +206,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             entry.held = {}
             held.mirror?.()
 
-            if (held.focus) layout.open(key(held.focus), ref, { select: true })
+            if (held.focus) layout.open(key(held.focus), ref, { tab: "select" })
           }),
       )
 
@@ -367,10 +367,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     error: (session: Session) => state.errors[session.key] ?? attachment(session)?.error,
     suspended: (session: Session) => attachment(session)?.suspended ?? false,
-    /** The host surface of a tab's page, once main created the page. */
-    surface: (session: Session, tabID: string) => attachment(session)?.surfaces[tabID],
+    /** The host embed of a tab's page, once main created the page. */
+    embed: (session: Session, tabID: string) => attachment(session)?.embeds[tabID],
     /**
-     * Creates a restored tab's page, which then reports its surface. Holds for the caller's scope: a new registration,
+     * Creates a restored tab's page, which then reports its embed. Holds for the caller's scope: a new registration,
      * e.g. after a suspension, has no page for the tab and loads it again.
      */
     load(session: Session, tabID: Browser.TabID) {
@@ -421,7 +421,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const item = target && tab(session, target.tabID)
 
       if (!item) return
-      layout.open(key(item.id), session, { select: true })
+      layout.open(key(item.id), session, { tab: "select" })
 
       if (target.ref) live.get(session.key)?.connection.highlight(item.id, target.ref)
     },

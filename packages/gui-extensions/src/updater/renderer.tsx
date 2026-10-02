@@ -1,11 +1,11 @@
 import { showToast } from "@opencode/ui/toast"
-import { lazy, Suspense } from "solid-js"
-import { createKeyed, onIdle, Command, Desktop, SettingsPage, TitlebarItem, type Setup } from "../sdk"
+import { lazy, onCleanup, Suspense } from "solid-js"
+import { createKeyed, onIdle, Command, SettingsPage, TitlebarItem, type Setup } from "../sdk"
 import { updaterAction } from "./action"
 import type definition from "./index"
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (!ctx.use(Desktop)) return
+  if (!ctx.desktop) return
   const updater = ctx.uses.updater
 
   const state = () => {
@@ -25,7 +25,7 @@ const setup: Setup<typeof definition> = (ctx) => {
 
   const Section = lazy(() => import("./section"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
-  ctx.cleanup(onIdle(() => void Section.preload()))
+  onCleanup(onIdle(() => void Section.preload()))
 
   ctx.add(TitlebarItem, () => {
     const current = state()

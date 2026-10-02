@@ -9,7 +9,7 @@ export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
 export type Connection = ReturnType<typeof createConnection>
 
 export type Registration = {
-  /** Creates a restored tab's page, which then reports its surface. */
+  /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
   inspect(tabID: Browser.TabID, enabled: boolean): void
@@ -20,8 +20,8 @@ export type Registration = {
 type ConnectionState = {
   registration?: Registration
   browser: Browser.State | null
-  /** Host surface per tab page of the current registration. */
-  surfaces: Readonly<Record<string, string>>
+  /** Host embed per tab page of the current registration. */
+  embeds: Readonly<Record<string, string>>
   suspended: boolean
   error?: string
 }
@@ -47,7 +47,7 @@ export function createConnection(input: {
   preview: (path: string) => void
   inspect: (event: InspectEvent) => void
 }) {
-  const state: ConnectionState = { browser: null, surfaces: {}, suspended: false }
+  const state: ConnectionState = { browser: null, embeds: {}, suspended: false }
   let disposed = false
   let blocked = false
   let attempts = 0
@@ -97,7 +97,7 @@ export function createConnection(input: {
     lost = true
     registration.close()
     state.registration = undefined
-    state.surfaces = {}
+    state.embeds = {}
     state.suspended = true
     state.error = undefined
     publish()
@@ -109,7 +109,7 @@ export function createConnection(input: {
     if (disposed || state.registration !== registration) return
     registration.close()
     state.registration = undefined
-    state.surfaces = {}
+    state.embeds = {}
     state.suspended = false
     state.error = undefined
     publish()
@@ -142,8 +142,8 @@ export function createConnection(input: {
 
         if (event.type === "inspect") return input.inspect(event)
 
-        if (event.type === "surface") {
-          state.surfaces = { ...state.surfaces, [event.tabID]: event.surface }
+        if (event.type === "embed") {
+          state.embeds = { ...state.embeds, [event.tabID]: event.embed }
 
           return publish()
         }
@@ -152,7 +152,7 @@ export function createConnection(input: {
           blocked = true
           registration.close()
           state.registration = undefined
-          state.surfaces = {}
+          state.embeds = {}
           state.browser = null
           state.error = event.error
           publish()
@@ -165,7 +165,7 @@ export function createConnection(input: {
         if (event.error === "browser.pane.suspended") {
           registration.close()
           state.registration = undefined
-          state.surfaces = {}
+          state.embeds = {}
           state.suspended = true
 
           if (event.state) state.browser = event.state
@@ -191,7 +191,7 @@ export function createConnection(input: {
     )
 
     state.registration = registration
-    state.surfaces = {}
+    state.embeds = {}
     state.suspended = false
     state.error = undefined
     publish()

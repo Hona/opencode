@@ -3,7 +3,7 @@ import { showToast } from "@opencode/ui/toast"
 import { createContext, createEffect, createSignal, For, onCleanup, Show, untrack, useContext } from "solid-js"
 import type { ParentProps } from "solid-js"
 import { HomeProjectsView, type HomeProjectsViewProps } from "@/home/projects/view"
-import { ExtensionHostProvider, useExtensionHost } from "@/runtime/extension/host"
+import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "@/runtime/extension/host"
 import { Contribution, ExtensionStyles } from "@/runtime/extension/render"
 import { ExtensionServersProvider, useExtensionServers, useServerAddItems } from "@/runtime/extension/servers"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -12,7 +12,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCollectionController } from "@/servers/registry/controller"
 import { ExtensionServerRow } from "@/servers/registry/extension-row"
 import { builtins } from "../../../../gui-extensions/src/renderer"
-import { Layout, type IpcClient } from "../../../../gui-extensions/src/sdk"
+import type { IpcClient, Layout } from "../../../../gui-extensions/src/sdk"
 import type { Ssh, SshConfig, SshHttp, SshItem, SshStart } from "../../../../gui-extensions/src/ssh/contract"
 import { DialogSsh } from "../../../../gui-extensions/src/ssh/dialog"
 import { createSshController } from "../../../../gui-extensions/src/ssh/state"
@@ -94,7 +94,8 @@ export function SshProvider(props: ParentProps) {
     <ExtensionHostProvider
       definitions={[extension]}
       disabled={() => none}
-      apis={[...apis, { token: Layout, create: () => layout }]}
+      // The SSH extension's renderer reads no other HostApi in these stories.
+      apis={{ ...apis, layout: () => layout } as HostApiFactories}
       ipc={(token) => (token.id === extension.id ? ipc : undefined)}
     >
       <SshIpcContext.Provider value={ipc}>

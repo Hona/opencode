@@ -3,10 +3,8 @@ import { createStore } from "solid-js/store"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   createKeyed,
-  Layout,
   LinkHandler,
   Panel,
-  Sessions,
   usePanel,
   type PanelTab,
   type SessionRef,
@@ -24,8 +22,8 @@ const KEY = `review:${TAB}`
 
 const setup: Setup<typeof Review> = (ctx) => {
   const owner = getOwner()
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
+  const sessions = ctx.sessions
+  const layout = ctx.layout
   const diff = ctx.stores.diff
   const panel = ctx.stores.panel
 
@@ -111,7 +109,7 @@ const setup: Setup<typeof Review> = (ctx) => {
       get title() {
         return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
       },
-      kind: "pinned",
+      pinned: true,
       // Without focusable content the panel itself joins the tab order.
       get tabbable() {
         return !(count() > 0 || layout.sidebar.opened())
@@ -128,7 +126,7 @@ const setup: Setup<typeof Review> = (ctx) => {
   const ReviewPanel = lazy(() => import("./panel"))
   const MobileReview = lazy(() => import("./mobile"))
 
-  ctx.cleanup(onIdle(() => void (layout.narrow() ? MobileReview : ReviewPanel).preload()))
+  onCleanup(onIdle(() => void (layout.narrow() ? MobileReview : ReviewPanel).preload()))
 
   ctx.add(Panel, {
     id: "main",

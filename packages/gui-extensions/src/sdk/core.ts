@@ -1,6 +1,5 @@
 import type { Schema } from "effect"
 import type { Accessor } from "solid-js"
-import type { Scope } from "./scope"
 
 export type Cleanup = () => void | Promise<void>
 
@@ -15,19 +14,21 @@ export type Catalog = { readonly en: Messages } & {
   readonly [locale: string]: Messages | (() => Promise<{ readonly default: Messages }>)
 }
 
-type Result = void | Cleanup | Promise<void | Cleanup>
+/**
+ * What an entry's setup returns. Teardown is not returned: a window entry uses Solid's `onCleanup` (setup runs under
+ * the extension's root owner) and `ctx.signal`; a main entry uses `ctx.scope.addFinalizer` and `ctx.scope.signal`.
+ */
+type Result = void | Promise<void>
 
-/** A main-process entry that does not read its instance's scope. */
-export type Setup = (ctx: Context) => Result
-
-/** The setup context in the main process: the shared context plus the instance's lifetime. */
-export interface MainContext extends Context {
-  /** The instance's lifetime: `signal` is its signal and `cleanup` adds its finalizers. */
-  readonly scope: Scope
+/** The running build. One shape in the window and in main. */
+export interface Build {
+  readonly version: string
+  readonly channel: "local" | "dev" | "beta" | "prod"
+  /** Main is always "desktop". */
+  readonly platform: "web" | "desktop"
+  /** A packaged desktop app, not a development run. Always false on the web. */
+  readonly packaged: boolean
 }
-
-/** A main-process entry. */
-export type MainSetup = (ctx: MainContext) => Result
 
 export interface Definition {
   /** Prefix of every id the extension creates: commands, panels, settings, storage, contracts, points. */
@@ -41,13 +42,14 @@ export interface Definition {
   /**
    * Hard contracts. The host starts the extension only while every one is active and restarts it with them; the
    * values are plain in `ctx.requires`. Use it only where the extension is meaningless without the contract. A
-   * reference (`Ipc.ref`) is refused: it resolves only once code uses the full token, which setup would do.
+   * reference (`Ipc.ref`) is refused: it resolves only once code loads the full token, which setup would do.
    */
   readonly requires?: Readonly<Record<string, Contract<unknown> | Ipc>>
   /** State the host stores for the extension and loads before it is read. See `Store`. */
   readonly stores?: Readonly<Record<string, StoreDeclaration>>
   readonly renderer?: () => Promise<{ readonly default: (ctx: never) => Result }>
-  readonly main?: () => Promise<{ readonly default: MainSetup }>
+  /** The main entry; its default export is a `MainSetup` (`@opencode/gui-extensions/sdk/main`). */
+  readonly main?: () => Promise<{ readonly default: (ctx: never) => Result }>
 }
 
 // Loose on purpose: checking an entry's module while its definition is still being inferred would be circular.
@@ -71,13 +73,6 @@ export interface Point<T> {
 export interface Contract<T, Id extends string = string> {
   readonly kind: "contract"
   readonly id: Id
-  readonly [brand]?: T
-}
-
-/** An API the host always provides. */
-export interface HostApi<T> {
-  readonly kind: "hostapi"
-  readonly id: string
   readonly [brand]?: T
 }
 
@@ -117,7 +112,7 @@ export type Tokens = Readonly<Record<string, Token>>
 
 type TypeOf<C> = C extends Codec ? C["Type"] : void
 
-/** What the renderer gets from `use(ipc)`. Methods are async; state is synced per window. */
+/** What the renderer reads from `ctx.uses.name` for an Ipc. Methods are async; state is synced per window. */
 export type IpcClient<S extends IpcSpec> = {
   readonly [Name in keyof S["methods"]]: (
     input: TypeOf<S["methods"][Name]["input"]>,
@@ -153,7 +148,7 @@ export type Live<T> =
 const live = Symbol.for("opencode.extension.live")
 
 export const Live = {
-  /** For the host: marks the accessor `use` returns, so `createKeyed` follows its generations. */
+  /** For the host: marks the accessors `ctx.uses` holds, so `createKeyed` follows their generations. */
   accessor: <T>(read: () => Live<T>): Accessor<Live<T>> => Object.assign(read, { [live]: true }),
   /** The accessor is one the host marked with `Live.accessor`. */
   is: (source: Accessor<unknown>): source is Accessor<Live<unknown>> => live in source,
@@ -165,7 +160,7 @@ export interface Caller {
   readonly signal: AbortSignal
 }
 
-/** What main passes to `provide(ipc, impl)`. */
+/** What main passes to `ctx.provide(ipc, impl)`. */
 export type IpcImpl<S extends IpcSpec> = {
   readonly [Name in keyof S["methods"]]: (
     input: TypeOf<S["methods"][Name]["input"]>,
@@ -173,7 +168,7 @@ export type IpcImpl<S extends IpcSpec> = {
   ) => TypeOf<S["methods"][Name]["output"]> | Promise<TypeOf<S["methods"][Name]["output"]>>
 } & (S["state"] extends Codec ? { state(window: number): TypeOf<S["state"]> } : unknown)
 
-/** Returned by `provide(ipc, impl)` in main. */
+/** Returned by `ctx.provide(ipc, impl)` in main. */
 export interface IpcProvider<S extends IpcSpec> {
   /** Re-reads `impl.state` and sends it to one window, or to every window. */
   changed(window?: number): void
@@ -185,13 +180,12 @@ export interface IpcProvider<S extends IpcSpec> {
   dispose(): void
 }
 
-/** What every entry gets, in the renderer and in main. */
+/**
+ * What every entry gets, in the window and in main. Each process adds the APIs its host always provides as properties
+ * (`ctx.layout`, `ctx.storage`, …), created on first read, and `provide` for the contracts it hosts.
+ */
 export interface BaseContext {
   readonly id: string
-  /** Aborts when the extension is disabled, reloaded, or the window closes. */
-  readonly signal: AbortSignal
-  /** Runs when the extension goes away; runs at once if it already has, e.g. after an await in setup. */
-  cleanup(fn: Cleanup): Cleanup
   /**
    * Contribute an item. Pass a function to contribute reactively; return undefined to withdraw. The item is withdrawn
    * with the current owner (for example a `createKeyed` run or a component), else with the extension.
@@ -199,19 +193,9 @@ export interface BaseContext {
   add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup
   /** Read contributions to a point this extension owns. Reactive. */
   list<T>(point: Point<T>): readonly T[]
-  provide<T>(token: Contract<T>, impl: T): Cleanup
-  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
   /** Resolves this extension's catalog, then the app's shared keys. */
   t(key: string, params?: Params): string
   plural(key: string, count: number, params?: Params): string
-}
-
-/** The main process context. The renderer's `Context` follows providers through `Live` instead. */
-export interface Context extends BaseContext {
-  use<T>(token: HostApi<T>): T
-  /** Follows the provider live: undefined until it exists, and again after it goes away. */
-  use<T>(token: Contract<T>): Accessor<T | undefined>
-  use<S extends IpcSpec>(token: Ipc<S>): Accessor<IpcClient<S> | undefined>
 }
 
 /** Moves an older stored value into a store once. */
@@ -376,10 +360,6 @@ export const Contract = {
   define: <T, const Id extends string>(id: Id): Contract<T, Id> => ({ kind: "contract", id }),
 }
 
-export const HostApi = {
-  define: <T>(id: string): HostApi<T> => ({ kind: "hostapi", id }),
-}
-
 type SpecOf<R> = R extends Ipc<infer S> ? S : never
 
 export const Ipc = {
@@ -387,10 +367,9 @@ export const Ipc = {
   /**
    * Declares an Ipc by id, typed from a type-only import of its token, so a definition can name it in `provides`,
    * `uses` or `requires` without loading its schemas: `Ipc.ref<typeof BrowserPane>("browser.pane")`. Composition
-   * checks and `Live` typing treat it as the token. In the renderer it resolves once code in the window uses the full
-   * token, e.g. `ctx.use(BrowserPane)` from a chunk that loads later (`use` accepts the full token of a declared
-   * reference), and it is pending until then. Declare it in `uses`: a `requires` would wait for a resolution that setup
-   * itself would make.
+   * checks and `Live` typing treat it as the token. In the renderer it is pending until code in the window loads the
+   * full token, e.g. `ctx.uses.pane.load(BrowserPane)` from a chunk that loads later. Declare it in `uses`: a
+   * `requires` would wait for a resolution that setup itself would make.
    */
   ref: <R extends Ipc>(id: TokenId<R>): IpcRef<SpecOf<R>> => ({ kind: "ipc", id }),
 }

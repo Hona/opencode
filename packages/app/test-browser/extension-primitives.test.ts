@@ -8,7 +8,6 @@ import {
   createVisitState,
   ExtensionContext,
   Live,
-  Sessions,
   type Context,
   type Persisted,
   type SessionRef,
@@ -146,9 +145,8 @@ describe("extension primitives", () => {
 
   test("createVisitState returns to its initial value on every routing visit", () => {
     const [visit, setVisit] = createSignal<object>({})
-    const sessions = { list: () => [], current: () => ({ visit: visit() }) }
-    const fake = { use: (token: typeof Sessions) => (token === Sessions ? sessions : undefined) }
-    // SAFETY: `createVisitState` reads only `use(Sessions).current().visit`, which this fake provides.
+    const fake = { sessions: { list: () => [], current: () => ({ visit: visit() }) } }
+    // SAFETY: `createVisitState` reads only `sessions.current().visit`, which this fake provides.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const context = fake as unknown as Context
     const captured: ReturnType<typeof createVisitState<string>>[] = []

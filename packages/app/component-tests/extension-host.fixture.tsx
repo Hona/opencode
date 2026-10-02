@@ -1,35 +1,30 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
-import {
+import type {
   Appearance,
   Build,
-  Desktop,
-  Embeds,
+  Definition,
   Keybinds,
   Layout,
   Locale,
-  Preferences,
   Router,
   Servers,
-  Sessions,
+  Setup,
   Storage,
-  System,
+  StoreOptions,
   Workspaces,
-  type Definition,
-  type Setup,
-  type StoreOptions,
 } from "@opencode/gui-extensions/sdk"
-import { createSignal, getOwner, runWithOwner, Show } from "solid-js"
+import { createSignal, getOwner, onCleanup, runWithOwner, Show } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Schema } from "effect"
 import { render } from "solid-js/web"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { ExtensionHostProvider, useExtensionHost } from "../src/runtime/extension/host"
+import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "../src/runtime/extension/host"
 import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 
-export { Contract, createKeyed, Dialogs, Slot, Store } from "@opencode/gui-extensions/sdk"
+export { Contract, createKeyed, Slot, Store } from "@opencode/gui-extensions/sdk"
 
 export { Schema }
 
@@ -38,7 +33,62 @@ type ExtensionHost = ReturnType<typeof useExtensionHost>
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createSignal, getOwner, runWithOwner }
+export { createSignal, getOwner, onCleanup, runWithOwner }
+
+const layout: Layout = {
+  narrow: () => false,
+  ready: () => true,
+  open() {},
+  close() {},
+  toggle() {},
+  state: () => "closed",
+  stored: () => [],
+  side: { opened: () => false, toggle() {} },
+  sidebar: { opened: () => true },
+  dock: { opened: () => false, placement: () => "bottom" },
+  scroll: { get: () => undefined, set() {} },
+  settings() {},
+  project() {},
+}
+
+const build: Build = { version: "", channel: "dev", platform: "desktop", packaged: false }
+
+const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
+
+const appearance: Appearance = { font: () => "monospace" }
+
+const router: Router = { routing: () => false, path: () => "/" }
+
+const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
+
+const servers: Servers = { list: () => [] }
+
+const workspaces: Workspaces = { on: () => () => undefined }
+
+/** Every HostApi faked at its boundary, with the given storage. */
+function fakeApis(storage: (extension: string) => Storage): HostApiFactories {
+  return {
+    build: () => build,
+    locale: () => locale,
+    appearance: () => appearance,
+    router: () => router,
+    keybinds: () => keybinds,
+    servers: () => servers,
+    workspaces: () => workspaces,
+    desktop: () => undefined,
+    sessions: () => ({ list: () => [], current: () => undefined }),
+    layout: () => layout,
+    storage,
+    system: () => ({ copy: async () => {}, save: async () => false, openExternal() {} }),
+    preferences: () => ({ releaseNotes: () => false, setReleaseNotes() {}, mobileDiffWrap: () => false }),
+    embeds: () => ({ View: () => null, capture: async () => undefined }),
+  }
+}
+
+/** Storage that no test of `mountExtensionHost` reads. */
+const unused = (): Storage => {
+  throw new Error("The fixture extension reads no storage")
+}
 
 /** Resolves once `check` holds, checking every frame; rejects after five seconds. */
 export async function until(check: () => boolean) {
@@ -81,7 +131,7 @@ export function mountExtensionHost() {
               },
             ]}
             disabled={disabled}
-            apis={[]}
+            apis={fakeApis(unused)}
           >
             <Capture />
           </ExtensionHostProvider>
@@ -114,7 +164,7 @@ export function mountExtensionHost() {
 /**
  * Mounts the real host over these definitions, before any session mounts, with the HostApis faked at their
  * boundary. Storage is the real persisted store of a desktop window whose reads wait until `release()`; `stored` seeds
- * it. Renders the `shell.bottom` slot once the startup gate opens.
+ * it. Renders the `window.bottom` slot once the startup gate opens.
  */
 export function mountExtensions(input: {
   definitions: readonly Definition[]
@@ -163,53 +213,9 @@ export function mountExtensions(input: {
     remove() {},
   })
 
-  const layout: Layout = {
-    narrow: () => false,
-    ready: () => true,
-    open() {},
-    close() {},
-    toggle() {},
-    state: () => "closed",
-    stored: () => [],
-    side: { opened: () => false, toggle() {} },
-    sidebar: { opened: () => true },
-    dock: { opened: () => false, placement: () => "bottom" },
-    scroll: { get: () => undefined, set() {} },
-    settings() {},
-    project() {},
-  }
-
-  const build: Build = { channel: "dev", platform: "desktop" }
-  const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
-  const appearance: Appearance = { font: () => "monospace" }
-  const router: Router = { routing: () => false, path: () => "/" }
-  const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
-  const servers: Servers = { list: () => [] }
-  const workspaces: Workspaces = { on: () => () => undefined }
-
-  const apis = [
-    { token: Build, create: () => build },
-    { token: Locale, create: () => locale },
-    { token: Appearance, create: () => appearance },
-    { token: Router, create: () => router },
-    { token: Keybinds, create: () => keybinds },
-    { token: Servers, create: () => servers },
-    { token: Workspaces, create: () => workspaces },
-    { token: Desktop, create: () => undefined },
-    { token: Sessions, create: () => ({ list: () => [], current: () => undefined }) },
-    { token: Layout, create: () => layout },
-    { token: Storage, create: storage },
-    { token: System, create: () => ({ copy: async () => {}, save: async () => false, open() {} }) },
-    {
-      token: Preferences,
-      create: () => ({ releaseNotes: () => false, setReleaseNotes() {}, mobileDiffWrap: () => false }),
-    },
-    { token: Embeds, create: () => ({ View: () => null, capture: async () => undefined }) },
-  ]
-
   function MountedHost() {
     return (
-      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} apis={apis}>
+      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} apis={fakeApis(storage)}>
         <Capture />
       </ExtensionHostProvider>
     )
@@ -221,7 +227,7 @@ export function mountExtensions(input: {
 
     return (
       <Show when={host.ready()}>
-        <ExtensionSlot at="shell.bottom" input={{}} />
+        <ExtensionSlot at="window.bottom" input={{}} />
       </Show>
     )
   }

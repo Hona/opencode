@@ -195,12 +195,12 @@ test("a registration lost with the pane's Ipc registers again with its tabs once
   const app = fixture()
 
   try {
-    app.emit(0, { type: "surface", tabID, surface: "surface-1" })
-    expect(app.states.at(-1)?.surfaces).toEqual({ [tabID]: "surface-1" })
+    app.emit(0, { type: "embed", tabID, embed: "embed-1" })
+    expect(app.states.at(-1)?.embeds).toEqual({ [tabID]: "embed-1" })
     app.ipc.available = false
     app.connection.refresh()
     expect(app.listeners.has(app.calls[0].input.binding)).toBe(false)
-    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: true })
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, embeds: {}, browser, suspended: true })
     app.ipc.available = true
     app.connection.refresh()
     app.connection.refresh()
@@ -248,7 +248,7 @@ test("a mirror held while the strip cannot be written still adds new tabs and pr
     app.strip.push(stale)
     app.emit(0, { type: "state", state: { ...browser, tabs: [...browser.tabs, { ...browser.tabs[0], id: added }] } })
     // A later report replaces the held mirror before the strip can be written.
-    app.emit(0, { type: "surface", tabID: added, surface: "surface-2" })
+    app.emit(0, { type: "embed", tabID: added, embed: "embed-2" })
     expect(app.strip).toEqual([tabID, stale])
     app.owner.located = true
     app.owner.held?.()
@@ -267,7 +267,7 @@ test("a rejected registration clears itself and retries with its tabs after the 
     app.ipc.reject = new Error("browser.pane.registration.invalid")
     await expect(app.connection.command({ type: "reload", tabID })).rejects.toThrow("browser.pane.registration.invalid")
     expect(app.listeners.has(app.calls[1].input.binding)).toBe(false)
-    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: false })
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, embeds: {}, browser, suspended: false })
     app.ipc.reject = undefined
     jest.advanceTimersByTime(999)
     expect(app.calls).toHaveLength(2)

@@ -1,7 +1,7 @@
 import { onCleanup, Show } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { SessionReview } from "@opencode/session-ui/session-review"
-import { createKeyed, Layout, Links, Preferences, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import type { ReviewModel } from "./model"
 import { ReviewEmpty, ReviewTitle } from "./parts"
 
@@ -15,8 +15,8 @@ type ScrollState = {
 /** The narrow-screen review: every changed file as one scrollable list. */
 export default function SessionMobileReview(props: { review: ReviewModel; session: MountedSession }) {
   const ctx = useExtension()
-  const links = ctx.use(Links)
-  const preferences = ctx.use(Preferences)
+  const links = ctx.links
+  const preferences = ctx.preferences
 
   return (
     <div class="relative h-full overflow-hidden">
@@ -39,7 +39,7 @@ function SessionReviewTab(props: {
   onViewFile: (file: string) => void
 }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const review = props.review
   const state: ScrollState = { userInteracted: false }
 

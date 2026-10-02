@@ -25,20 +25,18 @@ import { resolveTemplate } from "@solid-primitives/i18n"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import {
-  Dialogs,
   ExtensionContext,
   LifetimeContext,
   LinkHandler,
-  Links,
   Live,
-  Sessions,
-  Storage,
+  type BaseContext,
   type Catalog,
   type Cleanup,
   type Context,
   type Contract,
   type Definition,
-  type HostApi,
+  type Dialogs,
+  type Links,
   type Messages,
   type Persisted,
   type Point,
@@ -70,15 +68,24 @@ type Instance = {
   preload(session: SessionRef): void
 }
 
-/** A HostApi the host provides. `register` withdraws what it returns with the caller's owner, else with the extension. */
-export type HostApiFactory = {
-  readonly token: HostApi<unknown>
-  // SAFETY: each factory returns the value its token types; `use` hands it back only through that token's overload.
-  // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
-  create(extension: string, owner: Owner | null, context: Context, register: (fn: Cleanup) => Cleanup): unknown
-}
+/** The APIs a window context exposes as properties. */
+type HostApis = Omit<Context, keyof BaseContext | "signal" | "provide">
 
-type Bound = readonly HostApiFactory[]
+/**
+ * Creates one HostApi for an extension instance, on the instance's first read of it. `register` withdraws what it is
+ * given with the caller's owner, else with the extension.
+ */
+type HostApiFactory<T> = (
+  extension: string,
+  owner: Owner | null,
+  context: Context,
+  register: (fn: Cleanup) => Cleanup,
+) => T
+
+/** The HostApis a window provides, by context property. The host itself provides `links` and `dialogs`. */
+export type HostApiFactories = {
+  readonly [K in Exclude<keyof HostApis, "links" | "dialogs">]: HostApiFactory<HostApis[K]>
+}
 
 export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
 
@@ -120,7 +127,7 @@ export function useExtensionHost() {
 type HostInput = {
   definitions: readonly Definition[]
   disabled: Accessor<ReadonlySet<string> | undefined>
-  apis: Bound
+  apis: HostApiFactories
   /** The renderer client of an Ipc while it is available; omitted where there is no main process. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
   /** How many times an Ipc became available. Reactive. */
@@ -138,7 +145,6 @@ export function ExtensionHostProvider(props: ParentProps<HostInput>) {
 function createHost(input: HostInput) {
   const language = useLanguage()
   const owner = getOwner()
-  const apis = new Map(input.apis.map((api) => [api.token.id, api]))
   const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
   const generations = new Map<string, number>()
 
@@ -298,14 +304,13 @@ function createHost(input: HostInput) {
     },
   }
 
-  apis.set(Links.id, { token: Links, create: () => links })
-
   const dialog = useDialog()
 
-  apis.set(Dialogs.id, {
-    token: Dialogs,
+  const factories = {
+    ...input.apis,
+    links: () => links,
     // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
-    create: (extension, _, context, register): Dialogs => {
+    dialogs: (extension, _, context, register): Dialogs => {
       const open = (method: "show" | "push") => (render: () => JSX.Element) => {
         if (context.signal.aborted) return
 
@@ -349,7 +354,7 @@ function createHost(input: HostInput) {
         active: () => !!dialog.active,
       }
     },
-  })
+  } satisfies { readonly [K in keyof HostApis]: HostApiFactory<HostApis[K]> }
 
   const activate = async (definition: Definition) => {
     const load = definition.renderer
@@ -407,7 +412,7 @@ function createHost(input: HostInput) {
         }
 
         // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
-        const setup = module.default as (ctx: InstanceContext) => void | Cleanup | Promise<void | Cleanup>
+        const setup = module.default as (ctx: InstanceContext) => void | Promise<void>
 
         const start = () =>
           void Promise.try(() =>
@@ -416,10 +421,7 @@ function createHost(input: HostInput) {
               () => untrack(() => setup(instance.context)),
               (cause) => queueMicrotask(() => crash(cause)),
             ),
-          ).then((cleanup) => {
-            // Registered first: if the extension already went away, the cleanup runs now.
-            if (cleanup) instance.context.cleanup(cleanup)
-
+          ).then(() => {
             if (instances.get(definition.id) !== instance) return
 
             setState("status", definition.id, "active")
@@ -451,7 +453,6 @@ function createHost(input: HostInput) {
     })
 
     const messages = () => catalog.latest
-    const created = new Map<string, ReturnType<Bound[number]["create"]>>()
 
     // Promise.try runs the cleanup synchronously and isolates a throw from the others.
     const release = (fn: Cleanup) =>
@@ -541,6 +542,23 @@ function createHost(input: HostInput) {
       return current.status === "active" ? current.value : undefined
     }
 
+    // A declared reference resolves once the chunk that loads its full token passes it to `load`, here and in other
+    // extensions.
+    const used = (token: Token) => {
+      const read = liveOf(token)
+
+      if (token.kind !== "ipc" || token.spec) return read
+
+      return Object.assign(read, {
+        load(full: Ipc) {
+          if (full.id !== token.id) throw new Error(`Ipc "${full.id}" does not resolve the reference "${token.id}"`)
+          learn(full)
+
+          return read
+        },
+      })
+    }
+
     Object.values(definition.uses ?? {}).forEach(learn)
     Object.values(definition.requires ?? {}).forEach(learn)
 
@@ -549,7 +567,6 @@ function createHost(input: HostInput) {
     const context = {
       id: extension,
       signal: controller.signal,
-      cleanup: own,
       add<T>(point: Point<T>, item: T | (() => T | undefined)) {
         if (late()) return () => {}
 
@@ -594,27 +611,7 @@ function createHost(input: HostInput) {
           setState("contracts", token.id, (version = 0) => version + 1)
         })
       },
-      use(token: HostApi<unknown> | Token) {
-        if (token.kind !== "hostapi") {
-          // A full token resolves the references to it, here and in other extensions.
-          learn(token)
-
-          return liveOf(token)
-        }
-
-        if (created.has(token.id)) return created.get(token.id)
-
-        const api = apis.get(token.id)
-
-        if (!api) throw new Error(`HostApi "${token.id}" is unavailable`)
-
-        const made = api.create(extension, root, typed, register)
-
-        created.set(token.id, made)
-
-        return made
-      },
-      uses: Object.fromEntries(Object.entries(definition.uses ?? {}).map(([name, token]) => [name, liveOf(token)])),
+      uses: Object.fromEntries(Object.entries(definition.uses ?? {}).map(([name, token]) => [name, used(token)])),
       // The host starts the extension only while every hard contract is active, and restarts it when one changes.
       requires: Object.fromEntries(
         Object.entries(definition.requires ?? {}).map(([name, token]) => [name, untrack(() => value(liveOf(token)))]),
@@ -639,7 +636,28 @@ function createHost(input: HostInput) {
       },
     }
 
-    // SAFETY: one implementation serves the overloads of `Context` and `SetupContext`; each method checks its token kind.
+    // Each HostApi is created on the instance's first read of it.
+    const created = new Map<string, HostApis[keyof HostApis]>()
+
+    Object.defineProperties(
+      context,
+      Object.fromEntries(
+        Object.entries(factories).map(([name, create]) => [
+          name,
+          {
+            enumerable: true,
+            get() {
+              if (!created.has(name)) created.set(name, create(extension, root, typed, register))
+
+              return created.get(name)
+            },
+          },
+        ]),
+      ),
+    )
+
+    // SAFETY: one implementation serves `Context` and every `SetupContext`: the declarations' records are built from
+    // the definition, and every HostApi is a getter defined above.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const typed = context as unknown as InstanceContext
 
@@ -649,7 +667,7 @@ function createHost(input: HostInput) {
       definition,
       context: typed,
       prepare() {
-        const storage = typed.use(Storage)
+        const storage = typed.storage
 
         const loaded = Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) => {
           if (declaration.scope === "global") {
@@ -674,7 +692,7 @@ function createHost(input: HostInput) {
         if (sessions.length > 0) {
           own(() => sessions.forEach((store) => store.dispose()))
 
-          const list = typed.use(Sessions)
+          const list = typed.sessions
 
           // Drops the stores of sessions whose tabs closed.
           createRenderEffect(() => {

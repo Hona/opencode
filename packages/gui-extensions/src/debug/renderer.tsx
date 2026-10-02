@@ -1,10 +1,10 @@
 import { createSignal, lazy, Show, Suspense } from "solid-js"
-import { Build, Command, Slot, TitlebarItem, type Setup } from "../sdk"
+import { Command, Slot, TitlebarItem, type Setup } from "../sdk"
 import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
-  const channel = ctx.use(Build).channel
+  const channel = ctx.build.channel
   // Window-local; every window starts with the bar hidden.
   const [visible, setVisible] = createSignal(false)
 
@@ -23,7 +23,7 @@ const setup: Setup<typeof Debug> = (ctx) => {
   )
 
   ctx.add(Slot, {
-    at: "shell.bottom",
+    at: "window.bottom",
     render: () => (
       <Show when={visible()}>
         <Suspense>

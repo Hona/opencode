@@ -1,20 +1,20 @@
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
-import { Build, Lifecycle, Log, MenubarItem, Storage, type MainContext } from "../sdk/main"
+import { MenubarItem, type MainContext } from "../sdk/main"
 import { Updater } from "./contract"
 import { logContext } from "./log"
 import { make } from "./machine"
 
 const setup = async (ctx: MainContext) => {
-  const build = ctx.use(Build)
-  const lifecycle = ctx.use(Lifecycle)
+  const build = ctx.build
+  const lifecycle = ctx.lifecycle
   const enabled = build.packaged && build.channel !== "dev"
   // Holds no resources, so it needs no cleanup.
-  const context = logContext(ctx.use(Log).write)
+  const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)
 
-  const ready = ctx.use(Storage).store("ready", {
+  const ready = ctx.storage.store("ready", {
     schema: Schema.NullOr(Schema.Struct({ version: Schema.String })),
     initial: null,
     from: "settings:opencode.updater/ready",
@@ -25,7 +25,7 @@ const setup = async (ctx: MainContext) => {
     ? await import("./platform").then((module) => runPromise(module.make(build.channel)))
     : undefined
 
-  if (ctx.signal.aborted) return
+  if (ctx.scope.signal.aborted) return
   const scope = Scope.makeUnsafe()
   ctx.scope.addFinalizer(() => runPromise(Scope.close(scope, Exit.void)))
   const publish = { changed: () => {} }
@@ -41,9 +41,9 @@ const setup = async (ctx: MainContext) => {
           catch: (error) => error,
         }),
       persistence: {
-        get: Effect.sync(() => ready.get() ?? undefined),
-        set: (value) => Effect.sync(() => ready.set(value)),
-        clear: Effect.sync(() => ready.set(null)),
+        get: Effect.sync(() => ready.value ?? undefined),
+        set: (value) => Effect.sync(() => ready.update(() => value)),
+        clear: Effect.sync(() => ready.update(() => null)),
       },
       changed: () => publish.changed(),
     }).pipe(Scope.provide(scope)),

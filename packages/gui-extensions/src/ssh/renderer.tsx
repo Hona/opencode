@@ -1,19 +1,6 @@
 import { showToast } from "@opencode/ui/toast"
-import { createMemo, createRoot, lazy, Suspense, type JSX } from "solid-js"
-import {
-  Build,
-  Command,
-  createKeyed,
-  Dialogs,
-  Layout,
-  MenuItem,
-  onIdle,
-  Router,
-  Server,
-  Style,
-  type ServerEntry,
-  type Setup,
-} from "../sdk"
+import { createMemo, createRoot, lazy, onCleanup, Suspense, type JSX } from "solid-js"
+import { Command, createKeyed, MenuItem, onIdle, Server, Style, type ServerEntry, type Setup } from "../sdk"
 import type { SshConfig, SshItem } from "./contract"
 import { SshCover, type SshOffer } from "./cover"
 import type definition from "./index"
@@ -24,14 +11,14 @@ const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
   // SSH lives in the desktop main process.
-  if (ctx.use(Build).platform !== "desktop") return
-  const router = ctx.use(Router)
+  if (ctx.build.platform !== "desktop") return
+  const router = ctx.router
   const ipc = ctx.uses.ssh
-  const layout = ctx.use(Layout)
-  const dialog = ctx.use(Dialogs)
+  const layout = ctx.layout
+  const dialog = ctx.dialogs
   const Row = lazy(() => import("./row"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
-  ctx.cleanup(onIdle(() => void Row.preload()))
+  onCleanup(onIdle(() => void Row.preload()))
 
   const client = () => {
     const live = ipc()

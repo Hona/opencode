@@ -1,5 +1,4 @@
 import { Scope, type Cleanup } from "@opencode/gui-extensions/sdk/main"
-import { Predicate } from "effect"
 
 /** How long disposal waits for an instance's finalizers and a setup still running. */
 const CLEANUP_TIMEOUT_MS = 3_000
@@ -23,7 +22,7 @@ export interface Instance {
 export type Revision = (instance: Instance) => {
   /** Settles before setup runs; setup never runs when the extension stops first. A failure here does not stop setup. */
   readonly ready: Promise<unknown>
-  readonly setup: () => void | Cleanup | Promise<void | Cleanup>
+  readonly setup: () => void | Promise<void>
 }
 
 /** Writes a structured error log entry; the logger serializes each field of `data` as it is. */
@@ -40,7 +39,7 @@ type Running = {
   readonly ready: Promise<unknown>
   /** Its setup succeeded while it was active. */
   good: boolean
-  /** Runs setup once. The cleanup it returns belongs to the instance, even when setup settles after disposal. */
+  /** Runs setup once. A finalizer it adds belongs to the instance, even when setup settles after disposal. */
   start(): Promise<Outcome>
   /**
    * Withdraws everything the instance contributed at once, then settles once its finalizers and a setup still
@@ -128,15 +127,11 @@ export function createLifecycle(input: {
       start() {
         const stall = setTimeout(() => input.log("extension setup stalled", { id, ms: SETUP_STALL_MS }), SETUP_STALL_MS)
 
+        // A finalizer a setup adds after disposal started runs at once, and disposal waits for it.
         const outcome = Promise.resolve()
           .then(prepared.setup)
           .then(
-            (cleanup): Outcome => {
-              // A setup that settles after disposal started has its cleanup run now; disposal waits for it.
-              if (Predicate.isFunction(cleanup)) scope.addFinalizer(cleanup)
-
-              return { ok: true }
-            },
+            (): Outcome => ({ ok: true }),
             (cause: unknown): Outcome => ({ ok: false, error: cause }),
           )
           .finally(() => clearTimeout(stall))

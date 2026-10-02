@@ -5,7 +5,7 @@ import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import type { Embeds, Servers, Storage, Windows } from "../sdk/main"
+import type { Embeds, ServerEndpoints, Storage, Windows } from "../sdk/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
@@ -43,7 +43,7 @@ export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
   readonly windows: Windows
-  readonly servers: Servers
+  readonly serverEndpoints: ServerEndpoints
   readonly storage: Storage
   readonly embeds: Embeds
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
@@ -60,7 +60,7 @@ export function createBrowserPane(input: {
 
   return {
     async register(window: number, binding: string, target: Target) {
-      const server = input.servers.get(target.server)
+      const server = input.serverEndpoints.get(target.server)
 
       if (disposed || !server || !destinationOrigin(server.url)) throw new Error("browser.pane.registration.invalid")
 
@@ -488,8 +488,8 @@ export function createBrowserPane(input: {
 
     entry.pages.set(id, page)
     entry.tabs.set(id, restore ?? page.state())
-    // Straight to the window, not through the server report: the surface is local to this desktop.
-    publish(entry, { type: "surface", tabID: id, surface: page.surface })
+    // Straight to the window, not through the server report: the embed is local to this desktop.
+    publish(entry, { type: "embed", tabID: id, embed: page.embed })
     void page.ready
       .then(() => {
         if (entry.pages.get(id) === page) publishState(entry)

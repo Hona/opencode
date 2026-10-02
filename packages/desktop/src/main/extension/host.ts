@@ -2,41 +2,37 @@ import { app, BrowserWindow } from "electron"
 import { builtins } from "@opencode/gui-extensions/main"
 import type { BridgeLayout, BridgeMenubarItem } from "@opencode/gui-extensions/sdk/bridge"
 import {
-  Build,
-  Cli,
-  Embeds,
-  Lifecycle,
-  Log,
   MenubarItem,
-  Servers,
-  Storage,
-  Windows,
+  type BaseContext,
+  type Build,
   type Caller,
   type Catalog,
   type Cleanup,
-  type Contract,
+  type Cli,
   type Definition,
-  type HostApi,
+  type Embeds,
+  type Ipc,
+  type IpcImpl,
+  type IpcProvider,
+  type IpcSpec,
+  type Lifecycle,
+  type Log,
   type MainContext,
-  type ServerEndpoint,
+  type MainSetup,
   type Messages,
   type OS,
   type Params,
   type Point,
-  type Ipc,
-  type IpcClient,
-  type IpcImpl,
-  type IpcProvider,
-  type IpcSpec,
-  type MainSetup,
+  type ServerEndpoint,
+  type ServerEndpoints,
+  type Windows,
 } from "@opencode/gui-extensions/sdk/main"
 import { Exit, Match, Predicate, Schema } from "effect"
-import type { Accessor } from "solid-js"
 import type { ExtensionEndpoint, ExtensionInstalled } from "../../shared/ipc-rpc/extensions"
 import {
   ExtensionAvailable,
   ExtensionEvent,
-  ExtensionMenubarChanged,
+  ExtensionMenubarItemsChanged,
   ExtensionState,
   ExtensionsChanged,
   type DesktopEvent,
@@ -78,7 +74,11 @@ type Provider = {
   readonly spec: IpcSpec
   readonly methods: ReadonlyMap<string, Method>
   readonly state?: (window: number) => Value
-  readonly listeners: Set<(name: string, data: Value) => void>
+}
+
+/** The APIs a main context exposes as properties, as each instance creates them on first read. */
+type HostApis = {
+  -readonly [K in Exclude<keyof MainContext, keyof BaseContext | "scope" | "provide">]?: MainContext[K]
 }
 
 /** A contribution as `add` stores it, with its point's item type erased; `list` restores it. */
@@ -125,7 +125,6 @@ export function createHost(input: {
 
   const embeds = createEmbeds()
   const entries = new Map<string, Entry>()
-  const contracts = new Map<string, { readonly extension: string; readonly impl: unknown }>()
   const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
@@ -162,8 +161,8 @@ export function createHost(input: {
       const encoded = Schema.encodeUnknownExit(schema)(stateOf(win.id))
 
       if (Exit.isFailure(encoded))
-        return input.log("extension state encoding failed", { remote: ipc, cause: String(encoded.cause) })
-      emitIpcEvent(win.webContents, new ExtensionState({ remote: ipc, state: encoded.value }))
+        return input.log("extension state encoding failed", { ipc, cause: String(encoded.cause) })
+      emitIpcEvent(win.webContents, new ExtensionState({ ipc, state: encoded.value }))
     })
   }
 
@@ -191,7 +190,7 @@ export function createHost(input: {
 
     if (status.disposed) return
     refreshMenu()
-    broadcast(new ExtensionMenubarChanged({ items: menubar() }))
+    broadcast(new ExtensionMenubarItemsChanged({ items: listMenubarItems() }))
   }
 
   const scheduleMenubar = () => {
@@ -200,7 +199,7 @@ export function createHost(input: {
     queueMicrotask(publishMenubar)
   }
 
-  const menubar = (): BridgeMenubarItem[] =>
+  const listMenubarItems = (): BridgeMenubarItem[] =>
     menubarItems().map((entry) => {
       const item = {
         menu: entry.item.menu,
@@ -250,9 +249,9 @@ export function createHost(input: {
     }
   }
 
-  const build = { version: VERSION, channel: CHANNEL, packaged: app.isPackaged } satisfies Build
+  const build = { version: VERSION, channel: CHANNEL, platform: "desktop", packaged: app.isPackaged } satisfies Build
 
-  const servers = { get: server } satisfies Servers
+  const serverEndpoints = { get: server } satisfies ServerEndpoints
 
   const desktopLog = {
     write: (level, message, data) => input.write(level, message, data ?? {}),
@@ -273,7 +272,11 @@ export function createHost(input: {
 
       if (!main) return undefined
 
-      return () => main().then((module) => prepare(id, { setup: module.default, i18n: builtin.i18n }))
+      return () =>
+        main().then((module) =>
+          // SAFETY: a built-in's main entry exports a `MainSetup`, whose context this host builds.
+          prepare(id, { setup: module.default as MainSetup, i18n: builtin.i18n }),
+        )
     }
 
     const manifest = manager.installed().find((item) => item.id === id)?.manifest
@@ -318,51 +321,8 @@ export function createHost(input: {
     contribute(() => {
       translations.delete(translation)
     })
-    const clients = new WeakMap<Provider, unknown>()
-
-    const apis = new Map<string, unknown>([
-      [
-        Windows.id,
-        {
-          get: (window) => getMainWindows().find((win) => win.id === window),
-          list: getMainWindows,
-          focused: () => getLastFocusedWindow() ?? undefined,
-          on: (event, handler) => {
-            if (event === "open") return contribute(onMainWindow(handler))
-            closed.add(handler)
-
-            return contribute(() => {
-              closed.delete(handler)
-            })
-          },
-        } satisfies Windows,
-      ],
-      [
-        Embeds.id,
-        {
-          create: (view, win) => {
-            const embed = embeds.create(instance, view, win)
-
-            // Created by a setup that outlived its instance: taken down at once, like any late contribution.
-            if (signal.aborted) contribute(embed.dispose)
-
-            return embed
-          },
-        } satisfies Embeds,
-      ],
-      [Storage.id, createStorage(input.state, id)],
-      [Cli.id, input.cli],
-      [Build.id, build],
-      [Servers.id, servers],
-      [
-        Lifecycle.id,
-        {
-          restart: (handoff, options) =>
-            lifecycle.restart(options?.keep ?? instance.scope, () => input.restart(handoff)),
-        } satisfies Lifecycle,
-      ],
-      [Log.id, desktopLog],
-    ])
+    // The instance's HostApis, each created on first read.
+    const created: HostApis = {}
 
     function add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup {
       if (signal.aborted) return () => {}
@@ -387,25 +347,11 @@ export function createHost(input: {
       })
     }
 
-    function provide<T>(token: Contract<T>, impl: T): Cleanup
     function provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
-    function provide<T>(token: Contract<T> | Ipc, impl: T | IpcImpl<IpcSpec>) {
-      if (token.kind === "contract") {
-        if (signal.aborted) return () => {}
+    function provide(token: Ipc, impl: IpcImpl<IpcSpec>): IpcProvider<IpcSpec> {
+      // Installed extensions are plain JavaScript: a contract token here has no spec to serve.
+      if (token.kind !== "ipc") throw new Error("Contracts are provided by an extension's renderer entry")
 
-        const entry = { extension: id, impl }
-        contracts.set(token.id, entry)
-
-        return contribute(() => {
-          if (contracts.get(token.id) === entry) contracts.delete(token.id)
-        })
-      }
-
-      // SAFETY: the overloads pair an Ipc token only with an IpcImpl; provideIpc checks each method at runtime.
-      return provideIpc(token, impl as IpcImpl<IpcSpec>)
-    }
-
-    const provideIpc = (token: Ipc, impl: IpcImpl<IpcSpec>): IpcProvider<IpcSpec> => {
       const ipc = token.id
       const current = ipcs.get(ipc)
 
@@ -430,7 +376,6 @@ export function createHost(input: {
         spec: token.spec,
         methods,
         state: isState(stateOf) ? (window) => stateOf.call(impl, window) : undefined,
-        listeners: new Set(),
       }
 
       const live = () => ipcs.get(ipc) === provider
@@ -440,12 +385,12 @@ export function createHost(input: {
         : contribute(() => {
             if (!live()) return
             ipcs.delete(ipc)
-            broadcast(new ExtensionAvailable({ remote: ipc, available: false }))
+            broadcast(new ExtensionAvailable({ ipc, available: false }))
           })
 
       if (!signal.aborted) {
         ipcs.set(ipc, provider)
-        broadcast(new ExtensionAvailable({ remote: ipc, available: true }))
+        broadcast(new ExtensionAvailable({ ipc, available: true }))
         pushState(ipc, provider)
       }
 
@@ -458,12 +403,11 @@ export function createHost(input: {
           const schema = token.spec.events?.[name]
 
           if (!schema) throw new Error(`Ipc "${ipc}" has no event "${name}"`)
-          provider.listeners.forEach((listener) => listener(name, data))
           const encoded = Schema.encodeUnknownExit(schema)(data)
 
           if (Exit.isFailure(encoded))
-            return input.log("extension event encoding failed", { remote: ipc, name, cause: String(encoded.cause) })
-          const event = new ExtensionEvent({ remote: ipc, name, data: encoded.value })
+            return input.log("extension event encoding failed", { ipc, name, cause: String(encoded.cause) })
+          const event = new ExtensionEvent({ ipc, name, data: encoded.value })
 
           if (window === undefined) return broadcast(event)
           const win = BrowserWindow.fromId(window)
@@ -474,71 +418,60 @@ export function createHost(input: {
       }
     }
 
-    function use<T>(token: HostApi<T>): T
-    function use<T>(token: Contract<T>): Accessor<T | undefined>
-    function use<S extends IpcSpec>(token: Ipc<S>): Accessor<IpcClient<S> | undefined>
-    function use(token: HostApi<unknown> | Contract<unknown> | Ipc) {
-      if (token.kind === "hostapi") {
-        if (!apis.has(token.id)) throw new Error(`HostApi "${token.id}" is unavailable in the main process`)
-
-        return apis.get(token.id)
-      }
-
-      if (token.kind === "contract") return () => contracts.get(token.id)?.impl
-
-      return () => {
-        const provider = ipcs.get(token.id)
-
-        if (!provider) return undefined
-        const cached = clients.get(provider)
-
-        if (cached) return cached
-        const created = client(token.id, provider)
-        clients.set(provider, created)
-
-        return created
-      }
-    }
-
-    // Main-to-main calls skip the codecs: both sides already hold decoded values. They carry no window.
-    const client = (ipc: string, provider: Provider) => ({
-      ...Object.fromEntries(
-        [...provider.methods].map(([name, method]) => [
-          name,
-          async (value: Value, options?: { readonly signal?: AbortSignal }) => {
-            // A client kept past its provider's disposal reaches nothing.
-            if (ipcs.get(ipc) !== provider) throw new ExtensionError("unavailable")
-
-            return method(value, {
-              window: 0,
-              signal: AbortSignal.any([signal, provider.signal, ...(options?.signal ? [options.signal] : [])]),
-            })
-          },
-        ]),
-      ),
-      state: () => provider.state?.(0),
-      on: (name: string, listener: (data: Value) => void) => {
-        const handler = (event: string, data: Value) => {
-          if (event === name) listener(data)
-        }
-
-        provider.listeners.add(handler)
-
-        return contribute(() => {
-          provider.listeners.delete(handler)
-        })
-      },
-    })
-
     const context: MainContext = {
       id,
-      signal,
       scope: instance.scope,
-      cleanup: (fn) => instance.scope.addFinalizer(fn),
+      get storage() {
+        return (created.storage ??= createStorage(input.state, id))
+      },
+      get log() {
+        return desktopLog
+      },
+      get lifecycle() {
+        return (created.lifecycle ??= {
+          restart: (handoff, options) =>
+            lifecycle.restart(options?.keep ?? instance.scope, () => input.restart(handoff)),
+        } satisfies Lifecycle)
+      },
+      get build() {
+        return build
+      },
+      get serverEndpoints() {
+        return serverEndpoints
+      },
+      get windows() {
+        return (created.windows ??= {
+          get: (window) => getMainWindows().find((win) => win.id === window),
+          list: getMainWindows,
+          focused: () => getLastFocusedWindow() ?? undefined,
+          on: (event, handler) => {
+            if (event === "open") return contribute(onMainWindow(handler))
+            closed.add(handler)
+
+            return contribute(() => {
+              closed.delete(handler)
+            })
+          },
+        } satisfies Windows)
+      },
+      get embeds() {
+        return (created.embeds ??= {
+          create: (view, win) => {
+            const embed = embeds.create(instance, view, win)
+
+            // Created by a setup that outlived its instance: taken down at once, like any late contribution.
+            if (signal.aborted) contribute(embed.dispose)
+
+            return embed
+          },
+        } satisfies Embeds)
+      },
+      get cli() {
+        return input.cli
+      },
       add,
       list,
       provide,
-      use,
       t: (key: string, params?: Params) =>
         formatNativeTemplate(translation.messages[key] ?? nativeMessage(key) ?? key, params),
       plural: (key: string, count: number, params?: Params) => {
@@ -660,11 +593,8 @@ export function createHost(input: {
 
       return { available: true, state: Schema.encodeUnknownSync(schema)(stateOf(window)) }
     },
-    async call(
-      request: { readonly remote: string; readonly method: string; readonly input?: unknown },
-      caller: Caller,
-    ) {
-      const provider = ipcs.get(request.remote)
+    async call(request: { readonly ipc: string; readonly method: string; readonly input?: unknown }, caller: Caller) {
+      const provider = ipcs.get(request.ipc)
 
       if (!provider) throw new ExtensionError("unavailable")
       const method = provider.methods.get(request.method)
@@ -679,7 +609,7 @@ export function createHost(input: {
         : undefined
 
       // Withdrawn while the input decoded: the disposed instance is not called.
-      if (ipcs.get(request.remote) !== provider) throw new ExtensionError("unavailable")
+      if (ipcs.get(request.ipc) !== provider) throw new ExtensionError("unavailable")
 
       const output = await method(value, {
         window: caller.window,
@@ -695,8 +625,8 @@ export function createHost(input: {
     embed: (window: number, id: string, layout?: BridgeLayout) => embeds.layout(window, id, layout),
     capture: (window: number, id: string) =>
       embeds.capture(window, id).then((image) => (image ? new Uint8Array(image.toJPEG(90)) : undefined)),
-    menubar,
-    runMenubar(window: number, id: string) {
+    listMenubarItems,
+    runMenubarItem(window: number, id: string) {
       const entry = menubarItems().find((item) => item.id === id)
 
       if (!entry || !(entry.item.enabled?.() ?? true)) return

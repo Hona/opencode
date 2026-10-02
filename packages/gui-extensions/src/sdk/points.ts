@@ -56,12 +56,18 @@ export interface PanelTab {
   readonly title: string
   /** preview is the host's replaceable preview tab (double-click keeps it). */
   readonly label?: (state: { readonly active: boolean; readonly preview: boolean }) => JSX.Element
+  /** Listed without being opened, before every other tab, never closed or dragged. */
+  readonly pinned?: boolean
+  /** Defaults to true. */
+  readonly draggable?: boolean
   /**
-   * - `pinned`: listed without being opened, before every other tab, never closed or dragged.
-   * - `fixed`: not draggable; compact close button.
-   * - `launcher`: not draggable; the close button shows on hover or while selected.
+   * The close button. Defaults to a plain one.
+   * - `compact`: a compact close button.
+   * - `hover`: shows on hover or while selected. Such a tab is a launcher, a tab that opens others: the next preview
+   *   replaces it, and narrow screens neither store nor select it.
+   * - `false`: none.
    */
-  readonly kind?: "pinned" | "fixed" | "launcher"
+  readonly closable?: "compact" | "hover" | false
   /**
    * Renders before the tabs in stored order. Opening it also stores it first and leaves the preview tab open, so
    * closing it selects the first remaining tab.
@@ -257,8 +263,8 @@ export interface TitlebarItem {
 
 export interface SlotMap {
   readonly app: Record<string, never>
-  /** Full-width strip under the shell content, above toasts. */
-  readonly "shell.bottom": Record<string, never>
+  /** Full-width strip under the window content, above toasts. */
+  readonly "window.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": { readonly session: MountedSession; readonly active: boolean }
   readonly "session.panel.end": { readonly session: MountedSession }

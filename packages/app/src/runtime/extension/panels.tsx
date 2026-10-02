@@ -150,23 +150,23 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
     const listed = stored().flatMap((key) => {
       const entry = byKey().get(key)
 
-      return entry && entry.tab.kind !== "pinned" ? [entry] : []
+      return entry && !entry.tab.pinned ? [entry] : []
     })
 
     return [
-      ...entries().filter((entry) => entry.tab.kind === "pinned"),
+      ...entries().filter((entry) => entry.tab.pinned),
       ...listed.filter((entry) => entry.tab.first),
       ...listed.filter((entry) => !entry.tab.first),
     ]
   })
 
-  // Narrow screens never select a launcher: a stored one falls back like a missing tab.
+  // Narrow screens never select a launcher (a hover-closable tab): a stored one falls back like a missing tab.
   const desktop = createMediaQuery("(min-width: 768px)")
 
   const active = createMemo(() => {
     const value = input.tabs().active()
 
-    if (value && strip().some((entry) => entry.key === value && (desktop() || entry.tab.kind !== "launcher")))
+    if (value && strip().some((entry) => entry.key === value && (desktop() || entry.tab.closable !== "hover")))
       return value
 
     return strip()
@@ -206,7 +206,7 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
     /** An extension's tab ids in the stored strip. */
     openFor: (extension: string) =>
       stored().flatMap((key) => (key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [])),
-    lead: () => !!drawn().find((entry) => entry.tab.kind !== "pinned")?.tab.first,
+    lead: () => !!drawn().find((entry) => !entry.tab.pinned)?.tab.first,
     select(key: string) {
       input.tabs().setActive(key)
     },

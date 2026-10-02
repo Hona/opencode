@@ -1,6 +1,16 @@
 import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
 import type { Schema } from "effect"
-import { HostApi, Point, type Cleanup } from "./core"
+import {
+  Point,
+  type BaseContext,
+  type Build,
+  type Cleanup,
+  type Ipc,
+  type IpcImpl,
+  type IpcProvider,
+  type IpcSpec,
+  type Persisted,
+} from "./core"
 import type { Scope } from "./scope"
 
 export * from "./core"
@@ -30,16 +40,18 @@ export interface Embeds {
 }
 
 export interface Storage {
-  /** Values are stored as the schema's canonical JSON; the schema must not need services. */
+  /**
+   * The window's `Persisted` shape, read and written synchronously: `value` is always defined and `ready()` always
+   * true. Values are stored as the schema's canonical JSON; the schema must not need services. Each write reaches the
+   * database before it returns. `update` changes a copy of the value; a mutation may also return the next value, which
+   * replaces it, so a number, `null` or a new list is written that way.
+   */
   store<S extends Schema.ConstraintCodec<unknown, unknown>>(
     key: string,
     options: { readonly schema: S; readonly initial: S["Type"]; readonly from?: string },
-  ): {
-    get(): S["Type"]
-    set(value: S["Type"]): void
-    /** Deletes the value and the older copy `from` names, so the key reads as `initial` again. */
-    remove(): void
-  }
+  ): Persisted<S["Type"], S["Type"]>
+  /** Deletes the value and the older copy `from` names, so the key reads as its `initial` again. */
+  remove(key: string, options?: { readonly from?: string }): void
 }
 
 export interface ServerEndpoint {
@@ -60,15 +72,8 @@ export interface Cli {
   readonly development: boolean
 }
 
-/** The running build. */
-export interface Build {
-  readonly version: string
-  readonly channel: string
-  readonly packaged: boolean
-}
-
 /** The server endpoints the app's windows use. */
-export interface Servers {
+export interface ServerEndpoints {
   get(id: string): ServerEndpoint | undefined
 }
 
@@ -93,6 +98,31 @@ export interface Log {
   ): void
 }
 
+/**
+ * The setup context in the main process. The APIs the host always provides are properties, each created on first
+ * read.
+ */
+export interface MainContext extends BaseContext {
+  /**
+   * The instance's lifetime. `signal` aborts when the extension is disabled, reloaded, or the app quits;
+   * `addFinalizer` adds its teardown, and runs it at once when the instance is already gone.
+   */
+  readonly scope: Scope
+  readonly storage: Storage
+  readonly log: Log
+  readonly lifecycle: Lifecycle
+  readonly build: Build
+  readonly serverEndpoints: ServerEndpoints
+  readonly windows: Windows
+  readonly embeds: Embeds
+  readonly cli: Cli
+  /** Provides an Ipc the definition declares in `provides`, for the windows to use. */
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+}
+
+/** A main-process entry. */
+export type MainSetup = (ctx: MainContext) => void | Promise<void>
+
 export interface MenubarItem {
   readonly menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
   readonly id: string
@@ -101,21 +131,5 @@ export interface MenubarItem {
   readonly enabled?: () => boolean
   run(window: BrowserWindow | undefined): void
 }
-
-export const Windows = HostApi.define<Windows>("window")
-
-export const Embeds = HostApi.define<Embeds>("embed")
-
-export const Storage = HostApi.define<Storage>("storage")
-
-export const Cli = HostApi.define<Cli>("cli")
-
-export const Build = HostApi.define<Build>("build")
-
-export const Servers = HostApi.define<Servers>("servers")
-
-export const Lifecycle = HostApi.define<Lifecycle>("lifecycle")
-
-export const Log = HostApi.define<Log>("log")
 
 export const MenubarItem = Point.define<MenubarItem>("menubar-item")

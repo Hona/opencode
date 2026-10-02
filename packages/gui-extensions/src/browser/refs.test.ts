@@ -8,15 +8,26 @@ test("element refs stay unique when the pane's main entry reloads over the same 
 
   // Keeps each value as its schema encodes it, as the host's storage does.
   const storage: Storage = {
-    store: (key, options) => ({
-      get: () => (values.has(key) ? Schema.decodeUnknownSync(options.schema)(values.get(key)) : options.initial),
-      set: (value) => {
-        values.set(key, Schema.encodeUnknownSync(options.schema)(value))
-      },
-      remove: () => {
-        values.delete(key)
-      },
-    }),
+    store: (key, options) => {
+      const read = () => (values.has(key) ? Schema.decodeUnknownSync(options.schema)(values.get(key)) : options.initial)
+
+      return {
+        get value() {
+          return read()
+        },
+        ready: () => true,
+        // Like the host's: a mutation that returns a value replaces the stored one.
+        update: (mutation: (draft: typeof options.initial) => typeof options.initial | undefined) => {
+          const current = read()
+          const next = mutation(current)
+
+          values.set(key, Schema.encodeUnknownSync(options.schema)(next === undefined ? current : next))
+        },
+      }
+    },
+    remove: (key) => {
+      values.delete(key)
+    },
   }
 
   const before = createRefs(storage)

@@ -1,7 +1,7 @@
 import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { createKeyed, Layout, Sessions, type MountedSession, type SetupContext } from "../sdk"
+import { createKeyed, type MountedSession, type SetupContext } from "../sdk"
 import type Btw from "./index"
 
 const instructions = [
@@ -19,8 +19,8 @@ const empty = {
 
 /** Side questions per session. Window-local: a reload drops them, and with them the tab. */
 export function createBtw(ctx: SetupContext<typeof Btw>) {
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
+  const sessions = ctx.sessions
+  const layout = ctx.layout
   const [states, setStates] = createStore<Record<string, typeof empty>>({})
   const requests = new Map<string, number>()
   const controllers = new Map<string, AbortController>()
@@ -40,7 +40,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     () => sessions.current(),
     (view) => onCleanup(() => stop(view.key)),
   )
-  ctx.cleanup(() => Array.from(controllers.keys()).forEach(stop))
+  onCleanup(() => Array.from(controllers.keys()).forEach(stop))
 
   const ask = (value?: string) => {
     const question = value?.trim()

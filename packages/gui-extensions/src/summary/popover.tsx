@@ -5,7 +5,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Command, createKeyed, createVisitState, Keybinds, useExtension, type MountedSession } from "../sdk"
+import { Command, createKeyed, createVisitState, useExtension, type MountedSession } from "../sdk"
 import type Summary from "./index"
 import type { Disclosure, SummaryPanelProps } from "./panel"
 
@@ -71,7 +71,7 @@ export function SummaryHeader(props: {
 
 function SummaryPopover(props: ParentProps<{ active: boolean; open: boolean; onOpenChange: (open: boolean) => void }>) {
   const ctx = useExtension()
-  const keybinds = ctx.use(Keybinds)
+  const keybinds = ctx.keybinds
 
   // Cached timelines remain mounted; only the visible summary owns the command. It leaves with this component.
   ctx.add(Command, (): Command | undefined =>

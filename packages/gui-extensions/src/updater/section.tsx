@@ -1,13 +1,13 @@
 import { createMemo, type JSX } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Switch } from "@opencode/ui/switch"
-import { Preferences, useExtension } from "../sdk"
+import { useExtension } from "../sdk"
 import { updaterAction } from "./action"
 import type { UpdaterState } from "./contract"
 
 export default function UpdatesSection(props: { state: () => UpdaterState | undefined; run: () => void }) {
   const ctx = useExtension()
-  const preferences = ctx.use(Preferences)
+  const preferences = ctx.preferences
   const action = createMemo(() => updaterAction(props.state()))
 
   return (

@@ -1,15 +1,15 @@
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { Cli, Storage, Windows, type MainContext } from "../sdk/main"
+import type { MainContext } from "../sdk/main"
 import { SshFailure } from "./command"
 import { Ssh, SshConfig } from "./contract"
 import { createSshController } from "./controller"
 
 const setup = async (ctx: MainContext) => {
-  const cli = ctx.use(Cli)
+  const cli = ctx.cli
 
-  const saved = ctx.use(Storage).store("servers", {
+  const saved = ctx.storage.store("servers", {
     schema: Schema.Array(SshConfig),
     initial: [],
     from: "settings:ssh.servers",
@@ -24,8 +24,8 @@ const setup = async (ctx: MainContext) => {
       development: cli.development,
       binary: cli.binary ?? cli.command[0] ?? "opencode",
       command: cli.command,
-      configs: saved.get(),
-      save: (configs) => Effect.try({ try: () => saved.set(configs), catch: SshFailure.from }),
+      configs: saved.value,
+      save: (configs) => Effect.try({ try: () => saved.update(() => configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
   )
 
@@ -55,7 +55,7 @@ const setup = async (ctx: MainContext) => {
 
   const changes = runtime.runFork(controller.changes().pipe(Stream.runForEach(() => Effect.sync(push))))
   // A closed window cancels the attempts it was answering.
-  ctx.use(Windows).on("close", (win) => void runtime.runPromise(controller.detach(win.id)))
+  ctx.windows.on("close", (win) => void runtime.runPromise(controller.detach(win.id)))
   // One finalizer, in order: the controller still runs on the runtime it closes last.
   ctx.scope.addFinalizer(async () => {
     await runtime.runPromise(Fiber.interrupt(changes))

@@ -9,7 +9,7 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, Links, Locale, useExtension, type FileContent, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
 import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
 import { workspaceFileUrl } from "./path"
@@ -46,7 +46,7 @@ export default function ArtifactView(props: {
   source: JSX.Element
 }) {
   const ctx = useExtension()
-  const locale = ctx.use(Locale)
+  const locale = ctx.locale
   // Media the browser could not decode falls back to the binary placeholder.
   const initial: ViewerState = { mode: "preview", info: {}, undecodable: false }
   // The viewer state belongs to one loaded content: a reloaded file starts from the preview again.
@@ -387,7 +387,7 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
 
 function ArtifactMarkdown(props: { session: MountedSession; path: string; text: string; cacheKey?: string }) {
   const ctx = useExtension()
-  const links = ctx.use(Links)
+  const links = ctx.links
   const parent = useMarkdown()
   // getDirectory yields "/" for a root-level file, which would make relative links absolute.
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))

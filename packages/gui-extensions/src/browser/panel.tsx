@@ -9,16 +9,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, For, on, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import {
-  createKeyed,
-  Desktop,
-  Embeds,
-  Keybinds,
-  useExtension,
-  usePanel,
-  type PanelTab,
-  type MountedSession,
-} from "../sdk"
+import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession } from "../sdk"
 import { commentNote } from "./comment"
 import type { Model } from "./model"
 import type { PaneElement } from "./ipc"
@@ -51,9 +42,9 @@ type PaneState = {
 
 export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; session: MountedSession; model: Model }) {
   const extension = useExtension()
-  const keybinds = extension.use(Keybinds)
-  const desktop = extension.use(Desktop)
-  const embeds = extension.use(Embeds)
+  const keybinds = extension.keybinds
+  const desktop = extension.desktop
+  const embeds = extension.embeds
   const panel = usePanel()
   const visible = () => panel.visible()
   const state = () => props.model.tab(props.session, props.tab().id)
@@ -108,13 +99,13 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
 
   const empty = () => !address() && !state()?.loading && !navigating()
   // The desktop page hides blank and loading documents itself; only hide here
-  // while the pane shows its own empty or failed state over the surface.
+  // while the pane shows its own empty or failed state over the embed.
   const shown = () => visible() && !empty() && !failed()
 
-  const surface = () => {
+  const embed = () => {
     const tab = state()
 
-    return tab ? props.model.surface(props.session, tab.id) : undefined
+    return tab ? props.model.embed(props.session, tab.id) : undefined
   }
 
   let addressDisplay: HTMLDivElement | undefined
@@ -307,7 +298,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     () => {
       const tab = state()
 
-      return tab && shown() && !surface() ? tab.id : undefined
+      return tab && shown() && !embed() ? tab.id : undefined
     },
     (tabID) => props.model.load(props.session, tabID),
   )
@@ -461,7 +452,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
         </div>
       </Show>
       <embeds.View
-        id={surface()}
+        id={embed()}
         visible={shown()}
         frozen={commenting()}
         radius={10}

@@ -4,7 +4,7 @@ import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { Layout, useExtension, usePanel, type MountedSession } from "../sdk"
+import { useExtension, usePanel, type MountedSession } from "../sdk"
 import { SessionFileBrowserTab } from "./browser"
 import { useShared } from "./context"
 import { fileTabPath, isFileTab } from "./path"
@@ -13,7 +13,7 @@ const OPEN_FILE_TAB = "open-file"
 
 export default function SessionMobileFiles(props: { session: MountedSession }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const shared = useShared()
   const panel = usePanel()
   const file = props.session.file

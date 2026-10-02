@@ -3,7 +3,7 @@ import { ProgressCircle } from "@opencode/ui/progress-circle"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { Layout, useExtension, type MountedSession } from "../sdk"
+import { useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 
 function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
@@ -21,7 +21,7 @@ export function SessionContextUsage(props: {
   placement?: ComponentProps<typeof Tooltip>["placement"]
 }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const i18n = useI18n()
   syncCatalog(props.session)
 

@@ -1,15 +1,11 @@
-import { Embeds, Servers, Storage, Windows, type Setup } from "../sdk/main"
+import type { MainContext } from "../sdk/main"
 import type { Pane } from "./pane"
 import { BrowserPane } from "./ipc"
 
 /** The pane once a window first registered one. */
 type LoadedPane = { pane?: Promise<Pane> }
 
-const setup: Setup = (ctx) => {
-  const windows = ctx.use(Windows)
-  const servers = ctx.use(Servers)
-  const storage = ctx.use(Storage)
-  const embeds = ctx.use(Embeds)
+const setup = (ctx: MainContext) => {
   const loaded: LoadedPane = {}
 
   // The pane brings the CDP driver and the full RPC client with every protocol schema;
@@ -17,10 +13,10 @@ const setup: Setup = (ctx) => {
   const load = () =>
     (loaded.pane ??= import("./pane").then((module) =>
       module.createBrowserPane({
-        windows,
-        servers,
-        storage,
-        embeds,
+        windows: ctx.windows,
+        serverEndpoints: ctx.serverEndpoints,
+        storage: ctx.storage,
+        embeds: ctx.embeds,
         emit: (window, value) => provider.emit("event", value, window),
       }),
     ))
@@ -40,7 +36,7 @@ const setup: Setup = (ctx) => {
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
-  ctx.cleanup(async () => {
+  ctx.scope.addFinalizer(async () => {
     if (loaded.pane) await (await loaded.pane).dispose()
   })
 }

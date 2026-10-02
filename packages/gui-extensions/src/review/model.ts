@@ -6,7 +6,7 @@ import { createQuery, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, createVisitState, Layout, type LineRange, type MountedSession, type SetupContext } from "../sdk"
+import { createKeyed, createVisitState, type LineRange, type MountedSession, type SetupContext } from "../sdk"
 import type Review from "./index"
 import {
   filterRenderableDiff,
@@ -33,7 +33,7 @@ const selectionFromLines = (range: LineRange): FileSelection => ({
 export function createReviewModel(input: { ctx: SetupContext<typeof Review>; view: MountedSession; demand: Demand }) {
   const ctx = input.ctx
   const view = input.view
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const queryClient = useQueryClient()
   const directory = () => view.file.root
 

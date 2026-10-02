@@ -1,6 +1,7 @@
 import { Predicate } from "effect"
 import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
 import type { ExtensionFailure } from "../shared/ipc-rpc/extensions"
+import { api } from "./api"
 import { cancellable, invoke, listen, send } from "./ipc-client"
 
 /** The listeners' attachment to main's extension events, while any listener is registered. */
@@ -16,34 +17,35 @@ export function createExtensionBridge(): Bridge {
 
   const attach = () => {
     const stops = [
-      listen("ExtensionState", (event) => dispatch({ type: "state", remote: event.remote, state: event.state })),
+      listen("ExtensionState", (event) => dispatch({ type: "state", ipc: event.ipc, state: event.state })),
       listen("ExtensionEvent", (event) =>
-        dispatch({ type: "event", remote: event.remote, name: event.name, data: event.data }),
+        dispatch({ type: "event", ipc: event.ipc, name: event.name, data: event.data }),
       ),
       listen("ExtensionAvailable", (event) =>
-        dispatch({ type: "available", remote: event.remote, available: event.available }),
+        dispatch({ type: "available", ipc: event.ipc, available: event.available }),
       ),
       listen("ExtensionsChanged", (event) => dispatch({ type: "extensions", list: event.list })),
-      listen("ExtensionMenubarChanged", (event) => {
+      listen("ExtensionMenubarItemsChanged", (event) => {
         menubar.revision++
-        dispatch({ type: "menubar", items: event.items })
+        dispatch({ type: "menubarItems", items: event.items })
       }),
     ]
 
     const revision = menubar.revision
     void invoke("ExtensionMenubarItems").then((items) => {
-      if (attached.stop && menubar.revision === revision) dispatch({ type: "menubar", items })
+      if (attached.stop && menubar.revision === revision) dispatch({ type: "menubarItems", items })
     })
 
     return () => stops.forEach((stop) => stop())
   }
 
   return {
+    packaged: api.getWindowBootstrap().packaged ?? false,
     call: (input, signal) =>
       cancellable("ExtensionCall", input, signal).catch((cause: unknown) => {
         throw failure(cause)
       }),
-    subscribe: (ipc) => invoke("ExtensionSubscribe", { remote: ipc }),
+    subscribe: (ipc) => invoke("ExtensionSubscribe", { ipc }),
     on(listener) {
       listeners.add(listener)
       attached.stop ??= attach()
@@ -56,9 +58,9 @@ export function createExtensionBridge(): Bridge {
         attached.stop = undefined
       }
     },
-    embed: (id, layout) => send("ExtensionSurface", { id, layout }),
+    embed: (id, layout) => send("ExtensionEmbed", { id, layout }),
     capture: (id) => invoke("ExtensionCapture", { id }).then((data) => data ?? undefined),
-    menubar: (id) => send("ExtensionMenubar", { id }),
+    runMenubarItem: (id) => send("ExtensionMenubarItem", { id }),
     configure: (servers) => send("ExtensionConfigure", { servers }),
     manager: {
       list: () => invoke("ExtensionList"),

@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import { Build, Cli, Log, Storage, type MainContext } from "../sdk/main"
+import type { MainContext } from "../sdk/main"
 import { Wsl } from "./contract"
 import { createWslRuntime } from "./runtime"
 import { createWslServersController, wslServerIdForDistro } from "./servers"
@@ -14,15 +14,17 @@ const Distro = Schema.Struct({ distro: Schema.NonEmptyString })
 const Id = Schema.Struct({ id: Schema.NonEmptyString })
 
 const setup = (ctx: MainContext) => {
-  const cli = ctx.use(Cli)
-  const packaged = ctx.use(Build).packaged
-  const desktopLog = ctx.use(Log)
+  const cli = ctx.cli
+  const packaged = ctx.build.packaged
+  const desktopLog = ctx.log
   const t = ctx.t
   const runtime = createWslRuntime(t)
 
-  const saved = ctx
-    .use(Storage)
-    .store("servers", { schema: Stored, initial: { servers: [] }, from: "settings:wslServers" })
+  const saved = ctx.storage.store("servers", {
+    schema: Stored,
+    initial: { servers: [] },
+    from: "settings:wslServers",
+  })
 
   // Development builds of the desktop app can build the Linux CLI from this checkout.
   const local =
@@ -39,7 +41,7 @@ const setup = (ctx: MainContext) => {
     t,
     log,
     readServers: () =>
-      saved.get().servers.flatMap((value) => {
+      saved.value.servers.flatMap((value) => {
         const record = Schema.decodeUnknownOption(Distro)(value)
 
         if (Option.isNone(record)) return []
@@ -48,7 +50,7 @@ const setup = (ctx: MainContext) => {
 
         return [{ id: Option.isSome(id) ? id.value.id : wslServerIdForDistro(distro), distro }]
       }),
-    writeServers: (servers) => saved.set({ servers }),
+    writeServers: (servers) => saved.update(() => ({ servers })),
     installCli: local
       ? async (distro) => {
           const { buildLocalWslCli } = await import("./local")
