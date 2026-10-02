@@ -2,12 +2,12 @@ import { batch, createMemo, lazy, on, onCleanup, Show, Suspense, type ParentProp
 import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
-  createActive,
+  createKeyed,
   ExtensionContext,
   Layout,
-  Link,
-  Menu,
-  Native,
+  LinkHandler,
+  MenuItem,
+  Desktop,
   Panel,
   Sessions,
   Slot,
@@ -17,7 +17,7 @@ import {
   usePanel,
   type LineRange,
   type PanelTab,
-  type SessionView,
+  type MountedSession,
   type Setup,
   onIdle,
 } from "../sdk"
@@ -46,17 +46,17 @@ const setup: Setup<typeof File> = (ctx) => {
   const sessions = ctx.use(Sessions)
   const layout = ctx.use(Layout)
   const storage = ctx.use(Storage)
-  const native = ctx.use(Native)
+  const desktop = ctx.use(Desktop)
   // The extension's context as other extensions' views receive it.
   const context = useExtension()
   const tree = ctx.stores.tree
   const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
-  const preference = native ? ctx.stores.app : undefined
+  const preference = desktop ? ctx.stores.app : undefined
 
   // Tab objects per routed view, reused so strip updates never rebuild a trigger. `close` prunes them.
-  const tabs = new WeakMap<SessionView, Map<string, PanelTab>>()
+  const tabs = new WeakMap<MountedSession, Map<string, PanelTab>>()
 
-  const tabsOf = (session: SessionView) => {
+  const tabsOf = (session: MountedSession) => {
     const existing = tabs.get(session)
 
     if (existing) return existing
@@ -69,18 +69,18 @@ const setup: Setup<typeof File> = (ctx) => {
   }
 
   // The file tab each view last selected, for reloads the side panel does not see.
-  const focused = new WeakMap<SessionView, string>()
+  const focused = new WeakMap<MountedSession, string>()
 
-  const key = (session: SessionView, path: string) => `file:${fileTabId(session.file, path)}`
+  const key = (session: MountedSession, path: string) => `file:${fileTabId(session.file, path)}`
 
-  const active = (session: SessionView, id: string) => {
+  const active = (session: MountedSession, id: string) => {
     const state = layout.state(`file:${id}`, session)
 
     return state === "active" || state === "visible"
   }
 
   const open = (
-    session: SessionView,
+    session: MountedSession,
     path: string,
     options?: { readonly preview?: boolean; readonly background?: boolean },
   ) => {
@@ -122,7 +122,9 @@ const setup: Setup<typeof File> = (ctx) => {
     open,
   }
 
-  const Provided = (props: ParentProps) => <FileContext.Provider value={shared}>{props.children}</FileContext.Provider>
+  const FileProvider = (props: ParentProps) => (
+    <FileContext.Provider value={shared}>{props.children}</FileContext.Provider>
+  )
 
   // Tab trigger styles render with the strip, before any panel chunk loads.
   ctx.add(Style, tabStyles)
@@ -169,7 +171,7 @@ const setup: Setup<typeof File> = (ctx) => {
     dom: { panel: TABPANEL },
   }
 
-  const fileTab = (session: SessionView, id: string): PanelTab => {
+  const fileTab = (session: MountedSession, id: string): PanelTab => {
     const path = () => fileTabPath(session.file, id)
     const missing = () => session.file.missing(path())
 
@@ -235,13 +237,13 @@ const setup: Setup<typeof File> = (ctx) => {
       const panel = usePanel()
 
       return (
-        <Provided>
+        <FileProvider>
           <Suspense>
             <Show when={panel.placement() === "mobile"} fallback={<FileBrowser tab={tab} session={session} />}>
               <MobileFiles session={session} />
             </Show>
           </Suspense>
-        </Provided>
+        </FileProvider>
       )
     },
     focus(tab, session, change) {
@@ -255,7 +257,7 @@ const setup: Setup<typeof File> = (ctx) => {
     },
   })
 
-  ctx.add(Menu, {
+  ctx.add(MenuItem, {
     menu: "session.panel",
     id: "open",
     get title() {
@@ -280,18 +282,18 @@ const setup: Setup<typeof File> = (ctx) => {
     },
   })
 
-  if (native) {
+  if (desktop) {
     const OpenInAppButton = lazy(() => import("./open-in-app"))
 
     ctx.cleanup(onIdle(() => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (
-        <Provided>
+        <FileProvider>
           <Suspense>
             <OpenInAppButton session={input.session} />
           </Suspense>
-        </Provided>
+        </FileProvider>
       ),
     })
   }
@@ -299,11 +301,11 @@ const setup: Setup<typeof File> = (ctx) => {
   ctx.add(Slot, {
     at: "session.panel.sidebar",
     render: (input) => (
-      <Provided>
+      <FileProvider>
         <Suspense>
           <Sidebar session={input.session} />
         </Suspense>
-      </Provided>
+      </FileProvider>
     ),
   })
 
@@ -311,7 +313,7 @@ const setup: Setup<typeof File> = (ctx) => {
   ctx.provide(FileTree, {
     Tree: (props) => (
       <ExtensionContext.Provider value={context}>
-        <Provided>
+        <FileProvider>
           <Suspense>
             <Tree
               session={props.session}
@@ -322,12 +324,12 @@ const setup: Setup<typeof File> = (ctx) => {
               onFileClick={(node) => props.onFileClick(node.path)}
             />
           </Suspense>
-        </Provided>
+        </FileProvider>
       </ExtensionContext.Provider>
     ),
     List: (props) => (
       <ExtensionContext.Provider value={context}>
-        <Provided>
+        <FileProvider>
           <Suspense>
             <List
               session={props.session}
@@ -338,7 +340,7 @@ const setup: Setup<typeof File> = (ctx) => {
               onFileClick={(path) => props.onFileClick(path)}
             />
           </Suspense>
-        </Provided>
+        </FileProvider>
       </ExtensionContext.Provider>
     ),
   })
@@ -348,7 +350,7 @@ const setup: Setup<typeof File> = (ctx) => {
    * otherwise absolute. Relative links resolve against `base`; ones that climb past the root
    * become absolute too, so a `../../shared/report.pdf` still opens.
    */
-  const resolve = (session: SessionView, href: string, base?: string) => {
+  const resolve = (session: MountedSession, href: string, base?: string) => {
     const root = session.file.root.replaceAll("\\", "/").replace(/\/+$/, "")
     // Agents cite locations as path:line or path:line:col; the file is what opens.
     const value = href.replaceAll("\\", "/").replace(/:\d+(?::\d+)?$/, "")
@@ -367,7 +369,7 @@ const setup: Setup<typeof File> = (ctx) => {
 
   // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
   // a browser tab for HTML when the desktop can load the file directly.
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     match: () => true,
     open(link) {
       const session = sessions.current()
@@ -417,13 +419,13 @@ const setup: Setup<typeof File> = (ctx) => {
   })
 
   // Review reveals a change: the tree shows the changed files.
-  createActive(ctx.uses.changes, (changes) => onCleanup(changes.onReveal(() => shared.tree.setTab("changes"))))
+  createKeyed(ctx.uses.changes, (changes) => onCleanup(changes.onReveal(() => shared.tree.setTab("changes"))))
 
   // A new workspace directory drops loaded files; reload the selected file tab.
   const root = createMemo<string | undefined>((previous) => sessions.current()?.file.root ?? previous)
   const moved = createMemo(on(root, () => ({}), { defer: true }))
 
-  createActive(moved, () => {
+  createKeyed(moved, () => {
     const session = sessions.current()
 
     if (!session) return

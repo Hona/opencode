@@ -6,7 +6,7 @@ import type { Definition } from "./core"
 export const ExtensionContext = createContext<Context>()
 
 /**
- * Marks a scope that ends before the extension does, such as a `createActive` generation. The host disposes at once a
+ * Marks a scope that ends before the extension does, such as a `createKeyed` run. The host disposes at once a
  * registration made in a scope that already ended.
  */
 export const LifetimeContext = createContext<{ readonly ended: boolean }>()

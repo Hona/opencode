@@ -3,7 +3,7 @@ import { createComponent, createRoot, createSignal, onCleanup, type Accessor } f
 import { produce } from "solid-js/store"
 import { Schema } from "effect"
 import {
-  createActive,
+  createKeyed,
   createLatest,
   createVisitState,
   ExtensionContext,
@@ -88,12 +88,12 @@ describe("extension primitives", () => {
         "run third",
       ],
     },
-  ])("createActive: $name", (row) => {
+  ])("createKeyed: $name", (row) => {
     const log: string[] = []
     const scenario = row.start()
 
     const dispose = createRoot((dispose) => {
-      createActive(
+      createKeyed(
         scenario.source,
         (value) => {
           log.push(`run ${value}`)
@@ -255,7 +255,7 @@ describe("extension primitives", () => {
     const [routed, setRouted] = createSignal("a")
     const [located, setLocated] = createSignal<readonly string[]>(["a"])
 
-    // A mounted `SessionView`: one object whose key and location follow the routed session.
+    // A `MountedSession`: one object whose key and location follow the routed session.
     const view = session(
       () => `server\n${routed()}`,
       () => (located().includes(routed()) ? { directory: `/${routed()}` } : undefined),
@@ -277,7 +277,9 @@ describe("extension primitives", () => {
     }))
 
     const a = root.store.get(view)
-    const read = (handles: readonly Persisted<{ directory: string }>[]) => handles.map((handle) => handle.value?.directory)
+
+    const read = (handles: readonly Persisted<{ directory: string }>[]) =>
+      handles.map((handle) => handle.value?.directory)
 
     setRouted("b")
     const b = root.store.get(view)

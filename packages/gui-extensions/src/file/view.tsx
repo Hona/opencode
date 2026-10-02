@@ -10,7 +10,7 @@ import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { createActive, Layout, useExtension, type LineRange, type SessionView } from "../sdk"
+import { createKeyed, Layout, useExtension, type LineRange, type MountedSession } from "../sdk"
 import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
@@ -169,7 +169,7 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
   }
 
   // The diff's code columns scroll on their own; listen to the ones on screen.
-  createActive(code, (items) => items.forEach((item) => makeEventListener(item, "scroll", onCodeScroll)))
+  createKeyed(code, (items) => items.forEach((item) => makeEventListener(item, "scroll", onCodeScroll)))
 
   const setViewport = (el: HTMLDivElement) => {
     state.scroll = el
@@ -189,7 +189,7 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
   }
 }
 
-export function SessionFileView(props: { session: SessionView; id: string }) {
+export function SessionFileView(props: { session: MountedSession; id: string }) {
   const ctx = useExtension()
   const layout = ctx.use(Layout)
   const shared = useShared()
@@ -388,10 +388,10 @@ export function SessionFileView(props: { session: SessionView; id: string }) {
   // A new path, e.g. after the workspace directory changes, drops the comment draft and selection of the old one.
   const moved = createMemo(on(path, () => ({}), { defer: true }))
 
-  createActive(moved, () => commentsUi.note.reset())
+  createKeyed(moved, () => commentsUi.note.reset())
 
   // A comment focused elsewhere, e.g. from its composer chip, opens here once this file shows.
-  createActive(
+  createKeyed(
     () => {
       const focus = comment.focus.current()
       const p = path()
@@ -411,7 +411,7 @@ export function SessionFileView(props: { session: SessionView; id: string }) {
   const previous = { loaded: false, ready: false, active: false }
 
   // Restores the stored scroll when the file loads, its view state loads, or the tab shows a loaded file again.
-  createActive(
+  createKeyed(
     () => ({ loaded: !!current()?.loaded, ready: file.ready(), shown: active() }),
     (next) => {
       const restore =

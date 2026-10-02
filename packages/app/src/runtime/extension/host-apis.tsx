@@ -16,20 +16,26 @@ import { Predicate, type Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
 import {
-  App,
+  Appearance,
+  Build,
+  Desktop,
+  Embeds,
+  Keybinds,
   Layout,
-  Native,
+  Locale,
   Panel,
   Preferences,
+  Router,
+  Servers,
   Sessions,
   Storage,
-  Surfaces,
   System,
+  Workspaces,
   type PanelSidebar,
   type PanelState,
   type ServerRef,
   type SessionRef,
-  type SessionView,
+  type MountedSession,
   type StorageScope,
   type StoreFrom,
   type StoreOptions,
@@ -49,15 +55,15 @@ import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useExtensionHost, type HostService } from "./host"
+import { createEmbeds } from "./embeds"
+import { useExtensionHost, type HostApiFactory } from "./host"
 import { createLocatedWrites } from "./located"
 import type { Region } from "./panels"
 import { persistedHandle } from "./stores"
-import { createSurfaces } from "./surface"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
-  current: Accessor<SessionView | undefined>
+  current: Accessor<MountedSession | undefined>
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
@@ -78,8 +84,8 @@ type Attached = {
 /** What persistence imports a store's older value from. */
 type CopyFrom = NonNullable<Exclude<Parameters<typeof persisted>[0], string>["copyFrom"]>
 
-/** Services the host owns. Session and layout attach once the app interface mounts. */
-export function createExtensionServices() {
+/** HostApis the host owns. Session and layout attach once the app interface mounts. */
+export function createHostApis() {
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
@@ -91,7 +97,7 @@ export function createExtensionServices() {
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
   const current = () => attached()
 
-  const surfaces = createSurfaces({
+  const embeds = createEmbeds({
     bridge: platform.extensions,
     zoom: () => platform.webviewZoom?.() ?? 1,
     dialog: () => !!dialog.active,
@@ -101,7 +107,7 @@ export function createExtensionServices() {
     const name = `extension.${extension}.${key}`
     const copyFrom = copySpec(from)
 
-    if (!scope || scope === "app") return { ...Persist.global(name), copyFrom }
+    if (!scope || scope === "global") return { ...Persist.global(name), copyFrom }
     const connected = requireAttached(attached())
 
     if ("session" in scope) {
@@ -125,7 +131,7 @@ export function createExtensionServices() {
     return { ...Persist.serverWorkspace(connected.scope(scope.server), base64Encode(scope.directory), name), copyFrom }
   }
 
-  const services: HostService[] = [
+  const apis: HostApiFactory[] = [
     {
       token: Storage,
       create: (extension, owner) =>
@@ -187,7 +193,7 @@ export function createExtensionServices() {
         }) satisfies System,
     },
     {
-      token: Native,
+      token: Desktop,
       create: () =>
         platform.platform === "desktop"
           ? ({
@@ -198,27 +204,57 @@ export function createExtensionServices() {
               reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
               installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
               forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
-            } satisfies NonNullable<Native>)
+            } satisfies NonNullable<Desktop>)
           : undefined,
     },
     {
-      token: App,
-      create: (_extension, _owner, _context, register) =>
+      token: Build,
+      create: () =>
         ({
           version: platform.version,
           // SAFETY: the build sets VITE_OPENCODE_CHANNEL to one of the release channels, or leaves it unset locally.
-          channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as App["channel"],
+          channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as Build["channel"],
           platform: platform.platform,
-          font: () => requireAttached(current()).font(),
+        }) satisfies Build,
+    },
+    {
+      token: Locale,
+      create: () =>
+        ({
           locale: language.intl,
           direction: language.direction,
           setDirection: language.setDirection,
+        }) satisfies Locale,
+    },
+    {
+      token: Appearance,
+      create: () => ({ font: () => requireAttached(current()).font() }) satisfies Appearance,
+    },
+    {
+      token: Router,
+      create: () =>
+        ({
           routing: () => current()?.routing() ?? false,
           path: () => current()?.path() ?? "",
+        }) satisfies Router,
+    },
+    {
+      token: Keybinds,
+      create: () =>
+        ({
           keybind: (command) => current()?.keybind(command) ?? [],
           keys: (bind) => formatKeybindParts(bind, language.t),
           matches: (command, event) => current()?.matches(command, event) ?? false,
-          servers: () => current()?.servers() ?? [],
+        }) satisfies Keybinds,
+    },
+    {
+      token: Servers,
+      create: () => ({ list: () => current()?.servers() ?? [] }) satisfies Servers,
+    },
+    {
+      token: Workspaces,
+      create: (_extension, _owner, _context, register) =>
+        ({
           on(_event, handler) {
             removed.add(handler)
 
@@ -226,7 +262,7 @@ export function createExtensionServices() {
               removed.delete(handler)
             })
           },
-        }) satisfies App,
+        }) satisfies Workspaces,
     },
     {
       token: Sessions,
@@ -273,11 +309,11 @@ export function createExtensionServices() {
           mobileDiffWrap: () => requireAttached(current()).preferences.mobileDiffWrap(),
         }) satisfies Preferences,
     },
-    { token: Surfaces, create: () => surfaces },
+    { token: Embeds, create: () => embeds },
   ]
 
   return {
-    services,
+    apis,
     attach(value: Attached) {
       setAttached(() => value)
 
@@ -291,12 +327,12 @@ export function createExtensionServices() {
   }
 }
 
-export type ExtensionServices = ReturnType<typeof createExtensionServices>
+export type HostApis = ReturnType<typeof createHostApis>
 
 export { ExtensionAttachmentProvider, useExtensionAttachment } from "./attachment"
 
-/** Attaches session and layout services from inside the app interface. */
-export function createExtensionAttachment(services: ExtensionServices) {
+/** Attaches the session and layout HostApis from inside the app interface. */
+export function createExtensionAttachment(apis: HostApis) {
   const global = useGlobal()
   const tabs = useTabs()
   const layout = useLayout()
@@ -308,7 +344,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const location = useLocation()
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
-  const views = new Map<string, SessionView>()
+  const mountedSessions = new Map<string, MountedSession>()
   const [mounted, setMounted] = createStore({ revision: 0 })
   const refs = new Map<string, SessionRef>()
 
@@ -412,7 +448,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     if (!key) return
     void mounted.revision
 
-    return views.get(key)
+    return mountedSessions.get(key)
   })
 
   const scope = (id: string) => {
@@ -437,9 +473,9 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const shellTab = (session: SessionRef) =>
     findSessionTab(tabs.store, ServerConnection.Key.make(session.server.id), session.id)
 
-  const sideOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "side")
-  const dockOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "dock")
-  const setDock = (session: SessionRef, opened: boolean) => tabs.setPane(shellTab(session), "dock", opened)
+  const sideOpened = (session: SessionRef) => !!tabs.region(shellTab(session), "side")
+  const dockOpened = (session: SessionRef) => !!tabs.region(shellTab(session), "dock")
+  const setDock = (session: SessionRef, opened: boolean) => tabs.setRegion(shellTab(session), "dock", opened)
 
   // A token per session whose side region is open, new each time the region opens.
   const sideVisits = createMemo<ReadonlyMap<string, object>>(
@@ -464,7 +500,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     return matches.find((item) => item.value.region === "side") ?? matches[0]
   }
 
-  const mountedView = (session: SessionRef) => {
+  const mountedSession = (session: SessionRef) => {
     const view = current()
 
     return view?.key === session.key ? view : undefined
@@ -472,7 +508,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
   // Counts routing visits: each change of the routed session, including to none (e.g. Home), starts the next one.
   const visit = createMemo(on(routed, (_key, _previous, count: number = 0) => count + 1))
-  // `SessionView.visit`: a new object for each routing visit.
+  // `MountedSession.visit`: a new object for each routing visit.
   const token = createMemo(on(visit, () => ({})))
 
   // The narrow-screen view belongs to the routed, mounted session for one visit, and reads as the conversation once
@@ -494,7 +530,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
   // The side tabs a mounted session lists right now, plus `adding` as if it were stored; unmounted sessions have none.
   const listed = (session: SessionRef, value: string, adding?: string) => {
-    const view = mountedView(session)
+    const view = mountedSession(session)
 
     if (!view) return []
     const all = layout.panel.state(value).all
@@ -530,7 +566,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     // A select keeps the narrow-screen view and dock, as a background open does, and opens the side region too.
     if (options?.select)
       return batch(() => {
-        tabs.setPane(shellTab(session), "side", true)
+        tabs.setRegion(shellTab(session), "side", true)
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
@@ -545,11 +581,12 @@ export function createExtensionAttachment(services: ExtensionServices) {
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
 
         // A tab its panel does not list, or a launcher, stays unstored: the open only selects the panel's view.
-        if (mountedView(session) && !known.some((entry) => entry.key === key && entry.tab.kind !== "launcher")) return
+        if (mountedSession(session) && !known.some((entry) => entry.key === key && entry.tab.kind !== "launcher"))
+          return
       }
 
       // A background open keeps the narrow-screen view, but its tab still shows once the window is wide.
-      if (!narrow() || options?.background) tabs.setPane(shellTab(session), "side", true)
+      if (!narrow() || options?.background) tabs.setRegion(shellTab(session), "side", true)
 
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
@@ -568,7 +605,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     if (!value) return located.hold(session, () => close(key, session))
     const tab = listed(session, value).find((entry) => entry.key === key)?.tab
     layout.panel.close(value, key)
-    const view = mountedView(session)
+    const view = mountedSession(session)
 
     if (view && tab) item?.value.close?.(tab, view)
   }
@@ -590,7 +627,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
     if (!value) return "closed"
     const panel = layout.panel.state(value)
-    const active = mountedView(session) ? (region()?.active() ?? panel.active) : panel.active
+    const active = mountedSession(session) ? (region()?.active() ?? panel.active) : panel.active
 
     if (active !== key) return panel.all.includes(key) ? "open" : "closed"
 
@@ -643,7 +680,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
 
         // Closing the last panel the region was opened for also closes the region.
         if (region && openedFor.get(region) === key && layout.panel.state(value).all.length === 0)
-          tabs.setPane(shellTab(session), "side", false)
+          tabs.setRegion(shellTab(session), "side", false)
       })
 
       return
@@ -664,7 +701,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
     layout.panel.setScroll(value, key, next)
   }
 
-  const detach = services.attach({
+  const detach = apis.attach({
     sessions,
     current,
     scope,
@@ -681,7 +718,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
       setReleaseNotes: settings.general.setReleaseNotes,
       mobileDiffWrap: settings.general.mobileDiffWrap,
     },
-    // SAFETY: an extension names a page it contributed through `Setting`, which settings lists as an extension tab.
+    // SAFETY: an extension names a page it contributed through `SettingsPage`, which settings lists as an extension tab.
     settings: (page) => surface.open(page as Parameters<typeof surface.open>[0]),
     layout: {
       ready: layout.ready,
@@ -701,7 +738,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
       },
       side: {
         opened: sideOpened,
-        toggle: (session) => tabs.setPane(shellTab(session), "side", !sideOpened(session)),
+        toggle: (session) => tabs.setRegion(shellTab(session), "side", !sideOpened(session)),
       },
       // Open is the stored preference's default, which holds until a session screen shows the preference.
       sidebar: { opened: () => sidebar()?.opened() ?? true },
@@ -723,7 +760,7 @@ export function createExtensionAttachment(services: ExtensionServices) {
   onCleanup(detach)
 
   return {
-    /** The routed, mounted session view. */
+    /** The routed `MountedSession`. */
     current,
     region(value: Region) {
       setRegion(() => value)
@@ -753,17 +790,17 @@ export function createExtensionAttachment(services: ExtensionServices) {
         if (session) selectMobile(session, view)
       },
     },
-    /** The current routing visit, which `SessionView.visit` returns. */
+    /** The current routing visit, which `MountedSession.visit` returns. */
     visit: token,
-    mount(key: string, view: SessionView) {
-      views.set(key, view)
+    mount(key: string, view: MountedSession) {
+      mountedSessions.set(key, view)
       setMounted("revision", (value) => value + 1)
       // The session's declared stores start loading now, before its regions read them.
       untrack(() => host.preload(view))
 
       return () => {
-        if (views.get(key) !== view) return
-        views.delete(key)
+        if (mountedSessions.get(key) !== view) return
+        mountedSessions.delete(key)
         setMounted("revision", (value) => value + 1)
       }
     },

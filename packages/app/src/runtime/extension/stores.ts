@@ -1,13 +1,4 @@
-import {
-  batch,
-  createMemo,
-  createRenderEffect,
-  createRoot,
-  createSignal,
-  on,
-  untrack,
-  type Owner,
-} from "solid-js"
+import { batch, createMemo, createRenderEffect, createRoot, createSignal, on, untrack, type Owner } from "solid-js"
 import type { Persisted, SessionRef } from "@opencode/gui-extensions/sdk"
 
 const loads = new WeakMap<object, Promise<void>>()
@@ -123,7 +114,7 @@ export function createSessionStore<T extends object>(input: {
 }
 
 /**
- * A ref that keeps naming the session `session` names now. A mounted `SessionView` follows the route to the next
+ * A ref that keeps naming the session `session` names now. A `MountedSession` follows the route to the next
  * session, so its location is read only while it still names this one, and the last location it reported stands
  * meanwhile. The store opens, and reads `server`, only when that location changes.
  */

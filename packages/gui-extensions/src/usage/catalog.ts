@@ -1,11 +1,11 @@
-import { createActive, type SessionView } from "../sdk"
+import { createKeyed, type MountedSession } from "../sdk"
 
-const location = (session: SessionView) => (session.directory ? { directory: session.directory } : undefined)
+const location = (session: MountedSession) => (session.directory ? { directory: session.directory } : undefined)
 
 /** Loads the provider and model catalogs of the session's location. */
-export function syncCatalog(session: SessionView) {
+export function syncCatalog(session: MountedSession) {
   // Loads again when the server reconnects or is replaced, and when the session moves to another directory.
-  createActive(
+  createKeyed(
     () => session.server.connected && { data: session.server.data, ref: location(session) },
     (current) =>
       void (async () => {
@@ -17,7 +17,7 @@ export function syncCatalog(session: SessionView) {
 }
 
 /** The catalog entries of a message's model, matching the app's provider catalog: both lists must load, and deprecated models are skipped. */
-export function catalogModel(session: SessionView, model: { readonly providerID: string; readonly id: string }) {
+export function catalogModel(session: MountedSession, model: { readonly providerID: string; readonly id: string }) {
   const ref = location(session)
   const providers = session.server.data.location.provider.list(ref)
   const models = session.server.data.location.model.list(ref)

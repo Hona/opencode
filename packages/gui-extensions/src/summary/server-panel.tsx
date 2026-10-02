@@ -19,7 +19,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { App, createActive, Native, System, useExtension, type SessionView } from "../sdk"
+import { createKeyed, Desktop, Locale, Servers, System, useExtension, type MountedSession } from "../sdk"
 import { configuredLsps } from "./configured-lsp"
 
 const services = [
@@ -32,7 +32,7 @@ const services = [
 type Service = (typeof services)[number]["type"]
 
 type ServiceMenuProps = {
-  session: SessionView
+  session: MountedSession
   service: (typeof services)[number]
   directory: string
   shown: boolean
@@ -42,7 +42,7 @@ type ServiceMenuProps = {
 }
 
 export function SessionServerPanel(props: {
-  session: SessionView
+  session: MountedSession
   directory: string
   shown: boolean
   mobile?: boolean
@@ -50,10 +50,10 @@ export function SessionServerPanel(props: {
   onExpandedChange: (expanded: boolean) => void
 }) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const servers = ctx.use(Servers)
   const contentID = createUniqueId()
   // With one server the card is generic; with several it names the session's server.
-  const name = () => (app.servers().length < 2 ? ctx.t("server") : props.session.server.name)
+  const name = () => (servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
   // A new scope whenever the directory, the summary's visibility or the disclosure changes closes the open submenu.
   const scope = createMemo(on([() => props.directory, () => props.shown, () => props.expanded], () => ({})))
   const [submenu, setSubmenu] = createSignal<{ readonly scope: object; readonly service: Service }>()
@@ -125,7 +125,7 @@ function LspMenu(props: ServiceMenuProps) {
 
   const names = createMemo(() => configuredLsps(data.location.config.list({ directory: props.directory }) ?? []))
 
-  createActive(
+  createKeyed(
     () => props.directory,
     (directory) =>
       onCleanup(
@@ -375,7 +375,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
     return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  createActive(
+  createKeyed(
     () => props.directory,
     (directory) =>
       onCleanup(
@@ -445,10 +445,10 @@ function ServicePopover(
   },
 ) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const locale = ctx.use(Locale)
 
   const placement = createMemo(() =>
-    props.mobile ? "top-end" : app.direction() === "rtl" ? "right-start" : "left-start",
+    props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-start" : "left-start",
   )
 
   return (
@@ -505,9 +505,9 @@ function ServicePopover(
   )
 }
 
-function ServiceConfigLink(props: { session: SessionView; directory: string; service: Service }) {
+function ServiceConfigLink(props: { session: MountedSession; directory: string; service: Service }) {
   const ctx = useExtension()
-  const native = ctx.use(Native)
+  const desktop = ctx.use(Desktop)
   const system = ctx.use(System)
   const local = () => props.session.server.local
   const [store, setStore] = createStore({ opening: false, copied: false })
@@ -518,7 +518,7 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
   onCleanup(() => clearTimeout(reset))
 
   const activate = async () => {
-    if (store.opening || (local() && !native)) return
+    if (store.opening || (local() && !desktop)) return
     setStore({ opening: true, copied: false })
     const directory = props.directory
     await props.session.server.client.config
@@ -541,8 +541,8 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
           return
         }
 
-        if (path && (await native?.reveal(path))) return
-        await native?.launch(path ? getDirectory(path) : directory)
+        if (path && (await desktop?.reveal(path))) return
+        await desktop?.launch(path ? getDirectory(path) : directory)
       })
       .catch((error) =>
         showToast({
@@ -558,7 +558,7 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
     <>
       <span class="session-service-config-separator" role="separator" />
       <Show
-        when={!local() || native}
+        when={!local() || desktop}
         fallback={
           <span class="session-service-row">
             <Icon name="settings-gear" class="shrink-0 text-v2-icon-icon-muted" />
@@ -598,7 +598,7 @@ function ServiceConfigLink(props: { session: SessionView; directory: string; ser
   )
 }
 
-function ServiceEmpty(props: { session: SessionView; title: string; directory: string; service: Service }) {
+function ServiceEmpty(props: { session: MountedSession; title: string; directory: string; service: Service }) {
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>

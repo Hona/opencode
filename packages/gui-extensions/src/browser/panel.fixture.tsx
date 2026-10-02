@@ -15,33 +15,39 @@ import { createStore, produce } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
 import type { Bridge, BridgeLayout } from "../sdk/bridge"
 import {
-  App,
+  Appearance,
+  Build,
+  Desktop,
+  Embeds,
   ExtensionContext,
+  Keybinds,
   Layout,
-  Native,
+  Locale,
   PanelContext,
+  Router,
+  Servers,
   Sessions,
   Storage,
-  Surfaces,
+  Workspaces,
   type ComposerNote,
   type Context,
   type Definition,
   type PanelFrame,
   type PanelTab,
-  type Remote,
-  type RemoteClient,
+  type Ipc,
+  type IpcClient,
   type SessionRef,
-  type SessionView,
+  type MountedSession,
 } from "../sdk"
 import type { InspectEvent } from "./connection"
 import browserEn from "./i18n/en"
 import type { Model } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent } from "./remote"
+import { BrowserPane, type PaneEvent } from "./ipc"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
-type Host = {
-  createSurfaces(input: { bridge: Bridge | undefined; zoom: () => number; dialog: () => boolean }): Surfaces
+type PaneHost = {
+  createEmbeds(input: { bridge: Bridge | undefined; zoom: () => number; dialog: () => boolean }): Embeds
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   UiI18nBridge: ParentComponent
   useLanguage(): { t(key: string): string }
@@ -67,9 +73,9 @@ type PaneFixtureState = {
   comments: ComposerNote[]
 }
 
-// Component-test fixture: the real pane on the real host surface, with the desktop faked at its two
+// Component-test fixture: the real pane on the real host embeds, with the desktop faked at its two
 // boundaries: the model's main-process pane (tab state, picker events) and the host bridge that shows native views.
-export function mountBrowserPane(input: Host) {
+export function mountBrowserPane(input: PaneHost) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-pane-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
@@ -116,8 +122,8 @@ export function mountBrowserPane(input: Host) {
 
     const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
 
-    const bridge: Pick<Bridge, "surface" | "capture"> = {
-      surface: (id, layout) => setStore("layouts", id, layout),
+    const bridge: Pick<Bridge, "embed" | "capture"> = {
+      embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
         setStore("captures", (count) => count + 1)
 
@@ -134,24 +140,24 @@ export function mountBrowserPane(input: Host) {
       },
     }
 
-    // SAFETY: the host surface calls only `surface` and `capture` on its bridge (`runtime/extension/surface.tsx`).
-    const surfaces = input.createSurfaces({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
-    const app = { keybind: () => [], keys: (bind: string) => bind.split("+") }
-    const native = { zoom: () => 1 }
+    // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
+    const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
+    const keybinds = { keybind: () => [], keys: (bind: string) => bind.split("+") }
+    const desktop = { zoom: () => 1 }
 
-    const services = new Map<string, typeof app | typeof native | Surfaces>([
-      [App.id, app],
-      [Native.id, native],
-      [Surfaces.id, surfaces],
+    const apis = new Map<string, typeof keybinds | typeof desktop | Embeds>([
+      [Keybinds.id, keybinds],
+      [Desktop.id, desktop],
+      [Embeds.id, embeds],
     ])
 
     const fake = {
       id: "browser",
-      use: (token: { id: string }) => services.get(token.id),
+      use: (token: { id: string }) => apis.get(token.id),
       t: (key: string) => messages.get(key) ?? language.t(key),
     }
 
-    // SAFETY: the pane reads only `id`, `t`, and `use` of App, Native and Surfaces from its extension's context.
+    // SAFETY: the pane reads only `id`, `t`, and `use` of Keybinds, Desktop and Embeds from its extension's context.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const extension = fake as unknown as Context
 
@@ -175,7 +181,7 @@ export function mountBrowserPane(input: Host) {
 
     // SAFETY: the pane reads only `key`, `file.search` and `composer.attach` of its session.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const session = view as unknown as SessionView
+    const session = view as unknown as MountedSession
 
     const fakeModel: Pick<
       Model,
@@ -364,7 +370,7 @@ type StripTabs = {
   remap(rewrite: (tab: string) => string): void
 }
 
-type PaneClient = RemoteClient<(typeof BrowserPane)["spec"]>
+type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
 
 /** The app's extension host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
 type RegionHost = {
@@ -373,15 +379,15 @@ type RegionHost = {
     ParentProps<{
       definitions: readonly Definition[]
       disabled: Accessor<ReadonlySet<string> | undefined>
-      services: readonly {
-        readonly token: { readonly kind: "host"; readonly id: string }
+      apis: readonly {
+        readonly token: { readonly kind: "hostapi"; readonly id: string }
         create(extension: string): object | undefined
       }[]
-      remote: (token: Remote) => PaneClient | undefined
+      ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
   useExtensionHost(): { ready(): boolean }
-  createRegion(input: { region: "side"; view: SessionView; tabs: Accessor<StripTabs> }): {
+  createRegion(input: { region: "side"; view: MountedSession; tabs: Accessor<StripTabs> }): {
     keys(): readonly string[]
     active(): string | undefined
     entry(key: string): { readonly tab: PanelTab } | undefined
@@ -395,12 +401,12 @@ type RegionFixtureState = {
   strips: Record<string, { all: string[]; active?: string }>
   /** Each registration of a pane binding, with how many tabs it asked main to restore. */
   registrations: { binding: string; session: string; restore: number }[]
-  /** The pane's remote is gone, as while its main extension reloads or is disabled. */
+  /** The pane's Ipc is gone, as while its main extension reloads or is disabled. */
   away: boolean
 }
 
 // Component-test fixture: the real side region over the real browser and file extensions, with the host's
-// session, layout, and storage services and the pane's main-process remote faked at their boundaries. Alpha was
+// session, layout, and storage HostApis and the pane's main-process Ipc faked at their boundaries. Alpha was
 // left on a file tab; Beta on a browser tab whose page the desktop reports only with its first inventory.
 export function mountBrowserRegion(input: RegionHost) {
   const host = document.createElement("main")
@@ -487,7 +493,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
     // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const view = routed as unknown as SessionView
+    const view = routed as unknown as MountedSession
 
     const layout = (extension: string): Layout => ({
       narrow: () => false,
@@ -535,21 +541,13 @@ export function mountBrowserRegion(input: RegionHost) {
       remove() {},
     })
 
-    const app: App = {
-      channel: "dev",
-      platform: "desktop",
-      font: () => "monospace",
-      locale: () => "en",
-      direction: () => "ltr",
-      setDirection() {},
-      routing: () => false,
-      path: () => "/",
-      keybind: () => [],
-      keys: (bind) => bind.split("+"),
-      matches: () => false,
-      servers: () => [server.id],
-      on: () => () => undefined,
-    }
+    const build: Build = { channel: "dev", platform: "desktop" }
+    const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
+    const appearance: Appearance = { font: () => "monospace" }
+    const router: Router = { routing: () => false, path: () => "/" }
+    const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
+    const servers: Servers = { list: () => [server.id] }
+    const workspaces: Workspaces = { on: () => () => undefined }
 
     const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
 
@@ -567,7 +565,7 @@ export function mountBrowserRegion(input: RegionHost) {
       close: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
-        // SAFETY: the pane's remote has one event, so every listener takes that event's payload.
+        // SAFETY: the pane's Ipc has one event, so every listener takes that event's payload.
         const added = listener as (value: { binding: string; event: PaneEvent }) => void
         listeners.add(added)
 
@@ -575,9 +573,15 @@ export function mountBrowserRegion(input: RegionHost) {
       },
     }
 
-    const services = [
-      { token: App, create: () => app },
-      { token: Native, create: () => undefined },
+    const apis = [
+      { token: Build, create: () => build },
+      { token: Locale, create: () => locale },
+      { token: Appearance, create: () => appearance },
+      { token: Router, create: () => router },
+      { token: Keybinds, create: () => keybinds },
+      { token: Servers, create: () => servers },
+      { token: Workspaces, create: () => workspaces },
+      { token: Desktop, create: () => undefined },
       { token: Sessions, create: () => ({ list: () => refs, current: () => view }) },
       { token: Layout, create: layout },
       { token: Storage, create: storage },
@@ -654,8 +658,8 @@ export function mountBrowserRegion(input: RegionHost) {
         <input.ExtensionHostProvider
           definitions={input.definitions}
           disabled={() => new Set<string>()}
-          services={services}
-          remote={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
+          apis={apis}
+          ipc={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
         >
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
           <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>

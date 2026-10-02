@@ -2,15 +2,15 @@ import { batch, createRoot, createSignal, getOwner, lazy, onCleanup, Show, Suspe
 import { createStore } from "solid-js/store"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
-  createActive,
+  createKeyed,
   Layout,
-  Link,
+  LinkHandler,
   Panel,
   Sessions,
   usePanel,
   type PanelTab,
   type SessionRef,
-  type SessionView,
+  type MountedSession,
   type Setup,
   onIdle,
 } from "../sdk"
@@ -31,9 +31,9 @@ const setup: Setup<typeof Review> = (ctx) => {
 
   // Who shows a view's changes: the review render, the file tree, and file tabs. A view follows its route,
   // so a session switch keeps the demand.
-  const demands = new WeakMap<SessionView, ReturnType<typeof createStore<Demand>>>()
+  const demands = new WeakMap<MountedSession, ReturnType<typeof createStore<Demand>>>()
 
-  const demand = (view: SessionView) => {
+  const demand = (view: MountedSession) => {
     const existing = demands.get(view)
 
     if (existing) return existing
@@ -45,7 +45,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     return created
   }
 
-  const watch = (view: SessionView, source: keyof Demand) => {
+  const watch = (view: MountedSession, source: keyof Demand) => {
     const set = demand(view)[1]
 
     set(source, (count) => count + 1)
@@ -54,9 +54,9 @@ const setup: Setup<typeof Review> = (ctx) => {
   }
 
   // One review model for the routed session screen, like the review the screen created before extensions.
-  const [entry, setEntry] = createSignal<{ view: SessionView; model: ReviewModel; dispose: () => void }>()
+  const [entry, setEntry] = createSignal<{ view: MountedSession; model: ReviewModel; dispose: () => void }>()
 
-  createActive(
+  createKeyed(
     () => sessions.current(),
     (view) => {
       const current = untrack(entry)
@@ -97,9 +97,9 @@ const setup: Setup<typeof Review> = (ctx) => {
     return current && current.view.key === session.key ? current.model : undefined
   }
 
-  const tabs = new WeakMap<SessionView, PanelTab>()
+  const tabs = new WeakMap<MountedSession, PanelTab>()
 
-  const tab = (session: SessionView) => {
+  const tab = (session: MountedSession) => {
     const existing = tabs.get(session)
 
     if (existing) return existing
@@ -154,7 +154,7 @@ const setup: Setup<typeof Review> = (ctx) => {
       return (
         <Show when={modelFor(session)} keyed>
           {(model) => {
-            createActive(frame.visible, () => onCleanup(watch(session, "panel")))
+            createKeyed(frame.visible, () => onCleanup(watch(session, "panel")))
 
             return (
               <Show
@@ -198,7 +198,7 @@ const setup: Setup<typeof Review> = (ctx) => {
   const reveals = new Set<() => void>()
 
   // A review comment in the composer reveals its diff.
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     priority: 1,
     match: (link) => link.origin === "review",
     open(link) {

@@ -19,7 +19,7 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import { useExtension, usePanel, type PanelSidebar, type SessionView } from "../sdk"
+import { useExtension, usePanel, type PanelSidebar, type MountedSession } from "../sdk"
 import type Review from "./index"
 import {
   applyFileListKeyDown,
@@ -41,7 +41,7 @@ type ReviewPanelState = {
 }
 
 type ReviewPanelProps = {
-  session: SessionView
+  session: MountedSession
   title?: JSX.Element
   empty?: JSX.Element
   /** Renderable diffs and their change kinds, computed once by the review model. */
@@ -67,7 +67,7 @@ type ReviewPanelProps = {
 /** The desktop review panel. */
 export default function ReviewPanelContent(props: {
   review: ReviewModel
-  session: SessionView
+  session: MountedSession
   diffStyle: SessionReviewDiffStyle
   onDiffStyleChange: (style: SessionReviewDiffStyle) => void
   expandMode: SessionReviewExpandMode
@@ -240,7 +240,7 @@ function ReviewPanel(props: ReviewPanelProps) {
 }
 
 function ReviewPanelSidebar(props: {
-  session: SessionView
+  session: MountedSession
   title?: JSX.Element
   state: ReviewPanelState
   diffsReady: boolean

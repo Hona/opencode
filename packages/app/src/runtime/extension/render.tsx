@@ -1,7 +1,7 @@
 import { createMemo, ErrorBoundary, For, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
-import { ExtensionContext, Slot, Style, type SessionView, type SlotMap } from "@opencode/gui-extensions/sdk"
+import { ExtensionContext, Slot, Style, type MountedSession, type SlotMap } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "./host"
 
 /**
@@ -64,8 +64,8 @@ export function ExtensionStyles() {
   )
 }
 
-/** Routes local markdown links in the session to extension Link handlers, keeping image loading. */
-export function ExtensionLinks(props: ParentProps<{ session: SessionView }>) {
+/** Routes local markdown links in the session to extension LinkHandler contributions, keeping image loading. */
+export function ExtensionLinks(props: ParentProps<{ session: MountedSession }>) {
   const host = useExtensionHost()
   const markdown = useMarkdown()
 

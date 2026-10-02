@@ -2,8 +2,14 @@ import { createResource, onCleanup, type JSX } from "solid-js"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
-  App,
+  Appearance,
+  Build,
   ExtensionContext,
+  Keybinds,
+  Locale,
+  Router,
+  Servers,
+  Workspaces,
   type Catalog,
   type Context,
   type Definition,
@@ -47,7 +53,7 @@ function createStoryContext(definition: Definition) {
   const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
     initialValue: definition.i18n?.en ?? {},
   })
-  const app = createStoryApp("web")
+  const apis = createStoryHostApis("web")
   const controller = new AbortController()
   onCleanup(() => controller.abort())
   const unavailable = (name: string) => () => {
@@ -64,8 +70,9 @@ function createStoryContext(definition: Definition) {
     list: () => [],
     provide: unavailable("ctx.provide"),
     use: (token: { id: string }) => {
-      if (token.id === App.id) return app
-      throw new Error(`Host service "${token.id}" is unavailable in extension stories`)
+      const api = apis.find((item) => item.token.id === token.id)
+      if (api) return api.create()
+      throw new Error(`HostApi "${token.id}" is unavailable in extension stories`)
     },
     t: (key: string, params?: Params) => {
       const template = catalog.latest[key]
@@ -81,24 +88,25 @@ function createStoryContext(definition: Definition) {
   } as unknown as Context
 }
 
-/** The host's App service for a story, outside any route. */
-export function createStoryApp(platform: App["platform"]): App {
+/** The host's build, locale, appearance, router, keybind, server and workspace APIs for a story, outside any route. */
+export function createStoryHostApis(platform: Build["platform"]) {
   const language = useLanguage()
-  return {
-    channel: "dev",
-    platform,
-    font: () => "var(--font-family-mono)",
-    locale: language.intl,
-    direction: language.direction,
-    setDirection: language.setDirection,
-    routing: () => false,
-    path: () => "/",
-    keybind: () => [],
-    keys: () => [],
-    matches: () => false,
-    servers: () => [],
-    on: () => () => {},
-  }
+  const build: Build = { channel: "dev", platform }
+  const locale: Locale = { locale: language.intl, direction: language.direction, setDirection: language.setDirection }
+  const appearance: Appearance = { font: () => "var(--font-family-mono)" }
+  const router: Router = { routing: () => false, path: () => "/" }
+  const keybinds: Keybinds = { keybind: () => [], keys: () => [], matches: () => false }
+  const servers: Servers = { list: () => [] }
+  const workspaces: Workspaces = { on: () => () => {} }
+  return [
+    { token: Build, create: () => build },
+    { token: Locale, create: () => locale },
+    { token: Appearance, create: () => appearance },
+    { token: Router, create: () => router },
+    { token: Keybinds, create: () => keybinds },
+    { token: Servers, create: () => servers },
+    { token: Workspaces, create: () => workspaces },
+  ]
 }
 
 async function loadMessages(catalog: Catalog | undefined, locale: string): Promise<Messages> {

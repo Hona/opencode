@@ -62,25 +62,26 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await expect(tree).toHaveText('{"tab":"changes"}')
 })
 
-story("keeps the browser tabs while the pane's remote is away and registers them again when it returns", async ({
-  page,
-}) => {
-  const root = page.getByTestId("browser-region-fixture")
-  const tabs = root.getByRole("tab")
-  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
-  await root.getByRole("button", { name: "Beta", exact: true }).click()
-  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
-  await root.getByRole("button", { name: "First inventory", exact: true }).click()
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
+story(
+  "keeps the browser tabs while the pane's Ipc is away and registers them again when it returns",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-region-fixture")
+    const tabs = root.getByRole("tab")
+    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "Beta", exact: true }).click()
+    await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "First inventory", exact: true }).click()
+    await expect(tabs).toHaveText(["beta.ts", "Preview"])
 
-  // The pane's main extension reloads: every binding goes with it, and the strip keeps the tab it will restore.
-  await root.getByRole("button", { name: "Pane away", exact: true }).click()
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
-  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+    // The pane's main extension reloads: every binding goes with it, and the strip keeps the tab it will restore.
+    await root.getByRole("button", { name: "Pane away", exact: true }).click()
+    await expect(tabs).toHaveText(["beta.ts", "Preview"])
+    await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
 
-  // Both attachments register again at once, without a retry timer; Beta hands main the tab to restore.
-  await root.getByRole("button", { name: "Pane back", exact: true }).click()
-  await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
-  await expect(root.getByText("Beta restores: 1", { exact: true })).toBeVisible()
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
-})
+    // Both attachments register again at once, without a retry timer; Beta hands main the tab to restore.
+    await root.getByRole("button", { name: "Pane back", exact: true }).click()
+    await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
+    await expect(root.getByText("Beta restores: 1", { exact: true })).toBeVisible()
+    await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  },
+)

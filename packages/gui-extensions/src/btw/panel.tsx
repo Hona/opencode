@@ -7,10 +7,10 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { Markdown } from "@opencode/session-ui/markdown"
-import { System, useExtension, type SessionView } from "../sdk"
+import { System, useExtension, type MountedSession } from "../sdk"
 import type { BtwModel } from "./model"
 
-export default function SessionBtwPanel(props: { btw: BtwModel; session: SessionView }) {
+export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession }) {
   const ctx = useExtension()
   const system = ctx.use(System)
   const answer = () => props.btw.answer(props.session)

@@ -4,11 +4,11 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
-import { App, Dialogs, type RemoteClient, type SetupContext } from "../sdk"
+import { Build, Dialogs, type IpcClient, type SetupContext } from "../sdk"
 import type { Updater } from "./contract"
 import type definition from "./index"
 
-type Client = RemoteClient<typeof Updater.spec>
+type Client = IpcClient<typeof Updater.spec>
 
 type Context = SetupContext<typeof definition>
 
@@ -47,7 +47,7 @@ export async function check(ctx: Context, client: Client) {
       variant: "success",
       icon: () => <Icon name="circle-check" />,
       title: ctx.t("toast.latest.title"),
-      description: ctx.t("toast.latest.description", { version: ctx.use(App).version ?? "" }),
+      description: ctx.t("toast.latest.description", { version: ctx.use(Build).version ?? "" }),
     })
   }
 

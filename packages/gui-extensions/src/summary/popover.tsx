@@ -5,13 +5,13 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { App, Command, createActive, createVisitState, useExtension, type SessionView } from "../sdk"
+import { Command, createKeyed, createVisitState, Keybinds, useExtension, type MountedSession } from "../sdk"
 import type Summary from "./index"
 import type { Disclosure, SummaryPanelProps } from "./panel"
 
 /** The summary button of one timeline header. Cached timelines each keep their own. */
 export function SummaryHeader(props: {
-  session: SessionView
+  session: MountedSession
   active: boolean
   panel: Component<SummaryPanelProps>
   disclosure: Disclosure
@@ -40,8 +40,8 @@ export function SummaryHeader(props: {
   })
 
   // The changes row loads the session directory's changes only while the summary shows.
-  createActive(changes, (service) =>
-    createActive(
+  createKeyed(changes, (service) =>
+    createKeyed(
       () => open() && props.session,
       (session) => onCleanup(service.watch(session, "details")),
     ),
@@ -71,7 +71,7 @@ export function SummaryHeader(props: {
 
 function SummaryPopover(props: ParentProps<{ active: boolean; open: boolean; onOpenChange: (open: boolean) => void }>) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const keybinds = ctx.use(Keybinds)
 
   // Cached timelines remain mounted; only the visible summary owns the command. It leaves with this component.
   ctx.add(Command, (): Command | undefined =>
@@ -87,7 +87,7 @@ function SummaryPopover(props: ParentProps<{ active: boolean; open: boolean; onO
       : undefined,
   )
 
-  const keybind = () => [...app.keybind("summary.toggle")]
+  const keybind = () => [...keybinds.keybind("summary.toggle")]
 
   return (
     <Popover open={props.open} placement="bottom-end" gutter={8} overflowPadding={16} onOpenChange={props.onOpenChange}>

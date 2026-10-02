@@ -47,7 +47,7 @@ story("built-ins: no requires cycle, and each consumer activates without each op
       return walk(definition.id, [])
     })
 
-    // A renderer that uses the remote its own main entry provides depends on no other extension.
+    // A renderer that uses the Ipc its own main entry provides depends on no other extension.
     const edges = definitions.flatMap((consumer) =>
       ids(consumer.uses).flatMap((token) => {
         const provider = providerOf(token)

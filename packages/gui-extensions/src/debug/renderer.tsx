@@ -1,10 +1,10 @@
 import { createSignal, lazy, Show, Suspense } from "solid-js"
-import { App, Command, Slot, Status, type Setup } from "../sdk"
+import { Build, Command, Slot, TitlebarItem, type Setup } from "../sdk"
 import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
-  const channel = ctx.use(App).channel
+  const channel = ctx.use(Build).channel
   // Window-local; every window starts with the bar hidden.
   const [visible, setVisible] = createSignal(false)
 
@@ -35,8 +35,8 @@ const setup: Setup<typeof Debug> = (ctx) => {
 
   if (channel !== "dev" && channel !== "local") return
   ctx.add(
-    Status,
-    (): Status => ({
+    TitlebarItem,
+    (): TitlebarItem => ({
       id: "toggle",
       placement: "channel",
       label: ctx.t("status.toggle"),

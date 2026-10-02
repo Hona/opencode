@@ -1,13 +1,19 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import {
-  App,
+  Appearance,
+  Build,
+  Desktop,
+  Embeds,
+  Keybinds,
   Layout,
-  Native,
+  Locale,
   Preferences,
+  Router,
+  Servers,
   Sessions,
   Storage,
-  Surfaces,
   System,
+  Workspaces,
   type Definition,
   type Setup,
   type StoreOptions,
@@ -23,11 +29,11 @@ import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 
-export { createActive, Dialogs, Service, Slot, Store } from "@opencode/gui-extensions/sdk"
+export { Contract, createKeyed, Dialogs, Slot, Store } from "@opencode/gui-extensions/sdk"
 
 export { Schema }
 
-type Host = ReturnType<typeof useExtensionHost>
+type ExtensionHost = ReturnType<typeof useExtensionHost>
 
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
@@ -48,7 +54,7 @@ export async function until(check: () => boolean) {
 export function mountExtensionHost() {
   const loads: PromiseWithResolvers<{ default: Setup<Definition> }>[] = []
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
-  const hosts: Host[] = []
+  const hosts: ExtensionHost[] = []
   const container = document.createElement("div")
   document.body.appendChild(container)
 
@@ -75,7 +81,7 @@ export function mountExtensionHost() {
               },
             ]}
             disabled={disabled}
-            services={[]}
+            apis={[]}
           >
             <Capture />
           </ExtensionHostProvider>
@@ -106,7 +112,7 @@ export function mountExtensionHost() {
 }
 
 /**
- * Mounts the real host over these definitions, before any session mounts, with the host services faked at their
+ * Mounts the real host over these definitions, before any session mounts, with the HostApis faked at their
  * boundary. Storage is the real persisted store of a desktop window whose reads wait until `release()`; `stored` seeds
  * it. Renders the `shell.bottom` slot once the startup gate opens.
  */
@@ -117,7 +123,7 @@ export function mountExtensions(input: {
 }) {
   const held = Promise.withResolvers<void>()
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set(input.disabled ?? []))
-  const hosts: Host[] = []
+  const hosts: ExtensionHost[] = []
   const container = document.createElement("div")
   document.body.appendChild(container)
 
@@ -173,25 +179,23 @@ export function mountExtensions(input: {
     project() {},
   }
 
-  const app: App = {
-    channel: "dev",
-    platform: "desktop",
-    font: () => "monospace",
-    locale: () => "en",
-    direction: () => "ltr",
-    setDirection() {},
-    routing: () => false,
-    path: () => "/",
-    keybind: () => [],
-    keys: (bind) => bind.split("+"),
-    matches: () => false,
-    servers: () => [],
-    on: () => () => undefined,
-  }
+  const build: Build = { channel: "dev", platform: "desktop" }
+  const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
+  const appearance: Appearance = { font: () => "monospace" }
+  const router: Router = { routing: () => false, path: () => "/" }
+  const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
+  const servers: Servers = { list: () => [] }
+  const workspaces: Workspaces = { on: () => () => undefined }
 
-  const services = [
-    { token: App, create: () => app },
-    { token: Native, create: () => undefined },
+  const apis = [
+    { token: Build, create: () => build },
+    { token: Locale, create: () => locale },
+    { token: Appearance, create: () => appearance },
+    { token: Router, create: () => router },
+    { token: Keybinds, create: () => keybinds },
+    { token: Servers, create: () => servers },
+    { token: Workspaces, create: () => workspaces },
+    { token: Desktop, create: () => undefined },
     { token: Sessions, create: () => ({ list: () => [], current: () => undefined }) },
     { token: Layout, create: () => layout },
     { token: Storage, create: storage },
@@ -200,12 +204,12 @@ export function mountExtensions(input: {
       token: Preferences,
       create: () => ({ releaseNotes: () => false, setReleaseNotes() {}, mobileDiffWrap: () => false }),
     },
-    { token: Surfaces, create: () => ({ View: () => null, capture: async () => undefined }) },
+    { token: Embeds, create: () => ({ View: () => null, capture: async () => undefined }) },
   ]
 
-  function Host() {
+  function MountedHost() {
     return (
-      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} services={services}>
+      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} apis={apis}>
         <Capture />
       </ExtensionHostProvider>
     )
@@ -226,7 +230,7 @@ export function mountExtensions(input: {
     () => (
       <LanguageProvider locale="en">
         <DialogProvider>
-          <Host />
+          <MountedHost />
         </DialogProvider>
       </LanguageProvider>
     ),

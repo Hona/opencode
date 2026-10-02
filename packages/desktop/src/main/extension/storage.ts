@@ -1,32 +1,43 @@
-import type { MainStorage } from "@opencode/gui-extensions/sdk/main"
+import type { Storage } from "@opencode/gui-extensions/sdk/main"
 import { Option, Schema } from "effect"
 import type { StateStore } from "../storage/state"
 import { getStore } from "../storage/store"
+
+/** The last value a store read or wrote, so later reads skip the database. */
+type Cached<T> = { value?: { current: T } }
 
 /**
  * Each extension's values live in the `state` table under `extension.<id>`, stored as canonical JSON. Writes are rare,
  * so each one reaches the database before it returns and survives a crash.
  */
-export function createMainStorage(state: StateStore, id: string): MainStorage {
+export function createStorage(state: StateStore, id: string): Storage {
   const name = namespace(id)
+
   return {
     store(key, options) {
       const codec = Schema.toCodecJson(options.schema)
       const legacy = options.from ? source(state, options.from) : undefined
-      const cached: { value?: { current: typeof options.initial } } = {}
+      const cached: Cached<typeof options.initial> = {}
+
       const read = () => {
         const stored = state.get(name, key)
+
         if (stored !== null) return Schema.decodeUnknownOption(Schema.fromJsonString(codec))(stored)
         const found = legacy?.read()
+
         if (found === undefined) return Option.none()
         const decoded = Schema.decodeUnknownOption(codec)(found)
+
         // Imported once; the old location keeps its copy for builds that still read it.
         if (Option.isSome(decoded)) state.set(name, key, JSON.stringify(found))
+
         return decoded
       }
+
       return {
         get() {
           cached.value ??= { current: Option.getOrElse(read(), () => options.initial) }
+
           return cached.value.current
         },
         set(value) {
@@ -37,6 +48,7 @@ export function createMainStorage(state: StateStore, id: string): MainStorage {
         remove() {
           // The old copy goes too, or the next read would import it again.
           legacy?.remove()
+
           if (state.get(name, key) !== null) state.delete(name, key)
           state.flush()
           cached.value = { current: options.initial }
@@ -52,11 +64,12 @@ export function namespace(id: string) {
 
 // `settings:<key>` reads the JSON settings file and `settings:<file>/<key>` another one (e.g. opencode.updater);
 // `state:<name>/<key>` reads another state namespace.
-function source(state: StateStore, from: string): { read(): unknown; remove(): void } {
+function source(state: StateStore, from: string) {
   if (from.startsWith("settings:")) {
     const [file, key] = from.slice("settings:".length).split("/", 2)
     const store = () => (key === undefined ? getStore() : getStore(file))
     const entry = key ?? file ?? ""
+
     return {
       read: () => store().get(entry),
       remove() {
@@ -64,13 +77,17 @@ function source(state: StateStore, from: string): { read(): unknown; remove(): v
       },
     }
   }
+
   if (from.startsWith("state:")) {
     const [name = "", ...rest] = from.slice("state:".length).split("/")
     const key = rest.join("/")
+
     return {
       read() {
         const value = state.get(name, key)
+
         if (value === null) return undefined
+
         return Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value))
       },
       remove() {
@@ -78,5 +95,6 @@ function source(state: StateStore, from: string): { read(): unknown; remove(): v
       },
     }
   }
+
   throw new Error(`Unsupported storage import: ${from}`)
 }

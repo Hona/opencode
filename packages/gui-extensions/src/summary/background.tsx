@@ -4,11 +4,11 @@ import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, createSignal, For, on, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { App, useExtension, type BackgroundTask } from "../sdk"
+import { Locale, useExtension, type BackgroundTask } from "../sdk"
 
 export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[]; mobile?: boolean }) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const locale = ctx.use(Locale)
   const data = useData()
   const running = createMemo(() => props.tasks.length > 0)
   // A new period each time work starts or ends: the list closes when the last task ends and stays closed when work returns.
@@ -28,7 +28,7 @@ export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[];
   return (
     <Popover
       open={open()}
-      placement={props.mobile ? "top-end" : app.direction() === "rtl" ? "right-end" : "left-end"}
+      placement={props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-end" : "left-end"}
       gutter={4}
       onOpenChange={setOpen}
     >

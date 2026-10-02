@@ -9,10 +9,19 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, For, on, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { App, createActive, Native, Surfaces, useExtension, usePanel, type PanelTab, type SessionView } from "../sdk"
+import {
+  createKeyed,
+  Desktop,
+  Embeds,
+  Keybinds,
+  useExtension,
+  usePanel,
+  type PanelTab,
+  type MountedSession,
+} from "../sdk"
 import { commentNote } from "./comment"
 import type { Model } from "./model"
-import type { PaneElement } from "./remote"
+import type { PaneElement } from "./ipc"
 
 type PaneState = {
   /** The address field's text while the user edits it, and the submitted address it keeps afterwards. */
@@ -40,11 +49,11 @@ type PaneState = {
   editorHeight: number
 }
 
-export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; session: SessionView; model: Model }) {
+export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; session: MountedSession; model: Model }) {
   const extension = useExtension()
-  const app = extension.use(App)
-  const native = extension.use(Native)
-  const surfaces = extension.use(Surfaces)
+  const keybinds = extension.use(Keybinds)
+  const desktop = extension.use(Desktop)
+  const embeds = extension.use(Embeds)
   const panel = usePanel()
   const visible = () => panel.visible()
   const state = () => props.model.tab(props.session, props.tab().id)
@@ -180,7 +189,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     const rect = store.comment?.element.rect
 
     if (!rect) return
-    const zoom = native?.zoom() ?? 1
+    const zoom = desktop?.zoom() ?? 1
 
     return { x: rect.x / zoom, y: rect.y / zoom, width: rect.width / zoom, height: rect.height / zoom }
   }
@@ -261,8 +270,8 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     if (tabID && (tabID !== state()?.id || !visible())) setPicking(tabID, false)
   }
 
-  createActive(visible, endPicker, { otherwise: endPicker })
-  createActive(
+  createKeyed(visible, endPicker, { otherwise: endPicker })
+  createKeyed(
     () => state()?.id,
     (id) => {
       endPicker()
@@ -294,7 +303,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   )
 
   // A restored tab has no page until the pane first shows it.
-  createActive(
+  createKeyed(
     () => {
       const tab = state()
 
@@ -335,7 +344,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
             <div class="flex items-center gap-2">
               <span>{extension.t(state()?.loading ? "action.stop" : "action.reload")}</span>
               <Show when={!state()?.loading}>
-                <Keybind keys={[...app.keybind("browser.reload")]} variant="neutral" />
+                <Keybind keys={[...keybinds.keybind("browser.reload")]} variant="neutral" />
               </Show>
             </div>
           }
@@ -362,14 +371,14 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
                 <span>{extension.t("inspect")}</span>
-                <Show when={app.keybind("browser.inspect").length > 0}>
-                  <Keybind keys={[...app.keybind("browser.inspect")]} variant="neutral" />
+                <Show when={keybinds.keybind("browser.inspect").length > 0}>
+                  <Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />
                 </Show>
               </div>
               {/* The page claims Chromium's picker chord itself; the app leaves it to the terminal. */}
               <div class="flex items-center gap-2">
                 <span>{extension.t("inspect.pageShortcut")}</span>
-                <Keybind keys={[...app.keys("mod+shift+c")]} variant="neutral" />
+                <Keybind keys={[...keybinds.keys("mod+shift+c")]} variant="neutral" />
               </div>
             </div>
           }
@@ -451,7 +460,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           {error()}
         </div>
       </Show>
-      <surfaces.View
+      <embeds.View
         id={surface()}
         visible={shown()}
         frozen={commenting()}
@@ -540,7 +549,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
             </div>
           )}
         </Show>
-      </surfaces.View>
+      </embeds.View>
       <p class="sr-only" role="status" aria-live="polite">
         {picking() ? extension.t("inspect.active") : ""}
       </p>

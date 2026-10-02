@@ -73,7 +73,7 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createActive(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ]
           }
@@ -90,7 +90,7 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createActive(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ],
             "patterns": [

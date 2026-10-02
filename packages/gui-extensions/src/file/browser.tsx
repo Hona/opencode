@@ -6,7 +6,7 @@ import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-u
 import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { createActive, useExtension, usePanel, type PanelSidebar, type PanelTab, type SessionView } from "../sdk"
+import { createKeyed, useExtension, usePanel, type PanelSidebar, type PanelTab, type MountedSession } from "../sdk"
 import { current, useShared } from "./context"
 import SessionFileList, { applyFileListKeyDown } from "./list"
 import { fileTabPath, isFileTab } from "./path"
@@ -16,7 +16,7 @@ import { SessionFileView } from "./view"
 const emptyFiles: string[] = []
 
 export function SessionFileBrowserTab(props: {
-  session: SessionView
+  session: MountedSession
   /** The file tab to show; absent while browsing. */
   id?: string
   placeholder: boolean
@@ -186,7 +186,7 @@ export function SessionFileBrowserTab(props: {
 }
 
 /** The side panel render every file tab and the "Open file" launcher share. */
-export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: SessionView }) {
+export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: MountedSession }) {
   const panel = usePanel()
   const shared = useShared()
   const id = () => props.tab().id
@@ -195,14 +195,14 @@ export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: S
   const changes = () => current(shared.changes())
 
   // Change markers in the tree load while a file tab shows, as the side panel did.
-  createActive(
+  createKeyed(
     () => (panel.visible() && !placeholder() ? changes() : undefined),
     (service) => onCleanup(service.watch(props.session, "files")),
   )
 
   // Keep each file tab's last selection for the moment before a session's file view state loads. The handoff
   // outlives this view: the session's next view reads it.
-  createActive(
+  createKeyed(
     () => {
       const file = props.session.file
 

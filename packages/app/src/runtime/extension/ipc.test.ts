@@ -1,21 +1,22 @@
 import { expect, test } from "bun:test"
-import type { Remote } from "@opencode/gui-extensions/sdk"
+import type { Ipc } from "@opencode/gui-extensions/sdk"
 import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
-import { createRemotes } from "./remote"
+import { createIpcClients } from "./ipc"
 
-const token: Remote = { kind: "remote", id: "fixture", spec: { id: "fixture", methods: {} } }
+const token: Ipc = { kind: "ipc", id: "fixture", spec: { id: "fixture", methods: {} } }
+
 type Reply = { readonly available: boolean; readonly state?: unknown }
 
 // Each row sends an event while the subscribe reply is in flight; the older reply must not undo it.
 test.each<[string, BridgeMessage, Reply, { available: boolean; state: unknown }]>([
   [
-    "the remote appearing",
+    "the Ipc appearing",
     { type: "available", remote: "fixture", available: true },
     { available: false },
     { available: true, state: undefined },
   ],
   [
-    "the remote going away",
+    "the Ipc going away",
     { type: "available", remote: "fixture", available: false },
     { available: true, state: { count: 1 } },
     { available: false, state: undefined },
@@ -28,29 +29,31 @@ test.each<[string, BridgeMessage, Reply, { available: boolean; state: unknown }]
   ],
 ])("a subscribe reply older than %s keeps the event's data", async (_, event, reply, expected) => {
   const bridge = fakeBridge()
-  const remotes = createRemotes(bridge.value)
-  expect(remotes.client(token)).toBeUndefined()
+  const ipcs = createIpcClients(bridge.value)
+  expect(ipcs.client(token)).toBeUndefined()
   bridge.emit(event)
   bridge.reply(reply)
   await Bun.sleep(0)
-  const client = remotes.client(token)
+  const client = ipcs.client(token)
   expect({ available: !!client, state: client?.state() }).toEqual(expected)
-  remotes.dispose()
+  ipcs.dispose()
 })
 
 function fakeBridge() {
   const listeners = new Set<(message: BridgeMessage) => void>()
   const pending = Promise.withResolvers<Reply>()
+
   const value: Bridge = {
     call: () => Promise.reject(new Error("no calls in this test")),
     subscribe: () => pending.promise,
     on: (listener) => {
       listeners.add(listener)
+
       return () => {
         listeners.delete(listener)
       }
     },
-    surface: () => {},
+    embed: () => {},
     capture: async () => undefined,
     menubar: () => {},
     configure: () => {},
@@ -65,6 +68,7 @@ function fakeBridge() {
       asset: () => "",
     },
   }
+
   return {
     value,
     emit: (message: BridgeMessage) => listeners.forEach((listener) => listener(message)),

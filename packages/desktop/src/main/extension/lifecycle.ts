@@ -26,8 +26,8 @@ export type Revision = (instance: Instance) => {
   readonly setup: () => void | Cleanup | Promise<void | Cleanup>
 }
 
-/** Writes a structured log entry; the logger serializes each field of `data` as it is. */
-export type Log = <Data extends Readonly<Record<string, unknown>>>(message: string, data: Data) => void
+/** Writes a structured error log entry; the logger serializes each field of `data` as it is. */
+export type ErrorLog = <Data extends Readonly<Record<string, unknown>>>(message: string, data: Data) => void
 
 type Outcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown }
 
@@ -59,7 +59,7 @@ export function createLifecycle(input: {
   readonly enabled: (id: string) => boolean
   /** A failure was recorded. */
   readonly changed: () => void
-  readonly log: Log
+  readonly log: ErrorLog
 }) {
   const active = new Map<string, Running>()
   // One serialized lifecycle per extension: each operation starts after the previous one fully settled.
@@ -344,7 +344,7 @@ export function createLifecycle(input: {
      */
     restart(keep: Scope, handoff: () => Promise<void>) {
       if (![...active.values()].some((running) => running.instance.scope === keep))
-        return Promise.reject(new Error("MainApp.restart keeps only an active extension's ctx.scope"))
+        return Promise.reject(new Error("Lifecycle.restart keeps only an active extension's ctx.scope"))
       kept.add(keep)
 
       return Promise.resolve()

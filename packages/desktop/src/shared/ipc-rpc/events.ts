@@ -30,7 +30,7 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
   revision: Schema.Number,
 }) {}
 
-// A main extension's remote state for this window, already encoded with the remote's schema.
+// A main extension's Ipc state for this window, already encoded with the Ipc's schema.
 export class ExtensionState extends Schema.TaggedClass<ExtensionState>()("ExtensionState", {
   remote: Schema.String,
   state: ExtensionPayload,
@@ -68,7 +68,9 @@ export const DesktopEvent = Schema.Union([
   ExtensionsChanged,
   ExtensionMenubarChanged,
 ])
+
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
+
 export const EventRpcs = RpcGroup.make(DesktopEvents)

@@ -2,7 +2,7 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Icon } from "@opencode/ui/icon"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { createMemo, Show } from "solid-js"
-import { App, useExtension, type Project, type SessionView } from "../sdk"
+import { Locale, useExtension, type Project, type MountedSession } from "../sdk"
 import { BackgroundWorkSummary } from "./background"
 import { workspaceDirectories } from "./paths"
 import { ProjectSummaryCard } from "./project-card"
@@ -17,7 +17,7 @@ export type Disclosure = {
 }
 
 export type SummaryPanelProps = {
-  session: SessionView
+  session: MountedSession
   project: Project
   shown?: boolean
   mobile?: boolean
@@ -31,18 +31,23 @@ export type SummaryPanelProps = {
 
 export default function SessionSummaryPanel(props: SummaryPanelProps) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const locale = ctx.use(Locale)
   const data = props.session.server.data
+
   const placement = createMemo(() =>
-    props.mobile ? "top-end" : app.direction() === "rtl" ? "right-start" : "left-start",
+    props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-start" : "left-start",
   )
+
   const location = () => {
     if (props.session.local) return ctx.t("workspace.local")
+
     const workspace = workspaceDirectories(props.project).find((item) =>
       containsDirectory(item, props.session.directory),
     )
+
     return getFilename(workspace ?? props.session.directory)
   }
+
   const branch = () => data.location.vcs.info({ directory: props.session.directory })?.branch.current
   const baseBranch = () => data.location.vcs.info({ directory: props.project.worktree })?.branch.current
 

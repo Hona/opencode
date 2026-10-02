@@ -1,7 +1,7 @@
 import { Effect, Fiber, Schedule } from "effect"
 import { onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createActive, type RemoteClient } from "../sdk"
+import { createKeyed, type IpcClient } from "../sdk"
 import type { Ssh, SshConfig, SshItem } from "./contract"
 import { isSshConnecting } from "./name"
 
@@ -10,7 +10,7 @@ export type SshController = ReturnType<typeof createSshController>
 export function createSshController(input: {
   items: () => readonly SshItem[]
   /** Undefined while the main side is loading or gone. */
-  api: Accessor<RemoteClient<(typeof Ssh)["spec"]> | undefined>
+  api: Accessor<IpcClient<(typeof Ssh)["spec"]> | undefined>
   /** Resolves once this window's state includes `revision`. */
   refresh: (revision: number) => Promise<void>
   error: () => void
@@ -81,7 +81,7 @@ export function createSshController(input: {
     Effect.runFork(Effect.forEach([...tasks.values()], Fiber.interrupt, { discard: true }))
   })
   // Attempts whose server reached an outcome in main's state: they settle and tell whoever waits on them.
-  createActive(
+  createKeyed(
     () => {
       const done = input.items().flatMap((item) => {
         const attempt = attempts[item.config.id]

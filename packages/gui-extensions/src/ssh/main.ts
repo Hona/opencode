@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { Cli, MainStorage, Windows, type MainContext } from "../sdk/main"
+import { Cli, Storage, Windows, type MainContext } from "../sdk/main"
 import { SshFailure } from "./command"
 import { Ssh, SshConfig } from "./contract"
 import { createSshController } from "./controller"
@@ -9,7 +9,7 @@ import { createSshController } from "./controller"
 const setup = async (ctx: MainContext) => {
   const cli = ctx.use(Cli)
 
-  const saved = ctx.use(MainStorage).store("servers", {
+  const saved = ctx.use(Storage).store("servers", {
     schema: Schema.Array(SshConfig),
     initial: [],
     from: "settings:ssh.servers",
@@ -31,7 +31,7 @@ const setup = async (ctx: MainContext) => {
 
   const status = { revision: 0 }
 
-  const provided = ctx.provide(Ssh, {
+  const provider = ctx.provide(Ssh, {
     // Each window sees only the prompts of the attempts it started.
     state: (window: number) => ({ ...runtime.runSync(controller.state(window)), revision: status.revision }),
     start: async (input, caller) => {
@@ -48,7 +48,7 @@ const setup = async (ctx: MainContext) => {
 
   function push() {
     status.revision++
-    provided.changed()
+    provider.changed()
 
     return status.revision
   }

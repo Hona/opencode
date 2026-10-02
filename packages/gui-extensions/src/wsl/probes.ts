@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import type { Accessor } from "solid-js"
-import { createActive, type RemoteClient } from "../sdk"
+import { createKeyed, type IpcClient } from "../sdk"
 import type { Wsl, WslInstalledDistro, WslServersState } from "./contract"
 import {
   addServerProbePlan,
@@ -13,7 +13,7 @@ import {
 
 export function useWslAddServerProbes(input: {
   state: Accessor<WslServersState | undefined>
-  api: () => RemoteClient<(typeof Wsl)["spec"]>
+  api: () => IpcClient<(typeof Wsl)["spec"]>
   view: Accessor<WslAddServerView>
   adding: Accessor<boolean>
   busy: Accessor<boolean>
@@ -62,7 +62,7 @@ export function useWslAddServerProbes(input: {
   })
 
   // Asks main to probe; its answer arrives as a new state.
-  createActive(next, (command) => probe.mutate(command))
+  createKeyed(next, (command) => probe.mutate(command))
 
   return {
     probingAddable: () => probe.isPending && probe.variables?.kind === "addable",

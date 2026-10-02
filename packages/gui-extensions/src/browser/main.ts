@@ -1,28 +1,34 @@
-import { MainApp, MainStorage, Surfaces, Windows, type Setup } from "../sdk/main"
+import { Embeds, Servers, Storage, Windows, type Setup } from "../sdk/main"
 import type { Pane } from "./pane"
-import { BrowserPane } from "./remote"
+import { BrowserPane } from "./ipc"
+
+/** The pane once a window first registered one. */
+type LoadedPane = { pane?: Promise<Pane> }
 
 const setup: Setup = (ctx) => {
   const windows = ctx.use(Windows)
-  const app = ctx.use(MainApp)
-  const storage = ctx.use(MainStorage)
-  const surfaces = ctx.use(Surfaces)
-  const loaded: { pane?: Promise<Pane> } = {}
+  const servers = ctx.use(Servers)
+  const storage = ctx.use(Storage)
+  const embeds = ctx.use(Embeds)
+  const loaded: LoadedPane = {}
+
   // The pane brings the CDP driver and the full RPC client with every protocol schema;
   // load it when a window first registers a pane instead of at startup.
   const load = () =>
     (loaded.pane ??= import("./pane").then((module) =>
       module.createBrowserPane({
         windows,
-        app,
+        servers,
         storage,
-        surfaces,
-        emit: (window, value) => provided.emit("event", value, window),
+        embeds,
+        emit: (window, value) => provider.emit("event", value, window),
       }),
     ))
+
   // Every other call names a binding, and bindings exist only after a register loaded the pane.
   const existing = () => loaded.pane ?? Promise.reject(new Error("browser.pane.unavailable"))
-  const provided = ctx.provide(BrowserPane, {
+
+  const provider = ctx.provide(BrowserPane, {
     register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
     load: async (input, caller) => (await existing()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await existing()).command(caller.window, input.binding, input.command),
@@ -32,7 +38,8 @@ const setup: Setup = (ctx) => {
       (await existing()).highlight(caller.window, input.binding, input.tabID, input.ref),
     close: async (input, caller) => (await existing()).close(caller.window, input.binding),
   })
-  // The host withdraws the remote before this runs, so windows hear nothing; they suspend on the remote going away.
+
+  // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
   ctx.cleanup(async () => {
     if (loaded.pane) await (await loaded.pane).dispose()
   })

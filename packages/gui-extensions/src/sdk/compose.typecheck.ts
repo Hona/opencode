@@ -4,15 +4,15 @@ import type { Accessor } from "solid-js"
 import { Schema } from "effect"
 import {
   Extension,
-  Remote,
-  Service,
+  Ipc,
+  Contract,
   Store,
   type Composition,
   type Duplicate,
   type Live,
   type Missing,
   type MissingMain,
-  type RemotesProvided,
+  type IpcsProvided,
   type Setup,
 } from "./index"
 
@@ -20,13 +20,13 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ?
 
 const equal = <A, B>(value: Equal<A, B>) => value
 
-const Tree = Service.define<{ open(path: string): void }, "fixture.tree">("fixture.tree")
+const Tree = Contract.define<{ open(path: string): void }, "fixture.tree">("fixture.tree")
 
-const Changes = Service.define<{ count(): number }, "fixture.changes">("fixture.changes")
+const Changes = Contract.define<{ count(): number }, "fixture.changes">("fixture.changes")
 
-const Unlisted = Service.define<{ ping(): void }, "fixture.unlisted">("fixture.unlisted")
+const Unlisted = Contract.define<{ ping(): void }, "fixture.unlisted">("fixture.unlisted")
 
-const Pane = Remote.define({ id: "fixture.pane", methods: { open: { input: Schema.String } } })
+const Pane = Ipc.define({ id: "fixture.pane", methods: { open: { input: Schema.String } } })
 
 const View = Schema.Struct({ open: Schema.Boolean })
 
@@ -38,7 +38,7 @@ const Consumer = Extension.define({
   id: "consumer",
   uses: { changes: Changes },
   requires: { tree: Tree, pane: Pane },
-  stores: { view: Store.app(View, { open: false }), draft: Store.session(View, { open: true }) },
+  stores: { view: Store.global(View, { open: false }), draft: Store.session(View, { open: true }) },
 })
 
 // A composition with every hard provider and no duplicate compiles, and is the identity at runtime.
@@ -65,30 +65,30 @@ equal<
   { readonly "duplicate provider": Duplicate<"fixture.tree"> }
 >(true)
 
-// A renderer Remote needs an entry with a main module that provides it in the main composition.
+// A renderer Ipc needs an entry with a main module that provides it in the main composition.
 export const main = Extension.compose({ ...PaneProvider, main: async () => ({ default: () => undefined }) })
 
-export const remotes: RemotesProvided<typeof renderer, typeof main> = true
+export const ipcs: IpcsProvided<typeof renderer, typeof main> = true
 
 export const mainless = Extension.compose(PaneProvider)
 
 // @ts-expect-error no main entry provides fixture.pane
-export const unprovided: RemotesProvided<typeof renderer, typeof mainless> = true
+export const unprovided: IpcsProvided<typeof renderer, typeof mainless> = true
 
-equal<RemotesProvided<typeof renderer, typeof mainless>, MissingMain<"fixture.pane">>(true)
+equal<IpcsProvided<typeof renderer, typeof mainless>, MissingMain<"fixture.pane">>(true)
 
 // A reference types like its token, resolves from the full token, and is refused in `requires`.
-const PaneRef = Remote.ref<typeof Pane>("fixture.pane")
+const PaneRef = Ipc.ref<typeof Pane>("fixture.pane")
 
 const RefConsumer = Extension.define({ id: "ref", uses: { pane: PaneRef } })
 
-export const referenced: RemotesProvided<[typeof RefConsumer], typeof main> = true
+export const referenced: IpcsProvided<[typeof RefConsumer], typeof main> = true
 
 export const resolver: Setup<typeof RefConsumer> = (ctx) => {
   const full = ctx.use(Pane)
   equal<typeof full, typeof ctx.uses.pane>(true)
   // @ts-expect-error the id must be the token's
-  Remote.ref<typeof Pane>("fixture.other")
+  Ipc.ref<typeof Pane>("fixture.other")
 }
 
 // @ts-expect-error a reference cannot be required

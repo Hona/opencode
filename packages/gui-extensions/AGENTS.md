@@ -5,8 +5,8 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 ## Structure
 
 - One folder per extension: `index.ts` (`Extension.define({ id, os?, i18n })`), `contract.ts`, `renderer.tsx`, optional `main.ts`, and `i18n/<locale>.ts`.
-- `src/renderer.ts` and `src/main.ts` are the only files that list the built-ins, each through `Extension.compose`. Main never imports renderer code. `src/builtins.typecheck.ts` fails the typecheck when a renderer `uses` or `requires` a Remote that no main entry provides.
-- Another extension may import only your `contract.ts` (tokens and schemas, no runtime code). Declare what you use in `uses` (or `requires`); every consumer must still work when the provider is disabled (see "Failure is part of the contract"). To declare a Remote without loading its schemas at startup, use `Remote.ref<typeof Token>("id")` and `ctx.use(Token)` from the chunk that loads them.
+- `src/renderer.ts` and `src/main.ts` are the only files that list the built-ins, each through `Extension.compose`. Main never imports renderer code. `src/builtins.typecheck.ts` fails the typecheck when a renderer `uses` or `requires` an Ipc that no main entry provides.
+- Another extension may import only your `contract.ts` (tokens and schemas, no runtime code). Declare what you use in `uses` (or `requires`); every consumer must still work when the provider is disabled (see "Failure is part of the contract"). To declare an Ipc without loading its schemas at startup, use `Ipc.ref<typeof Token>("id")` and `ctx.use(Token)` from the chunk that loads them.
 - Never import `@opencode/app`, `@opencode/desktop`, or `@/` paths. Import CSS with `?inline` and contribute it through `ctx.add(Style, css)`. No module-level state: keep state inside `setup`. `bun run lint` enforces these rules.
 - `bun run lint:changed` must pass before you finish: every file you add or edit has no oxlint problem at all, including the warn-level anti-slop rules (`unknown` parameters and returns, unchecked type assertions, widened types, unsafe dictionaries, missing spacing). Touching a file means leaving the whole file clean, older warnings included. Fix the code; suppress only with a `SAFETY:` comment that states a real checked invariant.
 
@@ -19,23 +19,23 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 
 An instance lives from `setup` until it is disabled, reloaded, removed, or its window closes. A reload can land at any `await`, so code that outlives a tick must prove it still belongs to the live instance.
 
-- Everything registered through `ctx` (contributions, services, remotes, menu items, surfaces) is withdrawn by the host when the instance goes away. Anything else you start (timers, DOM or remote listeners, subscriptions) needs `ctx.cleanup`. A cleanup registered after disposal runs at once.
-- `setup` may be async. After every `await`, return if `ctx.signal.aborted` before touching state or contributing. Pass `ctx.signal`, or a signal derived from it, to remote calls and long work.
+- Everything registered through `ctx` (contributions, contracts, Ipcs, menu items, embeds) is withdrawn by the host when the instance goes away. Anything else you start (timers, DOM or Ipc listeners, subscriptions) needs `ctx.cleanup`. A cleanup registered after disposal runs at once.
+- `setup` may be async. After every `await`, return if `ctx.signal.aborted` before touching state or contributing. Pass `ctx.signal`, or a signal derived from it, to Ipc calls and long work.
 - Never keep a value from a shorter lifetime in a longer one. Read a server's `client`, `data` and `url` from its live `ServerRef` each time: a restarted or re-authenticated server gets a new controller under the same id. Keep per-session state in a session-scoped store, or in a map keyed by session that you prune.
-- Main: `MainApp.restart(handoff, { keep: ctx.scope })` keeps the extension that owns `ctx.scope` (the caller by default) active until the handoff settles; when it rejects, return to a state the user can retry from. `ctx.cleanup` adds a finalizer to `ctx.scope`.
+- Main: `Lifecycle.restart(handoff, { keep: ctx.scope })` keeps the extension that owns `ctx.scope` (the caller by default) active until the handoff settles; when it rejects, return to a state the user can retry from. `ctx.cleanup` adds a finalizer to `ctx.scope`.
 
 ## Failure is part of the contract
 
 - A `uses` contract is a `Live` accessor: `pending` while the provider loads, `inactive` while it is disabled, failed, or restarting. Every user action branches on it and still answers: show an unavailable state (as WSL's "WSL unavailable" does), never a silent `return` or an endless spinner.
-- A remote that goes away is a suspension, not a failure: keep what the user had (for example the browser's tab inventory) and resume when it returns, without a retry timer.
-- A remote call can reject while the event that explains it is still in flight; events and call replies travel on different channels. When main reports an outcome as an event, let the event decide, and treat a rejection as final only for errors main throws before any event (validation, missing endpoint).
-- The host orders remote state for you: an event always wins over an older snapshot. Do not re-fetch state to fix ordering.
+- An Ipc that goes away is a suspension, not a failure: keep what the user had (for example the browser's tab inventory) and resume when it returns, without a retry timer.
+- An Ipc call can reject while the event that explains it is still in flight; events and call replies travel on different channels. When main reports an outcome as an event, let the event decide, and treat a rejection as final only for errors main throws before any event (validation, missing endpoint).
+- The host orders Ipc state for you: an event always wins over an older snapshot. Do not re-fetch state to fix ordering.
 
 ## Stored state
 
-- Desktop storage loads over IPC; web storage is synchronous, so a read before load passes every web e2e test and still breaks desktop. Declare stores (`Store.app`, `Store.session`): an app store is loaded before setup, a session store's `value` is undefined until it loads, and `update` waits for the load. `Storage.store`, for keys only known at runtime, returns the same `Persisted`; derive nothing from it, such as a request, before `value` is defined.
+- Desktop storage loads over IPC; web storage is synchronous, so a read before load passes every web e2e test and still breaks desktop. Declare stores (`Store.global`, `Store.session`): a global store is loaded before setup, a session store's `value` is undefined until it loads, and `update` waits for the load. `Storage.store`, for keys only known at runtime, returns the same `Persisted`; derive nothing from it, such as a request, before `value` is defined.
 - Moving a stored value goes through `from` (and `from.sessions` for one session's slice of an app key). Keep the old field readable until every user has migrated; never drop user data.
-- `MainStorage` writes reach disk at once; do not batch them yourself.
+- Main `Storage` writes reach disk at once; do not batch them yourself.
 
 ## Panels and layout
 
@@ -50,9 +50,9 @@ An instance lives from `setup` until it is disabled, reloaded, removed, or its w
 
 Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect) and [Solid.js Best Practices](https://www.brenelz.com/posts/solid-js-best-practices/) before writing reactive code here. In short:
 
-- `bun run lint` bans importing `createEffect`, `createRenderEffect` and `createComputed` outside `src/sdk/`. Run side work per provider generation or value with `createActive(source, fn, { otherwise })`, fetch with `createLatest`, and keep per-visit state with `createVisitState`.
+- `bun run lint` bans importing `createEffect`, `createRenderEffect` and `createComputed` outside `src/sdk/`. Run side work per provider generation or value with `createKeyed(source, fn, { otherwise })`, fetch with `createLatest`, and keep per-visit state with `createVisitState`.
 - Derive, don't sync. A value computed from other state is a `createMemo` or a plain function, never an effect that calls a setter. Never mirror state into a second store, signal, or `Map` through an effect.
-- An effect (`createActive`) synchronizes with something outside Solid: the DOM, a third-party widget, a native surface, a remote subscription, a chunk preload. Comment what it syncs with when that isn't obvious.
+- An effect (`createKeyed`) synchronizes with something outside Solid: the DOM, a third-party widget, an embed, an Ipc subscription, a chunk preload. Comment what it syncs with when that isn't obvious.
 - Logic caused by a user action belongs in that action's handler, not in an effect that watches the state the action changed. If several handlers share it, call one function from each.
 - Reset state on an identity change by keying the subtree (`<Show keyed>`) or by storing an id and deriving the selection from it. To forget a selection when the user navigates away and back, derive a visit token (`createMemo(on(key, () => ({})))`) and keep the selection only while its token matches. Never reset state in an effect.
 - No effect chains, and no effect that notifies a parent: update everything in the same handler or `batch`.
@@ -81,5 +81,5 @@ Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-a
 - Follow the Tests section of `packages/app/AGENTS.md`.
 - Unit-test pure logic that carries a contract: path and security checks, storage migration, protocol parsing, archive validation.
 - UI behavior is proven by the app e2e keeper suites. Do not add unit tests that repeat them.
-- Test a main-process entry through its `Remote` contract with real inputs, not through Electron mocks.
-- For lifetime and ordering contracts, drive the race the user hits: a reload during async setup, a rejection that beats its event, a store that loads late (the e2e fixtures can hold desktop storage reads), a remote that goes away and returns.
+- Test a main-process entry through its `Ipc` contract with real inputs, not through Electron mocks.
+- For lifetime and ordering contracts, drive the race the user hits: a reload during async setup, a rejection that beats its event, a store that loads late (the e2e fixtures can hold desktop storage reads), an Ipc that goes away and returns.

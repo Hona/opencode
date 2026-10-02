@@ -1,19 +1,20 @@
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
-import { MainApp, MainStorage, Menubar, type MainContext } from "../sdk/main"
+import { Build, Lifecycle, Log, MenubarItem, Storage, type MainContext } from "../sdk/main"
 import { Updater } from "./contract"
 import { logContext } from "./log"
 import { make } from "./machine"
 
 const setup = async (ctx: MainContext) => {
-  const app = ctx.use(MainApp)
-  const enabled = app.packaged && app.channel !== "dev"
+  const build = ctx.use(Build)
+  const lifecycle = ctx.use(Lifecycle)
+  const enabled = build.packaged && build.channel !== "dev"
   // Holds no resources, so it needs no cleanup.
-  const context = logContext(app.log)
+  const context = logContext(ctx.use(Log).write)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)
 
-  const ready = ctx.use(MainStorage).store("ready", {
+  const ready = ctx.use(Storage).store("ready", {
     schema: Schema.NullOr(Schema.Struct({ version: Schema.String })),
     initial: null,
     from: "settings:opencode.updater/ready",
@@ -21,7 +22,7 @@ const setup = async (ctx: MainContext) => {
 
   // electron-updater loads only in packaged builds that update, after the first window is up.
   const platform = enabled
-    ? await import("./platform").then((module) => runPromise(module.make(app.channel)))
+    ? await import("./platform").then((module) => runPromise(module.make(build.channel)))
     : undefined
 
   if (ctx.signal.aborted) return
@@ -31,12 +32,12 @@ const setup = async (ctx: MainContext) => {
 
   const updater = await runPromise(
     make({
-      currentVersion: app.version,
+      currentVersion: build.version,
       platform,
       // The updater stays active through the handoff, so a failed install returns to a state the user can retry.
       restart: (handoff) =>
         Effect.tryPromise({
-          try: () => app.restart(() => runPromise(handoff), { keep: ctx.scope }),
+          try: () => lifecycle.restart(() => runPromise(handoff), { keep: ctx.scope }),
           catch: (error) => error,
         }),
       persistence: {
@@ -48,13 +49,13 @@ const setup = async (ctx: MainContext) => {
     }).pipe(Scope.provide(scope)),
   )
 
-  const provided = ctx.provide(Updater, {
+  const provider = ctx.provide(Updater, {
     state: () => updater.state(),
     check: () => runPromise(updater.check),
     install: () => runPromise(updater.install),
   })
 
-  publish.changed = () => provided.changed()
+  publish.changed = () => provider.changed()
 
   const show = Effect.gen(function* () {
     const state = yield* updater.check
@@ -100,8 +101,8 @@ const setup = async (ctx: MainContext) => {
   })
 
   ctx.add(
-    Menubar,
-    (): Menubar => ({
+    MenubarItem,
+    (): MenubarItem => ({
       menu: "app",
       id: "check",
       label: ctx.t("menu.check"),
@@ -109,9 +110,9 @@ const setup = async (ctx: MainContext) => {
       enabled: () => enabled,
       run(window) {
         // Beta builds check in the focused window, which can offer the stable installer.
-        if (app.channel !== "beta") return void runFork(show)
+        if (build.channel !== "beta") return void runFork(show)
 
-        if (window) provided.emit("check", null, window.id)
+        if (window) provider.emit("check", null, window.id)
       },
     }),
   )

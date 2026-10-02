@@ -1,29 +1,29 @@
 import { showToast } from "@opencode/ui/toast"
 import { lazy, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { App, Dialogs, Menu, onIdle, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
+import { Build, Dialogs, MenuItem, onIdle, Server, Style, type ServerEntry, type ServerState, type Setup } from "../sdk"
 import type { WslServerItem } from "./contract"
 import type definition from "./index"
 
 const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (ctx.use(App).platform !== "desktop") return
-  const remote = ctx.uses.wsl
+  if (ctx.use(Build).platform !== "desktop") return
+  const ipc = ctx.uses.wsl
   const dialog = ctx.use(Dialogs)
   const Row = lazy(() => import("./row"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
   ctx.cleanup(onIdle(() => void Row.preload()))
 
   const client = () => {
-    const live = remote()
+    const live = ipc()
 
     return live.status === "active" ? live.value : undefined
   }
 
   // Without its main side, loading or gone, every action fails as WSL being unavailable, as the add dialog shows.
   const api = () => {
-    const live = remote()
+    const live = ipc()
 
     if (live.status === "active") return live.value
     throw new Error(ctx.t("error.unavailable"))
@@ -89,10 +89,10 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(Menu, (): Menu => ({ menu: "server.add", id: "add", title: ctx.t("server.add"), order: 2, run: add }))
+  ctx.add(MenuItem, (): MenuItem => ({ menu: "server.add", id: "add", title: ctx.t("server.add"), order: 2, run: add }))
   ctx.add(
-    Menu,
-    (): Menu => ({
+    MenuItem,
+    (): MenuItem => ({
       menu: "server.row",
       id: "retry",
       title: ctx.t("server.retryStart"),

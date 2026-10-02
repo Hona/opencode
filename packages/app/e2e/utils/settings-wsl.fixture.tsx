@@ -192,7 +192,7 @@ export function mount(input: {
 
         return () => listeners.delete(listener)
       },
-      surface: () => undefined,
+      embed: () => undefined,
       capture: async () => undefined,
       menubar: () => undefined,
       configure: () => undefined,

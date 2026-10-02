@@ -2,12 +2,12 @@ import { batch, createRoot, createSignal, getOwner, onCleanup, runWithOwner } fr
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createActive, Layout, Links, Sessions, type Link, type SessionRef, type SetupContext } from "../sdk"
+import { createKeyed, Layout, Links, Sessions, type Link, type SessionRef, type SetupContext } from "../sdk"
 import { readHref } from "./comment"
 import { createConnection, unavailable, type Connection, type InspectEvent, type Registration } from "./connection"
 import type definition from "./index"
 import { isHtml, resolveLink, workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent } from "./remote"
+import { BrowserPane, type PaneEvent } from "./ipc"
 
 type Session = Pick<SessionRef, "key">
 
@@ -73,8 +73,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
-  // The SDK removes the listener when the remote's generation ends.
-  createActive(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
+  // The SDK removes the listener when the Ipc's generation ends.
+  createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
 
   const wakeCurrent = () => {
     if (document.visibilityState !== "visible") return
@@ -83,10 +83,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (view) live.get(view.key)?.connection.wake()
   }
 
-  // The pane's remote goes away while its main extension reloads or is disabled, taking every binding with it.
-  // Each attachment keeps its tabs and registers again once the remote is back. Created before the first attachment,
+  // The pane's Ipc goes away while its main extension reloads or is disabled, taking every binding with it.
+  // Each attachment keeps its tabs and registers again once the Ipc is back. Created before the first attachment,
   // so its first run finds nothing to refresh or wake.
-  createActive(
+  createKeyed(
     pane,
     () => {
       live.forEach((entry) => entry.connection.refresh())
@@ -198,7 +198,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     // Mirrors the desktop's inventory and focus requests into the strip: writes held while the session's location was
     // unknown land once the server reports it.
     const unwatch = createRoot((dispose) => {
-      createActive(
+      createKeyed(
         () => ref.location,
         () =>
           batch(() => {
@@ -222,7 +222,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   // The routed session attaches, once its server is compatible.
-  createActive(() => {
+  createKeyed(() => {
     const view = sessions.current()
 
     if (!view?.id) return
@@ -233,7 +233,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // An attachment closes with its shell tab, or when its server stops being compatible. The store's keys mirror `live`,
   // and reading them follows new attachments.
-  createActive(
+  createKeyed(
     () => {
       const owned = new Set(sessions.list().map((ref) => ref.key))
 
@@ -251,7 +251,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // These are edges, not a reactive dependency on suspended state: eviction while the window
   // remains focused must not immediately reopen the browser and defeat resource cleanup.
-  createActive(() => sessions.current()?.key, wakeCurrent)
+  createKeyed(() => sessions.current()?.key, wakeCurrent)
   makeEventListener(window, "focus", wakeCurrent)
   makeEventListener(document, "visibilitychange", wakeCurrent)
   makeEventListener(document, "pointerdown", wakeCurrent)
@@ -374,7 +374,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
      * e.g. after a suspension, has no page for the tab and loads it again.
      */
     load(session: Session, tabID: Browser.TabID) {
-      createActive(
+      createKeyed(
         () => attachment(session)?.registration,
         () => live.get(session.key)?.registration?.load(tabID),
       )

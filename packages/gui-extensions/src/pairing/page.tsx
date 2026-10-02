@@ -6,10 +6,10 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { renderSVG } from "uqr"
-import { Dialogs, System, useExtension, type Live, type RemoteClient } from "../sdk"
+import { Dialogs, System, useExtension, type Live, type IpcClient } from "../sdk"
 import type { Pairing } from "./contract"
 
-type Client = RemoteClient<typeof Pairing.spec>
+type Client = IpcClient<typeof Pairing.spec>
 
 // The page shows nothing until the main side is up, and again while it is away.
 export default function PairingPage(props: { pairing: Accessor<Live<Client>> }) {

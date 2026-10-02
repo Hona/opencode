@@ -4,7 +4,7 @@ import { Collapsible } from "@opencode/ui/collapsible"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import type { ChangeKind } from "../review/contract"
-import { createActive, type FileNode, type SessionView } from "../sdk"
+import { createKeyed, type FileNode, type MountedSession } from "../sdk"
 import { startFileDrag } from "./drag"
 
 const MAX_DEPTH = 128
@@ -154,7 +154,7 @@ const FileTreeNode = (
 }
 
 export default function FileTree(props: {
-  session: SessionView
+  session: MountedSession
   path: string
   class?: string
   nodeClass?: string
@@ -280,13 +280,13 @@ export default function FileTree(props: {
   })
 
   // A filter opens the directories of its files at the top level.
-  createActive(filter, (current) =>
+  createKeyed(filter, (current) =>
     dirsToExpand({ level, filter: current, expanded: (dir) => file.tree.state(dir)?.expanded ?? false }).forEach(
       (dir) => file.tree.expand(dir),
     ),
   )
 
-  createActive(
+  createKeyed(
     () => props.path,
     (path) => {
       if (!shouldListRoot({ level, dir: file.tree.state(path) })) return

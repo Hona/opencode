@@ -15,7 +15,7 @@ import {
   type PanelFrame,
   type PanelSidebar,
   type PanelTab,
-  type SessionView,
+  type MountedSession,
 } from "@opencode/gui-extensions/sdk"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -83,7 +83,7 @@ export function createPanelSidebar(): PanelSidebar {
 }
 
 /** Every panel extensions offer in one region of the routed session, merged with the stored strip. */
-export function createRegion(input: { region: Panel["region"]; view: SessionView; tabs: Tabs }) {
+export function createRegion(input: { region: Panel["region"]; view: MountedSession; tabs: Tabs }) {
   const host = useExtensionHost()
   const stored = () => input.tabs().all()
   const providers = createMemo(() => host.items(Panel).filter((item) => item.value.region === input.region))
@@ -224,7 +224,7 @@ export type Region = ReturnType<typeof createRegion>
 /** Grouped content stays mounted while any member is listed; other tabs mount only while selected. */
 export function RegionContent(props: {
   region: Region
-  view: SessionView
+  view: MountedSession
   frame: Omit<PanelFrame, "visible" | "open"> & { shown: Accessor<boolean> }
 }) {
   const groups = createMemo(() =>
@@ -324,7 +324,7 @@ function groupKey(entry: RegionEntry) {
 
 /** The dock region: host frame, sizing, and resize around the dock panel an extension renders. */
 export function DockRegion(props: {
-  view: SessionView
+  view: MountedSession
   sidebar: PanelSidebar
   stacked?: boolean
   fill?: boolean
@@ -364,7 +364,7 @@ export function DockRegion(props: {
   const opened = createMemo(() => view().dock.opened())
   const height = createMemo(() => view().dock.height())
   const max = () => store.viewport * 0.6
-  const pane = () => Math.min(height(), max())
+  const regionHeight = () => Math.min(height(), max())
   const stacked = createMemo(() => isDesktop() && !!props.stacked)
 
   const panelHeight = createMemo(() => {
@@ -372,13 +372,13 @@ export function DockRegion(props: {
 
     if (!opened()) return "0px"
 
-    if (isDesktop()) return stacked() ? `${pane()}px` : "100%"
+    if (isDesktop()) return stacked() ? `${regionHeight()}px` : "100%"
 
-    return `${pane()}px`
+    return `${regionHeight()}px`
   })
 
   const contentHeight = createMemo(
-    () => props.contentHeight ?? (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : `${pane()}px`),
+    () => props.contentHeight ?? (isDesktop() ? (stacked() ? `${regionHeight()}px` : "100%") : `${regionHeight()}px`),
   )
 
   const present = createMemo(() => opened() || !!props.present)
@@ -427,7 +427,7 @@ export function DockRegion(props: {
         <ResizeHandle
           class="-top-1"
           direction="vertical"
-          size={pane()}
+          size={regionHeight()}
           min={100}
           max={max()}
           collapseThreshold={50}
@@ -474,7 +474,7 @@ export function DockRegion(props: {
 /** Renders one panel as a narrow-screen view. */
 export function MobilePanel(props: {
   entry: RegionEntry
-  view: SessionView
+  view: MountedSession
   sidebar: PanelSidebar
   visible: boolean
   open: Accessor<readonly string[]>

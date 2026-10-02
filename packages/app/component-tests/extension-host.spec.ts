@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import type { Owner } from "solid-js"
-import type { Context, Dialogs, Service } from "@opencode/gui-extensions/sdk"
+import type { Context, Contract, Dialogs } from "@opencode/gui-extensions/sdk"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
@@ -82,8 +82,8 @@ story("a dialog service kept from before a reload opens and closes nothing under
   const result = await page.evaluate(async (fixture) => {
     const { mountExtensionHost, Dialogs } = await import(fixture)
     const host = mountExtensionHost()
-    const services: Dialogs[] = []
-    const setup = (ctx: Context) => void services.push(ctx.use(Dialogs))
+    const dialogs: Dialogs[] = []
+    const setup = (ctx: Context) => void dialogs.push(ctx.use(Dialogs))
     const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
     const shown = (value: string) => !!document.body.textContent?.includes(value)
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -92,7 +92,7 @@ story("a dialog service kept from before a reload opens and closes nothing under
     host.reload()
     host.load(setup, 1)
     await wait(20)
-    const [stale, fresh] = services
+    const [stale, fresh] = dialogs
     stale.push(text("stale dialog"))
     fresh.push(text("fresh dialog"))
     await wait(50)
@@ -111,11 +111,11 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
   const shown = await page.evaluate(async (fixture) => {
     const { mountExtensionHost, Dialogs } = await import(fixture)
     const host = mountExtensionHost()
-    const services: Dialogs[] = []
+    const dialogs: Dialogs[] = []
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-    host.load((ctx: Context) => void services.push(ctx.use(Dialogs)), 0)
+    host.load((ctx: Context) => void dialogs.push(ctx.use(Dialogs)), 0)
     await wait(20)
-    services[0].push(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
+    dialogs[0].push(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
     host.reload()
     await wait(300)
     const outcome = !!document.body.textContent?.includes("same tick dialog")
@@ -160,7 +160,7 @@ story(
   "a registration is withdrawn with the scope that made it, and at once when that scope already ended",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
-      const { mountExtensions, until, createActive, createSignal, getOwner, runWithOwner } = await import(fixture)
+      const { mountExtensions, until, createKeyed, createSignal, getOwner, runWithOwner } = await import(fixture)
       const point = { kind: "point" as const, id: "fixture-scoped" }
       const scope: Scope = { end: () => {} }
 
@@ -173,7 +173,7 @@ story(
                 const [on, set] = createSignal(true)
                 scope.end = () => set(false)
                 scope.ctx = ctx
-                createActive(on, () => {
+                createKeyed(on, () => {
                   scope.owner = getOwner()
                   ctx.add(point, "during")
                 })
@@ -250,10 +250,10 @@ story("a contribution that throws renders nothing and records the error; the oth
   })
 })
 
-story("an extension that requires a service starts once it is active and restarts with it", async ({ page }) => {
+story("an extension that requires a contract starts once it is active and restarts with it", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
-    const { mountExtensions, until, Service } = await import(fixture)
-    const Tree: Service<{ version: number }, "provider.tree"> = Service.define("provider.tree")
+    const { mountExtensions, until, Contract } = await import(fixture)
+    const Tree: Contract<{ version: number }, "provider.tree"> = Contract.define("provider.tree")
     const providerLoad = Promise.withResolvers<void>()
     const log: string[] = []
     const versions = { value: 0 }
@@ -310,7 +310,7 @@ story("an extension that requires a service starts once it is active and restart
   })
 })
 
-story("declared app stores load before setup, so setup reads the stored value", async ({ page }) => {
+story("declared global stores load before setup, so setup reads the stored value", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountExtensions, until, Schema, Store } = await import(fixture)
     const Prefs = Schema.Struct({ open: Schema.Boolean })
@@ -321,7 +321,7 @@ story("declared app stores load before setup, so setup reads the stored value", 
       definitions: [
         {
           id: "fixture",
-          stores: { prefs: Store.app(Prefs, { open: false }) },
+          stores: { prefs: Store.global(Prefs, { open: false }) },
           renderer: async () => ({
             default: (ctx: Context & { stores: { prefs: { value: { open: boolean } } } }) =>
               void seen.push(ctx.stores.prefs.value.open),

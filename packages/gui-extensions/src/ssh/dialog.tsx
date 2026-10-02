@@ -5,7 +5,7 @@ import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createActive, useExtension } from "../sdk"
+import { createKeyed, useExtension } from "../sdk"
 import type { SshConfig, SshItem } from "./contract"
 import { isSshConnecting, sshName } from "./name"
 import type { SshController } from "./state"
@@ -92,13 +92,13 @@ export function DialogSsh(props: {
   }
 
   // Never let a focused Continue button become Trust between SSH challenges.
-  createActive(
+  createKeyed(
     () => (prompt()?.confirm ? challenge() : undefined),
     () => queueMicrotask(() => cancelButton?.focus()),
   )
 
   // Closes the dialog once the server it started is ready.
-  createActive(
+  createKeyed(
     () => state.started && item()?.stage === "ready" && !ssh.submitting(id) && !state.complete,
     () => {
       setState("complete", true)

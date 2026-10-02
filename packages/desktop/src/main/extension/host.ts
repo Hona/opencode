@@ -2,29 +2,32 @@ import { app, BrowserWindow } from "electron"
 import { builtins } from "@opencode/gui-extensions/main"
 import type { BridgeLayout, BridgeMenubarItem } from "@opencode/gui-extensions/sdk/bridge"
 import {
+  Build,
   Cli,
-  MainApp,
-  MainStorage,
-  Menubar,
-  Surfaces,
+  Embeds,
+  Lifecycle,
+  Log,
+  MenubarItem,
+  Servers,
+  Storage,
   Windows,
   type Caller,
   type Catalog,
   type Cleanup,
+  type Contract,
   type Definition,
-  type Host,
+  type HostApi,
   type MainContext,
-  type MainServer,
+  type ServerEndpoint,
   type Messages,
   type OS,
   type Params,
   type Point,
-  type Provided,
-  type Remote,
-  type RemoteClient,
-  type RemoteImpl,
-  type RemoteSpec,
-  type Service,
+  type Ipc,
+  type IpcClient,
+  type IpcImpl,
+  type IpcProvider,
+  type IpcSpec,
   type MainSetup,
 } from "@opencode/gui-extensions/sdk/main"
 import { Exit, Match, Predicate, Schema } from "effect"
@@ -53,26 +56,26 @@ import type { Database } from "../storage/database"
 import type { StateStore } from "../storage/state"
 import { getLastFocusedWindow, getMainWindows, onMainWindow } from "../windows"
 import { ExtensionError } from "./error"
-import { createLifecycle, type Instance, type Log, type Revision } from "./lifecycle"
+import { createLifecycle, type ErrorLog, type Instance, type Revision } from "./lifecycle"
 import { createManager } from "./manager"
 import { evaluateMain } from "./module"
-import { createMainStorage, namespace } from "./storage"
-import { createSurfaces } from "./surfaces"
+import { createStorage, namespace } from "./storage"
+import { createEmbeds } from "./embeds"
 
 export type ExtensionHost = ReturnType<typeof createHost>
 
 type Loaded = { readonly setup: MainSetup; readonly i18n?: Catalog }
 
-/** A remote method with its spec erased: remotes of every spec share one table, and `call` runs the spec's codecs. */
-type Method = RemoteImpl<RemoteSpec>[string]
+/** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
+type Method = IpcImpl<IpcSpec>[string]
 
-/** A value one of a remote's schemas governs, erased like the methods that take it. */
+/** A value one of an Ipc's schemas governs, erased like the methods that take it. */
 type Value = Parameters<Method>[0]
 
 type Provider = {
   readonly extension: string
   readonly signal: AbortSignal
-  readonly spec: RemoteSpec
+  readonly spec: IpcSpec
   readonly methods: ReadonlyMap<string, Method>
   readonly state?: (window: number) => Value
   readonly listeners: Set<(name: string, data: Value) => void>
@@ -93,18 +96,18 @@ const os = Match.value(process.platform).pipe(
 
 /**
  * The main-process GUI extension host. Every main extension is an app-scoped singleton; windows
- * reach its remotes over the bridge and main scopes state and events by `caller.window`.
+ * reach its Ipcs over the bridge and main scopes state and events by `caller.window`.
  */
 export function createHost(input: {
   readonly db: Database
   readonly state: StateStore
   readonly cli: Cli
-  /** Windows per remote that asked for state; shared with the IPC layer, which records them first. */
+  /** Windows per Ipc that asked for state; shared with the IPC layer, which records them first. */
   readonly subscriptions: Map<string, Set<number>>
   /** The server endpoints each window last pushed. */
   readonly servers: Map<number, readonly ExtensionEndpoint[]>
   readonly restart: (handoff?: () => void | Promise<void>) => Promise<void>
-  readonly log: Log
+  readonly log: ErrorLog
   /** Extension logs at their own level. */
   readonly write: <Data extends Readonly<Record<string, unknown>>>(
     level: "debug" | "info" | "warn" | "error",
@@ -120,10 +123,10 @@ export function createHost(input: {
     (id) => id.startsWith("opencode") || definitions.some((definition) => definition.id === id),
   )
 
-  const surfaces = createSurfaces()
+  const embeds = createEmbeds()
   const entries = new Map<string, Entry>()
-  const services = new Map<string, { readonly extension: string; readonly impl: unknown }>()
-  const remotes = new Map<string, Provider>()
+  const contracts = new Map<string, { readonly extension: string; readonly impl: unknown }>()
+  const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
   const reloads = new Map<string, number>()
@@ -133,8 +136,8 @@ export function createHost(input: {
   const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
   const changed = () => broadcast(new ExtensionsChanged({ list: installed() }))
 
-  const subscribers = (remote: string, window?: number) => {
-    const ids = input.subscriptions.get(remote)
+  const subscribers = (ipc: string, window?: number) => {
+    const ids = input.subscriptions.get(ipc)
 
     if (!ids) return []
 
@@ -150,26 +153,26 @@ export function createHost(input: {
       })
   }
 
-  const pushState = (remote: string, provider: Provider, window?: number) => {
+  const pushState = (ipc: string, provider: Provider, window?: number) => {
     const schema = provider.spec.state
     const stateOf = provider.state
 
     if (!schema || !stateOf) return
-    subscribers(remote, window).forEach((win) => {
+    subscribers(ipc, window).forEach((win) => {
       const encoded = Schema.encodeUnknownExit(schema)(stateOf(win.id))
 
       if (Exit.isFailure(encoded))
-        return input.log("extension state encoding failed", { remote, cause: String(encoded.cause) })
-      emitIpcEvent(win.webContents, new ExtensionState({ remote, state: encoded.value }))
+        return input.log("extension state encoding failed", { remote: ipc, cause: String(encoded.cause) })
+      emitIpcEvent(win.webContents, new ExtensionState({ remote: ipc, state: encoded.value }))
     })
   }
 
   const menubarItems = () => {
     const items = [...entries.values()].flatMap((entry) => {
-      if (entry.point !== Menubar.id) return []
+      if (entry.point !== MenubarItem.id) return []
       const item = read(entry)
 
-      return isMenubar(item) ? [{ id: `${entry.extension}.${item.id}`, extension: entry.extension, item }] : []
+      return isMenubarItem(item) ? [{ id: `${entry.extension}.${item.id}`, extension: entry.extension, item }] : []
     })
 
     const published = new Set(items.map((item) => item.id))
@@ -210,7 +213,7 @@ export function createHost(input: {
       return entry.after === undefined ? item : { ...item, after: entry.after }
     })
 
-  const server = (id: string): MainServer | undefined => {
+  const server = (id: string): ServerEndpoint | undefined => {
     const sidecar = SidecarCredentials.get()
 
     // The app's own server is known here first-hand; the renderer never holds its credential.
@@ -247,13 +250,13 @@ export function createHost(input: {
     }
   }
 
-  const mainApp = {
-    version: VERSION,
-    channel: CHANNEL,
-    packaged: app.isPackaged,
-    server,
-    log: (level, message, data) => input.write(level, message, data ?? {}),
-  } satisfies Omit<MainApp, "restart">
+  const build = { version: VERSION, channel: CHANNEL, packaged: app.isPackaged } satisfies Build
+
+  const servers = { get: server } satisfies Servers
+
+  const desktopLog = {
+    write: (level, message, data) => input.write(level, message, data ?? {}),
+  } satisfies Log
 
   const lifecycle = createLifecycle({
     loader: (id) => loader(id),
@@ -307,9 +310,9 @@ export function createHost(input: {
   const createContext = (id: string, loaded: Loaded, instance: Instance): ReturnType<Revision> => {
     const signal = instance.scope.signal
     const contribute = instance.contribute
-    // Registered first, so it runs last: the instance's surfaces go after everything else it contributed. They are
+    // Registered first, so it runs last: the instance's embeds go after everything else it contributed. They are
     // owned by the instance, so releasing them never touches a replacement's.
-    contribute(() => surfaces.releaseOwner(instance))
+    contribute(() => embeds.releaseOwner(instance))
     const translation: Translation = { catalog: loaded.i18n, messages: loaded.i18n?.en ?? {} }
     translations.add(translation)
     contribute(() => {
@@ -317,7 +320,7 @@ export function createHost(input: {
     })
     const clients = new WeakMap<Provider, unknown>()
 
-    const hosts = new Map<string, unknown>([
+    const apis = new Map<string, unknown>([
       [
         Windows.id,
         {
@@ -335,28 +338,30 @@ export function createHost(input: {
         } satisfies Windows,
       ],
       [
-        Surfaces.id,
+        Embeds.id,
         {
           create: (view, win) => {
-            const surface = surfaces.create(instance, view, win)
+            const embed = embeds.create(instance, view, win)
 
             // Created by a setup that outlived its instance: taken down at once, like any late contribution.
-            if (signal.aborted) contribute(surface.dispose)
+            if (signal.aborted) contribute(embed.dispose)
 
-            return surface
+            return embed
           },
-        } satisfies Surfaces,
+        } satisfies Embeds,
       ],
-      [MainStorage.id, createMainStorage(input.state, id)],
+      [Storage.id, createStorage(input.state, id)],
       [Cli.id, input.cli],
+      [Build.id, build],
+      [Servers.id, servers],
       [
-        MainApp.id,
+        Lifecycle.id,
         {
-          ...mainApp,
           restart: (handoff, options) =>
             lifecycle.restart(options?.keep ?? instance.scope, () => input.restart(handoff)),
-        } satisfies MainApp,
+        } satisfies Lifecycle,
       ],
+      [Log.id, desktopLog],
     ])
 
     function add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup {
@@ -365,10 +370,10 @@ export function createHost(input: {
       const key = `${id}/${++status.sequence}`
       entries.set(key, { point: point.id, extension: id, value: item })
 
-      if (point.id === Menubar.id) scheduleMenubar()
+      if (point.id === MenubarItem.id) scheduleMenubar()
 
       return contribute(() => {
-        if (entries.delete(key) && point.id === Menubar.id) scheduleMenubar()
+        if (entries.delete(key) && point.id === MenubarItem.id) scheduleMenubar()
       })
     }
 
@@ -382,36 +387,36 @@ export function createHost(input: {
       })
     }
 
-    function provide<T>(token: Service<T>, impl: T): Cleanup
-    function provide<S extends RemoteSpec>(token: Remote<S>, impl: RemoteImpl<S>): Provided<S>
-    function provide<T>(token: Service<T> | Remote, impl: T | RemoteImpl<RemoteSpec>) {
-      if (token.kind === "service") {
+    function provide<T>(token: Contract<T>, impl: T): Cleanup
+    function provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+    function provide<T>(token: Contract<T> | Ipc, impl: T | IpcImpl<IpcSpec>) {
+      if (token.kind === "contract") {
         if (signal.aborted) return () => {}
 
         const entry = { extension: id, impl }
-        services.set(token.id, entry)
+        contracts.set(token.id, entry)
 
         return contribute(() => {
-          if (services.get(token.id) === entry) services.delete(token.id)
+          if (contracts.get(token.id) === entry) contracts.delete(token.id)
         })
       }
 
-      // SAFETY: the overloads pair a Remote token only with a RemoteImpl; provideRemote checks each method at runtime.
-      return provideRemote(token, impl as RemoteImpl<RemoteSpec>)
+      // SAFETY: the overloads pair an Ipc token only with an IpcImpl; provideIpc checks each method at runtime.
+      return provideIpc(token, impl as IpcImpl<IpcSpec>)
     }
 
-    const provideRemote = (token: Remote, impl: RemoteImpl<RemoteSpec>): Provided<RemoteSpec> => {
-      const remote = token.id
-      const current = remotes.get(remote)
+    const provideIpc = (token: Ipc, impl: IpcImpl<IpcSpec>): IpcProvider<IpcSpec> => {
+      const ipc = token.id
+      const current = ipcs.get(ipc)
 
       if (current && current.extension !== id)
-        throw new Error(`Remote "${remote}" is already provided by ${current.extension}`)
+        throw new Error(`Ipc "${ipc}" is already provided by ${current.extension}`)
 
       const methods = new Map(
         Object.keys(token.spec.methods).map((name) => {
           const method = Predicate.hasProperty(impl, name) ? impl[name] : undefined
 
-          if (!isMethod(method)) throw new Error(`Remote "${remote}" is missing method "${name}"`)
+          if (!isMethod(method)) throw new Error(`Ipc "${ipc}" is missing method "${name}"`)
 
           return [name, (value: Value, caller: Caller) => method.call(impl, value, caller)] as const
         }),
@@ -428,37 +433,37 @@ export function createHost(input: {
         listeners: new Set(),
       }
 
-      const live = () => remotes.get(remote) === provider
+      const live = () => ipcs.get(ipc) === provider
 
       const dispose = signal.aborted
         ? () => {}
         : contribute(() => {
             if (!live()) return
-            remotes.delete(remote)
-            broadcast(new ExtensionAvailable({ remote, available: false }))
+            ipcs.delete(ipc)
+            broadcast(new ExtensionAvailable({ remote: ipc, available: false }))
           })
 
       if (!signal.aborted) {
-        remotes.set(remote, provider)
-        broadcast(new ExtensionAvailable({ remote, available: true }))
-        pushState(remote, provider)
+        ipcs.set(ipc, provider)
+        broadcast(new ExtensionAvailable({ remote: ipc, available: true }))
+        pushState(ipc, provider)
       }
 
       return {
         changed(window) {
-          if (live()) pushState(remote, provider, window)
+          if (live()) pushState(ipc, provider, window)
         },
         emit(name, data, window) {
           if (!live()) return
           const schema = token.spec.events?.[name]
 
-          if (!schema) throw new Error(`Remote "${remote}" has no event "${name}"`)
+          if (!schema) throw new Error(`Ipc "${ipc}" has no event "${name}"`)
           provider.listeners.forEach((listener) => listener(name, data))
           const encoded = Schema.encodeUnknownExit(schema)(data)
 
           if (Exit.isFailure(encoded))
-            return input.log("extension event encoding failed", { remote, name, cause: String(encoded.cause) })
-          const event = new ExtensionEvent({ remote, name, data: encoded.value })
+            return input.log("extension event encoding failed", { remote: ipc, name, cause: String(encoded.cause) })
+          const event = new ExtensionEvent({ remote: ipc, name, data: encoded.value })
 
           if (window === undefined) return broadcast(event)
           const win = BrowserWindow.fromId(window)
@@ -469,20 +474,20 @@ export function createHost(input: {
       }
     }
 
-    function use<T>(token: Host<T>): T
-    function use<T>(token: Service<T>): Accessor<T | undefined>
-    function use<S extends RemoteSpec>(token: Remote<S>): Accessor<RemoteClient<S> | undefined>
-    function use(token: Host<unknown> | Service<unknown> | Remote) {
-      if (token.kind === "host") {
-        if (!hosts.has(token.id)) throw new Error(`Host service "${token.id}" is unavailable in the main process`)
+    function use<T>(token: HostApi<T>): T
+    function use<T>(token: Contract<T>): Accessor<T | undefined>
+    function use<S extends IpcSpec>(token: Ipc<S>): Accessor<IpcClient<S> | undefined>
+    function use(token: HostApi<unknown> | Contract<unknown> | Ipc) {
+      if (token.kind === "hostapi") {
+        if (!apis.has(token.id)) throw new Error(`HostApi "${token.id}" is unavailable in the main process`)
 
-        return hosts.get(token.id)
+        return apis.get(token.id)
       }
 
-      if (token.kind === "service") return () => services.get(token.id)?.impl
+      if (token.kind === "contract") return () => contracts.get(token.id)?.impl
 
       return () => {
-        const provider = remotes.get(token.id)
+        const provider = ipcs.get(token.id)
 
         if (!provider) return undefined
         const cached = clients.get(provider)
@@ -496,13 +501,13 @@ export function createHost(input: {
     }
 
     // Main-to-main calls skip the codecs: both sides already hold decoded values. They carry no window.
-    const client = (remote: string, provider: Provider) => ({
+    const client = (ipc: string, provider: Provider) => ({
       ...Object.fromEntries(
         [...provider.methods].map(([name, method]) => [
           name,
           async (value: Value, options?: { readonly signal?: AbortSignal }) => {
             // A client kept past its provider's disposal reaches nothing.
-            if (remotes.get(remote) !== provider) throw new ExtensionError("unavailable")
+            if (ipcs.get(ipc) !== provider) throw new ExtensionError("unavailable")
 
             return method(value, {
               window: 0,
@@ -590,13 +595,13 @@ export function createHost(input: {
       "did-start-navigation",
       (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (!event.isMainFrame || event.isSameDocument) return
-        // The renderer is reloading: it lays surfaces out and subscribes again once it is back.
-        surfaces.reset(window)
+        // The renderer is reloading: it lays embeds out and subscribes again once it is back.
+        embeds.reset(window)
         forget()
       },
     )
     win.once("closed", () => {
-      surfaces.releaseWindow(window)
+      embeds.releaseWindow(window)
       forget()
       input.servers.delete(window)
       closed.forEach((listener) => listener(win))
@@ -634,18 +639,18 @@ export function createHost(input: {
       const ids = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)]
       await Promise.all(ids.map((id) => lifecycle.activate(id)))
     },
-    /** Activates the extension a remote belongs to ahead of `start`. Remote ids start with their extension's id. */
-    demand(remote: string) {
-      if (remotes.has(remote)) return
+    /** Activates the extension an Ipc belongs to ahead of `start`. Ipc ids start with their extension's id. */
+    demand(ipc: string) {
+      if (ipcs.has(ipc)) return
 
       const id = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)].find(
-        (id) => remote === id || remote.startsWith(`${id}.`),
+        (id) => ipc === id || ipc.startsWith(`${id}.`),
       )
 
       if (id) void lifecycle.activate(id)
     },
-    snapshot(remote: string, window: number) {
-      const provider = remotes.get(remote)
+    snapshot(ipc: string, window: number) {
+      const provider = ipcs.get(ipc)
 
       if (!provider) return { available: false }
       const schema = provider.spec.state
@@ -659,7 +664,7 @@ export function createHost(input: {
       request: { readonly remote: string; readonly method: string; readonly input?: unknown },
       caller: Caller,
     ) {
-      const provider = remotes.get(request.remote)
+      const provider = ipcs.get(request.remote)
 
       if (!provider) throw new ExtensionError("unavailable")
       const method = provider.methods.get(request.method)
@@ -674,7 +679,7 @@ export function createHost(input: {
         : undefined
 
       // Withdrawn while the input decoded: the disposed instance is not called.
-      if (remotes.get(request.remote) !== provider) throw new ExtensionError("unavailable")
+      if (ipcs.get(request.remote) !== provider) throw new ExtensionError("unavailable")
 
       const output = await method(value, {
         window: caller.window,
@@ -687,9 +692,9 @@ export function createHost(input: {
         throw new ExtensionError("output", { cause, message: String(cause) })
       })
     },
-    surface: (window: number, id: string, layout?: BridgeLayout) => surfaces.layout(window, id, layout),
+    embed: (window: number, id: string, layout?: BridgeLayout) => embeds.layout(window, id, layout),
     capture: (window: number, id: string) =>
-      surfaces.capture(window, id).then((image) => (image ? new Uint8Array(image.toJPEG(90)) : undefined)),
+      embeds.capture(window, id).then((image) => (image ? new Uint8Array(image.toJPEG(90)) : undefined)),
     menubar,
     runMenubar(window: number, id: string) {
       const entry = menubarItems().find((item) => item.id === id)
@@ -776,7 +781,7 @@ function isState(value: unknown): value is (window: number) => Value {
   return Predicate.isFunction(value)
 }
 
-function isMenubar(value: Item): value is Menubar {
+function isMenubarItem(value: Item): value is MenubarItem {
   return (
     Predicate.hasProperty(value, "id") &&
     Predicate.hasProperty(value, "menu") &&

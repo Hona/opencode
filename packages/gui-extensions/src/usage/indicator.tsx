@@ -3,7 +3,7 @@ import { ProgressCircle } from "@opencode/ui/progress-circle"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { Layout, useExtension, type SessionView } from "../sdk"
+import { Layout, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 
 function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
@@ -16,7 +16,7 @@ function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
 }
 
 export function SessionContextUsage(props: {
-  session: SessionView
+  session: MountedSession
   variant?: "button" | "indicator"
   placement?: ComponentProps<typeof Tooltip>["placement"]
 }) {
@@ -26,9 +26,11 @@ export function SessionContextUsage(props: {
   syncCatalog(props.session)
 
   const variant = createMemo(() => props.variant ?? "button")
+
   const messages = createMemo(() =>
     props.session.id ? props.session.server.data.session.message.list(props.session.id) : [],
   )
+
   const info = createMemo(() =>
     props.session.id ? props.session.server.data.session.get(props.session.id) : undefined,
   )
@@ -43,19 +45,23 @@ export function SessionContextUsage(props: {
 
   const context = createMemo(() => {
     const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+
     if (message?.type !== "assistant" || !message.tokens) return
     const model = catalogModel(props.session, message.model)?.model
+
     const total =
       message.tokens.input +
       message.tokens.output +
       message.tokens.reasoning +
       message.tokens.cache.read +
       message.tokens.cache.write
+
     return {
       total,
       usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
+
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
@@ -80,6 +86,7 @@ export function SessionContextUsage(props: {
       />
     </div>
   )
+
   const compactCircle = () => (
     <div class="flex items-center justify-center">
       <ProgressCircle appearance="compact" percentage={context()?.usage ?? 0} />

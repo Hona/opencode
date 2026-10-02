@@ -11,7 +11,7 @@ export default Extension.define({
   id: "summary",
   uses: { changes: Changes },
   stores: {
-    prefs: Store.app(
+    prefs: Store.global(
       Prefs,
       { projectExpanded: true, serverExpanded: true },
       { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },

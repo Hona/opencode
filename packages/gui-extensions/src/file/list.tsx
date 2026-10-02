@@ -3,7 +3,7 @@ import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtua
 import { FileIcon } from "@opencode/ui/file-icon"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { createActive, Native, useExtension, type SessionView } from "../sdk"
+import { createKeyed, Desktop, useExtension, type MountedSession } from "../sdk"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
 import { normalizeFileTreeV2Path } from "./tree-model"
@@ -43,7 +43,7 @@ export function applyFileListKeyDown(
 // no CSS of its own — it folds into data-selected below and only exists as the
 // scrollIntoView query hook.
 export default function SessionFileList(props: {
-  session: SessionView
+  session: MountedSession
   files: readonly string[]
   active?: string
   highlighted?: string
@@ -56,7 +56,7 @@ export default function SessionFileList(props: {
 }) {
   const ctx = useExtension()
 
-  const openIn = ctx.use(Native)
+  const openIn = ctx.use(Desktop)
     ? useOpenInApp({ session: props.session, path: () => props.session.file.root })
     : undefined
 
@@ -92,7 +92,7 @@ export default function SessionFileList(props: {
   })
 
   // Keeps the highlighted result in the virtualized viewport.
-  createActive(
+  createKeyed(
     () => {
       const index = normalized().indexOf(highlighted())
 
@@ -115,7 +115,7 @@ export default function SessionFileList(props: {
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
   // New results measure from the pane's width again; rows wider than the pane widen the list.
-  createActive(
+  createKeyed(
     () => {
       const files = normalized()
       const element = root()
@@ -128,7 +128,7 @@ export default function SessionFileList(props: {
     },
   )
 
-  createActive(
+  createKeyed(
     () => ({ keys: virtualRowKeys(), element: root() }),
     (current) => syncFileTreeV2Width(current.element),
   )

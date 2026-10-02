@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import { Cli, MainApp, MainStorage, type MainContext } from "../sdk/main"
+import { Build, Cli, Log, Storage, type MainContext } from "../sdk/main"
 import { Wsl } from "./contract"
 import { createWslRuntime } from "./runtime"
 import { createWslServersController, wslServerIdForDistro } from "./servers"
@@ -15,13 +15,13 @@ const Id = Schema.Struct({ id: Schema.NonEmptyString })
 
 const setup = (ctx: MainContext) => {
   const cli = ctx.use(Cli)
-  const app = ctx.use(MainApp)
-  const packaged = app.packaged
+  const packaged = ctx.use(Build).packaged
+  const desktopLog = ctx.use(Log)
   const t = ctx.t
   const runtime = createWslRuntime(t)
 
   const saved = ctx
-    .use(MainStorage)
+    .use(Storage)
     .store("servers", { schema: Stored, initial: { servers: [] }, from: "settings:wslServers" })
 
   // Development builds of the desktop app can build the Linux CLI from this checkout.
@@ -31,7 +31,7 @@ const setup = (ctx: MainContext) => {
       : { script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD, output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT }
 
   const log = <Data extends Readonly<Record<string, unknown>>>(level: "info" | "error", message: string, data: Data) =>
-    app.log(level, `[wsl] ${message}`, data)
+    desktopLog.write(level, `[wsl] ${message}`, data)
 
   const controller = createWslServersController({
     cli: { version: cli.version },
@@ -69,7 +69,7 @@ const setup = (ctx: MainContext) => {
     },
   })
 
-  const provided = ctx.provide(Wsl, {
+  const provider = ctx.provide(Wsl, {
     state: () => controller.getState(),
     probeRuntime: () => controller.probeRuntime(),
     refreshDistros: () => controller.refreshDistros(),
@@ -82,7 +82,7 @@ const setup = (ctx: MainContext) => {
     startServer: (input) => controller.startServer(input.id),
   })
 
-  ctx.scope.addFinalizer(controller.subscribe(() => provided.changed()))
+  ctx.scope.addFinalizer(controller.subscribe(() => provider.changed()))
   // Finalizers run in reverse: the servers stop before the state stops being published.
   ctx.scope.addFinalizer(() => controller.stopServers())
   controller.startConfiguredServers()

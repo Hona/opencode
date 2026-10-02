@@ -1,11 +1,11 @@
 import { showToast } from "@opencode/ui/toast"
 import { lazy, Suspense } from "solid-js"
-import { createActive, onIdle, Command, Native, Setting, Status, type Setup } from "../sdk"
+import { createKeyed, onIdle, Command, Desktop, SettingsPage, TitlebarItem, type Setup } from "../sdk"
 import { updaterAction } from "./action"
 import type definition from "./index"
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (!ctx.use(Native)) return
+  if (!ctx.use(Desktop)) return
   const updater = ctx.uses.updater
 
   const state = () => {
@@ -27,7 +27,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   // Settings rows are small; load them while idle so settings opens without a blank row.
   ctx.cleanup(onIdle(() => void Section.preload()))
 
-  ctx.add(Status, () => {
+  ctx.add(TitlebarItem, () => {
     const current = state()
     const installing = current?.status === "installing"
     const ready = current?.status === "ready" || current?.status === "download-required"
@@ -43,7 +43,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(Setting, {
+  ctx.add(SettingsPage, {
     id: "updates",
     page: "general",
     available: "desktop",
@@ -81,7 +81,7 @@ const setup: Setup<typeof definition> = (ctx) => {
 
   // Beta builds answer the app menu's Check for Updates in the focused window instead of a native dialog. The
   // listener ends with the generation of the main side that sends it.
-  createActive(updater, (client) => void client.on("check", () => act("check")))
+  createKeyed(updater, (client) => void client.on("check", () => act("check")))
 }
 
 export default setup

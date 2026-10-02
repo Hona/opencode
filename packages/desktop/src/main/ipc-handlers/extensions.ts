@@ -12,24 +12,30 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
   Effect.gen(function* () {
     const handoff = yield* IpcPortHandoff
     const extensions = yield* Extensions.Service
-    // Remotes scope state and events by the calling app window.
+
+    // Ipcs scope state and events by the calling app window.
     const caller = (context: RpcContext) => {
       const contents = sender(handoff, context)
       const win = BrowserWindow.fromWebContents(contents)
+
       if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL()))
         throw new Error("extension.caller.invalid")
+
       return win.id
     }
+
     // The manager (enable, reload, install archives) is a development tool until installed extensions have a trust
     // model; packaged builds refuse it so no renderer can install and run main-process code.
     const manage = <A>(run: (host: ExtensionHost) => A | Promise<A>) =>
       Effect.tryPromise({
         try: () => {
           if (app.isPackaged) throw new ExtensionError("unavailable")
+
           return extensions.host().then(run)
         },
         catch: extensionFailure,
       })
+
     return ExtensionRpcs.of({
       ExtensionCall: (request, context) =>
         Effect.tryPromise({
@@ -38,7 +44,7 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
         }),
       ExtensionSubscribe: ({ remote }, context) => Effect.sync(() => extensions.subscribe(remote, caller(context))),
       ExtensionSurface: ({ id, layout }, context) =>
-        Effect.sync(() => extensions.loaded()?.surface(caller(context), id, layout)),
+        Effect.sync(() => extensions.loaded()?.embed(caller(context), id, layout)),
       ExtensionCapture: ({ id }, context) =>
         Effect.promise(async () => (await extensions.loaded()?.capture(caller(context), id)) ?? null),
       ExtensionMenubar: ({ id }, context) => Effect.sync(() => extensions.loaded()?.runMenubar(caller(context), id)),

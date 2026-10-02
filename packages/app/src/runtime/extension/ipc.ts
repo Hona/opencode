@@ -1,27 +1,27 @@
 import { batch } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Schema } from "effect"
-import type { Remote, RemoteClient, RemoteSpec } from "@opencode/gui-extensions/sdk"
+import type { Ipc, IpcClient, IpcSpec } from "@opencode/gui-extensions/sdk"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
-type Codec = NonNullable<RemoteSpec["state"]>
+type Codec = NonNullable<IpcSpec["state"]>
 
-/** A value a remote's codec decodes to; each remote's `RemoteClient` gives it that remote's own type. */
+/** A value an Ipc's codec decodes to; each Ipc's `IpcClient` gives it that Ipc's own type. */
 type Decoded = Codec["Type"]
 
-/** A value as it crosses the bridge, encoded by a remote's codec. */
+/** A value as it crosses the bridge, encoded by an Ipc's codec. */
 type Encoded = Codec["Encoded"]
 
-type RemoteState = {
+type IpcState = {
   available: Record<string, boolean | undefined>
   values: Record<string, Decoded>
-  // Counts each time a remote becomes available, so users can tell a returning provider from the one they had.
+  // Counts each time an Ipc becomes available, so users can tell a returning provider from the one they had.
   generations: Record<string, number | undefined>
 }
 
-/** Renderer-side clients for remotes that extensions provide in the main process. */
-export function createRemotes(bridge: Bridge | undefined) {
-  const [state, setState] = createStore<RemoteState>({ available: {}, values: {}, generations: {} })
+/** Renderer-side clients for the Ipcs that extensions provide in the main process. */
+export function createIpcClients(bridge: Bridge | undefined) {
+  const [state, setState] = createStore<IpcState>({ available: {}, values: {}, generations: {} })
 
   const setAvailable = (id: string, available: boolean) => {
     if (available && !state.available[id]) setState("generations", id, (value = 0) => value + 1)
@@ -29,11 +29,11 @@ export function createRemotes(bridge: Bridge | undefined) {
     setState("available", id, available)
   }
 
-  const specs = new Map<string, RemoteSpec>()
-  const clients = new Map<string, RemoteClient<RemoteSpec>>()
+  const specs = new Map<string, IpcSpec>()
+  const clients = new Map<string, IpcClient<IpcSpec>>()
   const listeners = new Map<string, Set<(name: string, data: Decoded) => void>>()
   const subscribed = new Set<string>()
-  // How many availability and state events reached each remote. Events are newer than any snapshot, so a
+  // How many availability and state events reached each Ipc. Events are newer than any snapshot, so a
   // subscribe reply only fills in what no event changed while it was in flight.
   const changes = new Map<string, { available: number; state: number }>()
 
@@ -90,7 +90,7 @@ export function createRemotes(bridge: Bridge | undefined) {
     listeners.get(message.remote)?.forEach((listener) => listener(message.name, data))
   })
 
-  const subscribe = (connected: Bridge, token: Remote) => {
+  const subscribe = (connected: Bridge, token: Ipc) => {
     if (subscribed.has(token.id)) return
 
     subscribed.add(token.id)
@@ -110,7 +110,7 @@ export function createRemotes(bridge: Bridge | undefined) {
     })
   }
 
-  const create = (connected: Bridge, token: Remote): RemoteClient<RemoteSpec> => {
+  const create = (connected: Bridge, token: Ipc): IpcClient<IpcSpec> => {
     const methods = Object.fromEntries(
       Object.entries(token.spec.methods).map(([name, method]) => [
         name,
@@ -142,10 +142,10 @@ export function createRemotes(bridge: Bridge | undefined) {
     })
 
     // SAFETY: `methods` holds one codec-checked function per method of the token's spec, beside `state` and `on`.
-    return client as RemoteClient<RemoteSpec>
+    return client as IpcClient<IpcSpec>
   }
 
-  const client = (token: Remote) => {
+  const client = (token: Ipc) => {
     if (!bridge) return undefined
 
     subscribe(bridge, token)
@@ -165,12 +165,12 @@ export function createRemotes(bridge: Bridge | undefined) {
 
   return {
     client,
-    /** How many times the remote became available; 0 until it first is. Reactive. */
-    generation: (token: Remote) => state.generations[token.id] ?? 0,
-    /** A client typed by its token, for host code that uses one remote directly. */
-    typed: <S extends RemoteSpec>(token: Remote<S>) =>
+    /** How many times the Ipc became available; 0 until it first is. Reactive. */
+    generation: (token: Ipc) => state.generations[token.id] ?? 0,
+    /** A client typed by its token, for host code that uses one Ipc directly. */
+    typed: <S extends IpcSpec>(token: Ipc<S>) =>
       // SAFETY: the client was built from this token's spec, so its methods, state and events are those of `S`.
-      client(token) as RemoteClient<S> | undefined,
+      client(token) as IpcClient<S> | undefined,
     /** Stops listening to the bridge. Call it when the owner of these clients goes away. */
     dispose() {
       stop?.()

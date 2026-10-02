@@ -1,6 +1,6 @@
 import { batch, createMemo, createRoot, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createActive, type Storage, type ServerRef, type SessionView, type Sessions } from "../sdk"
+import { createKeyed, type Storage, type ServerRef, type MountedSession, type Sessions } from "../sdk"
 import { MAX_TERMINAL_SESSIONS, numberFromTitle, TerminalState, type LocalPTY } from "./state"
 import { defaultTitle } from "./title"
 
@@ -57,7 +57,7 @@ export function createTerminalModel(input: { storage: Storage; sessions: Session
   }
 
   return {
-    load(session: Pick<SessionView, "server" | "directory">) {
+    load(session: Pick<MountedSession, "server" | "directory">) {
       // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
       const key = workspaceKey(session.server.id, session.directory)
       const existing = cache.get(key)
@@ -134,7 +134,7 @@ export function createTerminalModel(input: { storage: Storage; sessions: Session
           from: LEGACY,
         })
 
-        createActive(
+        createKeyed(
           () => stored.ready(),
           () => {
             input.storage.remove(STORE, { scope })
@@ -248,7 +248,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
   }
 
   // A restarted server replaces its data under the same ref, so the subscription follows it.
-  createActive(
+  createKeyed(
     () => input.server.data,
     (data) =>
       onCleanup(

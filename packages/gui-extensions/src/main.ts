@@ -14,7 +14,7 @@ import wsl from "./wsl"
 
 /**
  * Built-in extensions with their main entries. Lists every built-in so their ids stay reserved. `builtins.typecheck.ts`
- * checks that it provides every remote the renderer composition uses.
+ * checks that it provides every Ipc the renderer composition uses.
  */
 export const builtins = Extension.compose(
   usage,

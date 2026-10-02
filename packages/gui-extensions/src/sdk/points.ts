@@ -1,7 +1,7 @@
 import type { IconProps } from "@opencode/ui/icon"
 import type { Accessor, JSX } from "solid-js"
 import { Point } from "./core"
-import type { SessionRef, SessionView } from "./services"
+import type { SessionRef, MountedSession } from "./host-apis"
 
 export type IconName = IconProps["name"]
 
@@ -33,7 +33,7 @@ export interface Command {
   run(input?: string): void | Promise<void>
 }
 
-export interface Menu {
+export interface MenuItem {
   /** Host menu: "session.panel" (the + before side panel tabs), "server.add", "server.row". */
   readonly menu: "session.panel" | "server.add" | "server.row"
   readonly id: string
@@ -111,33 +111,33 @@ export interface Panel {
    * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
    * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
    */
-  normalize?(id: string, session: SessionView): string
+  normalize?(id: string, session: MountedSession): string
   /** A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"`. */
   readonly mobile?: MobileView
   /**
    * Reactive. `open` holds this extension's tab ids stored in the strip. List those that still apply,
    * plus any `pinned` tab. The host renders triggers, restore, and selection from this data.
    */
-  list(session: SessionView, open: readonly string[]): readonly PanelTab[]
-  render(tab: Accessor<PanelTab>, session: SessionView): JSX.Element
+  list(session: MountedSession, open: readonly string[]): readonly PanelTab[]
+  render(tab: Accessor<PanelTab>, session: MountedSession): JSX.Element
   /** Runs after the host removes the tab from the strip. */
-  close?(tab: PanelTab, session: SessionView): void
+  close?(tab: PanelTab, session: MountedSession): void
   /**
    * Runs when the tab becomes selected. `restored` is true for the selection the side region mounts with, e.g. the
    * tab selected before a reload, and false for every later selection change.
    */
-  focus?(tab: PanelTab, session: SessionView, change: { readonly restored: boolean }): void
+  focus?(tab: PanelTab, session: MountedSession, change: { readonly restored: boolean }): void
 }
 
 export interface SettingEntry {
-  /** The `data-action` of the row search reveals. An entry with the Setting's own id describes the page itself. */
+  /** The `data-action` of the row search reveals. An entry with the SettingsPage's own id describes the page itself. */
   readonly id: string
   readonly title: string
   readonly description?: string
   readonly keywords?: string
 }
 
-export interface Setting {
+export interface SettingsPage {
   /** A page's settings tab value (`/settings?tab=<id>`). */
   readonly id: string
   /** Adds a section to a host page. Omit to add a page. */
@@ -177,7 +177,7 @@ export interface ServerRow {
   readonly default: { available(): boolean; current(): boolean; set(value: boolean): void }
   /** Runs the entry's `remove`, then closes the server's tabs and clears it as the default. */
   remove(): Promise<void>
-  /** Menu "server.row" items for this server, rendered as items of the row's own menu. */
+  /** MenuItem "server.row" items for this server, rendered as items of the row's own menu. */
   readonly Items: () => JSX.Element
 }
 
@@ -242,7 +242,7 @@ export interface LinkHandler {
   open(link: Link): void
 }
 
-export interface Status {
+export interface TitlebarItem {
   readonly id: string
   /** titlebar (default) places a pill in the titlebar or tabs footer; channel makes the dev channel badge a toggle. */
   readonly placement?: "titlebar" | "channel"
@@ -260,9 +260,9 @@ export interface SlotMap {
   /** Full-width strip under the shell content, above toasts. */
   readonly "shell.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
-  readonly "session.header": { readonly session: SessionView; readonly active: boolean }
-  readonly "session.panel.end": { readonly session: SessionView }
-  readonly "session.panel.sidebar": { readonly session: SessionView }
+  readonly "session.header": { readonly session: MountedSession; readonly active: boolean }
+  readonly "session.panel.end": { readonly session: MountedSession }
+  readonly "session.panel.sidebar": { readonly session: MountedSession }
 }
 
 export type Slot = {
@@ -270,11 +270,19 @@ export type Slot = {
 }[keyof SlotMap]
 
 export const Command = Point.define<Command>("command")
-export const Menu = Point.define<Menu>("menu")
+
+export const MenuItem = Point.define<MenuItem>("menu-item")
+
 export const Panel = Point.define<Panel>("panel")
-export const Setting = Point.define<Setting>("setting")
+
+export const SettingsPage = Point.define<SettingsPage>("settings-page")
+
 export const Server = Point.define<Server>("server")
-export const Link = Point.define<LinkHandler>("link")
-export const Status = Point.define<Status>("status")
+
+export const LinkHandler = Point.define<LinkHandler>("link-handler")
+
+export const TitlebarItem = Point.define<TitlebarItem>("titlebar-item")
+
 export const Slot = Point.define<Slot>("slot")
+
 export const Style = Point.define<string>("style")

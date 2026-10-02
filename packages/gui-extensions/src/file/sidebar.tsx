@@ -1,12 +1,12 @@
 import { createMemo, Match, onCleanup, Show, Switch } from "solid-js"
 import { Tabs } from "@opencode/ui/tabs"
 import type { ChangeKind } from "../review/contract"
-import { createActive, useExtension, type SessionView } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { current, useShared } from "./context"
 import FileTree from "./tree"
 
 /** The file tree beside the side panel: the session's changed files, or every workspace file. */
-export default function FileSidebar(props: { session: SessionView }) {
+export default function FileSidebar(props: { session: MountedSession }) {
   const ctx = useExtension()
   const shared = useShared()
   const file = props.session.file
@@ -14,11 +14,11 @@ export default function FileSidebar(props: { session: SessionView }) {
   const changes = () => current(shared.changes())
 
   // The host mounts this only while the tree is open, which is when its changes should stay loaded.
-  createActive(shared.changes, (service) => onCleanup(service.watch(props.session, "tree")))
+  createKeyed(shared.changes, (service) => onCleanup(service.watch(props.session, "tree")))
 
   // Lists the root again when the directory, the tree tab or the connection changes, and whenever the root
   // listing is unloaded, e.g. after the workspace's tree resets.
-  createActive(
+  createKeyed(
     () => {
       const directory = file.root
 

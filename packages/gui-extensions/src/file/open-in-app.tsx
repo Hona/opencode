@@ -7,7 +7,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createLatest, Native, useExtension, type Context, type OS, type SessionView } from "../sdk"
+import { createLatest, Desktop, useExtension, type Context, type OS, type MountedSession } from "../sdk"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
 import { openInAppParentPath } from "./path"
@@ -68,12 +68,12 @@ const showRequestError = (ctx: Context, err: Error | string) => {
   })
 }
 
-export function useOpenInApp(input: { session: SessionView; path: () => string }) {
+export function useOpenInApp(input: { session: MountedSession; path: () => string }) {
   const ctx = useExtension()
-  const native = ctx.use(Native)
+  const desktop = ctx.use(Desktop)
   const shared = useShared()
 
-  const os = () => native?.os ?? "linux"
+  const os = () => desktop?.os ?? "linux"
   const apps = createMemo(() => openAppsForOS(os()))
   const fileManager = createMemo(() => fileManagerApp(os()))
 
@@ -82,7 +82,7 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
 
     if (cached) return cached
 
-    const request = Promise.resolve(native?.installed(app))
+    const request = Promise.resolve(desktop?.installed(app))
       .then(Boolean)
       .catch(() => false)
 
@@ -93,7 +93,7 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
 
   // Which of the OS's apps are installed; none are listed until the check answers.
   const installed = createLatest(
-    () => native && apps(),
+    () => desktop && apps(),
     (list) =>
       Promise.all(list.map((app) => checkAppExists(app.openWith).then((ok) => [app.id, ok] as const))).then(
         (entries) => new Map<OpenApp, boolean>(entries),
@@ -112,7 +112,7 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore<{ app?: OpenApp }>({})
 
-  const canOpen = createMemo(() => !!native && input.session.server.local)
+  const canOpen = createMemo(() => !!desktop && input.session.server.local)
 
   const current = createMemo(
     () =>
@@ -129,7 +129,7 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
   }
 
   const openPath = (app: OpenApp | "finder", target = input.path(), reveal = false) => {
-    if (opening() || !canOpen() || !native) return
+    if (opening() || !canOpen() || !desktop) return
 
     if (!target) return
 
@@ -139,8 +139,10 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
 
     const request =
       app === "finder" && reveal
-        ? native.reveal(target).then((revealed) => (revealed ? undefined : native.launch(openInAppParentPath(target))))
-        : native.launch(target, openWith)
+        ? desktop
+            .reveal(target)
+            .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
+        : desktop.launch(target, openWith)
 
     request
       .catch((err) => showRequestError(ctx, err))
@@ -182,7 +184,7 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
 
 type OpenInAppState = ReturnType<typeof useOpenInApp>
 
-export default function OpenInAppButton(props: { session: SessionView }) {
+export default function OpenInAppButton(props: { session: MountedSession }) {
   const ctx = useExtension()
   const directory = () => props.session.file.root
   const state = useOpenInApp({ session: props.session, path: directory })

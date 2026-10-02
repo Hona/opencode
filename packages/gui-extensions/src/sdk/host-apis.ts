@@ -3,7 +3,7 @@ import type { LocationRef, OpenCodeClient, ProjectListOutput, WorktreeDirectory 
 import type { Schema } from "effect"
 import type { Accessor, JSX } from "solid-js"
 import type { Store } from "solid-js/store"
-import { Host, type Cleanup, type OS, type Persisted, type StoreFrom } from "./core"
+import { HostApi, type Cleanup, type OS, type Persisted, type StoreFrom } from "./core"
 import type { IconName, Link } from "./points"
 
 export interface ServerRef {
@@ -150,7 +150,7 @@ export interface ComposerFile {
  */
 export interface ComposerNote {
   type: "note"
-  /** The extension that attached it. Opening the chip routes `Links.open({ href, origin })` to its Link handler. */
+  /** The extension that attached it. Opening the chip routes `Links.open({ href, origin })` to its LinkHandler. */
   origin: string
   commentID: string
   /** Chip text naming the subject, e.g. `button#save`. */
@@ -183,7 +183,7 @@ export interface BackgroundTask {
 }
 
 /** A mounted session route. Slot inputs and panel renders receive this. */
-export interface SessionView extends SessionRef {
+export interface MountedSession extends SessionRef {
   /** A new object each time the session is routed, e.g. after Home and back. Keep per-visit state keyed by it. */
   readonly visit: object
   /** `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local overrides. */
@@ -209,7 +209,7 @@ export interface Sessions {
   /** Sessions owned by open shell tabs. Reactive. */
   list(): readonly SessionRef[]
   /** The routed, mounted session. Reactive. */
-  current(): SessionView | undefined
+  current(): MountedSession | undefined
 }
 
 export type PanelState = "closed" | "open" | "active" | "visible"
@@ -267,7 +267,7 @@ export interface Layout {
 }
 
 export type StorageScope =
-  | "app"
+  | "global"
   | { readonly server: string; readonly directory?: string }
   | { readonly session: SessionRef }
 
@@ -303,7 +303,8 @@ export interface System {
   open(url: string): void
 }
 
-export interface Native {
+/** Desktop-only abilities; the token gives undefined on the web. */
+export interface Desktop {
   readonly os: OS
   readonly window: string
   zoom(): number
@@ -314,35 +315,57 @@ export interface Native {
   installed(app: string): Promise<boolean>
 }
 
-export interface App {
+/** The running build. */
+export interface Build {
   readonly version?: string
   readonly channel: "local" | "dev" | "beta" | "prod"
   readonly platform: "web" | "desktop"
-  font(kind: "mono"): string
+}
+
+/** The interface language and its writing direction. */
+export interface Locale {
   /** BCP 47 locale of the interface language, for Intl formatting. */
   locale(): string
   direction(): "ltr" | "rtl"
   setDirection(direction: "ltr" | "rtl"): void
+}
+
+/** The user's appearance settings. */
+export interface Appearance {
+  font(kind: "mono"): string
+}
+
+/** The app's route. */
+export interface Router {
   /** A route transition is in progress. */
   routing(): boolean
   /** The current route path with its query string. */
   path(): string
+}
+
+/** The effective keybinds of published commands. */
+export interface Keybinds {
   /** Display parts of a published command's effective keybind, e.g. ["Ctrl", "`\"]. Empty when unbound. */
   keybind(command: string): readonly string[]
   /** Display parts of a chord the app does not own, e.g. "mod+shift+c" that a page handles itself. */
   keys(bind: string): readonly string[]
   /** The event matches a published command's effective keybind. */
   matches(command: string, event: KeyboardEvent): boolean
+}
+
+/** The servers the app lists. */
+export interface Servers {
   /** Ids of the servers the app lists (`ServerRef.id`). Reactive. */
-  servers(): readonly string[]
-  on(
-    event: "workspace.remove",
-    handler: (value: { readonly server: string; readonly directory: string }) => void,
-  ): Cleanup
+  list(): readonly string[]
+}
+
+/** Workspace lifecycle events. */
+export interface Workspaces {
+  on(event: "remove", handler: (value: { readonly server: string; readonly directory: string }) => void): Cleanup
 }
 
 export interface Links {
-  /** Routes a local link to the best Link handler. Returns false when none matches. */
+  /** Routes a local link to the best LinkHandler. Returns false when none matches. */
   open(link: Link): boolean
 }
 
@@ -366,12 +389,12 @@ export interface Dialogs {
   active(): boolean
 }
 
-export interface SurfaceProps {
-  /** A surface the extension's main entry created with `Surfaces.create`. Undefined renders the box alone. */
+export interface EmbedProps {
+  /** An embed the extension's main entry created with `Embeds.create`. Undefined renders the box alone. */
   readonly id: string | undefined
-  /** The surface should be on screen. The host also hides it while the window is hidden or a dialog is open. */
+  /** The embed should be on screen. The host also hides it while the window is hidden or a dialog is open. */
   readonly visible: boolean
-  /** Paints a still of the surface in place of the live view, so DOM content can float above it. */
+  /** Paints a still of the embed in place of the live view, so DOM content can float above it. */
   readonly frozen?: boolean
   /** Radius of the bottom corners in CSS pixels. */
   readonly radius?: number
@@ -381,33 +404,46 @@ export interface SurfaceProps {
   readonly children?: JSX.Element
 }
 
-export interface Surfaces {
+/** Web pages (Electron WebContentsViews) the extension's main entry placed in the window layout. */
+export interface Embeds {
   /**
-   * The box a native main-process surface fills. The host measures it (webview zoom included), pushes
-   * coalesced layouts, masks the rounded corners, hides the surface while it is invisible or unmounted,
+   * The box a main-process embed fills. The host measures it (webview zoom included), pushes
+   * coalesced layouts, masks the rounded corners, hides the embed while it is invisible or unmounted,
    * and paints a still of it while floating content covers it. Children render inside the box.
    */
-  View(props: SurfaceProps): JSX.Element
-  /** A JPEG still of a shown surface; undefined while it is hidden, and always on the web. */
+  View(props: EmbedProps): JSX.Element
+  /** A JPEG still of a shown embed; undefined while it is hidden, and always on the web. */
   capture(id: string): Promise<Uint8Array | undefined>
 }
 
-export const Sessions = Host.define<Sessions>("session")
+export const Sessions = HostApi.define<Sessions>("session")
 
-export const Layout = Host.define<Layout>("layout")
+export const Layout = HostApi.define<Layout>("layout")
 
-export const Storage = Host.define<Storage>("storage")
+export const Storage = HostApi.define<Storage>("storage")
 
-export const System = Host.define<System>("system")
+export const System = HostApi.define<System>("system")
 
-export const Native = Host.define<Native | undefined>("native")
+export const Desktop = HostApi.define<Desktop | undefined>("desktop")
 
-export const App = Host.define<App>("app")
+export const Build = HostApi.define<Build>("build")
 
-export const Dialogs = Host.define<Dialogs>("dialog")
+export const Locale = HostApi.define<Locale>("locale")
 
-export const Links = Host.define<Links>("link")
+export const Appearance = HostApi.define<Appearance>("appearance")
 
-export const Preferences = Host.define<Preferences>("preferences")
+export const Router = HostApi.define<Router>("router")
 
-export const Surfaces = Host.define<Surfaces>("surface")
+export const Keybinds = HostApi.define<Keybinds>("keybinds")
+
+export const Servers = HostApi.define<Servers>("servers")
+
+export const Workspaces = HostApi.define<Workspaces>("workspaces")
+
+export const Dialogs = HostApi.define<Dialogs>("dialog")
+
+export const Links = HostApi.define<Links>("link")
+
+export const Preferences = HostApi.define<Preferences>("preferences")
+
+export const Embeds = HostApi.define<Embeds>("embed")

@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Spinner } from "@opencode/ui/spinner"
 import { Show } from "solid-js"
-import { createActive, useExtension } from "../sdk"
+import { createKeyed, useExtension } from "../sdk"
 import { isSshConnecting, sshName } from "./name"
 import type { SshController } from "./state"
 
@@ -18,7 +18,7 @@ export function SshCover(props: { id: string; visit: object; ssh: SshController;
   // Offer authentication once per visit to a tab. Cancelling must not immediately reopen the prompt, and a sign-in
   // requested again after the server was ready (a new cover) shows the Authenticate button without a dialog.
   // Background hosts never open a dialog here. A new object for each change, so every change is considered.
-  createActive(
+  createKeyed(
     () => {
       const current = item()
 

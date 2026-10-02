@@ -14,13 +14,13 @@ export default Extension.define({
   // Without review the tree lists only the workspace files; without the browser, HTML opens as a file tab.
   uses: { changes: Changes, browser: Browser },
   stores: {
-    tree: Store.app(
+    tree: Store.global(
       TreeState,
       { tab: "changes" },
       { key: "layout", pick: (value: { fileTree?: { tab?: unknown } } | null) => ({ tab: value?.fileTree?.tab }) },
     ),
     // The open-in-app choice. Only the desktop reads it.
-    app: Store.app(OpenAppPreferences, { app: "finder" }, "open.app"),
+    app: Store.global(OpenAppPreferences, { app: "finder" }, "open.app"),
   },
   i18n: {
     en,

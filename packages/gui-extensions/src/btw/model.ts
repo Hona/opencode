@@ -1,7 +1,7 @@
 import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { createActive, Layout, Sessions, type SessionView, type SetupContext } from "../sdk"
+import { createKeyed, Layout, Sessions, type MountedSession, type SetupContext } from "../sdk"
 import type Btw from "./index"
 
 const instructions = [
@@ -36,7 +36,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   }
 
   // Leaving a session abandons its in-flight question.
-  createActive(
+  createKeyed(
     () => sessions.current(),
     (view) => onCleanup(() => stop(view.key)),
   )
@@ -89,16 +89,16 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
       })
   }
 
-  const state = (session: SessionView) => states[session.key]
+  const state = (session: MountedSession) => states[session.key]
 
   return {
     ask,
-    has: (session: SessionView) => !!state(session),
-    answer: (session: SessionView) => (state(session) ?? empty).answer,
-    error: (session: SessionView) => (state(session) ?? empty).error,
-    pending: (session: SessionView) => (state(session) ?? empty).pending,
-    question: (session: SessionView) => (state(session) ?? empty).question,
-    retry: (session: SessionView) => ask((state(session) ?? empty).question),
+    has: (session: MountedSession) => !!state(session),
+    answer: (session: MountedSession) => (state(session) ?? empty).answer,
+    error: (session: MountedSession) => (state(session) ?? empty).error,
+    pending: (session: MountedSession) => (state(session) ?? empty).pending,
+    question: (session: MountedSession) => (state(session) ?? empty).question,
+    retry: (session: MountedSession) => ask((state(session) ?? empty).question),
   }
 }
 

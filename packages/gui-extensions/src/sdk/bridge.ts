@@ -1,7 +1,8 @@
 /**
  * Host-internal contract between the renderer host (packages/app) and the main host (packages/desktop).
- * Extensions never use this directly; they use Remote tokens.
- * Payloads are structured-clone values already encoded with the Remote's schemas.
+ * Extensions never use this directly; they use Ipc tokens.
+ * Payloads are structured-clone values already encoded with the Ipc's schemas. The `remote` fields name an Ipc by id;
+ * they keep the IPC message format's field name.
  */
 
 export interface BridgeLayout {
@@ -38,18 +39,21 @@ export interface BridgeMenubarItem {
 }
 
 export interface Bridge {
+  // SAFETY: the reply is the method's output as its schema encoded it; the renderer host decodes it with that schema.
+  /* oxlint-disable anti-slop/no-unknown-returns -- see SAFETY above */
   call(
     input: { readonly remote: string; readonly method: string; readonly input: unknown },
     signal?: AbortSignal,
   ): Promise<unknown>
+  /* oxlint-enable anti-slop/no-unknown-returns */
   /** Starts state sync for this window. Resolves with the current availability and state. */
-  subscribe(remote: string): Promise<{ readonly available: boolean; readonly state?: unknown }>
+  subscribe(ipc: string): Promise<{ readonly available: boolean; readonly state?: unknown }>
   on(listener: (message: BridgeMessage) => void): () => void
-  surface(id: string, layout?: BridgeLayout): void
+  embed(id: string, layout?: BridgeLayout): void
   capture(id: string): Promise<Uint8Array | undefined>
   /** Runs a native menubar item from the in-app (Windows) menu. */
   menubar(id: string): void
-  /** Tells main the current server endpoints so `MainApp.server(id)` can resolve them. */
+  /** Tells main the current server endpoints so `Servers.get(id)` can resolve them. */
   configure(
     servers: readonly {
       readonly id: string

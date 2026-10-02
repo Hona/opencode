@@ -11,7 +11,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
-import { App, createActive, useExtension, usePanel, type SessionView } from "../sdk"
+import { createKeyed, Keybinds, useExtension, usePanel, type MountedSession } from "../sdk"
 import type { TerminalModel, TerminalWorkspace } from "./model"
 import type { LocalPTY } from "./state"
 import { SortableTerminalTab } from "./tab"
@@ -35,9 +35,9 @@ type TerminalPanelState = {
   workspaces: string[]
 }
 
-export default function TerminalPanel(props: { model: TerminalModel; session: SessionView; onClose: () => void }) {
+export default function TerminalPanel(props: { model: TerminalModel; session: MountedSession; onClose: () => void }) {
   const extension = useExtension()
-  const app = extension.use(App)
+  const keybinds = extension.use(Keybinds)
   const frame = usePanel()
   const terminal = createMemo(() => props.model.load(props.session))
   const workspaceKey = () => terminal().key
@@ -50,7 +50,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
 
   const [store, setStore] = createStore<TerminalPanelState>({ recovered: {}, surfaces: [], workspaces: [] })
 
-  const newTerminalKeybind = createMemo(() => [...app.keybind("terminal.new")])
+  const newTerminalKeybind = createMemo(() => [...keybinds.keybind("terminal.new")])
 
   onMount(() => {
     makeEventListener(document, "focusin", (event) => {
@@ -61,10 +61,10 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
   })
 
   // While the dock shows, an empty workspace gets its first terminal, once per workspace in a row.
-  createActive(opened, () => {
+  createKeyed(opened, () => {
     const created = { workspace: "" }
 
-    createActive(
+    createKeyed(
       () => {
         const workspace = terminal()
 
@@ -80,7 +80,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
   })
 
   // The dock closes when the shown workspace loses its last terminal, e.g. when its shell exits.
-  createActive(
+  createKeyed(
     () => (terminal().all().length > 0 ? terminal() : undefined),
     (workspace) =>
       onCleanup(() =>
@@ -91,7 +91,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
   )
 
   // Focuses the active terminal once the dock shows it and a focus request names it.
-  createActive(
+  createKeyed(
     () => {
       const id = terminal().active()
 
@@ -106,7 +106,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
   )
 
   // The titles outlive this instance: after a reload they show until the stored terminals load.
-  createActive(
+  createKeyed(
     () => {
       if (!props.session.directory || !terminal().ready()) return
 
@@ -131,7 +131,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
   const all = () => terminal().all()
 
   // Keeps each shown terminal mounted for the workspaces shown last, so switching back keeps its screen and session.
-  createActive(
+  createKeyed(
     () => ({
       workspace: workspaceKey(),
       ready: terminal().ready(),

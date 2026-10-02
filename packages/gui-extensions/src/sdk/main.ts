@@ -1,6 +1,6 @@
 import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
 import type { Schema } from "effect"
-import { Host, Point, type Cleanup } from "./core"
+import { HostApi, Point, type Cleanup } from "./core"
 import type { Scope } from "./scope"
 
 export * from "./core"
@@ -14,7 +14,7 @@ export interface Windows {
   on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
 }
 
-export interface Surface {
+export interface Embed {
   readonly id: string
   /** Page-side gate. The view shows only while the renderer lays it out AND show(true). */
   show(visible: boolean): void
@@ -24,12 +24,12 @@ export interface Surface {
   dispose(): void
 }
 
-export interface Surfaces {
-  /** The renderer presents it with the renderer SDK's `Surfaces.View`; the host owns bounds, zoom, corners, and occlusion. */
-  create(view: WebContentsView, window: BrowserWindow): Surface
+export interface Embeds {
+  /** The renderer presents it with the renderer SDK's `Embeds.View`; the host owns bounds, zoom, corners, and occlusion. */
+  create(view: WebContentsView, window: BrowserWindow): Embed
 }
 
-export interface MainStorage {
+export interface Storage {
   /** Values are stored as the schema's canonical JSON; the schema must not need services. */
   store<S extends Schema.ConstraintCodec<unknown, unknown>>(
     key: string,
@@ -42,7 +42,7 @@ export interface MainStorage {
   }
 }
 
-export interface MainServer {
+export interface ServerEndpoint {
   readonly id: string
   readonly url: string
   readonly headers: Readonly<Record<string, string>>
@@ -60,11 +60,20 @@ export interface Cli {
   readonly development: boolean
 }
 
-export interface MainApp {
+/** The running build. */
+export interface Build {
   readonly version: string
   readonly channel: string
   readonly packaged: boolean
-  server(id: string): MainServer | undefined
+}
+
+/** The server endpoints the app's windows use. */
+export interface Servers {
+  get(id: string): ServerEndpoint | undefined
+}
+
+/** The app process's lifetime. */
+export interface Lifecycle {
   /**
    * Marks the app as quitting and disposes every extension but the one whose `keep` scope is passed (the caller's
    * `ctx.scope` by default), then runs handoff (e.g. quitAndInstall) or relaunches. The kept scope outlives shutdown
@@ -72,15 +81,19 @@ export interface MainApp {
    * can be kept.
    */
   restart(handoff?: () => void | Promise<void>, options?: { readonly keep?: Scope }): Promise<void>
+}
+
+/** The desktop log file. */
+export interface Log {
   /** Writes to the desktop log file (included in exported debug logs); each field of `data` is serialized as it is. */
-  log<Data extends Readonly<Record<string, unknown>>>(
+  write<Data extends Readonly<Record<string, unknown>>>(
     level: "debug" | "info" | "warn" | "error",
     message: string,
     data?: Data,
   ): void
 }
 
-export interface Menubar {
+export interface MenubarItem {
   readonly menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
   readonly id: string
   readonly label: string
@@ -89,14 +102,20 @@ export interface Menubar {
   run(window: BrowserWindow | undefined): void
 }
 
-export const Windows = Host.define<Windows>("window")
+export const Windows = HostApi.define<Windows>("window")
 
-export const Surfaces = Host.define<Surfaces>("surface")
+export const Embeds = HostApi.define<Embeds>("embed")
 
-export const MainStorage = Host.define<MainStorage>("storage")
+export const Storage = HostApi.define<Storage>("storage")
 
-export const Cli = Host.define<Cli>("cli")
+export const Cli = HostApi.define<Cli>("cli")
 
-export const MainApp = Host.define<MainApp>("app")
+export const Build = HostApi.define<Build>("build")
 
-export const Menubar = Point.define<Menubar>("menubar")
+export const Servers = HostApi.define<Servers>("servers")
+
+export const Lifecycle = HostApi.define<Lifecycle>("lifecycle")
+
+export const Log = HostApi.define<Log>("log")
+
+export const MenubarItem = Point.define<MenubarItem>("menubar-item")

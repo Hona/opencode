@@ -1,35 +1,40 @@
 import { createMemo, For, Show } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { Status } from "@opencode/gui-extensions/sdk"
+import { TitlebarItem } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "./host"
 
-/** Status items placed in the titlebar (the default placement). */
-export function useTitlebarStatus() {
+/** TitlebarItem contributions placed in the titlebar (the default placement). */
+export function useTitlebarItems() {
   const host = useExtensionHost()
-  const items = createMemo(() => host.list(Status).filter((item) => (item.placement ?? "titlebar") === "titlebar"))
+
+  const items = createMemo(() =>
+    host.list(TitlebarItem).filter((item) => (item.placement ?? "titlebar") === "titlebar"),
+  )
+
   // Keyed by id so a pill keeps its element (and hover state) while its item changes.
   const ids = createMemo(() => items().map((item) => item.id), undefined, {
     equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]),
   })
+
   return {
     ids,
     item: (id: string) => items().find((item) => item.id === id),
   }
 }
 
-export function TitlebarStatusItems(props: { status: ReturnType<typeof useTitlebarStatus>; vertical?: boolean }) {
+export function TitlebarItems(props: { items: ReturnType<typeof useTitlebarItems>; vertical?: boolean }) {
   return (
-    <For each={props.status.ids()}>
+    <For each={props.items.ids()}>
       {(id) => (
-        <Show when={props.status.item(id)}>
-          {(item) => <TitlebarStatusButton item={item()} vertical={props.vertical} />}
+        <Show when={props.items.item(id)}>
+          {(item) => <TitlebarItemButton item={item()} vertical={props.vertical} />}
         </Show>
       )}
     </For>
   )
 }
 
-function TitlebarStatusButton(props: { item: Status; vertical?: boolean }) {
+function TitlebarItemButton(props: { item: TitlebarItem; vertical?: boolean }) {
   const label = () => (
     <span
       class="shrink-0 text-[11px] leading-4 text-v2-text-text-accent [font-weight:530] opacity-0 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0"
@@ -41,6 +46,7 @@ function TitlebarStatusButton(props: { item: Status; vertical?: boolean }) {
       {props.item.label}
     </span>
   )
+
   return (
     <div
       data-slot="titlebar-update"

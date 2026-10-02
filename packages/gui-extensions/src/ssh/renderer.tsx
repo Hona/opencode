@@ -1,13 +1,14 @@
 import { showToast } from "@opencode/ui/toast"
 import { createMemo, createRoot, lazy, Suspense, type JSX } from "solid-js"
 import {
-  App,
+  Build,
   Command,
-  createActive,
+  createKeyed,
   Dialogs,
   Layout,
-  Menu,
+  MenuItem,
   onIdle,
+  Router,
   Server,
   Style,
   type ServerEntry,
@@ -22,11 +23,10 @@ import { createSshController } from "./state"
 const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
-  const app = ctx.use(App)
-
   // SSH lives in the desktop main process.
-  if (app.platform !== "desktop") return
-  const remote = ctx.uses.ssh
+  if (ctx.use(Build).platform !== "desktop") return
+  const router = ctx.use(Router)
+  const ipc = ctx.uses.ssh
   const layout = ctx.use(Layout)
   const dialog = ctx.use(Dialogs)
   const Row = lazy(() => import("./row"))
@@ -34,7 +34,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   ctx.cleanup(onIdle(() => void Row.preload()))
 
   const client = () => {
-    const live = remote()
+    const live = ipc()
 
     return live.status === "active" ? live.value : undefined
   }
@@ -54,7 +54,7 @@ const setup: Setup<typeof definition> = (ctx) => {
           }
 
           ctx.signal.addEventListener("abort", done, { once: true })
-          createActive(
+          createKeyed(
             () => (state()?.revision ?? 0) >= revision,
             () => {
               ctx.signal.removeEventListener("abort", done)
@@ -67,7 +67,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   })
 
   // A visit to the routed page: a new token each time another tab or page is routed, whether or not a cover shows.
-  const visit = createMemo(() => ({ path: app.path() }))
+  const visit = createMemo(() => ({ path: router.path() }))
   const offer: SshOffer = { visit: undefined }
   const styled = { added: false }
   const byKey = (key: string) => (key.startsWith("ssh:") ? ssh.item(key.slice(4)) : undefined)
@@ -111,7 +111,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       reconnect: (signal) => ssh.resolve(id, signal),
       connect: () => new Promise((resolve) => ssh.connect(config(), { onConnected: resolve })),
       remove: () => {
-        const live = remote()
+        const live = ipc()
 
         // Loading or gone, main keeps the server: the removal fails rather than leaving it saved behind the list.
         if (live.status !== "active") return Promise.reject(new Error(ctx.t("error.unavailable")))
@@ -137,7 +137,10 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(Menu, (): Menu => ({ menu: "server.add", id: "add", title: ctx.t("add"), order: 1, run: () => add(false) }))
+  ctx.add(
+    MenuItem,
+    (): MenuItem => ({ menu: "server.add", id: "add", title: ctx.t("add"), order: 1, run: () => add(false) }),
+  )
   ctx.add(
     Command,
     (): Command => ({
@@ -148,8 +151,8 @@ const setup: Setup<typeof definition> = (ctx) => {
     }),
   )
   ctx.add(
-    Menu,
-    (): Menu => ({
+    MenuItem,
+    (): MenuItem => ({
       menu: "server.row",
       id: "connect",
       title: ctx.t("connect"),
@@ -168,8 +171,8 @@ const setup: Setup<typeof definition> = (ctx) => {
     }),
   )
   ctx.add(
-    Menu,
-    (): Menu => ({
+    MenuItem,
+    (): MenuItem => ({
       menu: "server.row",
       id: "authenticate",
       title: ctx.t("authenticate"),
@@ -188,7 +191,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   // connections too, so a later manual disconnect is respected.
   const restored = new Set<string>()
 
-  createActive(
+  createKeyed(
     () => {
       const unseen = (state()?.servers ?? []).filter((item) => item.saved && !restored.has(item.config.id))
 
@@ -203,7 +206,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   )
 
   // Challenges of an attempt started without its dialog open one of their own.
-  createActive(
+  createKeyed(
     () => (dialog.active() ? undefined : ssh.dialog.next()),
     (item) => {
       ssh.dialog.opened(item.config.id)

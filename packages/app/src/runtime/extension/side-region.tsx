@@ -15,12 +15,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
-import {
-  Menu as MenuPoint,
-  type Menu as MenuItem,
-  type PanelSidebar,
-  type SessionView,
-} from "@opencode/gui-extensions/sdk"
+import { MenuItem, type MountedSession, type PanelSidebar } from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -36,7 +31,7 @@ const FILE_TREE_WIDTH_MIN = 240
 
 /** The side region: the tab strip with its "+" menu, the selected panel, and the inner sidebar. */
 export function SideRegion(props: {
-  view: SessionView
+  view: MountedSession
   region: Region
   sidebar: PanelSidebar
   fileTree: boolean
@@ -56,15 +51,20 @@ export function SideRegion(props: {
   const open = createMemo(() => tabsOpen() || fileOpen())
   const visible = createMemo(() => tabsVisible() || fileOpen())
   const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
+
   const panelWidth = createMemo(() => {
     if (!visible()) return "0px"
+
     if (tabsVisible()) return "auto"
+
     return `${fileTreeWidth()}px`
   })
+
   const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
+
   const menu = createMemo(() =>
     host
-      .list(MenuPoint)
+      .list(MenuItem)
       .filter((item) => item.menu === "session.panel")
       .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   )
@@ -120,6 +120,7 @@ export function SideRegion(props: {
                     ]}
                     onDragEnd={(event) => {
                       const source = event.operation.source
+
                       if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
                       tabs().move(source.id.toString(), source.index)
                     }}
@@ -271,6 +272,7 @@ export function SideRegion(props: {
 function AddButton(props: { item: MenuItem }): JSX.Element {
   const command = useCommand()
   const keybind = createMemo(() => (props.item.keybind ? command.keybindParts(props.item.keybind) : []))
+
   return (
     <Tooltip
       value={
@@ -298,6 +300,7 @@ function AddButton(props: { item: MenuItem }): JSX.Element {
 function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
+
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
       <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
@@ -316,6 +319,7 @@ function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
             <For each={props.items}>
               {(item) => {
                 const keybind = createMemo(() => (item.keybind ? command.keybindParts(item.keybind) : []))
+
                 return (
                   <Menu.Item
                     class="!gap-6"

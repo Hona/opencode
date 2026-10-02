@@ -1,6 +1,6 @@
 import { createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createActive, onIdle, Panel, Sessions, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
+import { createKeyed, onIdle, Panel, Sessions, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
 import type Summary from "./index"
 import type { Disclosure } from "./panel"
 import { SummaryHeader } from "./popover"
@@ -75,9 +75,7 @@ const setup: Setup<typeof Summary> = (ctx) => {
       })
 
       // The changes row loads the session directory's changes only while the drawer shows.
-      createActive(changes, (service) =>
-        createActive(frame.visible, () => onCleanup(service.watch(session, "details"))),
-      )
+      createKeyed(changes, (service) => createKeyed(frame.visible, () => onCleanup(service.watch(session, "details"))))
 
       return (
         <Show when={session.project}>

@@ -1,9 +1,11 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
-import { Remote } from "../sdk"
+import { Ipc } from "../sdk"
 
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
+
 const detail = (maximum: number) => Schema.String.check(Schema.isMaxLength(maximum))
+
 const binding = text(128)
 
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
@@ -17,6 +19,7 @@ export const PaneElement = Schema.Struct({
   /** Border box in the native view's DIPs. */
   rect: Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
 })
+
 export type PaneElement = typeof PaneElement.Type
 
 export const PaneEvent = Schema.Union([
@@ -37,13 +40,14 @@ export const PaneEvent = Schema.Union([
     element: Schema.optionalKey(PaneElement),
   }),
 ])
+
 export type PaneEvent = typeof PaneEvent.Type
 
 /**
  * The native browser pane in the main process. A binding is one registration of a session's pane
  * by a window; its events go to that window only.
  */
-export const BrowserPane = Remote.define({
+export const BrowserPane = Ipc.define({
   id: "browser.pane",
   methods: {
     register: {

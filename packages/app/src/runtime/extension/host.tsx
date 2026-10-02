@@ -28,7 +28,7 @@ import {
   Dialogs,
   ExtensionContext,
   LifetimeContext,
-  Link,
+  LinkHandler,
   Links,
   Live,
   Sessions,
@@ -36,17 +36,16 @@ import {
   type Catalog,
   type Cleanup,
   type Context,
+  type Contract,
   type Definition,
-  type Host,
-  type LinkHandler,
+  type HostApi,
   type Messages,
   type Persisted,
   type Point,
-  type Remote,
-  type RemoteClient,
-  type RemoteRef,
-  type RemoteSpec,
-  type Service,
+  type Ipc,
+  type IpcClient,
+  type IpcRef,
+  type IpcSpec,
   type SessionRef,
   type SetupContext,
   type Token,
@@ -65,21 +64,21 @@ type Instance = {
   definition: Definition
   context: InstanceContext
   dispose: () => void
-  /** Opens the declared stores. Settles once the app stores have loaded. */
+  /** Opens the declared stores. Settles once the global stores have loaded. */
   prepare(): Promise<readonly void[]>
   /** Starts loading the declared session stores for a mounted session. */
   preload(session: SessionRef): void
 }
 
-/** A host service. `register` withdraws what it returns with the caller's owner, else with the extension. */
-export type HostService = {
-  readonly token: Host<unknown>
-  // SAFETY: each service returns the value its token types; `use` hands it back only through that token's overload.
+/** A HostApi the host provides. `register` withdraws what it returns with the caller's owner, else with the extension. */
+export type HostApiFactory = {
+  readonly token: HostApi<unknown>
+  // SAFETY: each factory returns the value its token types; `use` hands it back only through that token's overload.
   // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
   create(extension: string, owner: Owner | null, context: Context, register: (fn: Cleanup) => Cleanup): unknown
 }
 
-type Bound = readonly HostService[]
+type Bound = readonly HostApiFactory[]
 
 export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
 
@@ -93,7 +92,7 @@ type Provider = Absent | { readonly status: "active"; readonly generation: numbe
 
 type HostState = {
   entries: Record<string, Entry[] | undefined>
-  services: Record<string, number | undefined>
+  contracts: Record<string, number | undefined>
   status: Record<string, ExtensionStatus | undefined>
   failures: Record<string, ExtensionFailure | undefined>
 }
@@ -121,11 +120,11 @@ export function useExtensionHost() {
 type HostInput = {
   definitions: readonly Definition[]
   disabled: Accessor<ReadonlySet<string> | undefined>
-  services: Bound
-  /** The renderer client of a remote while it is available; omitted where there is no main process. */
-  remote?: (token: Remote) => RemoteClient<RemoteSpec> | undefined
-  /** How many times a remote became available. Reactive. */
-  generation?: (token: Remote) => number
+  apis: Bound
+  /** The renderer client of an Ipc while it is available; omitted where there is no main process. */
+  ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
+  /** How many times an Ipc became available. Reactive. */
+  generation?: (token: Ipc) => number
   /** An extension's main entry failed. Reactive. */
   failed?: (id: string) => boolean
 }
@@ -139,12 +138,12 @@ export function ExtensionHostProvider(props: ParentProps<HostInput>) {
 function createHost(input: HostInput) {
   const language = useLanguage()
   const owner = getOwner()
-  const hosts = new Map(input.services.map((service) => [service.token.id, service]))
+  const apis = new Map(input.apis.map((api) => [api.token.id, api]))
   const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
   const generations = new Map<string, number>()
 
-  // Entries are indexed by point and services versioned by token, so a change wakes only its own readers.
-  const [state, setState] = createStore<HostState>({ entries: {}, services: {}, status: {}, failures: {} })
+  // Entries are indexed by point and contracts versioned by token, so a change wakes only its own readers.
+  const [state, setState] = createStore<HostState>({ entries: {}, contracts: {}, status: {}, failures: {} })
 
   const instances = new Map<string, Instance>()
   const memos = new Map<string, Accessor<readonly Item<unknown>[]>>()
@@ -187,35 +186,35 @@ function createHost(input: HostInput) {
     return generation > 0 ? inactive.restarting : pending
   }
 
-  const serviceLive = (token: Service<unknown>): Live<unknown> => {
-    void state.services[token.id]
+  const contractLive = (token: Contract<unknown>): Live<unknown> => {
+    void state.contracts[token.id]
 
     return provided.get(token.id)?.live ?? absent(token.id, generations.get(token.id) ?? 0, false)
   }
 
-  // Full remote tokens by id. A reference (`Remote.ref`) carries no spec and resolves through the full token once code
+  // Full Ipc tokens by id. A reference (`Ipc.ref`) carries no spec and resolves through the full token once code
   // in this window uses it; until then it is absent, as pending as its provider allows.
-  const [known, setKnown] = createSignal<ReadonlyMap<string, Remote>>(new Map())
+  const [known, setKnown] = createSignal<ReadonlyMap<string, Ipc>>(new Map())
 
   const learn = (token: Token) => {
-    if (token.kind !== "remote" || !token.spec || untrack(known).has(token.id)) return
+    if (token.kind !== "ipc" || !token.spec || untrack(known).has(token.id)) return
 
     setKnown((map) => new Map(map).set(token.id, token))
   }
 
-  const resolve = (token: Remote | RemoteRef) => (token.spec ? token : known().get(token.id))
+  const resolve = (token: Ipc | IpcRef) => (token.spec ? token : known().get(token.id))
 
-  // One object per remote generation, so reading a provider allocates nothing while it is unchanged.
+  // One object per Ipc generation, so reading a provider allocates nothing while it is unchanged.
   const actives = new Map<string, Provider & { readonly status: "active" }>()
 
   const providerState = (token: Token): Provider => {
-    if (token.kind === "service") return serviceLive(token)
+    if (token.kind === "contract") return contractLive(token)
 
-    if (!input.remote) return inactive.disabled
+    if (!input.ipc) return inactive.disabled
 
     const full = resolve(token)
 
-    if (!full || !input.remote(full)) return absent(token.id, full ? (input.generation?.(full) ?? 0) : 0, true)
+    if (!full || !input.ipc(full)) return absent(token.id, full ? (input.generation?.(full) ?? 0) : 0, true)
 
     const generation = input.generation?.(full) ?? 1
     const cached = actives.get(token.id)
@@ -284,7 +283,7 @@ function createHost(input: HostInput) {
 
   const links: Links = {
     open(link) {
-      const handler = untrack(() => list(Link))
+      const handler = untrack(() => list(LinkHandler))
         .filter((item) => item.match(link))
         .reduce<LinkHandler | undefined>(
           (best, item) => (!best || (item.priority ?? 0) > (best.priority ?? 0) ? item : best),
@@ -299,11 +298,11 @@ function createHost(input: HostInput) {
     },
   }
 
-  hosts.set(Links.id, { token: Links, create: () => links })
+  apis.set(Links.id, { token: Links, create: () => links })
 
   const dialog = useDialog()
 
-  hosts.set(Dialogs.id, {
+  apis.set(Dialogs.id, {
     token: Dialogs,
     // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
     create: (extension, _, context, register): Dialogs => {
@@ -395,7 +394,7 @@ function createHost(input: HostInput) {
 
         instances.set(definition.id, instance)
 
-        // Setup and every scope under it read the extension's context, e.g. `createActive` with a token.
+        // Setup and every scope under it read the extension's context, e.g. `createKeyed` with a token.
         if (root) root.context = { ...root.context, [ExtensionContext.id]: instance.context }
 
         const crash = (cause: unknown) => {
@@ -429,7 +428,7 @@ function createHost(input: HostInput) {
         // Setup runs synchronously inside the extension root so its effects and memos are owned.
         if (Object.keys(definition.stores ?? {}).length === 0) return start()
 
-        // App stores load in their storage namespace's one read before setup, so setup reads them as plain values.
+        // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
         Promise.try(instance.prepare).then(() => {
           if (instances.get(definition.id) === instance) runWithOwner(root, start)
         }, crash)
@@ -494,14 +493,14 @@ function createHost(input: HostInput) {
       return cleanup
     }
 
-    const clients = new Map<string, { client: RemoteClient<RemoteSpec>; live: Live<unknown> }>()
+    const clients = new Map<string, { client: IpcClient<IpcSpec>; live: Live<unknown> }>()
 
     // One accessor per token, and one Live object per transition, so readers re-run only when the provider changes.
-    const remoteLive = (token: Remote | RemoteRef): Live<unknown> => {
-      if (!input.remote) return inactive.disabled
+    const ipcLive = (token: Ipc | IpcRef): Live<unknown> => {
+      if (!input.ipc) return inactive.disabled
 
       const full = resolve(token)
-      const client = full && input.remote(full)
+      const client = full && input.ipc(full)
 
       if (!full || !client) return absent(token.id, full ? (input.generation?.(full) ?? 0) : 0, true)
 
@@ -529,7 +528,7 @@ function createHost(input: HostInput) {
 
       if (existing) return existing
 
-      const read = Live.accessor(token.kind === "service" ? () => serviceLive(token) : () => remoteLive(token))
+      const read = Live.accessor(token.kind === "contract" ? () => contractLive(token) : () => ipcLive(token))
 
       lives.set(token.id, read)
 
@@ -574,8 +573,8 @@ function createHost(input: HostInput) {
         )
       },
       list,
-      provide<T>(token: Service<T> | Remote, impl: T) {
-        if (token.kind === "remote") throw new Error("Remotes are provided by an extension's main entry")
+      provide<T>(token: Contract<T> | Ipc, impl: T) {
+        if (token.kind === "ipc") throw new Error("Ipcs are provided by an extension's main entry")
 
         if (late()) return () => {}
 
@@ -586,17 +585,17 @@ function createHost(input: HostInput) {
         const entry = { live: { status: "active", value: impl, generation } as const }
 
         provided.set(token.id, entry)
-        setState("services", token.id, (version = 0) => version + 1)
+        setState("contracts", token.id, (version = 0) => version + 1)
 
         return register(() => {
           if (provided.get(token.id) !== entry) return
 
           provided.delete(token.id)
-          setState("services", token.id, (version = 0) => version + 1)
+          setState("contracts", token.id, (version = 0) => version + 1)
         })
       },
-      use(token: Host<unknown> | Token) {
-        if (token.kind !== "host") {
+      use(token: HostApi<unknown> | Token) {
+        if (token.kind !== "hostapi") {
           // A full token resolves the references to it, here and in other extensions.
           learn(token)
 
@@ -605,11 +604,11 @@ function createHost(input: HostInput) {
 
         if (created.has(token.id)) return created.get(token.id)
 
-        const service = hosts.get(token.id)
+        const api = apis.get(token.id)
 
-        if (!service) throw new Error(`Host service "${token.id}" is unavailable`)
+        if (!api) throw new Error(`HostApi "${token.id}" is unavailable`)
 
-        const made = service.create(extension, root, typed, register)
+        const made = api.create(extension, root, typed, register)
 
         created.set(token.id, made)
 
@@ -652,9 +651,9 @@ function createHost(input: HostInput) {
       prepare() {
         const storage = typed.use(Storage)
 
-        const app = Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) => {
-          if (declaration.scope === "app") {
-            const handle = storage.store(name, { ...declaration, scope: "app" })
+        const loaded = Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) => {
+          if (declaration.scope === "global") {
+            const handle = storage.store(name, { ...declaration, scope: "global" })
 
             stores[name] = handle
 
@@ -685,12 +684,12 @@ function createHost(input: HostInput) {
           })
         }
 
-        return Promise.all(app)
+        return Promise.all(loaded)
       },
       preload: (session) => sessions.forEach((store) => store.get(session)),
       dispose() {
         controller.abort()
-        // One batch: every contribution and service of the extension disappears in the same frame.
+        // One batch: every contribution and contract of the extension disappears in the same frame.
         batch(() => {
           Array.from(cleanups).reverse().forEach(release)
           cleanups.clear()

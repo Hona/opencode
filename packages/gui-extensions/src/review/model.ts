@@ -6,7 +6,7 @@ import { createQuery, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createActive, createVisitState, Layout, type LineRange, type SessionView, type SetupContext } from "../sdk"
+import { createKeyed, createVisitState, Layout, type LineRange, type MountedSession, type SetupContext } from "../sdk"
 import type Review from "./index"
 import {
   filterRenderableDiff,
@@ -30,7 +30,7 @@ const selectionFromLines = (range: LineRange): FileSelection => ({
 })
 
 /** The routed session's review: its diffs, selection, and comments. Lives as long as the session screen. */
-export function createReviewModel(input: { ctx: SetupContext<typeof Review>; view: SessionView; demand: Demand }) {
+export function createReviewModel(input: { ctx: SetupContext<typeof Review>; view: MountedSession; demand: Demand }) {
   const ctx = input.ctx
   const view = input.view
   const layout = ctx.use(Layout)
@@ -57,7 +57,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   const selectedFile = createMemo(() => stored()?.file)
 
   // After a session switch the review renders a frame later, so the switch paints first.
-  createActive(
+  createKeyed(
     () => view.visit,
     () => {
       const run = { ended: false }
@@ -162,7 +162,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   }, 100)
 
   // The server reports file changes in the directory; its event stream follows a restarted server.
-  createActive(
+  createKeyed(
     () => ({ directory: directory(), data: view.server.data }),
     (current) =>
       onCleanup(
@@ -183,7 +183,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     ),
   )
 
-  createActive(opened, () => {
+  createKeyed(opened, () => {
     if (diffQuery.isFetching) return
 
     if (input.demand.tree > 0) {
@@ -398,7 +398,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   }
 
   // Scrolls the review panel to a focused file once its diff has rendered.
-  createActive(
+  createKeyed(
     () => {
       const pending = pendingFile()
 
@@ -440,7 +440,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   )
 
   // A mode the session no longer offers, such as Branch back on the default branch, falls back to the first one.
-  createActive(
+  createKeyed(
     () => {
       if (!stored() || !view.server.connected || !view.project) return
 
@@ -463,7 +463,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   )
 
   // A session that goes idle has finished its turn, which may have changed files.
-  createActive(idled, () => {
+  createKeyed(idled, () => {
     refresh()
     void queryClient.invalidateQueries({ queryKey: turnKey() })
   })

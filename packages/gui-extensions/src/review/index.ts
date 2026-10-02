@@ -24,7 +24,7 @@ export default Extension.define({
   // The changed files list in the file browser's tree; without it the list stays empty.
   uses: { tree: FileTree },
   stores: {
-    diff: Store.app(
+    diff: Store.global(
       DiffState,
       { diffStyle: "split" },
       {
@@ -32,7 +32,7 @@ export default Extension.define({
         pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }),
       },
     ),
-    panel: Store.app(
+    panel: Store.global(
       PanelState,
       { expandMode: "collapse" },
       {

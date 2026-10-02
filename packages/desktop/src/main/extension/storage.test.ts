@@ -5,16 +5,17 @@ import path from "node:path"
 import { Schema } from "effect"
 import { openDatabase, type Database } from "../storage/database"
 import { createStateStore } from "../storage/state"
-import { createMainStorage } from "./storage"
+import { createStorage } from "./storage"
 
 const roots: string[] = []
+
 // Bun's node:sqlite shim pins the WAL files on Windows after close(); tolerate the leftover here only.
 afterEach(() =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }).catch(() => undefined))),
 )
 
 const open = (db: Database) =>
-  createMainStorage(createStateStore(db), "example").store("servers", {
+  createStorage(createStateStore(db), "example").store("servers", {
     schema: Schema.Array(Schema.String),
     initial: [],
   })

@@ -1,7 +1,7 @@
 import { createContext, useContext } from "solid-js"
-import type { createExtensionAttachment } from "./services"
+import type { createExtensionAttachment } from "./host-apis"
 
-// Apart from `services.tsx`, so session code such as the side panels reads the attachment without loading its services.
+// Apart from `host-apis.tsx`, so session code such as the side panels reads the attachment without loading the HostApis.
 const AttachmentContext = createContext<ReturnType<typeof createExtensionAttachment>>()
 
 export function useExtensionAttachment() {

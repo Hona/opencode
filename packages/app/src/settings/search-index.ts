@@ -1,4 +1,4 @@
-import type { Setting } from "@opencode/gui-extensions/sdk"
+import type { SettingsPage } from "@opencode/gui-extensions/sdk"
 import type { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
@@ -15,7 +15,7 @@ export type SettingsSearchServer = {
 }
 
 /** An extension setting that applies to this platform. */
-export type SettingsSearchExtension = { extension: string; value: Setting }
+export type SettingsSearchExtension = { extension: string; value: SettingsPage }
 
 export function settingsSearchIndex(input: {
   servers: readonly SettingsSearchServer[]
@@ -26,6 +26,7 @@ export function settingsSearchIndex(input: {
   extensions?: readonly SettingsSearchExtension[]
 }) {
   const items: SettingsSearchResult[] = []
+
   const add = (
     entry: (typeof clientSettings)[number],
     view: SettingsHostView,
@@ -43,6 +44,7 @@ export function settingsSearchIndex(input: {
                 ? "settings.general.section.general"
                 : pageLabels[view.tab]),
           )
+
     items.push({
       id: JSON.stringify([server, project, view.tab, view.target, view.subtab, entry.label]),
       title: input.translate(entry.label),
@@ -58,11 +60,13 @@ export function settingsSearchIndex(input: {
       view,
     })
   }
+
   const extensions = input.extensions ?? []
+
   // Extension entries are keyed by extension and entry id; their copy is already translated.
   const addExtension = (
     item: SettingsSearchExtension,
-    entry: NonNullable<Setting["entries"]>[number],
+    entry: NonNullable<SettingsPage["entries"]>[number],
     view: SettingsView,
     page: string,
     owner: string,
@@ -83,13 +87,17 @@ export function settingsSearchIndex(input: {
 
   clientSettings.forEach((entry) => {
     if (entry.available === "desktop" && !input.desktop) return
+
     if (entry.available === "browser" && !input.browser) return
+
     if (entry.available === "mobile" && !input.mobile) return
     add(entry, { type: "root", tab: entry.tab, target: entry.target }, "")
   })
   extensions.forEach((item) => {
     const setting = item.value
+
     if (setting.page === "servers") return
+
     if (setting.page === "general")
       return setting.entries?.forEach((entry) =>
         addExtension(
@@ -100,6 +108,7 @@ export function settingsSearchIndex(input: {
           "",
         ),
       )
+    // SAFETY: a SettingsPage without a host page is an extension tab under its id, as `createSettingsPages().tabs` lists.
     const tab = setting.id as SettingsExtensionTab
     const page = setting.entries?.find((entry) => entry.id === setting.id)
     addExtension(item, { ...page, id: setting.id, title: setting.title }, { type: "root", tab }, setting.title, "")
@@ -111,8 +120,10 @@ export function settingsSearchIndex(input: {
   input.servers.forEach((server) => {
     const view = (tab: SettingsServerTab, target?: string, subtab?: SettingsView["subtab"]): SettingsHostView => {
       if (input.servers.length === 1) return { type: "root", tab: tab === "general" ? "servers" : tab, target, subtab }
+
       return { type: "server", server: server.key, tab, target, subtab }
     }
+
     items.push({
       id: `server:${server.key}`,
       entity: true,
@@ -124,6 +135,7 @@ export function settingsSearchIndex(input: {
       server: server.key,
       view: view("general"),
     })
+
     if (!server.connected) return
     serverSettings.forEach((entry) => add(entry, view(entry.tab, entry.target, entry.subtab), server.name, server.key))
     // Sections on the servers page render under each server's general page.
@@ -141,6 +153,7 @@ export function settingsSearchIndex(input: {
         tab: "general",
         parent: input.servers.length > 1 ? "server" : "root",
       }
+
       const name = displayName(project)
       items.push({
         id: `project:${server.key}:${project.worktree}`,
@@ -168,5 +181,6 @@ export function settingsSearchIndex(input: {
       })
     })
   })
+
   return items
 }

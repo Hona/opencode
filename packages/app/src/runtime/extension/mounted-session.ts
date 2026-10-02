@@ -6,7 +6,7 @@ import type {
   Files,
   LineRange,
   ServerRef,
-  SessionView,
+  MountedSession,
 } from "@opencode/gui-extensions/sdk"
 import { useComments } from "@/composer/comments"
 import { useComposerState } from "@/composer/persistence"
@@ -16,12 +16,12 @@ import type { SessionModel } from "@/session/model"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { pathKey } from "@/workspaces/path-key"
-import { useExtensionAttachment } from "./services"
+import { useExtensionAttachment } from "./host-apis"
 
 const noTasks: readonly BackgroundTask[] = []
 
 /** The routed session as extensions see it. One stable object that follows the route. */
-export function createSessionView(session: SessionModel) {
+export function createMountedSession(session: SessionModel) {
   const file = useFile()
   const comments = useComments()
   const composer = useComposerState()
@@ -140,7 +140,7 @@ export function createSessionView(session: SessionModel) {
       )
   })
 
-  const view: SessionView = {
+  const view: MountedSession = {
     get key() {
       return `${server.key}\n${session.identity.sessionID() ?? ""}`
     },

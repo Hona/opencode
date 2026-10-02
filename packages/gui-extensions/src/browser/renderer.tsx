@@ -1,11 +1,11 @@
 import { createMemo, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import {
-  App,
+  Build,
   Command,
-  createActive,
-  Link,
-  Menu,
+  createKeyed,
+  LinkHandler,
+  MenuItem,
   onIdle,
   Panel,
   Sessions,
@@ -40,14 +40,14 @@ const setup: Setup<typeof definition> = (ctx) => {
   })
 
   // The native pane is a desktop feature.
-  if (ctx.use(App).platform !== "desktop") return
+  if (ctx.use(Build).platform !== "desktop") return
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
   // schemas load when the first session opens instead of at startup.
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
-  createActive(opened, () => {
+  createKeyed(opened, () => {
     const owner = getOwner()
     void import("./model").then((module) => {
       if (ctx.signal.aborted) return
@@ -94,7 +94,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(Menu, (): Menu | undefined => {
+  ctx.add(MenuItem, (): MenuItem | undefined => {
     const view = sessions.current()
     const value = model()
 
@@ -111,13 +111,13 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     priority: 10,
     match: (link) => !!model()?.match(link),
     open: (link) => model()?.openLink(link),
   })
   // A composer chip for a comment on a picked element.
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     priority: 10,
     match: (link) => link.origin === ctx.id && !!link.session,
     open(link) {

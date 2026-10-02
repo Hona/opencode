@@ -22,7 +22,7 @@ type Plan = {
 
 type Made = { readonly id: string; readonly revision: string; readonly label: string; readonly instance: Instance }
 
-type Contribution = { readonly made: Made; readonly kind: "remote" | "listener" | "surface"; readonly window?: number }
+type Contribution = { readonly made: Made; readonly kind: "ipc" | "listener" | "embed"; readonly window?: number }
 
 beforeEach(() => jest.useFakeTimers())
 
@@ -51,7 +51,7 @@ const wait = (value: Wait | undefined) => {
 
 /**
  * A fake host around the real lifecycle: extensions whose code loads, prepares, sets up and cleans up on a plan, and
- * a registry of what each instance contributed, including surfaces in windows that open and close.
+ * a registry of what each instance contributed, including embeds in windows that open and close.
  */
 function world() {
   const logs: { readonly message: string; readonly data: object }[] = []
@@ -91,7 +91,7 @@ function world() {
         ready: wait(plan.ready),
         setup: async () => {
           events.push(`setup ${owner.label}`)
-          contribute(owner, "remote")
+          contribute(owner, "ipc")
           instance.scope.addFinalizer(async () => {
             events.push(`cleanup ${owner.label}`)
             await wait(plan.cleanup)
@@ -105,8 +105,8 @@ function world() {
 
           if (instance.scope.signal.aborted && live(id).length) stats.overlapping++
           // Registered after an await without checking the signal: a stopped instance withdraws them at once.
-          windows.forEach((window) => contribute(owner, "surface", window))
-          const opener = (window: number) => contribute(owner, "surface", window)
+          windows.forEach((window) => contribute(owner, "embed", window))
+          const opener = (window: number) => contribute(owner, "embed", window)
           openers.add(opener)
           contribute(owner, "listener", undefined, () => openers.delete(opener))
           events.push(`ready ${owner.label}`)
@@ -167,7 +167,7 @@ function world() {
     },
     close(window: number) {
       windows.delete(window)
-      // The host releases a closed window's surfaces itself, whichever instance owns them.
+      // The host releases a closed window's embeds itself, whichever instance owns them.
       contributions.forEach((entry) => {
         if (entry.window === window) contributions.delete(entry)
       })

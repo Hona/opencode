@@ -9,7 +9,7 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { App, createActive, Links, useExtension, type FileContent, type SessionView } from "../sdk"
+import { createKeyed, Links, Locale, useExtension, type FileContent, type MountedSession } from "../sdk"
 import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
 import { workspaceFileUrl } from "./path"
@@ -39,14 +39,14 @@ const previewableKinds: readonly ArtifactKind[] = ["svg", "html", "markdown", "m
  * previewable text kinds can switch to `source`, which the host supplies (its code view).
  */
 export default function ArtifactView(props: {
-  session: SessionView
+  session: MountedSession
   path: string
   content: FileContent
   cacheKey?: string
   source: JSX.Element
 }) {
   const ctx = useExtension()
-  const app = ctx.use(App)
+  const locale = ctx.use(Locale)
   // Media the browser could not decode falls back to the binary placeholder.
   const initial: ViewerState = { mode: "preview", info: {}, undecodable: false }
   // The viewer state belongs to one loaded content: a reloaded file starts from the preview again.
@@ -89,7 +89,7 @@ export default function ArtifactView(props: {
       info.duration ? formatDuration(info.duration) : undefined,
       info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
-      formatBytes(app.locale(), contentBytes(props.content)),
+      formatBytes(locale.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
   })
 
@@ -143,7 +143,7 @@ export default function ArtifactView(props: {
           <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           <Match when={kind() === "binary"}>
-            <ArtifactBinary path={props.path} size={formatBytes(app.locale(), contentBytes(props.content))} />
+            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
           </Match>
         </Switch>
       </Show>
@@ -215,7 +215,7 @@ function ArtifactToolbar(props: {
 }
 
 /** Shows only while the browser pane is active and can load the file. */
-function OpenInBrowserButton(props: { session: SessionView; path: string }) {
+function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
   const ctx = useExtension()
   const shared = useShared()
 
@@ -385,7 +385,7 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
   )
 }
 
-function ArtifactMarkdown(props: { session: SessionView; path: string; text: string; cacheKey?: string }) {
+function ArtifactMarkdown(props: { session: MountedSession; path: string; text: string; cacheKey?: string }) {
   const ctx = useExtension()
   const links = ctx.use(Links)
   const parent = useMarkdown()
@@ -459,7 +459,7 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
 
   // The document's font set holds the face while it shows.
-  createActive(url, (source) => {
+  createKeyed(url, (source) => {
     const face = new FontFace(family(), `url(${source})`)
 
     document.fonts.add(face)

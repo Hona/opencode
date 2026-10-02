@@ -11,7 +11,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { createActive, Layout, System, useExtension, type SessionView } from "../sdk"
+import { createKeyed, Layout, System, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
@@ -78,7 +78,7 @@ function RawMessage(props: {
 
 const emptyMessages: SessionMessageInfo[] = []
 
-export default function SessionContextTab(props: { session: SessionView }) {
+export default function SessionContextTab(props: { session: MountedSession }) {
   const ctx = useExtension()
   const layout = ctx.use(Layout)
   const system = ctx.use(System)
@@ -270,7 +270,7 @@ export default function SessionContextTab(props: { session: SessionView }) {
   }
 
   // Restores the stored scroll a frame after the messages change; on mount the viewport ref restores it.
-  createActive(
+  createKeyed(
     createMemo(on(messages, (list) => list, { defer: true })),
     () => void requestAnimationFrame(restoreScroll),
   )

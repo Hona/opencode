@@ -2,7 +2,7 @@ import { batch, createMemo, createSignal, onCleanup, onMount, Show } from "solid
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { App, createActive, Native, Sessions, useExtension } from "../sdk"
+import { createKeyed, Desktop, Locale, Router, Sessions, useExtension } from "../sdk"
 import {
   applyProviderMetricEvent,
   isProviderMetricEvent,
@@ -193,8 +193,9 @@ function ToggleCell(props: {
 
 export default function DebugBar(props: { diagnostics?: boolean; inline?: boolean }) {
   const ctx = useExtension()
-  const app = ctx.use(App)
-  const native = ctx.use(Native)
+  const router = ctx.use(Router)
+  const locale = ctx.use(Locale)
+  const desktop = ctx.use(Desktop)
   const sessions = ctx.use(Sessions)
 
   const [state, setState] = createStore<Readings>({
@@ -252,7 +253,7 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     return current && current.target === target() && current.outages === outages() ? current.metrics : projected()
   }
 
-  createActive(target, (current) => {
+  createKeyed(target, (current) => {
     const accumulator: ProviderMetricState = {}
 
     onCleanup(
@@ -280,14 +281,14 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
   const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
 
   const toggleFocus = async () => {
-    if (!native) return
+    if (!desktop) return
     const enabled = !state.focus
-    await native.forceFocus(enabled)
+    await desktop.forceFocus(enabled)
     setState("focus", enabled)
   }
 
   onCleanup(() => {
-    if (state.focus) void native?.forceFocus(false).catch(() => undefined)
+    if (state.focus) void desktop?.forceFocus(false).catch(() => undefined)
   })
 
   let prev = ""
@@ -297,8 +298,8 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
   let two = 0
 
   // Times navigations to and from a session: from the route starting to change until two frames after it settles.
-  createActive(
-    () => props.diagnostics && { busy: app.routing(), next: app.path() },
+  createKeyed(
+    () => props.diagnostics && { busy: router.routing(), next: router.path() },
     (route) => {
       const next = route.next
 
@@ -708,17 +709,17 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
             bad={bad(heap(), 0.8)}
             dim={state.heap.used === undefined}
             inline={props.inline}
-            span={native ? 2 : 3}
+            span={desktop ? 2 : 3}
           />
           <ToggleCell
-            active={app.direction() === "rtl"}
+            active={locale.direction() === "rtl"}
             inline={props.inline}
             label={ctx.t("direction.label")}
             tip={ctx.t("direction.tip")}
-            value={ctx.t(`direction.${app.direction()}`)}
-            onClick={() => app.setDirection(app.direction() === "rtl" ? "ltr" : "rtl")}
+            value={ctx.t(`direction.${locale.direction()}`)}
+            onClick={() => locale.setDirection(locale.direction() === "rtl" ? "ltr" : "rtl")}
           />
-          <Show when={native}>
+          <Show when={desktop}>
             <ToggleCell
               active={state.focus}
               inline={props.inline}

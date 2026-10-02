@@ -2,7 +2,7 @@ export * from "./core"
 
 export * from "./points"
 
-export * from "./services"
+export * from "./host-apis"
 
 export * from "./solid"
 

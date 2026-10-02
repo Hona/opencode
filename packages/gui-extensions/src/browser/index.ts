@@ -1,11 +1,11 @@
-import { Extension, Remote } from "../sdk"
+import { Extension, Ipc } from "../sdk"
 import { Browser } from "./contract"
 import en from "./i18n/en"
-import type { BrowserPane } from "./remote"
+import type { BrowserPane } from "./ipc"
 
-// The pane's remote, which the main entry provides and the renderer's model uses once a session opens. A reference,
+// The pane's Ipc, which the main entry provides and the renderer's model uses once a session opens. A reference,
 // so its protocol schemas load with the model instead of at startup.
-const Pane = Remote.ref<typeof BrowserPane>("browser.pane")
+const Pane = Ipc.ref<typeof BrowserPane>("browser.pane")
 
 export default Extension.define({
   id: "browser",

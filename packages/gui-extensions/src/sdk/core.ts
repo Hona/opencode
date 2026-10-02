@@ -30,20 +30,20 @@ export interface MainContext extends Context {
 export type MainSetup = (ctx: MainContext) => Result
 
 export interface Definition {
-  /** Prefix of every id the extension creates: commands, panels, settings, storage, services, points. */
+  /** Prefix of every id the extension creates: commands, panels, settings, storage, contracts, points. */
   readonly id: string
   readonly os?: readonly OS[]
   readonly i18n?: Catalog
-  /** Contracts this extension provides: Services from its renderer entry, Remotes from its main entry. */
+  /** Contracts this extension provides: Contracts from its renderer entry, Ipcs from its main entry. */
   readonly provides?: Tokens
   /** Optional contracts. Each is a `Live` accessor in `ctx.uses`; the extension must work while one is inactive. */
   readonly uses?: Tokens
   /**
    * Hard contracts. The host starts the extension only while every one is active and restarts it with them; the
    * values are plain in `ctx.requires`. Use it only where the extension is meaningless without the contract. A
-   * reference (`Remote.ref`) is refused: it resolves only once code uses the full token, which setup would do.
+   * reference (`Ipc.ref`) is refused: it resolves only once code uses the full token, which setup would do.
    */
-  readonly requires?: Readonly<Record<string, Service<unknown> | Remote>>
+  readonly requires?: Readonly<Record<string, Contract<unknown> | Ipc>>
   /** State the host stores for the extension and loads before it is read. See `Store`. */
   readonly stores?: Readonly<Record<string, StoreDeclaration>>
   readonly renderer?: () => Promise<{ readonly default: (ctx: never) => Result }>
@@ -68,57 +68,57 @@ export interface Point<T> {
 }
 
 /** An in-process contract. Any interface, no schema, never crosses IPC. */
-export interface Service<T, Id extends string = string> {
-  readonly kind: "service"
+export interface Contract<T, Id extends string = string> {
+  readonly kind: "contract"
   readonly id: Id
   readonly [brand]?: T
 }
 
-/** A capability the host always provides. */
-export interface Host<T> {
-  readonly kind: "host"
+/** An API the host always provides. */
+export interface HostApi<T> {
+  readonly kind: "hostapi"
   readonly id: string
   readonly [brand]?: T
 }
 
 type Codec = Schema.ConstraintCodec<unknown, unknown>
 
-export interface RemoteMethod {
+export interface IpcMethod {
   readonly input?: Codec
   readonly output?: Codec
 }
 
-export interface RemoteSpec {
+export interface IpcSpec {
   readonly id: string
   readonly state?: Codec
-  readonly methods: Readonly<Record<string, RemoteMethod>>
+  readonly methods: Readonly<Record<string, IpcMethod>>
   readonly events?: Readonly<Record<string, Codec>>
 }
 
 /** A contract provided in the main process and used from the renderer over the IPC bridge. */
-export interface Remote<S extends RemoteSpec = RemoteSpec> {
-  readonly kind: "remote"
+export interface Ipc<S extends IpcSpec = IpcSpec> {
+  readonly kind: "ipc"
   readonly id: string
   readonly spec: S
 }
 
-/** A Remote declared by id and typed by its token, with no spec at runtime. See `Remote.ref`. */
-export interface RemoteRef<S extends RemoteSpec = RemoteSpec> {
-  readonly kind: "remote"
+/** An Ipc declared by id and typed by its token, with no spec at runtime. See `Ipc.ref`. */
+export interface IpcRef<S extends IpcSpec = IpcSpec> {
+  readonly kind: "ipc"
   readonly id: string
   readonly spec?: undefined
   readonly [brand]?: S
 }
 
 /** A contract one extension provides and others declare in `uses` or `requires`. */
-export type Token = Service<unknown> | Remote | RemoteRef
+export type Token = Contract<unknown> | Ipc | IpcRef
 
 export type Tokens = Readonly<Record<string, Token>>
 
 type TypeOf<C> = C extends Codec ? C["Type"] : void
 
-/** What the renderer gets from `use(remote)`. Methods are async; state is synced per window. */
-export type RemoteClient<S extends RemoteSpec> = {
+/** What the renderer gets from `use(ipc)`. Methods are async; state is synced per window. */
+export type IpcClient<S extends IpcSpec> = {
   readonly [Name in keyof S["methods"]]: (
     input: TypeOf<S["methods"][Name]["input"]>,
     options?: { readonly signal?: AbortSignal },
@@ -131,13 +131,13 @@ export type RemoteClient<S extends RemoteSpec> = {
   ): Cleanup
 }
 
-/** The value a token gives its users: the service itself, or the client of a remote. */
+/** The value a token gives its users: the contract itself, or the client of an Ipc. */
 export type TokenValue<T> =
-  T extends Remote<infer S>
-    ? RemoteClient<S>
-    : T extends RemoteRef<infer S>
-      ? RemoteClient<S>
-      : T extends Service<infer V>
+  T extends Ipc<infer S>
+    ? IpcClient<S>
+    : T extends IpcRef<infer S>
+      ? IpcClient<S>
+      : T extends Contract<infer V>
         ? V
         : never
 
@@ -153,28 +153,28 @@ export type Live<T> =
 const live = Symbol.for("opencode.extension.live")
 
 export const Live = {
-  /** Host: marks the accessor `use` returns, so `createActive` follows its generations. */
+  /** For the host: marks the accessor `use` returns, so `createKeyed` follows its generations. */
   accessor: <T>(read: () => Live<T>): Accessor<Live<T>> => Object.assign(read, { [live]: true }),
   /** The accessor is one the host marked with `Live.accessor`. */
   is: (source: Accessor<unknown>): source is Accessor<Live<unknown>> => live in source,
 }
 
-/** Identifies the renderer window a remote call came from. Main uses it to scope state and events. */
+/** Identifies the renderer window an Ipc call came from. Main uses it to scope state and events. */
 export interface Caller {
   readonly window: number
   readonly signal: AbortSignal
 }
 
-/** What main passes to `provide(remote, impl)`. */
-export type RemoteImpl<S extends RemoteSpec> = {
+/** What main passes to `provide(ipc, impl)`. */
+export type IpcImpl<S extends IpcSpec> = {
   readonly [Name in keyof S["methods"]]: (
     input: TypeOf<S["methods"][Name]["input"]>,
     caller: Caller,
   ) => TypeOf<S["methods"][Name]["output"]> | Promise<TypeOf<S["methods"][Name]["output"]>>
 } & (S["state"] extends Codec ? { state(window: number): TypeOf<S["state"]> } : unknown)
 
-/** Returned by `provide(remote, impl)` in main. */
-export interface Provided<S extends RemoteSpec> {
+/** Returned by `provide(ipc, impl)` in main. */
+export interface IpcProvider<S extends IpcSpec> {
   /** Re-reads `impl.state` and sends it to one window, or to every window. */
   changed(window?: number): void
   emit<Name extends keyof NonNullable<S["events"]> & string>(
@@ -194,13 +194,13 @@ export interface BaseContext {
   cleanup(fn: Cleanup): Cleanup
   /**
    * Contribute an item. Pass a function to contribute reactively; return undefined to withdraw. The item is withdrawn
-   * with the current owner (for example a `createActive` generation or a component), else with the extension.
+   * with the current owner (for example a `createKeyed` run or a component), else with the extension.
    */
   add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup
   /** Read contributions to a point this extension owns. Reactive. */
   list<T>(point: Point<T>): readonly T[]
-  provide<T>(token: Service<T>, impl: T): Cleanup
-  provide<S extends RemoteSpec>(token: Remote<S>, impl: RemoteImpl<S>): Provided<S>
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
   /** Resolves this extension's catalog, then the app's shared keys. */
   t(key: string, params?: Params): string
   plural(key: string, count: number, params?: Params): string
@@ -208,10 +208,10 @@ export interface BaseContext {
 
 /** The main process context. The renderer's `Context` follows providers through `Live` instead. */
 export interface Context extends BaseContext {
-  use<T>(token: Host<T>): T
+  use<T>(token: HostApi<T>): T
   /** Follows the provider live: undefined until it exists, and again after it goes away. */
-  use<T>(token: Service<T>): Accessor<T | undefined>
-  use<S extends RemoteSpec>(token: Remote<S>): Accessor<RemoteClient<S> | undefined>
+  use<T>(token: Contract<T>): Accessor<T | undefined>
+  use<S extends IpcSpec>(token: Ipc<S>): Accessor<IpcClient<S> | undefined>
 }
 
 /** Moves an older stored value into a store once. */
@@ -220,7 +220,7 @@ export type StoreFrom =
   | {
       readonly key: string
       /**
-       * For session scope: `key` is an app key (e.g. "layout") whose field `sessions` holds every session's
+       * For session scope: `key` is a global key (e.g. "layout") whose field `sessions` holds every session's
        * state by the host's session key. pick receives only this session's entry, or undefined.
        */
       readonly sessions?: string
@@ -234,7 +234,7 @@ type StoreSchema = Schema.ConstraintCodec<object, unknown>
 /** A store an extension declares in `Extension.define({ stores })`. Its key is the store's name. */
 export interface StoreDeclaration<
   S extends StoreSchema = StoreSchema,
-  Scope extends "app" | "session" = "app" | "session",
+  Scope extends "global" | "session" = "global" | "session",
 > {
   readonly scope: Scope
   readonly schema: S
@@ -245,12 +245,12 @@ export interface StoreDeclaration<
 
 export const Store = {
   /** One value for the app. The host loads it before setup, so `ctx.stores.name.value` is never undefined. */
-  app: <S extends StoreSchema>(
+  global: <S extends StoreSchema>(
     schema: S,
     initial: NoInfer<S["Type"]>,
     from?: StoreFrom,
-  ): StoreDeclaration<S, "app"> => ({
-    scope: "app",
+  ): StoreDeclaration<S, "global"> => ({
+    scope: "global",
     schema,
     initial,
     from,
@@ -289,11 +289,11 @@ export type DeclaredStores<D> = D extends { readonly stores?: infer M }
 
 /** The id a token declares, for compile errors. */
 export type TokenId<T> =
-  T extends Remote<infer S>
+  T extends Ipc<infer S>
     ? S["id"]
-    : T extends RemoteRef<infer S>
+    : T extends IpcRef<infer S>
       ? S["id"]
-      : T extends Service<unknown, infer Id>
+      : T extends Contract<unknown, infer Id>
         ? Id
         : never
 
@@ -307,7 +307,7 @@ export interface Duplicate<Id extends string> {
   readonly [problem]: Id
 }
 
-/** `RemotesProvided`: a renderer `uses` or `requires` of a Remote that no main entry provides. */
+/** `IpcsProvided`: a renderer `uses` or `requires` of an Ipc that no main entry provides. */
 export interface MissingMain<Id extends string> {
   readonly [problem]: Id
 }
@@ -334,25 +334,25 @@ export type Composition<Ds extends readonly unknown[]> = [MissingIds<Ds>] extend
     : { readonly "duplicate provider": Duplicate<DuplicateIds<Ds>> }
   : { readonly "missing provider": Missing<MissingIds<Ds>> }
 
-type RemoteIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
-  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Remote | RemoteRef>>
+type IpcIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
+  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Ipc | IpcRef>>
   : never
 
-type MissingRemotes<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
-  RemoteIds<R[number], "uses"> | RemoteIds<R[number], "requires">,
-  RemoteIds<Extract<M[number], { readonly main: unknown }>, "provides">
+type MissingIpcs<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
+  IpcIds<R[number], "uses"> | IpcIds<R[number], "requires">,
+  IpcIds<Extract<M[number], { readonly main: unknown }>, "provides">
 >
 
 /**
- * `true` when every Remote the renderer composition `R` declares in `uses` or `requires` is provided by an entry with a
- * main module in the main composition `M`; otherwise an error type naming the remote. Check it once in a file that
- * imports both compositions: `const remotes: RemotesProvided<typeof renderer, typeof main> = true`.
+ * `true` when every Ipc the renderer composition `R` declares in `uses` or `requires` is provided by an entry with a
+ * main module in the main composition `M`; otherwise an error type naming the Ipc. Check it once in a file that
+ * imports both compositions: `const ipcs: IpcsProvided<typeof renderer, typeof main> = true`.
  */
-export type RemotesProvided<R extends readonly unknown[], M extends readonly unknown[]> = [
-  MissingRemotes<R, M>,
-] extends [never]
+export type IpcsProvided<R extends readonly unknown[], M extends readonly unknown[]> = [MissingIpcs<R, M>] extends [
+  never,
+]
   ? true
-  : MissingMain<MissingRemotes<R, M>>
+  : MissingMain<MissingIpcs<R, M>>
 
 export const Extension = {
   /**
@@ -371,26 +371,26 @@ export const Point = {
   define: <T>(id: string): Point<T> => ({ kind: "point", id }),
 }
 
-export const Service = {
-  /** `Service.define<FileTree, "file.tree">("file.tree")`: the id is a type argument too, so composition errors name it. */
-  define: <T, const Id extends string>(id: Id): Service<T, Id> => ({ kind: "service", id }),
+export const Contract = {
+  /** `Contract.define<FileTree, "file.tree">("file.tree")`: the id is a type argument too, so composition errors name it. */
+  define: <T, const Id extends string>(id: Id): Contract<T, Id> => ({ kind: "contract", id }),
 }
 
-export const Host = {
-  define: <T>(id: string): Host<T> => ({ kind: "host", id }),
+export const HostApi = {
+  define: <T>(id: string): HostApi<T> => ({ kind: "hostapi", id }),
 }
 
-type SpecOf<R> = R extends Remote<infer S> ? S : never
+type SpecOf<R> = R extends Ipc<infer S> ? S : never
 
-export const Remote = {
-  define: <const S extends RemoteSpec>(spec: S): Remote<S> => ({ kind: "remote", id: spec.id, spec }),
+export const Ipc = {
+  define: <const S extends IpcSpec>(spec: S): Ipc<S> => ({ kind: "ipc", id: spec.id, spec }),
   /**
-   * Declares a remote by id, typed from a type-only import of its token, so a definition can name it in `provides`,
-   * `uses` or `requires` without loading its schemas: `Remote.ref<typeof BrowserPane>("browser.pane")`. Composition
+   * Declares an Ipc by id, typed from a type-only import of its token, so a definition can name it in `provides`,
+   * `uses` or `requires` without loading its schemas: `Ipc.ref<typeof BrowserPane>("browser.pane")`. Composition
    * checks and `Live` typing treat it as the token. In the renderer it resolves once code in the window uses the full
    * token, e.g. `ctx.use(BrowserPane)` from a chunk that loads later (`use` accepts the full token of a declared
    * reference), and it is pending until then. Declare it in `uses`: a `requires` would wait for a resolution that setup
    * itself would make.
    */
-  ref: <R extends Remote>(id: TokenId<R>): RemoteRef<SpecOf<R>> => ({ kind: "remote", id }),
+  ref: <R extends Ipc>(id: TokenId<R>): IpcRef<SpecOf<R>> => ({ kind: "ipc", id }),
 }

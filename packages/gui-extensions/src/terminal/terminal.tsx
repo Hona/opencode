@@ -8,7 +8,7 @@ import { createPtyClient } from "@opencode/client/solid"
 import type { FitAddon, Terminal as Term } from "ghostty-web"
 import { Option, Predicate, Schema } from "effect"
 import { type ComponentProps, createMemo, onCleanup, onMount, splitProps } from "solid-js"
-import { App, createActive, Native, System, useExtension, type ServerRef } from "../sdk"
+import { Appearance, createKeyed, Desktop, Keybinds, System, useExtension, type ServerRef } from "../sdk"
 import type { TerminalModel } from "./model"
 import type { LocalPTY } from "./state"
 import { SerializeAddon } from "./serialize"
@@ -182,9 +182,10 @@ const persistTerminal = (input: {
 
 export const Terminal = (props: TerminalProps) => {
   const extension = useExtension()
-  const app = extension.use(App)
+  const appearance = extension.use(Appearance)
+  const keybinds = extension.use(Keybinds)
   const system = extension.use(System)
-  const native = extension.use(Native)
+  const desktop = extension.use(Desktop)
   const theme = useTheme()
   let container!: HTMLDivElement
 
@@ -358,7 +359,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   // The terminal follows the theme and font; it is created with the current ones, so changes before then wait.
-  createActive(
+  createKeyed(
     () => ({ colors: terminalColors(), mode: theme.mode() === "dark" ? "dark" : "light" }),
     (current) => {
       if (!term) return
@@ -368,8 +369,8 @@ export const Terminal = (props: TerminalProps) => {
     },
   )
 
-  createActive(
-    () => app.font("mono"),
+  createKeyed(
+    () => appearance.font("mono"),
     (font) => {
       if (!term) return
 
@@ -379,8 +380,8 @@ export const Terminal = (props: TerminalProps) => {
   )
 
   // A new zoom refits; the first value finds no fit addon yet.
-  createActive(
-    () => native?.zoom(),
+  createKeyed(
+    () => desktop?.zoom(),
     () => scheduleFit(),
   )
 
@@ -438,7 +439,7 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: app.font("mono"),
+        fontFamily: appearance.font("mono"),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -480,7 +481,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         // allow for toggle terminal keybinds in parent
-        return app.matches("terminal.toggle", event)
+        return keybinds.matches("terminal.toggle", event)
       })
 
       const fit = new mod.FitAddon()

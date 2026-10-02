@@ -4,7 +4,7 @@ import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtua
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import type { ChangeKind } from "../review/contract"
-import { createActive, Native, useExtension, type FileNode, type SessionView } from "../sdk"
+import { createKeyed, Desktop, useExtension, type FileNode, type MountedSession } from "../sdk"
 import { startFileDrag } from "./drag"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
@@ -130,7 +130,7 @@ function GuideLines(props: { level: number }) {
 }
 
 export default function FileTreeV2(props: {
-  session: SessionView
+  session: MountedSession
   active?: string
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, ChangeKind>
@@ -140,7 +140,7 @@ export default function FileTreeV2(props: {
 }) {
   const ctx = useExtension()
   const file = props.session.file
-  const openIn = ctx.use(Native) ? useOpenInApp({ session: props.session, path: () => file.root }) : undefined
+  const openIn = ctx.use(Desktop) ? useOpenInApp({ session: props.session, path: () => file.root }) : undefined
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
@@ -182,7 +182,7 @@ export default function FileTreeV2(props: {
   })
 
   // The live tree lists the root whenever it is not loaded, e.g. again after the workspace's tree resets.
-  createActive(
+  createKeyed(
     () => {
       if (!live()) return
 
@@ -197,7 +197,7 @@ export default function FileTreeV2(props: {
   // Do not re-scroll when expand/collapse reshuffles `rows()`. An empty path is no active path.
   const scrolled = { active: "" }
 
-  createActive(
+  createKeyed(
     () => {
       const path = active()
 
@@ -256,7 +256,7 @@ export default function FileTreeV2(props: {
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
   // A new row set measures from the pane's width again; rows wider than the pane widen the tree.
-  createActive(
+  createKeyed(
     () => {
       const current = rows()
       const element = root()
@@ -269,7 +269,7 @@ export default function FileTreeV2(props: {
     },
   )
 
-  createActive(
+  createKeyed(
     () => ({ keys: virtualRowKeys(), element: root() }),
     (current) => syncFileTreeV2Width(current.element),
   )

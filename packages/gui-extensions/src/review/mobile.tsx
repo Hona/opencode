@@ -1,7 +1,7 @@
 import { onCleanup, Show } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { SessionReview } from "@opencode/session-ui/session-review"
-import { createActive, Layout, Links, Preferences, useExtension, type SessionView } from "../sdk"
+import { createKeyed, Layout, Links, Preferences, useExtension, type MountedSession } from "../sdk"
 import type { ReviewModel } from "./model"
 import { ReviewEmpty, ReviewTitle } from "./parts"
 
@@ -13,7 +13,7 @@ type ScrollState = {
 }
 
 /** The narrow-screen review: every changed file as one scrollable list. */
-export default function SessionMobileReview(props: { review: ReviewModel; session: SessionView }) {
+export default function SessionMobileReview(props: { review: ReviewModel; session: MountedSession }) {
   const ctx = useExtension()
   const links = ctx.use(Links)
   const preferences = ctx.use(Preferences)
@@ -34,7 +34,7 @@ export default function SessionMobileReview(props: { review: ReviewModel; sessio
 
 function SessionReviewTab(props: {
   review: ReviewModel
-  session: SessionView
+  session: MountedSession
   overflow: "wrap" | "scroll"
   onViewFile: (file: string) => void
 }) {
@@ -118,7 +118,7 @@ function SessionReviewTab(props: {
   }
 
   // Restores the stored scroll once the layout loads, and again when the list or its wrapping changes.
-  createActive(
+  createKeyed(
     () => {
       const count = review.diffs().length
       const overflow = props.overflow
