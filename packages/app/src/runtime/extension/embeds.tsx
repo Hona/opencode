@@ -5,6 +5,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import type { EmbedProps, Embeds } from "@opencode/gui-extensions/sdk"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
+const geometry =
+  /^(inset|left|right|top|bottom|translate|transform|scale|rotate|margin|padding|flex|grid|gap|row-gap|column-gap)|(^|-)(width|height)$/
+
 type Input = {
   readonly bridge: Bridge | undefined
   readonly zoom: () => number
@@ -150,13 +153,13 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     if (placed !== id) hide()
     placed = id
 
-    const geometry = {
+    const box = {
       visible,
       bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
       radius: Math.round((props.radius ?? 0) * zoom),
     }
 
-    props.bridge.embed(id, rgba ? { ...geometry, background: [rgba[0], rgba[1], rgba[2], rgba[3]] as const } : geometry)
+    props.bridge.embed(id, rgba ? { ...box, background: [rgba[0], rgba[1], rgba[2], rgba[3]] as const } : box)
   }
 
   const tick = () => {
@@ -196,6 +199,14 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   // animation frame keeps the native view in step with a region drag.
   createResizeObserver(() => element, measure)
   createEventListener(window, "resize", () => schedule(300))
+  // A layout transition elsewhere, such as the chat column's width while the side pane opens, can
+  // move the box without resizing it. Track it from when it actually runs, and settle on its end.
+  createEventListener(document, "transitionrun", (event) => {
+    if (geometry.test(event.propertyName)) schedule(300)
+  })
+  createEventListener(document, ["transitionend", "transitioncancel"], (event) => {
+    if (geometry.test(event.propertyName)) schedule()
+  })
   // Floating content portals directly into <body>; keep measuring briefly so
   // the positioner has settled before the overlap check runs.
   const portals = new MutationObserver(() => schedule(300))

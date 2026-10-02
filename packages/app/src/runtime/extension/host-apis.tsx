@@ -9,7 +9,6 @@ import {
   runWithOwner,
   untrack,
   type Accessor,
-  type Owner,
 } from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
 import type { Schema } from "effect"

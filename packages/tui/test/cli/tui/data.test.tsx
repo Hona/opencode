@@ -3,7 +3,6 @@ import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { OpenCodeEvent } from "@opencode/client"
 import { SessionMessage } from "@opencode/core/session/message"
-import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
@@ -45,7 +44,7 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig({}, { terminal: false })
+const config = createTuiResolvedConfig()
 
 function DataProvider(props: ParentProps) {
   return (

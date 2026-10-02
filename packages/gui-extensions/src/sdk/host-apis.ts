@@ -1,7 +1,7 @@
 import type { Data } from "@opencode/client/solid"
 import type { LocationRef, OpenCodeClient, ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
 import type { Schema } from "effect"
-import type { Accessor, JSX } from "solid-js"
+import type { JSX } from "solid-js"
 import type { Store } from "solid-js/store"
 import type { Cleanup, OS, Persisted, StoreFrom } from "./core"
 import type { IconName, Link } from "./points"

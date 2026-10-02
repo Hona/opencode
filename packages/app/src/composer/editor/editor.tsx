@@ -36,7 +36,6 @@ import type {
   ComposerComment,
   ComposerFilePart,
   ComposerOption,
-  ComposerPersistedState,
   ComposerPrompt,
   ComposerSkillPart,
   ComposerSuggestion,
