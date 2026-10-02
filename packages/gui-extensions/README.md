@@ -1,6 +1,6 @@
 # GUI extensions
 
-Every feature of the desktop and web app that is not the core shell is an extension: the terminal, review, files, the browser, SSH, WSL, the updater and more. Each one builds only on the SDK in [`src/sdk`](src/sdk). The SDK is typed so that the common bugs fail to compile or fail the lint, and every declaration has TSDoc, so editor hovers answer most questions. This guide shows how the parts fit. [`src/example`](src/example) is a small extension that the guide walks through. CI compiles and tests it, but it is not a built-in, so it never ships.
+Every feature of the desktop and web app that is not the core shell is an extension: the terminal, review, files, the browser, SSH, WSL, the updater and more. Each one builds only on the SDK in [`src/sdk`](src/sdk). The SDK is typed so that the common bugs fail to compile or fail the lint, and every declaration has TSDoc, so editor hovers answer most questions. This guide shows how the parts fit, with code from the extensions that ship. [Build your first extension](#build-your-first-extension) walks through [`src/pairing`](src/pairing), a small built-in that uses both processes. `bun run lint` checks every code block marked with its source against that source.
 
 - Window SDK: `@opencode/gui-extensions/sdk` ([`index.ts`](src/sdk/index.ts))
 - Main-process SDK: `@opencode/gui-extensions/sdk/main` ([`main.ts`](src/sdk/main.ts))
@@ -22,14 +22,16 @@ flowchart LR
 ## Anatomy
 
 ```text
-src/example/
+src/pairing/
 ├── index.ts          Extension.define: id, provides, uses, requires, stores, i18n
 ├── contract.ts       tokens other code may import: Ipc, Contract, Point
-├── renderer.ts(x)    window entry, default export Setup<typeof definition>
-├── main.ts           main entry, default export MainSetup (desktop only)
-├── i18n/en.ts        English copy; other locales load when picked
-└── *.test.ts         unit tests of logic that carries a contract
+├── renderer.tsx      window entry, default export Setup<typeof definition>
+├── main.ts           main entry, default export MainSetup<typeof definition> (desktop only)
+├── page.tsx          heavy UI, loaded with lazy()
+└── i18n/en.ts        English copy; other locales load when picked
 ```
+
+Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, as in `src/ssh/` and `src/updater/`.
 
 `Extension.define` is the manifest. The host reads it before any entry loads.
 
@@ -97,6 +99,16 @@ stateDiagram-v2
 - Teardown of other work: `onCleanup` in the window, `ctx.scope.addFinalizer` in main. Setup returns nothing.
 - Setup may be async. After each `await` there is no owner. Return if `ctx.signal.aborted` (main: `ctx.scope.signal`).
 
+The updater listens to its main side's `check` event once per generation of that side. When main restarts, the run ends and its listener goes with it:
+
+<!-- source: src/updater/renderer.tsx#createKeyed -->
+
+```tsx
+// Beta builds answer the app menu's Check for Updates in the focused window instead of a native dialog. The
+// listener ends with the generation of the main side that sends it.
+createKeyed(updater, (client) => void client.on("check", () => act("check")))
+```
+
 ### The routed session
 
 ```mermaid
@@ -110,7 +122,13 @@ flowchart LR
 
 - Each routed session gets its own frozen `MountedSession`: `key`, `id`, `tab`, `server`, `directory` and `visit` never change, and `location`, `project` and the other fields read that session's data, never the route's. It has nothing that acts on another session.
 - Renders stay mounted. The host hands them the next object through a reactive getter, so read `props.session` (panels), `input.session` (slots) or `state.session` (tab labels) where you use it, and never copy it into a variable.
-- The workspace files, line comments and composer follow the route, so they belong to the session screen: `ctx.screen.current()` returns one `SessionScreen` from the screen's first render until it unmounts, and undefined on Home and on a draft. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
+- The workspace files, line comments and composer follow the route, so they belong to the session screen. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
+- The screen and its session are two different checks:
+
+| Read                            | Defined                                                                               | Undefined                                                                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.screen.current()`          | While a session screen is mounted: one object from its first render until it unmounts | On Home, on a draft (`/new-session` renders the new-session page, not a session screen), and before the app interface mounts                                                                             |
+| `ctx.screen.current()?.session` | While that screen routes a session: the same object as `ctx.sessions.current()`       | Whenever `ctx.sessions.current()` is: during the screen's first render, before it registers the routed session, and while the route has left the screen for Home or a draft that has not replaced it yet |
 
 ```ts
 ctx.add(Panel, {
@@ -149,10 +167,9 @@ ctx.add(Command, {
 | `onIdle(fn)`                                    | Preloading a lazy chunk while the app is idle                                 |
 | `Scope` (main)                                  | `ctx.scope`: `signal`, `addFinalizer`, `fork`, `close`                        |
 
-```ts
-// Side work per generation of a provider: the listener ends with the generation.
-createKeyed(ctx.uses.updater, (updater) => void updater.on("check", () => act("check")))
+[Lifetimes](#lifetimes) shows `createKeyed` in the updater.
 
+```ts
 // Async data: `latest` stays while a new request runs; a stale reply is dropped.
 const info = createLatest(ctx.uses.pairing, (pairing, signal) => pairing.info(undefined, { signal }))
 
@@ -219,17 +236,18 @@ An `Ipc` is the typed contract between an extension's main entry and its windows
 
 ```mermaid
 sequenceDiagram
-  participant W as window (ctx.uses.counter)
+  participant W as updater window (ctx.uses.updater)
   participant B as bridge
-  participant M as main (ctx.provide)
+  participant M as updater main (ctx.provide)
   W->>B: subscribe
   B->>M: state(window)
   M-->>W: available + state snapshot
-  W->>B: add(1), input encoded
+  W->>B: check(), input encoded
   B->>M: decoded input, Caller { window, signal }
-  M->>M: count.update(…), counter.changed()
+  M->>M: the state moves to "checking", provider.changed()
   M-->>W: state push (an event always wins over an older snapshot)
   M-->>W: reply, output encoded
+  M-->>W: emit("check", null, window): the app menu asks this window to check
 ```
 
 - Define it in `contract.ts`. Its id is your extension id, or `<id>.<name>`.
@@ -268,33 +286,36 @@ A reference cannot go in `requires`: setup would wait for a `load` that only set
 - An Ipc call can reject while the event that explains it is still in flight. When main reports an outcome as an event, let the event decide.
 - A contribution that throws renders nothing and records the error. The rest of the window keeps working.
 
-The example offers its pill and its reset command only while main's counter is active:
+The updater's actions branch on the `Live` value and still answer while its main side is missing:
 
-<!-- source: src/example/renderer.ts#counter -->
+<!-- source: src/updater/renderer.tsx#act -->
 
-```ts
-// One run per generation of main's counter. What it adds goes away with the generation, so nothing is offered
-// while the counter cannot answer (on the web, always).
-createKeyed(ctx.uses.counter, (counter) => {
-  ctx.add(TitlebarItem, () =>
-    pill.value.shown
-      ? {
-          id: "count",
-          label: ctx.plural("pill.label", counter.state() ?? 0),
-          title: ctx.t("pill.title"),
-          icon: "plus",
-          run: () => void counter.add(1, { signal: ctx.signal }),
-        }
-      : undefined,
-  )
-  ctx.add(Command, {
-    id: "reset",
-    get title() {
-      return ctx.t("command.reset")
-    },
-    run: () => counter.reset(undefined, { signal: ctx.signal }),
-  })
-})
+```tsx
+const act = (name: "check" | "install") => {
+  const live = updater()
+
+  if (live.status === "active") return void import("./actions").then((module) => module[name](ctx, live.value))
+
+  // Not loaded yet, or gone (disabled, failed, restarting): nothing can check or install.
+  showToast({ title: ctx.t("common.requestFailed") })
+}
+```
+
+The pairing settings page renders only while its main side is up, so it never offers a control that cannot answer:
+
+<!-- source: src/pairing/page.tsx#PairingPage -->
+
+```tsx
+// The page shows nothing until the main side is up, and again while it is away.
+export default function PairingPage(props: { pairing: Accessor<Live<Client>> }) {
+  const client = () => {
+    const live = props.pairing()
+
+    return live.status === "active" ? live.value : undefined
+  }
+
+  return <Show when={client()}>{(client) => <SettingsPairing client={client()} />}</Show>
+}
 ```
 
 ## Stored state
@@ -311,22 +332,42 @@ Desktop windows load storage over IPC; the web reads it synchronously. A read be
 
 Each process's `ctx.stores` holds only its own stores: reading a `Store.main` store in the window, or a window store in main, fails to compile.
 
+Details lists older homes, newest first: its earlier id's namespace, then the app key before it.
+
+<!-- source: src/details/index.ts#prefs -->
+
 ```ts
-// details/index.ts: older homes, newest first: the earlier id's namespace, then the app key before it.
+// Stored under the extension's earlier id `summary`, and before extensions in the app settings.
 prefs: Store.global(Prefs, { projectExpanded: true, serverExpanded: true }, [
   "extension.summary.prefs",
   { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },
 ]),
+```
 
-// review/index.ts: one session's slice of an app key that holds every session.
-session: Store.session(SessionState, { open: [] }, {
-  key: "layout",
-  sessions: "sessionView",
-  pick: (entry: { reviewOpen?: unknown } | undefined) => entry && { open: entry.reviewOpen },
-}),
+Review imports one session's slice of an app key that holds every session:
 
-// ssh/index.ts, a main store: a key of the desktop settings file. `{ state: [namespace, key] }` names a key of
-// another main storage namespace, and `file` another settings file.
+<!-- source: src/review/index.ts#session -->
+
+```ts
+// The mode, selected file and open files of each session.
+session: Store.session(
+  SessionState,
+  { open: [] },
+  {
+    key: "layout",
+    sessions: "sessionView",
+    pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
+      entry && { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen },
+  },
+),
+```
+
+SSH keeps a main store, imported from a key of the desktop settings file. `{ state: [namespace, key] }` names a key of another main storage namespace instead, and `file` another settings file:
+
+<!-- source: src/ssh/index.ts#servers -->
+
+```ts
+// The saved hosts, which main keeps; stored before in the desktop settings file.
 servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 ```
 
@@ -348,192 +389,243 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 
 ## Testing
 
-| Gate                       | Where                                                                                                                                                                      | Catches                                                                                                                                                    |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Composition compile checks | [`sdk/compose.typecheck.ts`](src/sdk/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts), [`example/compositions.ts`](src/example/compositions.ts) | A missing `requires` provider, two providers of one token, a window Ipc no main entry provides, a key naming two tokens, a store read in the wrong process |
-| Point compile checks       | [`sdk/points.typecheck.ts`](src/sdk/points.typecheck.ts)                                                                                                                   | A `MenuItem` field its menu ignores                                                                                                                        |
-| Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                                                                                     | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                                           |
-| Keeper suites              | `packages/app/e2e/regression/`                                                                                                                                             | What the user sees, per product area                                                                                                                       |
-| Unit tests                 | `*.test.ts` beside the code                                                                                                                                                | Pure logic with a contract: paths, migrations, protocols                                                                                                   |
-| Lint gate                  | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                                                                            | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from the example                                                      |
+| Gate                       | Where                                                                                                            | Catches                                                                                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition compile checks | [`sdk/compose.typecheck.ts`](src/sdk/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts) | A missing `requires` provider, two providers of one token, a window Ipc no main entry provides, a key naming two tokens, a store read in the wrong process |
+| Point compile checks       | [`sdk/points.typecheck.ts`](src/sdk/points.typecheck.ts)                                                         | A `MenuItem` field its menu ignores                                                                                                                        |
+| Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                           | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                                           |
+| Keeper suites              | `packages/app/e2e/regression/`                                                                                   | What the user sees, per product area                                                                                                                       |
+| Unit tests                 | `*.test.ts` beside the code                                                                                      | Pure logic with a contract: paths, migrations, protocols                                                                                                   |
+| Lint gate                  | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                  | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from its shipping source                                              |
 
-- Test a main entry through its `Ipc` contract with real inputs, not Electron mocks. The example's [`main.test.ts`](src/example/main.test.ts) does.
+- Test a main entry through its `Ipc` contract with real inputs, not Electron mocks.
+- The hosts own their contracts: main storage in `packages/desktop/src/main/extension/storage.test.ts`, the real window host in `packages/app/component-tests/extension-host.spec.ts`. An extension does not test them again.
 - Drive the race the user hits: a reload during async setup, a store that loads late, an Ipc that goes away and returns.
 
 ## Build your first extension
 
-The example keeps a count in main and shows it as a titlebar pill. A command hides the pill, and a reset command appears while main's counter is up.
+Pairing shows another device how to reach this machine's server, and keeps the display awake. It is small and uses both processes: a main entry that owns a power-save blocker and the server's credentials, and a window entry that adds a settings page and a command. Each block below is its shipping source.
 
-1. **Define the Ipc.** The schemas type both sides and encode every value.
+1. **Define the contract.** `contract.ts` holds the tokens other code may import, here the Ipc between pairing's main and window entries. The schemas type both sides and encode every value.
 
-<!-- source: src/example/contract.ts -->
+<!-- source: src/pairing/contract.ts -->
 
 ```ts
 import { Schema } from "effect"
 import { Ipc } from "../sdk"
 
-/** A count the main process keeps for the whole app; every window sees the same value. */
-export const Counter = Ipc.define({
-  id: "example.counter",
-  state: Schema.Number,
+export const PairingInfo = Schema.Struct({ urls: Schema.Array(Schema.String) })
+
+/** Pairs other devices with this machine's local server and keeps its display awake. */
+export const Pairing = Ipc.define({
+  id: "pairing",
   methods: {
-    /** Adds a number to the count and returns the new count. */
-    add: { input: Schema.Number, output: Schema.Number },
-    /** Sets the count back to 0. */
-    reset: {},
+    /** The local server's advertised URLs. */
+    info: { output: PairingInfo },
+    /** A single-use code for an `/auth/connect/:code` link. */
+    code: { output: Schema.String },
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
   },
 })
 ```
 
-2. **Write the definition.** Main provides the counter, and `provides` puts it in the window's `ctx.uses` too. The pill preference is a declared window store, so the host loads it before setup; the count is a declared main store.
+2. **Write the definition.** Pairing provides its Ipc, so its window entry reads it as `ctx.uses.pairing` with no second declaration. Whether main keeps the display awake is a main store, imported once from the key the desktop kept it under before.
 
-<!-- source: src/example/index.ts -->
+<!-- source: src/pairing/index.ts -->
 
 ```ts
 import { Schema } from "effect"
 import { Extension, Store } from "../sdk"
-import { Counter } from "./contract"
+import { Pairing } from "./contract"
 import en from "./i18n/en"
 
-const Pill = Schema.Struct({ shown: Schema.Boolean })
-
-/** The guide's example: a count main keeps, shown as a titlebar pill. Not a built-in, so it never ships. */
 export default Extension.define({
-  id: "example",
-  // The main entry provides the counter. The window entry reads it as `ctx.uses.counter`, a `Live` accessor, so the
-  // window keeps working without it.
-  provides: { counter: Counter },
+  id: "pairing",
+  provides: { pairing: Pairing },
   stores: {
-    // Window state: the host loads it before the window entry's setup.
-    pill: Store.global(Pill, { shown: true }),
-    // Main state: only the main entry's `ctx.stores` holds it.
-    count: Store.main(Schema.Number, 0),
+    // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
+    keepScreenActive: Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] }),
   },
   i18n: { en },
 })
 ```
 
-3. **Add the copy.** Count-sensitive copy uses plural keys, which `ctx.plural` picks.
+3. **Provide it from main.** `MainSetup<typeof definition>` types `ctx.stores`, which main reads synchronously. A finalizer releases the blocker when the instance goes away, and the sidecar's credentials never leave main.
 
-<!-- source: src/example/i18n/en.ts -->
-
-```ts
-export default {
-  "command.show": "Show counter in titlebar",
-  "command.hide": "Hide counter in titlebar",
-  "command.reset": "Reset counter",
-  "pill.label.one": "{{count}} click",
-  "pill.label.other": "{{count}} clicks",
-  "pill.title": "Add one to the counter",
-}
-```
-
-4. **Provide it from main.** `MainSetup<typeof definition>` types the main stores in `ctx.stores`, which main storage reads synchronously. Each change calls `changed()`, which pushes the new state to every window.
-
-<!-- source: src/example/main.ts -->
+<!-- source: src/pairing/main.ts -->
 
 ```ts
+import { powerSaveBlocker } from "electron"
 import type { MainSetup } from "../sdk/main"
-import { Counter } from "./contract"
+import { Pairing } from "./contract"
 import type definition from "./index"
 
+/** The display sleep blocker this instance holds, if any. */
+type Blocker = { id?: number }
+
 const setup: MainSetup<typeof definition> = (ctx) => {
-  // A declared main store: main storage is synchronous, so `value` is always defined.
-  const count = ctx.stores.count
+  const stored = ctx.stores.keepScreenActive
+  const blocker: Blocker = {}
 
-  const counter = ctx.provide(Counter, {
-    state: () => count.value,
-    add: (by) => {
-      count.update((value) => value + by)
-      counter.changed()
+  const release = () => {
+    if (blocker.id === undefined) return
+    powerSaveBlocker.stop(blocker.id)
+    blocker.id = undefined
+  }
 
-      return count.value
-    },
-    reset: () => {
-      count.update(() => 0)
-      counter.changed()
-    },
+  const keepScreenActive = (enabled: boolean) => {
+    if (enabled && blocker.id === undefined) blocker.id = powerSaveBlocker.start("prevent-display-sleep")
+
+    if (!enabled) release()
+    stored.update(() => enabled)
+  }
+
+  if (stored.value) keepScreenActive(true)
+  ctx.scope.addFinalizer(release)
+
+  const client = async () => {
+    const server = ctx.serverEndpoints.get("sidecar")
+
+    if (!server) throw new Error("The local desktop server is not ready")
+    const { OpenCode } = await import("@opencode/client/promise")
+
+    return OpenCode.make({ baseUrl: server.url, headers: server.headers })
+  }
+
+  ctx.provide(Pairing, {
+    info: async () => ({ urls: (await (await client()).server.info()).urls }),
+    code: async () => (await (await client()).server.pair()).code,
+    screenActive: () => blocker.id !== undefined && powerSaveBlocker.isStarted(blocker.id),
+    setScreenActive: (enabled) => keepScreenActive(enabled),
   })
 }
 
 export default setup
 ```
 
-5. **Write the window entry.** The toggle command needs no main process. The pill and the reset command live in one `createKeyed` run per generation of the counter, so they exist only while main can answer.
+4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives `ctx.uses.pairing` and renders nothing until main answers (see `PairingPage` under [Live and failure handling](#live-and-failure-handling)).
 
-<!-- source: src/example/renderer.ts -->
+<!-- source: src/pairing/renderer.tsx -->
 
-```ts
-import { Command, createKeyed, TitlebarItem, type Setup } from "../sdk"
+```tsx
+import { lazy, onCleanup, Suspense } from "solid-js"
+import { onIdle, Command, SettingsPage, type Setup } from "../sdk"
 import type definition from "./index"
 
 const setup: Setup<typeof definition> = (ctx) => {
-  const pill = ctx.stores.pill
+  if (!ctx.desktop) return
+  const layout = ctx.layout
+  const Page = lazy(() => import("./page"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  onCleanup(onIdle(() => void Page.preload()))
 
-  // Needs no main process: it only flips a stored preference.
-  ctx.add(Command, {
-    id: "toggle",
+  ctx.add(SettingsPage, {
+    id: "pairing",
+    icon: "server",
+    available: "desktop",
     get title() {
-      return ctx.t(pill.value.shown ? "command.hide" : "command.show")
+      return ctx.t("title")
     },
-    run: () => pill.update((draft) => ({ shown: !draft.shown })),
+    get entries() {
+      return [
+        { id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" },
+        {
+          id: "settings-keep-screen-active",
+          title: ctx.t("screenActive.title"),
+          description: ctx.t("screenActive.description"),
+          keywords: "display sleep awake local",
+        },
+      ]
+    },
+    render: () => (
+      <Suspense>
+        <Page pairing={ctx.uses.pairing} />
+      </Suspense>
+    ),
   })
 
-  // One run per generation of main's counter. What it adds goes away with the generation, so nothing is offered
-  // while the counter cannot answer (on the web, always).
-  createKeyed(ctx.uses.counter, (counter) => {
-    ctx.add(TitlebarItem, () =>
-      pill.value.shown
-        ? {
-            id: "count",
-            label: ctx.plural("pill.label", counter.state() ?? 0),
-            title: ctx.t("pill.title"),
-            icon: "plus",
-            run: () => void counter.add(1, { signal: ctx.signal }),
-          }
-        : undefined,
-    )
-    ctx.add(Command, {
-      id: "reset",
-      get title() {
-        return ctx.t("command.reset")
-      },
-      run: () => counter.reset(undefined, { signal: ctx.signal }),
-    })
+  ctx.add(Command, {
+    id: "open",
+    get title() {
+      return ctx.t("command.title")
+    },
+    get group() {
+      return ctx.t("command.category.server")
+    },
+    run: () => layout.settings("pairing"),
   })
 }
 
 export default setup
 ```
 
-6. **Compose it.** Each process lists its extensions with `Extension.compose`, and `IpcsProvided` checks the two lists against each other.
+5. **Register it.** A built-in joins both lists, each composed with `Extension.compose`. The main list names every built-in, so their ids stay reserved, and adds pairing's main entry:
 
-<!-- source: src/example/compositions.ts -->
-
-```ts
-import { Extension, type IpcsProvided } from "../sdk"
-import example from "./index"
-import setup from "./renderer"
-
-/** The window composition, as `src/renderer.ts` lists the built-ins. */
-export const renderer = Extension.compose({ ...example, renderer: async () => ({ default: setup }) })
-
-/** The main composition, as `src/main.ts` lists the built-ins. */
-export const main = Extension.compose({ ...example, main: () => import("./main") })
-
-// The window uses `example.counter`, so a main entry must provide it: without `main` above, this fails to compile.
-export const ipcs: IpcsProvided<typeof renderer, typeof main> = true
-```
-
-7. **Test it.** [`main.test.ts`](src/example/main.test.ts) drives the main entry through the `Counter` contract: every change reaches the windows, and a reload keeps the count. `packages/app/component-tests/extension-example.spec.ts` mounts the window entry in the real host, with and without main's counter.
-
-8. **Ship it.** A built-in joins the two lists. The example stays out of them, so nothing changes for users:
+<!-- source: src/main.ts#builtins -->
 
 ```ts
-// src/renderer.ts
-{ ...example, renderer: eager(exampleRenderer) },
-// src/main.ts
-{ ...example, main: () => import("./example/main") },
+/**
+ * Built-in extensions with their main entries. Lists every built-in so their ids stay reserved. `builtins.typecheck.ts`
+ * checks that it provides every Ipc the renderer composition uses.
+ */
+export const builtins = Extension.compose(
+  context,
+  btw,
+  debug,
+  terminal,
+  file,
+  review,
+  details,
+  { ...browser, main: () => import("./browser/main") },
+  { ...pairing, main: () => import("./pairing/main") },
+  { ...updater, main: () => import("./updater/main") },
+  { ...ssh, main: () => import("./ssh/main") },
+  { ...wsl, main: () => import("./wsl/main") },
+)
 ```
 
-Then run `bun run lint` and `bun typecheck`. The lint includes `script/sdk-docs.ts`, which fails when an SDK declaration has no TSDoc, or when a code block in this guide differs from the example.
+The window list adds each window entry, loaded with the app:
+
+<!-- source: src/renderer.ts#builtins -->
+
+```ts
+/**
+ * Built-in extensions with their renderer entries. The only place host builds name extensions. `builtins.typecheck.ts`
+ * checks this composition against the main one.
+ */
+export const builtins = Extension.compose(
+  { ...context, renderer: eager(contextRenderer) },
+  { ...btw, renderer: eager(btwRenderer) },
+  { ...debug, renderer: eager(debugRenderer) },
+  { ...terminal, renderer: eager(terminalRenderer) },
+  { ...file, renderer: eager(fileRenderer) },
+  { ...review, renderer: eager(reviewRenderer) },
+  { ...details, renderer: eager(detailsRenderer) },
+  { ...browser, renderer: eager(browserRenderer) },
+  { ...pairing, renderer: eager(pairingRenderer) },
+  { ...updater, renderer: eager(updaterRenderer) },
+  { ...ssh, renderer: eager(sshRenderer) },
+  { ...wsl, renderer: eager(wslRenderer) },
+)
+```
+
+`IpcsProvided` checks the two lists against each other. Drop pairing's `main` entry and this line fails to compile, naming `pairing`:
+
+<!-- source: src/builtins.typecheck.ts#ipcs -->
+
+```ts
+export const ipcs: IpcsProvided<typeof builtins, typeof mainBuiltins> = true
+```
+
+Your own extension takes the same steps:
+
+1. **Pick the id.** It prefixes your commands, panel keys, stored keys and Ipc ids. A later rename needs the migrations under [Stored state](#stored-state).
+2. **Define it.** Create `src/<id>/index.ts` with `Extension.define({ id, i18n: { en } })`, and `src/<id>/i18n/en.ts` with your copy.
+3. **Declare the tokens.** Put any token another extension or your main entry needs in `contract.ts`: a `Contract`, a `Point` or an `Ipc`. Your own tokens go in `provides`. What others provide goes in `uses`, or in `requires` only if the extension is meaningless without it.
+4. **Write the window entry.** In `renderer.tsx`, a `Setup<typeof definition>` contributes with `ctx.add`, branches each action on `ctx.uses.<name>()`, runs side work in `createKeyed`, and keeps heavy UI behind `lazy()` with an `onIdle` preload.
+5. **Write the main entry, if you need Node or Electron.** In `main.ts`, a `MainSetup<typeof definition>` provides your Ipc with `ctx.provide` and tears down with `ctx.scope.addFinalizer`.
+6. **Declare your state.** Use `Store.global`, `Store.session` or `Store.main`, with a `from` for every older home of the value.
+7. **Register both entries** in `src/renderer.ts` and `src/main.ts`, as above. The graph matrix then boots each new optional edge with its provider disabled.
+8. **Test it.** Unit-test pure logic beside the code. Prove what the user sees with a case in the area's keeper suite in `packages/app/e2e/regression/`.
+9. **Check it.** Run `bun run lint`, which includes `script/sdk-docs.ts`, then `bun run lint:changed`, and `bun typecheck` in `packages/gui-extensions`.

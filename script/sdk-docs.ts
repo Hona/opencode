@@ -4,9 +4,10 @@
 // - an exported declaration, an interface member, a field of an object type (an option, a result, a union member), or
 //   a member of an exported object such as `Store.global` has no doc comment;
 // - a documented function or method leaves a parameter without `@param`, or names one it does not have.
-// It also fails when a code block of the guide (`packages/gui-extensions/README.md`) marked `<!-- source: path -->` or
-// `<!-- source: path#region -->` differs from that source, when an example file is shown nowhere, or when the guide or
-// the package's AGENTS.md names a `ctx.<member>` no context declares.
+// It also fails when a code block of the guide (`packages/gui-extensions/README.md`) marked `<!-- source: path -->` (a
+// whole file of a shipping extension) or `<!-- source: path#name -->` (the first declaration, object property or call
+// statement named `name` in that file, with the comments directly above it) differs from that source, or when the
+// guide or the package's AGENTS.md names a `ctx.<member>` no context declares.
 // Usage: bun script/sdk-docs.ts
 import path from "node:path"
 import { Glob } from "bun"
@@ -15,7 +16,6 @@ import ts from "typescript"
 const root = path.resolve(import.meta.dir, "..")
 const pkg = path.join(root, "packages/gui-extensions")
 const sdk = path.join(pkg, "src/sdk")
-const example = path.join(pkg, "src/example")
 
 const problems: string[] = []
 const counts = { declarations: 0, members: 0, parameters: 0, blocks: 0 }
@@ -25,17 +25,7 @@ const files = [...new Glob("**/*.{ts,tsx}").scanSync(sdk)]
   .toSorted()
   .map((file) => path.join(sdk, file))
 
-const sources = await Promise.all(
-  files.map(async (file) =>
-    ts.createSourceFile(
-      file,
-      await Bun.file(file).text(),
-      ts.ScriptTarget.Latest,
-      true,
-      file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    ),
-  ),
-)
+const sources = await Promise.all(files.map(async (file) => parse(file, await Bun.file(file).text())))
 
 sources.forEach((source) => source.statements.forEach((statement) => checkStatement(source, statement)))
 await checkGuide()
@@ -201,13 +191,13 @@ function relative(file: string) {
   return path.relative(root, file).replaceAll(path.sep, "/")
 }
 
-/** The guide's marked code blocks match their source, every example file is shown, and every `ctx.*` it names exists. */
+/** The guide's marked code blocks match their source, and every `ctx.*` the guide and AGENTS.md name exists. */
 async function checkGuide() {
   const guide = path.join(pkg, "README.md")
   const lines = (await read(guide)).split("\n")
 
   const blocks = lines.flatMap((line, index) => {
-    const marker = /^<!-- source: ([^#\s]+)(?:#([\w-]+))? -->$/.exec(line.trim())
+    const marker = /^<!-- source: ([^#\s]+)(?:#([\w$]+))? -->$/.exec(line.trim())
 
     if (!marker?.[1]) return []
 
@@ -221,15 +211,21 @@ async function checkGuide() {
       return []
     }
 
-    return [{ at, file: path.join(pkg, marker[1]), region: marker[2], code: lines.slice(fence + 1, close) }]
+    return [{ at, file: path.join(pkg, marker[1]), name: marker[2], code: lines.slice(fence + 1, close) }]
   })
 
   await Promise.all(
     blocks.map(async (block) => {
-      const name = `${relative(block.file)}${block.region ? `#${block.region}` : ""}`
-      const expected = excerpt(await read(block.file), block.region)
+      const label = `${relative(block.file)}${block.name ? `#${block.name}` : ""}`
+      const text = await Bun.file(block.file)
+        .text()
+        .catch(() => undefined)
 
-      if (!expected) return void problems.push(`${block.at}  ${name} has no such region`)
+      if (text === undefined) return void problems.push(`${block.at}  ${label}: no such file`)
+
+      const expected = excerpt(block.file, text.replaceAll("\r\n", "\n"), block.name)
+
+      if (!expected) return void problems.push(`${block.at}  ${label}: nothing by that name`)
 
       const row = Array.from({ length: Math.max(expected.length, block.code.length) }, (_, row) => row).find(
         (row) => expected[row] !== block.code[row],
@@ -237,18 +233,9 @@ async function checkGuide() {
 
       if (row === undefined) return void counts.blocks++
 
-      problems.push(`${block.at}  the code block differs from ${name} at its line ${row + 1}`)
+      problems.push(`${block.at}  the code block differs from ${label} at its line ${row + 1}`)
     }),
   )
-
-  const shown = new Set(blocks.map((block) => path.resolve(block.file)))
-
-  ;[...new Glob("**/*.{ts,tsx}").scanSync(example)]
-    .filter((file) => !/\.(test|spec)\.tsx?$/.test(file))
-    .map((file) => path.resolve(example, file))
-    .filter((file) => !shown.has(file))
-    .toSorted()
-    .forEach((file) => problems.push(`${relative(file)}:1:1  the guide shows no part of this example file`))
 
   const members = contextMembers()
 
@@ -268,22 +255,64 @@ async function read(file: string) {
   return (await Bun.file(file).text()).replaceAll("\r\n", "\n")
 }
 
-/** The file's lines, or those of one `// #region name` … `// #endregion`, without region markers and dedented. */
-function excerpt(text: string, region: string | undefined) {
+/**
+ * The file's lines, or, for a name, the lines of the first declaration, object property or call statement it names,
+ * with the comment lines directly above it, dedented.
+ */
+function excerpt(file: string, text: string, name: string | undefined) {
   const lines = text.replace(/\n$/, "").split("\n")
-  const marker = (line: string) => /^\s*\/\/ #(end)?region\b/.test(line)
 
-  if (!region) return lines.filter((line) => !marker(line))
+  if (!name) return lines
 
-  const start = lines.findIndex((line) => line.trim() === `// #region ${region}`)
+  const source = parse(file, text)
+  const node = named(source, name)
 
-  if (start === -1) return undefined
+  if (!node) return undefined
 
-  const end = lines.findIndex((line, index) => index > start && line.trim() === "// #endregion")
-  const inner = lines.slice(start + 1, end === -1 ? undefined : end).filter((line) => !marker(line))
-  const indent = Math.min(...inner.filter((line) => line.trim()).map((line) => /^\s*/.exec(line)?.[0].length ?? 0))
+  const first = source.getLineAndCharacterOfPosition(node.getStart(source)).line
+  const last = source.getLineAndCharacterOfPosition(node.getEnd()).line
+  const above = lines.slice(0, first).findLastIndex((line) => !/^\s*(\/\/|\/\*|\*)/.test(line)) + 1
+  const picked = lines.slice(above, last + 1)
+  const indent = Math.min(...picked.filter((line) => line.trim()).map((line) => /^\s*/.exec(line)?.[0].length ?? 0))
 
-  return inner.map((line) => line.slice(indent))
+  return picked.map((line) => line.slice(indent))
+}
+
+/** The first node, in source order, that declares `name`, is an object property named `name`, or calls `name`. */
+function named(node: ts.Node, name: string): ts.Node | undefined {
+  if (ts.isVariableStatement(node)) {
+    if (node.declarationList.declarations.some((declaration) => declaration.name.getText() === name)) return node
+  }
+
+  if (
+    (ts.isFunctionDeclaration(node) ||
+      ts.isClassDeclaration(node) ||
+      ts.isInterfaceDeclaration(node) ||
+      ts.isTypeAliasDeclaration(node) ||
+      ts.isPropertyAssignment(node) ||
+      ts.isMethodDeclaration(node)) &&
+    node.name?.getText() === name
+  )
+    return node
+
+  if (
+    ts.isExpressionStatement(node) &&
+    ts.isCallExpression(node.expression) &&
+    node.expression.expression.getText() === name
+  )
+    return node
+
+  return ts.forEachChild(node, (child) => named(child, name))
+}
+
+function parse(file: string, text: string) {
+  return ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
 }
 
 /** Every member a window or main context exposes: `BaseContext`, `Context`, `SetupContext` and `MainContext`. */

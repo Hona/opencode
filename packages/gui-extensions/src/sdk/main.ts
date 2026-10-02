@@ -331,7 +331,7 @@ export interface MainContext<D = never> extends BaseContext {
    *
    * @example
    * ```ts
-   * const counter = ctx.provide(Counter, { state: () => count.value, add: (by) => add(by) })
+   * const provider = ctx.provide(Updater, { state: () => updater.state(), check, install })
    * ```
    */
   provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
@@ -344,7 +344,8 @@ export interface MainContext<D = never> extends BaseContext {
  * @example
  * ```ts
  * const setup: MainSetup<typeof definition> = (ctx) => {
- *   ctx.provide(Counter, { state: () => ctx.stores.count.value, add: (by) => by })
+ *   const stored = ctx.stores.keepScreenActive // a declared main store, always loaded
+ *   ctx.provide(Pairing, { info, code, screenActive, setScreenActive: (enabled) => stored.update(() => enabled) })
  * }
  * export default setup
  * ```

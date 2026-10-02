@@ -4,14 +4,10 @@ import {
   type Appearance,
   type Build,
   type Definition,
-  type Ipc,
-  type IpcClient,
-  type IpcSpec,
   type Keybinds,
   type Layout,
   type Locale,
   type MountedSession,
-  type Point,
   type Router,
   type Servers,
   type SessionScreen,
@@ -34,7 +30,7 @@ import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 
-export { Command, Contract, createKeyed, Panel, Slot, Store, TitlebarItem } from "@opencode/gui-extensions/sdk"
+export { Contract, createKeyed, Panel, Slot, Store } from "@opencode/gui-extensions/sdk"
 
 export { Schema }
 
@@ -180,15 +176,12 @@ export function mountExtensionHost() {
 /**
  * Mounts the real host over these definitions, before any session mounts, with the HostApis faked at their
  * boundary. Storage is the real persisted store of a desktop window whose reads wait until `release()`; `stored` seeds
- * it. `ipc` and `generation` stand in for main's Ipcs, as the window's bridge clients do. Renders the `window.bottom`
- * slot once the startup gate opens.
+ * it. Renders the `window.bottom` slot once the startup gate opens.
  */
 export function mountExtensions(input: {
   definitions: readonly Definition[]
   disabled?: readonly string[]
   stored?: Readonly<Record<string, Json>>
-  ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
-  generation?: (token: Ipc) => number
 }) {
   const held = Promise.withResolvers<void>()
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set(input.disabled ?? []))
@@ -230,13 +223,7 @@ export function mountExtensions(input: {
 
   function MountedHost() {
     return (
-      <ExtensionHostProvider
-        definitions={input.definitions}
-        disabled={disabled}
-        apis={fakeApis(storage)}
-        ipc={input.ipc}
-        generation={input.generation}
-      >
+      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} apis={fakeApis(storage)}>
         <Capture />
       </ExtensionHostProvider>
     )
@@ -278,8 +265,6 @@ export function mountExtensions(input: {
     status: (id: string) => hosts[0]?.state.status[id],
     failure: (id: string) => hosts[0]?.state.failures[id],
     entries: (point: string) => hosts[0]?.state.entries[point]?.length ?? 0,
-    /** The items contributed to a point, as the host renders them. */
-    list: <T,>(point: Point<T>) => hosts[0]?.list(point) ?? [],
   }
 }
 

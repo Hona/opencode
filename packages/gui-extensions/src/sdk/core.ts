@@ -210,10 +210,9 @@ export interface IpcSpec {
  *
  * @example
  * ```ts
- * export const Counter = Ipc.define({
- *   id: "example.counter",
- *   state: Schema.Number,
- *   methods: { add: { input: Schema.Number, output: Schema.Number } },
+ * export const Pairing = Ipc.define({
+ *   id: "pairing",
+ *   methods: { info: { output: PairingInfo }, setScreenActive: { input: Schema.Boolean } },
  * })
  * ```
  */
@@ -268,7 +267,7 @@ type TypeOf<C> = C extends Codec ? C["Type"] : void
  *
  * @example
  * ```ts
- * const total = await counter.add(1, { signal: ctx.signal })
+ * const info = await pairing.info(undefined, { signal: ctx.signal })
  * ```
  */
 export type IpcClient<S extends IpcSpec> = {
@@ -411,8 +410,8 @@ export type IpcImpl<S extends IpcSpec> = {
  *
  * @example
  * ```ts
- * const counter = ctx.provide(Counter, { state: () => count.value, add })
- * counter.changed()
+ * const provider = ctx.provide(Updater, { state: () => updater.state(), check, install })
+ * provider.changed()
  * ```
  */
 export interface IpcProvider<S extends IpcSpec> {
@@ -829,7 +828,7 @@ export type IpcsProvided<R extends readonly unknown[], M extends readonly unknow
  *
  * @example
  * ```ts
- * export default Extension.define({ id: "example", provides: { counter: Counter }, i18n: { en } })
+ * export default Extension.define({ id: "pairing", provides: { pairing: Pairing }, i18n: { en } })
  * export const builtins = Extension.compose(review, file, browser)
  * ```
  */
@@ -896,7 +895,7 @@ type SpecOf<R> = R extends Ipc<infer S> ? S : never
  *
  * @example
  * ```ts
- * export const Counter = Ipc.define({ id: "example.counter", state: Schema.Number, methods: { reset: {} } })
+ * export const Pairing = Ipc.define({ id: "pairing", methods: { code: { output: Schema.String } } })
  * const Pane = Ipc.ref<typeof BrowserPane>("browser.pane")
  * ```
  */

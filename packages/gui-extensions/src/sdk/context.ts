@@ -260,7 +260,7 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
    *
    * @example
    * ```ts
-   * createKeyed(ctx.uses.counter, (counter) => ctx.add(Command, reset(counter)))
+   * createKeyed(ctx.uses.updater, (client) => void client.on("check", () => act("check")))
    * ```
    */
   readonly uses: { readonly [K in keyof Usable<D>]: Used<Usable<D>[K]> }
