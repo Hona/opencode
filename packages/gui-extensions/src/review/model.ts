@@ -4,9 +4,16 @@ import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-brid
 import { checksum } from "@opencode/util/encode"
 import { createQuery, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
-import { createMemo, on, onCleanup } from "solid-js"
+import { createMemo, on, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, createVisitState, type LineRange, type MountedSession, type SetupContext } from "../sdk"
+import {
+  createKeyed,
+  createVisitState,
+  type LineRange,
+  type MountedSession,
+  type SessionScreen,
+  type SetupContext,
+} from "../sdk"
 import type Review from "./index"
 import {
   filterRenderableDiff,
@@ -29,13 +36,22 @@ const selectionFromLines = (range: LineRange): FileSelection => ({
   endChar: 0,
 })
 
-/** The routed session's review: its diffs, selection, and comments. Lives as long as the session screen. */
-export function createReviewModel(input: { ctx: SetupContext<typeof Review>; view: MountedSession; demand: Demand }) {
+/**
+ * The routed session's review: its diffs, selection, and comments. Lives as long as the session screen; `view`
+ * returns the screen's routed session, a new object on each switch.
+ */
+export function createReviewModel(input: {
+  ctx: SetupContext<typeof Review>
+  screen: SessionScreen
+  view: Accessor<MountedSession>
+  demand: Demand
+}) {
   const ctx = input.ctx
+  const screen = input.screen
   const view = input.view
   const layout = ctx.layout
   const queryClient = useQueryClient()
-  const directory = () => view.file.root
+  const directory = () => screen.file.root
 
   // The filter is transient by design: a persisted filter would silently hide files after a reload.
   const [state, setState] = createStore({ filter: "" })
@@ -47,7 +63,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   // The routed session's review state. Desktop loads it asynchronously; until it has, its defaults are not the
   // session's choice, so nothing shows them or requests their diff, and changes wait to apply over the stored state.
-  const saved = createMemo(() => ctx.stores.session(view))
+  const saved = createMemo(() => ctx.stores.session(view()))
   const stored = () => saved().value
 
   const update: ReturnType<typeof ctx.stores.session>["update"] = (mutation) => saved().update(mutation)
@@ -58,7 +74,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   // After a session switch the review renders a frame later, so the switch paints first.
   createKeyed(
-    () => view.visit,
+    () => view().visit,
     () => {
       const run = { ended: false }
 
@@ -73,11 +89,11 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     },
   )
 
-  const vcs = createMemo(() => view.server.data.location.vcs.info({ directory: directory() }))
+  const vcs = createMemo(() => view().server.data.location.vcs.info({ directory: directory() }))
 
   const options = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
-    const project = view.project
+    const project = view().project
 
     if (project?.vcs) list.push("git")
 
@@ -91,7 +107,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     }
 
     // Turn snapshots are captured only for Git sessions.
-    if (project?.vcs === "git" && view.id) list.push("turn")
+    if (project?.vcs === "git" && view().id) list.push("turn")
 
     return list
   })
@@ -100,7 +116,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     () =>
       [
         ctx.id,
-        view.server.id,
+        view().server.id,
         "session-vcs",
         directory(),
         vcs()?.branch.current ?? "",
@@ -114,7 +130,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     return demand.tree + demand.files + demand.panel > 0
   })
 
-  const turnKey = () => [ctx.id, view.server.id, "session-turn", view.id] as const
+  const turnKey = () => [ctx.id, view().server.id, "session-turn", view().id] as const
 
   const diffQuery = createQuery(() => {
     const value = mode()
@@ -123,15 +139,15 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     return {
       queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
       // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view.server.connected && wantsReview() && !!view.project?.vcs,
+      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
       refetchOnMount: "always" as const,
       // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
       refetchOnWindowFocus: !turn,
       queryFn: turn
-        ? () => view.server.client.session.diff({ sessionID: view.id })
+        ? () => view().server.client.session.diff({ sessionID: view().id })
         : () =>
-            view.server.client.vcs
-              .diff({
+            view()
+              .server.client.vcs.diff({
                 location: { directory: directory() },
                 mode: value === "git" ? "working" : value,
               })
@@ -140,14 +156,14 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   })
 
   // The session details' changes row: the session directory's working tree, loaded only while the details show.
-  const detailsKey = () => [ctx.id, view.server.id, "session-details", view.directory] as const
+  const detailsKey = () => [ctx.id, view().server.id, "session-details", view().directory] as const
 
   const detailsQuery = createQuery(() => ({
     queryKey: detailsKey(),
-    enabled: input.demand.details > 0 && view.server.connected && !!view.project?.vcs,
+    enabled: input.demand.details > 0 && view().server.connected && !!view().project?.vcs,
     queryFn: () =>
-      view.server.client.vcs
-        .diff({ location: { directory: view.directory }, mode: "working" })
+      view()
+        .server.client.vcs.diff({ location: { directory: view().directory }, mode: "working" })
         .then((result) => result.data)
         .catch((error) => {
           console.debug("[session-review] failed to load session details diff", { error })
@@ -163,7 +179,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   // The server reports file changes in the directory; its event stream follows a restarted server.
   createKeyed(
-    () => ({ directory: directory(), data: view.server.data }),
+    () => ({ directory: directory(), data: view().server.data }),
     (current) =>
       onCleanup(
         current.data.listen(({ details }) => {
@@ -177,7 +193,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   // A region restored open does not load them until something shows them.
   const opened = createMemo(
     on(
-      () => !layout.narrow() && layout.side.opened(view),
+      () => !layout.narrow() && layout.side.opened(view()),
       (open, previous) => (open && !previous ? {} : undefined),
       { defer: true },
     ),
@@ -192,7 +208,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
       return
     }
 
-    if (view.server.connected && view.project?.vcs) void diffQuery.refetch()
+    if (view().server.connected && view().project?.vcs) void diffQuery.refetch()
   })
 
   const diffs = (): FileDiffInfo[] => (diffQuery.isFetched ? (diffQuery.data ?? []) : [])
@@ -213,7 +229,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   const ready = () => {
     // A project without VCS never enables diffQuery, so its status stays "pending" forever.
-    const project = view.project
+    const project = view().project
 
     if (project && !project.vcs) return true
 
@@ -244,7 +260,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
           queryKey: [...turnKey(), "bounded", version] as const,
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
-          queryFn: () => view.server.client.session.diff({ sessionID: view.id, context: 3 }),
+          queryFn: () => view().server.client.session.diff({ sessionID: view().id, context: 3 }),
         })
         .then((result) => valid(result.find((diff) => diff.file === path)))
         .catch((error) => {
@@ -254,7 +270,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
         })
     }
 
-    const root = reviewRootDirectory(view.project?.worktree ?? directory())
+    const root = reviewRootDirectory(view().project?.worktree ?? directory())
     const scoped = reviewDiffDirectory(root, path)
 
     const request = (scope: string, context?: number) =>
@@ -264,8 +280,8 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
-            view.server.client.vcs
-              .diff({
+            view()
+              .server.client.vcs.diff({
                 location: { directory: scope },
                 mode: value === "git" ? "working" : value,
                 context,
@@ -297,7 +313,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   }
 
   const selectionPreview = (path: string, selection: FileSelection): string | undefined => {
-    const content = view.file.get(path)?.content?.content
+    const content = screen.file.get(path)?.content?.content
 
     if (!content) return undefined
 
@@ -306,9 +322,9 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   const addComment = (comment: SessionReviewLineComment) => {
     const selection = selectionFromLines(comment.selection)
-    const saved = view.comment.add({ file: comment.file, selection: comment.selection, comment: comment.comment })
+    const saved = screen.comment.add({ file: comment.file, selection: comment.selection, comment: comment.comment })
 
-    view.composer.attach({
+    screen.composer.attach({
       type: "file",
       path: comment.file,
       selection,
@@ -326,17 +342,17 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     comment: string
     preview?: string
   }) => {
-    view.comment.update(comment.id, comment.comment)
+    screen.comment.update(comment.id, comment.comment)
     // The composer keeps a chip's preview unless the update names a new one.
-    view.composer.update(
+    screen.composer.update(
       comment.id,
       comment.preview ? { comment: comment.comment, preview: comment.preview } : { comment: comment.comment },
     )
   }
 
   const removeComment = (comment: { id: string; file: string }) => {
-    view.comment.remove(comment.id)
-    view.composer.detach(comment.id)
+    screen.comment.remove(comment.id)
+    screen.composer.detach(comment.id)
   }
 
   const commentActions = createMemo(() => ({
@@ -347,7 +363,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   }))
 
   const open = () => {
-    if (!layout.side.opened(view)) layout.side.toggle(view)
+    if (!layout.side.opened(view())) layout.side.toggle(view())
   }
 
   const openPath = (path: string) =>
@@ -382,7 +398,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
     if (top === undefined) return false
 
-    layout.scroll.set(view, "review", { x: element.scrollLeft, y: top })
+    layout.scroll.set(view(), "review", { x: element.scrollLeft, y: top })
     element.scrollTo({ top, behavior: "auto" })
 
     return true
@@ -442,7 +458,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   // A mode the session no longer offers, such as Branch back on the default branch, falls back to the first one.
   createKeyed(
     () => {
-      if (!stored() || !view.server.connected || !view.project) return
+      if (!stored() || !view().server.connected || !view().project) return
 
       const list = options()
 
@@ -456,7 +472,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
 
   const idled = createMemo(
     on(
-      () => view.server.data.session.status(view.id),
+      () => view().server.data.session.status(view().id),
       (next, previous) => (next === "idle" && previous !== undefined && previous !== "idle" ? {} : undefined),
       { defer: true },
     ),
@@ -472,27 +488,28 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
   const panelRendered = createMemo<boolean>((previous) => previous || !deferRender(), false)
 
   return {
+    screen,
     view,
     activeFile,
     // The mode picker waits for the stored mode.
-    canReview: () => !!view.project && !!stored(),
+    canReview: () => !!view().project && !!stored(),
     comments: {
       actions: commentActions,
       add: addComment,
-      all: () => [...view.comment.list()],
-      focus: () => view.comment.focus.current(),
-      mentions: (query: string) => view.file.search(query, { kind: "any" }),
+      all: () => [...screen.comment.list()],
+      focus: () => screen.comment.focus.current(),
+      mentions: (query: string) => screen.file.search(query, { kind: "any" }),
       remove: removeComment,
       changeFocus: (focus: { file: string; id: string } | null) => {
         if (!focus) {
-          const current = view.comment.focus.current()
+          const current = screen.comment.focus.current()
 
           if (current && diffs().some((diff) => diff.file === current.file)) focusFile(current.file)
         }
 
-        view.comment.focus.set(focus)
+        screen.comment.focus.set(focus)
       },
-      setFocus: (focus: { file: string; id: string } | null) => view.comment.focus.set(focus),
+      setFocus: (focus: { file: string; id: string } | null) => screen.comment.focus.set(focus),
       update: updateComment,
     },
     count,
@@ -506,7 +523,11 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     hasChanges,
     loadDiff,
     mode,
-    noGit: createMemo(() => !!view.project && !view.project.vcs),
+    noGit: createMemo(() => {
+      const project = view().project
+
+      return !!project && !project.vcs
+    }),
     filter: () => state.filter,
     setFilter: (value: string) => setState("filter", value),
     open: () => stored()?.open ?? [],

@@ -232,7 +232,12 @@ function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
           size="small"
           variant="ghost"
           icon="globe"
-          onClick={() => browser().open(props.session, workspaceFileUrl(props.session.file.root, props.path))}
+          onClick={() => {
+            // The screen's workspace root, read when the user acts.
+            const root = ctx.screen.current()?.file.root
+
+            if (root !== undefined) browser().open(props.session, workspaceFileUrl(root, props.path))
+          }}
         >
           {ctx.t("view.openInBrowser")}
         </Button>

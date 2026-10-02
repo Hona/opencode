@@ -1,23 +1,30 @@
-import type { Storage } from "@opencode/gui-extensions/sdk/main"
+import type { MainStoreFrom, Storage } from "@opencode/gui-extensions/sdk/main"
 import { Option, Schema } from "effect"
 import type { StateStore } from "../storage/state"
-import { getStore } from "../storage/store"
+import type { SettingsStore } from "../storage/store"
 
 /** The last value a store read or wrote, so later reads skip the database. */
 type Cached<T> = { value?: { current: T } }
 
+/** A desktop settings file by name; the app's own when the name is left out. */
+export type SettingsFiles = (file?: string) => SettingsStore
+
 /**
  * Each extension's values live in the `state` table under `extension.<id>`, stored as canonical JSON. Writes are rare,
- * so each one reaches the database before it returns and survives a crash.
+ * so each one reaches the database before it returns and survives a crash. A `from` imports an older value once from
+ * a settings file or another state namespace.
  */
-export function createStorage(state: StateStore, id: string): Storage {
+export function createStorage(state: StateStore, settings: SettingsFiles, id: string): Storage {
   const name = namespace(id)
   // Resets the caches of the stores opened on each key since its last removal, so they read `initial` again.
   const opened = new Map<string, Set<() => void>>()
 
-  const remove = (key: string, from: string | undefined) => {
-    // The old copy goes too, or the next read would import it again.
-    if (from) source(state, from).remove()
+  const sources = (from: MainStoreFrom | readonly MainStoreFrom[] | undefined) =>
+    [from ?? []].flat().map((item) => source(state, settings, item))
+
+  const remove = (key: string, from: MainStoreFrom | readonly MainStoreFrom[] | undefined) => {
+    // The old copies go too, or the next read would import one again.
+    sources(from).forEach((older) => older.remove())
 
     if (state.get(name, key) !== null) state.delete(name, key)
     state.flush()
@@ -28,14 +35,15 @@ export function createStorage(state: StateStore, id: string): Storage {
   return {
     store(key, options) {
       const codec = Schema.toCodecJson(options.schema)
-      const legacy = options.from ? source(state, options.from) : undefined
+      const legacy = sources(options.from)
       const cached: Cached<typeof options.initial> = {}
 
       const read = () => {
         const stored = state.get(name, key)
 
         if (stored !== null) return Schema.decodeUnknownOption(Schema.fromJsonString(codec))(stored)
-        const found = legacy?.read()
+        // The newest older home that holds a value.
+        const found = legacy.find((older) => older.read() !== undefined)?.read()
 
         if (found === undefined) return Option.none()
         const decoded = Schema.decodeUnknownOption(codec)(found)
@@ -91,39 +99,31 @@ export function namespace(id: string) {
   return `extension.${id}`
 }
 
-// `settings:<key>` reads the JSON settings file and `settings:<file>/<key>` another one (e.g. opencode.updater);
-// `state:<name>/<key>` reads another state namespace.
-function source(state: StateStore, from: string) {
-  if (from.startsWith("settings:")) {
-    const [file, key] = from.slice("settings:".length).split("/", 2)
-    const store = () => (key === undefined ? getStore() : getStore(file))
-    const entry = key ?? file ?? ""
+/** One older home: a key of a settings file, or of another state namespace. */
+function source(state: StateStore, settings: SettingsFiles, from: MainStoreFrom) {
+  if ("settings" in from) {
+    const store = () => settings(from.file)
 
     return {
-      read: () => store().get(entry),
+      read: () => store().get(from.settings),
       remove() {
-        if (store().get(entry) !== undefined) store().delete(entry)
+        if (store().get(from.settings) !== undefined) store().delete(from.settings)
       },
     }
   }
 
-  if (from.startsWith("state:")) {
-    const [name = "", ...rest] = from.slice("state:".length).split("/")
-    const key = rest.join("/")
+  const [space, key] = from.state
 
-    return {
-      read() {
-        const value = state.get(name, key)
+  return {
+    read() {
+      const value = state.get(space, key)
 
-        if (value === null) return undefined
+      if (value === null) return undefined
 
-        return Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value))
-      },
-      remove() {
-        if (state.get(name, key) !== null) state.delete(name, key)
-      },
-    }
+      return Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value))
+    },
+    remove() {
+      if (state.get(space, key) !== null) state.delete(space, key)
+    },
   }
-
-  throw new Error(`Unsupported storage import: ${from}`)
 }

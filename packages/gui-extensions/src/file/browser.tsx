@@ -6,7 +6,15 @@ import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-u
 import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, useExtension, usePanel, type PanelSidebar, type PanelTab, type MountedSession } from "../sdk"
+import {
+  createKeyed,
+  useExtension,
+  usePanel,
+  type MountedSession,
+  type PanelSidebar,
+  type PanelTab,
+  type SessionScreen,
+} from "../sdk"
 import { current, useShared } from "./context"
 import SessionFileList, { applyFileListKeyDown } from "./list"
 import { fileTabPath, isFileTab } from "./path"
@@ -17,6 +25,7 @@ const emptyFiles: string[] = []
 
 export function SessionFileBrowserTab(props: {
   session: MountedSession
+  screen: SessionScreen
   /** The file tab to show; absent while browsing. */
   id?: string
   placeholder: boolean
@@ -29,7 +38,7 @@ export function SessionFileBrowserTab(props: {
   mobile?: boolean
 }) {
   const ctx = useExtension()
-  const file = props.session.file
+  const file = props.screen.file
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [store, setStore] = createStore<{ filter: string; explicitHighlight?: string }>({ filter: "" })
   const filter = () => store.filter
@@ -117,6 +126,7 @@ export function SessionFileBrowserTab(props: {
             fallback={
               <FileTreeV2
                 session={props.session}
+                screen={props.screen}
                 active={props.active}
                 kinds={props.kinds}
                 draggable={!props.mobile}
@@ -144,6 +154,7 @@ export function SessionFileBrowserTab(props: {
               >
                 <SessionFileList
                   session={props.session}
+                  screen={props.screen}
                   id={resultsID}
                   role="listbox"
                   optionID={optionID}
@@ -177,7 +188,7 @@ export function SessionFileBrowserTab(props: {
       >
         <div class="min-h-0 flex-1">
           <Show when={props.id} keyed>
-            {(id) => <SessionFileView session={props.session} id={id} />}
+            {(id) => <SessionFileView session={props.session} screen={props.screen} id={id} />}
           </Show>
         </div>
       </Show>
@@ -186,7 +197,11 @@ export function SessionFileBrowserTab(props: {
 }
 
 /** The side panel render every file tab and the "Open file" launcher share. */
-export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: MountedSession }) {
+export default function FileBrowser(props: {
+  tab: Accessor<PanelTab>
+  session: MountedSession
+  screen: SessionScreen
+}) {
   const panel = usePanel()
   const shared = useShared()
   const id = () => props.tab().id
@@ -204,7 +219,7 @@ export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: M
   // outlives this view: the session's next view reads it.
   createKeyed(
     () => {
-      const file = props.session.file
+      const file = props.screen.file
 
       if (!file.ready()) return
 
@@ -228,9 +243,10 @@ export default function FileBrowser(props: { tab: Accessor<PanelTab>; session: M
   return (
     <SessionFileBrowserTab
       session={props.session}
+      screen={props.screen}
       id={placeholder() ? undefined : id()}
       placeholder={placeholder()}
-      active={placeholder() ? undefined : fileTabPath(props.session.file, id())}
+      active={placeholder() ? undefined : fileTabPath(props.screen.file, id())}
       kinds={changes()?.kinds(props.session) ?? empty}
       state={panel.sidebar}
       onSelect={(path) => shared.open(props.session, path, { tab: "preview" })}

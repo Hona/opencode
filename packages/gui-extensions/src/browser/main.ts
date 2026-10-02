@@ -1,11 +1,12 @@
-import type { MainContext } from "../sdk/main"
+import type { MainSetup } from "../sdk/main"
+import type definition from "./index"
 import type { Pane } from "./pane"
 import { BrowserPane } from "./ipc"
 
 /** The pane once a window first registered one. */
 type LoadedPane = { pane?: Promise<Pane> }
 
-const setup = (ctx: MainContext) => {
+const setup: MainSetup<typeof definition> = (ctx) => {
   const loaded: LoadedPane = {}
 
   // The pane brings the CDP driver and the full RPC client with every protocol schema;
@@ -16,6 +17,7 @@ const setup = (ctx: MainContext) => {
         windows: ctx.windows,
         serverEndpoints: ctx.serverEndpoints,
         storage: ctx.storage,
+        refs: ctx.stores.refs,
         embeds: ctx.embeds,
         emit: (window, value) => provider.emit("event", value, window),
       }),

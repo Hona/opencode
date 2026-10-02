@@ -80,7 +80,7 @@ function SettingsPairing(props: { client: Client }) {
                 variant="neutral"
                 disabled={!localHost()}
                 onClick={() =>
-                  dialogs.push(() => (
+                  dialogs.open(() => (
                     <DialogPairing title={ctx.t("connection")} host={localHost()!} code={() => props.client.code()} />
                   ))
                 }

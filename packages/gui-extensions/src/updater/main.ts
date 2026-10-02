@@ -1,11 +1,12 @@
 import { dialog } from "electron"
-import { Effect, Exit, Schema, Scope } from "effect"
-import { MenubarItem, type MainContext } from "../sdk/main"
+import { Effect, Exit, Scope } from "effect"
+import { MenubarItem, type MainSetup } from "../sdk/main"
 import { Updater } from "./contract"
+import type definition from "./index"
 import { logContext } from "./log"
 import { make } from "./machine"
 
-const setup = async (ctx: MainContext) => {
+const setup: MainSetup<typeof definition> = async (ctx) => {
   const build = ctx.build
   const lifecycle = ctx.lifecycle
   const enabled = build.packaged && build.channel !== "dev"
@@ -13,12 +14,7 @@ const setup = async (ctx: MainContext) => {
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)
-
-  const ready = ctx.storage.store("ready", {
-    schema: Schema.NullOr(Schema.Struct({ version: Schema.String })),
-    initial: null,
-    from: "settings:opencode.updater/ready",
-  })
+  const ready = ctx.stores.ready
 
   // electron-updater loads only in packaged builds that update, after the first window is up.
   const platform = enabled

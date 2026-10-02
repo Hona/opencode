@@ -16,7 +16,6 @@ import {
   untrack,
   useContext,
   type Accessor,
-  type JSX,
   type Owner,
   type ParentProps,
 } from "solid-js"
@@ -310,15 +309,18 @@ function createHost(input: HostInput) {
     ...input.apis,
     links: () => links,
     // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
-    dialogs: (extension, _, context, register): Dialogs => {
-      const open = (method: "show" | "push") => (render: () => JSX.Element) => {
-        if (context.signal.aborted) return
-
+    dialogs: (extension, _, context, register): Dialogs => ({
+      open(render, options) {
         const id = `extension:${extension}:${sequence.value++}`
+        // Each handle names its own dialog, so it never closes one another extension or instance opened.
+        const handle = { close: () => dialog.close(id) }
+
+        if (context.signal.aborted) return handle
+
         // Closes this dialog, not whichever is on top, when the extension or the scope that opened it goes away.
         const release = register(() => dialog.close(id))
 
-        void dialog[method](
+        void dialog[options?.replace ? "show" : "push"](
           () => {
             // The dialog's root disposes when it closes or another dialog replaces it.
             onCleanup(() => void release())
@@ -334,7 +336,7 @@ function createHost(input: HostInput) {
                   return null
                 }}
               >
-                <ExtensionContext.Provider value={context}>{untrack(render)}</ExtensionContext.Provider>
+                <ExtensionContext.Provider value={context}>{untrack(() => render(handle))}</ExtensionContext.Provider>
               </ErrorBoundary>
             )
           },
@@ -343,17 +345,11 @@ function createHost(input: HostInput) {
           // The stack mounts in a later transition; disposal before then must still keep it closed.
           context.signal,
         )
-      }
 
-      return {
-        show: open("show"),
-        push: open("push"),
-        close: () => {
-          if (!context.signal.aborted) dialog.close()
-        },
-        active: () => !!dialog.active,
-      }
-    },
+        return handle
+      },
+      active: () => !!dialog.active,
+    }),
   } satisfies { readonly [K in keyof HostApis]: HostApiFactory<HostApis[K]> }
 
   const activate = async (definition: Definition) => {
@@ -428,7 +424,7 @@ function createHost(input: HostInput) {
           }, crash)
 
         // Setup runs synchronously inside the extension root so its effects and memos are owned.
-        if (Object.keys(definition.stores ?? {}).length === 0) return start()
+        if (windowStores(definition).length === 0) return start()
 
         // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
         Promise.try(instance.prepare).then(() => {
@@ -559,7 +555,10 @@ function createHost(input: HostInput) {
       })
     }
 
-    Object.values(definition.uses ?? {}).forEach(learn)
+    // `ctx.uses` holds the extension's own tokens too; `Extension.define` refuses a key that names two tokens.
+    const usable = { ...definition.provides, ...definition.uses }
+
+    Object.values(usable).forEach(learn)
     Object.values(definition.requires ?? {}).forEach(learn)
 
     const stores: Stores = {}
@@ -611,7 +610,7 @@ function createHost(input: HostInput) {
           setState("contracts", token.id, (version = 0) => version + 1)
         })
       },
-      uses: Object.fromEntries(Object.entries(definition.uses ?? {}).map(([name, token]) => [name, used(token)])),
+      uses: Object.fromEntries(Object.entries(usable).map(([name, token]) => [name, used(token)])),
       // The host starts the extension only while every hard contract is active, and restarts it when one changes.
       requires: Object.fromEntries(
         Object.entries(definition.requires ?? {}).map(([name, token]) => [name, untrack(() => value(liveOf(token)))]),
@@ -669,7 +668,7 @@ function createHost(input: HostInput) {
       prepare() {
         const storage = typed.storage
 
-        const loaded = Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) => {
+        const loaded = windowStores(definition).flatMap(([name, declaration]) => {
           if (declaration.scope === "global") {
             const handle = storage.store(name, { ...declaration, scope: "global" })
 
@@ -866,6 +865,13 @@ function createHost(input: HostInput) {
       })
     },
   }
+}
+
+/** The window's declared stores; a `Store.main` store belongs to the main process. */
+function windowStores(definition: Definition) {
+  return Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) =>
+    declaration.scope === "main" ? [] : [[name, declaration] as const],
+  )
 }
 
 /** English merged under the locale's messages. A catalog that fails to load leaves English. */

@@ -1,38 +1,38 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import type { Storage } from "../sdk/main"
+import browser from "./index"
 import { createRefs } from "./refs"
 
+/** Main storage's row for the store, as its schema encodes it. */
+type Disk = { stored?: number }
+
 test("element refs stay unique when the pane's main entry reloads over the same storage", () => {
-  const values = new Map<string, unknown>()
+  const values: Disk = {}
+  const declared = browser.stores.refs
 
-  // Keeps each value as its schema encodes it, as the host's storage does.
-  const storage: Storage = {
-    store: (key, options) => {
-      const read = () => (values.has(key) ? Schema.decodeUnknownSync(options.schema)(values.get(key)) : options.initial)
+  // The declared store as the host opens it on each load: each value kept as its schema encodes it.
+  const open = () => {
+    const read = () =>
+      "stored" in values ? Schema.decodeUnknownSync(declared.schema)(values.stored) : declared.initial
 
-      return {
-        get value() {
-          return read()
-        },
-        ready: () => true,
-        // Like the host's: a mutation that returns a value replaces the stored one.
-        update: (mutation: (draft: typeof options.initial) => typeof options.initial | undefined) => {
-          const current = read()
-          const next = mutation(current)
+    return {
+      get value() {
+        return read()
+      },
+      ready: () => true,
+      // Like the host's: a mutation that returns a value replaces the stored one.
+      update: (mutation: (draft: number) => number | void) => {
+        const current = read()
+        const next = mutation(current)
 
-          values.set(key, Schema.encodeUnknownSync(options.schema)(next === undefined ? current : next))
-        },
-      }
-    },
-    remove: (key) => {
-      values.delete(key)
-    },
+        values.stored = Schema.encodeUnknownSync(declared.schema)(next === undefined ? current : next)
+      },
+    }
   }
 
-  const before = createRefs(storage)
+  const before = createRefs(open())
   const issued = [before(), before()]
-  const after = createRefs(storage)
+  const after = createRefs(open())
   expect(issued).toEqual(["e1", "e2"])
   expect(issued).not.toContain(after())
 })

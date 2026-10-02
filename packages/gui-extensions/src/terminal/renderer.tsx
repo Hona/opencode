@@ -152,9 +152,9 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       kind: "tab",
     },
     list: () => [tab],
-    render: (_tab, session) => (
+    render: (props) => (
       <Suspense>
-        <TerminalPanel model={model} session={session} onClose={() => layout.close(DOCK, session)} />
+        <TerminalPanel model={model} session={props.session} onClose={() => layout.close(DOCK, props.session)} />
       </Suspense>
     ),
   })

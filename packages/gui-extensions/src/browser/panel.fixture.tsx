@@ -105,8 +105,9 @@ export function mountBrowserPane(input: PaneHost) {
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
     const held: (() => void)[] = []
-    const inspectors = new Set<(event: InspectEvent) => void>()
-    const emitInspect = (event: InspectEvent) => inspectors.forEach((listener) => listener(event))
+    // Picker events reach the routed session's listeners only, as the model keys them by session.
+    const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
+    const emitInspect = (event: InspectEvent) => inspectors.get(store.session)?.forEach((listener) => listener(event))
 
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
@@ -141,17 +142,13 @@ export function mountBrowserPane(input: PaneHost) {
     // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
     const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
 
-    const fake = {
+    const base = {
       id: "browser",
       keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
       desktop: { zoom: () => 1 },
       embeds,
       t: (key: string) => messages.get(key) ?? language.t(key),
     }
-
-    // SAFETY: the pane reads only `id`, `t`, `keybinds`, `desktop` and `embeds` of its extension's context.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const extension = fake as unknown as Context
 
     const panel: PanelFrame = {
       visible: () => store.visible,
@@ -163,17 +160,32 @@ export function mountBrowserPane(input: PaneHost) {
       open: () => [],
     }
 
-    const view = {
-      get key() {
-        return store.session
+    // One object per session, as the host gives each routed session its own.
+    const views = new Map(
+      ["Alpha", "Beta", "Empty"].map((key) => {
+        // SAFETY: the pane reads only `key` of its session.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+        return [key, { key } as unknown as MountedSession] as const
+      }),
+    )
+
+    const session = () => views.get(store.session) ?? views.get("Alpha")
+
+    // The session screen: one object that follows the route, with the composer the pane attaches comments to.
+    const screen = {
+      get session() {
+        return session()
       },
       file: { search: async () => [] },
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
     }
 
-    // SAFETY: the pane reads only `key`, `file.search` and `composer.attach` of its session.
+    const fake = { ...base, screen: { current: () => screen } }
+
+    // SAFETY: the pane reads only `id`, `t`, `keybinds`, `desktop`, `embeds`, and the screen's `file.search` and
+    // `composer.attach`, of its extension's context.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const session = view as unknown as MountedSession
+    const extension = fake as unknown as Context
 
     const fakeModel: Pick<
       Model,
@@ -220,10 +232,13 @@ export function mountBrowserPane(input: PaneHost) {
         emitInspect({ type: "inspect", tabID, active: enabled })
       },
       highlight: (_session, _tabID, ref) => setStore("highlights", (items) => [...items, ref ?? "clear"]),
-      onInspect: (_session, listener) => {
-        inspectors.add(listener)
+      onInspect: (session, listener) => {
+        const set = inspectors.get(session.key) ?? new Set()
 
-        return () => inspectors.delete(listener)
+        set.add(listener)
+        inspectors.set(session.key, set)
+
+        return () => set.delete(listener)
       },
     }
 
@@ -294,8 +309,8 @@ export function mountBrowserPane(input: PaneHost) {
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
           <p>Highlights: {store.highlights.join(",")}</p>
           <div style={{ position: "relative", width: "640px", height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted}>
-              <SessionBrowserPane tab={() => current()} session={session} model={model} />
+            <Show when={store.mounted && session()}>
+              {(view) => <SessionBrowserPane tab={() => current()} session={view()} model={model} />}
             </Show>
           </div>
           <ul data-testid="fixture-comments">
@@ -377,7 +392,7 @@ type RegionHost = {
     }>
   >
   useExtensionHost(): { ready(): boolean }
-  createRegion(input: { region: "side"; view: MountedSession; tabs: Accessor<StripTabs> }): {
+  createRegion(input: { region: "side"; view: Accessor<MountedSession>; tabs: Accessor<StripTabs> }): {
     keys(): readonly string[]
     active(): string | undefined
     entry(key: string): { readonly tab: PanelTab } | undefined
@@ -453,37 +468,53 @@ export function mountBrowserRegion(input: RegionHost) {
       (key) => ({ key, id: key.split("\n")[1], tab: key, server, pending: false, location }) as unknown as SessionRef,
     )
 
-    const routed = {
-      get key() {
-        return store.session
-      },
-      get id() {
-        return store.session.split("\n")[1]
-      },
-      get tab() {
-        return store.session
-      },
-      server,
-      pending: false,
-      location,
-      directory: "/repo",
-      local: true,
-      background: [],
-      file: {
-        root: "/repo",
-        ready: () => false,
-        resolve: (path: string) => path.replace(/^file:\/\//, ""),
-        absolute: () => false,
-        get: () => undefined,
-        missing: () => false,
-        sync: async () => undefined,
-        search: async () => [],
-      },
+    // The session screen's file model, which follows the route.
+    const file = {
+      root: "/repo",
+      ready: () => false,
+      resolve: (path: string) => path.replace(/^file:\/\//, ""),
+      absolute: () => false,
+      get: () => undefined,
+      missing: () => false,
+      sync: async () => undefined,
+      search: async () => [],
     }
 
-    // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const view = routed as unknown as MountedSession
+    // One object per routed session, as the host gives each its own.
+    const views = new Map(
+      [alpha, beta].map((key) => {
+        const routed = {
+          key,
+          id: key.split("\n")[1],
+          tab: key,
+          visit: {},
+          server,
+          pending: false,
+          location,
+          directory: "/repo",
+          local: true,
+          background: [],
+        }
+
+        // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+        return [key, routed as unknown as MountedSession] as const
+      }),
+    )
+
+    const fallback = views.get(alpha)
+
+    if (!fallback) throw new Error("The fixture has no Alpha session")
+
+    const view = () => views.get(store.session) ?? fallback
+
+    // One screen object while the strip mounts, whichever session it routes.
+    const screen = {
+      get session() {
+        return view()
+      },
+      file,
+    }
 
     const layout = (extension: string): Layout => ({
       narrow: () => false,
@@ -572,7 +603,8 @@ export function mountBrowserRegion(input: RegionHost) {
       servers: () => servers,
       workspaces: () => workspaces,
       desktop: () => undefined,
-      sessions: () => ({ list: () => refs, current: () => view }),
+      sessions: () => ({ list: () => refs, current: view }),
+      screen: () => ({ current: () => screen }),
       layout,
       storage,
     }
@@ -606,16 +638,16 @@ export function mountBrowserRegion(input: RegionHost) {
         region: "side",
         view,
         tabs: () => ({
-          all: () => strip(view.key).all,
-          active: () => strip(view.key).active,
-          setAll: (all) => setAll(view.key, all),
-          setActive: (tab) => setStore("strips", view.key, "active", tab),
-          close: (tab) => close(view.key, tab),
+          all: () => strip(view().key).all,
+          active: () => strip(view().key).active,
+          setAll: (all) => setAll(view().key, all),
+          setActive: (tab) => setStore("strips", view().key, "active", tab),
+          close: (tab) => close(view().key, tab),
           remap(rewrite) {
-            const all = strip(view.key).all
+            const all = strip(view().key).all
             const next = Array.from(new Set(all.map(rewrite)))
 
-            if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view.key, next)
+            if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view().key, next)
           },
         }),
       })

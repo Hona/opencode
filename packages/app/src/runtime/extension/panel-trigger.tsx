@@ -6,7 +6,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Tabs } from "@opencode/ui/tabs"
-import type { PanelTab } from "@opencode/gui-extensions/sdk"
+import type { MountedSession, PanelTab } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
 import { Contribution } from "./render"
@@ -16,6 +16,7 @@ export function PanelTrigger(props: {
   value: string
   extension: string
   tab: PanelTab
+  session: MountedSession
   index: number
   active: boolean
   preview: boolean
@@ -26,13 +27,17 @@ export function PanelTrigger(props: {
   const command = useCommand()
   const closeKeybind = createMemo(() => command.keybindParts("file.close"))
 
-  // The label renders once per label function; state is read through getters so selection never remounts it.
+  // The label renders once per label function; state is read through getters so neither selection nor a session
+  // switch remounts it.
   const state = {
     get active() {
       return props.active
     },
     get preview() {
       return props.preview
+    },
+    get session() {
+      return props.session
     },
   }
 

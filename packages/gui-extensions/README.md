@@ -33,15 +33,15 @@ src/example/
 
 `Extension.define` is the manifest. The host reads it before any entry loads.
 
-| Field      | What it declares                                                              | In the context                 |
-| ---------- | ----------------------------------------------------------------------------- | ------------------------------ |
-| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                       |
-| `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                |
-| `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`     |
-| `uses`     | Optional dependencies; the extension works while one is missing               | `ctx.uses.name()` is `Live<T>` |
-| `requires` | Hard dependencies; setup runs only while all are active                       | `ctx.requires.name` is `T`     |
-| `stores`   | Window state the host loads before it is read                                 | `ctx.stores.name`              |
-| `i18n`     | The extension's copy                                                          | `ctx.t`, `ctx.plural`          |
+| Field      | What it declares                                                              | In the context                                    |
+| ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
+| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                                          |
+| `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                                   |
+| `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
+| `uses`     | Optional dependencies other extensions provide; it works while one is missing | `ctx.uses.name()` is `Live<T>`                    |
+| `requires` | Hard dependencies; setup runs only while all are active                       | `ctx.requires.name` is `T`                        |
+| `stores`   | State the host stores: window stores load before they are read, main's always | `ctx.stores.name`, each process its own           |
+| `i18n`     | The extension's copy                                                          | `ctx.t`, `ctx.plural`                             |
 
 - [`src/renderer.ts`](src/renderer.ts) and [`src/main.ts`](src/main.ts) list the built-ins, each through `Extension.compose`. These are the only files that name extensions.
 - Another extension imports only your `contract.ts`.
@@ -54,17 +54,18 @@ Setup receives one context. Components read the same object with `useExtension<t
 | Member                | Window                                                                                      | Main                                   |
 | --------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------- |
 | Host APIs             | `ctx.layout`, `ctx.sessions`, `ctx.storage`, `ctx.desktop`, … (see the [catalog](#catalog)) | `ctx.storage`, `ctx.windows`, …        |
-| Optional dependencies | `ctx.uses.name`: `Accessor<Live<T>>`                                                        |                                        |
+| Optional dependencies | `ctx.uses.name`: `Accessor<Live<T>>`, `provides` included                                   |                                        |
 | Hard dependencies     | `ctx.requires.name`: `T`                                                                    |                                        |
-| Declared stores       | `ctx.stores.name`: `Persisted`, or `(session) => Persisted`                                 | `ctx.storage.store(key, …)`            |
+| Declared stores       | `ctx.stores.name`: `Persisted`, or `(session) => Persisted`                                 | `ctx.stores.name`: `Persisted`, loaded |
 | Contribute to a point | `ctx.add(Point, item)`                                                                      | `ctx.add(MenubarItem, item)`           |
 | Provide a dependency  | `ctx.provide(Contract, impl)`                                                               | `ctx.provide(Ipc, impl)`               |
 | Lifetime              | Solid's `onCleanup` and `ctx.signal`                                                        | `ctx.scope` (`signal`, `addFinalizer`) |
 | Copy                  | `ctx.t(key, params)`, `ctx.plural(key, count)`                                              | the same                               |
 
 - Host APIs are getters: an API you never read costs nothing.
+- No host API throws before the app interface mounts: reads return their documented defaults (`ctx.layout.ready()` is false), and writes such as `ctx.layout.open` wait, then apply in call order.
 - Points and contracts are tokens: `ctx.add(Command, …)`, `ctx.provide(FileTree, …)`.
-- Reading a token you did not declare is a compile error.
+- Reading a token you did not declare is a compile error. A key that names one token in `provides` and another in `uses` is one too.
 
 ```ts
 const setup: Setup<typeof definition> = (ctx) => {
@@ -96,22 +97,57 @@ stateDiagram-v2
 - Teardown of other work: `onCleanup` in the window, `ctx.scope.addFinalizer` in main. Setup returns nothing.
 - Setup may be async. After each `await` there is no owner. Return if `ctx.signal.aborted` (main: `ctx.scope.signal`).
 
+### The routed session
+
+```mermaid
+flowchart LR
+  route["route: A → B → A"] --> objects["MountedSession objects: A₁, B₁, A₂"]
+  route --> screen["one SessionScreen: file, comment, composer"]
+  objects -- "props.session / input.session (getters)" --> renders["panel and slot renders, mounted once"]
+  objects -- "ctx.sessions.current()" --> setup["setup and handlers"]
+  screen -- "ctx.screen.current()" --> actions["actions on the routed session"]
+```
+
+- Each routed session gets its own frozen `MountedSession`: `key`, `id`, `tab`, `server`, `directory` and `visit` never change, and `location`, `project` and the other fields read that session's data, never the route's. It has nothing that acts on another session.
+- Renders stay mounted. The host hands them the next object through a reactive getter, so read `props.session` (panels), `input.session` (slots) or `state.session` (tab labels) where you use it, and never copy it into a variable.
+- The workspace files, line comments and composer follow the route, so they belong to the session screen: `ctx.screen.current()` returns one `SessionScreen` from the screen's first render until it unmounts, and undefined on Home and on a draft. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
+
+```ts
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  list: (_session, open) => (open.includes("main") ? [tab] : []),
+  // Runs once; `props.session` returns B's object after a switch to B, without a remount.
+  render: (props) => <View session={props.session} tab={props.tab} />,
+})
+
+// The composer follows the route, so it belongs to the screen: the file reaches the session routed when this runs.
+ctx.add(Command, {
+  id: "attach-readme",
+  title: ctx.t("command.attachReadme"),
+  get enabled() {
+    return !!ctx.screen.current()
+  },
+  run: () => ctx.screen.current()?.composer.attach({ type: "file", path: "README.md" }),
+})
+```
+
 ## Primitives
 
-| Primitive                                    | Use it for                                                                    |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `Extension.define(definition)`               | The manifest, typed so `Setup<typeof definition>` sees the declarations       |
-| `Extension.compose(...definitions)`          | A process's list; fails to compile on a missing or duplicate provider         |
-| `Point.define<T>(id)`                        | A place your extension renders and others contribute to                       |
-| `Contract.define<T, Id>(id)`                 | An in-process API one extension provides to others                            |
-| `Ipc.define(spec)` / `Ipc.ref<typeof T>(id)` | The main ↔ window contract, or a reference to it that loads no schemas       |
-| `Store.global` / `Store.session`             | Declared state the host loads before you read it                              |
-| `createKeyed(source, fn, { otherwise })`     | Side effects per provider generation or per value; the only sanctioned effect |
-| `createLatest(source, fetch)`                | Async data that never suspends and drops stale replies                        |
-| `createVisitState(initial)`                  | State that resets each time the user routes back to the session               |
-| `useExtension` / `usePanel` / `useDrawer`    | The context, the panel frame, and the narrow-screen drawer in components      |
-| `onIdle(fn)`                                 | Preloading a lazy chunk while the app is idle                                 |
-| `Scope` (main)                               | `ctx.scope`: `signal`, `addFinalizer`, `fork`, `close`                        |
+| Primitive                                       | Use it for                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `Extension.define(definition)`                  | The manifest, typed so `Setup<typeof definition>` sees the declarations       |
+| `Extension.compose(...definitions)`             | A process's list; fails to compile on a missing or duplicate provider         |
+| `Point.define<T>(id)`                           | A place your extension renders and others contribute to                       |
+| `Contract.define<T, Id>(id)`                    | An in-process API one extension provides to others                            |
+| `Ipc.define(spec)` / `Ipc.ref<typeof T>(id)`    | The main ↔ window contract, or a reference to it that loads no schemas       |
+| `Store.global` / `Store.session` / `Store.main` | Declared window state the host loads before you read it, and main state       |
+| `createKeyed(source, fn, { otherwise })`        | Side effects per provider generation or per value; the only sanctioned effect |
+| `createLatest(source, fetch)`                   | Async data that never suspends and drops stale replies                        |
+| `createVisitState(initial)`                     | State that resets each time the user routes back to the session               |
+| `useExtension` / `usePanel` / `useDrawer`       | The context, the panel frame, and the narrow-screen drawer in components      |
+| `onIdle(fn)`                                    | Preloading a lazy chunk while the app is idle                                 |
+| `Scope` (main)                                  | `ctx.scope`: `signal`, `addFinalizer`, `fork`, `close`                        |
 
 ```ts
 // Side work per generation of a provider: the listener ends with the generation.
@@ -153,10 +189,11 @@ Each line links to the file whose TSDoc covers every field.
 | ---------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `ctx.layout`                 | `Layout`                                                       | Side panel tabs, the dock, scroll offsets, settings, open project |
 | `ctx.sessions`               | `Sessions`                                                     | Sessions of open tabs, and the mounted `MountedSession`           |
+| `ctx.screen`                 | `Screen`                                                       | The session screen's files, comments and composer                 |
 | `ctx.storage`                | `Storage`                                                      | Stores for keys known only at runtime, and window memory          |
 | `ctx.system`                 | `System`                                                       | Clipboard, saving files, `openExternal`                           |
 | `ctx.desktop`                | `Desktop \| undefined`                                         | Desktop-only: reveal, launch, installed, zoom, forceFocus         |
-| `ctx.dialogs`                | `Dialogs`                                                      | Dialogs that close when the extension goes away                   |
+| `ctx.dialogs`                | `Dialogs`                                                      | `open` returns a handle to close; a dialog closes with its owner  |
 | `ctx.links`                  | `Links`                                                        | Routes a local link to the best `LinkHandler`                     |
 | `ctx.embeds`                 | `Embeds`                                                       | Shows a web page the main entry created                           |
 | `ctx.build`                  | `Build`                                                        | Version, channel, platform, packaged                              |
@@ -196,16 +233,16 @@ sequenceDiagram
 ```
 
 - Define it in `contract.ts`. Its id is your extension id, or `<id>.<name>`.
-- The main entry provides it; the window entry declares it in `uses`. Your own Ipc goes in both `provides` and `uses`.
+- Your own Ipc goes in `provides` only: the main entry provides it, and the window entry reads it as `ctx.uses.name`. Another extension's Ipc goes in `uses`.
 - On the web there is no main process: the Ipc is always `inactive`.
-- `IpcsProvided<typeof renderer, typeof main>` fails to compile when a window uses an Ipc that no main entry provides. [`src/builtins.typecheck.ts`](src/builtins.typecheck.ts) checks the built-ins.
+- `IpcsProvided<typeof renderer, typeof main>` fails to compile when a window provides, uses or requires an Ipc that no main entry provides. [`src/builtins.typecheck.ts`](src/builtins.typecheck.ts) checks the built-ins.
 - To name an Ipc without loading its schemas at startup, declare a reference and load the full token from the chunk that needs it:
 
 ```ts
 // browser/index.ts: a type-only import, so no schemas load at startup
 import type { BrowserPane } from "./ipc"
 const Pane = Ipc.ref<typeof BrowserPane>("browser.pane")
-export default Extension.define({ id: "browser", provides: { pane: Pane }, uses: { pane: Pane } })
+export default Extension.define({ id: "browser", provides: { pane: Pane } })
 
 // browser/model.ts: a chunk that loads with the first session and imports the full token
 const pane = ctx.uses.pane.load(BrowserPane) // pending until this runs, here and in other extensions
@@ -264,12 +301,15 @@ createKeyed(ctx.uses.counter, (counter) => {
 
 Desktop windows load storage over IPC; the web reads it synchronously. A read before load passes every web test and still breaks desktop, so declare your stores.
 
-| Kind                                    | Window value                                             | Loads                         |
-| --------------------------------------- | -------------------------------------------------------- | ----------------------------- |
-| `Store.global(schema, initial, from?)`  | `ctx.stores.name.value`: never undefined                 | Before setup                  |
-| `Store.session(schema, initial, from?)` | `ctx.stores.name(session).value`: undefined until loaded | When the session mounts       |
-| `ctx.storage.store(key, options)`       | `value`: undefined until loaded                          | When opened; for runtime keys |
-| main `ctx.storage.store(key, options)`  | `value`: always defined                                  | Synchronously                 |
+| Kind                                    | Value                                                           | Loads                         |
+| --------------------------------------- | --------------------------------------------------------------- | ----------------------------- |
+| `Store.global(schema, initial, from?)`  | window `ctx.stores.name.value`: never undefined                 | Before setup                  |
+| `Store.session(schema, initial, from?)` | window `ctx.stores.name(session).value`: undefined until loaded | When the session mounts       |
+| `Store.main(schema, initial, from?)`    | main `ctx.stores.name.value`: always defined                    | Synchronously                 |
+| `ctx.storage.store(key, options)`       | window `value`: undefined until loaded                          | When opened; for runtime keys |
+| main `ctx.storage.store(key, options)`  | `value`: always defined                                         | Synchronously; runtime keys   |
+
+Each process's `ctx.stores` holds only its own stores: reading a `Store.main` store in the window, or a window store in main, fails to compile.
 
 ```ts
 // details/index.ts: older homes, newest first: the earlier id's namespace, then the app key before it.
@@ -284,9 +324,13 @@ session: Store.session(SessionState, { open: [] }, {
   sessions: "sessionView",
   pick: (entry: { reviewOpen?: unknown } | undefined) => entry && { open: entry.reviewOpen },
 }),
+
+// ssh/index.ts, a main store: a key of the desktop settings file. `{ state: [namespace, key] }` names a key of
+// another main storage namespace, and `file` another settings file.
+servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 ```
 
-- Keys live in your namespace: `extension.<id>.<name>`.
+- Keys live in your namespace: `extension.<id>.<name>` in the window, the store's name under `extension.<id>` in main.
 - `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners.
 - `update(fn)` edits the draft, or returns the next value, which replaces the stored one, in both processes. In the window it waits for the load, then applies in call order.
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
@@ -304,13 +348,14 @@ session: Store.session(SessionState, { open: [] }, {
 
 ## Testing
 
-| Gate                       | Where                                                                                                                                                                      | Catches                                                                                               |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Composition compile checks | [`sdk/compose.typecheck.ts`](src/sdk/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts), [`example/compositions.ts`](src/example/compositions.ts) | A missing `requires` provider, two providers of one token, a window Ipc no main entry provides        |
-| Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                                                                                     | A `requires` cycle; a consumer that fails when one optional provider is disabled                      |
-| Keeper suites              | `packages/app/e2e/regression/`                                                                                                                                             | What the user sees, per product area                                                                  |
-| Unit tests                 | `*.test.ts` beside the code                                                                                                                                                | Pure logic with a contract: paths, migrations, protocols                                              |
-| Lint gate                  | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                                                                            | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from the example |
+| Gate                       | Where                                                                                                                                                                      | Catches                                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition compile checks | [`sdk/compose.typecheck.ts`](src/sdk/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts), [`example/compositions.ts`](src/example/compositions.ts) | A missing `requires` provider, two providers of one token, a window Ipc no main entry provides, a key naming two tokens, a store read in the wrong process |
+| Point compile checks       | [`sdk/points.typecheck.ts`](src/sdk/points.typecheck.ts)                                                                                                                   | A `MenuItem` field its menu ignores                                                                                                                        |
+| Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                                                                                     | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                                           |
+| Keeper suites              | `packages/app/e2e/regression/`                                                                                                                                             | What the user sees, per product area                                                                                                                       |
+| Unit tests                 | `*.test.ts` beside the code                                                                                                                                                | Pure logic with a contract: paths, migrations, protocols                                                                                                   |
+| Lint gate                  | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                                                                            | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from the example                                                      |
 
 - Test a main entry through its `Ipc` contract with real inputs, not Electron mocks. The example's [`main.test.ts`](src/example/main.test.ts) does.
 - Drive the race the user hits: a reload during async setup, a store that loads late, an Ipc that goes away and returns.
@@ -340,7 +385,7 @@ export const Counter = Ipc.define({
 })
 ```
 
-2. **Write the definition.** Main provides the counter and the window uses it. The pill preference is a declared store, so the host loads it before setup.
+2. **Write the definition.** Main provides the counter, and `provides` puts it in the window's `ctx.uses` too. The pill preference is a declared window store, so the host loads it before setup; the count is a declared main store.
 
 <!-- source: src/example/index.ts -->
 
@@ -355,10 +400,15 @@ const Pill = Schema.Struct({ shown: Schema.Boolean })
 /** The guide's example: a count main keeps, shown as a titlebar pill. Not a built-in, so it never ships. */
 export default Extension.define({
   id: "example",
-  // The main entry provides the counter and the window entry uses it, so the window keeps working without it.
+  // The main entry provides the counter. The window entry reads it as `ctx.uses.counter`, a `Live` accessor, so the
+  // window keeps working without it.
   provides: { counter: Counter },
-  uses: { counter: Counter },
-  stores: { pill: Store.global(Pill, { shown: true }) },
+  stores: {
+    // Window state: the host loads it before the window entry's setup.
+    pill: Store.global(Pill, { shown: true }),
+    // Main state: only the main entry's `ctx.stores` holds it.
+    count: Store.main(Schema.Number, 0),
+  },
   i18n: { en },
 })
 ```
@@ -378,18 +428,18 @@ export default {
 }
 ```
 
-4. **Provide it from main.** Main storage is synchronous. Each change calls `changed()`, which pushes the new state to every window.
+4. **Provide it from main.** `MainSetup<typeof definition>` types the main stores in `ctx.stores`, which main storage reads synchronously. Each change calls `changed()`, which pushes the new state to every window.
 
 <!-- source: src/example/main.ts -->
 
 ```ts
-import { Schema } from "effect"
 import type { MainSetup } from "../sdk/main"
 import { Counter } from "./contract"
+import type definition from "./index"
 
-const setup: MainSetup = (ctx) => {
-  // Main storage is synchronous: `value` is always defined.
-  const count = ctx.storage.store("count", { schema: Schema.Number, initial: 0 })
+const setup: MainSetup<typeof definition> = (ctx) => {
+  // A declared main store: main storage is synchronous, so `value` is always defined.
+  const count = ctx.stores.count
 
   const counter = ctx.provide(Counter, {
     state: () => count.value,

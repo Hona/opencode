@@ -46,7 +46,7 @@ function SessionReviewTab(props: {
 
   const readFile = async (path: string) => {
     return props.session.server.client.file
-      .read({ path, location: { directory: props.session.file.root } })
+      .read({ path, location: { directory: props.review.screen.file.root } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })

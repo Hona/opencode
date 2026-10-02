@@ -165,12 +165,12 @@ const setup: Setup<typeof definition> = (ctx) => {
       return [...next.values()]
     },
     // The pane shows nothing until the desktop's first inventory names its tabs.
-    render: (tab, session) => (
+    render: (props) => (
       <Show when={model()}>
         {(value) => (
-          <Show when={!value().pending(session)}>
+          <Show when={!value().pending(props.session)}>
             <Suspense>
-              <SessionBrowserPane tab={tab} session={session} model={value()} />
+              <SessionBrowserPane tab={() => props.tab} session={props.session} model={value()} />
             </Suspense>
           </Show>
         )}

@@ -1,4 +1,14 @@
-import { batch, createMemo, createRenderEffect, createRoot, createSignal, on, untrack, type Owner } from "solid-js"
+import {
+  batch,
+  createMemo,
+  createRenderEffect,
+  createRoot,
+  createSignal,
+  on,
+  untrack,
+  type Accessor,
+  type Owner,
+} from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import { Predicate } from "effect"
 import type { Persisted, SessionRef, StoreFrom } from "@opencode/gui-extensions/sdk"
@@ -115,9 +125,45 @@ export function whenLoaded<T>(handle: Persisted<T>) {
 }
 
 /**
- * A declared session store: one handle per session. A session's storage needs its location, so the store opens once
- * the location is known; changes made before then wait and apply in order.
+ * A `Persisted` over a store that opens later: `value` is undefined and `ready()` false until `store` returns one, and
+ * changes made before then wait and apply in order. Call it inside an owner, which ends the hand-over.
  */
+export function deferredHandle<T>(store: Accessor<Persisted<T> | undefined>): Persisted<T> {
+  const queue: Mutation<T>[] = []
+
+  // Hands changes made before the store opened to it, which applies them once it has loaded.
+  createRenderEffect(() => {
+    const current = store()
+
+    if (current && queue.length > 0) untrack(() => queue.splice(0).forEach((mutation) => current.update(mutation)))
+  })
+
+  return {
+    get value() {
+      return store()?.value
+    },
+    ready: () => store()?.ready() ?? false,
+    update(mutation) {
+      const current = untrack(store)
+
+      if (current) return current.update(mutation)
+      queue.push(mutation)
+    },
+  }
+}
+
+/**
+ * A store of one session, which needs the session's location: it opens once the location is known, and again in a
+ * new directory. The session is one session's ref or `MountedSession`, so it never reads another session's location.
+ */
+export function locatedHandle<T>(session: SessionRef, open: () => Persisted<T>) {
+  const directory = createMemo(() => session.location?.directory)
+
+  // A new directory opens the store again; the store from the old one disposes with the previous run.
+  return deferredHandle(createMemo(on(directory, (value) => (value === undefined ? undefined : open()))))
+}
+
+/** A declared session store: one handle per session, opened through `locatedHandle`. */
 export function createSessionStore<T extends object>(input: {
   readonly open: (session: SessionRef) => Persisted<T>
   readonly owner: Owner | null
@@ -125,34 +171,7 @@ export function createSessionStore<T extends object>(input: {
   const entries = new Map<string, { readonly handle: Persisted<T>; readonly dispose: () => void }>()
 
   const create = (session: SessionRef) =>
-    createRoot((dispose) => {
-      const queue: Mutation<T>[] = []
-      const pinned = pin(session)
-      const directory = createMemo(() => pinned.location?.directory)
-      // A new directory opens the store again; the store from the old one disposes with the previous run.
-      const store = createMemo(on(directory, (value) => (value === undefined ? undefined : input.open(pinned))))
-      // Hands changes made before the location was known to the store, which applies them once it has loaded.
-      createRenderEffect(() => {
-        const current = store()
-
-        if (current && queue.length > 0) untrack(() => queue.splice(0).forEach((mutation) => current.update(mutation)))
-      })
-
-      const handle: Persisted<T> = {
-        get value() {
-          return store()?.value
-        },
-        ready: () => store()?.ready() ?? false,
-        update(mutation) {
-          const current = untrack(store)
-
-          if (current) return current.update(mutation)
-          queue.push(mutation)
-        },
-      }
-
-      return { handle, dispose }
-    }, input.owner)
+    createRoot((dispose) => ({ handle: locatedHandle(session, () => input.open(session)), dispose }), input.owner)
 
   return {
     get(session: SessionRef) {
@@ -175,32 +194,6 @@ export function createSessionStore<T extends object>(input: {
     dispose() {
       entries.forEach((entry) => entry.dispose())
       entries.clear()
-    },
-  }
-}
-
-/**
- * A ref that keeps naming the session `session` names now. A `MountedSession` follows the route to the next
- * session, so its location is read only while it still names this one, and the last location it reported stands
- * meanwhile. The store opens, and reads `server`, only when that location changes.
- */
-function pin(session: SessionRef): SessionRef {
-  const key = session.key
-  const id = session.id
-  const tab = session.tab
-  const server = session.server
-  const location = createMemo<SessionRef["location"]>((last) => (session.key === key ? session.location : last))
-
-  return {
-    key,
-    id,
-    tab,
-    server,
-    get pending() {
-      return session.key === key && session.pending
-    },
-    get location() {
-      return location()
     },
   }
 }

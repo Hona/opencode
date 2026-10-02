@@ -1,43 +1,55 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
-import type {
-  Appearance,
-  Build,
-  Definition,
-  Ipc,
-  IpcClient,
-  IpcSpec,
-  Keybinds,
-  Layout,
-  Locale,
-  Point,
-  Router,
-  Servers,
-  Setup,
-  Storage,
-  StoreOptions,
-  Workspaces,
+import {
+  Panel,
+  type Appearance,
+  type Build,
+  type Definition,
+  type Ipc,
+  type IpcClient,
+  type IpcSpec,
+  type Keybinds,
+  type Layout,
+  type Locale,
+  type MountedSession,
+  type Point,
+  type Router,
+  type Servers,
+  type SessionScreen,
+  type Setup,
+  type Storage,
+  type StoreOptions,
+  type Workspaces,
 } from "@opencode/gui-extensions/sdk"
-import { createSignal, getOwner, onCleanup, runWithOwner, Show } from "solid-js"
+import { createMemo, createSignal, getOwner, onCleanup, runWithOwner, Show, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Schema } from "effect"
 import { render } from "solid-js/web"
-import type { Platform } from "@/runtime/platform/platform"
+import { PlatformProvider, type Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { ServerScope } from "@/runtime/server/scope"
 import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "../src/runtime/extension/host"
+import { createHostApis } from "../src/runtime/extension/host-apis"
+import { createRegion, RegionContent } from "../src/runtime/extension/panels"
 import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 
-export { Command, Contract, createKeyed, Slot, Store, TitlebarItem } from "@opencode/gui-extensions/sdk"
+export { Command, Contract, createKeyed, Panel, Slot, Store, TitlebarItem } from "@opencode/gui-extensions/sdk"
 
 export { Schema }
 
 type ExtensionHost = ReturnType<typeof useExtensionHost>
 
+/** What the app interface hands the real host APIs when it mounts. */
+type Interface = Parameters<ReturnType<typeof createHostApis>["attach"]>[0]
+
+/** The host APIs a mounted fixture created, once it rendered. */
+type Captured = { apis?: ReturnType<typeof createHostApis> }
+
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createSignal, getOwner, onCleanup, runWithOwner }
+export { createMemo, createSignal, getOwner, onCleanup, runWithOwner }
 
 const layout: Layout = {
   narrow: () => false,
@@ -81,6 +93,7 @@ function fakeApis(storage: (extension: string) => Storage): HostApiFactories {
     workspaces: () => workspaces,
     desktop: () => undefined,
     sessions: () => ({ list: () => [], current: () => undefined }),
+    screen: () => ({ current: () => undefined }),
     layout: () => layout,
     storage,
     system: () => ({ copy: async () => {}, save: async () => false, openExternal() {} }),
@@ -267,5 +280,236 @@ export function mountExtensions(input: {
     entries: (point: string) => hosts[0]?.state.entries[point]?.length ?? 0,
     /** The items contributed to a point, as the host renders them. */
     list: <T,>(point: Point<T>) => hosts[0]?.list(point) ?? [],
+  }
+}
+
+const web: Platform = {
+  platform: "web",
+  openExternal: () => undefined,
+  restart: async () => undefined,
+  notify: async () => undefined,
+}
+
+/** A stand-in for the app interface the real host APIs attach to; each test overrides what it observes. */
+function standIn(overrides: Partial<Interface>): Interface {
+  return {
+    sessions: () => [],
+    current: () => undefined,
+    screen: () => undefined,
+    scope: () => ServerScope.local,
+    scoped: () => undefined,
+    layout: {
+      ready: () => true,
+      open() {},
+      close() {},
+      toggle() {},
+      state: () => "closed",
+      stored: () => [],
+      side: { opened: () => true, toggle() {} },
+      sidebar: { opened: () => false },
+      dock: { opened: () => false, placement: () => "bottom" },
+      scroll: { get: () => undefined, set() {} },
+    },
+    settings() {},
+    project() {},
+    font: () => "fixture mono",
+    routing: () => false,
+    path: () => "/",
+    keybind: () => [],
+    matches: () => false,
+    servers: () => ["local"],
+    ...overrides,
+  }
+}
+
+/** The real host over the real HostApis of a web window; `mounted`, when given, attaches as the app interface. */
+function RealHost(props: ParentProps<{ definitions: readonly Definition[]; captured: Captured; mounted?: Interface }>) {
+  const apis = createHostApis()
+  props.captured.apis = apis
+
+  if (props.mounted) onCleanup(apis.attach(props.mounted))
+
+  return (
+    <ExtensionHostProvider definitions={props.definitions} disabled={() => new Set<string>()} apis={apis.apis}>
+      {props.children}
+    </ExtensionHostProvider>
+  )
+}
+
+/**
+ * Mounts the real host and HostApis, and the parts of the session screen that render extension content for the routed
+ * session: the side region (`createRegion`, `RegionContent`) with every panel's tabs stored, and the
+ * `session.panel.end` slot, whose input the screen builds this way. `route(id)` routes a session the way the screen
+ * does: a new session object each time, delivered through the same reactive inputs, while the one screen object
+ * `ctx.screen` returns follows the route. Its composer records which session each attachment reached.
+ */
+export function mountSessionRegion(input: { definitions: readonly Definition[]; active: string }) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const hosts: ExtensionHost[] = []
+  const captured: Captured = {}
+  const attached: string[] = []
+
+  const object = (id: string) => {
+    const value = { key: `fixture\n${id}`, id, tab: id, pending: false, location: { directory: "/repo" }, visit: {} }
+
+    // SAFETY: the region and slot pass the object through; the test's extension reads only `key` and `id`.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    return value as unknown as MountedSession
+  }
+
+  const [view, setView] = createSignal(object("a"))
+
+  const route = {
+    get session() {
+      return view()
+    },
+    composer: { attach: () => void attached.push(view().id), update() {}, detach() {} },
+  }
+
+  // SAFETY: the test's extension reads only `session` and `composer.attach` of the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = route as unknown as SessionScreen
+
+  const sidebar = { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} }
+
+  function Region() {
+    const host = useExtensionHost()
+    hosts.push(host)
+    // Every panel's `main` tab is stored, and `active` selected, as a strip restored after a reload.
+    const all = () => host.items(Panel).map((item) => `${item.extension}:main`)
+
+    const region = createRegion({
+      region: "side",
+      view,
+      tabs: () => ({
+        all,
+        active: () => input.active,
+        setAll() {},
+        setActive() {},
+        close() {},
+        remap() {},
+      }),
+    })
+
+    return (
+      <Show when={host.ready()}>
+        <ExtensionSlot
+          at="session.panel.end"
+          input={{
+            get session() {
+              return view()
+            },
+          }}
+        />
+        <RegionContent
+          region={region}
+          view={view()}
+          frame={{
+            shown: () => true,
+            present: () => true,
+            placement: () => "side",
+            reserve: () => false,
+            animate: () => false,
+            sidebar,
+          }}
+        />
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <RealHost
+              definitions={input.definitions}
+              captured={captured}
+              mounted={standIn({ current: view, screen: () => screen })}
+            >
+              <Region />
+            </RealHost>
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    container,
+    /** Routes a session: the screen creates a new session object for it. */
+    route: (id: string) => setView(object(id)),
+    /** The session each composer attachment reached, in order. */
+    attached,
+    status: (id: string) => hosts[0]?.state.status[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host over the real HostApis of a web window, before the app interface mounts. `attach()` mounts a
+ * stand-in for the interface: its layout records each write and reports a tab it opened as visible, its server is
+ * the local one, and its mono font is "fixture mono".
+ */
+export function mountHostApis(input: { definitions: readonly Definition[] }) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const writes: string[] = []
+  const [opened, setOpened] = createSignal<readonly string[]>([])
+  const hosts: ExtensionHost[] = []
+  const captured: Captured = {}
+  const layout = standIn({}).layout
+
+  const mounted = standIn({
+    layout: {
+      ...layout,
+      open(key) {
+        writes.push(`open ${key}`)
+        setOpened((keys) => [...keys, key])
+      },
+      close: (key) => void writes.push(`close ${key}`),
+      toggle: (key) => void writes.push(`toggle ${key}`),
+      state: (key) => (opened().includes(key) ? "visible" : "closed"),
+      scroll: { get: () => undefined, set: (_session, key) => void writes.push(`scroll ${key}`) },
+    },
+    settings: (page) => void writes.push(`settings ${page}`),
+  })
+
+  function Capture() {
+    hosts.push(useExtensionHost())
+
+    return null
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <RealHost definitions={input.definitions} captured={captured}>
+              <Capture />
+            </RealHost>
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    /** Layout writes the interface received, in order. */
+    writes,
+    /** Mounts the interface. */
+    attach: () => void captured.apis?.attach(mounted),
+    status: (id: string) => hosts[0]?.state.status[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
   }
 }

@@ -55,12 +55,13 @@ import { ExtensionError } from "./error"
 import { createLifecycle, type ErrorLog, type Instance, type Revision } from "./lifecycle"
 import { createManager } from "./manager"
 import { evaluateMain } from "./module"
+import { getStore } from "../storage/store"
 import { createStorage, namespace } from "./storage"
 import { createEmbeds } from "./embeds"
 
 export type ExtensionHost = ReturnType<typeof createHost>
 
-type Loaded = { readonly setup: MainSetup; readonly i18n?: Catalog }
+type Loaded = { readonly setup: MainSetup; readonly i18n?: Catalog; readonly stores?: Definition["stores"] }
 
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
 type Method = IpcImpl<IpcSpec>[string]
@@ -275,7 +276,7 @@ export function createHost(input: {
       return () =>
         main().then((module) =>
           // SAFETY: a built-in's main entry exports a `MainSetup`, whose context this host builds.
-          prepare(id, { setup: module.default as MainSetup, i18n: builtin.i18n }),
+          prepare(id, { setup: module.default as MainSetup, i18n: builtin.i18n, stores: builtin.stores }),
         )
     }
 
@@ -418,11 +419,21 @@ export function createHost(input: {
       }
     }
 
+    const storage = () => (created.storage ??= createStorage(input.state, getStore, id))
+
     const context: MainContext = {
       id,
       scope: instance.scope,
+      // The declared main stores, opened on the first read; main storage reads synchronously, so they are loaded.
+      get stores() {
+        return (created.stores ??= Object.fromEntries(
+          Object.entries(loaded.stores ?? {}).flatMap(([name, declaration]) =>
+            declaration.scope === "main" ? [[name, storage().store(name, declaration)] as const] : [],
+          ),
+        ))
+      },
       get storage() {
-        return (created.storage ??= createStorage(input.state, id))
+        return storage()
       },
       get log() {
         return desktopLog

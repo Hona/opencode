@@ -1,12 +1,18 @@
 import { fileURLToPath } from "node:url"
 import type { Owner } from "solid-js"
-import type { Context, Contract, Dialogs } from "@opencode/gui-extensions/sdk"
+import type { Context, Contract, DialogHandle, Dialogs, SessionRef } from "@opencode/gui-extensions/sdk"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
 
 /** What the scoped-registration case keeps from inside its extension. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
+
+/** The context the session-routing case keeps from inside its extension. */
+type Kept = { ctx?: Context }
+
+/** What the pre-mount case reads from inside its extension's setup. */
+type Reads = { state?: () => string; font?: () => string; prefs?: { value?: { count: number }; ready(): boolean } }
 
 story.beforeEach(async ({ mount }) => {
   // Any story loads the app; the fixture mounts the real host beside it.
@@ -94,10 +100,10 @@ story("a dialog service kept from before a reload opens and closes nothing under
     host.load(setup, 1)
     await wait(20)
     const [stale, fresh] = dialogs
-    stale.push(text("stale dialog"))
-    fresh.push(text("fresh dialog"))
+    const kept = stale.open(text("stale dialog"))
+    fresh.open(text("fresh dialog"))
     await wait(50)
-    stale.close()
+    kept.close()
     await wait(300)
     const outcome = { stale: shown("stale dialog"), fresh: shown("fresh dialog") }
     host.unmount()
@@ -108,6 +114,42 @@ story("a dialog service kept from before a reload opens and closes nothing under
   expect(result).toEqual({ stale: false, fresh: true })
 })
 
+story("a dialog handle closes its own dialog, and a dialog closes with the scope that opened it", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensionHost, createKeyed, createSignal } = await import(fixture)
+    const host = mountExtensionHost()
+    const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+    const shown = () => ["below", "middle", "scoped"].filter((value) => document.body.textContent?.includes(value))
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    const scope = { end: () => {} }
+    const handles: DialogHandle[] = []
+    host.load((ctx: Context) => {
+      const [on, set] = createSignal(true)
+      scope.end = () => set(false)
+      handles.push(ctx.dialogs.open(text("below")), ctx.dialogs.open(text("middle")))
+      createKeyed(on, () => void ctx.dialogs.open(text("scoped")))
+    }, 0)
+    await wait(100)
+    const opened = shown()
+    // The middle dialog is not on top: its handle closes it and nothing else.
+    handles[1]?.close()
+    await wait(300)
+    const closed = shown()
+    scope.end()
+    await wait(300)
+    const ended = shown()
+    host.unmount()
+
+    return { opened, closed, ended }
+  }, fixture)
+
+  expect(result).toEqual({
+    opened: ["below", "middle", "scoped"],
+    closed: ["below", "scoped"],
+    ended: ["below"],
+  })
+})
+
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
     const { mountExtensionHost } = await import(fixture)
@@ -116,7 +158,7 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
     host.load((ctx: Context) => void dialogs.push(ctx.dialogs), 0)
     await wait(20)
-    dialogs[0].push(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
+    dialogs[0].open(() => Object.assign(document.createElement("p"), { textContent: "same tick dialog" }))
     host.reload()
     await wait(300)
     const outcome = !!document.body.textContent?.includes("same tick dialog")
@@ -127,6 +169,159 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
 
   expect(shown).toBe(false)
 })
+
+story(
+  "routing A, B, then A again: a kept session stays A, the same screen follows the route, and no render remounts",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountSessionRegion, until, Panel, Slot } = await import(fixture)
+      const mounts = { single: 0, grouped: 0, slot: 0 }
+      const inputs: Partial<Record<keyof typeof mounts, { readonly session: { readonly id: string } }>> = {}
+      const kept: Kept = {}
+      const node = () => document.createElement("p")
+
+      // One render of each kind the host has: a selected tab, a group that stays mounted, and a slot.
+      const render = (kind: keyof typeof mounts) => (input: { readonly session: { readonly id: string } }) => {
+        mounts[kind]++
+        inputs[kind] = input
+
+        return node()
+      }
+
+      const host = mountSessionRegion({
+        active: "single:main",
+        definitions: [
+          {
+            id: "single",
+            renderer: async () => ({
+              default: (ctx: Context) => {
+                const tab = { id: "main", title: "Single" }
+                kept.ctx = ctx
+                ctx.add(Panel, { id: "main", region: "side", list: () => [tab], render: render("single") })
+                ctx.add(Slot, { at: "session.panel.end", render: render("slot") })
+              },
+            }),
+          },
+          {
+            id: "grouped",
+            renderer: async () => ({
+              default: (ctx: Context) => {
+                const tab = { id: "main", title: "Grouped", group: "group" }
+                ctx.add(Panel, { id: "main", region: "side", list: () => [tab], render: render("grouped") })
+              },
+            }),
+          },
+        ],
+      })
+
+      await until(() => mounts.single > 0 && mounts.grouped > 0 && mounts.slot > 0)
+
+      // Session A's object, as an extension keeps it, and the screen while it routes A.
+      const session = kept.ctx?.sessions.current()
+      const screen = kept.ctx?.screen.current()
+
+      const seen = () => ({
+        mounts: { ...mounts },
+        sessions: [inputs.single?.session.id, inputs.grouped?.session.id, inputs.slot?.session.id],
+        kept: session?.id,
+        fresh: kept.ctx?.sessions.current() !== session,
+        screen: { same: kept.ctx?.screen.current() === screen, session: screen?.session?.id },
+      })
+
+      const steps = [seen()]
+      host.route("b")
+      steps.push(seen())
+      // An action through the screen targets the session routed now.
+      screen?.composer.attach({ type: "file", path: "notes.md" })
+      host.route("a")
+      steps.push(seen())
+      host.unmount()
+
+      return { steps, attached: host.attached }
+    }, fixture)
+
+    const step = (id: string, fresh: boolean) => ({
+      mounts: { single: 1, grouped: 1, slot: 1 },
+      sessions: [id, id, id],
+      kept: "a",
+      fresh,
+      screen: { same: true, session: id },
+    })
+
+    // Routing A again makes a new object for the new visit; the kept one still names A.
+    expect(result).toEqual({ steps: [step("a", false), step("b", true), step("a", true)], attached: ["b"] })
+  },
+)
+
+story(
+  "before the app interface mounts, host APIs read their defaults and keep writes until it mounts",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountHostApis, until, createMemo, Schema } = await import(fixture)
+      const Prefs = Schema.Struct({ count: Schema.Number })
+      const fake = { key: "local\nses_fixture", id: "ses_fixture", tab: "tab", pending: false, location: undefined }
+      // SAFETY: the stand-in interface reads only the key it is given; the host APIs pass the session through.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+      const session = fake as unknown as SessionRef
+
+      const reads: Reads = {}
+
+      const host = mountHostApis({
+        definitions: [
+          {
+            id: "fixture",
+            renderer: async () => ({
+              default: (ctx: Context) => {
+                // Setup runs before the interface mounts, as every built-in's does.
+                ctx.layout.open("fixture:main", session)
+                ctx.layout.settings("fixture")
+
+                const prefs = ctx.storage.store("prefs", {
+                  schema: Prefs,
+                  initial: { count: 0 },
+                  scope: { server: "local" },
+                })
+
+                prefs.update((draft) => ({ count: draft.count + 1 }))
+                reads.state = createMemo(() => ctx.layout.state("fixture:main", session))
+                reads.font = createMemo(() => ctx.appearance.font("mono"))
+                reads.prefs = prefs
+              },
+            }),
+          },
+        ],
+      })
+
+      const read = () => ({
+        state: reads.state?.(),
+        font: reads.font?.().startsWith('"JetBrainsMono Nerd Font Mono"') ? "default mono" : reads.font?.(),
+        prefs: reads.prefs?.value?.count,
+        ready: reads.prefs?.ready(),
+        writes: [...host.writes],
+      })
+
+      await until(() => host.status("fixture") === "active")
+      const before = read()
+      host.attach()
+      await until(() => host.writes.length === 2)
+      const after = read()
+      host.unmount()
+
+      return { before, after }
+    }, fixture)
+
+    expect(result).toEqual({
+      before: { state: "closed", font: "default mono", prefs: undefined, ready: false, writes: [] },
+      after: {
+        state: "visible",
+        font: "fixture mono",
+        prefs: 1,
+        ready: true,
+        writes: ["open fixture:main", "settings fixture"],
+      },
+    })
+  },
+)
 
 story("an extension reloaded while disabled starts when it is enabled again", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {

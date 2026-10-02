@@ -4,19 +4,19 @@ import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { useExtension, usePanel, type MountedSession } from "../sdk"
+import { useExtension, usePanel, type MountedSession, type SessionScreen } from "../sdk"
 import { SessionFileBrowserTab } from "./browser"
 import { useShared } from "./context"
 import { fileTabPath, isFileTab } from "./path"
 
 const OPEN_FILE_TAB = "open-file"
 
-export default function SessionMobileFiles(props: { session: MountedSession }) {
+export default function SessionMobileFiles(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
   const layout = ctx.layout
   const shared = useShared()
   const panel = usePanel()
-  const file = props.session.file
+  const file = props.screen.file
   const opened = createMemo(() => panel.open().filter(isFileTab))
   // The selected side tab when it is a file tab. A gone selection falls back to the first file tab.
   const activeFileTab = createMemo(() => opened().find((id) => shared.active(props.session, id)))
@@ -88,6 +88,7 @@ export default function SessionMobileFiles(props: { session: MountedSession }) {
         <SessionFileBrowserTab
           mobile
           session={props.session}
+          screen={props.screen}
           id={activeFileTab()}
           placeholder={browsing()}
           active={active()}

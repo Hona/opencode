@@ -9,6 +9,7 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   const generations: { sessionID: string; prompt: string }[] = []
   const prompts: unknown[] = []
   const generated = Promise.withResolvers<void>()
+  const abandoned = Promise.withResolvers<void>()
   const main = { id: "ses_btw_sidebar", title: "Side question session" }
   const other = { id: "ses_btw_sidebar_other", title: "Other side question session" }
   const ownerWarnings: string[] = []
@@ -25,6 +26,13 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
       generations.push(input)
 
       if (input.sessionID === other.id) return { text: "This answer belongs to the **other session**." }
+
+      if (input.prompt.includes("left behind")) {
+        await abandoned.promise
+
+        return { text: "This answer arrived after the user left." }
+      }
+
       await generated.promise
 
       return {
@@ -72,6 +80,18 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expectSessionTitle(page, main.title)
   await expect(panel.getByText("exponential backoff", { exact: false })).toBeVisible()
   await expect(panel.getByText("other session", { exact: false })).toHaveCount(0)
+
+  // Leaving a session abandons its in-flight question, so it reads as failed on return.
+  await editor.fill("/btw is this question left behind?")
+  await editor.press("Enter")
+  await expect(panel.getByRole("status")).toContainText("Working")
+  await page.locator(`[data-titlebar-tab-link][href="${sessionHref(other.id)}"]`).click()
+  await expectSessionTitle(page, other.title)
+  await page.locator(`[data-titlebar-tab-link][href="${sessionHref(main.id)}"]`).click()
+  await expectSessionTitle(page, main.title)
+  await expect(panel.getByText("Couldn’t answer that question", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Retry", exact: true })).toBeVisible()
+  abandoned.resolve()
 
   await page.reload()
   await expectSessionTitle(page, main.title)

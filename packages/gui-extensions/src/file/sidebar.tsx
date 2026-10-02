@@ -1,15 +1,15 @@
 import { createMemo, Match, onCleanup, Show, Switch } from "solid-js"
 import { Tabs } from "@opencode/ui/tabs"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession, type SessionScreen } from "../sdk"
 import { current, useShared } from "./context"
 import FileTree from "./tree"
 
 /** The file tree beside the side panel: the session's changed files, or every workspace file. */
-export default function FileSidebar(props: { session: MountedSession }) {
+export default function FileSidebar(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
   const shared = useShared()
-  const file = props.session.file
+  const file = props.screen.file
   const empty = new Map<string, ChangeKind>()
   const changes = () => current(shared.changes())
 
@@ -96,6 +96,7 @@ export default function FileSidebar(props: { session: MountedSession }) {
               >
                 <FileTree
                   session={props.session}
+                  screen={props.screen}
                   path=""
                   class="pt-3"
                   allowed={diffFiles()}
@@ -123,6 +124,7 @@ export default function FileSidebar(props: { session: MountedSession }) {
             <Match when={true}>
               <FileTree
                 session={props.session}
+                screen={props.screen}
                 path=""
                 class="pt-3"
                 modified={diffFiles()}

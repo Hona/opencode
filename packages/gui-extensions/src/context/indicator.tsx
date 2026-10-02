@@ -23,7 +23,7 @@ export function SessionContextUsage(props: {
   const ctx = useExtension()
   const layout = ctx.layout
   const i18n = useI18n()
-  syncCatalog(props.session)
+  syncCatalog(() => props.session)
 
   const variant = createMemo(() => props.variant ?? "button")
 

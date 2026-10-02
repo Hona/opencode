@@ -11,9 +11,11 @@ import type {
   IpcClient,
   IpcRef,
   Live,
+  MainStoreDeclaration,
   Persisted,
   StoreDeclaration,
   TokenValue,
+  Usable,
 } from "./core"
 import type {
   Appearance,
@@ -25,6 +27,7 @@ import type {
   Links,
   Locale,
   Router,
+  Screen,
   Servers,
   SessionRef,
   Sessions,
@@ -84,6 +87,17 @@ export interface Context extends BaseContext {
    */
   readonly sessions: Sessions
   /**
+   * The mounted session screen and its route-following files, comments and composer. Read it where you act, so an
+   * action targets the session routed at that moment; a `MountedSession` carries no such actions.
+   *
+   * @example
+   * ```ts
+   * const screen = ctx.screen.current()
+   * if (screen) screen.composer.attach({ type: "file", path })
+   * ```
+   */
+  readonly screen: Screen
+  /**
    * Stores for keys only known at runtime, and window-local memory. Declare `stores` for keys known up front.
    *
    * @example
@@ -112,11 +126,11 @@ export interface Context extends BaseContext {
    */
   readonly desktop: Desktop | undefined
   /**
-   * Dialogs that close when the extension goes away.
+   * Dialogs that close with the owner that opened them, else when the extension goes away.
    *
    * @example
    * ```ts
-   * ctx.dialogs.show(() => <ConfirmDialog />)
+   * ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
    * ```
    */
   readonly dialogs: Dialogs
@@ -241,15 +255,15 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
    */
   provide<T extends Extract<Provides<D>, Contract<unknown>>>(token: T, impl: TokenValue<T>): Cleanup
   /**
-   * Each optional dependency, by its name in `uses`, as a `Live` accessor. Branch on it, or follow it with
-   * `createKeyed`; an `Ipc.ref` adds `load(fullToken)`.
+   * Each token of `provides` and each optional dependency of `uses`, by its key, as a `Live` accessor. Branch on it,
+   * or follow it with `createKeyed`; an `Ipc.ref` adds `load(fullToken)`. Your own Ipc is here through `provides`.
    *
    * @example
    * ```ts
    * createKeyed(ctx.uses.counter, (counter) => ctx.add(Command, reset(counter)))
    * ```
    */
-  readonly uses: { readonly [K in keyof Declared<D, "uses">]: Used<Declared<D, "uses">[K]> }
+  readonly uses: { readonly [K in keyof Usable<D>]: Used<Usable<D>[K]> }
   /**
    * Each hard dependency's value, by its name in `requires`. Setup runs only while all are active and restarts when
    * one changes, so the values are plain.
@@ -261,8 +275,9 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
    */
   readonly requires: { readonly [K in keyof Declared<D, "requires">]: TokenValue<Declared<D, "requires">[K]> }
   /**
-   * Each declared store, by its name in `stores`. A global store is a `Persisted` that has loaded before setup; a
-   * session store is a function of the session whose `value` is undefined until that session's store loads.
+   * Each declared window store, by its name in `stores`. A global store is a `Persisted` that has loaded before setup;
+   * a session store is a function of the session whose `value` is undefined until that session's store loads. A
+   * `Store.main` store belongs to the main entry and is not here.
    *
    * @example
    * ```ts
@@ -270,7 +285,11 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
    * const open = (session: SessionRef) => ctx.stores.view(session).value?.open ?? []
    * ```
    */
-  readonly stores: { readonly [K in keyof DeclaredStores<D>]: Handle<DeclaredStores<D>[K]> }
+  readonly stores: {
+    readonly [K in keyof DeclaredStores<D> as DeclaredStores<D>[K] extends MainStoreDeclaration ? never : K]: Handle<
+      DeclaredStores<D>[K]
+    >
+  }
 }
 
 /**

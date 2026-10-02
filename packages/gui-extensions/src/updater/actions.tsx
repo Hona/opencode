@@ -1,10 +1,9 @@
 import type { JSX } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
-import type { IpcClient, SetupContext } from "../sdk"
+import type { DialogHandle, IpcClient, SetupContext } from "../sdk"
 import type { Updater } from "./contract"
 import type definition from "./index"
 
@@ -30,7 +29,10 @@ export function install(ctx: Context, client: Client) {
     return
   }
 
-  ctx.dialogs.show(() => <DialogStableDownload ctx={ctx} version={state.version} download={download} />)
+  ctx.dialogs.open(
+    (dialog) => <DialogStableDownload ctx={ctx} dialog={dialog} version={state.version} download={download} />,
+    { replace: true },
+  )
 }
 
 export async function check(ctx: Context, client: Client) {
@@ -56,12 +58,16 @@ export async function check(ctx: Context, client: Client) {
   }
 }
 
-function DialogStableDownload(props: { ctx: Context; version: string; download: () => Promise<void> }) {
+function DialogStableDownload(props: {
+  ctx: Context
+  dialog: DialogHandle
+  version: string
+  download: () => Promise<void>
+}) {
   const ctx = props.ctx
-  const dialog = useDialog()
 
   const download = () => {
-    dialog.close()
+    props.dialog.close()
     void props.download()
   }
 
@@ -74,7 +80,7 @@ function DialogStableDownload(props: { ctx: Context; version: string; download: 
         />
       </DialogHeader>
       <DialogFooter>
-        <Button type="button" variant="neutral" onClick={() => dialog.close()}>
+        <Button type="button" variant="neutral" onClick={() => props.dialog.close()}>
           {ctx.t("common.cancel")}
         </Button>
         <Button type="button" variant="contrast" autofocus onClick={download}>

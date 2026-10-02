@@ -5,7 +5,7 @@ import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import type { Embeds, ServerEndpoints, Storage, Windows } from "../sdk/main"
+import type { Embeds, Persisted, ServerEndpoints, Storage, Windows } from "../sdk/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
@@ -45,12 +45,14 @@ export function createBrowserPane(input: {
   readonly windows: Windows
   readonly serverEndpoints: ServerEndpoints
   readonly storage: Storage
+  /** The declared store of reserved element refs. */
+  readonly refs: Persisted<number, number>
   readonly embeds: Embeds
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const entries = new Map<string, Entry>()
   const restore = createBrowserRestoreStore(input.storage)
-  const shared: Shared = { ref: createRefs(input.storage) }
+  const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()

@@ -65,7 +65,7 @@ const setup: Setup<typeof definition> = (ctx) => {
 
       if (!styled.added) ctx.add(Style, module.css)
       styled.added = true
-      dialog.push(() => render(module))
+      dialog.open(() => render(module))
     })
 
   const add = (openProject: boolean) =>

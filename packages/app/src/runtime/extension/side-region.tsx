@@ -15,7 +15,12 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
-import { MenuItem, type MountedSession, type PanelSidebar } from "@opencode/gui-extensions/sdk"
+import {
+  MenuItem,
+  type MountedSession,
+  type PanelSidebar,
+  type SessionPanelMenuItem,
+} from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -65,7 +70,7 @@ export function SideRegion(props: {
   const menu = createMemo(() =>
     host
       .list(MenuItem)
-      .filter((item) => item.menu === "session.panel")
+      .flatMap((item) => (item.menu === "session.panel" ? [item] : []))
       .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   )
 
@@ -168,6 +173,7 @@ export function SideRegion(props: {
                                     value={key}
                                     extension={entry().extension}
                                     tab={entry().tab}
+                                    session={props.view}
                                     index={tabs().all().indexOf(key)}
                                     active={props.region.active() === key}
                                     preview={tabs().preview() === key}
@@ -194,7 +200,14 @@ export function SideRegion(props: {
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <ExtensionSlot at="session.panel.end" input={{ session: props.view }} />
+                          <ExtensionSlot
+                            at="session.panel.end"
+                            input={{
+                              get session() {
+                                return props.view
+                              },
+                            }}
+                          />
                           <Show when={tabsVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>
@@ -245,7 +258,14 @@ export function SideRegion(props: {
                   class="h-full flex flex-col overflow-hidden group/filetree"
                   classList={{ "border-l border-border-weaker-base": tabsOpen() }}
                 >
-                  <ExtensionSlot at="session.panel.sidebar" input={{ session: props.view }} />
+                  <ExtensionSlot
+                    at="session.panel.sidebar"
+                    input={{
+                      get session() {
+                        return props.view
+                      },
+                    }}
+                  />
                 </div>
                 <div onPointerDown={() => props.size.start()}>
                   <ResizeHandle
@@ -269,7 +289,7 @@ export function SideRegion(props: {
   )
 }
 
-function AddButton(props: { item: MenuItem }): JSX.Element {
+function AddButton(props: { item: SessionPanelMenuItem }): JSX.Element {
   const command = useCommand()
   const keybind = createMemo(() => (props.item.keybind ? command.keybindParts(props.item.keybind) : []))
 
@@ -290,14 +310,14 @@ function AddButton(props: { item: MenuItem }): JSX.Element {
         icon={<Icon name="plus" />}
         variant="ghost-muted"
         size="large"
-        onClick={() => props.item.run("")}
+        onClick={() => props.item.run()}
         aria-label={props.item.title}
       />
     </Tooltip>
   )
 }
 
-function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
 
@@ -323,7 +343,7 @@ function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
                 return (
                   <Menu.Item
                     class="!gap-6"
-                    onSelect={() => item.run("")}
+                    onSelect={() => item.run()}
                     shortcut={
                       <Show when={keybind().length > 0}>
                         <Keybind keys={keybind()} variant="neutral" />

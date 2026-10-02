@@ -8,6 +8,8 @@ import {
   Contract,
   Store,
   type Composition,
+  type Conflict,
+  type DefinitionCheck,
   type Desktop,
   type Duplicate,
   type IpcClient,
@@ -15,8 +17,10 @@ import {
   type Missing,
   type MissingMain,
   type IpcsProvided,
+  type SessionScreen,
   type Setup,
 } from "./index"
+import type { MainSetup } from "./main"
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 
@@ -115,10 +119,62 @@ export const setup: Setup<typeof Consumer> = (ctx) => {
   ctx.provide(Tree, { open: () => undefined })
   // @ts-expect-error no store named missing
   void ctx.stores.missing
+  // A session carries its identity and data only; the route-following models belong to the session screen.
+  const session = ctx.sessions.current()
+  // @ts-expect-error a session has no workspace files: read `ctx.screen.current()?.file`
+  void session?.file
+  // @ts-expect-error a session has no comments: read `ctx.screen.current()?.comment`
+  void session?.comment
+  // @ts-expect-error a session has no composer: read `ctx.screen.current()?.composer`
+  void session?.composer
+  equal<ReturnType<typeof ctx.screen.current>, SessionScreen | undefined>(true)
 }
 
 export const provider: Setup<typeof TreeProvider> = (ctx) => {
   ctx.provide(Tree, { open: () => undefined })
   // @ts-expect-error the implementation must match the token
   ctx.provide(Tree, { close: () => undefined })
+  // What an extension provides it reads through `uses` too, without declaring it twice.
+  equal<typeof ctx.uses.tree, Accessor<Live<{ open(path: string): void }>>>(true)
 }
+
+export const ipcProvider: Setup<typeof PaneProvider> = (ctx) => {
+  equal<typeof ctx.uses.pane, Accessor<Live<IpcClient<(typeof Pane)["spec"]>>>>(true)
+}
+
+// The same token under one key in both records is allowed; two different tokens under one key are not.
+export const repeated = Extension.define({ id: "repeated", provides: { tree: Tree }, uses: { tree: Tree } })
+
+// @ts-expect-error `tree` names fixture.tree in provides and fixture.changes in uses
+Extension.define({ id: "clash", provides: { tree: Tree }, uses: { tree: Changes } })
+
+equal<
+  DefinitionCheck<{
+    readonly provides: { readonly tree: typeof Tree }
+    readonly uses: { readonly tree: typeof Changes }
+  }>,
+  { readonly "conflicting key": Conflict<"tree"> }
+>(true)
+
+// Each process's `ctx.stores` holds only its own declared stores; main's are always loaded.
+const Split = Extension.define({
+  id: "split",
+  stores: { view: Store.global(View, { open: false }), count: Store.main(Schema.Number, 0) },
+})
+
+export const windowStores: Setup<typeof Split> = (ctx) => {
+  equal<typeof ctx.stores.view.value, { readonly open: boolean }>(true)
+  // @ts-expect-error a main store is not in the window's context
+  void ctx.stores.count
+}
+
+export const mainStores: MainSetup<typeof Split> = (ctx) => {
+  equal<typeof ctx.stores.count.value, number>(true)
+  // @ts-expect-error a window store is not in the main context
+  void ctx.stores.view
+  // @ts-expect-error main has no session screen; it is a window API
+  void ctx.screen
+}
+
+// @ts-expect-error a main store's `from` names a settings key or a state namespace and key, not a raw string
+Store.main(Schema.Number, 0, "settings:count")

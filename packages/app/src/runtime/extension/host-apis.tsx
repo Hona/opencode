@@ -25,6 +25,7 @@ import {
   type PanelState,
   type ServerRef,
   type SessionRef,
+  type SessionScreen,
   type Storage,
   type StorageScope,
   type StoreFrom,
@@ -49,11 +50,12 @@ import { createEmbeds } from "./embeds"
 import { useExtensionHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
 import type { Region } from "./panels"
-import { globalStoreTarget, persistedHandle, storeImports, storeName } from "./stores"
+import { deferredHandle, globalStoreTarget, persistedHandle, storeImports, storeName } from "./stores"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
   current: Accessor<MountedSession | undefined>
+  screen: Accessor<SessionScreen | undefined>
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
@@ -70,7 +72,10 @@ type Attached = {
   servers: Accessor<readonly string[]>
 }
 
-/** HostApis the host owns. Session and layout attach once the app interface mounts. */
+/**
+ * HostApis the host owns. Session and layout attach once the app interface mounts; until then their reads return
+ * their documented defaults and their writes wait, then apply in call order.
+ */
 export function createHostApis() {
   const platform = usePlatform()
   const dialog = useDialog()
@@ -82,6 +87,32 @@ export function createHostApis() {
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
   const current = () => attached()
+  // Writes made while the app interface is not mounted, in call order.
+  const early: ((value: Attached) => void)[] = []
+  // Removals of a session's store wait for its location, as layout writes do.
+  const located = createLocatedWrites()
+
+  // Runs a write now when the interface is mounted and nothing waits before it; otherwise once it mounts.
+  const write = (run: (value: Attached) => void) => {
+    const value = untrack(attached)
+
+    if (value && early.length === 0) return run(value)
+    early.push(run)
+  }
+
+  // Promise.try runs each write synchronously and isolates a throw, such as an unlisted server, from the later ones.
+  const flush = () => {
+    const value = untrack(attached)
+
+    if (!value) return
+    batch(() =>
+      early
+        .splice(0)
+        .forEach(
+          (run) => void Promise.try(() => run(value)).catch((cause: unknown) => console.error("[extension]", cause)),
+        ),
+    )
+  }
 
   const embeds = createEmbeds({
     bridge: platform.extensions,
@@ -89,15 +120,15 @@ export function createHostApis() {
     dialog: () => !!dialog.active,
   })
 
+  // A server or session store's key needs the server's scope, which the mounted interface provides.
   const target = (
     extension: string,
     key: string,
-    scope: StorageScope | undefined,
+    scope: Exclude<StorageScope, "global">,
     from: StoreFrom | readonly StoreFrom[] | undefined,
+    connected: Attached,
   ) => {
-    if (!scope || scope === "global") return globalStoreTarget(extension, key, from)
     const name = storeName(extension, key)
-    const connected = requireAttached(attached())
 
     if ("session" in scope) {
       const location = scope.session.location
@@ -124,12 +155,33 @@ export function createHostApis() {
   const apis: HostApiFactories = {
     storage: (extension, owner) => ({
       store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>) {
-        // Persistence owns effects and resources; code after an await in setup has no owner.
-        const pair = runWithOwner(getOwner() ?? owner, () =>
-          persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
-        )!
+        const open = (at: Parameters<typeof persisted>[0]) => {
+          const pair = persisted(at, options.schema, options.initial, platform)
 
-        return persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
+          return persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
+        }
+
+        const scope = options.scope
+
+        // Persistence owns effects and resources; code after an await in setup has no owner.
+        return runWithOwner(getOwner() ?? owner, () => {
+          if (!scope || scope === "global") return open(globalStoreTarget(extension, key, options.from))
+
+          const scoped = (connected: Attached | undefined) =>
+            connected && open(target(extension, key, scope, options.from, connected))
+
+          // A server store opens once the interface mounts. A session store also waits for the session's location, and
+          // opens again in a new directory; the store a run opened disposes with the next run.
+          if (!("session" in scope)) return deferredHandle(createMemo(on(attached, scoped)))
+
+          const directory = createMemo(() => scope.session.location?.directory)
+
+          return deferredHandle(
+            createMemo(
+              on([attached, directory], ([connected, value]) => (value === undefined ? undefined : scoped(connected))),
+            ),
+          )
+        })!
       },
       memory<T extends object>(key: string, options: { readonly initial: T }) {
         const name = `${extension}.${key}`
@@ -148,7 +200,20 @@ export function createHostApis() {
         return value
       },
       remove(key, options) {
-        removePersisted(target(extension, key, options?.scope, options?.from), platform)
+        const scope = options?.scope
+
+        if (!scope || scope === "global")
+          return removePersisted(globalStoreTarget(extension, key, options?.from), platform)
+
+        const run = (connected: Attached) =>
+          removePersisted(target(extension, key, scope, options?.from, connected), platform)
+
+        // A session's store is found through its location: the removal waits for it, as layout writes do.
+        write((connected) =>
+          "session" in scope && !scope.session.location
+            ? located.hold(scope.session, () => write(run))
+            : run(connected),
+        )
       },
     }),
     system: () => ({
@@ -194,7 +259,8 @@ export function createHostApis() {
       direction: language.direction,
       setDirection: language.setDirection,
     }),
-    appearance: () => ({ font: () => requireAttached(current()).font() }),
+    // Before the interface mounts, the default mono font.
+    appearance: () => ({ font: () => current()?.font() ?? terminalFontFamily(undefined) }),
     router: () => ({
       routing: () => current()?.routing() ?? false,
       path: () => current()?.path() ?? "",
@@ -218,29 +284,31 @@ export function createHostApis() {
       list: () => current()?.sessions() ?? [],
       current: () => current()?.current(),
     }),
+    screen: () => ({ current: () => current()?.screen() }),
+    // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
     layout: (extension) => ({
       narrow,
       ready: () => current()?.layout.ready() ?? false,
-      open: (key, session, options) => requireAttached(current()).layout.open(key, session, options),
-      close: (key, session) => requireAttached(current()).layout.close(key, session),
-      toggle: (key, session) => requireAttached(current()).layout.toggle(key, session),
-      state: (key, session) => requireAttached(current()).layout.state(key, session),
-      stored: (session) => requireAttached(current()).layout.stored(extension, session),
+      open: (key, session, options) => write((value) => value.layout.open(key, session, options)),
+      close: (key, session) => write((value) => value.layout.close(key, session)),
+      toggle: (key, session) => write((value) => value.layout.toggle(key, session)),
+      state: (key, session) => current()?.layout.state(key, session) ?? "closed",
+      stored: (session) => current()?.layout.stored(extension, session) ?? [],
       side: {
-        opened: (session) => requireAttached(current()).layout.side.opened(session),
-        toggle: (session) => requireAttached(current()).layout.side.toggle(session),
+        opened: (session) => current()?.layout.side.opened(session) ?? false,
+        toggle: (session) => write((value) => value.layout.side.toggle(session)),
       },
-      sidebar: { opened: () => requireAttached(current()).layout.sidebar.opened() },
+      sidebar: { opened: () => current()?.layout.sidebar.opened() ?? true },
       dock: {
-        opened: (session) => requireAttached(current()).layout.dock.opened(session),
-        placement: () => requireAttached(current()).layout.dock.placement(),
+        opened: (session) => current()?.layout.dock.opened(session) ?? false,
+        placement: () => current()?.layout.dock.placement() ?? "side",
       },
       scroll: {
-        get: (session, key) => requireAttached(current()).layout.scroll.get(session, key),
-        set: (session, key, value) => requireAttached(current()).layout.scroll.set(session, key, value),
+        get: (session, key) => current()?.layout.scroll.get(session, key),
+        set: (session, key, value) => write((connected) => connected.layout.scroll.set(session, key, value)),
       },
-      settings: (page) => requireAttached(current()).settings(page),
-      project: (server, title) => requireAttached(current()).project(server, title),
+      settings: (page) => write((value) => value.settings(page)),
+      project: (server, title) => write((value) => value.project(server, title)),
     }),
     embeds: () => embeds,
   }
@@ -249,6 +317,8 @@ export function createHostApis() {
     apis,
     attach(value: Attached) {
       setAttached(() => value)
+      // After the interface's first render, so the waiting writes find its layout, in call order.
+      queueMicrotask(flush)
 
       return () => {
         if (attached() === value) setAttached(undefined)
@@ -277,8 +347,10 @@ export function createExtensionAttachment(apis: HostApis) {
   const location = useLocation()
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
-  const mountedSessions = new Map<string, MountedSession>()
-  const [mounted, setMounted] = createStore({ revision: 0 })
+  // The mounted session screen, from its first render, and its object for the session it routes once it has mounted;
+  // one screen is mounted at a time.
+  const [screen, setScreen] = createSignal<SessionScreen>()
+  const [routedView, setRoutedView] = createSignal<Accessor<MountedSession>>()
   const refs = new Map<string, SessionRef>()
 
   const connection = (id: string) => global.servers.list().find((item) => ServerConnection.key(item) === id)
@@ -377,11 +449,9 @@ export function createExtensionAttachment(apis: HostApis) {
 
   const current = createMemo(() => {
     const key = routed()
+    const view = routedView()?.()
 
-    if (!key) return
-    void mounted.revision
-
-    return mountedSessions.get(key)
+    return key && view?.key === key ? view : undefined
   })
 
   const scope = (id: string) => {
@@ -441,8 +511,6 @@ export function createExtensionAttachment(apis: HostApis) {
 
   // Counts routing visits: each change of the routed session, including to none (e.g. Home), starts the next one.
   const visit = createMemo(on(routed, (_key, _previous, count: number = 0) => count + 1))
-  // `MountedSession.visit`: a new object for each routing visit.
-  const token = createMemo(on(visit, () => ({})))
 
   // The narrow-screen view belongs to the routed, mounted session for one visit, and reads as the conversation once
   // another visit starts. A view selected for a session that is not routed (e.g. a file link that opens Files on
@@ -637,6 +705,7 @@ export function createExtensionAttachment(apis: HostApis) {
   const detach = apis.attach({
     sessions,
     current,
+    screen,
     scope,
     scoped: layout.sessionState.track,
     project: (server, title) => setProjects((pending) => [...pending, { server, title }]),
@@ -718,25 +787,25 @@ export function createExtensionAttachment(apis: HostApis) {
         if (session) selectMobile(session, view)
       },
     },
-    /** The current routing visit, which `MountedSession.visit` returns. */
-    visit: token,
-    mount(key: string, view: MountedSession) {
-      mountedSessions.set(key, view)
-      setMounted("revision", (value) => value + 1)
-      // The session's declared stores start loading now, before its regions read them.
-      untrack(() => host.preload(view))
+    /** A session screen started rendering: `Screen.current` returns it until it unmounts. */
+    screen(value: SessionScreen) {
+      setScreen(() => value)
 
       return () => {
-        if (mountedSessions.get(key) !== view) return
-        mountedSessions.delete(key)
-        setMounted("revision", (value) => value + 1)
+        if (screen() === value) setScreen(undefined)
       }
     },
+    /** A session screen mounted: `Sessions.current` reads its object for the routed session. */
+    mount(view: Accessor<MountedSession>) {
+      setRoutedView(() => view)
+
+      return () => {
+        if (routedView() === view) setRoutedView(undefined)
+      }
+    },
+    /** Starts loading every extension's declared session stores for a session the screen routes. */
+    preload(view: MountedSession) {
+      untrack(() => host.preload(view))
+    },
   }
-}
-
-function requireAttached(value: Attached | undefined) {
-  if (!value) throw new Error("The app interface is not mounted")
-
-  return value
 }

@@ -114,6 +114,19 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  // The pane stays mounted when Beta is routed, and its picker then listens to Beta's page.
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await editor.fill("Beta's button too")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([
+    "button.primary @e7: Make this the primary colour",
+    "button.primary @e7: Beta's button too",
+  ])
 })
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {

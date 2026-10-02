@@ -19,7 +19,7 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import { useExtension, usePanel, type PanelSidebar, type MountedSession } from "../sdk"
+import { useExtension, usePanel, type MountedSession, type PanelSidebar, type SessionScreen } from "../sdk"
 import type Review from "./index"
 import {
   applyFileListKeyDown,
@@ -42,6 +42,8 @@ type ReviewPanelState = {
 
 type ReviewPanelProps = {
   session: MountedSession
+  /** The session screen, whose workspace the panel reads files from. */
+  screen: SessionScreen
   title?: JSX.Element
   empty?: JSX.Element
   /** Renderable diffs and their change kinds, computed once by the review model. */
@@ -78,6 +80,7 @@ export default function ReviewPanelContent(props: {
   return (
     <ReviewPanel
       session={props.session}
+      screen={props.review.screen}
       title={<ReviewTitle review={props.review} />}
       empty={<ReviewPanelEmpty review={props.review} />}
       diffs={props.review.renderable()}
@@ -110,7 +113,7 @@ export default function ReviewPanelContent(props: {
 function ReviewPanel(props: ReviewPanelProps) {
   const readFile = async (path: string) =>
     props.session.server.client.file
-      .read({ path, location: { directory: props.session.file.root } })
+      .read({ path, location: { directory: props.screen.file.root } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })

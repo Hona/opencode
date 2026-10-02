@@ -551,7 +551,9 @@ function MessageTimelineView(
                     <ExtensionSlot
                       at="session.header"
                       input={{
-                        session: props.view,
+                        get session() {
+                          return props.view
+                        },
                         get active() {
                           return props.active !== false
                         },

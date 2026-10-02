@@ -56,7 +56,7 @@ const setup: Setup<typeof definition> = (ctx) => {
 
       if (!styled.added) ctx.add(Style, module.css)
       styled.added = true
-      dialog.push(() => <module.DialogAddWslServer api={client()} state={state()} />)
+      dialog.open(() => <module.DialogAddWslServer api={client()} state={state()} />)
     })
 
   const entry = (item: WslServerItem): ServerEntry => {

@@ -4,7 +4,7 @@ import { Collapsible } from "@opencode/ui/collapsible"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, type FileNode, type MountedSession } from "../sdk"
+import { createKeyed, type FileNode, type MountedSession, type SessionScreen } from "../sdk"
 import { startFileDrag } from "./drag"
 
 const MAX_DEPTH = 128
@@ -155,6 +155,7 @@ const FileTreeNode = (
 
 export default function FileTree(props: {
   session: MountedSession
+  screen: SessionScreen
   path: string
   class?: string
   nodeClass?: string
@@ -173,7 +174,7 @@ export default function FileTree(props: {
   _kinds?: ReadonlyMap<string, ChangeKind>
   _chain?: readonly string[]
 }) {
-  const file = props.session.file
+  const file = props.screen.file
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
 
@@ -412,6 +413,7 @@ export default function FileTree(props: {
                     >
                       <FileTree
                         session={props.session}
+                        screen={props.screen}
                         path={node.path}
                         level={level + 1}
                         allowed={props.allowed}

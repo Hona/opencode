@@ -1,12 +1,24 @@
+import { createMemo, type Accessor } from "solid-js"
 import { createKeyed, type MountedSession } from "../sdk"
 
 const location = (session: MountedSession) => (session.directory ? { directory: session.directory } : undefined)
 
-/** Loads the provider and model catalogs of the session's location. */
-export function syncCatalog(session: MountedSession) {
-  // Loads again when the server reconnects or is replaced, and when the session moves to another directory.
+/** Loads the provider and model catalogs of the routed session's location. */
+export function syncCatalog(session: Accessor<MountedSession>) {
+  // The same target while another session of the same directory is routed, so a session switch loads nothing.
+  const target = createMemo(
+    () => {
+      const current = session()
+
+      return current.server.connected ? { data: current.server.data, ref: location(current) } : undefined
+    },
+    undefined,
+    { equals: (a, b) => a?.data === b?.data && a?.ref?.directory === b?.ref?.directory },
+  )
+
+  // Loads again when the server reconnects or is replaced, and when another session's directory is routed.
   createKeyed(
-    () => session.server.connected && { data: session.server.data, ref: location(session) },
+    target,
     (current) =>
       void (async () => {
         if (!current.ref) await current.data.location.syncInfo()

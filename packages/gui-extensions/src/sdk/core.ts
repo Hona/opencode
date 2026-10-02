@@ -94,13 +94,15 @@ export interface Definition {
   readonly i18n?: Catalog
   /**
    * Tokens this extension provides: Contracts from its window entry (`ctx.provide`), Ipcs from its main entry.
-   * `Extension.compose` refuses two providers of one token.
+   * `Extension.compose` refuses two providers of one token. The window entry also reads each one as `ctx.uses.<key>`,
+   * a `Live` accessor, so an extension that talks to its own main entry lists that Ipc here only.
    */
   readonly provides?: Tokens
   /**
-   * Optional dependencies. Each is a `Live` accessor in `ctx.uses`: pending while its provider loads, inactive while
-   * it is disabled, failed or restarting. The extension must keep working while one is inactive. An extension that
-   * talks to its own main entry lists that Ipc here and in `provides`.
+   * Optional dependencies that other extensions provide. Each is a `Live` accessor in `ctx.uses`: pending while its
+   * provider loads, inactive while it is disabled, failed or restarting. The extension must keep working while one is
+   * inactive. Your own tokens need no entry: `provides` already puts them in `ctx.uses`. A key that names one token in
+   * `provides` and another here fails to compile (`Conflict<"key">`).
    */
   readonly uses?: Tokens
   /**
@@ -110,10 +112,11 @@ export interface Definition {
    */
   readonly requires?: Readonly<Record<string, Contract<unknown> | Ipc>>
   /**
-   * Window state the host stores for the extension and loads before it is read, by store name; `ctx.stores` holds
-   * them. See `Store`. A main entry opens its stores with `ctx.storage.store`, which reads synchronously.
+   * State the host stores for the extension, by store name. Each process's `ctx.stores` holds only its own:
+   * `Store.global` and `Store.session` are window state, loaded before they are read; `Store.main` is main-process
+   * state, always loaded. See `Store`. Keys known only at runtime go through `ctx.storage.store`.
    */
-  readonly stores?: Readonly<Record<string, StoreDeclaration>>
+  readonly stores?: Readonly<Record<string, StoreDeclaration | MainStoreDeclaration>>
   /** The window entry; its default export is a `Setup<typeof Definition>` (`@opencode/gui-extensions/sdk`). */
   readonly renderer?: () => Promise<{
     /** The window setup. */
@@ -231,7 +234,7 @@ export interface Ipc<S extends IpcSpec = IpcSpec> {
  * @example
  * ```ts
  * const Pane = Ipc.ref<typeof BrowserPane>("browser.pane")
- * Extension.define({ id: "browser", uses: { pane: Pane } })
+ * Extension.define({ id: "browser", provides: { pane: Pane } })
  * ```
  */
 export interface IpcRef<S extends IpcSpec = IpcSpec> {
@@ -569,14 +572,57 @@ export interface StoreDeclaration<
 }
 
 /**
- * Declares stored state. The store's name in `stores` is its key, stored as `extension.<id>.<name>`. Desktop windows
- * load storage over IPC, so the host loads declared stores for you before they are read.
+ * An older home of a main store's value, imported once while the store holds nothing. Where `from` takes a list, it
+ * names several, newest first, and the first that holds a value is imported. The older home keeps its copy until the
+ * store is removed.
+ * - `{ settings, file? }`: a key of a desktop settings file, the app's own unless `file` names another.
+ * - `{ state }`: a key of another main storage namespace.
+ *
+ * @example
+ * ```ts
+ * Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] })
+ * ```
+ */
+export type MainStoreFrom =
+  | {
+      /** The key in the settings file, e.g. `ssh.servers`. */
+      readonly settings: string
+      /** Another settings file of the desktop app, e.g. `opencode.updater`. Defaults to the app's settings file. */
+      readonly file?: string
+    }
+  | {
+      /** The storage namespace and the key in it, e.g. `["opencode.settings", "keepScreenActive"]`. */
+      readonly state: readonly [namespace: string, key: string]
+    }
+
+type MainSchema = Schema.ConstraintCodec<unknown, unknown>
+
+/** A main-process store an extension declares in `Extension.define({ stores })`. Build one with `Store.main`. */
+export interface MainStoreDeclaration<S extends MainSchema = MainSchema> {
+  /** Where the value lives: `main`, one value for the app in main storage. */
+  readonly scope: "main"
+  /**
+   * Decodes the stored JSON; any schema that needs no services. A stored value that fails to decode reads as
+   * `initial`.
+   */
+  readonly schema: S
+  /** The value before anything is stored, and after `Storage.remove`. */
+  readonly initial: S["Type"]
+  /** Older homes the value is imported from once. See `MainStoreFrom`. */
+  readonly from?: MainStoreFrom | readonly MainStoreFrom[]
+}
+
+/**
+ * Declares stored state. The store's name in `stores` is its key: window stores are stored as `extension.<id>.<name>`,
+ * main stores under the name in main storage's `extension.<id>` namespace. Desktop windows load storage over IPC, so
+ * the host loads declared window stores for you before they are read; main storage reads synchronously.
  *
  * @example
  * ```ts
  * stores: {
  *   prefs: Store.global(Prefs, { shown: true }, "extension.summary.prefs"),
  *   view: Store.session(View, { open: [] }),
+ *   count: Store.main(Schema.Number, 0),
  * }
  * ```
  */
@@ -613,6 +659,20 @@ export const Store = {
     initial: NoInfer<S["Type"]>,
     from?: StoreFrom | readonly StoreFrom[],
   ): StoreDeclaration<S, "session"> => ({ scope: "session", schema, initial, from }),
+  /**
+   * One value for the app in the main process. The main entry reads it as `ctx.stores.name`, whose `value` is always
+   * defined: main storage reads synchronously, and each write reaches the database before it returns. The window
+   * entry's `ctx.stores` does not hold it.
+   *
+   * @param schema - Decodes the stored JSON; any schema that needs no services, so a number, `null` or a list works.
+   * @param initial - The value before anything is stored.
+   * @param from - Older homes to import the value from once, newest first.
+   */
+  main: <S extends MainSchema>(
+    schema: S,
+    initial: NoInfer<S["Type"]>,
+    from?: MainStoreFrom | readonly MainStoreFrom[],
+  ): MainStoreDeclaration<S> => ({ scope: "main", schema, initial, from }),
 }
 
 /**
@@ -647,9 +707,9 @@ export type Declared<D, K extends "provides" | "uses" | "requires"> = D extends 
     : {}
   : {}
 
-/** The stores a definition declares; `{}` when it declares none. */
+/** The stores a definition declares, window and main alike; `{}` when it declares none. */
 export type DeclaredStores<D> = D extends { readonly stores?: infer M }
-  ? M extends Readonly<Record<string, StoreDeclaration>>
+  ? M extends Readonly<Record<string, StoreDeclaration | MainStoreDeclaration>>
     ? M
     : {}
   : {}
@@ -676,11 +736,39 @@ export interface Duplicate<Id extends string> {
   readonly [problem]: Id
 }
 
-/** `IpcsProvided`'s error: a window `uses` or `requires` of an Ipc that no main entry provides. */
+/** `IpcsProvided`'s error: a window `provides`, `uses` or `requires` of an Ipc that no main entry provides. */
 export interface MissingMain<Id extends string> {
   /** The Ipc's id. */
   readonly [problem]: Id
 }
+
+/** `Extension.define`'s error: a key that names one token in `provides` and another in `uses`. */
+export interface Conflict<Key extends string> {
+  /** The key both records use. */
+  readonly [problem]: Key
+}
+
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+type SharedKeys<D> = keyof Declared<D, "provides"> & keyof Declared<D, "uses"> & string
+
+type ConflictingKeys<D> = {
+  [K in SharedKeys<D>]: Same<Declared<D, "provides">[K], Declared<D, "uses">[K]> extends true ? never : K
+}[SharedKeys<D>]
+
+/** Compile errors for a definition; `unknown` when it is valid. */
+export type DefinitionCheck<D> = [ConflictingKeys<D>] extends [never]
+  ? unknown
+  : {
+      /** This key names one token in `provides` and another in `uses`. */
+      readonly "conflicting key": Conflict<ConflictingKeys<D>>
+    }
+
+/**
+ * What `ctx.uses` holds, by key: every token of `provides`, then those of `uses`. `Extension.define` refuses a key
+ * that names two different tokens, so the merge never hides one.
+ */
+export type Usable<D> = Omit<Declared<D, "provides">, keyof Declared<D, "uses">> & Declared<D, "uses">
 
 type Literal<Id> = Id extends string ? (string extends Id ? never : Id) : never
 
@@ -714,14 +802,15 @@ type IpcIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
   ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Ipc | IpcRef>>
   : never
 
+// A window reads its own `provides` through `ctx.uses` too, so those Ipcs need a main entry as well.
 type MissingIpcs<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
-  IpcIds<R[number], "uses"> | IpcIds<R[number], "requires">,
+  IpcIds<R[number], "provides"> | IpcIds<R[number], "uses"> | IpcIds<R[number], "requires">,
   IpcIds<Extract<M[number], { readonly main: unknown }>, "provides">
 >
 
 /**
- * `true` when every Ipc the window composition `R` declares in `uses` or `requires` is provided by an entry with a
- * main module in the main composition `M`; otherwise an error type naming the Ipc. Check it once in a file that
+ * `true` when every Ipc the window composition `R` declares in `provides`, `uses` or `requires` is provided by an entry
+ * with a main module in the main composition `M`; otherwise an error type naming the Ipc. Check it once in a file that
  * imports both compositions.
  *
  * @example
@@ -740,7 +829,7 @@ export type IpcsProvided<R extends readonly unknown[], M extends readonly unknow
  *
  * @example
  * ```ts
- * export default Extension.define({ id: "example", uses: { counter: Counter }, i18n: { en } })
+ * export default Extension.define({ id: "example", provides: { counter: Counter }, i18n: { en } })
  * export const builtins = Extension.compose(review, file, browser)
  * ```
  */
@@ -748,11 +837,14 @@ export const Extension = {
   /**
    * Returns the definition with its declarations typed; `Setup<typeof Definition>` reads them. The entries are checked
    * where the definition is composed, so `renderer: () => import("./renderer")` may name `Setup<typeof Definition>`.
+   * Fails to compile, naming the key, when a key names one token in `provides` and another in `uses`
+   * (`Conflict<"key">`).
    *
    * @param definition - The extension's manifest.
    * @returns The same object.
    */
-  define: <const D extends Omit<Definition, "renderer" | "main"> & Entries>(definition: D): D => definition,
+  define: <const D extends Omit<Definition, "renderer" | "main"> & Entries>(definition: D & DefinitionCheck<D>): D =>
+    definition,
   /**
    * Returns the definitions as they are. Fails to compile, naming the token id, when a `requires` token has no
    * provider in the composition (`Missing<"id">`), or when two extensions provide the same token (`Duplicate<"id">`).
@@ -819,8 +911,8 @@ export const Ipc = {
    * Declares an Ipc by id, typed from a type-only import of its token, so a definition can name it in `provides`,
    * `uses` or `requires` without loading its schemas: `Ipc.ref<typeof BrowserPane>("browser.pane")`. Composition
    * checks and `Live` typing treat it as the token. In the window it is pending until code in the window loads the
-   * full token, e.g. `ctx.uses.pane.load(BrowserPane)` from a chunk that loads later. Declare it in `uses`: a
-   * `requires` would wait for a resolution that setup itself would make.
+   * full token, e.g. `ctx.uses.pane.load(BrowserPane)` from a chunk that loads later. Declare it in `provides` (your
+   * own Ipc) or `uses`: a `requires` would wait for a resolution that setup itself would make.
    *
    * @param id - The full token's id; another id fails to compile.
    */

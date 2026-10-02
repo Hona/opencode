@@ -1,4 +1,4 @@
-import { lazy, onCleanup, Suspense } from "solid-js"
+import { createMemo, lazy, onCleanup, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { Command, onIdle, Panel, type PanelTab, type Setup } from "../sdk"
 import type Btw from "./index"
@@ -10,6 +10,8 @@ const setup: Setup<typeof Btw> = (ctx) => {
   const layout = ctx.layout
   const sessions = ctx.sessions
   const btw = createBtw(ctx)
+  // Changes when a session mounts or unmounts, not on every switch between sessions.
+  const mounted = createMemo(() => !!sessions.current())
 
   const tab: PanelTab = {
     id: "main",
@@ -35,7 +37,7 @@ const setup: Setup<typeof Btw> = (ctx) => {
       slash: { name: "btw", arguments: true },
       hidden: true,
       // Offered only while a session is open in a desktop-width window.
-      enabled: !layout.narrow() && !!sessions.current(),
+      enabled: !layout.narrow() && mounted(),
       run: (input) => btw.ask(input),
     }),
   )
@@ -48,9 +50,9 @@ const setup: Setup<typeof Btw> = (ctx) => {
     legacy: { btw: "main" },
     // The answer lives only in this window's memory, so the tab lists while its session has one.
     list: (session, open) => (open.includes("main") && btw.has(session) ? [tab] : []),
-    render: (_tab, session) => (
+    render: (props) => (
       <Suspense>
-        <SessionBtwPanel btw={btw} session={session} />
+        <SessionBtwPanel btw={btw} session={props.session} />
       </Suspense>
     ),
   })

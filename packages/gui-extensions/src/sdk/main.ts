@@ -5,10 +5,14 @@ import {
   type BaseContext,
   type Build,
   type Cleanup,
+  type DeclaredStores,
+  type Definition,
   type Ipc,
   type IpcImpl,
   type IpcProvider,
   type IpcSpec,
+  type MainStoreDeclaration,
+  type MainStoreFrom,
   type Persisted,
 } from "./core"
 import type { Scope } from "./scope"
@@ -75,7 +79,10 @@ export interface Embeds {
   create(view: WebContentsView, window: BrowserWindow): Embed
 }
 
-/** Main-process storage, in the extension's namespace (`extension.<id>`), shared by every window. */
+/**
+ * Main-process storage, in the extension's namespace (`extension.<id>`), shared by every window. Declare
+ * `Store.main` stores for keys known up front; this is for keys only known at runtime.
+ */
 export interface Storage {
   /**
    * The window's `Persisted` shape, read and written synchronously: `value` is always defined and `ready()` always
@@ -89,8 +96,8 @@ export interface Storage {
    *
    * @example
    * ```ts
-   * const count = ctx.storage.store("count", { schema: Schema.Number, initial: 0 })
-   * count.update((value) => value + 1)
+   * const tabs = ctx.storage.store(`restore:${session}`, { schema: Tabs, initial: [] })
+   * tabs.update(() => next)
    * ```
    */
   store<S extends Schema.ConstraintCodec<unknown, unknown>>(
@@ -100,17 +107,13 @@ export interface Storage {
       readonly schema: S
       /** The value before anything is stored, and after `remove`. */
       readonly initial: S["Type"]
-      /**
-       * An older copy to import once, while the key holds nothing: `settings:<key>` (the app settings file),
-       * `settings:<file>/<key>` (another settings file), or `state:<namespace>/<key>` (another storage namespace).
-       * Another form throws.
-       */
-      readonly from?: string
+      /** Older homes to import the value from once, while the key holds nothing. See `MainStoreFrom`. */
+      readonly from?: MainStoreFrom | readonly MainStoreFrom[]
     },
   ): Persisted<S["Type"], S["Type"]>
   /**
-   * Deletes the value, so opening the key again reads its `initial`. Pass the store's `from`: the older copy it names
-   * is deleted too, so it is never imported again.
+   * Deletes the value, so opening the key again reads its `initial`. Pass the store's `from`: every older home it names
+   * is deleted too, so none is imported again.
    *
    * @param key - The store's key in your namespace.
    * @param options - The store's options.
@@ -119,7 +122,7 @@ export interface Storage {
     key: string,
     options?: {
       /** The store's `from`. */
-      readonly from?: string
+      readonly from?: MainStoreFrom | readonly MainStoreFrom[]
     },
   ): void
 }
@@ -209,11 +212,33 @@ export interface Log {
   ): void
 }
 
+type MainHandle<S> = S extends MainStoreDeclaration<infer Schema> ? Persisted<Schema["Type"], Schema["Type"]> : never
+
+type MainStores<D> = [D] extends [never]
+  ? {}
+  : {
+      readonly [K in keyof DeclaredStores<D> as DeclaredStores<D>[K] extends MainStoreDeclaration
+        ? K
+        : never]: MainHandle<DeclaredStores<D>[K]>
+    }
+
 /**
  * The setup context in the main process. The APIs the host always provides are properties, each created on first
- * read. Every main extension is one instance for the whole app, shared by all windows.
+ * read. Every main extension is one instance for the whole app, shared by all windows. `MainContext<typeof
+ * definition>` also types the declared main stores.
  */
-export interface MainContext extends BaseContext {
+export interface MainContext<D = never> extends BaseContext {
+  /**
+   * Each store the definition declares with `Store.main`, by its name in `stores`. Always loaded: main storage reads
+   * synchronously. Window stores are not here.
+   *
+   * @example
+   * ```ts
+   * const count = ctx.stores.count
+   * count.update((value) => value + 1)
+   * ```
+   */
+  readonly stores: MainStores<D>
   /**
    * The instance's lifetime. `signal` aborts when the extension is disabled, reloaded, or the app quits;
    * `addFinalizer` adds its teardown, and runs it at once when the instance is already gone.
@@ -225,11 +250,11 @@ export interface MainContext extends BaseContext {
    */
   readonly scope: Scope
   /**
-   * Synchronous storage in the extension's namespace.
+   * Synchronous storage in the extension's namespace, for keys only known at runtime.
    *
    * @example
    * ```ts
-   * const count = ctx.storage.store("count", { schema: Schema.Number, initial: 0 })
+   * const tabs = ctx.storage.store(`restore:${session}`, { schema: Tabs, initial: [] })
    * ```
    */
   readonly storage: Storage
@@ -313,17 +338,18 @@ export interface MainContext extends BaseContext {
 }
 
 /**
- * A main-process entry: the default export of `main.ts`. It may be async; return nothing.
+ * A main-process entry: the default export of `main.ts`. `MainSetup<typeof definition>` types the declared main
+ * stores in `ctx.stores`; a plain `MainSetup` has none. It may be async; return nothing.
  *
  * @example
  * ```ts
- * const setup: MainSetup = (ctx) => {
- *   ctx.provide(Counter, { state: () => 0, add: (by) => by })
+ * const setup: MainSetup<typeof definition> = (ctx) => {
+ *   ctx.provide(Counter, { state: () => ctx.stores.count.value, add: (by) => by })
  * }
  * export default setup
  * ```
  */
-export type MainSetup = (ctx: MainContext) => void | Promise<void>
+export type MainSetup<D extends Definition = never> = (ctx: MainContext<D>) => void | Promise<void>
 
 /** An item of the native app menu. */
 export interface MenubarItem {

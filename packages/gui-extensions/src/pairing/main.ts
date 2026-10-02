@@ -1,18 +1,13 @@
 import { powerSaveBlocker } from "electron"
-import { Schema } from "effect"
-import type { MainContext } from "../sdk/main"
+import type { MainSetup } from "../sdk/main"
 import { Pairing } from "./contract"
+import type definition from "./index"
 
 /** The display sleep blocker this instance holds, if any. */
 type Blocker = { id?: number }
 
-const setup = (ctx: MainContext) => {
-  const stored = ctx.storage.store("keepScreenActive", {
-    schema: Schema.Boolean,
-    initial: false,
-    from: "state:opencode.settings/keepScreenActive",
-  })
-
+const setup: MainSetup<typeof definition> = (ctx) => {
+  const stored = ctx.stores.keepScreenActive
   const blocker: Blocker = {}
 
   const release = () => {

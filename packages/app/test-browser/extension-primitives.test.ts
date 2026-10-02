@@ -330,15 +330,27 @@ describe("extension primitives", () => {
     })
   })
 
-  test("a session store opened through the route-following view keeps reading its own session", () => {
+  test("a session store opened through each routed session's object reads that session, A to B (pending) to A", () => {
     const [routed, setRouted] = createSignal("a")
     const [located, setLocated] = createSignal<readonly string[]>(["a"])
 
-    // A `MountedSession`: one object whose key and location follow the routed session.
-    const view = session(
-      () => `server\n${routed()}`,
-      () => (located().includes(routed()) ? { directory: `/${routed()}` } : undefined),
+    // `MountedSession`s: one object per routed session, whose location is that session's, never the route's.
+    const views = new Map(
+      ["a", "b"].map((id) => [
+        id,
+        session(
+          () => `server\n${id}`,
+          () => (located().includes(id) ? { directory: `/${id}` } : undefined),
+        ),
+      ]),
     )
+
+    const view = () =>
+      views.get(routed()) ??
+      session(
+        () => "",
+        () => undefined,
+      )
 
     const opened: string[] = []
 
@@ -355,23 +367,25 @@ describe("extension primitives", () => {
       }),
     }))
 
-    const a = root.store.get(view)
+    const a = root.store.get(view())
 
     const read = (handles: readonly Persisted<{ directory: string }>[]) =>
       handles.map((handle) => handle.value?.directory)
 
     setRouted("b")
-    const b = root.store.get(view)
+    const b = root.store.get(view())
     const pending = read([a, b])
     setLocated(["a", "b"])
     const known = read([a, b])
     setRouted("a")
-    const back = read([a, b])
+    const again = root.store.get(view())
+    const back = read([again, b])
 
-    expect({ pending, known, back, opened }).toEqual({
+    expect({ pending, known, back, same: again === a, opened }).toEqual({
       pending: ["/a", undefined],
       known: ["/a", "/b"],
       back: ["/a", "/b"],
+      same: true,
       opened: ["/a", "/b"],
     })
     root.store.dispose()

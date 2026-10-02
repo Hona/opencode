@@ -818,7 +818,7 @@ function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
           "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
             !!debug(),
         }}
-        onClick={() => debug()?.run()}
+        onClick={() => debug()?.run?.()}
         aria-label={debug()?.label}
         aria-pressed={debug()?.pressed}
       >

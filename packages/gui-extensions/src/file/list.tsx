@@ -3,7 +3,7 @@ import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtua
 import { FileIcon } from "@opencode/ui/file-icon"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type MountedSession, type SessionScreen } from "../sdk"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
 import { normalizeFileTreeV2Path } from "./tree-model"
@@ -44,6 +44,7 @@ export function applyFileListKeyDown(
 // scrollIntoView query hook.
 export default function SessionFileList(props: {
   session: MountedSession
+  screen: SessionScreen
   files: readonly string[]
   active?: string
   highlighted?: string
@@ -56,7 +57,7 @@ export default function SessionFileList(props: {
 }) {
   const ctx = useExtension()
 
-  const openIn = ctx.desktop ? useOpenInApp({ session: props.session, path: () => props.session.file.root }) : undefined
+  const openIn = ctx.desktop ? useOpenInApp({ session: props.session, path: () => props.screen.file.root }) : undefined
 
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
   const highlighted = () => normalizeFileTreeV2Path(props.highlighted ?? "")
@@ -166,7 +167,7 @@ export default function SessionFileList(props: {
                 >
                   <OpenInAppContextMenuV2
                     state={openIn}
-                    path={() => resolveOpenInAppPath(props.session.file.root, path)}
+                    path={() => resolveOpenInAppPath(props.screen.file.root, path)}
                   >
                     <button
                       type="button"

@@ -1,30 +1,24 @@
 import { Option, Schema } from "effect"
-import type { MainContext } from "../sdk/main"
+import type { MainSetup } from "../sdk/main"
 import { Wsl } from "./contract"
+import type definition from "./index"
 import { createWslRuntime } from "./runtime"
 import { createWslServersController, wslServerIdForDistro } from "./servers"
 import { spawnWslSidecar } from "./sidecar"
-
-// Read leniently like the settings file it migrates from: one bad record must not drop the others.
-const Stored = Schema.Struct({ servers: Schema.Array(Schema.Unknown) })
 
 // A record is kept when it names a distro; an id that is missing or not a non-empty string is derived from the distro.
 const Distro = Schema.Struct({ distro: Schema.NonEmptyString })
 
 const Id = Schema.Struct({ id: Schema.NonEmptyString })
 
-const setup = (ctx: MainContext) => {
+const setup: MainSetup<typeof definition> = (ctx) => {
   const cli = ctx.cli
   const packaged = ctx.build.packaged
   const desktopLog = ctx.log
   const t = ctx.t
   const runtime = createWslRuntime(t)
-
-  const saved = ctx.storage.store("servers", {
-    schema: Stored,
-    initial: { servers: [] },
-    from: "settings:wslServers",
-  })
+  // Read leniently like the settings file it migrates from: one bad record must not drop the others.
+  const saved = ctx.stores.servers
 
   // Development builds of the desktop app can build the Linux CLI from this checkout.
   const local =

@@ -1,9 +1,8 @@
 import { createSignal, Index, Show } from "solid-js"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog } from "@opencode/ui/dialog"
-import { useExtension, type SetupContext } from "../sdk"
+import { useExtension, type DialogHandle, type SetupContext } from "../sdk"
 import type definition from "./index"
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
@@ -79,7 +78,9 @@ export function showWhatsNew(
       timers.add(
         setTimeout(() => {
           input.markSeen()
-          ctx.dialogs.show(() => <DialogReleaseNotes highlights={highlights} />)
+          ctx.dialogs.open((dialog) => <DialogReleaseNotes highlights={highlights} dialog={dialog} />, {
+            replace: true,
+          })
         }, 500),
       )
     })
@@ -181,9 +182,8 @@ function sliceHighlights(list: { tag?: string; highlights: Highlight[] }[], curr
     .slice(0, 5)
 }
 
-function DialogReleaseNotes(props: { highlights: Highlight[] }) {
+function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHandle }) {
   const ctx = useExtension<typeof definition>()
-  const dialog = useDialog()
   const [index, setIndex] = createSignal(0)
 
   const total = () => props.highlights.length
@@ -200,7 +200,7 @@ function DialogReleaseNotes(props: { highlights: Highlight[] }) {
   }
 
   function handleClose() {
-    dialog.close()
+    props.dialog.close()
   }
 
   function handleDisable() {

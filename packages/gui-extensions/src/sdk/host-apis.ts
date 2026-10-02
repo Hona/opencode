@@ -158,7 +158,7 @@ export interface FileNode {
   ignored: boolean
 }
 
-/** The mounted session's workspace files: content, view state and the file tree. */
+/** The session screen's workspace files: content, view state and the file tree, of the routed session. */
 export interface Files {
   /** The workspace root directory. */
   readonly root: string
@@ -214,12 +214,12 @@ export interface Files {
       /**
        * What to match. Defaults to `file`.
        * - `file`: files only.
-       * - `any`: files and directories; `limit` and `signal` are ignored.
+       * - `any`: files and directories.
        */
       readonly kind?: "file" | "any"
-      /** The most results to return. */
+      /** The most results to return. Defaults to the server's limit. */
       readonly limit?: number
-      /** Aborts the search. */
+      /** Aborts the search, which then rejects. A search that fails otherwise resolves with no results. */
       readonly signal?: AbortSignal
     },
   ): Promise<string[]>
@@ -342,7 +342,7 @@ export interface Comment {
   comment: string
 }
 
-/** The mounted session's line comments, by file. */
+/** The session screen's line comments, by file, of the routed session's next prompt. */
 export interface Comments {
   /**
    * The comments on one file, or on every file. Reactive.
@@ -482,7 +482,7 @@ export interface ComposerNote {
   }
 }
 
-/** The mounted session's composer: the parts attached to the next prompt. */
+/** The session screen's composer: the parts attached to the routed session's next prompt. */
 export interface Composer {
   /**
    * Attaches a file or a note to the next prompt.
@@ -530,18 +530,25 @@ export interface BackgroundTask {
 }
 
 /**
- * The mounted session screen. Slot inputs and panel renders receive it, and `Sessions.current` returns it. One object
- * that follows the route: when another session is routed, its `key`, `id` and every other field follow. Copy `key`,
- * or keep a `SessionRef` from `Sessions.list`, to remember one session.
+ * A routed session on the session screen: its identity and data, and nothing that acts on whichever session is
+ * routed. Slot inputs and panel renders receive it, and `Sessions.current` returns it. One frozen object per routed
+ * session, a new one each time a session is routed: `key`, `id`, `tab`, `server`, `directory` and `visit` never
+ * change, and the other fields read this session's own data, never the route's. When another session is routed, a
+ * render receives the new object through its reactive input instead of remounting, so read `input.session` or
+ * `props.session` where you use it rather than copying it. The workspace files, comments and composer follow the
+ * route instead, so they belong to the screen: see `Screen`.
  */
 export interface MountedSession extends SessionRef {
-  /** A new object each time the session is routed, e.g. after Home and back. Keep per-visit state keyed by it. */
+  /** This routing visit: a new object each time the session is routed, e.g. after Home and back. */
   readonly visit: object
-  /** `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local overrides. */
+  /**
+   * This session's project. `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local
+   * overrides. Reactive.
+   */
   readonly project: Project | undefined
   /**
    * The sidebar project whose worktree or a sandbox is this session's directory, with the user's local name and
-   * icon. Undefined when no listed project is opened there, e.g. for a session in a project subfolder.
+   * icon. Undefined when no listed project is opened there, e.g. for a session in a project subfolder. Reactive.
    */
   readonly listedProject:
     | {
@@ -553,25 +560,53 @@ export interface MountedSession extends SessionRef {
         readonly icon?: Project["icon"]
       }
     | undefined
-  /** The session's workspace directory. */
+  /** The session's workspace directory, as the session was routed. */
   readonly directory: string
-  /** The session runs in the project root rather than a worktree. */
+  /** The session runs in the project root rather than a worktree. Reactive. */
   readonly local: boolean
-  /** Shell commands and subagents the session moved to the background. */
+  /** Shell commands and subagents the session moved to the background; empty once another session is routed. */
   readonly background: readonly BackgroundTask[]
-  /** The workspace's files. */
+}
+
+/**
+ * The session screen: the app's view that shows the routed session, and stays the same object while it routes A, then
+ * B, then A again. It follows the route on purpose: its files, comments and composer are the screen's workspace models,
+ * and every action through them targets the session routed at that moment. Read it where you act, or pass it to the
+ * views that render inside it; a `MountedSession` you keep never acts on another session.
+ */
+export interface SessionScreen {
+  /**
+   * The routed session, the object `Sessions.current` returns, and undefined whenever that is: until the screen has
+   * mounted, and while the route leaves for Home or a draft. Reactive. Inside a render, read `props.session` or
+   * `input.session` instead.
+   */
+  readonly session: MountedSession | undefined
+  /** The routed workspace's files. */
   readonly file: Files
-  /** The line comments of the session's next prompt. */
+  /** The line comments of the routed session's next prompt. */
   readonly comment: Comments
-  /** The session's composer. */
+  /** The routed session's composer. */
   readonly composer: Composer
+}
+
+/** The session screen, while one is mounted. */
+export interface Screen {
+  /**
+   * The mounted session screen: the same object for as long as it stays mounted, whichever session it routes. Defined
+   * from the screen's first render, so every panel, slot and tab of the screen can read it; undefined on Home, on a
+   * draft and before the app interface mounts. Reactive.
+   */
+  current(): SessionScreen | undefined
 }
 
 /** The sessions of open shell tabs. */
 export interface Sessions {
   /** Sessions owned by open shell tabs. Empty until the app interface mounts. Reactive. */
   list(): readonly SessionRef[]
-  /** The routed, mounted session; undefined on Home, on a draft, and before the app interface mounts. Reactive. */
+  /**
+   * The routed, mounted session: a new object each time a session is routed. Undefined on Home, on a draft, and
+   * before the app interface mounts. Reactive.
+   */
   current(): MountedSession | undefined
 }
 
@@ -605,12 +640,14 @@ export interface OpenOptions {
 
 /**
  * The session layout: side panel tabs, the dock, scroll offsets, and the settings and project dialogs. Panel keys are
- * `${extension}:${tab id}`. Before the app interface mounts, `narrow` and `ready` work and every other member throws.
+ * `${extension}:${tab id}`. Nothing throws before the app interface mounts: `ready()` is false, reads return what an
+ * empty layout holds (each says its default), and writes (`open`, `close`, `toggle`, `side.toggle`, `scroll.set`,
+ * `settings`, `project`) wait and apply in call order once it mounts.
  */
 export interface Layout {
   /** Viewport under 768px. Reactive. */
   narrow(): boolean
-  /** Stored layout (tabs, scroll) has loaded. Reactive. */
+  /** Stored layout (tabs, scroll) has loaded; false before the app interface mounts. Reactive. */
   ready(): boolean
   /**
    * Opens a panel tab. Works for sessions that are not mounted. A key of a `dock` panel opens the dock. On narrow
@@ -639,7 +676,8 @@ export interface Layout {
    */
   toggle(key: string, session: SessionRef): void
   /**
-   * Where a key stands. "closed" while the session's location is unknown. Reactive.
+   * Where a key stands. "closed" while the session's location is unknown and before the app interface mounts.
+   * Reactive.
    *
    * @param key - `${extension}:${tab id}`.
    * @param session - Any session.
@@ -647,7 +685,7 @@ export interface Layout {
   state(key: string, session: SessionRef): PanelState
   /**
    * This extension's tab ids stored in the session's side strip, mounted or not. Empty while the session's location
-   * is unknown, as `state` is then "closed". Reactive.
+   * is unknown, as `state` is then "closed", and before the app interface mounts. Reactive.
    *
    * @param session - Any session.
    */
@@ -655,7 +693,7 @@ export interface Layout {
   /** The side region. */
   readonly side: {
     /**
-     * The side region is open. Reactive.
+     * The side region is open; false before the app interface mounts. Reactive.
      *
      * @param session - Any session.
      */
@@ -678,13 +716,13 @@ export interface Layout {
   /** The dock, where `dock` panels render. */
   readonly dock: {
     /**
-     * The dock is open. Reactive.
+     * The dock is open; false before the app interface mounts. Reactive.
      *
      * @param session - Any session.
      */
     opened(session: SessionRef): boolean
     /**
-     * Where the user placed the dock. Reactive.
+     * Where the user placed the dock; `side`, the setting's default, before the app interface mounts. Reactive.
      * - `side`: beside the timeline.
      * - `bottom`: below the timeline.
      */
@@ -693,7 +731,7 @@ export interface Layout {
   /** Scroll offsets the host stores per session and key. */
   readonly scroll: {
     /**
-     * The stored offset; undefined when none is stored or the location is unknown.
+     * The stored offset; undefined when none is stored, the location is unknown, or the app interface is not mounted.
      *
      * @param session - Any session.
      * @param key - Your own key, e.g. a panel key.
@@ -745,9 +783,10 @@ export interface Layout {
 /**
  * Where `Storage.store` keeps a value.
  * - `"global"`: one value for the app. The default.
- * - `{ server, directory? }`: one value per server, or per workspace directory on it.
- * - `{ session }`: one value per session. Opening it throws while the session's location is unknown; declare a
- *   `Store.session` instead, which waits.
+ * - `{ server, directory? }`: one value per server, or per workspace directory on it. Opens once the app interface
+ *   mounts; until then `value` is undefined and `update` waits.
+ * - `{ session }`: one value per session. Also waits for the session's location, and opens again in a new directory;
+ *   a declared `Store.session` does the same for every session.
  */
 export type StorageScope =
   | "global"
@@ -810,7 +849,8 @@ export interface Storage {
   /**
    * Deletes the value, so opening the key again reads its `initial`. Pass the store's `scope` and `from`: an older key
    * `from` names is deleted too, so it is never imported again, and a key it picks a part of stays for its other owners
-   * while the store keeps a marker that blocks the import.
+   * while the store keeps a marker that blocks the import. A server or session store's removal waits, in call order,
+   * until the app interface mounts and the session's location is known.
    *
    * @param key - The store's key in your namespace.
    * @param options - The store's scope and older homes.
@@ -912,7 +952,7 @@ export interface Locale {
 /** The user's appearance settings. */
 export interface Appearance {
   /**
-   * The CSS font family the user chose. Throws before the app interface mounts. Reactive.
+   * The CSS font family the user chose; the default mono font before the app interface mounts. Reactive.
    *
    * @param kind - `mono`, the terminal and code font.
    */
@@ -987,22 +1027,40 @@ export interface Links {
   open(link: Link): boolean
 }
 
-/** Dialogs. The render runs with this extension's context; the dialog closes when the extension goes away. */
+/** One dialog `Dialogs.open` opened. */
+export interface DialogHandle {
+  /**
+   * Closes this dialog, wherever it is in the stack; another dialog stays open. Does nothing once the dialog closed,
+   * including when it never opened because its extension went away first.
+   */
+  close(): void
+}
+
+/**
+ * Dialogs. The render runs with this extension's context. A dialog closes when the owner that opened it ends (the
+ * component or `createKeyed` run), else when the extension goes away.
+ */
 export interface Dialogs {
   /**
-   * Replaces the open dialogs. A render that throws closes the dialog and records the error.
+   * Opens a dialog above the open ones. Opening is deferred to a transition, so a dialog opened while its owner ends
+   * never shows. A render that throws closes the dialog and records the error.
    *
-   * @param render - Renders the dialog's content.
-   */
-  show(render: () => JSX.Element): void
-  /**
-   * Opens above the open dialog.
+   * @param render - Renders the dialog's content; receives the dialog's handle, so the content can close itself.
+   * @param options - How the dialog opens.
+   * @returns The dialog's handle.
    *
-   * @param render - Renders the dialog's content.
+   * @example
+   * ```ts
+   * const dialog = ctx.dialogs.open((dialog) => <Confirm onDone={dialog.close} />)
+   * ```
    */
-  push(render: () => JSX.Element): void
-  /** Closes the top dialog. */
-  close(): void
+  open(
+    render: (dialog: DialogHandle) => JSX.Element,
+    options?: {
+      /** Closes every open dialog first, the host's and other extensions' too. Defaults to false. */
+      readonly replace?: boolean
+    },
+  ): DialogHandle
   /** Some dialog is open. Reactive. */
   active(): boolean
 }

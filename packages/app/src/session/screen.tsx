@@ -1,4 +1,15 @@
-import { ErrorBoundary, Show, Match, Switch, createMemo, createEffect, on, onCleanup } from "solid-js"
+import {
+  ErrorBoundary,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { Slot, type BackgroundTask, type MountedSession } from "@opencode/gui-extensions/sdk"
@@ -28,18 +39,19 @@ import { createTimelineCache } from "./timeline/cache"
 
 export function SessionScreen(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
-  const view = createMountedSession(props.session)
+  const mounted = createMountedSession(props.session)
 
   return (
-    <ExtensionLinks session={view.view}>
-      <SessionScreenContent session={props.session} view={view.view} bindBackground={view.bindBackground} />
+    <ExtensionLinks session={mounted.view()}>
+      <SessionScreenContent session={props.session} view={mounted.view} bindBackground={mounted.bindBackground} />
     </ExtensionLinks>
   )
 }
 
 function SessionScreenContent(props: {
   session: SessionModel
-  view: MountedSession
+  /** One object per routed session; renders receive each through a reactive prop instead of remounting. */
+  view: Accessor<MountedSession>
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
 }) {
   const session = props.session
@@ -203,37 +215,46 @@ function SessionScreenContent(props: {
 
   const timelineView = createTimelineCache(
     session,
-    (source, active) => (
-      <MessageTimeline
-        active={active()}
-        hideHeader={!isDesktop()}
-        session={source}
-        view={props.view}
-        background={composer.requests.background}
-        actions={composer.actions.timeline}
-        scroll={timeline.scroll}
-        onResumeScroll={timeline.actions.resume}
-        setScrollRef={timeline.view.setScrollRef}
-        onScheduleScrollState={timeline.view.scheduleScrollState}
-        onPin={timeline.view.pin}
-        onUnpin={timeline.view.unpin}
-        onUserScroll={timeline.view.markUserScroll}
-        onHistoryScroll={timeline.view.onHistoryScroll}
-        onSelectionInteraction={timeline.view.selectionInteraction}
-        pinned={timeline.view.pinned()}
-        centered={screen.centered()}
-        reserveReviewToggle={!sideVisible()}
-        setContentRef={timeline.view.setContentRef}
-        anchor={timeline.view.anchor}
-        setRevealMessage={timeline.view.setRevealMessage}
-        setScrollToEnd={timeline.view.setScrollToEnd}
-        search={
-          <Show when={active()}>
-            <TimelineSearchBar controller={timelineSearch} />
-          </Show>
-        }
-      />
-    ),
+    (source, active) => {
+      // A cached timeline keeps its own session's latest object while another session is routed.
+      const own = createMemo<MountedSession>((previous) => {
+        const view = props.view()
+
+        return view.id === source.identity.sessionID() ? view : previous
+      }, untrack(props.view))
+
+      return (
+        <MessageTimeline
+          active={active()}
+          hideHeader={!isDesktop()}
+          session={source}
+          view={own()}
+          background={composer.requests.background}
+          actions={composer.actions.timeline}
+          scroll={timeline.scroll}
+          onResumeScroll={timeline.actions.resume}
+          setScrollRef={timeline.view.setScrollRef}
+          onScheduleScrollState={timeline.view.scheduleScrollState}
+          onPin={timeline.view.pin}
+          onUnpin={timeline.view.unpin}
+          onUserScroll={timeline.view.markUserScroll}
+          onHistoryScroll={timeline.view.onHistoryScroll}
+          onSelectionInteraction={timeline.view.selectionInteraction}
+          pinned={timeline.view.pinned()}
+          centered={screen.centered()}
+          reserveReviewToggle={!sideVisible()}
+          setContentRef={timeline.view.setContentRef}
+          anchor={timeline.view.anchor}
+          setRevealMessage={timeline.view.setRevealMessage}
+          setScrollToEnd={timeline.view.setScrollToEnd}
+          search={
+            <Show when={active()}>
+              <TimelineSearchBar controller={timelineSearch} />
+            </Show>
+          }
+        />
+      )
+    },
     () => conversationVisible() && messagesReady(),
   )
 
@@ -251,7 +272,7 @@ function SessionScreenContent(props: {
               views={mobile}
               region={region}
               current={mobileView()}
-              session={props.view}
+              session={props.view()}
               sidebar={sidebar}
               onSelect={selectMobile}
             />
@@ -267,7 +288,7 @@ function SessionScreenContent(props: {
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <Show when={!isDesktop() && store.mobileDockCached}>
           <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
-            <DockRegion view={props.view} sidebar={sidebar} fill embedded present contentHeight="100%" />
+            <DockRegion view={props.view()} sidebar={sidebar} fill embedded present contentHeight="100%" />
           </div>
         </Show>
         <Switch>
@@ -278,7 +299,7 @@ function SessionScreenContent(props: {
             {(entry) => (
               <MobilePanel
                 entry={entry()}
-                view={props.view}
+                view={props.view()}
                 sidebar={sidebar}
                 visible
                 open={() => region.openFor(entry().extension)}
@@ -407,7 +428,7 @@ function SessionScreenContent(props: {
                       }}
                     >
                       <SideRegion
-                        view={props.view}
+                        view={props.view()}
                         region={region}
                         sidebar={sidebar}
                         fileTree={screen.files.open()}
@@ -463,7 +484,7 @@ function SessionScreenContent(props: {
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
                           <DockRegion
-                            view={props.view}
+                            view={props.view()}
                             sidebar={sidebar}
                             fill
                             framed={false}
@@ -510,7 +531,7 @@ function SessionScreenContent(props: {
               </div>
             </Show>
             <DockRegion
-              view={props.view}
+              view={props.view()}
               sidebar={sidebar}
               stacked={isDesktop()}
               present={store.bottomDockCached}

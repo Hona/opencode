@@ -1,6 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
-import type { Storage } from "../sdk/main"
+import type { MainStoreFrom, Storage } from "../sdk/main"
 
 const Stored = Schema.Struct({
   tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url })),
@@ -13,7 +13,7 @@ const empty: Stored = { tabs: [], focusedTabID: null }
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
 export function createBrowserRestoreStore(storage: Storage) {
-  const from = (key: string) => `state:opencode.browser.dat/${key}`
+  const from = (key: string): MainStoreFrom => ({ state: ["opencode.browser.dat", key] })
   const open = (key: string) => storage.store(`restore:${key}`, { schema: Stored, initial: empty, from: from(key) })
 
   const stores = new Map<string, ReturnType<typeof open>>()

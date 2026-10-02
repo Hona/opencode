@@ -1,4 +1,15 @@
-import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createRenderEffect,
+  createRoot,
+  createSignal,
+  getOwner,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "solid-js"
 import type {
   BackgroundTask,
   Comments,
@@ -7,12 +18,13 @@ import type {
   LineRange,
   ServerRef,
   MountedSession,
+  SessionScreen,
 } from "@opencode/gui-extensions/sdk"
 import { useComments } from "@/composer/comments"
 import { useComposerState } from "@/composer/persistence"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import type { SessionModel } from "@/session/model"
+import { sessionInWorkspace, sessionProject, type SessionModel } from "@/session/model"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { pathKey } from "@/workspaces/path-key"
@@ -20,7 +32,13 @@ import { useExtensionAttachment } from "./host-apis"
 
 const noTasks: readonly BackgroundTask[] = []
 
-/** The routed session as extensions see it. One stable object that follows the route. */
+/** The root of the routed session's object, which ends when the screen routes another session. */
+type ObjectRoot = { dispose?: () => void }
+
+/**
+ * The routed session as extensions see it: one frozen object per routed session, a new one each time the screen
+ * routes another session, and the `SessionScreen` that owns the route-following files, comments and composer.
+ */
 export function createMountedSession(session: SessionModel) {
   const file = useFile()
   const comments = useComments()
@@ -75,7 +93,7 @@ export function createMountedSession(session: SessionModel) {
     missing: file.notFound,
     sync: (path, options) => file.load(path, options),
     search: (query, options) =>
-      options?.kind === "any" ? file.searchFilesAndDirectories(query) : file.searchFiles(query, options),
+      options?.kind === "any" ? file.searchFilesAndDirectories(query, options) : file.searchFiles(query, options),
     selection: {
       // SAFETY: the file model returns the view cache's selection for the path, which its schema types as a line range.
       get: (path) => file.selectedLines(path) as LineRange | null | undefined,
@@ -128,66 +146,102 @@ export function createMountedSession(session: SessionModel) {
     detach: (id) => composer.context.removeComment(id),
   }
 
-  // Only a project opened at this exact directory; a session in a project subfolder has none.
-  const listedProject = createMemo(() => {
-    const directory = pathKey(location().directory)
+  // Each object's memos live in its own root, which ends when the next session is routed: a kept object stops
+  // updating `project`, `listedProject` and `local`, and its other fields keep reading this session's data.
+  const create = (id: string): MountedSession => {
+    const info = () => server.ctx.data.session.get(id)
+    const directory = session.workspace.directory()
 
-    return server.ctx.projects
-      .list()
-      .find(
-        (item) =>
-          pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-      )
-  })
-
-  const view: MountedSession = {
-    get key() {
-      return `${server.key}\n${session.identity.sessionID() ?? ""}`
-    },
-    get id() {
-      return session.identity.sessionID() ?? ""
-    },
-    get tab() {
-      return session.layout.tabKey() ?? ""
-    },
-    get visit() {
-      return attachment.visit()
-    },
-    server: serverRef,
-    get pending() {
-      return server.ctx.data.session.creating(session.identity.sessionID() ?? "")
-    },
-    get location() {
-      return session.data.info()?.location
-    },
     // Global sync adds the worktrees found on disk, and the user's local name and icon override the server's.
     // Raw metadata stands in until global sync lists the project.
-    get project() {
-      const info = session.data.info()
+    const project = createMemo(() => {
+      const value = info()
 
-      return (info && server.ctx.projects.detailsForSession(info)) || session.project()
-    },
-    get listedProject() {
-      return listedProject()
-    },
-    get directory() {
-      return session.workspace.directory()
-    },
-    get local() {
-      return !session.workspace.current()
-    },
-    get background() {
-      return background()?.() ?? noTasks
+      return (
+        (value && server.ctx.projects.detailsForSession(value)) || sessionProject(server.ctx.data, value, directory)
+      )
+    })
+
+    // Only a project opened at this exact directory; a session in a project subfolder has none.
+    const listedProject = createMemo(() => {
+      const key = pathKey(directory)
+
+      return server.ctx.projects
+        .list()
+        .find((item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
+    })
+
+    const local = createMemo(() => !sessionInWorkspace(server.ctx.sync.data.project, info(), directory))
+
+    const view: MountedSession = Object.freeze({
+      key: `${server.key}\n${id}`,
+      id,
+      tab: session.layout.tabKey() ?? "",
+      visit: {},
+      server: serverRef,
+      get pending() {
+        return server.ctx.data.session.creating(id)
+      },
+      get location() {
+        return info()?.location
+      },
+      get project() {
+        return project()
+      },
+      get listedProject() {
+        return listedProject()
+      },
+      directory,
+      get local() {
+        return local()
+      },
+      // The composer region serves the routed session only.
+      get background() {
+        return mounted() === view ? (background()?.() ?? noTasks) : noTasks
+      },
+    })
+
+    return view
+  }
+
+  // One object while this screen is mounted, whichever session it routes: its models follow the route.
+  const screen: SessionScreen = Object.freeze({
+    get session() {
+      return attachment.current()
     },
     file: files,
     comment,
     composer: composerRef,
-  }
-
-  createEffect(() => {
-    if (!session.identity.sessionID()) return
-    onCleanup(attachment.mount(view.key, view))
   })
 
-  return { view, bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks) }
+  // Before the screen's regions render, so every contribution they show reads it.
+  onCleanup(attachment.screen(screen))
+
+  const owner = getOwner()
+  const root: ObjectRoot = {}
+
+  onCleanup(() => root.dispose?.())
+
+  // A new object for each routed session; a moment without an id keeps the last one.
+  const mounted = createMemo<MountedSession>((previous) => {
+    const id = session.identity.sessionID() ?? ""
+
+    if (previous && (previous.id === id || !id)) return previous
+
+    return untrack(() =>
+      createRoot((dispose) => {
+        root.dispose?.()
+        root.dispose = dispose
+
+        return create(id)
+      }, owner),
+    )
+  })
+
+  // The session's declared stores start loading now, before its regions read them.
+  createRenderEffect(on(mounted, (view) => attachment.preload(view)))
+  // Registered once: `Sessions.current` follows the screen's object from here on.
+  createEffect(() => onCleanup(attachment.mount(mounted)))
+
+  return { view: mounted, bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks) }
 }

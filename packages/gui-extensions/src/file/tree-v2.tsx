@@ -4,7 +4,7 @@ import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtua
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import type { ChangeKind } from "../review/contract"
-import { createKeyed, useExtension, type FileNode, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type FileNode, type MountedSession, type SessionScreen } from "../sdk"
 import { startFileDrag } from "./drag"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
@@ -131,6 +131,7 @@ function GuideLines(props: { level: number }) {
 
 export default function FileTreeV2(props: {
   session: MountedSession
+  screen: SessionScreen
   active?: string
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, ChangeKind>
@@ -139,7 +140,7 @@ export default function FileTreeV2(props: {
   onFileDoubleClick?: (file: FileNode) => void
 }) {
   const ctx = useExtension()
-  const file = props.session.file
+  const file = props.screen.file
   const openIn = ctx.desktop ? useOpenInApp({ session: props.session, path: () => file.root }) : undefined
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true

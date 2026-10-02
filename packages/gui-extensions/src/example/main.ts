@@ -1,10 +1,10 @@
-import { Schema } from "effect"
 import type { MainSetup } from "../sdk/main"
 import { Counter } from "./contract"
+import type definition from "./index"
 
-const setup: MainSetup = (ctx) => {
-  // Main storage is synchronous: `value` is always defined.
-  const count = ctx.storage.store("count", { schema: Schema.Number, initial: 0 })
+const setup: MainSetup<typeof definition> = (ctx) => {
+  // A declared main store: main storage is synchronous, so `value` is always defined.
+  const count = ctx.stores.count
 
   const counter = ctx.provide(Counter, {
     state: () => count.value,

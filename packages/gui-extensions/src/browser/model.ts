@@ -297,11 +297,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const openURL = (session: Session, url: string) => command(session, { type: "tabs.open", url })
 
-  // Only the routed session has a file model to resolve workspace paths with.
+  // Only the routed session has a file model to resolve workspace paths with: the session screen's.
   const files = (session: Session) => {
-    const view = sessions.current()
+    const screen = ctx.screen.current()
 
-    return view?.key === session.key ? view.file : undefined
+    return screen && sessions.current()?.key === session.key ? screen.file : undefined
   }
 
   // The desktop's own sidecar shares this disk, and its browser pane accepts file:// URLs inside the
@@ -328,7 +328,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const view = sessions.current()
 
     if (view?.key !== link.session.key) return
-    const path = resolveLink(view.file, link.href, link.base)
+    const current = files(view)
+
+    if (!current) return
+    const path = resolveLink(current, link.href, link.base)
 
     if (!path || !isHtml(path) || !canOpen(view, path)) return
 

@@ -79,8 +79,11 @@ export function createPanelSidebar(): PanelSidebar {
   return sidebar
 }
 
-/** Every panel extensions offer in one region of the routed session, merged with the stored strip. */
-export function createRegion(input: { region: Panel["region"]; view: MountedSession; tabs: Tabs }) {
+/**
+ * Every panel extensions offer in one region of the routed session, merged with the stored strip. `view` returns the
+ * routed session's object, a new one per routed session.
+ */
+export function createRegion(input: { region: Panel["region"]; view: Accessor<MountedSession>; tabs: Tabs }) {
   const host = useExtensionHost()
   const stored = () => input.tabs().all()
   const providers = createMemo(() => host.items(Panel).filter((item) => item.value.region === input.region))
@@ -90,7 +93,7 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
       const prefix = `${item.extension}:`
       const open = stored().flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
 
-      return item.value.list(input.view, open).map(
+      return item.value.list(input.view(), open).map(
         (tab): RegionEntry => ({
           key: panelKey(item.extension, tab.id),
           extension: item.extension,
@@ -120,7 +123,7 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
 
       if (!item?.value.normalize) return key
 
-      return panelKey(item.extension, item.value.normalize(key.slice(item.extension.length + 1), input.view))
+      return panelKey(item.extension, item.value.normalize(key.slice(item.extension.length + 1), input.view()))
     }
 
     // remap reads the stored tabs and writes nothing once every key is canonical, so this settles in one rerun.
@@ -174,7 +177,7 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
     on(active, (key, _, restored: boolean = true) => {
       const entry = key ? byKey().get(key) : undefined
 
-      if (entry) entry.provider.focus?.(entry.tab, input.view, { restored })
+      if (entry) entry.provider.focus?.(entry.tab, input.view(), { restored })
 
       return false
     }),
@@ -206,7 +209,7 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
       const entry = byKey().get(key)
       input.tabs().close(key)
 
-      if (entry) entry.provider.close?.(entry.tab, input.view)
+      if (entry) entry.provider.close?.(entry.tab, input.view())
     },
   }
 }
@@ -269,7 +272,16 @@ export function RegionContent(props: {
                     }}
                   >
                     <Contribution extension={extension}>
-                      {() => member()!.provider.render(() => member()!.tab, props.view)}
+                      {() =>
+                        member()!.provider.render({
+                          get tab() {
+                            return member()!.tab
+                          },
+                          get session() {
+                            return props.view
+                          },
+                        })
+                      }
                     </Contribution>
                   </PanelContext.Provider>
                 </div>
@@ -297,7 +309,16 @@ export function RegionContent(props: {
                     value={{ ...props.frame, visible: props.frame.shown, open: () => props.region.openFor(extension) }}
                   >
                     <Contribution extension={extension}>
-                      {() => entry()!.provider.render(() => entry()!.tab, props.view)}
+                      {() =>
+                        entry()!.provider.render({
+                          get tab() {
+                            return entry()!.tab
+                          },
+                          get session() {
+                            return props.view
+                          },
+                        })
+                      }
                     </Contribution>
                   </PanelContext.Provider>
                 </div>
@@ -453,7 +474,16 @@ export function DockRegion(props: {
               }}
             >
               <Contribution extension={extension}>
-                {() => entry()!.provider.render(() => entry()!.tab, props.view)}
+                {() =>
+                  entry()!.provider.render({
+                    get tab() {
+                      return entry()!.tab
+                    },
+                    get session() {
+                      return props.view
+                    },
+                  })
+                }
               </Contribution>
             </PanelContext.Provider>
           )}
@@ -484,7 +514,16 @@ export function MobilePanel(props: {
       }}
     >
       <Contribution extension={props.entry.extension}>
-        {() => props.entry.provider.render(() => props.entry.tab, props.view)}
+        {() =>
+          props.entry.provider.render({
+            get tab() {
+              return props.entry.tab
+            },
+            get session() {
+              return props.view
+            },
+          })
+        }
       </Contribution>
     </PanelContext.Provider>
   )

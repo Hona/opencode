@@ -192,10 +192,9 @@ export function useServerRowItems(server: () => string) {
 
   return createMemo(() =>
     host
-      .items(MenuItem)
-      .filter((item) => item.value.menu === "server.row" && (item.value.when?.(server()) ?? true))
-      .toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0))
-      .map((item) => item.value),
+      .list(MenuItem)
+      .flatMap((item) => (item.menu === "server.row" && (item.when?.(server()) ?? true) ? [item] : []))
+      .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   )
 }
 
@@ -205,9 +204,8 @@ export function useServerAddItems() {
 
   return createMemo(() =>
     host
-      .items(MenuItem)
-      .filter((item) => item.value.menu === "server.add")
-      .toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0))
-      .map((item) => item.value),
+      .list(MenuItem)
+      .flatMap((item) => (item.menu === "server.add" ? [item] : []))
+      .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   )
 }

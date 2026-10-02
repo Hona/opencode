@@ -54,7 +54,7 @@ const setup: Setup<typeof Details> = (ctx) => {
       kind: "drawer",
     },
     list: () => [],
-    render: (_tab, session) => {
+    render: (props) => {
       const frame = usePanel()
       const drawer = useDrawer()
       const [store, setStore] = createStore({ dismissed: false })
@@ -66,25 +66,27 @@ const setup: Setup<typeof Details> = (ctx) => {
         if (live.status !== "active") return
 
         return {
-          details: () => live.value.details(session),
+          details: () => live.value.details(props.session),
           open: () => {
             drawer?.close()
-            live.value.open(session)
+            live.value.open(props.session)
           },
         }
       })
 
       // The changes row loads the session directory's changes only while the drawer shows.
-      createKeyed(changes, (service) => createKeyed(frame.visible, () => onCleanup(service.watch(session, "details"))))
+      createKeyed(changes, (service) =>
+        createKeyed(frame.visible, () => onCleanup(service.watch(props.session, "details"))),
+      )
 
       return (
-        <Show when={session.project}>
+        <Show when={props.session.project}>
           {(project) => (
             <Suspense>
               <DetailsPanel
                 mobile
                 shown={frame.visible()}
-                session={session}
+                session={props.session}
                 project={project()}
                 diffs={project().vcs ? review()?.details() : []}
                 moveDismissed={store.dismissed}

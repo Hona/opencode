@@ -10,7 +10,7 @@ import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { createKeyed, useExtension, type LineRange, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type LineRange, type MountedSession, type SessionScreen } from "../sdk"
 import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
@@ -189,14 +189,14 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
   }
 }
 
-export function SessionFileView(props: { session: MountedSession; id: string }) {
+export function SessionFileView(props: { session: MountedSession; screen: SessionScreen; id: string }) {
   const ctx = useExtension()
   const layout = ctx.layout
   const shared = useShared()
   const fileComponent = useFileComponent()
-  const file = props.session.file
-  const comment = props.session.comment
-  const composer = props.session.composer
+  const file = props.screen.file
+  const comment = props.screen.comment
+  const composer = props.screen.composer
   // The stored side tab key doubles as the scroll key, as it did before extensions.
   const key = () => `file:${props.id}`
   const active = () => shared.active(props.session, props.id)

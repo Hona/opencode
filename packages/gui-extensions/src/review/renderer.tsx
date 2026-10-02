@@ -1,4 +1,15 @@
-import { batch, createRoot, createSignal, getOwner, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
+import {
+  batch,
+  createMemo,
+  createRoot,
+  createSignal,
+  getOwner,
+  lazy,
+  onCleanup,
+  Show,
+  Suspense,
+  untrack,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
@@ -8,6 +19,7 @@ import {
   SettingsPage,
   usePanel,
   type PanelTab,
+  type SessionScreen,
   type SessionRef,
   type MountedSession,
   type Setup,
@@ -28,54 +40,62 @@ const setup: Setup<typeof Review> = (ctx) => {
   const diff = ctx.stores.diff
   const panel = ctx.stores.panel
 
-  // Who shows a view's changes: the review render, the file tree, and file tabs. A view follows its route,
-  // so a session switch keeps the demand.
-  const demands = new WeakMap<MountedSession, ReturnType<typeof createStore<Demand>>>()
+  // Who shows a screen's changes: the review render, the file tree, and file tabs. Keyed by the session screen, which
+  // stays while it routes another session, so a session switch keeps the demand.
+  const demands = new WeakMap<SessionScreen, ReturnType<typeof createStore<Demand>>>()
 
-  const demand = (view: MountedSession) => {
-    const existing = demands.get(view)
+  const demand = (screen: SessionScreen) => {
+    const existing = demands.get(screen)
 
     if (existing) return existing
 
     const created = createStore<Demand>({ tree: 0, files: 0, panel: 0, details: 0 })
 
-    demands.set(view, created)
+    demands.set(screen, created)
 
     return created
   }
 
-  const watch = (view: MountedSession, source: keyof Demand) => {
-    const set = demand(view)[1]
+  // Views of the screen watch while they render, which is when `ctx.screen` returns it.
+  const watch = (_session: MountedSession, source: keyof Demand) => {
+    const screen = ctx.screen.current()
+
+    if (!screen) return () => {}
+
+    const set = demand(screen)[1]
 
     set(source, (count) => count + 1)
 
     return () => set(source, (count) => Math.max(0, count - 1))
   }
 
-  // One review model for the routed session screen, like the review the screen created before extensions.
-  const [entry, setEntry] = createSignal<{ view: MountedSession; model: ReviewModel; dispose: () => void }>()
+  // One review model per session screen, like the review the screen created before extensions, created once the
+  // screen routes a session. It follows the routed session, a new object on each switch, through `view`.
+  const [entry, setEntry] = createSignal<{ screen: SessionScreen; model: ReviewModel; dispose: () => void }>()
 
   createKeyed(
-    () => sessions.current(),
-    (view) => {
+    () => (sessions.current() ? ctx.screen.current() : undefined),
+    (screen) => {
       const current = untrack(entry)
+      const initial = untrack(sessions.current)
 
-      if (current?.view === view) return
+      if (current?.screen === screen || !initial) return
 
       current?.dispose()
       setEntry(
-        createRoot(
-          (dispose) => ({
-            view,
-            model: createReviewModel({ ctx, view, demand: demand(view)[0] }),
-            dispose,
-          }),
-          owner,
-        ),
+        createRoot((dispose) => {
+          // The routed session of this screen; the last one stays while none is routed for a moment.
+          const view = createMemo<MountedSession>(
+            (last) => (ctx.screen.current() === screen ? sessions.current() : undefined) ?? last,
+            initial,
+          )
+
+          return { screen, model: createReviewModel({ ctx, screen, view, demand: demand(screen)[0] }), dispose }
+        }, owner),
       )
     },
     {
-      // A session switch unmounts and remounts the routed view in one update; keep the model through it.
+      // A screen that unmounts and remounts in one update keeps its model.
       otherwise: () => {
         const current = untrack(entry)
 
@@ -91,37 +111,26 @@ const setup: Setup<typeof Review> = (ctx) => {
   onCleanup(() => untrack(entry)?.dispose())
 
   const modelFor = (session: SessionRef) => {
-    const current = entry()
+    const model = entry()?.model
 
-    return current && current.view.key === session.key ? current.model : undefined
+    return model && model.view().key === session.key ? model : undefined
   }
 
-  const tabs = new WeakMap<MountedSession, PanelTab>()
+  const count = () => entry()?.model.count() ?? 0
 
-  const tab = (session: MountedSession) => {
-    const existing = tabs.get(session)
-
-    if (existing) return existing
-
-    const count = () => modelFor(session)?.count() ?? 0
-
-    const created: PanelTab = {
-      id: TAB,
-      get title() {
-        return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
-      },
-      pinned: true,
-      // Without focusable content the panel itself joins the tab order.
-      get tabbable() {
-        return !(count() > 0 || layout.sidebar.opened())
-      },
-      fallback: 1,
-      dom: { tab: "session-side-panel-review-tab", panel: "session-side-panel-review-tabpanel" },
-    }
-
-    tabs.set(session, created)
-
-    return created
+  // One tab object for every session, so a session switch never renders its trigger again.
+  const tab: PanelTab = {
+    id: TAB,
+    get title() {
+      return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
+    },
+    pinned: true,
+    // Without focusable content the panel itself joins the tab order.
+    get tabbable() {
+      return !(count() > 0 || layout.sidebar.opened())
+    },
+    fallback: 1,
+    dom: { tab: "session-side-panel-review-tab", panel: "session-side-panel-review-tabpanel" },
   }
 
   const ReviewPanel = lazy(() => import("./panel"))
@@ -146,14 +155,15 @@ const setup: Setup<typeof Review> = (ctx) => {
       order: 10,
       kind: "tab",
     },
-    list: (session) => (!layout.narrow() && session.project ? [tab(session)] : []),
-    render: (_tab, session) => {
+    list: (session) => (!layout.narrow() && session.project ? [tab] : []),
+    render: (props) => {
       const frame = usePanel()
 
+      // The screen's model: the render belongs to the routed session, so it never waits for a key to match.
       return (
-        <Show when={modelFor(session)} keyed>
+        <Show when={entry()?.model} keyed>
           {(model) => {
-            createKeyed(frame.visible, () => onCleanup(watch(session, "panel")))
+            createKeyed(frame.visible, () => onCleanup(watch(props.session, "panel")))
 
             return (
               <Show
@@ -164,7 +174,7 @@ const setup: Setup<typeof Review> = (ctx) => {
                       <Suspense>
                         <ReviewPanel
                           review={model}
-                          session={session}
+                          session={props.session}
                           diffStyle={diff.value.diffStyle}
                           onDiffStyleChange={(style) =>
                             diff.update((draft) => {
@@ -184,7 +194,7 @@ const setup: Setup<typeof Review> = (ctx) => {
                 }
               >
                 <Suspense>
-                  <MobileReview review={model} session={session} />
+                  <MobileReview review={model} session={props.session} />
                 </Suspense>
               </Show>
             )

@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Scope, type IpcImpl, type MainContext } from "../sdk/main"
+import { Scope, type IpcImpl, type MainContext, type Storage } from "../sdk/main"
 import { Counter } from "./contract"
+import definition from "./index"
 import setup from "./main"
 
 type Spec = (typeof Counter)["spec"]
@@ -35,34 +36,38 @@ async function start(disk: Map<string, string>) {
   const scope = Scope.make("example", { timeout: 1_000, log: () => undefined })
   const provided: Provided = { pushed: 0 }
 
-  const ctx: MainContext = {
+  const storage: Storage = {
+    store(key, options) {
+      const codec = Schema.fromJsonString(Schema.toCodecJson(options.schema))
+
+      const read = () => {
+        const raw = disk.get(key)
+
+        return raw === undefined ? options.initial : Schema.decodeUnknownSync(codec)(raw)
+      }
+
+      return {
+        get value() {
+          return read()
+        },
+        ready: () => true,
+        update(mutation) {
+          const draft = read()
+          const next = mutation(draft)
+
+          disk.set(key, Schema.encodeSync(codec)(next === undefined ? draft : next))
+        },
+      }
+    },
+    remove: (key) => void disk.delete(key),
+  }
+
+  const ctx: MainContext<typeof definition> = {
     id: "example",
     scope,
-    storage: {
-      store(key, options) {
-        const codec = Schema.fromJsonString(Schema.toCodecJson(options.schema))
-
-        const read = () => {
-          const raw = disk.get(key)
-
-          return raw === undefined ? options.initial : Schema.decodeUnknownSync(codec)(raw)
-        }
-
-        return {
-          get value() {
-            return read()
-          },
-          ready: () => true,
-          update(mutation) {
-            const draft = read()
-            const next = mutation(draft)
-
-            disk.set(key, Schema.encodeSync(codec)(next === undefined ? draft : next))
-          },
-        }
-      },
-      remove: (key) => void disk.delete(key),
-    },
+    // The host opens each declared main store under its name, as `storage.store` does.
+    stores: { count: storage.store("count", definition.stores.count) },
+    storage,
     provide(token, impl) {
       if (token.id !== Counter.id) throw new Error(`The example provides no Ipc "${token.id}"`)
       // SAFETY: the token is `Counter`, checked above, so `impl` implements its spec.

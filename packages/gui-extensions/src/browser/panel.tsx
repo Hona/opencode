@@ -156,7 +156,8 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     const tab = state()
     // The draft outlives a reload or agent navigation, but the ref no longer names anything.
     const live = tab?.id === current.tabID && tab.generation === current.generation
-    props.session.composer.attach(
+    // The screen's composer, read when the user submits: it serves the session the pane shows.
+    extension.screen.current()?.composer.attach(
       commentNote({
         origin: extension.id,
         tabID: current.tabID,
@@ -223,34 +224,38 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     }),
   )
 
-  // The pane's session and model stay the same while it is mounted.
-  onCleanup(
-    props.model.onInspect(props.session, (event) => {
-      if (event.active) {
-        setStore("picking", event.tabID)
+  // The pane stays mounted when another session is routed; it listens to the routed session's picker.
+  createKeyed(
+    () => props.session,
+    (session) =>
+      onCleanup(
+        props.model.onInspect(session, (event) => {
+          if (event.active) {
+            setStore("picking", event.tabID)
 
-        return
-      }
+            return
+          }
 
-      if (store.picking === event.tabID) setStore("picking", undefined)
+          if (store.picking === event.tabID) setStore("picking", undefined)
 
-      if (!event.element) return
-      const tab = state()
+          if (!event.element) return
+          const tab = state()
 
-      if (tab?.id !== event.tabID || !visible()) {
-        props.model.highlight(props.session, event.tabID)
+          if (tab?.id !== event.tabID || !visible()) {
+            props.model.highlight(session, event.tabID)
 
-        return
-      }
+            return
+          }
 
-      setStore("comment", {
-        tabID: tab.id,
-        url: tab.url,
-        generation: tab.generation,
-        element: event.element,
-        draft: "",
-      })
-    }),
+          setStore("comment", {
+            tabID: tab.id,
+            url: tab.url,
+            generation: tab.generation,
+            element: event.element,
+            draft: "",
+          })
+        }),
+      ),
   )
 
   // A picker or comment belongs to the page on screen: the page's picker stops when its tab is switched away or the
@@ -524,7 +529,10 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
                       onInput={(value) => setStore("comment", "draft", value)}
                       onCancel={closeComment}
                       onSubmit={submitComment}
-                      mention={{ items: (query) => props.session.file.search(query, { kind: "any" }) }}
+                      mention={{
+                        items: (query) =>
+                          extension.screen.current()?.file.search(query, { kind: "any" }) ?? Promise.resolve([]),
+                      }}
                       selection={
                         <span class="flex min-w-0 items-center gap-1" dir="ltr">
                           <Icon name="select-element" size="small" class="shrink-0" />

@@ -46,7 +46,7 @@ story("the guide's example offers its pill and reset command only while main's c
     const toggle = commands().find((item) => item.id === "toggle")
     setGeneration(1)
     const up = seen()
-    pills()[0]?.run()
+    pills()[0]?.run?.()
     await fixture.until(() => count() === 1)
     const clicked = seen()
     void toggle?.run()

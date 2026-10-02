@@ -1,5 +1,5 @@
 import type { IconProps } from "@opencode/ui/icon"
-import type { Accessor, JSX } from "solid-js"
+import type { JSX } from "solid-js"
 import { Point } from "./core"
 import type { SessionRef, MountedSession } from "./host-apis"
 
@@ -63,55 +63,89 @@ export interface Command {
   run(input?: string): void | Promise<void>
 }
 
-/**
- * An item of a host menu. Which fields apply depends on `menu`.
- */
-export interface MenuItem {
-  /**
-   * The host menu.
-   * - `session.panel`: the + menu before the side panel tabs. Shows `icon` and `keybind`; `run` receives "".
-   * - `server.add`: the Add server menu. `run` receives "".
-   * - `server.row`: the menu of each server row in Settings. `when` and `enabled` apply; `run` receives the server's
-   *   key.
-   */
-  readonly menu: "session.panel" | "server.add" | "server.row"
+/** The fields every `MenuItem` has, whichever menu it is in. */
+interface MenuItemBase {
   /** The item's id, unique within the extension. */
   readonly id: string
   /** The item's label. */
   readonly title: string
-  /** The item's icon, in the `session.panel` menu. */
-  readonly icon?: IconName
-  /** Published command id whose shortcut the item shows, in the `session.panel` menu. */
-  readonly keybind?: string
   /** Items list in ascending order. Defaults to 0. */
   readonly order?: number
-  /** For `server.row`: lists the item only for rows where it returns true. Receives the row's server key. */
-  readonly when?: (input: string) => boolean
-  /** For `server.row`: shown but disabled while false. Receives the same input as `when`. */
-  readonly enabled?: (input: string) => boolean
+}
+
+/** An item of the + menu before the side panel tabs. */
+export interface SessionPanelMenuItem extends MenuItemBase {
+  /** The host menu: `session.panel`. */
+  readonly menu: "session.panel"
+  /** The item's icon. */
+  readonly icon?: IconName
+  /** Published command id whose shortcut the item shows. */
+  readonly keybind?: string
+  /** Runs the item. */
+  run(): void
+}
+
+/** An item of the Add server menu. */
+export interface ServerAddMenuItem extends MenuItemBase {
+  /** The host menu: `server.add`. */
+  readonly menu: "server.add"
+  /** Runs the item. */
+  run(): void
+}
+
+/** An item of the menu of each server row in Settings. */
+export interface ServerRowMenuItem extends MenuItemBase {
+  /** The host menu: `server.row`. */
+  readonly menu: "server.row"
+  /**
+   * Lists the item only for rows where it returns true. Omit it to list the item on every row.
+   *
+   * @param server - The row's server key.
+   */
+  readonly when?: (server: string) => boolean
+  /**
+   * Shows the item disabled while it returns false. Omit it to keep the item enabled.
+   *
+   * @param server - The row's server key.
+   */
+  readonly enabled?: (server: string) => boolean
   /**
    * Runs the item.
    *
-   * @param input - The row's server key for `server.row`; "" for the other menus.
+   * @param server - The row's server key.
    */
-  run(input: string): void
+  run(server: string): void
 }
 
-/** A tab a side `Panel` lists in the session's strip. Return the same object while it is unchanged. */
+/**
+ * An item of a host menu, by `menu`. Each menu takes only its own fields, so a field the menu ignores fails to compile.
+ * - `session.panel`: the + menu before the side panel tabs; shows `icon` and `keybind`.
+ * - `server.add`: the Add server menu.
+ * - `server.row`: the menu of each server row in Settings; `when` and `enabled` filter it per row, and `run` receives
+ *   the row's server key.
+ */
+export type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+/**
+ * A tab a side `Panel` lists in the session's strip. Return the same object while it is unchanged, also across a
+ * session switch where the tab stays: a new object renders its `label` again.
+ */
 export interface PanelTab {
   /** Host key is `${extension}:${id}`. */
   readonly id: string
   /** Accessible name. Also the trigger content when `label` is absent. */
   readonly title: string
   /**
-   * Renders the trigger content. `active`: the tab is selected; `preview`: it is the host's replaceable preview tab
-   * (double-click keeps it).
+   * Renders the trigger content once per label function; `state` is reactive. `active`: the tab is selected;
+   * `preview`: it is the host's replaceable preview tab (double-click keeps it); `session`: the routed session.
    */
   readonly label?: (state: {
     /** The tab is selected. */
     readonly active: boolean
     /** The tab is the preview tab. */
     readonly preview: boolean
+    /** The routed session the strip shows; a new object when another session is routed. */
+    readonly session: MountedSession
   }) => JSX.Element
   /** Listed without being opened, before every other tab, never closed or dragged. */
   readonly pinned?: boolean
@@ -178,6 +212,18 @@ export interface MobileView {
   readonly kind: "tab" | "menu" | "drawer"
 }
 
+/**
+ * What `Panel.render` receives. Both fields are reactive getters: read `props.tab` and `props.session` where you use
+ * them, and do not destructure. When another session is routed, `session` returns its object and the render stays
+ * mounted.
+ */
+export interface PanelProps {
+  /** The tab, as `list` currently returns it. */
+  readonly tab: PanelTab
+  /** The routed session. */
+  readonly session: MountedSession
+}
+
 /** A panel: the tabs an extension shows in a session's side region, or its dock. */
 export interface Panel {
   /** The panel's id, unique within the extension. Its mobile view's key is `${extension}:${id}`. */
@@ -203,7 +249,7 @@ export interface Panel {
    * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
    *
    * @param id - A stored tab id.
-   * @param session - The mounted session.
+   * @param session - The routed session.
    */
   normalize?(id: string, session: MountedSession): string
   /**
@@ -212,25 +258,27 @@ export interface Panel {
    */
   readonly mobile?: MobileView
   /**
-   * Reactive. `open` holds this extension's tab ids stored in the strip. List those that still apply,
-   * plus any `pinned` tab. The host renders triggers, restore, and selection from this data.
+   * Reactive, and runs again when another session is routed. `open` holds this extension's tab ids stored in the
+   * strip. List those that still apply, plus any `pinned` tab. The host renders triggers, restore, and selection from
+   * this data. Cache tab objects by something that outlives one session object (the tab id, `session.key`, or the
+   * screen `ctx.screen.current()` returns), so a session switch does not render their labels again.
    *
-   * @param session - The mounted session.
+   * @param session - The routed session.
    * @param open - This extension's stored tab ids, in strip order.
    */
   list(session: MountedSession, open: readonly string[]): readonly PanelTab[]
   /**
-   * Renders a tab's content. A render that throws renders nothing and records the error.
+   * Renders a tab's content once; its own reactivity updates it, also when another session is routed. A render that
+   * throws renders nothing and records the error.
    *
-   * @param tab - The tab, as `list` currently returns it.
-   * @param session - The mounted session.
+   * @param props - The tab and the routed session, as reactive getters.
    */
-  render(tab: Accessor<PanelTab>, session: MountedSession): JSX.Element
+  render(props: PanelProps): JSX.Element
   /**
    * Runs after the host removes the tab from the strip.
    *
    * @param tab - The removed tab.
-   * @param session - The mounted session.
+   * @param session - The routed session.
    */
   close?(tab: PanelTab, session: MountedSession): void
   /**
@@ -238,7 +286,7 @@ export interface Panel {
    * tab selected before a reload, and false for every later selection change.
    *
    * @param tab - The selected tab.
-   * @param session - The mounted session.
+   * @param session - The routed session.
    * @param change - How the selection came about.
    */
   focus?(
@@ -484,31 +532,29 @@ export interface TitlebarItem {
   readonly busy?: boolean
   /** Shows the pill pressed (`aria-pressed`). */
   readonly pressed?: boolean
-  /** Runs when the user clicks the pill. */
-  run(): void
+  /** Runs when the user clicks the pill, or the channel badge it toggles. Omit it for an item that only shows. */
+  run?(): void
 }
 
 /** The places a `Slot` renders, with the input each passes to `render`. */
 export interface SlotMap {
-  /** Declared for app-wide content; the host renders no `app` slot. */
-  readonly app: Record<string, never>
   /** Full-width strip under the window content, above toasts. */
   readonly "window.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": {
-    /** The timeline's session. */
+    /** The timeline's session: its latest object, kept while the timeline is hidden. */
     readonly session: MountedSession
     /** The timeline is the one on screen. */
     readonly active: boolean
   }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {
-    /** The mounted session. */
+    /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
   /** The side region's inner sidebar, shown while it is open. */
   readonly "session.panel.sidebar": {
-    /** The mounted session. */
+    /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
 }
@@ -521,8 +567,9 @@ export type Slot = {
     /** Slot contents render in ascending order. Defaults to 0. */
     readonly order?: number
     /**
-     * Renders the content once; its own reactivity updates it. A render that throws renders nothing and records the
-     * error.
+     * Renders the content once; its own reactivity updates it. The input's fields are reactive getters, so read
+     * `input.session` where you use it: another routed session arrives through it without a remount. A render that
+     * throws renders nothing and records the error.
      *
      * @param input - The slot's input.
      */
@@ -566,7 +613,7 @@ export const MenuItem = Point.define<MenuItem>("menu-item")
  *   id: "main",
  *   region: "side",
  *   list: (session, open) => (open.includes("main") ? [tab] : []),
- *   render: (tab, session) => <View session={session} />,
+ *   render: (props) => <View session={props.session} />,
  * })
  * ```
  */

@@ -84,7 +84,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
   const system = ctx.system
   const i18n = useI18n()
   const data = () => props.session.server.data
-  syncCatalog(props.session)
+  syncCatalog(() => props.session)
 
   const info = createMemo(() => (props.session.id ? data().session.get(props.session.id) : undefined))
 

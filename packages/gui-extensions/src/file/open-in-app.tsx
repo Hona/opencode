@@ -7,7 +7,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createLatest, useExtension, type Context, type OS, type MountedSession } from "../sdk"
+import { createLatest, useExtension, type Context, type OS, type MountedSession, type SessionScreen } from "../sdk"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
 import { openInAppParentPath } from "./path"
@@ -184,9 +184,9 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
 type OpenInAppState = ReturnType<typeof useOpenInApp>
 
-export default function OpenInAppButton(props: { session: MountedSession }) {
+export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
-  const directory = () => props.session.file.root
+  const directory = () => props.screen.file.root
   const state = useOpenInApp({ session: props.session, path: directory })
 
   return (

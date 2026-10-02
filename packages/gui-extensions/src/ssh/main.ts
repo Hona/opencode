@@ -1,19 +1,15 @@
 import { NodeServices } from "@effect/platform-node"
-import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
+import { Effect, Exit, Fiber, Layer, ManagedRuntime, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import type { MainContext } from "../sdk/main"
+import type { MainSetup } from "../sdk/main"
 import { SshFailure } from "./command"
-import { Ssh, SshConfig } from "./contract"
+import { Ssh } from "./contract"
 import { createSshController } from "./controller"
+import type definition from "./index"
 
-const setup = async (ctx: MainContext) => {
+const setup: MainSetup<typeof definition> = async (ctx) => {
   const cli = ctx.cli
-
-  const saved = ctx.storage.store("servers", {
-    schema: Schema.Array(SshConfig),
-    initial: [],
-    from: "settings:ssh.servers",
-  })
+  const saved = ctx.stores.servers
 
   const runtime = ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))
   const scope = await runtime.runPromise(Scope.make())
