@@ -2,14 +2,32 @@ import type { Cleanup } from "./core"
 
 /**
  * A lifetime, named after Effect's `Scope` without its runtime. Closing it aborts `signal`, then runs its finalizers
- * in reverse order, each isolated from the others' failures, under a deadline.
+ * in reverse order, each isolated from the others' failures, under a deadline. A main entry's `ctx.scope` closes when
+ * the extension is disabled, reloaded, removed, or the app quits.
+ *
+ * @example
+ * ```ts
+ * const timer = setInterval(poll, 60_000)
+ * ctx.scope.addFinalizer(() => clearInterval(timer))
+ * const session = ctx.scope.fork("session")
+ * ```
  */
 export interface Scope {
-  /** Aborts when the scope closes. */
+  /** Aborts when the scope closes. Pass it to long work, and return after an `await` if it aborted. */
   readonly signal: AbortSignal
-  /** Runs `fn` when the scope closes, or at once when it already has. The function returned runs it early instead. */
+  /**
+   * Runs `fn` when the scope closes, or at once when it already has. A throw or rejection is logged and the other
+   * finalizers still run.
+   *
+   * @param fn - The teardown. A named function's name labels it in the timeout log.
+   * @returns Runs `fn` early instead, and removes it from the scope.
+   */
   addFinalizer(fn: Cleanup): Cleanup
-  /** A child scope. It closes with this one, in reverse order like a finalizer, or earlier on its own. */
+  /**
+   * A child scope. It closes with this one, in reverse order like a finalizer, or earlier on its own.
+   *
+   * @param name - Labels the child in logs, as `parent/name`.
+   */
   fork(name: string): Scope
   /**
    * Aborts `signal` at once; the finalizers start once the calling code yields. Settles when they have, or at the
@@ -22,12 +40,31 @@ export interface Scope {
 /** Writes a structured log entry; the logger serializes each field of `data` as it is. */
 type Log = <Data extends Readonly<Record<string, unknown>>>(message: string, data: Data) => void
 
-type Options = { readonly timeout: number; readonly log: Log }
+type Options = {
+  /** How long `close` waits for the finalizers, in milliseconds. */
+  readonly timeout: number
+  /** Reports finalizers that failed or timed out. */
+  readonly log: Log
+}
 
 // A fork has no label: it logs its own finalizers.
 type Finalizer = { readonly label?: string; readonly run: Cleanup }
 
+/**
+ * Creates scopes. The main host makes one per extension instance; an extension forks `ctx.scope` instead.
+ *
+ * @example
+ * ```ts
+ * const scope = Scope.make("example", { timeout: 3_000, log: (message, data) => console.error(message, data) })
+ * ```
+ */
 export const Scope = {
+  /**
+   * Creates an open scope.
+   *
+   * @param name - Labels the scope in logs.
+   * @param options - The deadline and the log.
+   */
   make: (name: string, options: Options): Scope => create(name, options),
 }
 

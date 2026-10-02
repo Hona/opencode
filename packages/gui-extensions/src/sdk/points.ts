@@ -3,62 +3,119 @@ import type { Accessor, JSX } from "solid-js"
 import { Point } from "./core"
 import type { SessionRef, MountedSession } from "./host-apis"
 
+/** The name of an icon in `@opencode/ui/icon`. */
 export type IconName = IconProps["name"]
 
+/**
+ * A command in the palette, with an optional keybind and slash command. The host publishes it as
+ * `${extension}.${id}`. Read the title from a getter so it follows the locale.
+ */
 export interface Command {
   /** Local id. The host publishes `${extension}.${id}`, e.g. terminal + toggle = terminal.toggle. */
   readonly id: string
+  /** The palette label. */
   readonly title: string
+  /** The palette's second line. */
   readonly description?: string
+  /** The palette category the command is listed under; translated text. */
   readonly group?: string
-  /** Section of Settings > Shortcuts that lists the command. Defaults to general. */
+  /**
+   * Section of Settings > Shortcuts that lists the command. Defaults to `general`.
+   * - `general`: app-wide commands.
+   * - `session`: commands on the current session.
+   * - `navigation`: moving between views and tabs.
+   * - `model`: model and agent choice.
+   * - `terminal`: the terminal.
+   * - `prompt`: the composer.
+   */
   readonly section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  /** The default keybind, e.g. `mod+shift+t`. The user can change it in Settings > Shortcuts. */
   readonly bind?: string
+  /** Also offers the command as a composer slash command. */
   readonly slash?: {
+    /** The name after the slash, e.g. `open` for `/open`. */
     readonly name: string
+    /** The text after the name is passed to `run`. */
     readonly arguments?: true
     /** Lists this entry right after the slash entry with this name, e.g. "open", when one is present. */
     readonly after?: string
   }
-  /** Keep out of the command palette. */
+  /** Keep out of the command palette; the keybind still works. */
   readonly hidden?: true
+  /** Also listed under the palette's Suggested category while it is enabled. */
   readonly suggested?: boolean
   /** Listed when the command palette opens without a query. */
   readonly featured?: true
+  /** False takes the command out of the palette and turns its keybind off. Defaults to true. Reactive. */
   readonly enabled?: boolean
   /** CSS selector the keyboard focus must be inside for the binding to apply. Host tab shortcuts yield inside it. */
   readonly scope?: string
-  /** The binding also fires while a text field has focus. */
+  /**
+   * The binding also fires while a text field has focus. Without it, a binding with no Ctrl, Cmd or Alt key yields to
+   * the text field.
+   */
   readonly editable?: true
+  /**
+   * Runs the command from the palette, the keybind or the slash command.
+   *
+   * @param input - The slash command's arguments, when `slash.arguments` is set.
+   */
   run(input?: string): void | Promise<void>
 }
 
+/**
+ * An item of a host menu. Which fields apply depends on `menu`.
+ */
 export interface MenuItem {
-  /** Host menu: "session.panel" (the + before side panel tabs), "server.add", "server.row". */
+  /**
+   * The host menu.
+   * - `session.panel`: the + menu before the side panel tabs. Shows `icon` and `keybind`; `run` receives "".
+   * - `server.add`: the Add server menu. `run` receives "".
+   * - `server.row`: the menu of each server row in Settings. `when` and `enabled` apply; `run` receives the server's
+   *   key.
+   */
   readonly menu: "session.panel" | "server.add" | "server.row"
+  /** The item's id, unique within the extension. */
   readonly id: string
+  /** The item's label. */
   readonly title: string
+  /** The item's icon, in the `session.panel` menu. */
   readonly icon?: IconName
-  /** Published command id whose shortcut the item shows. */
+  /** Published command id whose shortcut the item shows, in the `session.panel` menu. */
   readonly keybind?: string
+  /** Items list in ascending order. Defaults to 0. */
   readonly order?: number
-  /** Receives the row input, e.g. a server key for "server.row". */
+  /** For `server.row`: lists the item only for rows where it returns true. Receives the row's server key. */
   readonly when?: (input: string) => boolean
-  /** Shown but disabled while false. Receives the same input as `when`. */
+  /** For `server.row`: shown but disabled while false. Receives the same input as `when`. */
   readonly enabled?: (input: string) => boolean
+  /**
+   * Runs the item.
+   *
+   * @param input - The row's server key for `server.row`; "" for the other menus.
+   */
   run(input: string): void
 }
 
+/** A tab a side `Panel` lists in the session's strip. Return the same object while it is unchanged. */
 export interface PanelTab {
   /** Host key is `${extension}:${id}`. */
   readonly id: string
   /** Accessible name. Also the trigger content when `label` is absent. */
   readonly title: string
-  /** preview is the host's replaceable preview tab (double-click keeps it). */
-  readonly label?: (state: { readonly active: boolean; readonly preview: boolean }) => JSX.Element
+  /**
+   * Renders the trigger content. `active`: the tab is selected; `preview`: it is the host's replaceable preview tab
+   * (double-click keeps it).
+   */
+  readonly label?: (state: {
+    /** The tab is selected. */
+    readonly active: boolean
+    /** The tab is the preview tab. */
+    readonly preview: boolean
+  }) => JSX.Element
   /** Listed without being opened, before every other tab, never closed or dragged. */
   readonly pinned?: boolean
-  /** Defaults to true. */
+  /** The user can drag the tab to reorder it. Defaults to true. */
   readonly draggable?: boolean
   /**
    * The close button; only how it looks. Defaults to a plain one.
@@ -95,21 +152,42 @@ export interface PanelTab {
   readonly file?: string
   /** The tab panel itself joins the tab order, for content without focusable elements. */
   readonly tabbable?: boolean
-  /** Forces the panel's inner sidebar open and disables its toggle. */
+  /** `locked`: forces the panel's inner sidebar open and disables its toggle. */
   readonly sidebar?: "locked"
   /** Stable DOM ids for the trigger and the tab panel. */
-  readonly dom?: { readonly tab?: string; readonly panel?: string }
+  readonly dom?: {
+    /** The trigger's id. */
+    readonly tab?: string
+    /** The tab panel's id. */
+    readonly panel?: string
+  }
 }
 
+/** A panel's narrow-screen view. */
 export interface MobileView {
+  /** The view's label in the switcher or the overflow menu. */
   readonly title: string
+  /** Views list in ascending order. */
   readonly order: number
-  /** `view` replaces the conversation; `menu` and `drawer` live behind the overflow menu. */
+  /**
+   * Where the view is offered.
+   * - `tab`: a tab of the view switcher; it replaces the conversation.
+   * - `menu`: an overflow menu entry; it replaces the conversation.
+   * - `drawer`: an overflow menu entry; it opens in a drawer over the conversation (`useDrawer`).
+   */
   readonly kind: "tab" | "menu" | "drawer"
 }
 
+/** A panel: the tabs an extension shows in a session's side region, or its dock. */
 export interface Panel {
+  /** The panel's id, unique within the extension. Its mobile view's key is `${extension}:${id}`. */
   readonly id: string
+  /**
+   * Where the panel renders.
+   * - `side`: tabs in the side region's strip.
+   * - `dock`: the dock, below or beside the timeline. The host renders the first tab `list` returns (with `open`
+   *   empty) of the first dock panel.
+   */
   readonly region: "side" | "dock"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
@@ -123,59 +201,127 @@ export interface Panel {
   /**
    * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
    * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
+   *
+   * @param id - A stored tab id.
+   * @param session - The mounted session.
    */
   normalize?(id: string, session: MountedSession): string
-  /** A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"`. */
+  /**
+   * A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"` and receives a tab with
+   * the panel's `id` and the view's `title`.
+   */
   readonly mobile?: MobileView
   /**
    * Reactive. `open` holds this extension's tab ids stored in the strip. List those that still apply,
    * plus any `pinned` tab. The host renders triggers, restore, and selection from this data.
+   *
+   * @param session - The mounted session.
+   * @param open - This extension's stored tab ids, in strip order.
    */
   list(session: MountedSession, open: readonly string[]): readonly PanelTab[]
+  /**
+   * Renders a tab's content. A render that throws renders nothing and records the error.
+   *
+   * @param tab - The tab, as `list` currently returns it.
+   * @param session - The mounted session.
+   */
   render(tab: Accessor<PanelTab>, session: MountedSession): JSX.Element
-  /** Runs after the host removes the tab from the strip. */
+  /**
+   * Runs after the host removes the tab from the strip.
+   *
+   * @param tab - The removed tab.
+   * @param session - The mounted session.
+   */
   close?(tab: PanelTab, session: MountedSession): void
   /**
    * Runs when the tab becomes selected. `restored` is true for the selection the side region mounts with, e.g. the
    * tab selected before a reload, and false for every later selection change.
+   *
+   * @param tab - The selected tab.
+   * @param session - The mounted session.
+   * @param change - How the selection came about.
    */
-  focus?(tab: PanelTab, session: MountedSession, change: { readonly restored: boolean }): void
+  focus?(
+    tab: PanelTab,
+    session: MountedSession,
+    change: {
+      /** The selection the side region mounted with, not a user's choice. */
+      readonly restored: boolean
+    },
+  ): void
 }
 
+/** A search entry of a `SettingsPage`, indexed without mounting the page. */
 export interface SettingEntry {
   /** The `data-action` of the row search reveals. An entry with the SettingsPage's own id describes the page itself. */
   readonly id: string
+  /** The entry's title in search results. */
   readonly title: string
+  /** The entry's second line. */
   readonly description?: string
+  /** Extra words search matches, separated by spaces. */
   readonly keywords?: string
 }
 
+/** A settings page, a section on a host page, or rows in a host section. */
 export interface SettingsPage {
-  /** A page's settings tab value (`/settings?tab=<id>`). */
+  /** A page's settings tab value (`/settings?tab=<id>`), and `Layout.settings`'s argument. */
   readonly id: string
-  /** Adds a section to a host page. Omit to add a page. */
+  /**
+   * Adds a section to a host page. Omit it to add a page.
+   * - `general`: the General page.
+   * - `servers`: the Servers page.
+   */
   readonly page?: "general" | "servers"
   /**
-   * With `page: "general"`, adds rows to that page's General section instead of a section of its own: `render`
-   * returns settings rows, which the host places in its list. Search lists the entries under the host section.
+   * `general`: with `page: "general"`, adds rows to that page's General section instead of a section of its own:
+   * `render` returns settings rows, which the host places in its list. Search lists the entries under the host
+   * section.
    */
   readonly section?: "general"
   /** Nav label of a page; search shows it as the section of every entry, except rows placed in a host `section`. */
   readonly title: string
+  /** The page's nav icon. */
   readonly icon?: IconName
+  /**
+   * Where the page is offered. Omit it for everywhere.
+   * - `desktop`: the desktop app only.
+   * - `mobile`: narrow screens only.
+   */
   readonly available?: "desktop" | "mobile"
   /** Search metadata, indexed without mounting the page. */
   readonly entries?: readonly SettingEntry[]
-  /** `target` is the entry search is revealing. */
-  render(input: { readonly target?: string }): JSX.Element
+  /**
+   * Renders the page, section or rows.
+   *
+   * @param input - `target` is the entry search is revealing.
+   */
+  render(input: {
+    /** The `SettingEntry.id` search is revealing, if any. */
+    readonly target?: string
+  }): JSX.Element
 }
 
+/**
+ * Where a contributed server stands.
+ * - `stopped`: not running.
+ * - `starting`: starting up.
+ * - `auth`: waiting for the user to sign in.
+ * - `ready`: reachable; `http` holds its endpoint.
+ * - `failed`: could not start.
+ * - `incompatible`: running a version this app does not support.
+ */
 export type ServerState = "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
 
+/** A server's latest health check. */
 export interface ServerHealth {
+  /** The server answered. */
   readonly healthy: boolean
+  /** The version it reported. */
   readonly version?: string
+  /** The version is not supported by this app. */
   readonly incompatible?: boolean
+  /** A check is in flight. */
   readonly checking?: boolean
 }
 
@@ -187,58 +333,103 @@ export interface ServerRow {
   health(): ServerHealth | undefined
   /** The host status mark: a dot, a spinner, a lock, or a warning. */
   readonly Indicator: (props: {
+    /** The health to show. */
     readonly health?: ServerHealth
+    /** Shows the spinner. */
     readonly connecting?: boolean
+    /** Shows the lock. */
     readonly auth?: boolean
   }) => JSX.Element
   /** The default server. `available` is false where the platform keeps no default. */
-  readonly default: { available(): boolean; current(): boolean; set(value: boolean): void }
+  readonly default: {
+    /** The platform keeps a default server. */
+    available(): boolean
+    /** This server is the default. Reactive. */
+    current(): boolean
+    /**
+     * Makes this server the default, or clears it.
+     *
+     * @param value - True to make it the default.
+     */
+    set(value: boolean): void
+  }
   /** Runs the entry's `remove`, then closes the server's tabs and clears it as the default. */
   remove(): Promise<void>
   /** MenuItem "server.row" items for this server, rendered as items of the row's own menu. */
   readonly Items: () => JSX.Element
 }
 
+/** A server an extension contributes through a `Server` source. */
 export interface ServerEntry {
+  /** The entry's id; its key is `${extension}:${id}`. */
   readonly id: string
+  /** The display name. */
   readonly name: string
   /** Short badge after the name, e.g. "SSH". */
   readonly label?: string
+  /** Where the server stands. */
   readonly state: ServerState
   /** False keeps the entry out of the app's server list (home, routes); settings still shows it and its tabs stay. */
   readonly listed?: boolean
-  readonly http?: { readonly url: string; readonly username?: string; readonly password?: string }
+  /** The endpoint, once the server is `ready`. */
+  readonly http?: {
+    /** The base URL. */
+    readonly url: string
+    /** The HTTP basic user name. */
+    readonly username?: string
+    /** The HTTP basic password. */
+    readonly password?: string
+  }
   /**
    * Resolves the endpoint again after the connection drops, e.g. a tunnel. Such a server is managed:
    * the host probes every new endpoint and holds prompts until the event connection is up.
+   *
+   * @param signal - Aborts when the host stops waiting.
    */
-  reconnect?(signal: AbortSignal): Promise<{ readonly url: string; readonly password?: string }>
+  reconnect?(signal: AbortSignal): Promise<{
+    /** The new base URL. */
+    readonly url: string
+    /** The new HTTP basic password. */
+    readonly password?: string
+  }>
   /** Called before opening a server that is not ready. Resolves true once it is. */
   connect?(): Promise<boolean>
   /** Runs before the host forgets the server. */
   remove?(): Promise<void>
-  /** The connection row in the server's settings. */
+  /**
+   * The connection row in the server's settings.
+   *
+   * @param row - Host parts for the row.
+   */
   row?(row: ServerRow): JSX.Element
   /**
    * Covers the routed session or draft while the entry is not ready; the route stays mounted underneath.
    * `tab` identifies the routed tab and changes when another one is routed.
+   *
+   * @param input - The routed tab.
    */
-  cover?(input: { readonly tab: string }): JSX.Element
+  cover?(input: {
+    /** The routed tab's key. */
+    readonly tab: string
+  }): JSX.Element
 }
 
+/** A source of servers, e.g. SSH hosts or WSL distributions. */
 export interface Server {
   /**
    * Startup waits until every source is ready. A ready source's entries are its complete inventory: the host
    * forgets a server, and closes its tabs, only when a ready source stops listing it.
    */
   readonly ready: boolean
-  /** Sources list in ascending order. */
+  /** Sources list in ascending order. Defaults to 0. */
   readonly order?: number
   /** Keys are `${extension}:${id}`. */
   readonly entries: readonly ServerEntry[]
 }
 
+/** A local link the app routes to a `LinkHandler`, e.g. a file path in a message. */
 export interface Link {
+  /** The link target: a path, URL or `file://` link. */
   readonly href: string
   /** The extension that produced the linked item, e.g. the origin of a composer comment. */
   readonly origin?: string
@@ -251,56 +442,193 @@ export interface Link {
   readonly background?: boolean
   /** Workspace-relative directory the link was written in. */
   readonly base?: string
+  /** The session the link belongs to. */
   readonly session?: SessionRef
 }
 
+/** Opens local links that `match` accepts. `Links.open` picks the matching handler with the highest priority. */
 export interface LinkHandler {
+  /** Handlers with higher values win; on a tie, the first contributed. Defaults to 0. */
   readonly priority?: number
+  /**
+   * Whether this handler opens the link.
+   *
+   * @param link - The link to route.
+   */
   match(link: Link): boolean
+  /**
+   * Opens the link.
+   *
+   * @param link - A link `match` accepted.
+   */
   open(link: Link): void
 }
 
+/** A titlebar pill, or the dev channel badge as a toggle. */
 export interface TitlebarItem {
+  /** The item's id; the host keeps the pill's element while the id stays. */
   readonly id: string
-  /** titlebar (default) places a pill in the titlebar or tabs footer; channel makes the dev channel badge a toggle. */
+  /**
+   * Where the item shows. Defaults to `titlebar`.
+   * - `titlebar`: a pill in the titlebar or tabs footer; the label shows on hover.
+   * - `channel`: makes the dev channel badge a toggle that runs the item.
+   */
   readonly placement?: "titlebar" | "channel"
+  /** The visible label. */
   readonly label: string
   /** Accessible name when it differs from the visible label. */
   readonly title?: string
+  /** The pill's icon. Defaults to a download arrow. */
   readonly icon?: IconName
+  /** Shows a spinner and disables the pill. */
   readonly busy?: boolean
+  /** Shows the pill pressed (`aria-pressed`). */
   readonly pressed?: boolean
+  /** Runs when the user clicks the pill. */
   run(): void
 }
 
+/** The places a `Slot` renders, with the input each passes to `render`. */
 export interface SlotMap {
+  /** Declared for app-wide content; the host renders no `app` slot. */
   readonly app: Record<string, never>
   /** Full-width strip under the window content, above toasts. */
   readonly "window.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
-  readonly "session.header": { readonly session: MountedSession; readonly active: boolean }
-  readonly "session.panel.end": { readonly session: MountedSession }
-  readonly "session.panel.sidebar": { readonly session: MountedSession }
+  readonly "session.header": {
+    /** The timeline's session. */
+    readonly session: MountedSession
+    /** The timeline is the one on screen. */
+    readonly active: boolean
+  }
+  /** The actions at the end of the side region's tab strip. */
+  readonly "session.panel.end": {
+    /** The mounted session. */
+    readonly session: MountedSession
+  }
+  /** The side region's inner sidebar, shown while it is open. */
+  readonly "session.panel.sidebar": {
+    /** The mounted session. */
+    readonly session: MountedSession
+  }
 }
 
+/** Content for one of the host's slots, typed by `at`. */
 export type Slot = {
-  [At in keyof SlotMap]: { readonly at: At; readonly order?: number; render(input: SlotMap[At]): JSX.Element }
+  [At in keyof SlotMap]: {
+    /** The slot; see `SlotMap`. */
+    readonly at: At
+    /** Slot contents render in ascending order. Defaults to 0. */
+    readonly order?: number
+    /**
+     * Renders the content once; its own reactivity updates it. A render that throws renders nothing and records the
+     * error.
+     *
+     * @param input - The slot's input.
+     */
+    render(input: SlotMap[At]): JSX.Element
+  }
 }[keyof SlotMap]
 
+/**
+ * A point: a command in the palette, with an optional keybind and slash command.
+ *
+ * @example
+ * ```ts
+ * ctx.add(Command, {
+ *   id: "toggle",
+ *   bind: "mod+shift+e",
+ *   get title() {
+ *     return ctx.t("command.toggle")
+ *   },
+ *   run: () => toggle(),
+ * })
+ * ```
+ */
 export const Command = Point.define<Command>("command")
 
+/**
+ * A point: an item of a host menu.
+ *
+ * @example
+ * ```ts
+ * ctx.add(MenuItem, { menu: "session.panel", id: "open", title: ctx.t("open"), icon: "folder", run: () => open() })
+ * ```
+ */
 export const MenuItem = Point.define<MenuItem>("menu-item")
 
+/**
+ * A point: tabs in the session's side region, or the dock.
+ *
+ * @example
+ * ```ts
+ * ctx.add(Panel, {
+ *   id: "main",
+ *   region: "side",
+ *   list: (session, open) => (open.includes("main") ? [tab] : []),
+ *   render: (tab, session) => <View session={session} />,
+ * })
+ * ```
+ */
 export const Panel = Point.define<Panel>("panel")
 
+/**
+ * A point: a settings page, a section on a host page, or rows in a host section.
+ *
+ * @example
+ * ```ts
+ * ctx.add(SettingsPage, { id: "updates", page: "general", title: ctx.t("title"), render: () => <Section /> })
+ * ```
+ */
 export const SettingsPage = Point.define<SettingsPage>("settings-page")
 
+/**
+ * A point: a source of servers the app lists.
+ *
+ * @example
+ * ```ts
+ * ctx.add(Server, () => ({ ready: loaded(), entries: hosts().map(toEntry) }))
+ * ```
+ */
 export const Server = Point.define<Server>("server")
 
+/**
+ * A point: opens local links, such as file paths in messages.
+ *
+ * @example
+ * ```ts
+ * ctx.add(LinkHandler, { match: (link) => link.href.endsWith(".md"), open: (link) => preview(link) })
+ * ```
+ */
 export const LinkHandler = Point.define<LinkHandler>("link-handler")
 
+/**
+ * A point: a titlebar pill, or the dev channel badge as a toggle.
+ *
+ * @example
+ * ```ts
+ * ctx.add(TitlebarItem, () => (ready() ? { id: "update", label: ctx.t("restart"), run: install } : undefined))
+ * ```
+ */
 export const TitlebarItem = Point.define<TitlebarItem>("titlebar-item")
 
+/**
+ * A point: content for one of the host's slots (`SlotMap`).
+ *
+ * @example
+ * ```ts
+ * ctx.add(Slot, { at: "session.header", render: (input) => <Usage session={input.session} /> })
+ * ```
+ */
 export const Slot = Point.define<Slot>("slot")
 
+/**
+ * A point: CSS the host adds to the document while the item is contributed. Import the file with `?inline`.
+ *
+ * @example
+ * ```ts
+ * import css from "./dialog.css?inline"
+ * ctx.add(Style, css)
+ * ```
+ */
 export const Style = Point.define<string>("style")

@@ -6,18 +6,28 @@ import type { Store } from "solid-js/store"
 import type { Cleanup, OS, Persisted, StoreFrom } from "./core"
 import type { IconName, Link } from "./points"
 
+/**
+ * A server the app lists. One ref per id that follows the live connection: read `client`, `data` and `url` from it
+ * each time, as a restarted or re-authenticated server gets a new controller under the same id.
+ */
 export interface ServerRef {
   /** Host key: "sidecar", an http URL, or `${extension}:${id}` for servers an extension contributes. */
   readonly id: string
-  /** Display name. */
+  /** Display name; the id when the server has none. */
   readonly name: string
+  /** The server's base URL. */
   readonly url: string
+  /** The HTTP basic password the user configured; undefined when there is none. */
   readonly password?: string
+  /** The server's API client. */
   readonly client: OpenCodeClient
+  /** The server's synced data (sessions, projects, …). Reactive. */
   readonly data: Data
   /** The built-in local server or a loopback http server. */
   readonly local: boolean
+  /** The app's own server, the desktop sidecar. */
   readonly builtin: boolean
+  /** The server's version works with this app; false after a health check found it incompatible. */
   readonly compatible: boolean
   /** The event connection to this server is up. */
   readonly connected: boolean
@@ -25,122 +35,417 @@ export interface ServerRef {
 
 /** A session owned by an open shell tab, mounted or not. */
 export interface SessionRef {
+  /** `${server id}\n${session id}`: unique across servers. Key per-session state by it. */
   readonly key: string
+  /** The session's id on its server. */
   readonly id: string
+  /** The key of the shell tab that owns the session. */
   readonly tab: string
+  /** The session's server. */
   readonly server: ServerRef
+  /** The server is still creating the session. */
   readonly pending: boolean
+  /**
+   * Where the session runs. Undefined until the server reports it, and again while it is unknown, e.g. after the
+   * server re-authenticates. Layout reads return nothing meanwhile; layout writes wait for it.
+   */
   readonly location: LocationRef | undefined
 }
 
+/** A project as the sidebar lists it, with the worktrees found on disk and the user's local name and icon. */
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
+  /** The project's root directory. */
   worktree: string
+  /** The project's worktrees. */
   worktrees: WorktreeDirectory[]
 }
 
+/** A file's content as the server read it. */
 export type FileContent = {
+  /**
+   * How to read `content`.
+   * - `text`: `content` is the text.
+   * - `binary`: `content` is base64 when `encoding` says so, or empty when only `size` is known.
+   */
   type: "text" | "binary"
+  /** The text, or the base64 bytes of a binary file. */
   content: string
+  /** A unified diff of the file's uncommitted change, when there is one. */
   diff?: string
+  /** The same change, parsed. */
   patch?: {
+    /** The file's name before the change. */
     oldFileName: string
+    /** The file's name after the change. */
     newFileName: string
+    /** The header of the old side. */
     oldHeader?: string
+    /** The header of the new side. */
     newHeader?: string
-    hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] }>
+    /** The changed regions. */
+    hunks: Array<{
+      /** First line of the hunk in the old file. */
+      oldStart: number
+      /** Lines of the hunk in the old file. */
+      oldLines: number
+      /** First line of the hunk in the new file. */
+      newStart: number
+      /** Lines of the hunk in the new file. */
+      newLines: number
+      /** The hunk's lines, each prefixed with " ", "+" or "-". */
+      lines: string[]
+    }>
+    /** The diff's index line. */
     index?: string
   }
+  /** `base64` when `content` holds encoded bytes. */
   encoding?: "base64"
+  /** The file's MIME type, when the server knows it. */
   mimeType?: string
   /** On-disk size when the bytes themselves are not retained. */
   size?: number
 }
 
+/** A range of lines in a file, or in one side of its diff. */
 export interface LineRange {
+  /** The first line. */
   start: number
+  /** The last line. */
   end: number
+  /**
+   * The diff side `start` is on. Omit it for the file itself.
+   * - `additions`: the new side.
+   * - `deletions`: the old side.
+   */
   side?: "additions" | "deletions"
+  /** The diff side `end` is on, when it differs from `side`. */
   endSide?: "additions" | "deletions"
 }
 
+/** One file of the session's workspace as the file model holds it. */
 export interface FileState {
+  /** The workspace-relative path. */
   path: string
+  /** The file's name. */
   name: string
+  /** The content has loaded at least once. */
   loaded?: boolean
+  /** A load is in flight. */
   loading?: boolean
+  /** The last load found no such file. */
   notFound?: boolean
+  /** The last load's error message. */
   error?: string
+  /** The loaded content. */
   content?: FileContent
 }
 
+/** An entry of the workspace file tree. */
 export interface FileNode {
+  /** The entry's name. */
   name: string
+  /** The workspace-relative path. */
   path: string
+  /** The absolute path. */
   absolute: string
+  /**
+   * What the entry is.
+   * - `file`: a file.
+   * - `directory`: a directory.
+   */
   type: "file" | "directory"
+  /** Ignored by the workspace's ignore files. */
   ignored: boolean
 }
 
+/** The mounted session's workspace files: content, view state and the file tree. */
 export interface Files {
+  /** The workspace root directory. */
   readonly root: string
+  /** The per-file view state (selection, scroll) has loaded. Reactive. */
   ready(): boolean
+  /**
+   * Normalizes a path, URL or `file://` link to a workspace-relative path. A path outside the root stays absolute.
+   *
+   * @param path - Any path or link to a file.
+   */
   resolve(path: string): string
+  /**
+   * Whether a normalized path is absolute, and so outside the workspace.
+   *
+   * @param path - A path from `resolve`.
+   */
   absolute(path: string): boolean
+  /**
+   * The file's state; undefined until `sync` first loads it. Reactive.
+   *
+   * @param path - A workspace-relative path.
+   */
   get(path: string): FileState | undefined
-  /** Last load found no such file. Unlike `get`, it does not touch the content cache. */
+  /**
+   * The last load found no such file. Unlike `get`, it does not touch the content cache.
+   *
+   * @param path - A workspace path.
+   */
   missing(path: string): boolean
-  sync(path: string, options?: { readonly force?: boolean }): Promise<void>
+  /**
+   * Loads the file's content, once unless forced.
+   *
+   * @param path - A workspace path.
+   * @param options - Load options.
+   */
+  sync(
+    path: string,
+    options?: {
+      /** Reloads even when the content has loaded. Defaults to false. */
+      readonly force?: boolean
+    },
+  ): Promise<void>
+  /**
+   * Searches the workspace by fuzzy path.
+   *
+   * @param query - The search text.
+   * @param options - Search options.
+   * @returns Matching workspace-relative paths, best first.
+   */
   search(
     query: string,
-    options?: { readonly kind?: "file" | "any"; readonly limit?: number; readonly signal?: AbortSignal },
+    options?: {
+      /**
+       * What to match. Defaults to `file`.
+       * - `file`: files only.
+       * - `any`: files and directories; `limit` and `signal` are ignored.
+       */
+      readonly kind?: "file" | "any"
+      /** The most results to return. */
+      readonly limit?: number
+      /** Aborts the search. */
+      readonly signal?: AbortSignal
+    },
   ): Promise<string[]>
+  /** The selected line range per file, kept with the session's view state. */
   readonly selection: {
+    /**
+     * The file's selected range: null when the selection was cleared, undefined when none is stored. Reactive.
+     *
+     * @param path - A workspace path.
+     */
     get(path: string): LineRange | null | undefined
+    /**
+     * Selects a range, or clears the selection with null.
+     *
+     * @param path - A workspace path.
+     * @param range - The range to select.
+     */
     set(path: string, range: LineRange | null): void
   }
+  /** The scroll offset per file, kept with the session's view state. */
   readonly scroll: {
-    get(path: string): { readonly top?: number; readonly left?: number }
-    set(path: string, value: { readonly top?: number; readonly left?: number }): void
+    /**
+     * The file's stored scroll offset.
+     *
+     * @param path - A workspace path.
+     */
+    get(path: string): {
+      /** Vertical offset in CSS pixels; undefined when none is stored. */
+      readonly top?: number
+      /** Horizontal offset in CSS pixels; undefined when none is stored. */
+      readonly left?: number
+    }
+    /**
+     * Stores the file's scroll offset. An offset left out keeps its stored value.
+     *
+     * @param path - A workspace path.
+     * @param value - The offsets to store.
+     */
+    set(
+      path: string,
+      value: {
+        /** Vertical offset in CSS pixels. */
+        readonly top?: number
+        /** Horizontal offset in CSS pixels. */
+        readonly left?: number
+      },
+    ): void
   }
+  /** The workspace file tree, loaded one directory at a time. */
   readonly tree: {
+    /**
+     * The loaded entries of a directory; empty until `sync` loads it. Reactive.
+     *
+     * @param path - A workspace-relative directory; "" for the root.
+     */
     list(path: string): readonly FileNode[]
-    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
-    sync(path: string, options?: { readonly force?: boolean }): Promise<void>
-    expand(path: string, options?: { readonly list?: boolean }): void
+    /**
+     * A directory's tree state; undefined before anything touched it. Reactive.
+     *
+     * @param path - A workspace-relative directory.
+     */
+    state(path: string):
+      | {
+          /** The directory is expanded. */
+          expanded: boolean
+          /** Its entries have loaded. */
+          loaded?: boolean
+          /** A load is in flight. */
+          loading?: boolean
+          /** The last load's error message. */
+          error?: string
+        }
+      | undefined
+    /**
+     * Loads a directory's entries, once unless forced.
+     *
+     * @param path - A workspace-relative directory.
+     * @param options - Load options.
+     */
+    sync(
+      path: string,
+      options?: {
+        /** Lists the directory again even when it has loaded. Defaults to false. */
+        readonly force?: boolean
+      },
+    ): Promise<void>
+    /**
+     * Expands a directory.
+     *
+     * @param path - A workspace-relative directory.
+     * @param options - Expand options.
+     */
+    expand(
+      path: string,
+      options?: {
+        /** False expands without loading its entries. Defaults to true. */
+        readonly list?: boolean
+      },
+    ): void
+    /**
+     * Collapses a directory.
+     *
+     * @param path - A workspace-relative directory.
+     */
     collapse(path: string): void
   }
 }
 
+/** A line comment the user left on a workspace file, before it is sent. */
 export interface Comment {
+  /** The comment's id. */
   id: string
+  /** When it was made, in milliseconds since the epoch. */
   time: number
+  /** The workspace path of the file. */
   file: string
+  /** The lines it is about. */
   selection: LineRange
+  /** The comment text. */
   comment: string
 }
 
+/** The mounted session's line comments, by file. */
 export interface Comments {
+  /**
+   * The comments on one file, or on every file. Reactive.
+   *
+   * @param file - A workspace path; omit it for all comments.
+   */
   list(file?: string): readonly Comment[]
+  /**
+   * Adds a comment and focuses it.
+   *
+   * @param input - The comment without its id and time.
+   * @returns The comment with its id and time.
+   */
   add(input: Omit<Comment, "id" | "time">): Comment
+  /**
+   * Replaces a comment's text. An unknown id does nothing.
+   *
+   * @param id - The comment's id.
+   * @param comment - The new text.
+   */
   update(id: string, comment: string): void
+  /**
+   * Removes a comment. An unknown id does nothing.
+   *
+   * @param id - The comment's id.
+   */
   remove(id: string): void
+  /** The comment a view should reveal and edit, e.g. the one just added. */
   readonly focus: {
-    current(): { readonly file: string; readonly id: string } | null
-    set(value: { readonly file: string; readonly id: string } | null): void
+    /** The focused comment, or null. Reactive. */
+    current(): {
+      /** The comment's file. */
+      readonly file: string
+      /** The comment's id. */
+      readonly id: string
+    } | null
+    /**
+     * Focuses a comment, or clears the focus with null.
+     *
+     * @param value - The comment's file and id.
+     */
+    set(
+      value: {
+        /** The comment's file. */
+        readonly file: string
+        /** The comment's id. */
+        readonly id: string
+      } | null,
+    ): void
   }
+  /** The comment views mark as current. */
   readonly active: {
-    current(): { readonly file: string; readonly id: string } | null
-    set(value: { readonly file: string; readonly id: string } | null): void
+    /** The current comment, or null. Reactive. */
+    current(): {
+      /** The comment's file. */
+      readonly file: string
+      /** The comment's id. */
+      readonly id: string
+    } | null
+    /**
+     * Marks a comment as current, or clears the mark with null.
+     *
+     * @param value - The comment's file and id.
+     */
+    set(
+      value: {
+        /** The comment's file. */
+        readonly file: string
+        /** The comment's id. */
+        readonly id: string
+      } | null,
+    ): void
   }
 }
 
+/** A workspace file attached to the composer, with an optional line selection and comment. */
 export interface ComposerFile {
+  /** The part kind. */
   type: "file"
+  /** The workspace path. */
   path: string
-  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  /** The selected text, when only part of the file is attached. */
+  selection?: {
+    /** First selected line. */
+    startLine: number
+    /** Last selected line. */
+    endLine: number
+    /** First selected character on `startLine`. */
+    startChar: number
+    /** Character after the selection on `endLine`. */
+    endChar: number
+  }
+  /** Text the chip previews. */
   preview?: string
+  /** The user's comment on the attachment. */
   comment?: string
+  /** The id that `Composer.update` and `detach` take. */
   commentID?: string
+  /**
+   * The view the comment was made in.
+   * - `review`: the review panel.
+   * - `file`: a file tab.
+   */
   commentOrigin?: "review" | "file"
 }
 
@@ -149,9 +454,11 @@ export interface ComposerFile {
  * "The user made the following comment regarding <subject>: <comment>".
  */
 export interface ComposerNote {
+  /** The part kind. */
   type: "note"
   /** The extension that attached it. Opening the chip routes `Links.open({ href, origin })` to its LinkHandler. */
   origin: string
+  /** The id that `Composer.update` and `detach` take. */
   commentID: string
   /** Chip text naming the subject, e.g. `button#save`. */
   label: string
@@ -159,30 +466,74 @@ export interface ComposerNote {
   icon: IconName
   /** What the comment is about, for the model. Quote untrusted text such as page content. */
   subject: string
+  /** The user's comment. */
   comment: string
+  /** The link opening the chip routes, with `origin`. */
   href?: string
   /**
    * Replaces `subject` and `href` while the note stays in this app process, for references only this process
    * can resolve (e.g. a page element ref). A stored draft and a sent message restored by revert or fork drop it.
    */
-  live?: { readonly subject: string; readonly href?: string }
+  live?: {
+    /** The subject while the note stays in this process. */
+    readonly subject: string
+    /** The link while the note stays in this process. */
+    readonly href?: string
+  }
 }
 
+/** The mounted session's composer: the parts attached to the next prompt. */
 export interface Composer {
+  /**
+   * Attaches a file or a note to the next prompt.
+   *
+   * @param part - The part to attach.
+   */
   attach(part: ComposerFile | ComposerNote): void
-  /** id is the part's commentID; update and detach reach files and notes alike. Notes take only comment. */
-  update(id: string, patch: { readonly comment?: string; readonly preview?: string }): void
+  /**
+   * Changes an attached part. Files and notes alike; a note takes only `comment`.
+   *
+   * @param id - The part's `commentID`.
+   * @param patch - The fields to change.
+   */
+  update(
+    id: string,
+    patch: {
+      /** The new comment. */
+      readonly comment?: string
+      /** The new preview, for a file. */
+      readonly preview?: string
+    },
+  ): void
+  /**
+   * Removes an attached part.
+   *
+   * @param id - The part's `commentID`.
+   */
   detach(id: string): void
 }
 
+/** Work the session moved to the background. */
 export interface BackgroundTask {
+  /** The task's id. */
   id: string
+  /**
+   * What runs.
+   * - `shell`: a shell command.
+   * - `subagent`: a subagent.
+   */
   type: "shell" | "subagent"
+  /** The task's display label. */
   label: string
+  /** The subagent's name, for `subagent` tasks. */
   agent?: string
 }
 
-/** A mounted session route. Slot inputs and panel renders receive this. */
+/**
+ * The mounted session screen. Slot inputs and panel renders receive it, and `Sessions.current` returns it. One object
+ * that follows the route: when another session is routed, its `key`, `id` and every other field follow. Copy `key`,
+ * or keep a `SessionRef` from `Sessions.list`, to remember one session.
+ */
 export interface MountedSession extends SessionRef {
   /** A new object each time the session is routed, e.g. after Home and back. Keep per-visit state keyed by it. */
   readonly visit: object
@@ -193,25 +544,44 @@ export interface MountedSession extends SessionRef {
    * icon. Undefined when no listed project is opened there, e.g. for a session in a project subfolder.
    */
   readonly listedProject:
-    | { readonly worktree: string; readonly name?: string; readonly icon?: Project["icon"] }
+    | {
+        /** The project's root directory. */
+        readonly worktree: string
+        /** The user's local name for the project. */
+        readonly name?: string
+        /** The project's icon. */
+        readonly icon?: Project["icon"]
+      }
     | undefined
+  /** The session's workspace directory. */
   readonly directory: string
   /** The session runs in the project root rather than a worktree. */
   readonly local: boolean
   /** Shell commands and subagents the session moved to the background. */
   readonly background: readonly BackgroundTask[]
+  /** The workspace's files. */
   readonly file: Files
+  /** The line comments of the session's next prompt. */
   readonly comment: Comments
+  /** The session's composer. */
   readonly composer: Composer
 }
 
+/** The sessions of open shell tabs. */
 export interface Sessions {
-  /** Sessions owned by open shell tabs. Reactive. */
+  /** Sessions owned by open shell tabs. Empty until the app interface mounts. Reactive. */
   list(): readonly SessionRef[]
-  /** The routed, mounted session. Reactive. */
+  /** The routed, mounted session; undefined on Home, on a draft, and before the app interface mounts. Reactive. */
   current(): MountedSession | undefined
 }
 
+/**
+ * Where a panel key stands in a session.
+ * - `closed`: not in the strip (a dock: not open).
+ * - `open`: in the strip, not selected.
+ * - `active`: selected, with the side region closed.
+ * - `visible`: selected and on screen (a dock: open).
+ */
 export type PanelState = "closed" | "open" | "active" | "visible"
 
 /** How `Layout.open` places a tab. */
@@ -227,57 +597,178 @@ export interface OpenOptions {
   readonly tab?: "open" | "preview" | "append" | "select"
   /**
    * On narrow screens, keep the current view and the dock, and open the side region so the tab shows when the window
-   * is wide.
+   * is wide. Pass it when the user stays where they are (a palette pick, a composer chip) or the agent opened the tab.
+   * Defaults to false.
    */
   readonly background?: boolean
 }
 
+/**
+ * The session layout: side panel tabs, the dock, scroll offsets, and the settings and project dialogs. Panel keys are
+ * `${extension}:${tab id}`. Before the app interface mounts, `narrow` and `ready` work and every other member throws.
+ */
 export interface Layout {
-  /** Viewport under 768px. */
+  /** Viewport under 768px. Reactive. */
   narrow(): boolean
-  /** Stored layout (tabs, scroll) has loaded. */
+  /** Stored layout (tabs, scroll) has loaded. Reactive. */
   ready(): boolean
   /**
-   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, an `open` or
-   * `preview` selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
-   * `transient` tab, stores nothing. A transient tab is never selected on narrow screens, but a stored one stays the
-   * preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown wait until
-   * it is known.
+   * Opens a panel tab. Works for sessions that are not mounted. A key of a `dock` panel opens the dock. On narrow
+   * screens, an `open` or `preview` selects the panel's mobile view and closes the dock; opening a tab its panel does
+   * not list, or a `transient` tab, stores nothing. A transient tab is never selected on narrow screens, but a stored
+   * one stays the preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is
+   * unknown wait until it is known, and apply in order.
+   *
+   * @param key - `${extension}:${tab id}`.
+   * @param session - The session whose strip changes.
+   * @param options - How the tab lands; see `OpenOptions`.
    */
   open(key: string, session: SessionRef, options?: OpenOptions): void
+  /**
+   * Removes a tab from the strip (closes the dock for a dock key) and calls its panel's `close`.
+   *
+   * @param key - `${extension}:${tab id}`.
+   * @param session - The session whose strip changes.
+   */
   close(key: string, session: SessionRef): void
-  /** Closing the last panel the side region was opened for also closes the region. */
+  /**
+   * Closes a visible tab, else opens it. Closing the last panel the side region was opened for also closes the region.
+   *
+   * @param key - `${extension}:${tab id}`.
+   * @param session - The session whose strip changes.
+   */
   toggle(key: string, session: SessionRef): void
+  /**
+   * Where a key stands. "closed" while the session's location is unknown. Reactive.
+   *
+   * @param key - `${extension}:${tab id}`.
+   * @param session - Any session.
+   */
   state(key: string, session: SessionRef): PanelState
   /**
    * This extension's tab ids stored in the session's side strip, mounted or not. Empty while the session's location
    * is unknown, as `state` is then "closed". Reactive.
+   *
+   * @param session - Any session.
    */
   stored(session: SessionRef): readonly string[]
-  readonly side: { opened(session: SessionRef): boolean; toggle(session: SessionRef): void }
+  /** The side region. */
+  readonly side: {
+    /**
+     * The side region is open. Reactive.
+     *
+     * @param session - Any session.
+     */
+    opened(session: SessionRef): boolean
+    /**
+     * Opens or closes the side region.
+     *
+     * @param session - Any session.
+     */
+    toggle(session: SessionRef): void
+  }
   /**
    * The inner sidebar preference every side panel shares, which `usePanel().sidebar` also reads inside a panel render.
    * One value for the app, for code outside a render such as a tab's fields. Reactive.
    */
-  readonly sidebar: { opened(): boolean }
-  readonly dock: { opened(session: SessionRef): boolean; placement(): "side" | "bottom" }
-  readonly scroll: {
-    get(session: SessionRef, key: string): { readonly x: number; readonly y: number } | undefined
-    set(session: SessionRef, key: string, value: { readonly x: number; readonly y: number }): void
+  readonly sidebar: {
+    /** The inner sidebar is open; true until a session screen shows the preference. Reactive. */
+    opened(): boolean
   }
+  /** The dock, where `dock` panels render. */
+  readonly dock: {
+    /**
+     * The dock is open. Reactive.
+     *
+     * @param session - Any session.
+     */
+    opened(session: SessionRef): boolean
+    /**
+     * Where the user placed the dock. Reactive.
+     * - `side`: beside the timeline.
+     * - `bottom`: below the timeline.
+     */
+    placement(): "side" | "bottom"
+  }
+  /** Scroll offsets the host stores per session and key. */
+  readonly scroll: {
+    /**
+     * The stored offset; undefined when none is stored or the location is unknown.
+     *
+     * @param session - Any session.
+     * @param key - Your own key, e.g. a panel key.
+     */
+    get(
+      session: SessionRef,
+      key: string,
+    ):
+      | {
+          /** Horizontal offset in CSS pixels. */
+          readonly x: number
+          /** Vertical offset in CSS pixels. */
+          readonly y: number
+        }
+      | undefined
+    /**
+     * Stores an offset. Waits while the session's location is unknown.
+     *
+     * @param session - Any session.
+     * @param key - Your own key, e.g. a panel key.
+     * @param value - The offset.
+     */
+    set(
+      session: SessionRef,
+      key: string,
+      value: {
+        /** Horizontal offset in CSS pixels. */
+        readonly x: number
+        /** Vertical offset in CSS pixels. */
+        readonly y: number
+      },
+    ): void
+  }
+  /**
+   * Opens Settings.
+   *
+   * @param page - A `SettingsPage` id you contributed, or a host page tab; defaults to `general`.
+   */
   settings(page?: string): void
-  /** Opens a project on a server: a directory picker titled `title`, then a new draft. Waits until the server is listed. */
+  /**
+   * Opens a project on a server: a directory picker titled `title`, then a new draft. Waits until the server is listed.
+   *
+   * @param server - The server's `ServerRef.id`.
+   * @param title - The picker's title.
+   */
   project(server: string, title: string): void
 }
 
+/**
+ * Where `Storage.store` keeps a value.
+ * - `"global"`: one value for the app. The default.
+ * - `{ server, directory? }`: one value per server, or per workspace directory on it.
+ * - `{ session }`: one value per session. Opening it throws while the session's location is unknown; declare a
+ *   `Store.session` instead, which waits.
+ */
 export type StorageScope =
   | "global"
-  | { readonly server: string; readonly directory?: string }
-  | { readonly session: SessionRef }
+  | {
+      /** The server's `ServerRef.id`. */
+      readonly server: string
+      /** A workspace directory on that server; omit it for one value per server. */
+      readonly directory?: string
+    }
+  | {
+      /** The session. */
+      readonly session: SessionRef
+    }
 
+/** What `Storage.store` opens. */
 export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>> {
+  /** Decodes the stored JSON, as `StoreDeclaration.schema` does. */
   readonly schema: S
+  /** The value before anything is stored, and after `remove`. */
   readonly initial: S["Type"]
+  /** Where the value lives. Defaults to `"global"`. */
   readonly scope?: StorageScope
   /**
    * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal"), or the first
@@ -287,75 +778,175 @@ export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>>
   readonly from?: StoreFrom | readonly StoreFrom[]
 }
 
+/**
+ * Window storage, in the extension's namespace (`extension.<id>.<key>`). Synced across windows. On desktop it loads
+ * over IPC, so a value is undefined until it loads; on the web it is synchronous.
+ */
 export interface Storage {
   /**
-   * Durable, schema-decoded, synced across windows. For keys only known at runtime, such as one per server and
-   * directory; declare `stores` in the definition for keys known up front.
+   * Opens a durable, schema-decoded store. For keys only known at runtime, such as one per server and directory;
+   * declare `stores` in the definition for keys known up front. Derive nothing from it, such as a request, before
+   * `value` is defined.
+   *
+   * @param key - The store's key in your namespace.
+   * @param options - Its schema, initial value, scope and older homes.
    */
   store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>): Persisted<S["Type"]>
-  /** Window-local and kept across extension reloads. */
+  /**
+   * Window-local state that survives extension reloads, but not a window reload. The first open of a key creates it;
+   * later opens return the same store and ignore `initial`.
+   *
+   * @param key - The store's key in your namespace.
+   * @param options - The store's options.
+   * @returns The store and its setter, which edits a draft.
+   */
   memory<T extends object>(
     key: string,
-    options: { readonly initial: T },
+    options: {
+      /** The value the first open creates. */
+      readonly initial: T
+    },
   ): readonly [Store<T>, (mutation: (draft: T) => void) => void]
   /**
    * Deletes the value, so opening the key again reads its `initial`. Pass the store's `scope` and `from`: an older key
    * `from` names is deleted too, so it is never imported again, and a key it picks a part of stays for its other owners
    * while the store keeps a marker that blocks the import.
+   *
+   * @param key - The store's key in your namespace.
+   * @param options - The store's scope and older homes.
    */
   remove(
     key: string,
-    options?: { readonly scope?: StorageScope; readonly from?: StoreFrom | readonly StoreFrom[] },
+    options?: {
+      /** The store's scope. Defaults to `"global"`. */
+      readonly scope?: StorageScope
+      /** The store's `from`. */
+      readonly from?: StoreFrom | readonly StoreFrom[]
+    },
   ): void
 }
 
+/** System services that work on every platform. */
 export interface System {
+  /**
+   * Copies text to the clipboard.
+   *
+   * @param text - The text to copy.
+   */
   copy(text: string): Promise<void>
-  save(file: { readonly name: string; readonly content: string }): Promise<boolean>
-  /** Opens a URL in the system browser; desktop opens file:// URLs with the default app. */
+  /**
+   * Saves a file: a save dialog on desktop, a download on the web.
+   *
+   * @param file - The suggested name and the content.
+   * @returns False when the user cancelled the desktop dialog; always true on the web.
+   */
+  save(file: {
+    /** The suggested file name. */
+    readonly name: string
+    /** The file's content. */
+    readonly content: string
+  }): Promise<boolean>
+  /**
+   * Opens a URL in the system browser; desktop opens file:// URLs with the default app. For links inside the app,
+   * use `Links.open`.
+   *
+   * @param url - The URL to open.
+   */
   openExternal(url: string): void
 }
 
 /** Desktop-only abilities; `ctx.desktop` is undefined on the web. */
 export interface Desktop {
+  /** The operating system. */
   readonly os: OS
+  /** This window's id. */
   readonly window: string
+  /** The window's zoom factor; 1 is 100%. */
   zoom(): number
+  /**
+   * Opens a path with an app, or with the default app.
+   *
+   * @param path - An absolute path.
+   * @param app - The app's name or path; omit it for the default app.
+   */
   launch(path: string, app?: string): Promise<void>
-  /** Keeps the window focused for automation and debugging. */
+  /**
+   * Keeps the window focused for automation and debugging.
+   *
+   * @param enabled - Turns it on or off.
+   */
   forceFocus(enabled: boolean): Promise<void>
+  /**
+   * Shows a path in the system file manager.
+   *
+   * @param path - An absolute path.
+   * @returns False when it could not.
+   */
   reveal(path: string): Promise<boolean>
+  /**
+   * Whether an app is installed.
+   *
+   * @param app - The app's name.
+   */
   installed(app: string): Promise<boolean>
 }
 
 /** The interface language and its writing direction. */
 export interface Locale {
-  /** BCP 47 locale of the interface language, for Intl formatting. */
+  /** BCP 47 locale of the interface language, for Intl formatting. Reactive. */
   locale(): string
+  /**
+   * The writing direction. Reactive.
+   * - `ltr`: left to right.
+   * - `rtl`: right to left.
+   */
   direction(): "ltr" | "rtl"
+  /**
+   * Overrides the writing direction.
+   *
+   * @param direction - `ltr` or `rtl`.
+   */
   setDirection(direction: "ltr" | "rtl"): void
 }
 
 /** The user's appearance settings. */
 export interface Appearance {
+  /**
+   * The CSS font family the user chose. Throws before the app interface mounts. Reactive.
+   *
+   * @param kind - `mono`, the terminal and code font.
+   */
   font(kind: "mono"): string
 }
 
 /** The app's route. */
 export interface Router {
-  /** A route transition is in progress. */
+  /** A route transition is in progress. Reactive. */
   routing(): boolean
-  /** The current route path with its query string. */
+  /** The current route path with its query string; "" before the app interface mounts. Reactive. */
   path(): string
 }
 
 /** The effective keybinds of published commands. */
 export interface Keybinds {
-  /** Display parts of a published command's effective keybind, e.g. ["Ctrl", "`\"]. Empty when unbound. */
+  /**
+   * Display parts of a published command's effective keybind, e.g. ["Ctrl", "`\"]. Empty when unbound. Reactive.
+   *
+   * @param command - A published command id, `${extension}.${id}`.
+   */
   keybind(command: string): readonly string[]
-  /** Display parts of a chord the app does not own, e.g. "mod+shift+c" that a page handles itself. */
+  /**
+   * Display parts of a chord the app does not own, e.g. "mod+shift+c" that a page handles itself.
+   *
+   * @param bind - A chord in keybind syntax.
+   */
   keys(bind: string): readonly string[]
-  /** The event matches a published command's effective keybind. */
+  /**
+   * The event matches a published command's effective keybind.
+   *
+   * @param command - A published command id.
+   * @param event - The keyboard event.
+   */
   matches(command: string, event: KeyboardEvent): boolean
 }
 
@@ -367,25 +958,56 @@ export interface Servers {
 
 /** Workspace lifecycle events. */
 export interface Workspaces {
-  on(event: "remove", handler: (value: { readonly server: string; readonly directory: string }) => void): Cleanup
+  /**
+   * Listens to an event. The listener is removed with the current owner, else with the extension.
+   *
+   * @param event - `remove`: the user removed a workspace directory from a server.
+   * @param handler - Receives the server's id and the directory.
+   * @returns Removes the listener.
+   */
+  on(
+    event: "remove",
+    handler: (value: {
+      /** The server's `ServerRef.id`. */
+      readonly server: string
+      /** The removed directory. */
+      readonly directory: string
+    }) => void,
+  ): Cleanup
 }
 
+/** Routes local links to the extensions that handle them. */
 export interface Links {
-  /** Routes a local link to the best LinkHandler. Returns false when none matches. */
+  /**
+   * Routes a local link to the LinkHandler with the highest priority that matches it.
+   *
+   * @param link - The link to open.
+   * @returns False when no handler matches.
+   */
   open(link: Link): boolean
 }
 
-/** The render runs with this extension's context; the dialog closes when the extension goes away. */
+/** Dialogs. The render runs with this extension's context; the dialog closes when the extension goes away. */
 export interface Dialogs {
-  /** Replaces the open dialogs. */
+  /**
+   * Replaces the open dialogs. A render that throws closes the dialog and records the error.
+   *
+   * @param render - Renders the dialog's content.
+   */
   show(render: () => JSX.Element): void
-  /** Opens above the open dialog. */
+  /**
+   * Opens above the open dialog.
+   *
+   * @param render - Renders the dialog's content.
+   */
   push(render: () => JSX.Element): void
+  /** Closes the top dialog. */
   close(): void
   /** Some dialog is open. Reactive. */
   active(): boolean
 }
 
+/** Props of `Embeds.View`. */
 export interface EmbedProps {
   /** An embed the extension's main entry created with `Embeds.create`. Undefined renders the box alone. */
   readonly id: string | undefined
@@ -397,7 +1019,9 @@ export interface EmbedProps {
   readonly radius?: number
   /** CSS color the rounded corners show; defaults to the app backdrop behind the panel. */
   readonly background?: string
+  /** Classes of the box. */
   readonly class?: string
+  /** Rendered inside the box, under the embed. */
   readonly children?: JSX.Element
 }
 
@@ -407,8 +1031,14 @@ export interface Embeds {
    * The box a main-process embed fills. The host measures it (webview zoom included), pushes
    * coalesced layouts, masks the rounded corners, hides the embed while it is invisible or unmounted,
    * and paints a still of it while floating content covers it. Children render inside the box.
+   *
+   * @param props - The embed and how to show it.
    */
   View(props: EmbedProps): JSX.Element
-  /** A JPEG still of a shown embed; undefined while it is hidden, and always on the web. */
+  /**
+   * A JPEG still of a shown embed; undefined while it is hidden, and always on the web.
+   *
+   * @param id - The embed's id.
+   */
   capture(id: string): Promise<Uint8Array | undefined>
 }
