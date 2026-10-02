@@ -1,7 +1,57 @@
 import { batch, createMemo, createRenderEffect, createRoot, createSignal, on, untrack, type Owner } from "solid-js"
-import type { Persisted, SessionRef } from "@opencode/gui-extensions/sdk"
+import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
+import { Predicate } from "effect"
+import type { Persisted, SessionRef, StoreFrom } from "@opencode/gui-extensions/sdk"
+import { Persist, type persisted } from "@/runtime/persistence/storage"
+import type { SessionStateKey } from "@/runtime/server/scope"
+
+type Mutation<T> = Parameters<Persisted<T>["update"]>[0]
+
+/** One older key persistence imports a store's value from. */
+type CopyFrom = NonNullable<Exclude<Parameters<typeof persisted>[0], string>["copyFrom"]>[number]
 
 const loads = new WeakMap<object, Promise<void>>()
+
+/** The storage key of an extension's store: the extension id is its namespace. */
+export function storeName(extension: string, key: string) {
+  return `extension.${extension}.${key}`
+}
+
+/** Where `Storage.store` keeps an extension's app-wide store, with the older keys it imports. */
+export function globalStoreTarget(extension: string, key: string, from: StoreFrom | readonly StoreFrom[] | undefined) {
+  return { ...Persist.global(storeName(extension, key)), copyFrom: storeImports(from) }
+}
+
+/**
+ * A store's `from` in the form persistence takes, in order. For a session store, an app key holding every session's
+ * state under one field imports only that session's entry.
+ */
+export function storeImports(
+  from: StoreFrom | readonly StoreFrom[] | undefined,
+  session?: SessionStateKey,
+): CopyFrom[] {
+  return [from ?? []].flat().map((item) => (session && sessionCopy(item, session)) || copySpec(item))
+}
+
+function copySpec(from: StoreFrom): CopyFrom {
+  return Predicate.isString(from) ? { key: from } : from
+}
+
+function sessionCopy(from: StoreFrom, session: SessionStateKey): CopyFrom | undefined {
+  if (Predicate.isString(from) || !from.sessions) return
+
+  const field = from.sessions
+
+  return {
+    key: from.key,
+    storage: Persist.global(from.key).storage,
+    pick: (value) => {
+      const sessions = Predicate.isObject(value) ? value[field] : undefined
+
+      return from.pick(Predicate.isObject(sessions) ? sessions[session] : undefined)
+    },
+  }
+}
 
 /**
  * What `Storage.store` returns: a `Persisted` whose `update` waits until the stored value has loaded, then applies in
@@ -9,17 +59,33 @@ const loads = new WeakMap<object, Promise<void>>()
  */
 export function persistedHandle<T extends object>(input: {
   readonly store: T
-  readonly update: (mutation: (draft: T) => void) => void
+  /** The persisted store's setter. */
+  readonly set: SetStoreFunction<T>
   /** The storage read; undefined when storage answered synchronously. */
   readonly init: Promise<unknown> | undefined
 }) {
   const [loaded, setLoaded] = createSignal(!input.init)
-  const queue: ((draft: T) => void)[] = []
+  const queue: Mutation<T>[] = []
+
+  // A mutation edits the draft in place, or returns the next value, which replaces the stored one entirely.
+  const apply = (mutation: Mutation<T>) =>
+    batch(() => {
+      const replaced: T[] = []
+
+      input.set(
+        produce((draft) => {
+          const next = mutation(draft)
+
+          if (next) replaced.push(next)
+        }),
+      )
+      replaced.forEach((next) => input.set(reconcile(next)))
+    })
 
   // Registered after the store's own hydration on the same read, so queued changes apply over the stored value.
   const load = input.init?.then(() =>
     batch(() => {
-      queue.splice(0).forEach(input.update)
+      queue.splice(0).forEach(apply)
       setLoaded(true)
     }),
   )
@@ -32,7 +98,7 @@ export function persistedHandle<T extends object>(input: {
     },
     ready: loaded,
     update(mutation) {
-      if (untrack(loaded)) return input.update(mutation)
+      if (untrack(loaded)) return apply(mutation)
 
       queue.push(mutation)
     },
@@ -60,7 +126,7 @@ export function createSessionStore<T extends object>(input: {
 
   const create = (session: SessionRef) =>
     createRoot((dispose) => {
-      const queue: ((draft: T) => void)[] = []
+      const queue: Mutation<T>[] = []
       const pinned = pin(session)
       const directory = createMemo(() => pinned.location?.directory)
       // A new directory opens the store again; the store from the old one disposes with the previous run.

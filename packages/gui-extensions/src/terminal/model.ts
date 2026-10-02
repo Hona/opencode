@@ -114,34 +114,9 @@ export function createTerminalModel(input: { storage: Storage; sessions: Session
       get: (key: string) => handoff.terminal.get(key),
     },
     remove(value: { readonly server: string; readonly directory: string }) {
-      const scope = { server: value.server, directory: value.directory }
-      const entry = cache.get(workspaceKey(value.server, value.directory))
-
-      if (entry) {
-        entry.value.clear()
-        input.storage.remove(STORE, { scope })
-
-        return
-      }
-
-      // Opening the store imports terminals saved before extensions, so the removal, once it has loaded, drops
-      // those too.
-      createRoot((dispose) => {
-        const stored = input.storage.store(STORE, {
-          schema: TerminalState,
-          initial: { all: [] },
-          scope,
-          from: LEGACY,
-        })
-
-        createKeyed(
-          () => stored.ready(),
-          () => {
-            input.storage.remove(STORE, { scope })
-            dispose()
-          },
-        )
-      }, owner)
+      cache.get(workspaceKey(value.server, value.directory))?.value.clear()
+      // Also drops terminals saved before extensions, which opening the store would otherwise import.
+      input.storage.remove(STORE, { scope: { server: value.server, directory: value.directory }, from: LEGACY })
     },
     dispose() {
       for (const entry of cache.values()) {

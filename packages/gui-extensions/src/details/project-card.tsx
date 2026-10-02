@@ -8,7 +8,7 @@ import {
 import { createUniqueId, Show, type ParentProps } from "solid-js"
 import type { Project } from "../sdk"
 
-export function ProjectSummaryCard(
+export function ProjectDetailsCard(
   props: ParentProps<{
     project: Pick<Project, "name" | "worktree" | "icon"> & { id?: string }
     expanded: boolean
@@ -16,6 +16,7 @@ export function ProjectSummaryCard(
   }>,
 ) {
   const contentID = createUniqueId()
+
   return (
     <section class="session-summary-card" data-section="project">
       <button

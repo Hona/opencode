@@ -240,9 +240,9 @@ export interface Layout {
   /**
    * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, an `open` or
    * `preview` selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
-   * launcher (`closable: "hover"`), stores nothing. A launcher is never selected on narrow screens, but a stored one
-   * stays the preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown
-   * wait until it is known.
+   * `transient` tab, stores nothing. A transient tab is never selected on narrow screens, but a stored one stays the
+   * preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is unknown wait until
+   * it is known.
    */
   open(key: string, session: SessionRef, options?: OpenOptions): void
   close(key: string, session: SessionRef): void
@@ -280,10 +280,11 @@ export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>>
   readonly initial: S["Type"]
   readonly scope?: StorageScope
   /**
-   * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal").
-   * With pick, only the picked part of the old JSON is copied and the old key stays for its other owners.
+   * Imports an older host key of the same storage once (the raw stored key, e.g. "workspace:terminal"), or the first
+   * of several that holds a value. With pick, only the picked part of the old JSON is copied and the old key stays for
+   * its other owners.
    */
-  readonly from?: StoreFrom
+  readonly from?: StoreFrom | readonly StoreFrom[]
 }
 
 export interface Storage {
@@ -297,7 +298,15 @@ export interface Storage {
     key: string,
     options: { readonly initial: T },
   ): readonly [Store<T>, (mutation: (draft: T) => void) => void]
-  remove(key: string, options?: { readonly scope?: StorageScope }): void
+  /**
+   * Deletes the value, so opening the key again reads its `initial`. Pass the store's `scope` and `from`: an older key
+   * `from` names is deleted too, so it is never imported again, and a key it picks a part of stays for its other owners
+   * while the store keeps a marker that blocks the import.
+   */
+  remove(
+    key: string,
+    options?: { readonly scope?: StorageScope; readonly from?: StoreFrom | readonly StoreFrom[] },
+  ): void
 }
 
 export interface System {
@@ -364,15 +373,6 @@ export interface Workspaces {
 export interface Links {
   /** Routes a local link to the best LinkHandler. Returns false when none matches. */
   open(link: Link): boolean
-}
-
-/** Host preferences an extension's settings may show and change. */
-export interface Preferences {
-  /** Show What's New after an update. */
-  releaseNotes(): boolean
-  setReleaseNotes(value: boolean): void
-  /** Wrap long diff lines on narrow screens. */
-  mobileDiffWrap(): boolean
 }
 
 /** The render runs with this extension's context; the dialog closes when the extension goes away. */

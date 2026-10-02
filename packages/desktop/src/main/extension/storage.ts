@@ -52,10 +52,13 @@ export function createStorage(state: StateStore, id: string): Storage {
         return cached.value.current
       }
 
+      // Keeps a decoded copy of what was stored, so the caller's object never aliases the stored value.
       const write = (value: typeof options.initial) => {
-        state.set(name, key, JSON.stringify(Schema.encodeSync(codec)(value)))
+        const encoded = Schema.encodeSync(codec)(value)
+
+        state.set(name, key, JSON.stringify(encoded))
         state.flush()
-        cached.value = { current: value }
+        cached.value = { current: Schema.decodeSync(codec)(encoded) }
       }
 
       const resets = opened.get(key) ?? new Set()
@@ -70,8 +73,9 @@ export function createStorage(state: StateStore, id: string): Storage {
           return current()
         },
         ready: () => true,
-        // The draft is a decoded copy, so a mutation never touches the cached value until it is written.
-        update(mutation: (draft: typeof options.initial) => typeof options.initial | undefined) {
+        // The draft is a decoded copy, so a mutation never touches the cached value until it is written. A returned
+        // value replaces the draft.
+        update(mutation) {
           const draft = Schema.decodeSync(codec)(Schema.encodeSync(codec)(current()))
           const next = mutation(draft)
 

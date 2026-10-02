@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
 import { createComponent, createRoot, createSignal, onCleanup, type Accessor } from "solid-js"
-import { produce } from "solid-js/store"
 import { Schema } from "effect"
 import {
   createKeyed,
@@ -13,9 +12,10 @@ import {
   type SessionRef,
 } from "@opencode/gui-extensions/sdk"
 import type { Platform } from "@/runtime/platform/platform"
-import { Persist, persisted } from "@/runtime/persistence/storage"
+import { flushPersisted } from "@/runtime/persistence/persist"
+import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { createLocatedWrites } from "@/runtime/extension/located"
-import { createSessionStore, persistedHandle, whenLoaded } from "@/runtime/extension/stores"
+import { createSessionStore, globalStoreTarget, persistedHandle, whenLoaded } from "@/runtime/extension/stores"
 
 const pending = { status: "pending" } as const
 
@@ -24,6 +24,22 @@ const restarting = { status: "inactive", reason: "restarting" } as const
 const first = { status: "active", value: "first", generation: 1 } as const
 
 const second = { status: "active", value: "second", generation: 2 } as const
+
+const Items = Schema.Struct({ items: Schema.mutable(Schema.Array(Schema.String)) })
+
+const Noted = Schema.Struct({
+  items: Schema.mutable(Schema.Array(Schema.String)),
+  note: Schema.optional(Schema.String),
+})
+
+/** A web window: storage is the page's localStorage. */
+const web: Platform = {
+  platform: "web",
+  openExternal: () => undefined,
+  restart: async () => undefined,
+  notify: async () => undefined,
+  openDirectoryPickerDialog: async () => null,
+}
 
 /** A session the store and layout code can key and locate; they read nothing else. */
 function session(key: Accessor<string>, location: Accessor<{ directory: string } | undefined>) {
@@ -182,7 +198,6 @@ describe("extension primitives", () => {
     { name: "while the session location is unknown", location: undefined },
   ])("store writes made $name apply in order over the stored value", async (row) => {
     const held = Promise.withResolvers<void>()
-    const Items = Schema.Struct({ items: Schema.mutable(Schema.Array(Schema.String)) })
     const key = `extension-store-${crypto.randomUUID()}`
 
     const platform: Platform = {
@@ -210,12 +225,7 @@ describe("extension primitives", () => {
       const store = createSessionStore({
         open: () => {
           const pair = persisted(Persist.global(key), Items, { items: [] }, platform)
-
-          const handle = persistedHandle({
-            store: pair[0],
-            update: (mutation: (draft: (typeof Items)["Type"]) => void) => pair[1](produce(mutation)),
-            init: pair[3].promise,
-          })
+          const handle = persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
 
           opened.push(handle)
 
@@ -249,6 +259,77 @@ describe("extension primitives", () => {
     root.dispose()
   })
 
+  test.each([
+    {
+      name: "an edit to the draft",
+      mutation: (draft: (typeof Noted)["Type"]) => void draft.items.push("b"),
+      expected: { items: ["a", "b"], note: "kept" },
+    },
+    { name: "a returned value", mutation: () => ({ items: ["b"] }), expected: { items: ["b"] } },
+  ])("store update: $name becomes the whole stored value", (row) => {
+    const key = `extension-update-${crypto.randomUUID()}`
+
+    localStorage.setItem(`opencode.global.dat:${key}`, JSON.stringify({ items: ["a"], note: "kept" }))
+
+    const root = createRoot((dispose) => {
+      const pair = persisted(Persist.global(key), Noted, { items: [] }, web)
+
+      return { dispose, handle: persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise }) }
+    })
+
+    root.handle.update(row.mutation)
+    flushPersisted()
+    expect({
+      value: root.handle.value,
+      stored: JSON.parse(localStorage.getItem(`opencode.global.dat:${key}`) ?? "null"),
+    }).toEqual({ value: row.expected, stored: row.expected })
+    root.dispose()
+  })
+
+  test.each([
+    {
+      name: "a store whose older key was never imported",
+      older: "old",
+      seed: { items: ["old"] },
+      from: (older: string) => older,
+      opened: false,
+      kept: null,
+    },
+    {
+      name: "a store that picked its value from a shared key",
+      older: "shared",
+      seed: { prefs: { items: ["old"] }, other: 1 },
+      from: (older: string) => ({ key: older, pick: (value: { prefs?: unknown } | null) => value?.prefs }),
+      opened: true,
+      kept: { prefs: { items: ["old"] }, other: 1 },
+    },
+  ])("store remove: $name reads its initial value again and never imports its older key", (row) => {
+    const extension = `remove-${crypto.randomUUID()}`
+    const older = `${row.older}-${extension}`
+    const from = row.from(older)
+
+    localStorage.setItem(older, JSON.stringify(row.seed))
+
+    const open = () =>
+      createRoot((dispose) => {
+        const value = persisted(globalStoreTarget(extension, "items", from), Items, { items: [] }, web)[0]
+        const items = [...value.items]
+
+        dispose()
+
+        return items
+      })
+
+    const imported = row.opened ? open() : undefined
+
+    removePersisted(globalStoreTarget(extension, "items", from), web)
+    expect({ imported, reopened: open(), older: JSON.parse(localStorage.getItem(older) ?? "null") }).toEqual({
+      imported: row.opened ? ["old"] : undefined,
+      reopened: [],
+      older: row.kept,
+    })
+  })
+
   test("a session store opened through the route-following view keeps reading its own session", () => {
     const [routed, setRouted] = createSignal("a")
     const [located, setLocated] = createSignal<readonly string[]>(["a"])
@@ -268,7 +349,7 @@ describe("extension primitives", () => {
           const directory = target.location?.directory ?? ""
           opened.push(directory)
 
-          return persistedHandle({ store: { directory }, update: () => undefined, init: undefined })
+          return persistedHandle({ store: { directory }, set: () => undefined, init: undefined })
         },
         owner: null,
       }),

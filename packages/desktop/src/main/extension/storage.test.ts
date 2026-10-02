@@ -28,6 +28,17 @@ describe("main extension storage", () => {
   test.each([
     { name: "update", write: (opened: ReturnType<typeof open>) => opened.store.update(() => ["a"]), expected: ["a"] },
     {
+      // The open store holds what was stored, not the caller's list, which changes afterwards.
+      name: "a returned list",
+      write: (opened: ReturnType<typeof open>) => {
+        const list = ["a"]
+
+        opened.store.update(() => list)
+        list.push("b")
+      },
+      expected: ["a"],
+    },
+    {
       name: "remove",
       write: (opened: ReturnType<typeof open>) => {
         opened.store.update(() => ["a"])

@@ -144,11 +144,20 @@ export function WindowsAppMenu(props: {
 
                       if (entry.type === "separator") return <Menu.Separator />
 
+                      // Plain accessors rather than conditional JSX expressions, which compile to memos created
+                      // where the menu reads the prop, possibly outside this owner.
+                      const label = () => (entry.labelKey ? language.t(entry.labelKey) : "")
+
+                      const keybind = () =>
+                        entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows
+
+                      const disabled = () => (entry.command ? commandDisabled(entry.command) : false)
+
                       return (
                         <DesktopMenuItem
-                          label={entry.labelKey ? language.t(entry.labelKey) : ""}
-                          keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
-                          disabled={entry.command ? commandDisabled(entry.command) : false}
+                          label={label()}
+                          keybind={keybind()}
+                          disabled={disabled()}
                           onSelect={() => runEntry(entry)}
                         />
                       )

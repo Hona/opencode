@@ -160,6 +160,7 @@ const setup: Setup<typeof File> = (ctx) => {
     ),
     draggable: false,
     closable: "hover",
+    transient: true,
     sidebar: "locked",
     group: GROUP,
     dom: { panel: TABPANEL },

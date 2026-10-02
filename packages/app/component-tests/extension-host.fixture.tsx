@@ -80,7 +80,6 @@ function fakeApis(storage: (extension: string) => Storage): HostApiFactories {
     layout: () => layout,
     storage,
     system: () => ({ copy: async () => {}, save: async () => false, openExternal() {} }),
-    preferences: () => ({ releaseNotes: () => false, setReleaseNotes() {}, mobileDiffWrap: () => false }),
     embeds: () => ({ View: () => null, capture: async () => undefined }),
   }
 }
@@ -199,11 +198,7 @@ export function mountExtensions(input: {
     store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>) {
       const pair = persisted(Persist.global(`extension.${extension}.${key}`), options.schema, options.initial, platform)
 
-      return persistedHandle({
-        store: pair[0],
-        update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
-        init: pair[3].promise,
-      })
+      return persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
     },
     memory: (_key, options) => {
       const [value, set] = createStore(options.initial)

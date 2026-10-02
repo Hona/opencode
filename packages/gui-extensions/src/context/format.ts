@@ -7,19 +7,25 @@ export function createSessionContextFormatter(locale: string) {
     hour: "numeric",
     minute: "numeric",
   })
+
   return {
     number(value: number | null | undefined) {
       if (value === undefined) return "—"
+
       if (value === null) return "—"
+
       return value.toLocaleString(locale)
     },
     percent(value: number | null | undefined) {
       if (value === undefined) return "—"
+
       if (value === null) return "—"
+
       return value.toLocaleString(locale) + "%"
     },
     time(value: number | undefined) {
       if (!value) return "—"
+
       return dateTime.format(value)
     },
   }

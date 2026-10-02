@@ -1,10 +1,12 @@
 import { showToast } from "@opencode/ui/toast"
 import { lazy, onCleanup, Suspense } from "solid-js"
-import { createKeyed, onIdle, Command, SettingsPage, TitlebarItem, type Setup } from "../sdk"
+import { createKeyed, onIdle, Command, SettingsPage, TitlebarItem, type Setup, type SetupContext } from "../sdk"
 import { updaterAction } from "./action"
 import type definition from "./index"
 
 const setup: Setup<typeof definition> = (ctx) => {
+  whatsNew(ctx)
+
   if (!ctx.desktop) return
   const updater = ctx.uses.updater
 
@@ -82,6 +84,31 @@ const setup: Setup<typeof definition> = (ctx) => {
   // Beta builds answer the app menu's Check for Updates in the focused window instead of a native dialog. The
   // listener ends with the generation of the main side that sends it.
   createKeyed(updater, (client) => void client.on("check", () => act("check")))
+}
+
+/**
+ * What's New after an update, on every platform: the release highlights since the version last seen. The first run
+ * and a disabled What's New only remember the version.
+ */
+function whatsNew(ctx: SetupContext<typeof definition>) {
+  const version = ctx.build.version
+  const seen = ctx.stores.seen
+  const previous = seen.value.version
+
+  if (!version || previous === version) return
+
+  const markSeen = () =>
+    seen.update((draft) => {
+      draft.version = version
+    })
+
+  if (!previous || !ctx.stores.releaseNotes.value.enabled) return markSeen()
+
+  void import("./whats-new").then((module) => {
+    if (ctx.signal.aborted) return
+
+    module.showWhatsNew(ctx, { previous, current: version, markSeen })
+  })
 }
 
 export default setup

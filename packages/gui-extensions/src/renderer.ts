@@ -1,6 +1,6 @@
 import { Extension, type Definition } from "./sdk"
-import usage from "./usage"
-import usageRenderer from "./usage/renderer"
+import context from "./context"
+import contextRenderer from "./context/renderer"
 import btw from "./btw"
 import btwRenderer from "./btw/renderer"
 import debug from "./debug"
@@ -11,8 +11,8 @@ import file from "./file"
 import fileRenderer from "./file/renderer"
 import review from "./review"
 import reviewRenderer from "./review/renderer"
-import summary from "./summary"
-import summaryRenderer from "./summary/renderer"
+import details from "./details"
+import detailsRenderer from "./details/renderer"
 import browser from "./browser"
 import browserRenderer from "./browser/renderer"
 import pairing from "./pairing"
@@ -34,13 +34,13 @@ const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["
  * checks this composition against the main one.
  */
 export const builtins = Extension.compose(
-  { ...usage, renderer: eager(usageRenderer) },
+  { ...context, renderer: eager(contextRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
   { ...file, renderer: eager(fileRenderer) },
   { ...review, renderer: eager(reviewRenderer) },
-  { ...summary, renderer: eager(summaryRenderer) },
+  { ...details, renderer: eager(detailsRenderer) },
   { ...browser, renderer: eager(browserRenderer) },
   { ...pairing, renderer: eager(pairingRenderer) },
   { ...updater, renderer: eager(updaterRenderer) },

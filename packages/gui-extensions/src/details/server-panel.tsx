@@ -54,7 +54,7 @@ export function SessionServerPanel(props: {
   const contentID = createUniqueId()
   // With one server the card is generic; with several it names the session's server.
   const name = () => (servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
-  // A new scope whenever the directory, the summary's visibility or the disclosure changes closes the open submenu.
+  // A new scope whenever the directory, the details' visibility or the disclosure changes closes the open submenu.
   const scope = createMemo(on([() => props.directory, () => props.shown, () => props.expanded], () => ({})))
   const [submenu, setSubmenu] = createSignal<{ readonly scope: object; readonly service: Service }>()
 

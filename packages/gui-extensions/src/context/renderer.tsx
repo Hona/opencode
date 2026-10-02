@@ -1,9 +1,9 @@
 import { lazy, onCleanup, Show, Suspense } from "solid-js"
 import { onIdle, Panel, Slot, usePanel, type PanelTab, type MountedSession, type Setup } from "../sdk"
-import type Usage from "./index"
+import type definition from "./index"
 import { SessionContextUsage } from "./indicator"
 
-const setup: Setup<typeof Usage> = (ctx) => {
+const setup: Setup<typeof definition> = (ctx) => {
   const SessionContextTab = lazy(() => import("./tab"))
   // Compile the tab while the app idles, so the first open renders at once.
   onCleanup(onIdle(() => void SessionContextTab.preload()))
@@ -16,7 +16,7 @@ const setup: Setup<typeof Usage> = (ctx) => {
     if (existing) return existing
 
     const created: PanelTab = {
-      id: "context",
+      id: "main",
       get title() {
         return ctx.t("tab.title")
       },
@@ -48,9 +48,10 @@ const setup: Setup<typeof Usage> = (ctx) => {
     (): Panel => ({
       id: "main",
       region: "side",
-      legacy: { context: "context" },
+      // Stored before extensions as "context", then under the extension's earlier id `usage`.
+      legacy: { context: "main", "usage:context": "main" },
       mobile: { title: ctx.t("mobile.title"), order: 10, kind: "menu" },
-      list: (session, open) => (open.includes("context") ? [tab(session)] : []),
+      list: (session, open) => (open.includes("main") ? [tab(session)] : []),
       render: (_tab, session) => {
         const panel = usePanel()
 

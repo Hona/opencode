@@ -28,12 +28,15 @@ export function ExtensionSettingsPages() {
   )
 }
 
-/** Extension sections on a host settings page, in contribution order. */
-export function ExtensionSettingsSections(props: { page: "general" | "servers" }) {
+/**
+ * Extension sections on a host settings page, in contribution order; with `section`, the extension rows placed in
+ * that host section, rendered where the host lists them.
+ */
+export function ExtensionSettingsSections(props: { page: "general" | "servers"; section?: "general" }) {
   const surface = useSettingsSurface()
 
   return (
-    <For each={surface.extensions.sections(props.page)}>
+    <For each={surface.extensions.sections(props.page, props.section)}>
       {(item) => (
         <Contribution extension={item.extension}>
           {() =>

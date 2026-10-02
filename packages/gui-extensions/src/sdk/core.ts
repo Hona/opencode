@@ -22,6 +22,10 @@ type Result = void | Promise<void>
 
 /** The running build. One shape in the window and in main. */
 export interface Build {
+  /**
+   * The app version. Web and desktop windows always know it; it is empty only in a window whose platform reports none,
+   * such as a test or Storybook fixture, as no build-time version constant exists in every build.
+   */
   readonly version: string
   readonly channel: "local" | "dev" | "beta" | "prod"
   /** Main is always "desktop". */
@@ -198,7 +202,11 @@ export interface BaseContext {
   plural(key: string, count: number, params?: Params): string
 }
 
-/** Moves an older stored value into a store once. */
+/**
+ * Moves an older stored value into a store once. Where `from` takes a list, it names several older homes, newest
+ * first, and the first that holds a value is imported: for example an extension's earlier storage namespace, then the
+ * app key that namespace once replaced.
+ */
 export type StoreFrom =
   | string
   | {
@@ -224,7 +232,7 @@ export interface StoreDeclaration<
   readonly schema: S
   readonly initial: S["Type"]
   /** Imports an older host key once, as `Storage.store`'s `from` does. */
-  readonly from?: StoreFrom
+  readonly from?: StoreFrom | readonly StoreFrom[]
 }
 
 export const Store = {
@@ -232,7 +240,7 @@ export const Store = {
   global: <S extends StoreSchema>(
     schema: S,
     initial: NoInfer<S["Type"]>,
-    from?: StoreFrom,
+    from?: StoreFrom | readonly StoreFrom[],
   ): StoreDeclaration<S, "global"> => ({
     scope: "global",
     schema,
@@ -243,7 +251,7 @@ export const Store = {
   session: <S extends StoreSchema>(
     schema: S,
     initial: NoInfer<S["Type"]>,
-    from?: StoreFrom,
+    from?: StoreFrom | readonly StoreFrom[],
   ): StoreDeclaration<S, "session"> => ({ scope: "session", schema, initial, from }),
 }
 
@@ -253,8 +261,11 @@ export interface Persisted<T, V = T | undefined> {
   readonly value: V
   /** The stored value has loaded. Reactive. */
   ready(): boolean
-  /** Changes the stored value. Waits until it has loaded, then applies in call order. */
-  update(mutation: (draft: T) => void): void
+  /**
+   * Changes the stored value. Waits until it has loaded, then applies in call order. The mutation edits `draft` in
+   * place, or returns the next value, which replaces the stored one; return nothing after editing the draft.
+   */
+  update(mutation: (draft: T) => T | void): void
 }
 
 /** The tokens a definition declares under `K`; `{}` when it declares none. */

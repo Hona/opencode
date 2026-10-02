@@ -6,7 +6,7 @@ import { createMemo, createSignal, For, on, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { useExtension, type BackgroundTask } from "../sdk"
 
-export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[]; mobile?: boolean }) {
+export function BackgroundWork(props: { tasks: readonly BackgroundTask[]; mobile?: boolean }) {
   const ctx = useExtension()
   const locale = ctx.locale
   const data = useData()

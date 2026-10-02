@@ -1,11 +1,11 @@
 import { createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createKeyed, onIdle, Panel, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
-import type Summary from "./index"
+import type Details from "./index"
 import type { Disclosure } from "./panel"
-import { SummaryHeader } from "./popover"
+import { DetailsHeader } from "./popover"
 
-const setup: Setup<typeof Summary> = (ctx) => {
+const setup: Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
   const changes = ctx.uses.changes
   const prefs = ctx.stores.prefs
@@ -23,8 +23,8 @@ const setup: Setup<typeof Summary> = (ctx) => {
       }),
   }
 
-  const SummaryPanel = lazy(() =>
-    Promise.all([import("./panel"), import("./summary.css?inline")]).then(([panel, css]) => {
+  const DetailsPanel = lazy(() =>
+    Promise.all([import("./panel"), import("./details.css?inline")]).then(([panel, css]) => {
       ctx.add(Style, css.default)
 
       return panel
@@ -32,13 +32,13 @@ const setup: Setup<typeof Summary> = (ctx) => {
   )
 
   // Compile the panel while the app idles, so the first open renders at once.
-  onCleanup(onIdle(() => void SummaryPanel.preload()))
+  onCleanup(onIdle(() => void DetailsPanel.preload()))
 
   ctx.add(Slot, {
     at: "session.header",
     order: 20,
     render: (input) => (
-      <SummaryHeader session={input.session} active={input.active} panel={SummaryPanel} disclosure={disclosure} />
+      <DetailsHeader session={input.session} active={input.active} panel={DetailsPanel} disclosure={disclosure} />
     ),
   })
 
@@ -81,7 +81,7 @@ const setup: Setup<typeof Summary> = (ctx) => {
         <Show when={session.project}>
           {(project) => (
             <Suspense>
-              <SummaryPanel
+              <DetailsPanel
                 mobile
                 shown={frame.visible()}
                 session={session}

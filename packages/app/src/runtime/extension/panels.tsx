@@ -25,6 +25,7 @@ import { useSessionLayout } from "@/session/session-layout"
 import { useExtensionHost } from "./host"
 import { Contribution } from "./render"
 import { useExtensionAttachment } from "./attachment"
+import { legacyKeys, panelKey } from "./panel-keys"
 
 type Tabs = Accessor<{
   all(): string[]
@@ -40,10 +41,6 @@ export type RegionEntry = {
   readonly extension: string
   readonly tab: PanelTab
   readonly provider: Panel
-}
-
-export function panelKey(extension: string, id: string) {
-  return `${extension}:${id}`
 }
 
 const SidebarState = Persistence.struct({
@@ -106,15 +103,11 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
 
   const byKey = createMemo(() => new Map(entries().map((entry) => [entry.key, entry])))
 
-  // Rewrites stored keys once their panel is present: keys stored before extensions (e.g. "context") and ids a
-  // panel writes more than one way. Duplicates collapse, so one file stored two ways is one tab.
+  // Rewrites stored keys once their panel is present: keys stored before extensions (e.g. "context") or under an
+  // extension's earlier id, and ids a panel writes more than one way. Duplicates collapse, so one file stored two ways
+  // is one tab.
   createEffect(() => {
-    const legacy = new Map(
-      providers().flatMap((item) =>
-        Object.entries(item.value.legacy ?? {}).map(([key, id]) => [key, panelKey(item.extension, id)] as const),
-      ),
-    )
-
+    const legacy = legacyKeys(providers())
     const normalizers = providers().flatMap((item) => (item.value.normalize ? [item] : []))
 
     if (legacy.size === 0 && normalizers.length === 0) return
@@ -160,14 +153,13 @@ export function createRegion(input: { region: Panel["region"]; view: MountedSess
     ]
   })
 
-  // Narrow screens never select a launcher (a hover-closable tab): a stored one falls back like a missing tab.
+  // Narrow screens never select a transient tab: a stored one falls back like a missing tab.
   const desktop = createMediaQuery("(min-width: 768px)")
 
   const active = createMemo(() => {
     const value = input.tabs().active()
 
-    if (value && strip().some((entry) => entry.key === value && (desktop() || entry.tab.closable !== "hover")))
-      return value
+    if (value && strip().some((entry) => entry.key === value && (desktop() || !entry.tab.transient))) return value
 
     return strip()
       .filter((entry) => entry.tab.fallback !== undefined)

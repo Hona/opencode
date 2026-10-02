@@ -12,6 +12,8 @@ const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "colla
   Struct.map(Schema.mutableKey),
 )
 
+const MobileDiff = Schema.Struct({ wrap: Schema.Boolean }).mapFields(Struct.map(Schema.mutableKey))
+
 const SessionState = Schema.Struct({
   mode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   file: Schema.optional(Schema.String),
@@ -38,6 +40,15 @@ export default Extension.define({
       {
         key: "review-panel-v2",
         pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }),
+      },
+    ),
+    // Whether narrow screens wrap long diff lines; stored before in the app settings.
+    mobileDiff: Store.global(
+      MobileDiff,
+      { wrap: true },
+      {
+        key: "settings.v3",
+        pick: (value: { general?: { mobileDiffWrap?: unknown } } | null) => ({ wrap: value?.general?.mobileDiffWrap }),
       },
     ),
     // The mode, selected file and open files of each session.

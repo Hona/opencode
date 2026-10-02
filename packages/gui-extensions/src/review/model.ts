@@ -139,7 +139,7 @@ export function createReviewModel(input: { ctx: SetupContext<typeof Review>; vie
     }
   })
 
-  // The summary's changes row: the session directory's working tree, loaded only while the summary shows.
+  // The session details' changes row: the session directory's working tree, loaded only while the details show.
   const detailsKey = () => [ctx.id, view.server.id, "session-details", view.directory] as const
 
   const detailsQuery = createQuery(() => ({

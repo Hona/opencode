@@ -81,7 +81,8 @@ export function settingsSearchIndex(input: {
       page,
       server,
       topLevel: !view.target,
-      icon: item.value.icon ?? pageIcons.extensions,
+      // Rows placed in a host section read like the host's own rows there.
+      icon: item.value.section ? pageIcons.general : (item.value.icon ?? pageIcons.extensions),
       view,
     })
 
@@ -98,16 +99,20 @@ export function settingsSearchIndex(input: {
 
     if (setting.page === "servers") return
 
-    if (setting.page === "general")
+    if (setting.page === "general") {
+      const section = setting.section ? input.translate("settings.general.section.general") : setting.title
+
       return setting.entries?.forEach((entry) =>
         addExtension(
           item,
           entry,
           { type: "root", tab: "general", target: entry.id },
-          `${input.translate(pageLabels.general)} / ${setting.title}`,
+          `${input.translate(pageLabels.general)} / ${section}`,
           "",
         ),
       )
+    }
+
     // SAFETY: a SettingsPage without a host page is an extension tab under its id, as `createSettingsPages().tabs` lists.
     const tab = setting.id as SettingsExtensionTab
     const page = setting.entries?.find((entry) => entry.id === setting.id)

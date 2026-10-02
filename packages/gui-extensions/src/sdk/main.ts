@@ -50,7 +50,10 @@ export interface Storage {
     key: string,
     options: { readonly schema: S; readonly initial: S["Type"]; readonly from?: string },
   ): Persisted<S["Type"], S["Type"]>
-  /** Deletes the value and the older copy `from` names, so the key reads as its `initial` again. */
+  /**
+   * Deletes the value, so opening the key again reads its `initial`. Pass the store's `from`: the older copy it names
+   * is deleted too, so it is never imported again.
+   */
   remove(key: string, options?: { readonly from?: string }): void
 }
 

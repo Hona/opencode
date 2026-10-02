@@ -14,6 +14,7 @@ Built-in features of the desktop and web app, each behind the SDK in `src/sdk/`.
 ## Host boundary
 
 - Host code must not name an extension or know its internals: no extension ids, command ids, DOM selectors, or stored key formats. When the host needs something from extensions, add a generic, documented field to the SDK (for example `PanelTab.file`, `Command.featured`, `Command.section`).
+- An extension owns its settings: declare a store and render the toggle from your `SettingsPage`, as a page, a section on a host page (`page`), or rows in a host section (`section`). The host exposes no preferences of its own.
 - Accepted exceptions: the built-in lists, the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`, the legacy `type: "browser"` comment decode in `packages/app/src/composer/schema.ts` (drafts and message metadata written before extension notes), and the crash page's use of the updater contract.
 
 ## Lifetimes
@@ -35,14 +36,16 @@ An instance lives from `setup` until it is disabled, reloaded, removed, or its w
 ## Stored state
 
 - Desktop storage loads over IPC; web storage is synchronous, so a read before load passes every web e2e test and still breaks desktop. Declare stores (`Store.global`, `Store.session`): a global store is loaded before setup, a session store's `value` is undefined until it loads, and `update` waits for the load. `Storage.store`, for keys only known at runtime, returns the same `Persisted`; derive nothing from it, such as a request, before `value` is defined.
-- Moving a stored value goes through `from` (and `from.sessions` for one session's slice of an app key). Keep the old field readable until every user has migrated; never drop user data.
-- Main `Storage.store` returns the same `Persisted`, always loaded; its `update` may also return the next value, which is how a number, `null` or a new list is written. Its writes reach disk at once; do not batch them yourself.
+- Stored keys live in your extension id's namespace (`extension.<id>.<key>`). Moving a stored value goes through `from` (and `from.sessions` for one session's slice of an app key); a list names older homes newest first, for example your earlier id's namespace, then the app key before it. Keep the old field readable until every user has migrated; never drop user data. When you rename an extension, map its command ids in the keybind rename map and its panel keys in `Panel.legacy` too.
+- `update` edits the draft, or returns the next value, which replaces the stored one in both processes; returning is how main writes a number, `null` or a new list. Main writes reach disk at once; do not batch them yourself.
+- `Storage.remove(key, { from })` takes the store's `from`, so the older key is never imported again and the key reads as `initial`.
 
 ## Panels and layout
 
 - `Panel.focus(tab, view, { restored })`: `restored` is true only for the selection the side region mounts with (for example after a reload). Run side effects that express user intent, such as switching the file tree's tab, only when it is false.
 - The host selects a fallback tab while the stored one is not listed. If you will restore a tab, keep listing its stored id, with `hidden: true` while its content is not known yet, so the fallback never runs.
-- Map keys stored before extensions with `Panel.legacy`. A `transient` panel's stored keys are dropped once it stops listing them.
+- Map keys stored before extensions, or under your extension's earlier id, with `Panel.legacy`. A `transient` panel's stored keys are dropped once it stops listing them.
+- A `PanelTab.transient` tab is a launcher (e.g. "Open file"): the next preview replaces it, and narrow screens neither store nor select it. `closable` only styles the close button; set both when you want both.
 - `Layout.stored(session)` returns your stored tab ids. Layout reads return nothing while `session.location` is undefined (for example after a server re-authenticates); writes made meanwhile wait and apply in order once it is known.
 - `Layout.sidebar.opened()` is the inner sidebar preference side panels share, readable outside a panel render (for example in a tab's fields); do not mirror `usePanel().sidebar` into a store.
 - Narrow screens: a plain open switches to the panel's mobile view and closes the dock. Pass `background` when the user stays where they are (a palette pick, a composer chip) or the agent opened the tab, and `tab: "select"` to append and select without replacing the preview.

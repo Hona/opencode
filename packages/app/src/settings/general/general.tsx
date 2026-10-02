@@ -395,21 +395,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsRow>
         </Show>
 
-        <SettingsRow
-          title={language.t("session.review.wrapLines")}
-          description={language.t("settings.general.row.mobileDiffWrap.description")}
-        >
-          <div data-action="settings-mobile-diff-wrap">
-            <Switch
-              aria-label={language.t("session.review.wrapLines")}
-              checked={settings.general.mobileDiffWrap()}
-              onChange={settings.general.setMobileDiffWrap}
-              hideLabel
-            >
-              {language.t("session.review.wrapLines")}
-            </Switch>
-          </div>
-        </SettingsRow>
+        <ExtensionSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow

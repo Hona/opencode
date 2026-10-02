@@ -6,19 +6,19 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Command, createKeyed, createVisitState, useExtension, type MountedSession } from "../sdk"
-import type Summary from "./index"
-import type { Disclosure, SummaryPanelProps } from "./panel"
+import type Details from "./index"
+import type { Disclosure, DetailsPanelProps } from "./panel"
 
-/** The summary button of one timeline header. Cached timelines each keep their own. */
-export function SummaryHeader(props: {
+/** The session details button of one timeline header. Cached timelines each keep their own. */
+export function DetailsHeader(props: {
   session: MountedSession
   active: boolean
-  panel: Component<SummaryPanelProps>
+  panel: Component<DetailsPanelProps>
   disclosure: Disclosure
 }) {
-  const changes = useExtension<typeof Summary>().uses.changes
+  const changes = useExtension<typeof Details>().uses.changes
   const Panel = props.panel
-  // Cached timelines stay mounted while hidden; routing away from the session closes its summary.
+  // Cached timelines stay mounted while hidden; routing away from the session closes its details.
   const [open, setOpen] = createVisitState(false)
   const [store, setStore] = createStore({ dismissed: false })
   const child = createMemo(() => !!props.session.server.data.session.get(props.session.id)?.parentID)
@@ -39,7 +39,7 @@ export function SummaryHeader(props: {
     }
   })
 
-  // The changes row loads the session directory's changes only while the summary shows.
+  // The changes row loads the session directory's changes only while the details show.
   createKeyed(changes, (service) =>
     createKeyed(
       () => open() && props.session,
@@ -50,7 +50,7 @@ export function SummaryHeader(props: {
   return (
     <Show when={!child() && project()}>
       {(project) => (
-        <SummaryPopover active={props.active} open={open()} onOpenChange={setOpen}>
+        <DetailsPopover active={props.active} open={open()} onOpenChange={setOpen}>
           <Suspense>
             <Panel
               session={props.session}
@@ -63,17 +63,17 @@ export function SummaryHeader(props: {
               disclosure={props.disclosure}
             />
           </Suspense>
-        </SummaryPopover>
+        </DetailsPopover>
       )}
     </Show>
   )
 }
 
-function SummaryPopover(props: ParentProps<{ active: boolean; open: boolean; onOpenChange: (open: boolean) => void }>) {
+function DetailsPopover(props: ParentProps<{ active: boolean; open: boolean; onOpenChange: (open: boolean) => void }>) {
   const ctx = useExtension()
   const keybinds = ctx.keybinds
 
-  // Cached timelines remain mounted; only the visible summary owns the command. It leaves with this component.
+  // Cached timelines remain mounted; only the visible details own the command. It leaves with this component.
   ctx.add(Command, (): Command | undefined =>
     props.active
       ? {
@@ -87,7 +87,7 @@ function SummaryPopover(props: ParentProps<{ active: boolean; open: boolean; onO
       : undefined,
   )
 
-  const keybind = () => [...keybinds.keybind("summary.toggle")]
+  const keybind = () => [...keybinds.keybind(`${ctx.id}.toggle`)]
 
   return (
     <Popover open={props.open} placement="bottom-end" gutter={8} overflowPadding={16} onOpenChange={props.onOpenChange}>

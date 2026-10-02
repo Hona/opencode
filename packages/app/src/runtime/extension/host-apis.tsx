@@ -12,7 +12,7 @@ import {
   type Owner,
 } from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
-import { Predicate, type Schema } from "effect"
+import type { Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { base64Encode } from "@opencode/util/encode"
 import {
@@ -23,7 +23,6 @@ import {
   type OpenOptions,
   type PanelSidebar,
   type PanelState,
-  type Preferences,
   type ServerRef,
   type SessionRef,
   type Storage,
@@ -50,7 +49,7 @@ import { createEmbeds } from "./embeds"
 import { useExtensionHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
 import type { Region } from "./panels"
-import { persistedHandle } from "./stores"
+import { globalStoreTarget, persistedHandle, storeImports, storeName } from "./stores"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
@@ -64,16 +63,12 @@ type Attached = {
   settings: (page?: string) => void
   project: (server: string, title: string) => void
   font: Accessor<string>
-  preferences: Preferences
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
   matches: (command: string, event: KeyboardEvent) => boolean
   servers: Accessor<readonly string[]>
 }
-
-/** What persistence imports a store's older value from. */
-type CopyFrom = NonNullable<Exclude<Parameters<typeof persisted>[0], string>["copyFrom"]>
 
 /** HostApis the host owns. Session and layout attach once the app interface mounts. */
 export function createHostApis() {
@@ -94,11 +89,14 @@ export function createHostApis() {
     dialog: () => !!dialog.active,
   })
 
-  const target = (extension: string, key: string, scope: StorageScope | undefined, from: StoreFrom | undefined) => {
-    const name = `extension.${extension}.${key}`
-    const copyFrom = copySpec(from)
-
-    if (!scope || scope === "global") return { ...Persist.global(name), copyFrom }
+  const target = (
+    extension: string,
+    key: string,
+    scope: StorageScope | undefined,
+    from: StoreFrom | readonly StoreFrom[] | undefined,
+  ) => {
+    if (!scope || scope === "global") return globalStoreTarget(extension, key, from)
+    const name = storeName(extension, key)
     const connected = requireAttached(attached())
 
     if ("session" in scope) {
@@ -108,14 +106,15 @@ export function createHostApis() {
       connected.scoped(name)
       const server = connected.scope(scope.session.server.id)
       const directory = base64Encode(location.directory)
+      const session = SessionStateKey.from(server, SessionRouteKey.fromRoute(directory, scope.session.id))
 
       return {
         ...Persist.serverSession(server, directory, scope.session.id, name),
-        copyFrom:
-          sessionCopy(from, SessionStateKey.from(server, SessionRouteKey.fromRoute(directory, scope.session.id))) ??
-          copyFrom,
+        copyFrom: storeImports(from, session),
       }
     }
+
+    const copyFrom = storeImports(from)
 
     if (!scope.directory) return { ...Persist.serverGlobal(connected.scope(scope.server), name), copyFrom }
 
@@ -130,11 +129,7 @@ export function createHostApis() {
           persisted(target(extension, key, options.scope, options.from), options.schema, options.initial, platform),
         )!
 
-        return persistedHandle({
-          store: pair[0],
-          update: (mutation: (draft: S["Type"]) => void) => pair[1](produce(mutation)),
-          init: pair[3].promise,
-        })
+        return persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
       },
       memory<T extends object>(key: string, options: { readonly initial: T }) {
         const name = `${extension}.${key}`
@@ -153,7 +148,7 @@ export function createHostApis() {
         return value
       },
       remove(key, options) {
-        removePersisted(target(extension, key, options?.scope, undefined), platform)
+        removePersisted(target(extension, key, options?.scope, options?.from), platform)
       },
     }),
     system: () => ({
@@ -246,11 +241,6 @@ export function createHostApis() {
       },
       settings: (page) => requireAttached(current()).settings(page),
       project: (server, title) => requireAttached(current()).project(server, title),
-    }),
-    preferences: () => ({
-      releaseNotes: () => requireAttached(current()).preferences.releaseNotes(),
-      setReleaseNotes: (value) => requireAttached(current()).preferences.setReleaseNotes(value),
-      mobileDiffWrap: () => requireAttached(current()).preferences.mobileDiffWrap(),
     }),
     embeds: () => embeds,
   }
@@ -514,9 +504,9 @@ export function createExtensionAttachment(apis: HostApis) {
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
-    // Lists the opened tab too, so its own fields apply before it is stored. A hover-closable tab is a launcher.
+    // Lists the opened tab too, so its own fields apply before it is stored. The next preview replaces a transient tab.
     const known = listed(session, value, key)
-    const launchers = new Set(known.flatMap((entry) => (entry.tab.closable === "hover" ? [entry.key] : [])))
+    const transient = new Set(known.flatMap((entry) => (entry.tab.transient ? [entry.key] : [])))
     const first = known.some((entry) => entry.key === key && entry.tab.first)
     batch(() => {
       if (narrow() && !options?.background) {
@@ -524,9 +514,8 @@ export function createExtensionAttachment(apis: HostApis) {
 
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
 
-        // A tab its panel does not list, or a launcher, stays unstored: the open only selects the panel's view.
-        if (mountedSession(session) && !known.some((entry) => entry.key === key && entry.tab.closable !== "hover"))
-          return
+        // A tab its panel does not list, or a transient one, stays unstored: the open only selects the panel's view.
+        if (mountedSession(session) && !known.some((entry) => entry.key === key && !entry.tab.transient)) return
       }
 
       // A background open keeps the narrow-screen view, but its tab still shows once the window is wide.
@@ -535,8 +524,8 @@ export function createExtensionAttachment(apis: HostApis) {
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.pinned)) return layout.panel.focus(value, key)
 
-      if (placement === "preview") return layout.panel.preview(value, key, launchers)
-      layout.panel.open(value, key, launchers, first)
+      if (placement === "preview") return layout.panel.preview(value, key, transient)
+      layout.panel.open(value, key, transient, first)
     })
   }
 
@@ -657,11 +646,6 @@ export function createExtensionAttachment(apis: HostApis) {
     keybind: command.keybindParts,
     matches: command.matches,
     servers: () => global.servers.list().map(ServerConnection.key),
-    preferences: {
-      releaseNotes: settings.general.releaseNotes,
-      setReleaseNotes: settings.general.setReleaseNotes,
-      mobileDiffWrap: settings.general.mobileDiffWrap,
-    },
     // SAFETY: an extension names a page it contributed through `SettingsPage`, which settings lists as an extension tab.
     settings: (page) => surface.open(page as Parameters<typeof surface.open>[0]),
     layout: {
@@ -755,30 +739,4 @@ function requireAttached(value: Attached | undefined) {
   if (!value) throw new Error("The app interface is not mounted")
 
   return value
-}
-
-/** A store's `from` in the object form persistence takes. */
-function copySpec(from: StoreFrom | undefined) {
-  // SAFETY: `StoreFrom` is an older key alone or an object with a key and a pick, as the SDK types it.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
-  return typeof from === "string" ? { key: from } : from
-}
-
-/** Imports a session's entry from an app key that holds every session's state under one field. */
-function sessionCopy(from: StoreFrom | undefined, session: SessionStateKey): CopyFrom | undefined {
-  const spec = copySpec(from)
-
-  if (!spec || !("sessions" in spec) || !spec.sessions) return
-
-  const field = spec.sessions
-
-  return {
-    key: spec.key,
-    storage: Persist.global(spec.key).storage,
-    pick: (value) => {
-      const sessions = Predicate.isObject(value) ? value[field] : undefined
-
-      return spec.pick(Predicate.isObject(sessions) ? sessions[session] : undefined)
-    },
-  }
 }

@@ -1,11 +1,11 @@
 import { Extension } from "./sdk/main"
-import usage from "./usage"
+import context from "./context"
 import btw from "./btw"
 import debug from "./debug"
 import terminal from "./terminal"
 import file from "./file"
 import review from "./review"
-import summary from "./summary"
+import details from "./details"
 import browser from "./browser"
 import pairing from "./pairing"
 import updater from "./updater"
@@ -17,13 +17,13 @@ import wsl from "./wsl"
  * checks that it provides every Ipc the renderer composition uses.
  */
 export const builtins = Extension.compose(
-  usage,
+  context,
   btw,
   debug,
   terminal,
   file,
   review,
-  summary,
+  details,
   { ...browser, main: () => import("./browser/main") },
   { ...pairing, main: () => import("./pairing/main") },
   { ...updater, main: () => import("./updater/main") },

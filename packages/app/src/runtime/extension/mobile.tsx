@@ -13,7 +13,8 @@ import {
 } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
-import { MobilePanel, panelKey, type Region, type RegionEntry } from "./panels"
+import { panelKey } from "./panel-keys"
+import { MobilePanel, type Region, type RegionEntry } from "./panels"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")

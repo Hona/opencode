@@ -3,9 +3,9 @@ import { Icon } from "@opencode/ui/icon"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { createMemo, Show } from "solid-js"
 import { useExtension, type Project, type MountedSession } from "../sdk"
-import { BackgroundWorkSummary } from "./background"
+import { BackgroundWork } from "./background"
 import { workspaceDirectories } from "./paths"
-import { ProjectSummaryCard } from "./project-card"
+import { ProjectDetailsCard } from "./project-card"
 import { SessionServerPanel } from "./server-panel"
 import { SessionWorkspaceMenu } from "./workspace-menu"
 
@@ -16,7 +16,7 @@ export type Disclosure = {
   setServer(expanded: boolean): void
 }
 
-export type SummaryPanelProps = {
+export type DetailsPanelProps = {
   session: MountedSession
   project: Project
   shown?: boolean
@@ -29,7 +29,7 @@ export type SummaryPanelProps = {
   disclosure: Disclosure
 }
 
-export default function SessionSummaryPanel(props: SummaryPanelProps) {
+export default function SessionDetailsPanel(props: DetailsPanelProps) {
   const ctx = useExtension()
   const locale = ctx.locale
   const data = props.session.server.data
@@ -54,7 +54,7 @@ export default function SessionSummaryPanel(props: SummaryPanelProps) {
   return (
     <div data-component="session-summary-panel" data-mobile={props.mobile || undefined}>
       <div>
-        <ProjectSummaryCard
+        <ProjectDetailsCard
           project={props.project}
           expanded={props.disclosure.project()}
           onExpandedChange={props.disclosure.setProject}
@@ -120,8 +120,8 @@ export default function SessionSummaryPanel(props: SummaryPanelProps) {
               </span>
             </button>
           </Show>
-          <BackgroundWorkSummary tasks={props.session.background} mobile={props.mobile} />
-        </ProjectSummaryCard>
+          <BackgroundWork tasks={props.session.background} mobile={props.mobile} />
+        </ProjectDetailsCard>
         <Show when={props.disclosure.project() && props.session.local && props.diffs?.length && !props.moveDismissed}>
           <div class="session-summary-move">
             <SessionWorkspaceMenu

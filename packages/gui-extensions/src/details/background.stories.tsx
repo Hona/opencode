@@ -1,5 +1,5 @@
 import { DataProvider } from "@opencode/session-ui/context"
-import { BackgroundWorkSummary } from "./background"
+import { BackgroundWork } from "./background"
 
 const tasks = [
   { id: "task_explore", type: "subagent" as const, agent: "explore", label: "Reviewing component implementation" },
@@ -20,7 +20,7 @@ export default {
   },
 }
 
-export const SummaryPanelEntry = {
+export const DetailsPanelEntry = {
   render: () => (
     <div class="w-[280px] rounded-[6px] bg-v2-background-bg-base px-0.5 py-1.5 shadow-[var(--v2-elevation-raised)]">
       <DataProvider
@@ -28,7 +28,7 @@ export const SummaryPanelEntry = {
         directory="/project"
         onSessionHref={(id) => `#${id}`}
       >
-        <BackgroundWorkSummary tasks={tasks} />
+        <BackgroundWork tasks={tasks} />
       </DataProvider>
     </div>
   ),

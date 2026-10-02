@@ -31,6 +31,8 @@ export function createSettingsPages() {
     pages,
     /** Their tab values. */
     tabs,
-    sections: (page: "general" | "servers") => items().filter((item) => item.value.page === page),
+    /** Sections on a host page, or with `section`, the rows placed in that host section. */
+    sections: (page: "general" | "servers", section?: "general") =>
+      items().filter((item) => item.value.page === page && item.value.section === section),
   }
 }

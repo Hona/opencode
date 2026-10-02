@@ -24,7 +24,6 @@ import type {
   Layout,
   Links,
   Locale,
-  Preferences,
   Router,
   Servers,
   SessionRef,
@@ -62,7 +61,6 @@ export interface Context extends BaseContext {
   readonly keybinds: Keybinds
   readonly servers: Servers
   readonly workspaces: Workspaces
-  readonly preferences: Preferences
 }
 
 type Handle<S> =

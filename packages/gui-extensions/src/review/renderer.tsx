@@ -5,6 +5,7 @@ import {
   createKeyed,
   LinkHandler,
   Panel,
+  SettingsPage,
   usePanel,
   type PanelTab,
   type SessionRef,
@@ -214,6 +215,30 @@ const setup: Setup<typeof Review> = (ctx) => {
     },
   })
 
+  const WrapLinesRow = lazy(() => import("./settings"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  onCleanup(onIdle(() => void WrapLinesRow.preload()))
+
+  // The narrow-screen diff wrap toggle, in its place in the host's General section.
+  ctx.add(SettingsPage, {
+    id: "mobile-diff",
+    page: "general",
+    section: "general",
+    get title() {
+      return ctx.t("settings.wrapLines.title")
+    },
+    get entries() {
+      return [
+        { id: "settings-mobile-diff-wrap", title: ctx.t("settings.wrapLines.title"), keywords: "diff wrap lines" },
+      ]
+    },
+    render: () => (
+      <Suspense>
+        <WrapLinesRow />
+      </Suspense>
+    ),
+  })
+
   const none: readonly FileDiffInfo[] = []
   const noKinds: ReadonlyMap<string, ChangeKind> = new Map()
 
@@ -225,7 +250,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     details: (session) => modelFor(session)?.details(),
     focus: (session, path) => modelFor(session)?.focusFile(path),
     open(session) {
-      // The summary's changes row: narrow screens switch to the Changes view; wide ones open the side region.
+      // The session details' changes row: narrow screens switch to the Changes view; wide ones open the side region.
       if (layout.narrow()) return layout.open(KEY, session)
 
       if (!layout.side.opened(session)) layout.side.toggle(session)

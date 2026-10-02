@@ -61,13 +61,17 @@ export interface PanelTab {
   /** Defaults to true. */
   readonly draggable?: boolean
   /**
-   * The close button. Defaults to a plain one.
+   * The close button; only how it looks. Defaults to a plain one.
    * - `compact`: a compact close button.
-   * - `hover`: shows on hover or while selected. Such a tab is a launcher, a tab that opens others: the next preview
-   *   replaces it, and narrow screens neither store nor select it.
+   * - `hover`: shows on hover or while selected.
    * - `false`: none.
    */
   readonly closable?: "compact" | "hover" | false
+  /**
+   * A launcher, a tab that opens others (e.g. "Open file"): the next preview replaces it, and narrow screens neither
+   * store nor select it. Independent of `closable`. Unlike `Panel.transient`, the tab is restored.
+   */
+  readonly transient?: boolean
   /**
    * Renders before the tabs in stored order. Opening it also stores it first and leaves the preview tab open, so
    * closing it selects the first remaining tab.
@@ -109,9 +113,12 @@ export interface Panel {
   readonly region: "side" | "dock"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
-  /** Tabs are not restored: stored keys this panel stops listing leave the strip. */
+  /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
   readonly transient?: boolean
-  /** Stored tab keys from before extensions, mapped to this panel's tab ids. The host rewrites them once. */
+  /**
+   * Stored tab keys from before extensions, or from this extension's earlier id (e.g. "usage:context"), mapped to this
+   * panel's tab ids. The host rewrites them once.
+   */
   readonly legacy?: Readonly<Record<string, string>>
   /**
    * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
@@ -148,7 +155,12 @@ export interface SettingsPage {
   readonly id: string
   /** Adds a section to a host page. Omit to add a page. */
   readonly page?: "general" | "servers"
-  /** Nav label of a page; search shows it as the section of every entry. */
+  /**
+   * With `page: "general"`, adds rows to that page's General section instead of a section of its own: `render`
+   * returns settings rows, which the host places in its list. Search lists the entries under the host section.
+   */
+  readonly section?: "general"
+  /** Nav label of a page; search shows it as the section of every entry, except rows placed in a host `section`. */
   readonly title: string
   readonly icon?: IconName
   readonly available?: "desktop" | "mobile"
