@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createComputed, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -91,15 +91,19 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    createEffect(() => {
-      scope()
-      inflight.clear()
-      resetFileContentLru()
-      batch(() => {
-        setStore("file", reconcile({}))
-        tree.reset()
-      })
-    })
+    // The store holds one directory's files. Drop them as soon as the directory changes, before any effect of the same
+    // update reads the new one: a file tab can load its file before a later watcher runs, and a reset after that load
+    // would discard its reply.
+    createComputed(
+      on(scope, () => {
+        inflight.clear()
+        resetFileContentLru()
+        batch(() => {
+          setStore("file", reconcile({}))
+          tree.reset()
+        })
+      }),
+    )
 
     const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))

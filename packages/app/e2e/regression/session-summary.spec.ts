@@ -43,6 +43,18 @@ for (const custom of [false, true]) {
       await expect(summary).toBeHidden()
       await expect(trigger).toBeFocused()
     }
+
+    if (!custom) return
+
+    // The override moved, so storage keeps only its new id and Shortcuts lists no row titled with the old one.
+    const keybinds = () => page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "null")?.keybinds)
+    await expect.poll(keybinds).toEqual({ "details.toggle": "f8" })
+    await page.goto("/settings")
+    const settings = page.getByTestId("settings-screen")
+    await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+    await expect(settings.getByText("Toggle summary", { exact: true })).toBeVisible()
+    await expect(settings.getByText("session.summary.toggle", { exact: true })).toHaveCount(0)
+    expect(await keybinds()).toEqual({ "details.toggle": "f8" })
   })
 }
 

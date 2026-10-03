@@ -1,4 +1,4 @@
-import { reconcile, unwrap } from "solid-js/store"
+import { produce, reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -383,13 +383,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("keybinds", action, keybind)
         },
         reset(action: string) {
-          setStore("keybinds", (current) => {
-            if (!Object.prototype.hasOwnProperty.call(current, action)) return current
-            const next = { ...current }
-            delete next[action]
-
-            return next
-          })
+          // A returned object would merge into the stored one, keeping the key; delete it on the store itself.
+          setStore(
+            "keybinds",
+            produce((draft) => {
+              delete draft[action]
+            }),
+          )
         },
         resetAll() {
           setStore("keybinds", reconcile({}))
