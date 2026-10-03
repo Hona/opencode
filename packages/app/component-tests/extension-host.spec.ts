@@ -254,11 +254,14 @@ story(
 )
 
 story(
-  "before the app interface mounts, host APIs read their defaults and keep writes until it mounts",
+  "before the app interface mounts, host APIs read their defaults and keep writes and dialogs until it mounts",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
       const { mountHostApis, until, createMemo, Schema } = await import(fixture)
       const Prefs = Schema.Struct({ count: Schema.Number })
+      const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+      const shown = () => ["kept", "cancelled"].filter((value) => document.body.textContent?.includes(value))
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
       const fake = { key: "local\nses_fixture", id: "ses_fixture", tab: "tab", pending: false, location: undefined }
       // SAFETY: the stand-in interface reads only the key it is given; the host APIs pass the session through.
       // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
@@ -275,6 +278,9 @@ story(
                 // Setup runs before the interface mounts, as every built-in's does.
                 ctx.layout.open("fixture:main", session)
                 ctx.layout.settings("fixture")
+                // A dialog waits for the interface too; one its handle closes meanwhile never shows.
+                ctx.dialogs.open(text("kept"))
+                ctx.dialogs.open(text("cancelled")).close()
 
                 const prefs = ctx.storage.store("prefs", {
                   schema: Prefs,
@@ -298,12 +304,15 @@ story(
         prefs: reads.prefs?.value?.count,
         ready: reads.prefs?.ready(),
         writes: [...host.writes],
+        dialogs: shown(),
       })
 
       await until(() => host.status("fixture") === "active")
+      // Long enough for a dialog's deferred opening to have shown it.
+      await wait(300)
       const before = read()
       host.attach()
-      await until(() => host.writes.length === 2)
+      await until(() => host.writes.length === 2 && shown().length > 0)
       const after = read()
       host.unmount()
 
@@ -311,13 +320,14 @@ story(
     }, fixture)
 
     expect(result).toEqual({
-      before: { state: "closed", font: "default mono", prefs: undefined, ready: false, writes: [] },
+      before: { state: "closed", font: "default mono", prefs: undefined, ready: false, writes: [], dialogs: [] },
       after: {
         state: "visible",
         font: "fixture mono",
         prefs: 1,
         ready: true,
         writes: ["open fixture:main", "settings fixture"],
+        dialogs: ["kept"],
       },
     })
   },

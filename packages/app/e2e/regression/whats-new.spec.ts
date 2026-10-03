@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import pkg from "../../package.json" with { type: "json" }
 import type { SeedInput } from "../utils/app"
+import { openHeldStart } from "../utils/direction"
 import { expectAppVisible } from "../utils/waits"
 import { mockWorkspace } from "../utils/workspace"
 
@@ -108,6 +109,26 @@ test("Don't show these in the future turns release notes off and closes What's N
   await dialog.getByRole("button", { name: "Don't show these in the future", exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect.poll(() => stored(page, RELEASE_NOTES)).toEqual({ enabled: false })
+})
+
+test("What's New ready before the app mounts shows over the restored Settings and keeps focus", async ({ page }) => {
+  await serveChangelog(page)
+  await mockWorkspace(page, { name: "Whats New", sessions: [], seed: upgraded })
+  const app = await openHeldStart(page, "/settings")
+  // What's New marks the release seen as it opens, here while the app is still starting.
+  await expect.poll(() => stored(page, SEEN)).toEqual({ version: "test" })
+  await app.start()
+
+  const dialog = page.getByRole("dialog")
+  const focused = () => dialog.evaluate((element) => element.contains(document.activeElement))
+  await expect(page.getByTestId("settings-screen")).toBeAttached()
+  await expect(dialog.getByRole("heading", { level: 1 })).toHaveText("Split panes")
+  await expect.poll(focused).toBe(true)
+
+  for (const key of ["Tab", "Tab", "Tab", "Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key)
+    await expect.poll(focused).toBe(true)
+  }
 })
 
 test("a failed changelog request leaves What's New for the next start", async ({ page }) => {

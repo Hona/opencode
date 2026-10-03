@@ -65,7 +65,7 @@ Setup receives one context. Components read the same object with `useExtension<t
 | Copy                  | `ctx.t(key, params)`, `ctx.plural(key, count)`                                              | the same                               |
 
 - Host APIs are getters: an API you never read costs nothing.
-- No host API throws before the app interface mounts: reads return their documented defaults (`ctx.layout.ready()` is false), and writes such as `ctx.layout.open` wait, then apply in call order.
+- No host API throws before the app interface mounts: reads return their documented defaults (`ctx.layout.ready()` is false), and writes such as `ctx.layout.open` wait, then apply in call order. A dialog `ctx.dialogs.open` opens meanwhile shows after the interface's first render.
 - Points and contracts are tokens: `ctx.add(Command, …)`, `ctx.provide(FileTree, …)`.
 - Reading a token you did not declare is a compile error. A key that names one token in `provides` and another in `uses` is one too.
 

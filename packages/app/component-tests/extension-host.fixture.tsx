@@ -97,6 +97,13 @@ function fakeApis(storage: (extension: string) => Storage): HostApiFactories {
   }
 }
 
+/** The fake HostApis' app interface, which is always mounted: a dialog shows at once. */
+function mounted(run: () => void) {
+  run()
+
+  return () => undefined
+}
+
 /** Storage that no test of `mountExtensionHost` reads. */
 const unused = (): Storage => {
   throw new Error("The fixture extension reads no storage")
@@ -144,6 +151,7 @@ export function mountExtensionHost() {
             ]}
             disabled={disabled}
             apis={fakeApis(unused)}
+            whenMounted={mounted}
           >
             <Capture />
           </ExtensionHostProvider>
@@ -223,7 +231,12 @@ export function mountExtensions(input: {
 
   function MountedHost() {
     return (
-      <ExtensionHostProvider definitions={input.definitions} disabled={disabled} apis={fakeApis(storage)}>
+      <ExtensionHostProvider
+        definitions={input.definitions}
+        disabled={disabled}
+        apis={fakeApis(storage)}
+        whenMounted={mounted}
+      >
         <Capture />
       </ExtensionHostProvider>
     )
@@ -315,7 +328,12 @@ function RealHost(props: ParentProps<{ definitions: readonly Definition[]; captu
   if (props.mounted) onCleanup(apis.attach(props.mounted))
 
   return (
-    <ExtensionHostProvider definitions={props.definitions} disabled={() => new Set<string>()} apis={apis.apis}>
+    <ExtensionHostProvider
+      definitions={props.definitions}
+      disabled={() => new Set<string>()}
+      apis={apis.apis}
+      whenMounted={apis.whenMounted}
+    >
       {props.children}
     </ExtensionHostProvider>
   )

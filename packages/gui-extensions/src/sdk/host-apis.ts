@@ -1030,8 +1030,9 @@ export interface Links {
 /** One dialog `Dialogs.open` opened. */
 export interface DialogHandle {
   /**
-   * Closes this dialog, wherever it is in the stack; another dialog stays open. Does nothing once the dialog closed,
-   * including when it never opened because its extension went away first.
+   * Closes this dialog, wherever it is in the stack; another dialog stays open. A dialog that still waits for the app
+   * interface never shows. Does nothing once the dialog closed, including when it never opened because its extension
+   * went away first.
    */
   close(): void
 }
@@ -1043,7 +1044,9 @@ export interface DialogHandle {
 export interface Dialogs {
   /**
    * Opens a dialog above the open ones. Opening is deferred to a transition, so a dialog opened while its owner ends
-   * never shows. A render that throws closes the dialog and records the error.
+   * never shows. Before the app interface mounts, as during setup, the dialog waits and shows after the interface's
+   * first render, behind the writes made before it: never behind the startup screen, and never before the restored
+   * route takes focus. A render that throws closes the dialog and records the error.
    *
    * @param render - Renders the dialog's content; receives the dialog's handle, so the content can close itself.
    * @param options - How the dialog opens.

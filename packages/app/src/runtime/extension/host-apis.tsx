@@ -314,6 +314,21 @@ export function createHostApis() {
 
   return {
     apis,
+    /**
+     * Runs `run` now while the app interface is mounted and no write waits; otherwise after the interface's first
+     * render, behind the writes made before it. The returned function cancels a run that still waits.
+     */
+    whenMounted(run: () => void) {
+      const state = { cancelled: false }
+
+      write(() => {
+        if (!state.cancelled) run()
+      })
+
+      return () => {
+        state.cancelled = true
+      }
+    },
     attach(value: Attached) {
       setAttached(() => value)
       // After the interface's first render, so the waiting writes find its layout, in call order.

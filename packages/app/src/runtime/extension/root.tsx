@@ -56,6 +56,7 @@ export function ExtensionRoot(props: ParentProps) {
         definitions={definitions}
         disabled={disabled}
         apis={apis.apis}
+        whenMounted={apis.whenMounted}
         ipc={bridge ? (token) => ipcs.client(token) : undefined}
         generation={ipcs.generation}
         failed={failed}

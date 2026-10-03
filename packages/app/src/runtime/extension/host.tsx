@@ -127,6 +127,11 @@ type HostInput = {
   definitions: readonly Definition[]
   disabled: Accessor<ReadonlySet<string> | undefined>
   apis: HostApiFactories
+  /**
+   * Runs `run` once the app interface has mounted, behind the HostApis writes made before it, or now when it has.
+   * Returns a cancel for a run that still waits.
+   */
+  whenMounted: (run: () => void) => () => void
   /** The renderer client of an Ipc while it is available; omitted where there is no main process. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
   /** How many times an Ipc became available. Reactive. */
@@ -312,38 +317,53 @@ function createHost(input: HostInput) {
     dialogs: (extension, _, context, register): Dialogs => ({
       open(render, options) {
         const id = `extension:${extension}:${sequence.value++}`
-        // Each handle names its own dialog, so it never closes one another extension or instance opened.
-        const handle = { close: () => dialog.close(id) }
+        const waiting = { cancel: () => {} }
+
+        // Each handle names its own dialog, so it never closes one another extension or instance opened. Closing a
+        // dialog that still waits for the app interface cancels it.
+        const close = () => {
+          waiting.cancel()
+          dialog.close(id)
+        }
+
+        const handle = { close }
 
         if (context.signal.aborted) return handle
 
         // Closes this dialog, not whichever is on top, when the extension or the scope that opened it goes away.
-        const release = register(() => dialog.close(id))
+        const release = register(close)
 
-        void dialog[options?.replace ? "show" : "push"](
-          () => {
-            // The dialog's root disposes when it closes or another dialog replaces it.
-            onCleanup(() => void release())
+        // A dialog opened before the app interface mounts, as during setup, shows after its first render: never behind
+        // the startup screen, and never before a route that focuses itself as it mounts.
+        waiting.cancel = input.whenMounted(
+          () =>
+            void dialog[options?.replace ? "show" : "push"](
+              () => {
+                // The dialog's root disposes when it closes or another dialog replaces it.
+                onCleanup(() => void release())
 
-            return (
-              <ErrorBoundary
-                fallback={(error) => {
-                  onMount(() => {
-                    dialog.close(id)
-                    fail(extension, error, "render")
-                  })
+                return (
+                  <ErrorBoundary
+                    fallback={(error) => {
+                      onMount(() => {
+                        dialog.close(id)
+                        fail(extension, error, "render")
+                      })
 
-                  return null
-                }}
-              >
-                <ExtensionContext.Provider value={context}>{untrack(() => render(handle))}</ExtensionContext.Provider>
-              </ErrorBoundary>
-            )
-          },
-          undefined,
-          id,
-          // The stack mounts in a later transition; disposal before then must still keep it closed.
-          context.signal,
+                      return null
+                    }}
+                  >
+                    <ExtensionContext.Provider value={context}>
+                      {untrack(() => render(handle))}
+                    </ExtensionContext.Provider>
+                  </ErrorBoundary>
+                )
+              },
+              undefined,
+              id,
+              // The stack mounts in a later transition; disposal before then must still keep it closed.
+              context.signal,
+            ),
         )
 
         return handle

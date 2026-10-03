@@ -388,6 +388,8 @@ type RegionHost = {
       disabled: Accessor<ReadonlySet<string> | undefined>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (extension: string) => object | undefined }
+      /** Runs once the app interface mounts; the fixture's is always mounted. */
+      whenMounted: (run: () => void) => () => void
       ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
@@ -681,6 +683,11 @@ export function mountBrowserRegion(input: RegionHost) {
           definitions={input.definitions}
           disabled={() => new Set<string>()}
           apis={apis}
+          whenMounted={(run) => {
+            run()
+
+            return () => undefined
+          }}
           ipc={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
         >
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>

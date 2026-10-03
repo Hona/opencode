@@ -96,6 +96,11 @@ export function SshProvider(props: ParentProps) {
       disabled={() => none}
       // The SSH extension's renderer reads no other HostApi in these stories.
       apis={{ ...apis, layout: () => layout } as HostApiFactories}
+      // The stories have no app interface to wait for: a dialog shows at once.
+      whenMounted={(run) => {
+        run()
+        return () => {}
+      }}
       ipc={(token) => (token.id === extension.id ? ipc : undefined)}
     >
       <SshIpcContext.Provider value={ipc}>
