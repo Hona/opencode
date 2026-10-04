@@ -118,6 +118,12 @@ describe("extractPromptFromMessage", () => {
           source: { type: "uri", uri: "file:///repo/notes.md" },
           name: "notes.md",
         },
+        {
+          data: "c3JjLw==",
+          mime: "application/x-directory",
+          source: { type: "uri", uri: "file:///repo/src" },
+          name: "src",
+        },
         // An empty file is stored with empty data, not missing data.
         { data: "", mime: "text/plain", source: { type: "inline" }, name: "empty.txt" },
       ],
@@ -130,15 +136,14 @@ describe("extractPromptFromMessage", () => {
       { type: "text", content: "日本 " },
       { type: "file", content: "@main.ts", url: "file:///repo/main.ts" },
       { type: "text", content: " " },
+      { type: "file", content: "@notes.md", path: "notes.md", url: "file:///repo/notes.md" },
+      { type: "text", content: " " },
+      // A directory keeps its URI rather than turning into a snapshot of its listing.
+      { type: "file", content: "@src", path: "src", url: "file:///repo/src", mime: "application/x-directory" },
+      { type: "text", content: " " },
       { type: "agent", content: "@plan", name: "plan" },
       { type: "text", content: " " },
       { type: "skill", content: "@review", id: "review" },
-      {
-        type: "image",
-        filename: "notes.md",
-        mime: "text/markdown",
-        blob: { url: "data:text/markdown;base64,bm90ZXM=" },
-      },
       { type: "image", filename: "empty.txt", mime: "text/plain", blob: { url: "data:text/plain;base64," } },
       { type: "path", filename: "report.zip", path: "/repo/report.zip" },
     ])

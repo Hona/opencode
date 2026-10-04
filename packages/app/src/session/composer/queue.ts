@@ -138,23 +138,37 @@ export function createSessionQueue(input: {
 
     if (changed < 0) return
 
-    // Existing inbox APIs cannot reorder rows, so replace only the changed suffix.
+    // Existing inbox APIs cannot reorder rows, so replace only the changed suffix. A replacement
+    // can fail (its file may be gone), so withdraw the ones already admitted to keep the queue intact.
+    const replacements: string[] = []
+
     for (const item of ordered.slice(changed)) {
-      await data.session.prompt({
-        sessionID: input.sessionID,
-        text: item.payload.text,
-        files: item.payload.files?.map((file) => ({
-          uri: storedFileUri(file),
-          name: file.name,
-          description: file.description,
-          mention: file.mention,
-        })),
-        agents: item.payload.agents,
-        skills: item.payload.skills,
-        metadata: item.payload.metadata,
-        delivery: "queue",
-        resume: false,
-      })
+      const admitted = await data.session
+        .prompt({
+          sessionID: input.sessionID,
+          text: item.payload.text,
+          files: item.payload.files?.map((file) => ({
+            uri: storedFileUri(file),
+            name: file.name,
+            description: file.description,
+            mention: file.mention,
+          })),
+          agents: item.payload.agents,
+          skills: item.payload.skills,
+          metadata: item.payload.metadata,
+          delivery: "queue",
+          resume: false,
+        })
+        .catch(async (error) => {
+          await Promise.all(
+            replacements.map((inboxID) =>
+              server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).catch(() => undefined),
+            ),
+          )
+          throw error
+        })
+
+      replacements.push(admitted.id)
     }
 
     for (const item of current.slice(changed)) {
@@ -461,6 +475,12 @@ async function editedPromptInput(
     ],
     agents: agents.map((agent) => ({ name: agent.name, mention: mention(agent.mention) })),
     skills: skills.map((skill) => ({ id: skill.id, mention: mention(skill.mention) })),
-    metadata: { ...payload?.metadata, displayText: request.displayText, attachments: request.attachments },
+    // Presentation metadata reads only with a comments list, which prompts from other clients lack.
+    metadata: {
+      comments: [],
+      ...payload?.metadata,
+      displayText: request.displayText,
+      attachments: request.attachments,
+    },
   }
 }

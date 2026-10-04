@@ -4,6 +4,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey } from "./schema"
+import { decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
 import { Skill } from "@opencode/schema/skill"
 
 type Inline =
@@ -62,7 +63,8 @@ export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "a
 
 // Restores the composer content that produced a prompt, losing nothing it carried. Review comments
 // return through extractPromptComments and regenerate their files, so those files are left out here;
-// any other unmentioned file returns as an attachment, and unmatched agents and skills as trailing parts.
+// other unmentioned file references, agents, and skills return as trailing mentions, and inline
+// files as attachments.
 export function extractPromptFromMessage(
   message: PromptSource,
   opts?: { directory?: string; attachmentName?: string },
@@ -118,9 +120,30 @@ export function extractPromptFromMessage(
 
     if (file.source.type === "uri" && commentFiles.has(file.source.uri)) continue
 
+    // Like the TUI, a file reference returns by its URI, as a mention: an inline snapshot would lose
+    // a directory's meaning and the file's location.
+    if (file.source.type === "uri" && file.source.uri.startsWith("file:")) {
+      const path = toRelative(
+        decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(/^\/([A-Za-z]:)/, "$1"),
+      )
+
+      trailing.push({
+        type: "file",
+        start: -1,
+        end: -1,
+        value: `@${path}`,
+        path,
+        selection: selectionFromFileUrl(file.source.uri),
+        url: file.source.uri,
+        mime: file.mime,
+        filename: file.name,
+      })
+      continue
+    }
+
     // Stored files carry their bytes, and an empty file has empty data; only a local handoff row
     // leaves data empty because its bytes live at a blob URL.
-    const stored = file.source.type === "inline" || file.source.uri.startsWith("file:") || !!file.data
+    const stored = file.source.type === "inline" || !!file.data
 
     const dataUrl =
       file.source.type === "uri" && file.source.uri.startsWith("data:")

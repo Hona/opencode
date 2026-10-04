@@ -35,6 +35,20 @@ type InboxRow = {
   delivery: SessionInbox.Delivery
 }
 
+function storedFile(file: NonNullable<typeof PromptBody.Type.files>[number]) {
+  const inline = file.uri.startsWith("data:")
+
+  const stored: NonNullable<InboxRow["payload"]["files"]>[number] = {
+    data: inline ? file.uri.slice(file.uri.indexOf(",") + 1) : "",
+    mime: inline ? file.uri.slice("data:".length, file.uri.indexOf(";")) : "text/plain",
+    source: inline ? { type: "inline" } : { type: "uri", uri: file.uri },
+    name: file.name,
+    mention: file.mention,
+  }
+
+  return stored
+}
+
 function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   const rows: InboxRow[] = seed.map((text, index) => ({
     id: `inb_seed_${index + 1}`,
@@ -89,6 +103,12 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
       }
 
       if (body.metadata !== undefined) row.payload.metadata = body.metadata
+
+      // Store attachments the way the server materializes them, so re-admissions round-trip.
+      if (body.files !== undefined) row.payload.files = body.files.map(storedFile)
+
+      if (body.agents !== undefined)
+        row.payload.agents = body.agents.map((agent) => ({ name: agent.name, mention: agent.mention }))
       rows.push(row)
       emit("session.inbox.enqueued", {
         sessionID: input.sessionID,
@@ -197,6 +217,38 @@ test("dragging reorders queued prompts", async ({ page }) => {
     { inboxID: "inb_seed_2", action: "cancel" },
     { inboxID: "inb_seed_3", action: "cancel" },
   ])
+})
+
+test("a reorder that cannot re-admit a prompt leaves the queue unchanged", async ({ page }) => {
+  const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
+  const mock = createQueueMock(order)
+  const admit = mock.onPrompt
+  // The first prompt's re-admission fails, for example because its file was deleted.
+  mock.onPrompt = (input) => {
+    if (input.body.text === "first queued prompt") throw new Error("Attachment file is gone")
+    admit(input)
+  }
+
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(3)
+
+  const first = view.rows.filter({ hasText: "first queued prompt" })
+  const third = view.rows.filter({ hasText: "third queued prompt" })
+  await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
+  await page.mouse.down()
+  const target = await third.boundingBox()
+
+  if (!target) throw new Error("The target queue row is not visible")
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
+  await page.mouse.up()
+
+  // The two replacements admitted before the failure are withdrawn; the originals stay.
+  await expect.poll(() => mock.changes.length).toBe(2)
+  expect(mock.changes.every((change) => change.action === "cancel" && !change.inboxID.startsWith("inb_seed_"))).toBe(
+    true,
+  )
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
+  expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
 })
 
 test("editing restores the existing draft and replaces only the original queue position", async ({ page }) => {
@@ -365,13 +417,15 @@ for (const delivery of ["queue", "steer"] as const) {
       await pending.getByRole("button", { name: "Revert message" }).click()
     }
 
-    await expect(view.input).toHaveText("inspect this file")
-    await expect(view.composer.locator('[data-component="composer-attachments"]')).toContainText("main.ts")
+    // The file returns as a mention of its own URI, as in the TUI, rather than a snapshot.
+    await expect(view.input).toHaveText("inspect this file @/repo/main.ts")
     expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
 
     await view.input.press("Enter")
     await expect.poll(() => mock.prompts.length).toBe(1)
-    expect(mock.prompts[0].files).toMatchObject([{ uri: "data:text/plain;base64,aGk=", name: "main.ts" }])
+    expect(mock.prompts[0].files).toMatchObject([
+      { uri: "file:///repo/main.ts", name: "main.ts", mention: { text: "@/repo/main.ts" } },
+    ])
   })
 }
 
