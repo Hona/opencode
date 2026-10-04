@@ -25,10 +25,10 @@ const first = { status: "active", value: "first", generation: 1 } as const
 
 const second = { status: "active", value: "second", generation: 2 } as const
 
-const Items = Schema.Struct({ items: Schema.mutable(Schema.Array(Schema.String)) })
+const Items = Schema.Struct({ items: Schema.Array(Schema.String) })
 
 const Noted = Schema.Struct({
-  items: Schema.mutable(Schema.Array(Schema.String)),
+  items: Schema.Array(Schema.String),
   note: Schema.optional(Schema.String),
 })
 
@@ -299,6 +299,8 @@ describe("extension primitives", () => {
       }
     })
 
+    root.handle.update((draft) => void draft.items.push("discarded"))
+    root.handle.set({ items: ["replacement"] })
     root.handle.update((draft) => void draft.items.push("first"))
     root.handle.update((draft) => void draft.items.push("second"))
 
@@ -309,7 +311,7 @@ describe("extension primitives", () => {
     await Promise.all(opened.map(whenLoaded))
     expect({ before, after: root.handle.value?.items, ready: root.handle.ready() }).toEqual({
       before: { value: undefined, ready: false },
-      after: ["stored", "first", "second"],
+      after: ["replacement", "first", "second"],
       ready: true,
     })
     root.dispose()
@@ -318,11 +320,25 @@ describe("extension primitives", () => {
   test.each([
     {
       name: "an edit to the draft",
-      mutation: (draft: (typeof Noted)["Type"]) => void draft.items.push("b"),
+      write: (handle: Persisted<(typeof Noted)["Type"]>) => handle.update((draft) => void draft.items.push("b")),
       expected: { items: ["a", "b"], note: "kept" },
     },
-    { name: "a returned value", mutation: () => ({ items: ["b"] }), expected: { items: ["b"] } },
-  ])("store update: $name becomes the whole stored value", (row) => {
+    {
+      name: "set replaces",
+      write: (handle: Persisted<(typeof Noted)["Type"]>) => handle.set({ items: ["b"] }),
+      expected: { items: ["b"] },
+    },
+    {
+      name: "update ignores returned values",
+      write: (handle: Persisted<(typeof Noted)["Type"]>) =>
+        handle.update((draft) => {
+          draft.items.push("b")
+
+          return { items: ["ignored"] }
+        }),
+      expected: { items: ["a", "b"], note: "kept" },
+    },
+  ])("store writes: $name becomes the whole stored value", (row) => {
     const key = `extension-update-${crypto.randomUUID()}`
 
     localStorage.setItem(`opencode.global.dat:${key}`, JSON.stringify({ items: ["a"], note: "kept" }))
@@ -333,7 +349,7 @@ describe("extension primitives", () => {
       return { dispose, handle: persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise }) }
     })
 
-    root.handle.update(row.mutation)
+    row.write(root.handle)
     flushPersisted()
     expect({
       value: root.handle.value,

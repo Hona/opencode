@@ -1,10 +1,11 @@
-import type { IconProps } from "@opencode/ui/icon"
 import type { JSX } from "solid-js"
 import { Point } from "./core"
-import type { SessionRef, MountedSession } from "./host-apis"
+import type { SessionRef, MountedSession, SessionScreen } from "./host-apis"
 
-/** The name of an icon in `@opencode/ui/icon`. */
-export type IconName = IconProps["name"]
+/** The name of a shared icon; derived from the dependency-free artwork catalog, not a UI component's props. */
+export type { IconName } from "@opencode/util/icons"
+
+import type { IconName } from "@opencode/util/icons"
 
 /**
  * A command in the palette, with an optional keybind and slash command. The host publishes it as
@@ -168,8 +169,8 @@ export interface PanelTab {
    * closing it selects the first remaining tab.
    */
   readonly first?: boolean
-  /** Selected when the stored selection is gone. The highest value wins, then strip order. */
-  readonly fallback?: number
+  /** Opts into fallback selection: first eligible regular tab, then a `first` tab, then a pinned tab, in tier order. */
+  readonly fallback?: true
   /** Tabs in one group share one render that stays mounted while any member is listed. */
   readonly group?: string
   /** Struck through, e.g. a file that no longer exists. */
@@ -213,7 +214,7 @@ export interface MobileView {
 }
 
 /**
- * What `Panel.render` receives. Both fields are reactive getters: read `props.tab` and `props.session` where you use
+ * What `Panel.render` receives. Fields are reactive getters: read `props.tab`, `props.session` and `props.screen` where you use
  * them, and do not destructure. When another session is routed, `session` returns its object and the render stays
  * mounted.
  */
@@ -222,6 +223,8 @@ export interface PanelProps {
   readonly tab: PanelTab
   /** The routed session. */
   readonly session: MountedSession
+  /** The session screen that owns this panel's files, comments and composer; always present. */
+  readonly screen: SessionScreen
 }
 
 /** A panel: the tabs an extension shows in a session's side region, or its dock. */
@@ -248,10 +251,16 @@ export interface Panel {
    * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
    * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
    *
-   * @param id - A stored tab id.
-   * @param session - The routed session.
+   * @param input - The stored id, routed session and owning screen. Read the getters; do not destructure.
    */
-  normalize?(id: string, session: MountedSession): string
+  normalize?(input: {
+    /** A stored tab id. */
+    readonly id: string
+    /** The routed session. */
+    readonly session: MountedSession
+    /** The session screen; always present. */
+    readonly screen: SessionScreen
+  }): string
   /**
    * A narrow-screen view of this panel. The render sees `usePanel().placement() === "mobile"` and receives a tab with
    * the panel's `id` and the view's `title`.
@@ -261,38 +270,40 @@ export interface Panel {
    * Reactive, and runs again when another session is routed. `open` holds this extension's tab ids stored in the
    * strip. List those that still apply, plus any `pinned` tab. The host renders triggers, restore, and selection from
    * this data. Cache tab objects by something that outlives one session object (the tab id, `session.key`, or the
-   * screen `ctx.screen.current()` returns), so a session switch does not render their labels again.
+   * screen passed as `input.screen`), so a session switch does not render their labels again. Read the getters;
+   * do not destructure.
    *
-   * @param session - The routed session.
-   * @param open - This extension's stored tab ids, in strip order.
+   * @param input - The routed session, owning screen and stored tab ids.
    */
-  list(session: MountedSession, open: readonly string[]): readonly PanelTab[]
+  list(input: {
+    /** The routed session. */
+    readonly session: MountedSession
+    /** The session screen; always present. */
+    readonly screen: SessionScreen
+    /** This extension's stored tab ids, in strip order. */
+    readonly open: readonly string[]
+  }): readonly PanelTab[]
   /**
    * Renders a tab's content once; its own reactivity updates it, also when another session is routed. A render that
    * throws renders nothing and records the error.
    *
-   * @param props - The tab and the routed session, as reactive getters.
+   * @param props - The tab, routed session and owning screen, as reactive getters.
    */
   render(props: PanelProps): JSX.Element
   /**
    * Runs after the host removes the tab from the strip.
    *
-   * @param tab - The removed tab.
-   * @param session - The routed session.
+   * @param input - The removed tab, routed session and owning screen. Read the getters; do not destructure.
    */
-  close?(tab: PanelTab, session: MountedSession): void
+  close?(input: PanelProps): void
   /**
    * Runs when the tab becomes selected. `restored` is true for the selection the side region mounts with, e.g. the
    * tab selected before a reload, and false for every later selection change.
    *
-   * @param tab - The selected tab.
-   * @param session - The routed session.
-   * @param change - How the selection came about.
+   * @param input - The selected tab, routed session, owning screen and selection origin. Do not destructure.
    */
   focus?(
-    tab: PanelTab,
-    session: MountedSession,
-    change: {
+    input: PanelProps & {
       /** The selection the side region mounted with, not a user's choice. */
       readonly restored: boolean
     },
@@ -542,6 +553,8 @@ export interface SlotMap {
   readonly "window.bottom": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": {
+    /** The timeline's owning session screen; always present, also while the timeline is cached. */
+    readonly screen: SessionScreen
     /** The timeline's session: its latest object, kept while the timeline is hidden. */
     readonly session: MountedSession
     /** The timeline is the one on screen. */
@@ -549,11 +562,15 @@ export interface SlotMap {
   }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {
+    /** The owning session screen; always present. */
+    readonly screen: SessionScreen
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
   /** The side region's inner sidebar, shown while it is open. */
   readonly "session.panel.sidebar": {
+    /** The owning session screen; always present. */
+    readonly screen: SessionScreen
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
@@ -612,7 +629,7 @@ export const MenuItem = Point.define<MenuItem>("menu-item")
  * ctx.add(Panel, {
  *   id: "main",
  *   region: "side",
- *   list: (session, open) => (open.includes("main") ? [tab] : []),
+ *   list: (input) => (input.open.includes("main") ? [tab] : []),
  *   render: (props) => <View session={props.session} />,
  * })
  * ```

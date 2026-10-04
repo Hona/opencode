@@ -11,11 +11,9 @@ import {
 } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import { Predicate } from "effect"
-import type { Persisted, SessionRef, StoreFrom } from "@opencode/gui-extensions/sdk"
+import type { Mutable, Persisted, SessionRef, StoreFrom } from "@opencode/gui-extensions/sdk"
 import { Persist, type persisted } from "@/runtime/persistence/storage"
 import type { SessionStateKey } from "@/runtime/server/scope"
-
-type Mutation<T> = Parameters<Persisted<T>["update"]>[0]
 
 /** One older key persistence imports a store's value from. */
 type CopyFrom = NonNullable<Exclude<Parameters<typeof persisted>[0], string>["copyFrom"]>[number]
@@ -64,8 +62,7 @@ function sessionCopy(from: StoreFrom, session: SessionStateKey): CopyFrom | unde
 }
 
 /**
- * What `Storage.store` returns: a `Persisted` whose `update` waits until the stored value has loaded, then applies in
- * call order.
+ * What `Storage.store` returns: a `Persisted` whose `update` and `set` wait for load, then apply in call order.
  */
 export function persistedHandle<T extends object>(input: {
   readonly store: T
@@ -75,27 +72,18 @@ export function persistedHandle<T extends object>(input: {
   readonly init: Promise<unknown> | undefined
 }) {
   const [loaded, setLoaded] = createSignal(!input.init)
-  const queue: Mutation<T>[] = []
+  const queue: (() => void)[] = []
 
-  // A mutation edits the draft in place, or returns the next value, which replaces the stored one entirely.
-  const apply = (mutation: Mutation<T>) =>
-    batch(() => {
-      const replaced: T[] = []
+  const write = (apply: () => void) => {
+    if (untrack(loaded)) return apply()
 
-      input.set(
-        produce((draft) => {
-          const next = mutation(draft)
-
-          if (next) replaced.push(next)
-        }),
-      )
-      replaced.forEach((next) => input.set(reconcile(next)))
-    })
+    queue.push(apply)
+  }
 
   // Registered after the store's own hydration on the same read, so queued changes apply over the stored value.
   const load = input.init?.then(() =>
     batch(() => {
-      queue.splice(0).forEach(apply)
+      queue.splice(0).forEach((apply) => apply())
       setLoaded(true)
     }),
   )
@@ -107,10 +95,12 @@ export function persistedHandle<T extends object>(input: {
       return loaded() ? input.store : undefined
     },
     ready: loaded,
-    update(mutation) {
-      if (untrack(loaded)) return apply(mutation)
-
-      queue.push(mutation)
+    update(mutate) {
+      // SAFETY: Solid's produce draft is writable recursively; schema readonly fields constrain readers, not drafts.
+      write(() => input.set(produce((draft) => void mutate(draft as Mutable<T>))))
+    },
+    set(next) {
+      write(() => input.set(reconcile(next)))
     },
   }
 
@@ -129,13 +119,13 @@ export function whenLoaded<T>(handle: Persisted<T>) {
  * changes made before then wait and apply in order. Call it inside an owner, which ends the hand-over.
  */
 export function deferredHandle<T>(store: Accessor<Persisted<T> | undefined>): Persisted<T> {
-  const queue: Mutation<T>[] = []
+  const queue: ((current: Persisted<T>) => void)[] = []
 
   // Hands changes made before the store opened to it, which applies them once it has loaded.
   createRenderEffect(() => {
     const current = store()
 
-    if (current && queue.length > 0) untrack(() => queue.splice(0).forEach((mutation) => current.update(mutation)))
+    if (current && queue.length > 0) untrack(() => queue.splice(0).forEach((apply) => apply(current)))
   })
 
   return {
@@ -143,11 +133,17 @@ export function deferredHandle<T>(store: Accessor<Persisted<T> | undefined>): Pe
       return store()?.value
     },
     ready: () => store()?.ready() ?? false,
-    update(mutation) {
+    update(mutate) {
       const current = untrack(store)
 
-      if (current) return current.update(mutation)
-      queue.push(mutation)
+      if (current) return current.update(mutate)
+      queue.push((opened) => opened.update(mutate))
+    },
+    set(next) {
+      const current = untrack(store)
+
+      if (current) return current.set(next)
+      queue.push((opened) => opened.set(next))
     },
   }
 }

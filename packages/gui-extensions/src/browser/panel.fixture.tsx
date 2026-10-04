@@ -11,7 +11,7 @@ import {
   type ParentComponent,
   type ParentProps,
 } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
 import type { Bridge, BridgeLayout } from "../sdk/bridge"
 import {
@@ -29,6 +29,7 @@ import {
   type Layout,
   type Locale,
   type MountedSession,
+  type Mutable,
   type PanelFrame,
   type PanelTab,
   type Router,
@@ -550,17 +551,27 @@ export function mountBrowserRegion(input: RegionHost) {
 
       if (key === "file:tree") setTree(() => value)
 
-      return [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const
+      return [value, (mutation: (draft: T) => void) => set(produce(mutation)), set] as const
     }
 
     // Loaded at once.
     const storage = (extension: string): Storage => ({
       store: (key, options) => {
-        const [value, update] = keep(`${extension}:${key}`, options.initial)
+        const [value, update, set] = keep(`${extension}:${key}`, options.initial)
 
-        return { value, ready: () => true, update }
+        return {
+          value,
+          ready: () => true,
+          // SAFETY: keep uses Solid's writable produce draft; readonly schema fields apply only to readers.
+          update: (mutate) => update((draft) => void mutate(draft as Mutable<typeof options.initial>)),
+          set: (next) => set(reconcile(next)),
+        }
       },
-      memory: (key, options) => keep(`${extension}:${key}`, options.initial),
+      memory: (key, options) => {
+        const kept = keep(`${extension}:${key}`, options.initial)
+
+        return [kept[0], kept[1]]
+      },
       remove() {},
     })
 

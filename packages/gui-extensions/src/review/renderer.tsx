@@ -74,7 +74,7 @@ const setup: Setup<typeof Review> = (ctx) => {
   const [entry, setEntry] = createSignal<{ screen: SessionScreen; model: ReviewModel; dispose: () => void }>()
 
   createKeyed(
-    () => (sessions.current() ? ctx.screen.current() : undefined),
+    ctx.screen.current,
     (screen) => {
       const current = untrack(entry)
       const initial = untrack(sessions.current)
@@ -129,7 +129,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     get tabbable() {
       return !(count() > 0 || layout.sidebar.opened())
     },
-    fallback: 1,
+    fallback: true,
     dom: { tab: "session-side-panel-review-tab", panel: "session-side-panel-review-tabpanel" },
   }
 
@@ -155,13 +155,19 @@ const setup: Setup<typeof Review> = (ctx) => {
       order: 10,
       kind: "tab",
     },
-    list: (session) => (!layout.narrow() && session.project ? [tab] : []),
+    list: (input) => (!layout.narrow() && input.session.project ? [tab] : []),
     render: (props) => {
       const frame = usePanel()
 
-      // The screen's model: the render belongs to the routed session, so it never waits for a key to match.
+      // A server switch mounts a new screen before the owned model effect runs. Never render the old screen's model.
+      const model = () => {
+        const current = entry()
+
+        return current?.screen === props.screen ? current.model : undefined
+      }
+
       return (
-        <Show when={entry()?.model} keyed>
+        <Show when={model()} keyed>
           {(model) => {
             createKeyed(frame.visible, () => onCleanup(watch(props.session, "panel")))
 

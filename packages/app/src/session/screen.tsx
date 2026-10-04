@@ -43,7 +43,12 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   return (
     <ExtensionLinks session={mounted.view()}>
-      <SessionScreenContent session={props.session} view={mounted.view} bindBackground={mounted.bindBackground} />
+      <SessionScreenContent
+        session={props.session}
+        mountedScreen={mounted.screen}
+        view={mounted.view}
+        bindBackground={mounted.bindBackground}
+      />
     </ExtensionLinks>
   )
 }
@@ -52,6 +57,7 @@ function SessionScreenContent(props: {
   session: SessionModel
   /** One object per routed session; renders receive each through a reactive prop instead of remounting. */
   view: Accessor<MountedSession>
+  mountedScreen: ReturnType<typeof createMountedSession>["screen"]
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
 }) {
   const session = props.session
@@ -59,7 +65,14 @@ function SessionScreenContent(props: {
   const attachment = useExtensionAttachment()
   const isDesktop = session.isDesktop
   const sidebar = createPanelSidebar()
-  const region = createRegion({ region: "side", view: props.view, tabs: session.layout.tabs })
+
+  const region = createRegion({
+    region: "side",
+    view: props.view,
+    screen: props.mountedScreen,
+    tabs: session.layout.tabs,
+  })
+
   onCleanup(attachment.region(region))
   const mobile = createMobileViews()
 
@@ -229,6 +242,7 @@ function SessionScreenContent(props: {
           hideHeader={!isDesktop()}
           session={source}
           view={own()}
+          screen={props.mountedScreen}
           background={composer.requests.background}
           actions={composer.actions.timeline}
           scroll={timeline.scroll}
@@ -269,6 +283,7 @@ function SessionScreenContent(props: {
         <Show when={session.identity.sessionKey()} keyed>
           {(_key) => (
             <MobileViewTabs
+              screen={props.mountedScreen}
               views={mobile}
               region={region}
               current={mobileView()}
@@ -288,7 +303,15 @@ function SessionScreenContent(props: {
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <Show when={!isDesktop() && store.mobileDockCached}>
           <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
-            <DockRegion view={props.view()} sidebar={sidebar} fill embedded present contentHeight="100%" />
+            <DockRegion
+              view={props.view()}
+              screen={props.mountedScreen}
+              sidebar={sidebar}
+              fill
+              embedded
+              present
+              contentHeight="100%"
+            />
           </div>
         </Show>
         <Switch>
@@ -298,6 +321,7 @@ function SessionScreenContent(props: {
           <Match when={!isDesktop() && session.identity.params.id ? mobileEntry() : undefined}>
             {(entry) => (
               <MobilePanel
+                screen={props.mountedScreen}
                 entry={entry()}
                 view={props.view()}
                 sidebar={sidebar}
@@ -428,6 +452,7 @@ function SessionScreenContent(props: {
                       }}
                     >
                       <SideRegion
+                        screen={props.mountedScreen}
                         view={props.view()}
                         region={region}
                         sidebar={sidebar}
@@ -484,6 +509,7 @@ function SessionScreenContent(props: {
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
                           <DockRegion
+                            screen={props.mountedScreen}
                             view={props.view()}
                             sidebar={sidebar}
                             fill
@@ -531,6 +557,7 @@ function SessionScreenContent(props: {
               </div>
             </Show>
             <DockRegion
+              screen={props.mountedScreen}
               view={props.view()}
               sidebar={sidebar}
               stacked={isDesktop()}

@@ -44,8 +44,8 @@ export type Catalog = {
 }
 
 /**
- * What an entry's setup returns. Teardown is not returned: a window entry uses Solid's `onCleanup` (setup runs under
- * the extension's root owner) and `ctx.signal`; a main entry uses `ctx.scope.addFinalizer` and `ctx.scope.signal`.
+ * What a main entry's setup returns. Teardown is not returned: main uses `ctx.scope.addFinalizer` and
+ * `ctx.scope.signal`. Window setup is synchronous and returns nothing.
  */
 type Result = void | Promise<void>
 
@@ -120,7 +120,7 @@ export interface Definition {
   /** The window entry; its default export is a `Setup<typeof Definition>` (`@opencode/gui-extensions/sdk`). */
   readonly renderer?: () => Promise<{
     /** The window setup. */
-    readonly default: (ctx: never) => Result
+    readonly default: (ctx: never) => void
   }>
   /** The main entry; its default export is a `MainSetup` (`@opencode/gui-extensions/sdk/main`). */
   readonly main?: () => Promise<{
@@ -267,17 +267,21 @@ type TypeOf<C> = C extends Codec ? C["Type"] : void
  *
  * @example
  * ```ts
- * const info = await pairing.info(undefined, { signal: ctx.signal })
+ * const info = await pairing.info({ signal: ctx.signal })
  * ```
  */
 export type IpcClient<S extends IpcSpec> = {
-  readonly [Name in keyof S["methods"]]: (
-    input: TypeOf<S["methods"][Name]["input"]>,
-    options?: {
-      /** Aborts the call: main's `Caller.signal` aborts, and the promise rejects. */
-      readonly signal?: AbortSignal
-    },
-  ) => Promise<TypeOf<S["methods"][Name]["output"]>>
+  readonly [Name in keyof S["methods"]]: S["methods"][Name] extends { readonly input: Codec }
+    ? (
+        /** The argument decoded by this method's input schema. */
+        input: TypeOf<S["methods"][Name]["input"]>,
+        /** Optional per-call cancellation. */
+        options?: IpcCallOptions,
+      ) => Promise<TypeOf<S["methods"][Name]["output"]>>
+    : (
+        /** Optional per-call cancellation; no input placeholder is accepted. */
+        options?: IpcCallOptions,
+      ) => Promise<TypeOf<S["methods"][Name]["output"]>>
 } & {
   /**
    * This window's state, as main's `IpcImpl.state` last pushed it. Undefined until the first snapshot arrives and
@@ -296,6 +300,12 @@ export type IpcClient<S extends IpcSpec> = {
     name: Name,
     listener: (data: TypeOf<NonNullable<S["events"]>[Name]>) => void,
   ): Cleanup
+}
+
+/** Options for any Ipc method. A method without an input schema takes these as its only argument. */
+export interface IpcCallOptions {
+  /** Aborts the call: main's `Caller.signal` aborts, and the promise rejects. */
+  readonly signal?: AbortSignal
 }
 
 /** The value a token gives its users: the contract itself, or the client of an Ipc. */
@@ -681,7 +691,8 @@ export const Store = {
  * @example
  * ```ts
  * const prefs = ctx.stores.prefs
- * prefs.update((draft) => ({ shown: !draft.shown }))
+ * prefs.update((draft) => { draft.shown = !draft.shown })
+ * prefs.set({ shown: true })
  * ```
  */
 export interface Persisted<T, V = T | undefined> {
@@ -690,14 +701,28 @@ export interface Persisted<T, V = T | undefined> {
   /** The stored value has loaded. Always true in main. Reactive in the window. */
   ready(): boolean
   /**
-   * Changes the stored value. In the window it waits until the value has loaded, then applies in call order; in main
-   * it writes at once. The mutation edits `draft` in place, or returns the next value, which replaces the stored one;
-   * return nothing after editing the draft.
+   * Mutates a deep-mutable draft, even when the schema's fields are readonly. Return nothing: returned values are
+   * ignored. In the window it waits for load and applies in call order with `set`; in main it writes at once.
    *
-   * @param mutation - Receives a draft of the current value.
+   * @param mutate - Edits a draft of the current value in place.
    */
-  update(mutation: (draft: T) => T | void): void
+  update(
+    mutate: (
+      /** A deep-mutable copy of the current value; edit it in place. */
+      draft: Mutable<T>,
+    ) => void,
+  ): void
+  /**
+   * Replaces the stored value. In the window it waits for load and applies in call order with `update`; in main it
+   * writes at once. Use this for primitives or to replace an object or collection.
+   *
+   * @param next - The complete next value, typed by the store's schema.
+   */
+  set(next: T): void
 }
+
+/** A stored value's writable draft, recursively removing readonly fields and collection entries. */
+export type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T
 
 /** The tokens a definition declares under `K`; `{}` when it declares none. */
 export type Declared<D, K extends "provides" | "uses" | "requires"> = D extends { readonly [P in K]?: infer M }
@@ -732,6 +757,12 @@ export interface Missing<Id extends string> {
 /** `Extension.compose`'s error: a token that two extensions in the composition provide. */
 export interface Duplicate<Id extends string> {
   /** The token's id. */
+  readonly [problem]: Id
+}
+
+/** `Extension.compose`'s error: two definitions use the same extension id. */
+export interface DuplicateExtension<Id extends string> {
+  /** The repeated extension id. */
   readonly [problem]: Id
 }
 
@@ -784,8 +815,21 @@ type DuplicateIds<Ds extends readonly unknown[]> = {
   [I in keyof Ds]: Literal<Ids<Ds[I], "provides">> & Ids<Others<Ds, I>, "provides">
 }[number]
 
+type ExtensionId<D> = D extends { readonly id: infer Id } ? Literal<Id> : never
+
+type DuplicateExtensions<Ds extends readonly unknown[]> = {
+  [I in keyof Ds]: ExtensionId<Ds[I]> & ExtensionId<Others<Ds, I>>
+}[number]
+
 /** Compile errors for a composition; `unknown` when it is valid. */
-export type Composition<Ds extends readonly unknown[]> = [MissingIds<Ds>] extends [never]
+export type Composition<Ds extends readonly unknown[]> = [DuplicateExtensions<Ds>] extends [never]
+  ? ProvidersCheck<Ds>
+  : {
+      /** Two definitions share this extension id. */
+      readonly "duplicate extension": DuplicateExtension<DuplicateExtensions<Ds>>
+    }
+
+type ProvidersCheck<Ds extends readonly unknown[]> = [MissingIds<Ds>] extends [never]
   ? [DuplicateIds<Ds>] extends [never]
     ? unknown
     : {
@@ -846,7 +890,8 @@ export const Extension = {
     definition,
   /**
    * Returns the definitions as they are. Fails to compile, naming the token id, when a `requires` token has no
-   * provider in the composition (`Missing<"id">`), or when two extensions provide the same token (`Duplicate<"id">`).
+   * provider in the composition (`Missing<"id">`), when two extensions provide the same token (`Duplicate<"id">`),
+   * or when two definitions share an extension id (`DuplicateExtension<"id">`).
    *
    * @param definitions - Every extension of one process, each with its entry.
    * @returns The same definitions, as an array.

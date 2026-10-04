@@ -150,7 +150,7 @@ function SessionReviewTab(props: {
       }}
       onScroll={handleScroll}
       onDiffRendered={queueRestore}
-      open={review.open()}
+      open={[...review.open()]}
       onOpenChange={review.setOpen}
       classes={{
         root: "[&_[data-slot=session-review-list]]:pb-0 [&_[data-slot=accordion-trigger]]:!rounded-none [&_[data-slot=accordion-trigger]]:!border-x-0 [&_[data-slot=accordion-item]:first-child_[data-slot=accordion-trigger]]:!border-t-0 [&_[data-slot=accordion-item]:last-child:not([data-expanded])_[data-slot=accordion-trigger]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=accordion-content]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=session-review-diff-placeholder]]:!border-b-0 [&_[data-slot=accordion-content]]:!rounded-none [&_[data-slot=accordion-content]]:!border-x-0 [&_[data-slot=session-review-diff-placeholder]]:!rounded-none [&_[data-slot=session-review-diff-placeholder]]:!border-x-0",

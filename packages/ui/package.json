@@ -108,6 +108,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@opencode/util": "workspace:*",
     "@kobalte/core": "catalog:",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-listener": "catalog:",

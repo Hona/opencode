@@ -86,7 +86,7 @@ export type HostApiFactories = {
   readonly [K in Exclude<keyof HostApis, "links" | "dialogs">]: HostApiFactory<HostApis[K]>
 }
 
-export type ExtensionStatus = "loading" | "active" | "failed" | "disabled"
+export type ExtensionStatus = "loading" | "active" | "failed" | "disabled" | "blocked"
 
 /** The last error an extension raised: in its setup or an effect, or while one of its contributions rendered. */
 export type ExtensionFailure = { readonly phase: "setup" | "render"; readonly error: string }
@@ -189,6 +189,9 @@ function createHost(input: HostInput) {
     if (main ? input.disabled()?.has(extension) : state.status[extension] === "disabled") return inactive.disabled
 
     if (main ? input.failed?.(extension) : state.status[extension] === "failed") return inactive.failed
+
+    // A blocked provider cannot offer its own contracts either, so hard-dependency chains settle as unavailable.
+    if (!main && state.status[extension] === "blocked") return inactive.disabled
 
     // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
     if (!main && state.status[extension] === "active") return inactive.disabled
@@ -383,7 +386,13 @@ function createHost(input: HostInput) {
     // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
     if (!load || input.disabled()?.has(definition.id) !== false) return
 
-    setState("status", definition.id, "loading")
+    const blocked = Object.values(definition.requires ?? {}).some((token) => {
+      const provider = untrack(() => providerState(token))
+
+      return provider.status === "inactive" && provider.reason !== "restarting"
+    })
+
+    setState("status", definition.id, blocked ? "blocked" : "loading")
 
     // Waits for its hard contracts; the requirement watcher starts it once they are active.
     if (!satisfied(definition)) return
@@ -479,7 +488,7 @@ function createHost(input: HostInput) {
       void Promise.try(fn).catch((cause: unknown) => console.error(`[extension] ${extension}`, cause))
 
     const own = (fn: Cleanup): Cleanup => {
-      // Work that outlives the extension, e.g. after an await in setup, is released as soon as it registers.
+      // Work that outlives the extension, e.g. a promise callback, is released as soon as it registers.
       if (controller.signal.aborted) {
         release(fn)
 
@@ -593,7 +602,7 @@ function createHost(input: HostInput) {
       add<T>(point: Point<T>, item: T | (() => T | undefined)) {
         if (late()) return () => {}
 
-        // Work after an await in setup has no owner; fall back to the extension root.
+        // Promise callbacks may have no owner; fall back to the extension root.
         const read =
           // SAFETY: a function item is the SDK's reactive form; points take no function values.
           // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
@@ -774,7 +783,7 @@ function createHost(input: HostInput) {
 
           const status = state.status[definition.id]
 
-          if (status === "active" || status === "failed" || status === "disabled") return true
+          if (status === "active" || status === "failed" || status === "disabled" || status === "blocked") return true
 
           return Object.values(definition.requires ?? {}).some((token) => {
             const provider = providerState(token)
@@ -818,8 +827,11 @@ function createHost(input: HostInput) {
     const key = createMemo(() => {
       const providers = tokens.map(providerState)
 
-      return providers.every((provider) => provider.status === "active")
-        ? providers.map((provider) => (provider.status === "active" ? provider.generation : 0)).join(",")
+      if (providers.every((provider) => provider.status === "active"))
+        return providers.map((provider) => (provider.status === "active" ? provider.generation : 0)).join(",")
+
+      return providers.some((provider) => provider.status === "inactive" && provider.reason !== "restarting")
+        ? "blocked"
         : undefined
     })
 
@@ -836,6 +848,8 @@ function createHost(input: HostInput) {
               if (input.disabled()?.has(id) !== false) return
 
               if (value === undefined) return setState("status", id, "loading")
+
+              if (value === "blocked") return setState("status", id, "blocked")
 
               void activate(latest(definition))
             }),
