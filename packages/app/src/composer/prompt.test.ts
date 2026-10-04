@@ -117,6 +117,7 @@ describe("extractPromptFromMessage", () => {
           mime: "text/markdown",
           source: { type: "uri", uri: "file:///repo/notes.md" },
           name: "notes.md",
+          description: "the failing version",
         },
         {
           data: "c3JjLw==",
@@ -124,6 +125,8 @@ describe("extractPromptFromMessage", () => {
           source: { type: "uri", uri: "file:///repo/src" },
           name: "src",
         },
+        // The workspace root has no relative path.
+        { data: "", mime: "application/x-directory", source: { type: "uri", uri: "file:///repo" }, name: "repo" },
         // An empty file is stored with empty data, not missing data.
         { data: "", mime: "text/plain", source: { type: "inline" }, name: "empty.txt" },
       ],
@@ -136,10 +139,18 @@ describe("extractPromptFromMessage", () => {
       { type: "text", content: "日本 " },
       { type: "file", content: "@main.ts", url: "file:///repo/main.ts" },
       { type: "text", content: " " },
-      { type: "file", content: "@notes.md", path: "notes.md", url: "file:///repo/notes.md" },
+      {
+        type: "file",
+        content: "@notes.md",
+        path: "notes.md",
+        url: "file:///repo/notes.md",
+        description: "the failing version",
+      },
       { type: "text", content: " " },
       // A directory keeps its URI rather than turning into a snapshot of its listing.
       { type: "file", content: "@src", path: "src", url: "file:///repo/src", mime: "application/x-directory" },
+      { type: "text", content: " " },
+      { type: "file", content: "@/repo", path: "/repo", url: "file:///repo" },
       { type: "text", content: " " },
       { type: "agent", content: "@plan", name: "plan" },
       { type: "text", content: " " },

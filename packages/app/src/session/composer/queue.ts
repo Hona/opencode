@@ -486,7 +486,12 @@ async function editedPromptInput(
           description: file.description,
           mention: mention(file.mention),
         })) ?? []),
-      ...request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
+      ...request.files.map((file) => ({
+        uri: file.uri,
+        name: file.name,
+        description: file.description,
+        mention: file.mention,
+      })),
     ],
     agents: agents.map((agent) => ({ name: agent.name, mention: mention(agent.mention) })),
     skills: skills.map((skill) => ({ id: skill.id, mention: mention(skill.mention) })),

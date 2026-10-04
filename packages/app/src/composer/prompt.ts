@@ -23,6 +23,7 @@ type Inline =
       url?: string
       mime?: string
       filename?: string
+      description?: string
     }
   | {
       type: "agent"
@@ -114,6 +115,7 @@ export function extractPromptFromMessage(
         url: uri,
         mime: file.mime,
         filename: file.name,
+        description: file.description,
       })
       continue
     }
@@ -123,9 +125,13 @@ export function extractPromptFromMessage(
     // A file reference keeps its URI, as the TUI keeps it: an inline snapshot would lose a directory's
     // meaning and the file's location. The composer holds file references as mentions.
     if (file.source.type === "uri" && file.source.uri.startsWith("file:")) {
-      const path = directory
-        ? createPathHelpers(() => directory).normalize(file.source.uri)
-        : decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(/^\/([A-Za-z]:)/, "$1")
+      const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(
+        /^\/([A-Za-z]:)/,
+        "$1",
+      )
+
+      // The workspace root itself has no relative path, so it keeps its absolute one.
+      const path = (directory && createPathHelpers(() => directory).normalize(file.source.uri)) || absolute
 
       trailing.push({
         type: "file",
@@ -137,6 +143,7 @@ export function extractPromptFromMessage(
         url: file.source.uri,
         mime: file.mime,
         filename: file.name,
+        description: file.description,
       })
       continue
     }
@@ -253,6 +260,7 @@ function buildPrompt(
       url: item.url,
       mime: item.mime,
       filename: item.filename,
+      description: item.description,
       ...span,
     } satisfies FileAttachmentPart)
   }

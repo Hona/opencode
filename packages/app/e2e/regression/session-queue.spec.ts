@@ -43,6 +43,7 @@ function storedFile(file: NonNullable<typeof PromptBody.Type.files>[number]) {
     mime: inline ? file.uri.slice("data:".length, file.uri.indexOf(";")) : "text/plain",
     source: inline ? { type: "inline" } : { type: "uri", uri: file.uri },
     name: file.name,
+    description: file.description,
     mention: file.mention,
   }
 
@@ -260,6 +261,9 @@ for (const change of ["reorder", "edit"] as const) {
     )
     await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
     expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
+
+    // A failed edit keeps its draft in the composer so nothing typed is lost.
+    if (change === "edit") await expect(view.input).toHaveText("second queued prompt, edited")
   })
 }
 
@@ -467,7 +471,13 @@ for (const delivery of ["queue", "steer"] as const) {
     const inboxID = mock.rows[0].id
     mock.rows[0].delivery = delivery
     mock.rows[0].payload.files = [
-      { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+      {
+        data: "aGk=",
+        mime: "text/plain",
+        source: { type: "uri", uri: "file:///repo/main.ts" },
+        name: "main.ts",
+        description: "the failing version",
+      },
     ]
     const view = await openQueue(page, mock)
 
@@ -489,7 +499,12 @@ for (const delivery of ["queue", "steer"] as const) {
     await view.input.press("Enter")
     await expect.poll(() => mock.prompts.length).toBe(1)
     expect(mock.prompts[0].files).toMatchObject([
-      { uri: "file:///repo/main.ts", name: "main.ts", mention: { text: "@/repo/main.ts" } },
+      {
+        uri: "file:///repo/main.ts",
+        name: "main.ts",
+        description: "the failing version",
+        mention: { text: "@/repo/main.ts" },
+      },
     ])
   })
 }
