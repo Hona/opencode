@@ -411,7 +411,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }}
         >
           <input
-            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent text-transparent caret-v2-text-text-base placeholder:text-v2-text-text-faint outline-none focus:border-v2-border-border-focus"
+            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent text-transparent caret-v2-text-text-base placeholder:text-v2-text-text-faint selection:bg-[color:Highlight] outline-none focus:border-v2-border-border-focus"
             spellcheck={false}
             autocomplete="off"
             value={field()}
@@ -435,7 +435,9 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               if (addressDisplay) addressDisplay.scrollLeft = event.currentTarget.scrollLeft
             }}
           />
-          {/* Keep native input editing and selection while coloring the scheme, including during editing. */}
+          {/* Keep native input editing and selection while coloring the scheme, including during editing.
+              The input's selection sets only a background: the default selection text color would paint a
+              second copy of the URL over this overlay and make it look bold. */}
           <div
             aria-hidden="true"
             class="absolute inset-0 flex items-center px-2 border border-transparent pointer-events-none"
