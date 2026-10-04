@@ -33,17 +33,21 @@ for (const view of ["desktop", "mobile"] as const) {
   })
 }
 
-test("Git initialization can be retried after switching sessions during the request", async ({ page }) => {
-  await openSession(page, {
+test("Git initialization belongs to its session and refreshes after a session switch", async ({ page }) => {
+  const requests: { directory: string; provider?: string }[] = []
+
+  const workspace = await openSession(page, {
     name: "ReviewInitSwitch",
     project: { vcs: undefined },
+    onVcsInit: (input) => requests.push(input),
     sessions: [
       { id: "ses_init_a", title: "Initialize Alpha" },
       { id: "ses_init_b", title: "Initialize Beta" },
     ],
     seed: { panes: { ses_init_a: { review: true }, ses_init_b: { review: true } } },
   })
-  // Without an init handler the harness rejects the request; hold it across the route change.
+
+  // The successful init finishes while another session is routed.
   const request = await holdRoute(page, (url) => url.pathname === "/api/vcs/init", { method: "POST" })
   const panel = page.locator("#review-panel")
   const init = panel.getByRole("button", { name: "Create Git repository", exact: true })
@@ -55,17 +59,56 @@ test("Git initialization can be retried after switching sessions during the requ
 
   await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Beta" }).click()
   await expectSessionTitle(page, "Initialize Beta")
+  await expect(init).toBeEnabled()
+  await expect(pending).toHaveCount(0)
+
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Alpha" }).click()
+  await expectSessionTitle(page, "Initialize Alpha")
   await expect(pending).toBeDisabled()
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Beta" }).click()
+  await expectSessionTitle(page, "Initialize Beta")
+  await expect(init).toBeEnabled()
+
+  const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  // The worktree event can refresh project-wide UI by itself; the completed action must also reload Alpha's cache.
+  const refreshed = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/session/ses_init_a")
+  request.release()
+  expect((await response).status()).toBe(204)
+  expect((await refreshed).status()).toBe(200)
+  expect(requests).toEqual([{ directory: workspace.directory, provider: "git" }])
+  await expect(panel.getByRole("button", { name: "Git changes", exact: true })).toBeVisible()
+  await expect(init).toHaveCount(0)
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Alpha" }).click()
+  await expectSessionTitle(page, "Initialize Alpha")
+  await expect(panel.getByRole("button", { name: "Git changes", exact: true })).toBeVisible()
+  await expect(pending).toHaveCount(0)
+})
+
+test("a rejected Git init releases its session's button without showing an error in another session", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewInitFailure",
+    project: { vcs: undefined },
+    sessions: [
+      { id: "ses_init_failure_a", title: "Initialize Alpha" },
+      { id: "ses_init_failure_b", title: "Initialize Beta" },
+    ],
+    seed: { panes: { ses_init_failure_a: { review: true }, ses_init_failure_b: { review: true } } },
+  })
+  const request = await holdRoute(page, (url) => url.pathname === "/api/vcs/init", { method: "POST" })
+  const init = page.locator("#review-panel").getByRole("button", { name: "Create Git repository", exact: true })
+  await init.click()
+  await request.arrived
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Beta" }).click()
+  await expectSessionTitle(page, "Initialize Beta")
+  await expect(init).toBeEnabled()
   const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
   request.release()
   expect((await response).status()).toBe(501)
-  await expect(init).toBeEnabled()
   await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
-
-  const retry = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
-  await init.click()
-  expect((await retry).status()).toBe(501)
-  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Alpha" }).click()
+  await expectSessionTitle(page, "Initialize Alpha")
   await expect(init).toBeEnabled()
 })
 
