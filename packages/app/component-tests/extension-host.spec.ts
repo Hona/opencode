@@ -5,6 +5,7 @@ import type {
   Contract,
   DialogHandle,
   Dialogs,
+  Live,
   PanelTab,
   SessionRef,
   SessionScreen,
@@ -403,7 +404,7 @@ const tiers: readonly { name: string; tabs: readonly PanelTab[]; active?: string
   },
   {
     name: "no implicit fallback",
-    tabs: [{ id: "details", title: "Details" }],
+    tabs: [{ id: "details", title: "Details", fallback: false }],
     expected: "",
   },
   {
@@ -604,7 +605,7 @@ story("an extension that requires a contract starts once it is active and restar
     ]
 
     // Hard contracts gate startup: a consumer whose provider is disabled settles the gate without starting.
-    const gated = mountExtensions({ definitions, disabled: ["provider"] })
+    const gated = mountExtensions({ definitions: [definitions[1], definitions[0]], disabled: ["provider"] })
     await until(() => gated.ready())
     const blocked = { status: gated.status("consumer"), log: [...log] }
     gated.unmount()
@@ -732,6 +733,135 @@ story("developer settings show a blocked hard dependency instead of loading fore
   await settings.screenshot({ path: info.outputPath("requires-status.png") })
   await expect(settings.getByText("Blocked", { exact: true })).toBeVisible()
   await expect(settings.getByText("Loading", { exact: true })).toHaveCount(0)
+})
+
+story("blocked chains expose their own reason and recover regardless of definition order", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { Contract, mountExtensions, until } = await import(fixture)
+    const Root: Contract<number, "root.value"> = Contract.define("root.value")
+    const Branch: Contract<number, "branch.value"> = Contract.define("branch.value")
+    const observed = { read: (): Live<number> => ({ status: "pending" }), starts: 0 }
+
+    const host = mountExtensions({
+      disabled: ["root"],
+      definitions: [
+        {
+          id: "leaf",
+          requires: { branch: Branch },
+          renderer: async () => ({
+            default: () => {
+              observed.starts++
+            },
+          }),
+        },
+        {
+          id: "observer",
+          uses: { branch: Branch },
+          renderer: async () => ({
+            default: (ctx: Context & { uses: { branch: () => Live<number> } }) => {
+              observed.read = ctx.uses.branch
+            },
+          }),
+        },
+        {
+          id: "branch",
+          requires: { root: Root },
+          provides: { branch: Branch },
+          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Branch, 2) }),
+        },
+        {
+          id: "root",
+          provides: { root: Root },
+          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Root, 1) }),
+        },
+      ],
+    })
+
+    await until(() => host.ready())
+
+    const blocked = {
+      branch: host.status("branch"),
+      leaf: host.status("leaf"),
+      live: observed.read(),
+      starts: observed.starts,
+    }
+
+    host.disable([])
+    await until(() => host.status("leaf") === "active")
+    const recovered = { live: observed.read(), starts: observed.starts }
+    host.unmount()
+
+    return { blocked, recovered }
+  }, fixture)
+
+  expect(result).toEqual({
+    blocked: { branch: "blocked", leaf: "blocked", live: { status: "inactive", reason: "blocked" }, starts: 0 },
+    recovered: { live: { status: "active", value: 2, generation: 1 }, starts: 1 },
+  })
+})
+
+const invalidSetups = ["promise", "thenable"]
+
+invalidSetups.forEach((kind) => {
+  story(`window setup rejects a returned ${kind}`, async ({ page }) => {
+    const result = await page.evaluate(
+      async (input) => {
+        const { mountExtensions, until } = await import(input.fixture)
+        const resume = Promise.withResolvers<void>()
+        const done = Promise.withResolvers<void>()
+        const point = { kind: "point" as const, id: "invalid-setup" }
+        const observed = { aborted: false }
+
+        const host = mountExtensions({
+          definitions: [
+            {
+              id: "invalid",
+              renderer: async () => ({
+                default: (ctx: Context) => {
+                  ctx.add(point, "before")
+
+                  if (input.kind === "thenable")
+                    return {
+                      then(resolve: () => void) {
+                        resolve()
+                      },
+                    }
+
+                  return resume.promise.then(() => {
+                    observed.aborted = ctx.signal.aborted
+                    ctx.add(point, "after")
+                    done.resolve()
+                  })
+                },
+              }),
+            },
+          ],
+        })
+
+        await until(() => host.ready())
+
+        const failed = {
+          status: host.status("invalid"),
+          error: host.failure("invalid")?.error.includes("Window setup must be synchronous"),
+          entries: host.entries(point.id),
+        }
+
+        resume.resolve()
+
+        if (input.kind === "promise") await done.promise
+        const after = { entries: host.entries(point.id), aborted: observed.aborted }
+        host.unmount()
+
+        return { failed, after }
+      },
+      { fixture, kind },
+    )
+
+    expect(result).toEqual({
+      failed: { status: "failed", error: true, entries: 0 },
+      after: { entries: 0, aborted: kind === "promise" },
+    })
+  })
 })
 
 story("declared global stores load before setup, so setup reads the stored value", async ({ page }) => {

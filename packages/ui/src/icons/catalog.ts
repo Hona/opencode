@@ -1,4 +1,4 @@
-import { additionalIcons, additionalIconViewBox } from "./additional-icons.js"
+import { additionalIcons, additionalIconViewBox } from "./icon/additional-icons"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
@@ -245,14 +245,25 @@ export function iconNames() {
   return Array.from(new Set([...Object.keys(additionalIcons), ...Object.keys(icons)])) as IconName[]
 }
 
-/** Narrows a name against the shared artwork catalog. */
+/**
+ * Narrows a name against the shared artwork catalog.
+ * @param name - A name supplied by a caller, including names unknown to this build.
+ */
 export function isIconName(name: string): name is IconName {
   return Object.hasOwn(icons, name) || Object.hasOwn(additionalIcons, name)
 }
 
+/**
+ * The SVG body and viewport for a known catalog name, with primary artwork taking precedence.
+ * @param name - A name validated by the type or by `isIconName`.
+ */
 export function getIcon(name: IconName) {
+  // SAFETY: IconName is the union of both catalogs' keys; an absent primary entry falls back to additional artwork.
   const icon = icons[name as keyof typeof icons]
+
   if (icon) return icon
-  const body = additionalIcons[name as keyof typeof additionalIcons]
-  return { body, viewBox: additionalIconViewBox(name as keyof typeof additionalIcons) }
+  // SAFETY: the primary lookup ruled out its entries, so the remaining name belongs to additionalIcons.
+  const key = name as keyof typeof additionalIcons
+
+  return { body: additionalIcons[key], viewBox: additionalIconViewBox(key) }
 }

@@ -566,7 +566,13 @@ export function createExtensionAttachment(apis: HostApis) {
           const open = stored.flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
 
           return item.value
-            .list({ session: view, screen: currentScreen, open })
+            .list({
+              get session() {
+                return mountedSession(session) ?? view
+              },
+              screen: currentScreen,
+              open,
+            })
             .map((tab) => ({ key: `${prefix}${tab.id}`, tab }))
         }),
     )

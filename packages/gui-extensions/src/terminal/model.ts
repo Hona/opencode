@@ -357,10 +357,14 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
 
       if (index === -1) return
 
-      stored.update((draft) => trimTerminal(draft.all[index]))
+      stored.update((draft) => {
+        trimTerminal(draft.all[index])
+      })
     },
     trimAll() {
-      stored.update((draft) => draft.all.forEach(trimTerminal))
+      stored.update((draft) => {
+        draft.all.forEach(trimTerminal)
+      })
     },
     clone,
     open(id: string) {

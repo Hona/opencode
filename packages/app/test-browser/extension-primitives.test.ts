@@ -251,6 +251,7 @@ describe("extension primitives", () => {
   test.each([
     { name: "while the storage read is held", location: { directory: "/repo" } },
     { name: "while the session location is unknown", location: undefined },
+    { name: "while held with an invalid returned replacement", location: { directory: "/repo" }, invalid: true },
   ])("store writes made $name apply in order over the stored value", async (row) => {
     const held = Promise.withResolvers<void>()
     const key = `extension-store-${crypto.randomUUID()}`
@@ -299,6 +300,16 @@ describe("extension primitives", () => {
       }
     })
 
+    if ("invalid" in row) {
+      // @ts-expect-error JavaScript extensions can return an invalid replacement before hydration too
+      root.handle.update(() => ({ items: ["wrong"] }))
+      held.resolve()
+      await expect(Promise.all(opened.map(whenLoaded))).rejects.toThrow("Use set")
+      root.dispose()
+
+      return
+    }
+
     root.handle.update((draft) => void draft.items.push("discarded"))
     root.handle.set({ items: ["replacement"] })
     root.handle.update((draft) => void draft.items.push("first"))
@@ -329,14 +340,13 @@ describe("extension primitives", () => {
       expected: { items: ["b"] },
     },
     {
-      name: "update ignores returned values",
+      name: "update rejects a returned replacement",
       write: (handle: Persisted<(typeof Noted)["Type"]>) =>
-        handle.update((draft) => {
-          draft.items.push("b")
-
-          return { items: ["ignored"] }
-        }),
-      expected: { items: ["a", "b"], note: "kept" },
+        expect(() => {
+          // @ts-expect-error JavaScript extensions can still return a replacement at runtime
+          handle.update(() => ({ items: ["wrong"] }))
+        }).toThrow("Use set"),
+      expected: { items: ["a"], note: "kept" },
     },
   ])("store writes: $name becomes the whole stored value", (row) => {
     const key = `extension-update-${crypto.randomUUID()}`

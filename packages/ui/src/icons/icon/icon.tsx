@@ -1,5 +1,5 @@
 import { onMount, type ComponentProps, splitProps } from "solid-js"
-import { iconNames, isIconName, getIcon, type IconName } from "@opencode/util/icons"
+import { iconNames, isIconName, getIcon, type IconName } from "../catalog"
 import "./icon.css"
 
 const spriteID = "opencode-v2-icon-sprite"

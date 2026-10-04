@@ -20,6 +20,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
 import { resolveTemplate } from "@solid-primitives/i18n"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { pluralCategory } from "@opencode/ui/context/i18n"
@@ -110,6 +111,7 @@ const pending: Absent = { status: "pending" }
 const inactive = {
   disabled: { status: "inactive", reason: "disabled" },
   failed: { status: "inactive", reason: "failed" },
+  blocked: { status: "inactive", reason: "blocked" },
   restarting: { status: "inactive", reason: "restarting" },
 } as const satisfies Record<string, Absent>
 
@@ -191,7 +193,7 @@ function createHost(input: HostInput) {
     if (main ? input.failed?.(extension) : state.status[extension] === "failed") return inactive.failed
 
     // A blocked provider cannot offer its own contracts either, so hard-dependency chains settle as unavailable.
-    if (!main && state.status[extension] === "blocked") return inactive.disabled
+    if (!main && state.status[extension] === "blocked") return inactive.blocked
 
     // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
     if (!main && state.status[extension] === "active") return inactive.disabled
@@ -386,13 +388,13 @@ function createHost(input: HostInput) {
     // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
     if (!load || input.disabled()?.has(definition.id) !== false) return
 
-    const blocked = Object.values(definition.requires ?? {}).some((token) => {
+    const unavailable = Object.values(definition.requires ?? {}).some((token) => {
       const provider = untrack(() => providerState(token))
 
-      return provider.status === "inactive" && provider.reason !== "restarting"
+      return blocked(provider)
     })
 
-    setState("status", definition.id, blocked ? "blocked" : "loading")
+    setState("status", definition.id, unavailable ? "blocked" : "loading")
 
     // Waits for its hard contracts; the requirement watcher starts it once they are active.
     if (!satisfied(definition)) return
@@ -441,13 +443,26 @@ function createHost(input: HostInput) {
         }
 
         // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
-        const setup = module.default as (ctx: InstanceContext) => void | Promise<void>
+        const setup = module.default as (ctx: InstanceContext) => void
 
         const start = () =>
           void Promise.try(() =>
             // Errors from the extension's own effects, at setup or later, fail the extension and nothing else.
             catchError(
-              () => untrack(() => setup(instance.context)),
+              () =>
+                untrack(() => {
+                  const returned = setup(instance.context)
+
+                  if (!Predicate.isPromiseLike(returned)) return
+
+                  // Do not await invalid setup, but consume its eventual rejection after the instance is aborted.
+                  void Promise.resolve(returned).catch((cause: unknown) =>
+                    console.error(`[extension] ${definition.id}`, cause),
+                  )
+                  throw new Error(
+                    "Window setup must be synchronous. Start async work with createKeyed or createLatest.",
+                  )
+                }),
               (cause) => queueMicrotask(() => crash(cause)),
             ),
           ).then(() => {
@@ -788,34 +803,11 @@ function createHost(input: HostInput) {
           return Object.values(definition.requires ?? {}).some((token) => {
             const provider = providerState(token)
 
-            return provider.status === "inactive" && provider.reason !== "restarting"
+            return blocked(provider)
           })
         })),
     false,
   )
-
-  createMemo(() => {
-    const disabled = input.disabled()
-
-    if (!disabled) return
-
-    untrack(() =>
-      batch(() =>
-        input.definitions.forEach((definition) => {
-          if (disabled.has(definition.id)) {
-            deactivate(definition.id)
-            setState("status", definition.id, "disabled")
-
-            return
-          }
-
-          if (instances.has(definition.id) || state.status[definition.id] === "loading") return
-
-          void activate(latest(definition))
-        }),
-      ),
-    )
-  })
 
   // `requires` gating: an extension starts once every hard contract is active and restarts with a new generation of
   // any of them. Activation is never ordered by the graph; only these extensions wait, and only for their contracts.
@@ -830,32 +822,53 @@ function createHost(input: HostInput) {
       if (providers.every((provider) => provider.status === "active"))
         return providers.map((provider) => (provider.status === "active" ? provider.generation : 0)).join(",")
 
-      return providers.some((provider) => provider.status === "inactive" && provider.reason !== "restarting")
-        ? "blocked"
-        : undefined
+      return providers.some(blocked) ? "blocked" : undefined
     })
 
     createRenderEffect(
-      on(
-        key,
-        (value) =>
-          untrack(() =>
-            batch(() => {
-              const id = definition.id
+      on(key, (value) =>
+        untrack(() =>
+          batch(() => {
+            const id = definition.id
 
-              deactivate(id)
+            deactivate(id)
 
-              if (input.disabled()?.has(id) !== false) return
+            if (input.disabled()?.has(id) !== false) return
 
-              if (value === undefined) return setState("status", id, "loading")
+            if (value === undefined) return setState("status", id, "loading")
 
-              if (value === "blocked") return setState("status", id, "blocked")
+            if (value === "blocked") return setState("status", id, "blocked")
 
-              void activate(latest(definition))
-            }),
-          ),
-        { defer: true },
+            void activate(latest(definition))
+          }),
+        ),
       ),
+    )
+  })
+
+  // Establish requirement watchers before activation, including their initial state. Publish every disabled status
+  // before starting enabled entries, so declaration order cannot leave a hard-dependency chain loading forever.
+  createMemo(() => {
+    const disabled = input.disabled()
+
+    if (!disabled) return
+
+    untrack(() =>
+      batch(() => {
+        input.definitions
+          .filter((definition) => disabled.has(definition.id))
+          .forEach((definition) => {
+            deactivate(definition.id)
+            setState("status", definition.id, "disabled")
+          })
+        input.definitions
+          .filter((definition) => !disabled.has(definition.id))
+          .forEach((definition) => {
+            if (instances.has(definition.id) || state.status[definition.id] === "loading") return
+
+            void activate(latest(definition))
+          })
+      }),
     )
   })
 
@@ -900,6 +913,11 @@ function windowStores(definition: Definition) {
   return Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) =>
     declaration.scope === "main" ? [] : [[name, declaration] as const],
   )
+}
+
+/** A hard dependency that is not coming until its provider or configuration changes. */
+function blocked(provider: Provider) {
+  return provider.status === "inactive" && provider.reason !== "restarting"
 }
 
 /** English merged under the locale's messages. A catalog that fails to load leaves English. */

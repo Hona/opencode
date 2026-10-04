@@ -551,27 +551,29 @@ export function mountBrowserRegion(input: RegionHost) {
 
       if (key === "file:tree") setTree(() => value)
 
-      return [value, (mutation: (draft: T) => void) => set(produce(mutation)), set] as const
+      return {
+        memory: [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const,
+        store: {
+          value,
+          ready: () => true,
+          update: (mutate: (draft: Mutable<T>) => undefined) =>
+            set(
+              produce((draft) => {
+                // SAFETY: keep uses Solid's writable produce draft; readonly schema fields apply only to readers.
+                const returned = mutate(draft as Mutable<T>)
+
+                if (returned !== undefined) throw new Error("Use set(next) to replace the value.")
+              }),
+            ),
+          set: (next: T) => set(reconcile(next)),
+        },
+      }
     }
 
     // Loaded at once.
     const storage = (extension: string): Storage => ({
-      store: (key, options) => {
-        const [value, update, set] = keep(`${extension}:${key}`, options.initial)
-
-        return {
-          value,
-          ready: () => true,
-          // SAFETY: keep uses Solid's writable produce draft; readonly schema fields apply only to readers.
-          update: (mutate) => update((draft) => void mutate(draft as Mutable<typeof options.initial>)),
-          set: (next) => set(reconcile(next)),
-        }
-      },
-      memory: (key, options) => {
-        const kept = keep(`${extension}:${key}`, options.initial)
-
-        return [kept[0], kept[1]]
-      },
+      store: (key, options) => keep(`${extension}:${key}`, options.initial).store,
+      memory: (key, options) => keep(`${extension}:${key}`, options.initial).memory,
       remove() {},
     })
 

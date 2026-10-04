@@ -104,7 +104,7 @@ stateDiagram-v2
 
 - A registration ends with the current Solid owner: a component, a `createKeyed` run, or else the extension.
 - Teardown of other work: `onCleanup` in the window, `ctx.scope.addFinalizer` in main. Setup returns nothing.
-- Window setup is synchronous. Put async work in `createKeyed` or `createLatest`, with `ctx.signal` or a signal derived from it. Only main setup may be async. After each `await` there is no owner; return if the signal aborted before registering or changing state. Late registrations remain safe: the host releases them when the owner or instance ended.
+- Window setup is synchronous: its `undefined` return type rejects async functions, and the host fails thenable-returning JavaScript setups instead of waiting for them. Put async work in `createKeyed` or `createLatest`, with `ctx.signal` or a signal derived from it. Only main setup may be async. After each `await` there is no owner; return if the signal aborted before registering or changing state. Late registrations remain safe: the host releases them when the owner or instance ended.
 
 The updater listens to its main side's `check` event once per generation of that side. When main restarts, the run ends and its listener goes with it:
 
@@ -131,9 +131,10 @@ flowchart LR
 - A session that moves to another directory gets a new object too, with the new `directory` and the same `key` and `visit`. Key per-session state by `key`.
 - Renders stay mounted. The host hands them the next object through a reactive getter, so read `props.session` (panels), `input.session` (slots) or `state.session` (tab labels) where you use it, and never copy it into a variable.
 - The workspace files, line comments and composer follow the route, so they belong to the session screen. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
-- `ctx.screen.current()` and `ctx.sessions.current()` are defined together, from first render. Both are undefined on Home, on a draft, before the interface mounts and once the route leaves the mounted screen. The screen has no `session` property.
-- All panel callbacks take one named input: `list({ session, screen, open })`, `render({ tab, session, screen })`, `focus({ tab, session, screen, restored })`, `close({ tab, session, screen })`, `normalize({ id, session, screen })`. Do not destructure the input: its getters stay reactive. Every `session.*` slot gets a non-null `screen`; `window.bottom` does not.
-- `fallback: true` opts a tab into selection when the stored selection is missing or cannot be selected. The host takes the first eligible regular tab, then a `first` tab, then a pinned tab, preserving order within each tier. Closing a tab still selects its neighbour.
+- `ctx.screen.current()` and `ctx.sessions.current()` are published together in one batched effect after the screen's first render, with v2's original session-mount timing. Renders already receive their owning screen and session directly. Both public accessors are undefined during the first render, on Home, on a draft, before the interface mounts and once the route leaves the mounted screen. The screen has no `session` property.
+- All panel callbacks take one named input: `list({ session, screen, open })`, `render({ tab, session, screen })`, `focus({ tab, session, screen, restored })`, `close({ tab, session, screen })`, `normalize({ id, session, screen })`. Session fields are getters; the screen is the constant owning screen. Render tab fields are live getters too; lifecycle callbacks receive their event's tab. Stored ids and `restored` describe that call. Do not destructure live getters. Every `session.*` slot gets a non-null `screen`; `window.bottom` does not.
+- Render effects can run before public publication too: change-list views call `Changes.watch(input.screen, source)`, not `ctx.screen.current()`, so their first demand is never lost.
+- `fallback: true` opts a tab into selection when the stored selection is missing or cannot be selected; false or omission opts out. The host takes the first eligible regular tab, then a `first` tab, then a pinned tab, preserving order within each tier. Closing a tab still selects its neighbour.
 
 ```ts
 ctx.add(Panel, {
@@ -199,7 +200,7 @@ const local = useQuery(() => ({
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields use `IconName` from the dependency-free shared artwork catalog in `@opencode/util/icons`. The UI renderer reads that same catalog: there is no copied name list or dependency on a UI component's props.
+SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-free module with no Solid or CSS imports. The UI renderer reads that same catalog: there is no copied name list or dependency on a UI component's props, and no artwork in the general-purpose util package.
 
 ### Points
 
@@ -288,13 +289,14 @@ A reference cannot go in `requires`: setup would wait for a `load` that only set
 
 `ctx.uses.name()` returns `Live<T>`, one object per provider transition.
 
-| Status                     | When                                                                     | What the user must see                    |
-| -------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
-| `pending`                  | The provider has not started, e.g. main is not up yet                    | A loading state, or nothing to click      |
-| `active`                   | `value` is the contract or client; `generation` counts restarts          | The feature                               |
-| `inactive`, `"restarting"` | It was active and comes back                                             | Keep what the user had; resume after      |
-| `inactive`, `"disabled"`   | Turned off, not composed, or not on this platform (every Ipc on the web) | An unavailable state, never a dead button |
-| `inactive`, `"failed"`     | Its setup threw                                                          | An unavailable state                      |
+| Status                     | When                                                                     | What the user must see                       |
+| -------------------------- | ------------------------------------------------------------------------ | -------------------------------------------- |
+| `pending`                  | The provider has not started, e.g. main is not up yet                    | A loading state, or nothing to click         |
+| `active`                   | `value` is the contract or client; `generation` counts restarts          | The feature                                  |
+| `inactive`, `"restarting"` | It was active and comes back                                             | Keep what the user had; resume after         |
+| `inactive`, `"disabled"`   | Turned off, not composed, or not on this platform (every Ipc on the web) | An unavailable state, never a dead button    |
+| `inactive`, `"failed"`     | Its setup threw                                                          | An unavailable state                         |
+| `inactive`, `"blocked"`    | A hard dependency is disabled, failed or itself blocked                  | An unavailable state; resume when it returns |
 
 - Offer an action only while it can answer, or let it answer with an unavailable state. Never a silent `return`, never an endless spinner.
 - `createKeyed` runs once per active generation. What the run registers ends with that generation. `otherwise` runs while there is none.
@@ -312,7 +314,7 @@ const act = (name: "check" | "install") => {
 
   if (live.status === "active") return void import("./actions").then((module) => module[name](ctx, live.value))
 
-  // Not loaded yet, or gone (disabled, failed, restarting): nothing can check or install.
+  // Not loaded yet, or gone (disabled, failed, blocked, restarting): nothing can check or install.
   showToast({ title: ctx.t("common.requestFailed") })
 }
 ```
@@ -392,7 +394,7 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 
 - Keys live in your namespace: `extension.<id>.<name>` in the window, the store's name under `extension.<id>` in main.
 - `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners; a pick returns undefined when that key holds none of its fields, never an object of undefined fields, so the next home is read.
-- `update(mutate)` edits a deep-mutable draft and ignores returned values. Plain `Schema.Struct` fields work without `mutableKey`. `set(next)` replaces the complete value, including main primitives and lists. Window calls wait for load and apply in call order with each other; main writes reach disk immediately. Runtime-key stores have the same contract.
+- `update(mutate)` edits a deep-mutable draft and must return nothing or `undefined`. Returning the next value is a compile error and throws at runtime in both processes; use `set(next)` to replace the complete value, including main primitives and lists. Plain `Schema.Struct` fields work without `mutableKey`. Window calls wait for load and apply in call order with each other; main writes reach disk immediately. Runtime-key stores have the same contract.
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
 - Renaming an extension moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data.
 

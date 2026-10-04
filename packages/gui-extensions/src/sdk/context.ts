@@ -296,6 +296,8 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
  * A window entry: the default export of `renderer.tsx`. `Setup<typeof Definition>` types the context from the
  * definition's declarations. Runs synchronously under the extension's Solid owner; return nothing. Put async work
  * in `createKeyed` or `createLatest`, and pass `ctx.signal` or a signal derived from it.
+ * The `undefined` return type rejects async functions and replacement values, while accepting a block with no
+ * return. The host also rejects thenables from JavaScript entries and aborts their late work.
  *
  * @param ctx - The extension's declared APIs, dependencies and stores, under its Solid owner.
  *
@@ -307,4 +309,4 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
  * export default setup
  * ```
  */
-export type Setup<D extends Definition> = (ctx: SetupContext<D>) => void
+export type Setup<D extends Definition> = (ctx: SetupContext<D>) => undefined

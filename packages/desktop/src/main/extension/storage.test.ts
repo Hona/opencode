@@ -93,14 +93,13 @@ describe("main extension storage", () => {
       expected: ["a"],
     },
     {
-      name: "update ignores a returned replacement",
+      name: "update rejects a returned replacement",
       write: (opened: ReturnType<typeof open>) =>
-        opened.store.update((draft) => {
-          draft.push("a")
-
-          return ["ignored"]
-        }),
-      expected: ["a"],
+        expect(() => {
+          // @ts-expect-error JavaScript extensions can still return a replacement at runtime
+          opened.store.update(() => ["wrong"])
+        }).toThrow("Use set"),
+      expected: [],
     },
     {
       name: "set and update retain call order",

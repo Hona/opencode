@@ -114,7 +114,11 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
         update(mutate) {
           const draft = Schema.decodeSync(codec)(Schema.encodeSync(codec)(current()))
           // SAFETY: the codec above creates a writable copy of the stored JSON, including its nested fields.
-          mutate(draft as Mutable<typeof options.initial>)
+          const returned = mutate(draft as Mutable<typeof options.initial>)
+
+          if (returned !== undefined)
+            throw new Error("Persisted.update must not return a value. Use set(next) to replace the value.")
+
           write(draft)
         },
         set: write,

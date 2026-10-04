@@ -88,7 +88,8 @@ export function persistedHandle<T extends object>(input: {
     }),
   )
 
-  void load?.catch(() => undefined)
+  // Runtime-key stores have no setup awaiter: a failed queued mutation must still report its contract error.
+  void load?.catch((cause: unknown) => console.error("[extension storage] Load or queued write failed", cause))
 
   const handle: Persisted<T> = {
     get value() {
@@ -96,8 +97,17 @@ export function persistedHandle<T extends object>(input: {
     },
     ready: loaded,
     update(mutate) {
-      // SAFETY: Solid's produce draft is writable recursively; schema readonly fields constrain readers, not drafts.
-      write(() => input.set(produce((draft) => void mutate(draft as Mutable<T>))))
+      write(() =>
+        input.set(
+          produce((draft) => {
+            // SAFETY: Solid's produce draft is writable recursively; schema readonly fields constrain readers, not drafts.
+            const returned = mutate(draft as Mutable<T>)
+
+            if (returned !== undefined)
+              throw new Error("Persisted.update must not return a value. Use set(next) to replace the value.")
+          }),
+        ),
+      )
     },
     set(next) {
       write(() => input.set(reconcile(next)))

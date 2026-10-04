@@ -588,7 +588,7 @@ export interface SessionScreen {
 export interface Screen {
   /**
    * The mounted session screen: the same object for as long as it stays mounted, whichever session it routes. Defined
-   * exactly when `Sessions.current()` is, including the screen's first render; undefined on Home, on a draft,
+   * exactly when `Sessions.current()` is, after the screen's first render; undefined on Home, on a draft,
    * while the route has left the mounted screen, and before the app interface mounts. Panel callbacks and session
    * slots receive a non-null screen directly. Reactive.
    */
@@ -601,7 +601,8 @@ export interface Sessions {
   list(): readonly SessionRef[]
   /**
    * The routed, mounted session: a new object each time a session is routed. Undefined on Home, on a draft, and
-   * before the app interface mounts. Defined exactly when `Screen.current()` is, from the screen's first render.
+   * before the app interface mounts and during the screen's first render. Defined exactly when `Screen.current()`
+   * is, after that first render. Panel and session-slot inputs are available during render directly.
    * Reactive.
    */
   current(): MountedSession | undefined

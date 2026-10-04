@@ -100,7 +100,7 @@ export interface Definition {
   readonly provides?: Tokens
   /**
    * Optional dependencies that other extensions provide. Each is a `Live` accessor in `ctx.uses`: pending while its
-   * provider loads, inactive while it is disabled, failed or restarting. The extension must keep working while one is
+   * provider loads, inactive while it is disabled, failed, blocked or restarting. The extension must keep working while one is
    * inactive. Your own tokens need no entry: `provides` already puts them in `ctx.uses`. A key that names one token in
    * `provides` and another here fails to compile (`Conflict<"key">`).
    */
@@ -325,7 +325,8 @@ export type TokenValue<T> =
  * - `active`: `value` is the contract or Ipc client. `generation` counts activations: a provider that restarts comes
  *   back with a new one.
  * - `inactive`: the provider is gone, and `reason` says why: `disabled` (turned off, absent, or not on this platform,
- *   such as every Ipc on the web), `failed` (its setup threw), or `restarting` (it was active before and is coming back).
+ *   such as every Ipc on the web), `failed` (its setup threw), `blocked` (a hard dependency is unavailable), or
+ *   `restarting` (it was active before and is coming back).
  *
  * @example
  * ```ts
@@ -353,9 +354,10 @@ export type Live<T> =
        * Why the provider is gone.
        * - `disabled`: turned off, not composed, or not on this platform.
        * - `failed`: its setup threw.
+       * - `blocked`: a hard dependency is disabled, failed or itself blocked.
        * - `restarting`: it was active before and is coming back.
        */
-      readonly reason: "disabled" | "failed" | "restarting"
+      readonly reason: "disabled" | "failed" | "blocked" | "restarting"
     }
 
 const live = Symbol.for("opencode.extension.live")
@@ -701,8 +703,9 @@ export interface Persisted<T, V = T | undefined> {
   /** The stored value has loaded. Always true in main. Reactive in the window. */
   ready(): boolean
   /**
-   * Mutates a deep-mutable draft, even when the schema's fields are readonly. Return nothing: returned values are
-   * ignored. In the window it waits for load and applies in call order with `set`; in main it writes at once.
+   * Mutates a deep-mutable draft, even when the schema's fields are readonly. Return nothing or `undefined`;
+   * returning a replacement is a compile error and throws at runtime. Use `set` to replace the value. In the
+   * window it waits for load and applies in call order with `set`; in main it writes at once.
    *
    * @param mutate - Edits a draft of the current value in place.
    */
@@ -710,7 +713,7 @@ export interface Persisted<T, V = T | undefined> {
     mutate: (
       /** A deep-mutable copy of the current value; edit it in place. */
       draft: Mutable<T>,
-    ) => void,
+    ) => undefined,
   ): void
   /**
    * Replaces the stored value. In the window it waits for load and applies in call order with `update`; in main it

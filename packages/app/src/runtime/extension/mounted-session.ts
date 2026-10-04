@@ -1,6 +1,7 @@
 import {
   batch,
   createMemo,
+  createEffect,
   createRenderEffect,
   createRoot,
   createSignal,
@@ -242,13 +243,14 @@ export function createMountedSession(session: SessionModel) {
 
   // The session's declared stores start loading now, before its regions read them.
   createRenderEffect(on(mounted, (view) => attachment.preload(view)))
-  // Publish both after constructing the models and preloading stores, before the regions render. Store pruning is
-  // owned and untracked; extension observers retain their existing owners. One batch prevents a server switch
-  // exposing a new view on the old screen.
-  batch(() => {
-    onCleanup(attachment.screen(screen))
-    onCleanup(attachment.mount(mounted))
-  })
+  // Publish both after render, with the original session-mount timing. Renders receive their own screen directly;
+  // only global observers need this attachment. One batch prevents exposing a view on another screen.
+  createEffect(() =>
+    batch(() => {
+      onCleanup(attachment.screen(screen))
+      onCleanup(attachment.mount(mounted))
+    }),
+  )
 
   return {
     screen,

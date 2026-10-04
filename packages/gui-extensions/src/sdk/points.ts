@@ -1,11 +1,10 @@
 import type { JSX } from "solid-js"
+import type { IconName } from "@opencode/ui/icons/catalog"
 import { Point } from "./core"
 import type { SessionRef, MountedSession, SessionScreen } from "./host-apis"
 
-/** The name of a shared icon; derived from the dependency-free artwork catalog, not a UI component's props. */
-export type { IconName } from "@opencode/util/icons"
-
-import type { IconName } from "@opencode/util/icons"
+/** The name of a shared icon; derived from the dependency-free UI artwork catalog, not a component's props. */
+export type { IconName }
 
 /**
  * A command in the palette, with an optional keybind and slash command. The host publishes it as
@@ -169,8 +168,8 @@ export interface PanelTab {
    * closing it selects the first remaining tab.
    */
   readonly first?: boolean
-  /** Opts into fallback selection: first eligible regular tab, then a `first` tab, then a pinned tab, in tier order. */
-  readonly fallback?: true
+  /** Opts into fallback selection: first eligible regular tab, then a `first` tab, then a pinned tab. Defaults to false. */
+  readonly fallback?: boolean
   /** Tabs in one group share one render that stays mounted while any member is listed. */
   readonly group?: string
   /** Struck through, e.g. a file that no longer exists. */
@@ -214,9 +213,9 @@ export interface MobileView {
 }
 
 /**
- * What `Panel.render` receives. Fields are reactive getters: read `props.tab`, `props.session` and `props.screen` where you use
- * them, and do not destructure. When another session is routed, `session` returns its object and the render stays
- * mounted.
+ * What `Panel.render` receives. `tab` and `session` are reactive getters; `screen` is the constant owning screen.
+ * Read the getters where you use them and do not destructure. On a session switch the render stays mounted and
+ * receives the next session. In `focus` and `close`, `tab` is the event's tab, not the render's changing selection.
  */
 export interface PanelProps {
   /** The tab, as `list` currently returns it. */
@@ -251,7 +250,7 @@ export interface Panel {
    * The canonical form of one of this panel's stored tab ids, when one tab can be stored more than one way (e.g.
    * the same file as an absolute and a relative path). The host rewrites stored ids and drops duplicates. Reactive.
    *
-   * @param input - The stored id, routed session and owning screen. Read the getters; do not destructure.
+   * @param input - The stored id, session getter and constant owning screen. Do not destructure the session.
    */
   normalize?(input: {
     /** A stored tab id. */
@@ -273,7 +272,7 @@ export interface Panel {
    * screen passed as `input.screen`), so a session switch does not render their labels again. Read the getters;
    * do not destructure.
    *
-   * @param input - The routed session, owning screen and stored tab ids.
+   * @param input - A session getter, the constant owning screen and this call's stored tab ids.
    */
   list(input: {
     /** The routed session. */
@@ -287,7 +286,7 @@ export interface Panel {
    * Renders a tab's content once; its own reactivity updates it, also when another session is routed. A render that
    * throws renders nothing and records the error.
    *
-   * @param props - The tab, routed session and owning screen, as reactive getters.
+   * @param props - The tab and session as reactive getters, and the constant owning screen.
    */
   render(props: PanelProps): JSX.Element
   /**
@@ -584,8 +583,9 @@ export type Slot = {
     /** Slot contents render in ascending order. Defaults to 0. */
     readonly order?: number
     /**
-     * Renders the content once; its own reactivity updates it. The input's fields are reactive getters, so read
-     * `input.session` where you use it: another routed session arrives through it without a remount. A render that
+     * Renders the content once; its own reactivity updates it. Session and active fields are reactive getters, so read
+     * `input.session` where you use it: another routed session arrives through it without a remount. `screen` on a
+     * session slot is its constant owning screen, available during the first render. A render that
      * throws renders nothing and records the error.
      *
      * @param input - The slot's input.

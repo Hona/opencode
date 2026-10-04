@@ -56,12 +56,8 @@ const setup: Setup<typeof Review> = (ctx) => {
     return created
   }
 
-  // Views of the screen watch while they render, which is when `ctx.screen` returns it.
-  const watch = (_session: MountedSession, source: keyof Demand) => {
-    const screen = ctx.screen.current()
-
-    if (!screen) return () => {}
-
+  // Views receive their screen before the public attachment is published, so initial render effects can watch it.
+  const watch = (screen: SessionScreen, source: keyof Demand) => {
     const set = demand(screen)[1]
 
     set(source, (count) => count + 1)
@@ -169,7 +165,7 @@ const setup: Setup<typeof Review> = (ctx) => {
       return (
         <Show when={model()} keyed>
           {(model) => {
-            createKeyed(frame.visible, () => onCleanup(watch(props.session, "panel")))
+            createKeyed(frame.visible, () => onCleanup(watch(props.screen, "panel")))
 
             return (
               <Show
@@ -271,7 +267,7 @@ const setup: Setup<typeof Review> = (ctx) => {
 
       if (!layout.side.opened(session)) layout.side.toggle(session)
     },
-    watch: (session, source) => watch(session, source),
+    watch,
     onReveal(listener) {
       reveals.add(listener)
 

@@ -153,11 +153,19 @@ export const setup: Setup<typeof Consumer> = (ctx) => {
     draft.open = true
   })
   ctx.stores.view.set({ open: false })
+  // @ts-expect-error update only mutates; replacement values go through set
+  ctx.stores.view.update(() => ({ open: true }))
   // @ts-expect-error replacement values match the schema
   ctx.stores.view.set({ open: "wrong" })
 }
 
-equal<ReturnType<Setup<typeof Consumer>>, void>(true)
+equal<ReturnType<Setup<typeof Consumer>>, undefined>(true)
+
+// @ts-expect-error an async window setup returns a Promise, not undefined
+export const asyncSetup: Setup<typeof Consumer> = async () => {}
+
+// @ts-expect-error a window setup cannot return an object either
+export const returningSetup: Setup<typeof Consumer> = () => ({ open: true })
 
 equal<ReturnType<MainSetup<typeof Consumer>>, void | Promise<void>>(true)
 
@@ -181,7 +189,11 @@ equal<SlotMap["session.panel.sidebar"]["screen"], SessionScreen>(true)
 
 equal<SlotMap["window.bottom"]["screen"], never>(true)
 
-equal<PanelTab["fallback"], true | undefined>(true)
+equal<PanelTab["fallback"], boolean | undefined>(true)
+
+export const ineligible: PanelTab = { id: "details", title: "Details", fallback: false }
+
+equal<Extract<Live<never>, { status: "inactive" }>["reason"], "disabled" | "failed" | "blocked" | "restarting">(true)
 
 // @ts-expect-error only known artwork names belong to SDK icon fields
 export const unknownIcon: IconName = "not-an-icon"
