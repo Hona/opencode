@@ -139,46 +139,50 @@ export function createSessionQueue(input: {
     const current = pending.filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue")
     const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
 
-    if (ordered.length !== current.length) throw new Error("Queued prompts changed before reordering")
+    // An edited prompt delivered meanwhile is no longer queued; fail so the edit draft stays.
+    if (ordered.length !== current.length || (replace && !current.some((item) => item.id === replace.original)))
+      throw new Error("Queued prompts changed before reordering")
     const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id || item.id === replace?.original)
 
     if (changed < 0) return
 
     // Existing inbox APIs cannot reorder rows, so replace only the changed suffix. A replacement
-    // can fail (its file may be gone), so withdraw the ones already admitted to keep the queue intact.
+    // can fail (its file may be gone), so withdraw the ones already sent to keep the queue intact.
+    // Each ID is recorded before sending: the server can admit a prompt whose response then fails.
     const replacements: string[] = []
 
     for (const item of ordered.slice(changed)) {
-      const admitted = await data.session
-        .prompt(
-          item.id === replace?.original
-            ? replace.admission
-            : {
-                sessionID: input.sessionID,
-                text: item.payload.text,
-                files: item.payload.files?.map((file) => ({
-                  uri: storedFileUri(file),
-                  name: file.name,
-                  description: file.description,
-                  mention: file.mention,
-                })),
-                agents: item.payload.agents,
-                skills: item.payload.skills,
-                metadata: item.payload.metadata,
-                delivery: "queue",
-                resume: false,
-              },
-        )
-        .catch(async (error) => {
-          await Promise.all(
-            replacements.map((inboxID) =>
-              server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).catch(() => undefined),
-            ),
-          )
-          throw error
-        })
+      const admission =
+        item.id === replace?.original
+          ? replace.admission
+          : {
+              id: SessionMessage.ID.create(),
+              sessionID: input.sessionID,
+              text: item.payload.text,
+              files: item.payload.files?.map((file) => ({
+                uri: storedFileUri(file),
+                name: file.name,
+                description: file.description,
+                mention: file.mention,
+              })),
+              agents: item.payload.agents,
+              skills: item.payload.skills,
+              metadata: item.payload.metadata,
+              delivery: "queue" as const,
+              resume: false,
+            }
 
-      replacements.push(admitted.id)
+      const id = admission.id ?? SessionMessage.ID.create()
+
+      replacements.push(id)
+      await data.session.prompt({ ...admission, id }).catch(async (error) => {
+        await Promise.all(
+          replacements.map((inboxID) =>
+            server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID }).catch(() => undefined),
+          ),
+        )
+        throw error
+      })
     }
 
     for (const item of current.slice(changed)) {

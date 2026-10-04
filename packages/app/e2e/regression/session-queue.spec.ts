@@ -225,10 +225,11 @@ for (const change of ["reorder", "edit"] as const) {
     const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
     const mock = createQueueMock(order)
     const admit = mock.onPrompt
-    // The last prompt's re-admission fails, for example because its file was deleted.
+    // The last prompt's re-admission fails after the server admitted it, so its response is lost.
     mock.onPrompt = (input) => {
-      if (input.body.text === order[2]) throw new Error("Attachment file is gone")
       admit(input)
+
+      if (input.body.text === order[2]) throw new Error("Connection lost after admission")
     }
 
     const view = await openQueue(page, mock)
@@ -304,6 +305,22 @@ test("editing restores the existing draft and replaces only the original queue p
     { inboxID: "inb_seed_3", action: "cancel" },
   ])
   expect(mock.log[0]).toBe("prompt:queue")
+})
+
+test("editing a prompt the server delivered meanwhile keeps the edit draft", async ({ page }) => {
+  const mock = createQueueMock(["first queued prompt", "second queued prompt"])
+  const view = await openQueue(page, mock)
+  await view.rows.getByText("second queued prompt", { exact: true }).click()
+  await expect(view.input).toHaveText("second queued prompt")
+  await view.input.fill("second queued prompt, edited")
+  // The server delivers the original before the edit lands; this client has not heard yet.
+  mock.rows.splice(1, 1)
+  await view.input.press("Enter")
+
+  await expect(page.getByText("Request failed")).toBeVisible()
+  await expect(view.input).toHaveText("second queued prompt, edited")
+  expect(mock.prompts).toEqual([])
+  expect(mock.changes).toEqual([])
 })
 
 test("editing drops a file whose mention was deleted and keeps unmentioned context", async ({ page }) => {
