@@ -35,7 +35,16 @@ export function install(ctx: Context, client: Client) {
 }
 
 export async function check(ctx: Context, client: Client) {
-  const state = await client.check()
+  const state = await client.check(undefined, { signal: ctx.signal }).catch((cause: unknown) => {
+    if (ctx.signal.aborted) return
+
+    showToast({
+      title: ctx.t("common.requestFailed"),
+      description: cause instanceof Error && cause.message ? cause.message : ctx.t("common.requestFailed"),
+    })
+  })
+
+  if (!state || ctx.signal.aborted) return
 
   if (state.status === "download-required") {
     install(ctx, client)
