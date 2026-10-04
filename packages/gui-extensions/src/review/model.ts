@@ -301,7 +301,7 @@ export function createReviewModel(input: {
         })
       })
       .finally(() => {
-        if (current()) setState("initializingGit", false)
+        if (!lifetime.disposed && !ctx.signal.aborted) setState("initializingGit", false)
       })
   }
 

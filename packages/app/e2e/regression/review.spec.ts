@@ -1,7 +1,7 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
-import { SERVER, project, provider, session, workspaceKey } from "../utils/app"
+import { SERVER, holdRoute, project, provider, session, workspaceKey } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
@@ -32,6 +32,42 @@ for (const view of ["desktop", "mobile"] as const) {
     await expect(init).toHaveCount(0)
   })
 }
+
+test("Git initialization can be retried after switching sessions during the request", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewInitSwitch",
+    project: { vcs: undefined },
+    sessions: [
+      { id: "ses_init_a", title: "Initialize Alpha" },
+      { id: "ses_init_b", title: "Initialize Beta" },
+    ],
+    seed: { panes: { ses_init_a: { review: true }, ses_init_b: { review: true } } },
+  })
+  // Without an init handler the harness rejects the request; hold it across the route change.
+  const request = await holdRoute(page, (url) => url.pathname === "/api/vcs/init", { method: "POST" })
+  const panel = page.locator("#review-panel")
+  const init = panel.getByRole("button", { name: "Create Git repository", exact: true })
+  const pending = panel.getByRole("button", { name: "Creating Git repository…", exact: true })
+  await expect(init).toBeEnabled()
+  await init.click()
+  await request.arrived
+  await expect(pending).toBeDisabled()
+
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Beta" }).click()
+  await expectSessionTitle(page, "Initialize Beta")
+  await expect(pending).toBeDisabled()
+  const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  request.release()
+  expect((await response).status()).toBe(501)
+  await expect(init).toBeEnabled()
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+
+  const retry = page.waitForResponse((item) => new URL(item.url()).pathname === "/api/vcs/init")
+  await init.click()
+  expect((await retry).status()).toBe(501)
+  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await expect(init).toBeEnabled()
+})
 
 test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number }[] = []
