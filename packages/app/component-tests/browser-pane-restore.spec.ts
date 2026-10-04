@@ -1,15 +1,17 @@
+import { fileURLToPath } from "node:url"
 import { expect, story } from "../../storybook/playwright/story"
-import { source } from "../../storybook/playwright/source"
+
+const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
 
 const modules = {
-  fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx", import.meta.url),
-  host: source("../src/runtime/extension/host.tsx", import.meta.url),
-  panels: source("../src/runtime/extension/panels.tsx", import.meta.url),
-  language: source("../src/runtime/i18n/language.tsx", import.meta.url),
-  browser: source("../../gui-extensions/src/browser/index.ts", import.meta.url),
-  browserRenderer: source("../../gui-extensions/src/browser/renderer.tsx", import.meta.url),
-  file: source("../../gui-extensions/src/file/index.ts", import.meta.url),
-  fileRenderer: source("../../gui-extensions/src/file/renderer.tsx", import.meta.url),
+  fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx"),
+  host: source("../src/runtime/extension/host.tsx"),
+  panels: source("../src/runtime/extension/panels.tsx"),
+  language: source("../src/runtime/i18n/language.tsx"),
+  browser: source("../../gui-extensions/src/browser/index.ts"),
+  browserRenderer: source("../../gui-extensions/src/browser/renderer.tsx"),
+  file: source("../../gui-extensions/src/file/index.ts"),
+  fileRenderer: source("../../gui-extensions/src/file/renderer.tsx"),
 }
 
 story.beforeEach(async ({ mount, page }) => {

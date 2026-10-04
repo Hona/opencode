@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import type { Component, Owner } from "solid-js"
 import type {
   Context,
@@ -10,9 +11,8 @@ import type {
   SessionScreen,
 } from "@opencode/gui-extensions/sdk"
 import { expect, story } from "../../storybook/playwright/story"
-import { source } from "../../storybook/playwright/source"
 
-const fixture = source("./extension-host.fixture.tsx", import.meta.url)
+const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
 
 /** What the scoped-registration case keeps from inside its extension. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }

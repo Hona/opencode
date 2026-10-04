@@ -1,10 +1,12 @@
+import { fileURLToPath } from "node:url"
 import type { Definition } from "@opencode/gui-extensions/sdk"
 import { expect, story } from "../../storybook/playwright/story"
-import { source } from "../../storybook/playwright/source"
+
+const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
 
 const modules = {
-  fixture: source("./extension-host.fixture.tsx", import.meta.url),
-  builtins: source("../../gui-extensions/src/renderer.ts", import.meta.url),
+  fixture: source("./extension-host.fixture.tsx"),
+  builtins: source("../../gui-extensions/src/renderer.ts"),
 }
 
 story.beforeEach(async ({ mount }) => {
