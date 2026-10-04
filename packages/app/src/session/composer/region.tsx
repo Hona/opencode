@@ -222,6 +222,12 @@ export function createActiveSessionRegion(input: {
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
     revert,
     focusInput: focus,
+    model: () => {
+      const selection = controls().model.selection
+      const model = selection.current()
+
+      return model ? { id: model.id, providerID: model.provider.id, variant: selection.variant.current() } : undefined
+    },
   })
   command.register("session-palette", () => [
     {

@@ -69,6 +69,7 @@ export type TimelineProjectionInput = {
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
   pendingUserMessageIDs?: ReadonlySet<string>
+  queuedCompactionIDs?: readonly string[]
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -84,6 +85,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.editToolDefaultOpen ?? false,
     undefined,
     input.timelineDetail,
+    input.queuedCompactionIDs,
   )
 
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
@@ -121,6 +123,7 @@ export function createReactiveTimelineProjection(input: {
   editToolDefaultOpen?: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
   pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
+  queuedCompactionIDs?: Accessor<readonly string[]>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -157,6 +160,7 @@ export function createReactiveTimelineProjection(input: {
           : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
             textVisible().get(content)!(),
       input.timelineDetail?.(),
+      input.queuedCompactionIDs?.(),
     ),
   )
 
@@ -218,6 +222,7 @@ export namespace Timeline {
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    queuedCompactionIDs: readonly string[] = [],
   ) {
     type Turn = {
       id: string
@@ -336,6 +341,17 @@ export namespace Timeline {
         )
       }),
     ]
+
+    // Like the TUI, a queued compaction waits after the active turn and ahead of undelivered prompts.
+    const pendingAt = rows.findIndex((row) => pendingUserMessageIDs?.has(row.userMessageID))
+
+    rows.splice(
+      pendingAt < 0 ? rows.length : pendingAt,
+      0,
+      ...queuedCompactionIDs.map(
+        (inboxID) => new TimelineRow.CompactionQueued({ userMessageID: activeMessageID ?? inboxID, inboxID }),
+      ),
+    )
 
     return {
       activeMessageID,

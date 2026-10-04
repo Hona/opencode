@@ -384,6 +384,31 @@ describe("current session timeline rows", () => {
     expect(result.rows[1].userMessageID).toBe(document.messages[0].id)
   })
 
+  test("places a queued compaction after the active turn and before undelivered prompts", () => {
+    const document = storyDocument([{ type: "text", text: "Working" }], true)
+
+    const result = Timeline.constructSessionMessageRows(
+      [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
+      true,
+      document.status,
+      new Set(["queued"]),
+      false,
+      false,
+      undefined,
+      undefined,
+      ["inb_compact"],
+    )
+
+    expect(result.rows.map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "AssistantPart",
+      "CompactionQueued",
+      "TurnGap",
+      "UserMessage",
+    ])
+    expect(result.rows[2].userMessageID).toBe(document.messages[0].id)
+  })
+
   test("keeps live thinking above a notice that arrives while it streams", () => {
     const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
 

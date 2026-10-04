@@ -125,6 +125,7 @@ export interface MockServerConfig {
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
@@ -1171,6 +1172,23 @@ function mockHandlers(
                 // Keys the request omits stay omitted.
                 payload: { text: "", ...Option.getOrUndefined(decodePromptPayload(body)) },
                 delivery: prompt?.delivery ?? "steer",
+              },
+            }
+          }),
+        // Like the server, a compaction is admitted as a steered inbox item under the proposed ID.
+        sessionCompact: (ctx) =>
+          Effect.sync(() => {
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
+            config.onCompact?.({ sessionID: ctx.params.sessionID, body })
+
+            return {
+              data: {
+                id: Predicate.isString(body.id) ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                time: { created: Date.now() },
+                type: "compaction",
+                payload: {},
+                delivery: "steer",
               },
             }
           }),

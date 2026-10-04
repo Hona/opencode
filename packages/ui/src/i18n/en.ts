@@ -244,6 +244,7 @@ const source = {
   "ui.message.revertMessage": "Revert message",
   "ui.message.moveToQueue": "Move to queue",
   "ui.message.deletePending": "Delete",
+  "ui.message.compactionQueued": "Compaction queued",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.thought": "Thought",

@@ -62,6 +62,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
 
   const events: OpenCodeEvent[] = []
   const prompts: (typeof PromptBody.Type)[] = []
+  const compactions: SessionInboxInfo[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
   let sequence = 0
@@ -83,6 +84,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
 
   return {
     rows,
+    compactions,
     prompts,
     changes,
     log,
@@ -115,6 +117,17 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         sessionID: input.sessionID,
         inboxID: row.id,
         item: { type: "user", payload: row.payload, delivery: row.delivery },
+      })
+    },
+    onCompact: (input: Parameters<NonNullable<MockServerConfig["onCompact"]>>[0]) => {
+      log.push("compact")
+      compactions.push({
+        id: Schema.decodeUnknownSync(SessionMessage.ID)(input.body.id),
+        sessionID: input.sessionID,
+        time: { created: Date.now() },
+        type: "compaction",
+        payload: {},
+        delivery: "steer",
       })
     },
     onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => {
@@ -151,8 +164,9 @@ async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, f
     provider: provider(model),
     pageMessages: () => ({ items: mock.messages }),
     sessionStatus: () => ({ [sessionID]: { type: "running" } }),
-    inbox: () => mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })),
+    inbox: () => [...mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })), ...mock.compactions],
     onPrompt: mock.onPrompt,
+    onCompact: mock.onCompact,
     onInboxChange: mock.onInboxChange,
     events: mock.events,
   }
@@ -601,6 +615,29 @@ test("a shell command cannot wait in the queue, as in the TUI", async ({ page })
   await expect(view.input).toHaveText("git status")
   expect(shells).toEqual([])
   expect(mock.prompts).toEqual([])
+})
+
+test("/compact runs with the composer model and shows a queued compaction, as in the TUI", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  const view = await openQueue(page, mock)
+  const models: unknown[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname !== `/api/session/${sessionID}/model`) return
+    mock.log.push("model")
+    models.push(request.postDataJSON())
+  })
+
+  await expect(userRow(page, "msg_queue_delivered")).toContainText("First prompt")
+  await runSlash(page, view.input, "compact")
+
+  await expect(page.locator('[data-timeline-row="CompactionQueued"]')).toHaveText("Compaction queued")
+  // The row is optimistic; the model switch still precedes the admission.
+  await expect.poll(() => mock.log).toEqual(["model", "compact"])
+  expect(models).toMatchObject([{ model: { id: "queue-model", providerID: "opencode" } }])
 })
 
 for (const action of ["Move to queue", "Delete"] as const) {
