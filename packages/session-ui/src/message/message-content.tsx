@@ -53,6 +53,19 @@ export async function writeClipboard(text: string): Promise<boolean> {
   )
 }
 
+function modelLabel(
+  data: ReturnType<typeof useData>,
+  i18n: ReturnType<typeof useI18n>,
+  model: SessionMessageAssistant["model"],
+) {
+  const name = data.store.provider?.all?.get(model.providerID)?.models?.[model.id]?.name ?? model.id
+  if (!model.variant || model.variant === "default") return name
+  return i18n.t("ui.message.modelVariant", {
+    model: name,
+    variant: model.variant[0]?.toUpperCase() + model.variant.slice(1),
+  })
+}
+
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
     icon: "check" | "copy" | "reset"
@@ -222,10 +235,7 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-  const model = createMemo(() => {
-    const match = data.store.provider?.all?.get(props.model.providerID)
-    return match?.models?.[props.model.id]?.name ?? props.model.id
-  })
+  const model = createMemo(() => modelLabel(data, i18n, props.model))
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
   const metaHead = createMemo(() => {
     const agent = props.agent
@@ -489,10 +499,7 @@ export function AssistantTextContent(props: {
     const type = props.message.error?.type.toLowerCase()
     return !!type && (type.includes("abort") || type.includes("interrupt"))
   }
-  const model = createMemo(() => {
-    const match = data.store.provider?.all?.get(props.message.model.providerID)
-    return match?.models?.[props.message.model.id]?.name ?? props.message.model.id
-  })
+  const model = createMemo(() => modelLabel(data, i18n, props.message.model))
   const duration = createMemo(() => {
     const completed = props.message.time.completed
     const ms =
