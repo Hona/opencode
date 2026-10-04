@@ -24,10 +24,11 @@ type PaneState = {
   /** The movement count at a submit; the next reported movement ends the submitted navigation. */
   navigating: number | undefined
   /** The tab whose element picker is on. */
-  picking: Browser.TabID | undefined
+  picking: { session: Pick<MountedSession, "key">; tabID: Browser.TabID } | undefined
   /** A picked element awaiting its comment. The page stays frozen as a still until it closes. */
   comment:
     | {
+        session: Pick<MountedSession, "key">
         tabID: Browser.TabID
         url: string
         /** The tab's navigation count at the pick; the element's ref dies when it changes. */
@@ -123,20 +124,20 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   }
 
   const inspectable = () => !!address() && !failed() && !suspended()
-  const picking = () => !!state() && store.picking === state()?.id
+  const picking = () => store.picking?.session.key === props.session.key && store.picking?.tabID === state()?.id
   // A comment on a picked element freezes the page so its editor can float above it.
-  const commenting = () => !!store.comment && store.comment.tabID === state()?.id
+  const commenting = () => store.comment?.session.key === props.session.key && store.comment?.tabID === state()?.id
 
-  const setPicking = (tabID: Browser.TabID, enabled: boolean) => {
-    props.model.inspect(props.session, tabID, enabled)
-    setStore("picking", enabled ? tabID : undefined)
+  const setPicking = (current: NonNullable<PaneState["picking"]>, enabled: boolean) => {
+    props.model.inspect(current.session, current.tabID, enabled)
+    setStore("picking", enabled ? current : undefined)
   }
 
   const closeComment = () => {
     const current = store.comment
 
     if (!current) return
-    props.model.highlight(props.session, current.tabID)
+    props.model.highlight(current.session, current.tabID)
     setStore("comment", undefined)
   }
 
@@ -146,7 +147,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     if (!tab || !inspectable()) return
 
     if (store.comment) closeComment()
-    setPicking(tab.id, !picking())
+    setPicking({ session: props.session, tabID: tab.id }, !picking())
   }
 
   const submitComment = (value: string) => {
@@ -154,8 +155,11 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
 
     if (!current) return
     const tab = state()
+
     // The draft outlives a reload or agent navigation, but the ref no longer names anything.
-    const live = tab?.id === current.tabID && tab.generation === current.generation
+    const live =
+      props.session.key === current.session.key && tab?.id === current.tabID && tab.generation === current.generation
+
     // The screen's composer, read when the user submits: it serves the session the pane shows.
     extension.screen.current()?.composer.attach(
       commentNote({
@@ -231,12 +235,13 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
       onCleanup(
         props.model.onInspect(session, (event) => {
           if (event.active) {
-            setStore("picking", event.tabID)
+            setStore("picking", { session, tabID: event.tabID })
 
             return
           }
 
-          if (store.picking === event.tabID) setStore("picking", undefined)
+          if (store.picking?.session.key === session.key && store.picking.tabID === event.tabID)
+            setStore("picking", undefined)
 
           if (!event.element) return
           const tab = state()
@@ -248,6 +253,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }
 
           setStore("comment", {
+            session,
             tabID: tab.id,
             url: tab.url,
             generation: tab.generation,
@@ -261,20 +267,26 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   // A picker or comment belongs to the page on screen: the page's picker stops when its tab is switched away or the
   // pane hides, and a comment closes with its tab.
   const endPicker = () => {
-    const tabID = store.picking
+    const current = store.picking
 
-    if (tabID && (tabID !== state()?.id || !visible())) setPicking(tabID, false)
+    if (current && (current.session.key !== props.session.key || current.tabID !== state()?.id || !visible()))
+      setPicking(current, false)
   }
 
   createKeyed(visible, endPicker, { otherwise: endPicker })
   createKeyed(
-    () => state()?.id,
-    (id) => {
+    () => {
+      const tab = state()
+
+      return tab ? { session: props.session.key, tabID: tab.id } : undefined
+    },
+    (current) => {
       endPicker()
 
-      if (store.comment?.tabID !== id) closeComment()
+      if (store.comment?.session.key !== current.session || store.comment.tabID !== current.tabID) closeComment()
     },
     {
+      equals: (previous, next) => previous.session === next.session && previous.tabID === next.tabID,
       otherwise: () => {
         endPicker()
         closeComment()
