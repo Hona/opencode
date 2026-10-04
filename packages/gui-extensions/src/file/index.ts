@@ -17,7 +17,14 @@ export default Extension.define({
     tree: Store.global(
       TreeState,
       { tab: "changes" },
-      { key: "layout", pick: (value: { fileTree?: { tab?: unknown } } | null) => ({ tab: value?.fileTree?.tab }) },
+      {
+        key: "layout",
+        pick: (value: { fileTree?: { tab?: unknown } } | null) => {
+          const tab = value?.fileTree?.tab
+
+          return tab === undefined ? undefined : { tab }
+        },
+      },
     ),
     // The open-in-app choice. Only the desktop reads it.
     app: Store.global(OpenAppPreferences, { app: "finder" }, "open.app"),

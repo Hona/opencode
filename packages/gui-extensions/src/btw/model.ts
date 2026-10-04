@@ -35,10 +35,10 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     if (states[key]?.pending) setStates(key, { pending: false, error: true })
   }
 
-  // Leaving a session abandons its in-flight question.
+  // Leaving a session abandons its in-flight question; the same session moving to another directory does not.
   createKeyed(
-    () => sessions.current(),
-    (view) => onCleanup(() => stop(view.key)),
+    () => sessions.current()?.key,
+    (key) => onCleanup(() => stop(key)),
   )
   onCleanup(() => Array.from(controllers.keys()).forEach(stop))
 

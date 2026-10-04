@@ -120,7 +120,8 @@ flowchart LR
   screen -- "ctx.screen.current()" --> actions["actions on the routed session"]
 ```
 
-- Each routed session gets its own frozen `MountedSession`: `key`, `id`, `tab`, `server`, `directory` and `visit` never change, and `location`, `project` and the other fields read that session's data, never the route's. It has nothing that acts on another session.
+- Each routed session gets its own frozen `MountedSession`: `key`, `id`, `tab`, `server`, `directory` and `visit` never change on one object, and `location`, `project` and the other fields read that session's data, never the route's. It has nothing that acts on another session.
+- A session that moves to another directory gets a new object too, with the new `directory` and the same `key` and `visit`. Key per-session state by `key`.
 - Renders stay mounted. The host hands them the next object through a reactive getter, so read `props.session` (panels), `input.session` (slots) or `state.session` (tab labels) where you use it, and never copy it into a variable.
 - The workspace files, line comments and composer follow the route, so they belong to the session screen. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
 - The screen and its session are two different checks:
@@ -356,8 +357,11 @@ session: Store.session(
   {
     key: "layout",
     sessions: "sessionView",
+    // An entry that holds only other fields, such as its scroll, holds no review state.
     pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
-      entry && { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen },
+      entry && [entry.reviewMode, entry.reviewFile, entry.reviewOpen].some((field) => field !== undefined)
+        ? { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen }
+        : undefined,
   },
 ),
 ```
@@ -372,7 +376,7 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 ```
 
 - Keys live in your namespace: `extension.<id>.<name>` in the window, the store's name under `extension.<id>` in main.
-- `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners.
+- `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners; a pick returns undefined when that key holds none of its fields, never an object of undefined fields, so the next home is read.
 - `update(fn)` edits the draft, or returns the next value, which replaces the stored one, in both processes. In the window it waits for the load, then applies in call order.
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
 - Renaming an extension moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data.

@@ -40,6 +40,16 @@ test.each([
     expected: { projectExpanded: false, serverExpanded: true },
   },
   {
+    // An older home without the field holds no value, so the import reads on to the next one.
+    name: "layout review.diffStyle, from the unprefixed layout when the newer one lacks it → extension.review.diff",
+    home: () =>
+      imported("review", "diff", review.stores.diff, "opencode.global.dat:extension.review.diff", [
+        ["opencode.global.dat:layout", { fileTree: { opened: true } }],
+        ["layout", { review: { diffStyle: "unified" } }],
+      ]),
+    expected: { diffStyle: "unified" },
+  },
+  {
     name: "Preferences releaseNotes → extension.updater.releaseNotes",
     home: () =>
       imported(

@@ -63,10 +63,17 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
         const stored = state.get(name, key)
 
         if (stored !== null) return stored
-        const found = legacy.find((older) => older.read() !== undefined)?.read()
 
-        if (found === undefined || Option.isNone(Schema.decodeUnknownOption(codec)(found))) return null
-        const json = JSON.stringify(found)
+        // Each home is read once; one whose value the schema rejects holds nothing for this store.
+        const found = legacy.reduce<{ readonly value: unknown } | undefined>((match, older) => {
+          if (match) return match
+          const value = older.read()
+
+          return value !== undefined && Option.isSome(Schema.decodeUnknownOption(codec)(value)) ? { value } : undefined
+        }, undefined)
+
+        if (!found) return null
+        const json = JSON.stringify(found.value)
         state.set(name, key, json)
 
         return json

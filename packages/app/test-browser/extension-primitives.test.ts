@@ -287,6 +287,7 @@ describe("extension primitives", () => {
           return handle
         },
         owner: null,
+        live: () => undefined,
       })
 
       return {
@@ -385,6 +386,39 @@ describe("extension primitives", () => {
     })
   })
 
+  test("a session store follows the host's live ref for its key, not the object it first opened with", () => {
+    // The screen's object keeps reading the controller it was made with; the host's ref follows the live one, here
+    // after the server re-authenticated and reports the session in another directory.
+    const first = session(
+      () => "server\nses_live",
+      () => ({ directory: "/before" }),
+    )
+
+    const [location, setLocation] = createSignal<{ directory: string } | undefined>({ directory: "/before" })
+    const listed = session(() => "server\nses_live", location)
+    const opened: string[] = []
+
+    const root = createRoot((dispose) => ({
+      dispose,
+      store: createSessionStore({
+        open: (target) => {
+          const directory = target.location?.directory ?? ""
+          opened.push(directory)
+
+          return persistedHandle({ store: { directory }, set: () => undefined, init: undefined })
+        },
+        owner: null,
+        live: (key) => (key === listed.key ? listed : undefined),
+      }),
+    }))
+
+    const handle = root.store.get(first)
+    setLocation({ directory: "/after" })
+    expect({ value: handle.value?.directory, opened }).toEqual({ value: "/after", opened: ["/before", "/after"] })
+    root.store.dispose()
+    root.dispose()
+  })
+
   test("a session store opened through each routed session's object reads that session, A to B (pending) to A", () => {
     const [routed, setRouted] = createSignal("a")
     const [located, setLocated] = createSignal<readonly string[]>(["a"])
@@ -419,6 +453,7 @@ describe("extension primitives", () => {
           return persistedHandle({ store: { directory }, set: () => undefined, init: undefined })
         },
         owner: null,
+        live: () => undefined,
       }),
     }))
 

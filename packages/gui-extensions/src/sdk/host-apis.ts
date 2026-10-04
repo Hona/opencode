@@ -532,14 +532,15 @@ export interface BackgroundTask {
 /**
  * A routed session on the session screen: its identity and data, and nothing that acts on whichever session is
  * routed. Slot inputs and panel renders receive it, and `Sessions.current` returns it. One frozen object per routed
- * session, a new one each time a session is routed: `key`, `id`, `tab`, `server`, `directory` and `visit` never
- * change, and the other fields read this session's own data, never the route's. When another session is routed, a
- * render receives the new object through its reactive input instead of remounting, so read `input.session` or
- * `props.session` where you use it rather than copying it. The workspace files, comments and composer follow the
- * route instead, so they belong to the screen: see `Screen`.
+ * session and directory: a new one each time a session is routed, each time the routed session moves to another
+ * directory, and once its shell tab is known. `key`, `id`, `tab`, `server`, `directory` and `visit` never change on
+ * one object, and the other fields read this session's own data, never the route's. A render receives each new
+ * object through its reactive input instead of remounting, so read `input.session` or `props.session` where you use
+ * it rather than copying it. Key per-session state by `key`, which a move keeps. The workspace files, comments and
+ * composer follow the route instead, so they belong to the screen: see `Screen`.
  */
 export interface MountedSession extends SessionRef {
-  /** This routing visit: a new object each time the session is routed, e.g. after Home and back. */
+  /** This routing visit: a new object each time the session is routed, e.g. after Home and back; a move keeps it. */
   readonly visit: object
   /**
    * This session's project. `sandboxes` includes worktrees found on disk; `name` and `icon` carry the user's local
@@ -560,7 +561,7 @@ export interface MountedSession extends SessionRef {
         readonly icon?: Project["icon"]
       }
     | undefined
-  /** The session's workspace directory, as the session was routed. */
+  /** The session's workspace directory. When the session moves, the next object carries the new one. */
   readonly directory: string
   /** The session runs in the project root rather than a worktree. Reactive. */
   readonly local: boolean

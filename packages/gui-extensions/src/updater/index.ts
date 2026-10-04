@@ -17,7 +17,11 @@ export default Extension.define({
       { enabled: true },
       {
         key: "settings.v3",
-        pick: (value: { general?: { releaseNotes?: unknown } } | null) => ({ enabled: value?.general?.releaseNotes }),
+        pick: (value: { general?: { releaseNotes?: unknown } } | null) => {
+          const enabled = value?.general?.releaseNotes
+
+          return enabled === undefined ? undefined : { enabled }
+        },
       },
     ),
     // The version whose What's New was last shown or skipped; stored before under the app's own key.

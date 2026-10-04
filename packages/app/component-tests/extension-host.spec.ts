@@ -119,7 +119,10 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
     const { mountExtensionHost, createKeyed, createSignal } = await import(fixture)
     const host = mountExtensionHost()
     const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
-    const shown = () => ["below", "middle", "scoped"].filter((value) => document.body.textContent?.includes(value))
+
+    const shown = () =>
+      ["below", "middle", "scoped", "cancelled", "brief"].filter((value) => document.body.textContent?.includes(value))
+
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
     const scope = { end: () => {} }
     const handles: DialogHandle[] = []
@@ -128,6 +131,11 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
       scope.end = () => set(false)
       handles.push(ctx.dialogs.open(text("below")), ctx.dialogs.open(text("middle")))
       createKeyed(on, () => void ctx.dialogs.open(text("scoped")))
+      // Ended in the tick they open, before the deferred opening: neither shows, and the replacing one replaces nothing.
+      ctx.dialogs.open(text("cancelled"), { replace: true }).close()
+      const [brief, end] = createSignal(true)
+      createKeyed(brief, () => void ctx.dialogs.open(text("brief")))
+      end(false)
     }, 0)
     await wait(100)
     const opened = shown()

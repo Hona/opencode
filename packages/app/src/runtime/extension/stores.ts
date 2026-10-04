@@ -167,11 +167,37 @@ export function locatedHandle<T>(session: SessionRef, open: () => Persisted<T>) 
 export function createSessionStore<T extends object>(input: {
   readonly open: (session: SessionRef) => Persisted<T>
   readonly owner: Owner | null
+  /**
+   * The host's ref for a session key while a tab owns it, which follows its server's live controller. Reactive. The
+   * ref a store first opens with, such as a screen's `MountedSession`, reads its own screen's controller.
+   */
+  readonly live: (key: string) => SessionRef | undefined
 }) {
   const entries = new Map<string, { readonly handle: Persisted<T>; readonly dispose: () => void }>()
 
-  const create = (session: SessionRef) =>
-    createRoot((dispose) => ({ handle: locatedHandle(session, () => input.open(session)), dispose }), input.owner)
+  const create = (session: SessionRef) => {
+    // The first ref stands in until the host lists the key, and again if its tab closes before the store is pruned.
+    const current = () => input.live(session.key) ?? session
+
+    const ref: SessionRef = {
+      key: session.key,
+      id: session.id,
+      get tab() {
+        return current().tab
+      },
+      get server() {
+        return current().server
+      },
+      get pending() {
+        return current().pending
+      },
+      get location() {
+        return current().location
+      },
+    }
+
+    return createRoot((dispose) => ({ handle: locatedHandle(ref, () => input.open(ref)), dispose }), input.owner)
+  }
 
   return {
     get(session: SessionRef) {

@@ -318,10 +318,13 @@ function createHost(input: HostInput) {
       open(render, options) {
         const id = `extension:${extension}:${sequence.value++}`
         const waiting = { cancel: () => {} }
+        // This open alone: once it aborts, a deferred open neither mounts nor replaces another dialog.
+        const opening = new AbortController()
 
         // Each handle names its own dialog, so it never closes one another extension or instance opened. Closing a
-        // dialog that still waits for the app interface cancels it.
+        // dialog that still waits for the app interface, or for its deferred open, cancels it.
         const close = () => {
+          opening.abort()
           waiting.cancel()
           dialog.close(id)
         }
@@ -361,8 +364,9 @@ function createHost(input: HostInput) {
               },
               undefined,
               id,
-              // The stack mounts in a later transition; disposal before then must still keep it closed.
-              context.signal,
+              // The stack mounts in a later transition. Its handle, its owner or the extension ending before then keeps
+              // it closed.
+              AbortSignal.any([opening.signal, context.signal]),
             ),
         )
 
@@ -700,6 +704,7 @@ function createHost(input: HostInput) {
           const store = createSessionStore({
             open: (session) => storage.store(name, { ...declaration, scope: { session } }),
             owner: root,
+            live: (key) => typed.sessions.list().find((session) => session.key === key),
           })
 
           stores[name] = store.get

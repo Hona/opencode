@@ -138,6 +138,16 @@ describe("main extension storage", () => {
       row: '[{"id":"older"}]',
     },
     {
+      name: "the next home of a list when the first holds a value the schema rejects",
+      from: [{ state: ["opencode.settings", "keepScreenActive"] }, { settings: "ssh.servers" }],
+      seed: {
+        state: '"off"',
+        settings: [{ file: "opencode.settings", key: "ssh.servers", value: [{ id: "older" }] }],
+      },
+      id: "older",
+      row: '[{"id":"older"}]',
+    },
+    {
       name: "the first home of a list when several hold a value",
       from: [{ state: ["opencode.settings", "keepScreenActive"] }, { settings: "ssh.servers" }],
       seed: {

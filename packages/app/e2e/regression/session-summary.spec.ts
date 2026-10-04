@@ -134,6 +134,49 @@ test("a session in a worktree subfolder names its worktree and lists cached work
   list.release()
 })
 
+test("the details follow the routed session when it moves to another worktree", async ({ page }) => {
+  const root = "C:/OpenCode/SmokeWorktrees"
+
+  const sessions = fixture.sessions.map((item) =>
+    item.id === fixture.targetID ? { ...item, directory: `${root}/feature` } : { ...item },
+  )
+
+  const mock = await mockStressTimeline(page, {
+    sessions,
+    worktrees: [
+      { directory: fixture.directory },
+      { directory: `${root}/feature`, strategy: "git" },
+      { directory: `${root}/other`, strategy: "git" },
+    ],
+  })
+
+  await page.goto(sessionHref(fixture.targetID))
+  const trigger = page.getByRole("button", { name: "Session details", exact: true })
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+  const location = (name: string) => summary.getByRole("button", { name, exact: true })
+  await trigger.click()
+  await expect(location("feature")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(summary).toBeHidden()
+
+  // The server moves the session; the screen stays mounted while its extensions read the new worktree.
+  const moved = sessions.find((item) => item.id === fixture.targetID)
+
+  if (moved) moved.directory = `${root}/other`
+  await mock.push([
+    {
+      id: "evt_details_session_moved",
+      type: "session.moved",
+      created: 2,
+      durable: { aggregateID: fixture.targetID, seq: 1, version: 1 },
+      data: { sessionID: fixture.targetID, location: { directory: `${root}/other` }, projectID: fixture.project.id },
+    },
+  ])
+  await trigger.click()
+  await expect(location("other")).toBeVisible()
+  await expect(location("feature")).toHaveCount(0)
+})
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`summary overlays the view and submenus follow ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })

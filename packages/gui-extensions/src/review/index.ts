@@ -31,7 +31,11 @@ export default Extension.define({
       { diffStyle: "split" },
       {
         key: "layout",
-        pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }),
+        pick: (value: { review?: { diffStyle?: unknown } } | null) => {
+          const diffStyle = value?.review?.diffStyle
+
+          return diffStyle === undefined ? undefined : { diffStyle }
+        },
       },
     ),
     panel: Store.global(
@@ -39,7 +43,11 @@ export default Extension.define({
       { expandMode: "collapse" },
       {
         key: "review-panel-v2",
-        pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }),
+        pick: (value: { expandMode?: unknown } | null) => {
+          const expandMode = value?.expandMode
+
+          return expandMode === undefined ? undefined : { expandMode }
+        },
       },
     ),
     // Whether narrow screens wrap long diff lines; stored before in the app settings.
@@ -48,7 +56,11 @@ export default Extension.define({
       { wrap: true },
       {
         key: "settings.v3",
-        pick: (value: { general?: { mobileDiffWrap?: unknown } } | null) => ({ wrap: value?.general?.mobileDiffWrap }),
+        pick: (value: { general?: { mobileDiffWrap?: unknown } } | null) => {
+          const wrap = value?.general?.mobileDiffWrap
+
+          return wrap === undefined ? undefined : { wrap }
+        },
       },
     ),
     // The mode, selected file and open files of each session.
@@ -58,8 +70,11 @@ export default Extension.define({
       {
         key: "layout",
         sessions: "sessionView",
+        // An entry that holds only other fields, such as its scroll, holds no review state.
         pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
-          entry && { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen },
+          entry && [entry.reviewMode, entry.reviewFile, entry.reviewOpen].some((field) => field !== undefined)
+            ? { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen }
+            : undefined,
       },
     ),
   },

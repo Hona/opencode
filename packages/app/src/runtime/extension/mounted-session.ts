@@ -146,11 +146,12 @@ export function createMountedSession(session: SessionModel) {
     detach: (id) => composer.context.removeComment(id),
   }
 
-  // Each object's memos live in its own root, which ends when the next session is routed: a kept object stops
+  // Each object's memos live in its own root, which ends when the next object replaces it: a kept object stops
   // updating `project`, `listedProject` and `local`, and its other fields keep reading this session's data.
-  const create = (id: string): MountedSession => {
+  const create = (input: { id: string; directory: string; tab: string; visit: object }): MountedSession => {
+    const id = input.id
+    const directory = input.directory
     const info = () => server.ctx.data.session.get(id)
-    const directory = session.workspace.directory()
 
     // Global sync adds the worktrees found on disk, and the user's local name and icon override the server's.
     // Raw metadata stands in until global sync lists the project.
@@ -176,8 +177,8 @@ export function createMountedSession(session: SessionModel) {
     const view: MountedSession = Object.freeze({
       key: `${server.key}\n${id}`,
       id,
-      tab: session.layout.tabKey() ?? "",
-      visit: {},
+      tab: input.tab,
+      visit: input.visit,
       server: serverRef,
       get pending() {
         return server.ctx.data.session.creating(id)
@@ -222,18 +223,25 @@ export function createMountedSession(session: SessionModel) {
 
   onCleanup(() => root.dispose?.())
 
-  // A new object for each routed session; a moment without an id keeps the last one.
+  // A new object for each routed session, and for the same session once it moves to another directory or its shell tab
+  // is known: its fields never change. A moment without an id keeps the last one. A move is the same routing visit.
   const mounted = createMemo<MountedSession>((previous) => {
     const id = session.identity.sessionID() ?? ""
+    const directory = session.workspace.directory()
+    const tab = session.layout.tabKey() ?? ""
 
-    if (previous && (previous.id === id || !id)) return previous
+    if (previous && !id) return previous
+
+    if (previous && previous.id === id && previous.directory === directory && previous.tab === tab) return previous
+
+    const visit = previous?.id === id ? previous.visit : {}
 
     return untrack(() =>
       createRoot((dispose) => {
         root.dispose?.()
         root.dispose = dispose
 
-        return create(id)
+        return create({ id, directory, tab, visit })
       }, owner),
     )
   })
