@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url"
 import type { Owner } from "solid-js"
 import type { Context, Contract, DialogHandle, Dialogs, SessionRef } from "@opencode/gui-extensions/sdk"
+import type { Bridge, BridgeMessage, Installed } from "@opencode/gui-extensions/sdk/bridge"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
@@ -555,4 +556,77 @@ story("declared global stores load before setup, so setup reads the stored value
   }, fixture)
 
   expect(result).toEqual({ held: { status: "loading", seen: [] }, seen: [true] })
+})
+
+story("startup enable state does not wait for the manager, and live updates beat older replies", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensions, until } = await import(fixture)
+    const initial = Promise.withResolvers<readonly string[]>()
+    const reply = Promise.withResolvers<readonly Installed[]>()
+    const listeners = new Set<(message: BridgeMessage) => void>()
+    const setups: string[] = []
+
+    const list = (disabled: readonly string[]): Installed[] =>
+      ["enabled", "disabled"].map((id) => ({
+        id,
+        name: id,
+        version: "1",
+        builtin: true,
+        enabled: !disabled.includes(id),
+      }))
+
+    const bridge: Bridge = {
+      packaged: false,
+      call: async () => undefined,
+      subscribe: async () => ({ available: false }),
+      on: (listener) => {
+        listeners.add(listener)
+
+        return () => void listeners.delete(listener)
+      },
+      embed() {},
+      capture: async () => undefined,
+      runMenubarItem() {},
+      configure() {},
+      manager: {
+        list: () => reply.promise,
+        enable: async () => {},
+        disable: async () => {},
+        reload: async () => {},
+        install: async () => {},
+        remove: async () => {},
+        source: async () => "",
+        asset: () => "",
+      },
+    }
+
+    const host = mountExtensions({
+      manager: { bridge, disabled: initial.promise },
+      definitions: ["enabled", "disabled"].map((id) => ({
+        id,
+        renderer: async () => ({ default: () => void setups.push(id) }),
+      })),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const before = [...setups]
+    initial.resolve(["disabled"])
+    await until(() => host.ready())
+    const started = { setups: [...setups], status: host.status("disabled") }
+    listeners.forEach((listener) => listener({ type: "extensions", list: list(["enabled"]) }))
+    await until(() => host.status("disabled") === "active" && host.status("enabled") === "disabled")
+    reply.resolve(list(["disabled"]))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const updated = { setups: [...setups], status: [host.status("enabled"), host.status("disabled")] }
+    host.unmount()
+
+    return { before, started, updated, listeners: listeners.size }
+  }, fixture)
+
+  expect(result).toEqual({
+    before: [],
+    started: { setups: ["enabled"], status: "disabled" },
+    updated: { setups: ["enabled", "disabled"], status: ["disabled", "active"] },
+    listeners: 0,
+  })
 })

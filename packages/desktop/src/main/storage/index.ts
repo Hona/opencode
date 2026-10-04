@@ -1,6 +1,7 @@
 export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
+import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Path } from "effect"
 import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"
@@ -8,6 +9,7 @@ import { setStorageSnapshotProvider } from "./snapshot"
 import { createDraftStore } from "./drafts"
 import { importLegacyStores } from "./legacy"
 import { createStateStore } from "./state"
+import { extension } from "./schema"
 
 export type Interface = ReturnType<typeof make>
 
@@ -19,9 +21,11 @@ export const layer = Layer.effect(
     const path = yield* Path.Path
     const runFork = Effect.runForkWith(yield* Effect.context())
     const userData = app.getPath("userData")
+
     const storage = make(path.join(userData, "drafts.sqlite"), (error) =>
       runFork(Effect.logError("storage flush failed", { error })),
     )
+
     yield* importLegacyStores(storage.db, userData).pipe(
       Effect.tap((result) =>
         result.removed.length === 0
@@ -30,10 +34,10 @@ export const layer = Layer.effect(
       ),
       Effect.catch((error) => Effect.logWarning("failed to import legacy store files", { error })),
     )
-    const wire = (_event: Electron.Event, win: BrowserWindow) => win.on("session-end", storage.flush)
+    const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => win.on("session-end", storage.flush)
     app.on("before-quit", storage.flush)
     app.on("browser-window-created", wire)
-    BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
+    BrowserWindow.getAllWindows().forEach((win) => wire(undefined, win))
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         app.off("before-quit", storage.flush)
@@ -42,17 +46,27 @@ export const layer = Layer.effect(
         storage.close()
       }),
     )
-    setStorageSnapshotProvider((names) => Object.fromEntries(names.map((name) => [name, storage.state.items(name)])))
+    setStorageSnapshotProvider((names) => ({
+      storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
+      disabledExtensions: storage.db
+        .select({ id: extension.id })
+        .from(extension)
+        .where(eq(extension.enabled, false))
+        .all()
+        .map((row) => row.id),
+    }))
     marks.storage = Date.now()
+
     return Service.of(storage)
   }),
 )
 
 // The file keeps its historical name; renaming it would mean moving the drafts it already holds.
-export function make(filename: string, onError?: (error: unknown) => void) {
+export function make(filename: string, onError?: NonNullable<Parameters<typeof createStateStore>[1]>["onError"]) {
   const database = openDatabase(filename)
   const state = createStateStore(database.db, { onError })
   const drafts = createDraftStore(database.db, { onError })
+
   return {
     db: database.db,
     state,

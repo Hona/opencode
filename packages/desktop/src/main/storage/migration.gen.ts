@@ -25,4 +25,11 @@ export const migrations = [
       "CREATE TABLE `extension_file` (\n\t`extension_id` text NOT NULL,\n\t`path` text NOT NULL,\n\t`data` blob NOT NULL,\n\tCONSTRAINT `extension_file_pk` PRIMARY KEY(`extension_id`, `path`)\n);",
     ],
   },
+  {
+    id: "20261004042510_extension-enablement",
+    statements: [
+      "-- Copy enable state only. Existing new-id rows win, and older rows and archive data stay intact.\nINSERT INTO `extension` (`id`, `enabled`)\nSELECT 'details', `enabled` FROM `extension` WHERE `id` = 'summary'\nON CONFLICT (`id`) DO NOTHING;",
+      "INSERT INTO `extension` (`id`, `enabled`)\nSELECT 'context', `enabled` FROM `extension` WHERE `id` = 'usage'\nON CONFLICT (`id`) DO NOTHING;",
+    ],
+  },
 ]

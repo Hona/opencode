@@ -1,4 +1,4 @@
-import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import type { Definition } from "@opencode/gui-extensions/sdk"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
@@ -33,13 +33,7 @@ export function ExtensionRoot(props: ParentProps) {
   const menubar = createMenubarItems(bridge)
   const ipcs = createIpcClients(bridge)
   onCleanup(ipcs.dispose)
-  const installed = createInstalled(bridge)
-
-  const disabled = createMemo(() => {
-    if (!installed.loaded()) return undefined
-
-    return new Set(installed.list().flatMap((item) => (item.enabled ? [] : [item.id])))
-  })
+  const installed = createInstalled(bridge, platform.disabledExtensions)
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
@@ -54,7 +48,7 @@ export function ExtensionRoot(props: ParentProps) {
     <HostApisContext.Provider value={apis}>
       <ExtensionHostProvider
         definitions={definitions}
-        disabled={disabled}
+        disabled={installed.disabled}
         apis={apis.apis}
         whenMounted={apis.whenMounted}
         ipc={bridge ? (token) => ipcs.client(token) : undefined}
