@@ -33,7 +33,11 @@ export function createSessionRevert(input: {
       })
 
   const restore = (target: ReturnType<typeof prompt.capture>, message: SessionMessageUser) => {
-    const restored = extractPromptFromMessage(message, { directory: location().directory })
+    const restored = extractPromptFromMessage(message, {
+      directory: location().directory,
+      attachmentName: language.t("common.attachment"),
+    })
+
     target.set(restored, promptLength(restored))
     target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
   }

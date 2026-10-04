@@ -118,10 +118,14 @@ export function extractPromptFromMessage(
 
     if (file.source.type === "uri" && commentFiles.has(file.source.uri)) continue
 
+    // Stored files carry their bytes, and an empty file has empty data; only a local handoff row
+    // leaves data empty because its bytes live at a blob URL.
+    const stored = file.source.type === "inline" || file.source.uri.startsWith("file:") || !!file.data
+
     const dataUrl =
       file.source.type === "uri" && file.source.uri.startsWith("data:")
         ? file.source.uri
-        : file.data
+        : stored
           ? `data:${file.mime};base64,${file.data}`
           : undefined
 

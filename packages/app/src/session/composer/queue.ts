@@ -63,9 +63,12 @@ export function createSessionQueue(input: {
         await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
         const draft = input.draft.current()
 
-        const prompt = promptLength(draft)
-          ? appendPrompt(draft, change.prompt)
-          : [...change.prompt, ...draft.filter(isAttachment)]
+        // A prompt of only comments or attachments adds no text, so it needs no paragraph break.
+        const prompt = !promptLength(draft)
+          ? [...change.prompt, ...draft.filter(isAttachment)]
+          : promptLength(change.prompt)
+            ? appendPrompt(draft, change.prompt)
+            : [...clonePrompt(draft), ...change.prompt.filter(isAttachment)]
 
         input.draft.set(prompt, promptLength(prompt))
         change.comments.forEach((comment) => input.draft.context.add(comment))
@@ -141,7 +144,7 @@ export function createSessionQueue(input: {
         sessionID: input.sessionID,
         text: item.payload.text,
         files: item.payload.files?.map((file) => ({
-          uri: `data:${file.mime};base64,${file.data}`,
+          uri: storedFileUri(file),
           name: file.name,
           description: file.description,
           mention: file.mention,
@@ -190,7 +193,10 @@ export function createSessionQueue(input: {
     mutation.mutate({
       type: "undo",
       item,
-      prompt: extractPromptFromMessage(source, { directory: location().directory }),
+      prompt: extractPromptFromMessage(source, {
+        directory: location().directory,
+        attachmentName: language.t("common.attachment"),
+      }),
       comments: extractPromptComments(source).map(commentContextItem),
     })
   }
@@ -374,6 +380,12 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
   ]
 }
 
+// A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
+// provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
+function storedFileUri(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
+  return file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+}
+
 function isComposerAttachment(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
   return !file.mention && file.source.type === "inline"
 }
@@ -440,7 +452,7 @@ async function editedPromptInput(
       ...(payload?.files
         ?.filter((file) => !isComposerAttachment(file))
         .map((file) => ({
-          uri: `data:${file.mime};base64,${file.data}`,
+          uri: storedFileUri(file),
           name: file.name,
           description: file.description,
           mention: mention(file.mention),

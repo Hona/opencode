@@ -118,6 +118,8 @@ describe("extractPromptFromMessage", () => {
           source: { type: "uri", uri: "file:///repo/notes.md" },
           name: "notes.md",
         },
+        // An empty file is stored with empty data, not missing data.
+        { data: "", mime: "text/plain", source: { type: "inline" }, name: "empty.txt" },
       ],
       agents: [{ name: "plan" }],
       skills: [{ id: "review", name: "Review" }],
@@ -137,6 +139,7 @@ describe("extractPromptFromMessage", () => {
         mime: "text/markdown",
         blob: { url: "data:text/markdown;base64,bm90ZXM=" },
       },
+      { type: "image", filename: "empty.txt", mime: "text/plain", blob: { url: "data:text/plain;base64," } },
       { type: "path", filename: "report.zip", path: "/repo/report.zip" },
     ])
   })

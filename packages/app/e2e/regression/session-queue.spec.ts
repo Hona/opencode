@@ -164,6 +164,9 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
 
 test("dragging reorders queued prompts", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
+  mock.rows[0].payload.files = [
+    { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+  ]
   const view = await openQueue(page, mock)
   await expect(view.rows).toHaveCount(3)
 
@@ -187,6 +190,8 @@ test("dragging reorders queued prompts", async ({ page }) => {
     "third queued prompt",
     "first queued prompt",
   ])
+  // A re-admitted file keeps the URI it came from instead of becoming an inline snapshot.
+  expect(mock.prompts[2].files).toMatchObject([{ uri: "file:///repo/main.ts", name: "main.ts" }])
   expect(mock.changes).toEqual([
     { inboxID: "inb_seed_1", action: "cancel" },
     { inboxID: "inb_seed_2", action: "cancel" },
@@ -269,6 +274,47 @@ test("Undo appends to an existing draft and restores inline attachments", async 
   await expect(view.input).toBeFocused()
   await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
+})
+
+test("Undo of a comment-only prompt keeps the draft text and restores the comment once", async ({ page }) => {
+  const comment = "check the guard"
+  const mock = createQueueMock([`The user made the following comment regarding line 2 of /repo/app.ts: ${comment}`])
+  mock.rows[0].payload.metadata = {
+    displayText: "",
+    comments: [
+      {
+        path: "/repo/app.ts",
+        comment,
+        selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+        origin: "review",
+      },
+    ],
+  }
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+      name: "app.ts",
+    },
+  ]
+  const view = await openQueue(page, mock)
+  await view.input.fill("my draft")
+  await view.rows.getByRole("button", { name: "Undo" }).click()
+
+  await expect(view.rows).toHaveCount(0)
+  await expect(view.input).toHaveText("my draft")
+  const cards = view.composer.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(cards).toHaveCount(1)
+  await expect(cards).toContainText(comment)
+
+  // The resubmission carries the draft text with no stray break and the comment's file exactly once.
+  await view.input.press("Enter")
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(mock.prompts[0].text).toBe(
+    `my draft\nThe user made the following comment regarding line 2 of /repo/app.ts: ${comment}`,
+  )
+  expect(mock.prompts[0].files?.map((file) => file.uri)).toEqual(["file:///repo/app.ts?start=2&end=2"])
 })
 
 test("Undo preserves mentioned file and agent references on resubmission", async ({ page }) => {
