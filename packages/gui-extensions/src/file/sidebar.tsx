@@ -17,22 +17,24 @@ export default function FileSidebar(props: { session: MountedSession; screen: Se
   createKeyed(shared.changes, (service) => onCleanup(service.watch(props.session, "tree")))
 
   // Lists the root again when the directory, the tree tab or the connection changes, and whenever the root
-  // listing is unloaded, e.g. after the workspace's tree resets.
+  // listing is unloaded: the workspace's tree resets to a new root entry. Loading that listing is the same key.
   createKeyed(
     () => {
       const directory = file.root
 
       if (!props.session.server.connected) return
 
-      const root = file.tree.state("")
-
-      return { directory, tab: shared.tree.tab(), root, loaded: root?.loaded }
+      return { directory, tab: shared.tree.tab(), root: file.tree.state("") }
     },
     (listing) => {
       const refresh = shared.tree.directory !== listing.directory
 
       shared.tree.directory = listing.directory
       void file.tree.sync("", refresh ? { force: true } : undefined)
+    },
+    {
+      equals: (previous, next) =>
+        previous.directory === next.directory && previous.tab === next.tab && previous.root === next.root,
     },
   )
 

@@ -3,8 +3,14 @@ import { Option, Schema } from "effect"
 import type { StateStore } from "../storage/state"
 import type { SettingsStore } from "../storage/store"
 
-/** The last value a store read or wrote, so later reads skip the database. */
-type Cached<T> = { value?: { current: T } }
+/**
+ * One key as every store opened on it sees it: the stored JSON last read or written, so later reads skip the database.
+ * Undefined until read; null while nothing is stored, including after `remove`, so each store reads its `initial`.
+ */
+type Shared = { json?: string | null }
+
+/** One store's decoded copy of the shared JSON, decoded again when another store on the key writes. */
+type Decoded<T> = { value?: { readonly json: string | null; readonly current: T } }
 
 /** A desktop settings file by name; the app's own when the name is left out. */
 export type SettingsFiles = (file?: string) => SettingsStore
@@ -16,8 +22,18 @@ export type SettingsFiles = (file?: string) => SettingsStore
  */
 export function createStorage(state: StateStore, settings: SettingsFiles, id: string): Storage {
   const name = namespace(id)
-  // Resets the caches of the stores opened on each key since its last removal, so they read `initial` again.
-  const opened = new Map<string, Set<() => void>>()
+  // Every store opened on a key shares its entry, so a write through one is what the others read.
+  const keys = new Map<string, Shared>()
+
+  const shared = (key: string) => {
+    const existing = keys.get(key)
+
+    if (existing) return existing
+    const created: Shared = {}
+    keys.set(key, created)
+
+    return created
+  }
 
   const sources = (from: MainStoreFrom | readonly MainStoreFrom[] | undefined) =>
     [from ?? []].flat().map((item) => source(state, settings, item))
@@ -28,53 +44,58 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
 
     if (state.get(name, key) !== null) state.delete(name, key)
     state.flush()
-    opened.get(key)?.forEach((reset) => reset())
-    opened.delete(key)
+    // The stores open on the key read their `initial` again.
+    const entry = keys.get(key)
+
+    if (entry) entry.json = null
   }
 
   return {
     store(key, options) {
       const codec = Schema.toCodecJson(options.schema)
       const legacy = sources(options.from)
-      const cached: Cached<typeof options.initial> = {}
+      const entry = shared(key)
+      const decoded: Decoded<typeof options.initial> = {}
 
+      // The stored JSON, imported once from the newest older home that holds a value this store's schema accepts; the
+      // old location keeps its copy for builds that still read it.
       const read = () => {
         const stored = state.get(name, key)
 
-        if (stored !== null) return Schema.decodeUnknownOption(Schema.fromJsonString(codec))(stored)
-        // The newest older home that holds a value.
+        if (stored !== null) return stored
         const found = legacy.find((older) => older.read() !== undefined)?.read()
 
-        if (found === undefined) return Option.none()
-        const decoded = Schema.decodeUnknownOption(codec)(found)
+        if (found === undefined || Option.isNone(Schema.decodeUnknownOption(codec)(found))) return null
+        const json = JSON.stringify(found)
+        state.set(name, key, json)
 
-        // Imported once; the old location keeps its copy for builds that still read it.
-        if (Option.isSome(decoded)) state.set(name, key, JSON.stringify(found))
-
-        return decoded
+        return json
       }
 
       const current = () => {
-        cached.value ??= { current: Option.getOrElse(read(), () => options.initial) }
+        // Null is a known empty key, so only an unread one goes to the database.
+        if (entry.json === undefined) entry.json = read()
+        const json = entry.json
+        const cached = decoded.value
 
-        return cached.value.current
+        if (cached && cached.json === json) return cached.current
+        const value = json === null ? Option.none() : Schema.decodeUnknownOption(Schema.fromJsonString(codec))(json)
+        const next = { json, current: Option.getOrElse(value, () => options.initial) }
+        decoded.value = next
+
+        return next.current
       }
 
       // Keeps a decoded copy of what was stored, so the caller's object never aliases the stored value.
       const write = (value: typeof options.initial) => {
         const encoded = Schema.encodeSync(codec)(value)
+        const json = JSON.stringify(encoded)
 
-        state.set(name, key, JSON.stringify(encoded))
+        state.set(name, key, json)
         state.flush()
-        cached.value = { current: Schema.decodeSync(codec)(encoded) }
+        entry.json = json
+        decoded.value = { json, current: Schema.decodeSync(codec)(encoded) }
       }
-
-      const resets = opened.get(key) ?? new Set()
-
-      resets.add(() => {
-        cached.value = { current: options.initial }
-      })
-      opened.set(key, resets)
 
       return {
         get value() {

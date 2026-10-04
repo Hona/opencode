@@ -5,11 +5,13 @@ import {
   type BaseContext,
   type Build,
   type Cleanup,
+  type Declared,
   type DeclaredStores,
   type Definition,
   type Ipc,
   type IpcImpl,
   type IpcProvider,
+  type IpcRef,
   type IpcSpec,
   type MainStoreDeclaration,
   type MainStoreFrom,
@@ -223,6 +225,20 @@ type MainStores<D> = [D] extends [never]
     }
 
 /**
+ * The spec of each Ipc the definition declares in `provides`, as a full token or an `Ipc.ref`; any spec when there is
+ * no definition, as for an installed extension's plain JavaScript.
+ */
+type ProvidedSpec<D> = [D] extends [never]
+  ? IpcSpec
+  : Declared<D, "provides">[keyof Declared<D, "provides">] extends infer T
+    ? T extends Ipc<infer S>
+      ? S
+      : T extends IpcRef<infer S>
+        ? S
+        : never
+    : never
+
+/**
  * The setup context in the main process. The APIs the host always provides are properties, each created on first
  * read. Every main extension is one instance for the whole app, shared by all windows. `MainContext<typeof
  * definition>` also types the declared main stores.
@@ -323,9 +339,10 @@ export interface MainContext<D = never> extends BaseContext {
   readonly cli: Cli
   /**
    * Provides an Ipc the definition declares in `provides`, for the windows to use. Withdrawn when the instance goes
-   * away. Throws for a Contract token, an Ipc another extension provides, or an `impl` missing a method.
+   * away. `MainSetup<typeof definition>` accepts only those Ipcs; a built-in that provides another one throws. Also
+   * throws for a Contract token, an Ipc another extension provides, or an `impl` missing a method.
    *
-   * @param token - The Ipc.
+   * @param token - An Ipc from `provides`; the full token where `provides` names it with `Ipc.ref`.
    * @param impl - Its methods, and `state` when the spec has one.
    * @returns Pushes state and events, or withdraws the Ipc early.
    *
@@ -334,7 +351,7 @@ export interface MainContext<D = never> extends BaseContext {
    * const provider = ctx.provide(Updater, { state: () => updater.state(), check, install })
    * ```
    */
-  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  provide<S extends Extract<ProvidedSpec<D>, IpcSpec>>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
 }
 
 /**

@@ -7,7 +7,7 @@ import { createKeyed, useExtension, type MountedSession, type SessionScreen } fr
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
 import { normalizeFileTreeV2Path } from "./tree-model"
-import { kindChange, kindLabel, syncFileTreeV2Width, virtualScrollElement } from "./tree-v2"
+import { kindChange, kindLabel, sameRows, syncFileTreeV2Width, virtualScrollElement } from "./tree-v2"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -127,9 +127,11 @@ export default function SessionFileList(props: {
     },
   )
 
+  // Measures again when other rows render, not when the same rows only move while scrolling.
   createKeyed(
     () => ({ keys: virtualRowKeys(), element: root() }),
     (current) => syncFileTreeV2Width(current.element),
+    { equals: sameRows },
   )
 
   return (

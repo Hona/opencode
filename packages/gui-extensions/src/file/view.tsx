@@ -425,6 +425,11 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
       if (restore) scrollSync.queueRestore()
     },
+    {
+      // The file's content changing while it stays loaded is the same key.
+      equals: (previous, next) =>
+        previous.loaded === next.loaded && previous.ready === next.ready && previous.shown === next.shown,
+    },
   )
 
   const renderFile = (source: string) => (

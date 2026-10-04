@@ -1,4 +1,4 @@
-import { batch, createRoot, createSignal, getOwner, onCleanup, runWithOwner } from "solid-js"
+import { batch, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
@@ -182,22 +182,29 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     live.set(id, entry)
     setState("attachments", id, { browser: null, embeds: {}, suspended: false })
-    // A new session appears in the UI before its server-side creation finishes. The listener
-    // belongs to this model, not to the route effect that happened to call attach().
-    const data = ref.server.data
 
-    const unsubscribe = runWithOwner(owner, () => [
-      data.on("session.created", (event) => {
-        if (event.data.sessionID === ref.id) entry.connection.wake()
-      }),
-      data.on("session.execution.started", (event) => {
-        if (event.data.sessionID === ref.id) entry.connection.wake()
-      }),
-    ])
-
-    // Mirrors the desktop's inventory and focus requests into the strip: writes held while the session's location was
-    // unknown land once the server reports it.
+    // The attachment's own root, not the route effect that happened to call attach(), so `entry.dispose` ends it.
     const unwatch = createRoot((dispose) => {
+      // A new session appears in the UI before its server-side creation finishes. The listeners follow the server's
+      // live data: a re-authenticated server gets a new controller under the same ref.
+      createKeyed(
+        () => ref.server.data,
+        (data) => {
+          onCleanup(
+            data.on("session.created", (event) => {
+              if (event.data.sessionID === ref.id) entry.connection.wake()
+            }),
+          )
+          onCleanup(
+            data.on("session.execution.started", (event) => {
+              if (event.data.sessionID === ref.id) entry.connection.wake()
+            }),
+          )
+        },
+      )
+
+      // Mirrors the desktop's inventory and focus requests into the strip: writes held while the session's location
+      // was unknown land once the server reports it.
       createKeyed(
         () => ref.location,
         () =>
@@ -216,7 +223,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (!ref.pending) entry.connection.wake()
     entry.dispose = () => {
       unwatch()
-      unsubscribe?.forEach((dispose) => dispose())
       entry.connection.dispose()
     }
   }

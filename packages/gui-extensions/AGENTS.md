@@ -67,7 +67,7 @@ Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-a
 
 - `bun run lint` bans importing `createEffect`, `createRenderEffect` and `createComputed` outside `src/sdk/`. Run side work per provider generation or value with `createKeyed(source, fn, { otherwise })`, fetch with `createLatest`, and keep per-visit state with `createVisitState`.
 - Derive, don't sync. A value computed from other state is a `createMemo` or a plain function, never an effect that calls a setter. Never mirror state into a second store, signal, or `Map` through an effect.
-- An effect (`createKeyed`) synchronizes with something outside Solid: the DOM, a third-party widget, an embed, an Ipc subscription, a chunk preload. Comment what it syncs with when that isn't obvious.
+- An effect (`createKeyed`) synchronizes with something outside Solid: the DOM, a third-party widget, an embed, an Ipc subscription, a chunk preload. Comment what it syncs with when that isn't obvious. A source that builds an object is a new key on every read; pass `equals` to compare the fields that should run it again.
 - Logic caused by a user action belongs in that action's handler, not in an effect that watches the state the action changed. If several handlers share it, call one function from each.
 - Reset state on an identity change by keying the subtree (`<Show keyed>`) or by storing an id and deriving the selection from it. To forget a selection when the user navigates away and back, use `createVisitState`. Never reset state in an effect.
 - No effect chains, and no effect that notifies a parent: update everything in the same handler or `batch`.

@@ -152,20 +152,20 @@ ctx.add(Command, {
 
 ## Primitives
 
-| Primitive                                       | Use it for                                                                    |
-| ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| `Extension.define(definition)`                  | The manifest, typed so `Setup<typeof definition>` sees the declarations       |
-| `Extension.compose(...definitions)`             | A process's list; fails to compile on a missing or duplicate provider         |
-| `Point.define<T>(id)`                           | A place your extension renders and others contribute to                       |
-| `Contract.define<T, Id>(id)`                    | An in-process API one extension provides to others                            |
-| `Ipc.define(spec)` / `Ipc.ref<typeof T>(id)`    | The main ↔ window contract, or a reference to it that loads no schemas       |
-| `Store.global` / `Store.session` / `Store.main` | Declared window state the host loads before you read it, and main state       |
-| `createKeyed(source, fn, { otherwise })`        | Side effects per provider generation or per value; the only sanctioned effect |
-| `createLatest(source, fetch)`                   | Async data that never suspends and drops stale replies                        |
-| `createVisitState(initial)`                     | State that resets each time the user routes back to the session               |
-| `useExtension` / `usePanel` / `useDrawer`       | The context, the panel frame, and the narrow-screen drawer in components      |
-| `onIdle(fn)`                                    | Preloading a lazy chunk while the app is idle                                 |
-| `Scope` (main)                                  | `ctx.scope`: `signal`, `addFinalizer`, `fork`, `close`                        |
+| Primitive                                        | Use it for                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `Extension.define(definition)`                   | The manifest, typed so `Setup<typeof definition>` sees the declarations       |
+| `Extension.compose(...definitions)`              | A process's list; fails to compile on a missing or duplicate provider         |
+| `Point.define<T>(id)`                            | A place your extension renders and others contribute to                       |
+| `Contract.define<T, Id>(id)`                     | An in-process API one extension provides to others                            |
+| `Ipc.define(spec)` / `Ipc.ref<typeof T>(id)`     | The main ↔ window contract, or a reference to it that loads no schemas       |
+| `Store.global` / `Store.session` / `Store.main`  | Declared window state the host loads before you read it, and main state       |
+| `createKeyed(source, fn, { otherwise, equals })` | Side effects per provider generation or per value; the only sanctioned effect |
+| `createLatest(source, fetch)`                    | Async data that never suspends and drops stale replies                        |
+| `createVisitState(initial)`                      | State that resets each time the user routes back to the session               |
+| `useExtension` / `usePanel` / `useDrawer`        | The context, the panel frame, and the narrow-screen drawer in components      |
+| `onIdle(fn)`                                     | Preloading a lazy chunk while the app is idle                                 |
+| `Scope` (main)                                   | `ctx.scope`: `signal`, `addFinalizer`, `fork`, `close`                        |
 
 [Lifetimes](#lifetimes) shows `createKeyed` in the updater.
 
@@ -381,6 +381,7 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 
 - **Derive, don't sync.** A value computed from other state is a `createMemo` or a plain function. Never an effect that calls a setter.
 - **Effects only for external sync.** `createKeyed` syncs with something outside Solid: the DOM, a widget, an embed, an Ipc subscription. Logic a user action causes goes in the handler.
+- **Key an object source by its fields.** A `createKeyed` source that builds an object, such as `{ directory, tab }`, is a new key on every read. Pass `equals` to compare the fields that should run it again.
 - **The lint bans raw effects.** `createEffect`, `createRenderEffect` and `createComputed` may not be imported outside `src/sdk`. An escape hatch needs an `oxlint-disable` comment with a reason.
 - **Suspense only on first load.** Wrap each `lazy()` component in its own `<Suspense>`, read async data through `.latest` or `createLatest`, and never read a refetching resource in render: it blanks the nearest boundary.
 - **Stable objects.** Return the same object from `Panel.list` and reactive contributions while nothing changed, so the host never remounts.

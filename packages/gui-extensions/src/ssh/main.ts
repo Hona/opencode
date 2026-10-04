@@ -11,8 +11,15 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
   const cli = ctx.cli
   const saved = ctx.stores.servers
 
+  // Each resource's teardown is registered as it is acquired, so a setup that fails or is aborted part way releases
+  // what it holds. The scope runs finalizers in reverse: the changes, the controller, its scope, then the runtime.
   const runtime = ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))
+  ctx.scope.addFinalizer(() => runtime.dispose())
+
   const scope = await runtime.runPromise(Scope.make())
+  ctx.scope.addFinalizer(() => runtime.runPromise(Scope.close(scope, Exit.void)))
+
+  if (ctx.scope.signal.aborted) return
 
   const controller = await runtime.runPromise(
     createSshController({
@@ -24,6 +31,10 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
       save: (configs) => Effect.try({ try: () => saved.update(() => configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
   )
+
+  ctx.scope.addFinalizer(() => runtime.runPromise(controller.close))
+
+  if (ctx.scope.signal.aborted) return
 
   const status = { revision: 0 }
 
@@ -50,15 +61,9 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
   }
 
   const changes = runtime.runFork(controller.changes().pipe(Stream.runForEach(() => Effect.sync(push))))
+  ctx.scope.addFinalizer(() => runtime.runPromise(Fiber.interrupt(changes)))
   // A closed window cancels the attempts it was answering.
   ctx.windows.on("close", (win) => void runtime.runPromise(controller.detach(win.id)))
-  // One finalizer, in order: the controller still runs on the runtime it closes last.
-  ctx.scope.addFinalizer(async () => {
-    await runtime.runPromise(Fiber.interrupt(changes))
-    await runtime.runPromise(controller.close)
-    await runtime.runPromise(Scope.close(scope, Exit.void))
-    await runtime.dispose()
-  })
 }
 
 export default setup

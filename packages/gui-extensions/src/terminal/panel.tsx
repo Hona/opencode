@@ -118,6 +118,13 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
       }
     },
     (handoff) => props.model.handoff.set(handoff.workspace, handoff.titles),
+    {
+      // A terminal changing anything but its title keeps the titles.
+      equals: (previous, next) =>
+        previous.workspace === next.workspace &&
+        previous.titles.length === next.titles.length &&
+        previous.titles.every((title, index) => title === next.titles[index]),
+    },
   )
 
   const handoff = createMemo(() => {
@@ -167,6 +174,13 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
       const keep = new Set(workspaces)
 
       setStore({ surfaces: surfaces.filter((surface) => keep.has(surface.workspace)), workspaces })
+    },
+    {
+      equals: (previous, next) =>
+        previous.workspace === next.workspace &&
+        previous.ready === next.ready &&
+        previous.active === next.active &&
+        previous.ptys === next.ptys,
     },
   )
 

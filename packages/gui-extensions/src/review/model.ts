@@ -69,8 +69,7 @@ export function createReviewModel(input: {
 
   const update: ReturnType<typeof ctx.stores.session>["update"] = (mutation) => saved().update(mutation)
 
-  // Memos, so the store a session switch reopens does not recompute the diffs, kinds and tree rows it feeds.
-  const mode = createMemo(() => stored()?.mode ?? "git")
+  // A memo, so the store a session switch reopens does not recompute the diffs, kinds and tree rows it feeds.
   const selectedFile = createMemo(() => stored()?.file)
 
   // After a session switch the review renders a frame later, so the switch paints first.
@@ -111,6 +110,19 @@ export function createReviewModel(input: {
     if (project?.vcs === "git" && view().id) list.push("turn")
 
     return list
+  })
+
+  // The session's chosen mode while it is offered. One it no longer offers, such as Branch back on the default branch,
+  // shows as the first mode offered; the stored choice stays, so it returns once its mode is offered again.
+  const mode = createMemo<ChangeMode>(() => {
+    const chosen = stored()?.mode ?? "git"
+
+    // Until the server and the project answer, what the session offers is unknown.
+    if (!view().server.connected || !view().project) return chosen
+
+    const list = options()
+
+    return list.includes(chosen) ? chosen : (list[0] ?? "git")
   })
 
   const vcsKey = createMemo(
@@ -178,7 +190,8 @@ export function createReviewModel(input: {
     void queryClient.invalidateQueries({ queryKey: detailsKey() })
   }, 100)
 
-  // The server reports file changes in the directory; its event stream follows a restarted server.
+  // The server reports file changes in the directory; its event stream follows a restarted server. Routing another
+  // session of the same directory and server keeps the listener.
   createKeyed(
     () => ({ directory: directory(), data: view().server.data }),
     (current) =>
@@ -187,6 +200,7 @@ export function createReviewModel(input: {
           if (details.type === "filesystem.changed" && details.location?.directory === current.directory) refresh()
         }),
       ),
+    { equals: (previous, next) => previous.directory === next.directory && previous.data === next.data },
   )
 
   // Opening the side region refreshes changes a tree already shows. Otherwise it loads them once, so the
@@ -506,21 +520,6 @@ export function createReviewModel(input: {
 
       requestAnimationFrame(() => attempt(0))
     },
-  )
-
-  // A mode the session no longer offers, such as Branch back on the default branch, falls back to the first one.
-  createKeyed(
-    () => {
-      if (!stored() || !view().server.connected || !view().project) return
-
-      const list = options()
-
-      return list.includes(mode()) ? undefined : list[0]
-    },
-    (next) =>
-      update((draft) => {
-        draft.mode = next
-      }),
   )
 
   const idled = createMemo(

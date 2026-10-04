@@ -225,6 +225,8 @@ export default function FileTreeV2(props: {
         virtualizer.scrollToIndex(next, { align: "auto" })
       })
     },
+    // A reshuffle that moves the active row is the same key; it showing up or leaving the tree is not.
+    { equals: (previous, next) => previous.path === next.path && previous.index < 0 === next.index < 0 },
   )
 
   const selectFile = (node: FileTreeV2Node, action?: (file: FileNode) => void) => {
@@ -270,9 +272,11 @@ export default function FileTreeV2(props: {
     },
   )
 
+  // Measures again when other rows render, not when the same rows only move while scrolling.
   createKeyed(
     () => ({ keys: virtualRowKeys(), element: root() }),
     (current) => syncFileTreeV2Width(current.element),
+    { equals: sameRows },
   )
 
   return (
@@ -377,4 +381,16 @@ export function syncFileTreeV2Width(element?: HTMLDivElement) {
     if (width <= element.clientWidth) return
     element.style.width = `${width}px`
   })
+}
+
+/** The rows a virtualized list renders, in its box. */
+type RenderedRows = { readonly keys: readonly unknown[]; readonly element?: HTMLDivElement }
+
+/** The same rows render in the same box, so their width needs no new measure. */
+export function sameRows(previous: RenderedRows, next: RenderedRows) {
+  return (
+    previous.element === next.element &&
+    previous.keys.length === next.keys.length &&
+    previous.keys.every((key, index) => key === next.keys[index])
+  )
 }

@@ -130,6 +130,61 @@ describe("extension primitives", () => {
     dispose()
   })
 
+  test("createKeyed with equals keys an object source by the fields it compares", () => {
+    const [read, write] = createSignal({ directory: "a", loading: true })
+    const log: string[] = []
+
+    const dispose = createRoot((dispose) => {
+      createKeyed(
+        () => ({ directory: read().directory, loading: read().loading }),
+        (value) => {
+          log.push(`run ${value.directory}`)
+          onCleanup(() => log.push(`end ${value.directory}`))
+        },
+        { equals: (previous, next) => previous.directory === next.directory },
+      )
+
+      return dispose
+    })
+
+    // The listing loads, which is the same key; then the directory changes.
+    write({ directory: "a", loading: false })
+    write({ directory: "b", loading: true })
+    expect(log).toEqual(["run a", "end a", "run b"])
+    dispose()
+  })
+
+  test("createLatest clears the error when the next request starts and while the source has no value", async () => {
+    const [key, setKey] = createSignal<string | undefined>("a")
+    const requests = new Map<string, PromiseWithResolvers<string>>()
+
+    const root = createRoot((dispose) => ({
+      dispose,
+      latest: createLatest(key, (value) => {
+        const reply = Promise.withResolvers<string>()
+
+        requests.set(value, reply)
+
+        return reply.promise
+      }),
+    }))
+
+    const error = () => (root.latest.error instanceof Error ? root.latest.error.message : root.latest.error)
+    const seen: unknown[] = []
+    requests.get("a")?.reject(new Error("a failed"))
+    await Bun.sleep(0)
+    seen.push(error())
+    setKey("b")
+    seen.push(error())
+    requests.get("b")?.reject(new Error("b failed"))
+    await Bun.sleep(0)
+    seen.push(error())
+    setKey(undefined)
+    seen.push(error())
+    expect(seen).toEqual(["a failed", undefined, "b failed", undefined])
+    root.dispose()
+  })
+
   test("createLatest aborts the previous request and drops its late reply", async () => {
     const [key, setKey] = createSignal<string | undefined>("a")
     const requests = new Map<string, { signal: AbortSignal; reply: PromiseWithResolvers<string> }>()

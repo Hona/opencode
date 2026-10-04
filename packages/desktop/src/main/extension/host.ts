@@ -61,7 +61,13 @@ import { createEmbeds } from "./embeds"
 
 export type ExtensionHost = ReturnType<typeof createHost>
 
-type Loaded = { readonly setup: MainSetup; readonly i18n?: Catalog; readonly stores?: Definition["stores"] }
+type Loaded = {
+  readonly setup: MainSetup
+  readonly i18n?: Catalog
+  readonly stores?: Definition["stores"]
+  /** A built-in's declared `provides`, the only Ipcs it may provide; unknown for an installed extension. */
+  readonly provides?: NonNullable<Definition["provides"]>
+}
 
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
 type Method = IpcImpl<IpcSpec>[string]
@@ -276,7 +282,12 @@ export function createHost(input: {
       return () =>
         main().then((module) =>
           // SAFETY: a built-in's main entry exports a `MainSetup`, whose context this host builds.
-          prepare(id, { setup: module.default as MainSetup, i18n: builtin.i18n, stores: builtin.stores }),
+          prepare(id, {
+            setup: module.default as MainSetup,
+            i18n: builtin.i18n,
+            stores: builtin.stores,
+            provides: builtin.provides ?? {},
+          }),
         )
     }
 
@@ -354,6 +365,12 @@ export function createHost(input: {
       if (token.kind !== "ipc") throw new Error("Contracts are provided by an extension's renderer entry")
 
       const ipc = token.id
+      const declared = loaded.provides
+
+      // A built-in's definition is known: it provides only the Ipcs it declares, so the windows' `uses` find them.
+      if (declared && !Object.values(declared).some((item) => item.kind === "ipc" && item.id === ipc))
+        throw new Error(`${id} provides Ipc "${ipc}" its definition does not declare in provides`)
+
       const current = ipcs.get(ipc)
 
       if (current && current.extension !== id)

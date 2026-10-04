@@ -76,6 +76,15 @@ describe("main extension storage", () => {
       },
       expected: [],
     },
+    {
+      // Every store opened on a key reads one value: this one read before another store on the key wrote.
+      name: "an update through another store on the key",
+      write: (opened: ReturnType<typeof open>) => {
+        expect(opened.store.value).toEqual([])
+        opened.storage.store("servers", { schema: Schema.Array(Schema.String), initial: [] }).update(() => ["a"])
+      },
+      expected: ["a"],
+    },
   ])("$name reaches the database before it returns, and the open store reads it", async (row) => {
     const root = await directory()
     const file = path.join(root, "drafts.sqlite")

@@ -39,9 +39,12 @@ type Run = { readonly value: unknown; readonly generation?: number } | undefined
  * only to sync with something outside Solid (the DOM, a widget, an Ipc subscription), never to set state from state.
  * Call it under an owner: in setup, or in a component.
  *
+ * A plain accessor that builds an object, such as `{ directory, tab }`, gives a new key each time it reads, even when
+ * every field is unchanged; pass `equals` to compare the fields that matter instead.
+ *
  * @param source - A `Live` accessor from `ctx.uses`, or any accessor.
  * @param fn - Runs once per key with the source's value. It runs untracked.
- * @param options - What runs while there is no key.
+ * @param options - What runs while there is no key, and when a plain accessor's new value is the same key.
  *
  * @example
  * ```ts
@@ -49,6 +52,10 @@ type Run = { readonly value: unknown; readonly generation?: number } | undefined
  * createKeyed(ctx.uses.updater, (updater) => void updater.on("check", () => act("check")))
  * // A plain accessor: the picker runs while the tab is visible, and `otherwise` while it is not.
  * createKeyed(visible, startPicker, { otherwise: endPicker })
+ * // An object source: lists again only when the directory or the tab changes.
+ * createKeyed(() => ({ directory: file.root, tab: tab() }), (key) => void list(key), {
+ *   equals: (previous, next) => previous.directory === next.directory && previous.tab === next.tab,
+ * })
  * ```
  */
 export function createKeyed<S extends KeyedSource>(
@@ -60,9 +67,16 @@ export function createKeyed<S extends KeyedSource>(
      * is undefined, null or false. Its own owner ends when a key arrives.
      */
     readonly otherwise?: () => void
+    /**
+     * Whether a plain accessor's new value is the same key as the one `fn` last ran with, so the run stays and `fn`
+     * does not run again. Use it when the source builds an object each time it reads. Defaults to identity (`===`).
+     * A `Live` accessor always keys by generation and ignores it.
+     */
+    readonly equals?: (previous: KeyedValue<S>, next: KeyedValue<S>) => boolean
   },
 ) {
   const read: KeyedSource = source
+  const same = options?.equals
 
   const active = Live.is(read)
     ? createMemo<Run>(
@@ -82,7 +96,16 @@ export function createKeyed<S extends KeyedSource>(
           return value === undefined || value === null || value === false ? undefined : { value }
         },
         undefined,
-        { equals: (previous, next) => previous?.value === next?.value },
+        {
+          equals: (previous, next) => {
+            if (previous === undefined || next === undefined) return previous === next
+
+            // SAFETY: both values come from `source` while it is active, which is what `KeyedValue<S>` describes.
+            return (
+              previous.value === next.value || !!same?.(previous.value as KeyedValue<S>, next.value as KeyedValue<S>)
+            )
+          },
+        },
       )
 
   createRenderEffect(
@@ -130,7 +153,10 @@ export function createLatest<S extends KeyedSource, T>(
   readonly latest: T | undefined
   /** A request for the current value is in flight. */
   readonly loading: boolean
-  /** The current request's rejection; cleared by the next result. */
+  /**
+   * The current request's rejection. Undefined while a request runs, after a result, and while the source has no
+   * value, so it never describes an earlier value's request.
+   */
   readonly error: unknown
 } {
   const [state, setState] = createStore<{ latest: T | undefined; loading: boolean; error: unknown }>({
@@ -145,7 +171,7 @@ export function createLatest<S extends KeyedSource, T>(
       const controller = new AbortController()
 
       onCleanup(() => controller.abort())
-      setState("loading", true)
+      setState({ loading: true, error: undefined })
       void Promise.try(() => fetch(value, controller.signal)).then(
         (latest) => {
           if (!controller.signal.aborted) setState({ latest, loading: false, error: undefined })
@@ -155,7 +181,7 @@ export function createLatest<S extends KeyedSource, T>(
         },
       )
     },
-    { otherwise: () => setState("loading", false) },
+    { otherwise: () => setState({ loading: false, error: undefined }) },
   )
 
   return state

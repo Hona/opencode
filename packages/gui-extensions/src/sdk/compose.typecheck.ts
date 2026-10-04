@@ -176,5 +176,21 @@ export const mainStores: MainSetup<typeof Split> = (ctx) => {
   void ctx.screen
 }
 
+// A main entry provides only the Ipcs its definition declares, a reference through its full token; with no
+// definition, as for an installed extension's plain JavaScript, any Ipc.
+const Other = Ipc.define({ id: "fixture.other", methods: { ping: {} } })
+
+const RefProvider = Extension.define({ id: "refProvider", provides: { pane: PaneRef } })
+
+export const mainProvider: MainSetup<typeof PaneProvider> = (ctx) => {
+  ctx.provide(Pane, { open: () => undefined })
+  // @ts-expect-error fixture.other is not in the definition's provides
+  ctx.provide(Other, { ping: () => undefined })
+}
+
+export const mainRefProvider: MainSetup<typeof RefProvider> = (ctx) => void ctx.provide(Pane, { open: () => undefined })
+
+export const installedProvider: MainSetup = (ctx) => void ctx.provide(Other, { ping: () => undefined })
+
 // @ts-expect-error a main store's `from` names a settings key or a state namespace and key, not a raw string
 Store.main(Schema.Number, 0, "settings:count")
