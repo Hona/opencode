@@ -422,7 +422,6 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               setStore({ editing: true, address: field() })
               event.currentTarget.select()
             }}
-            onClick={(event) => event.currentTarget.select()}
             onBlur={() =>
               setStore({
                 editing: false,
