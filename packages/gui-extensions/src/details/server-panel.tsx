@@ -115,25 +115,25 @@ function LspMenu(props: ServiceMenuProps) {
   const data = () => props.session.server.data
 
   const [load, { refetch }] = createResource(
-    () => props.shown && { directory: props.directory, data: data() },
+    () => props.shown && data(),
     (current) => {
-      current.data.location.config.invalidate({ directory: current.directory })
+      const directory = props.directory
 
-      return current.data.location.config.sync({ directory: current.directory })
+      current.location.config.invalidate({ directory })
+
+      return current.location.config.sync({ directory })
     },
   )
 
   const names = createMemo(() => configuredLsps(data().location.config.list({ directory: props.directory }) ?? []))
 
-  createKeyed(
-    data,
-    (current) =>
-      onCleanup(
-        current.on("config.updated", (event) => {
-          if (event.location?.directory !== props.directory) return
-          void refetch()
-        }),
-      ),
+  createKeyed(data, (current) =>
+    onCleanup(
+      current.on("config.updated", (event) => {
+        if (event.location?.directory !== props.directory) return
+        void refetch()
+      }),
+    ),
   )
 
   return (
@@ -177,6 +177,7 @@ function McpMenu(props: ServiceMenuProps) {
   const toggle = useMutation(() => ({
     mutationFn: async (input: { name: string; enabled: boolean }) => {
       const client = props.session.server.client
+      const source = data()
       const ref = { directory: props.directory }
       const server = (await client.mcp.list({ location: ref })).data.find((item) => item.name === input.name)
 
@@ -190,9 +191,9 @@ function McpMenu(props: ServiceMenuProps) {
         await client.mcp.connect({ server: input.name, location: ref })
       }
 
-      data().location.mcp.server.invalidate(ref)
-      await data().location.mcp.server.sync(ref)
-      const current = data().location.mcp.server.list(ref)?.find((item) => item.name === input.name)
+      source.location.mcp.server.invalidate(ref)
+      await source.location.mcp.server.sync(ref)
+      const current = source.location.mcp.server.list(ref)?.find((item) => item.name === input.name)
 
       if (input.enabled && current?.status.status === "needs_auth" && current.integrationID) {
         const integration = await client.integration.get({ integrationID: current.integrationID, location: ref })
@@ -209,8 +210,8 @@ function McpMenu(props: ServiceMenuProps) {
         system.openExternal(attempt.data.url)
       }
 
-      data().location.mcp.resource.invalidate(ref)
-      await data().location.mcp.resource.sync(ref)
+      source.location.mcp.resource.invalidate(ref)
+      await source.location.mcp.resource.sync(ref)
       // A successful HTTP response can still leave the MCP connection in a failed state.
       const status = current?.status
 
@@ -225,10 +226,12 @@ function McpMenu(props: ServiceMenuProps) {
   }))
 
   const [load, { refetch }] = createResource(
-    () => props.shown && { directory: props.directory, data: data() },
+    () => props.shown && data(),
     async (current) => {
-      current.data.location.mcp.server.invalidate({ directory: current.directory })
-      await current.data.location.mcp.server.sync({ directory: current.directory })
+      const directory = props.directory
+
+      current.location.mcp.server.invalidate({ directory })
+      await current.location.mcp.server.sync({ directory })
     },
   )
 
@@ -337,9 +340,9 @@ function ServiceCatalog(props: ServiceMenuProps) {
   const data = () => props.session.server.data
 
   const [items, { refetch }] = createResource(
-    () => props.shown && { directory: props.directory, data: data() },
+    () => props.shown && data(),
     async (current) => {
-      const directory = current.directory
+      const directory = props.directory
 
       if (props.service.type === "plugins") {
         const result = await props.session.server.client.plugin.list({ location: { directory } })
@@ -353,8 +356,8 @@ function ServiceCatalog(props: ServiceMenuProps) {
           }))
       }
 
-      current.data.location.skill.invalidate({ directory })
-      await current.data.location.skill.sync({ directory })
+      current.location.skill.invalidate({ directory })
+      await current.location.skill.sync({ directory })
 
       return undefined
     },
@@ -377,15 +380,13 @@ function ServiceCatalog(props: ServiceMenuProps) {
     return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  createKeyed(
-    data,
-    (current) =>
-      onCleanup(
-        current.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
-          if (event.location?.directory !== props.directory) return
-          void refetch()
-        }),
-      ),
+  createKeyed(data, (current) =>
+    onCleanup(
+      current.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
+        if (event.location?.directory !== props.directory) return
+        void refetch()
+      }),
+    ),
   )
 
   return (
