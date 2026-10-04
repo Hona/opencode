@@ -4,7 +4,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey } from "./schema"
-import { decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
+import { createPathHelpers, decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
 import { Skill } from "@opencode/schema/skill"
 
 type Inline =
@@ -120,12 +120,12 @@ export function extractPromptFromMessage(
 
     if (file.source.type === "uri" && commentFiles.has(file.source.uri)) continue
 
-    // Like the TUI, a file reference returns by its URI, as a mention: an inline snapshot would lose
-    // a directory's meaning and the file's location.
+    // A file reference keeps its URI, as the TUI keeps it: an inline snapshot would lose a directory's
+    // meaning and the file's location. The composer holds file references as mentions.
     if (file.source.type === "uri" && file.source.uri.startsWith("file:")) {
-      const path = toRelative(
-        decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(/^\/([A-Za-z]:)/, "$1"),
-      )
+      const path = directory
+        ? createPathHelpers(() => directory).normalize(file.source.uri)
+        : decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(/^\/([A-Za-z]:)/, "$1")
 
       trailing.push({
         type: "file",

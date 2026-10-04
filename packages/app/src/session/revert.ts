@@ -120,7 +120,12 @@ export function createSessionRevert(input: {
     const reverted = input.session.data.revertMessageID()
 
     if (!sessionID || !reverted) return
-    const messages = input.session.history.userMessages()
+
+    // Redo moves the revert boundary through delivered history; an undelivered input is no boundary.
+    const messages = input.session.history
+      .userMessages()
+      .filter((message) => !data.session.input.has(sessionID, message.id))
+
     const boundary = messages.findIndex((message) => message.id === reverted)
 
     if (boundary < 0) return

@@ -219,37 +219,49 @@ test("dragging reorders queued prompts", async ({ page }) => {
   ])
 })
 
-test("a reorder that cannot re-admit a prompt leaves the queue unchanged", async ({ page }) => {
-  const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
-  const mock = createQueueMock(order)
-  const admit = mock.onPrompt
-  // The first prompt's re-admission fails, for example because its file was deleted.
-  mock.onPrompt = (input) => {
-    if (input.body.text === "first queued prompt") throw new Error("Attachment file is gone")
-    admit(input)
-  }
+for (const change of ["reorder", "edit"] as const) {
+  test(`a ${change} that cannot re-admit a prompt leaves the queue unchanged`, async ({ page }) => {
+    const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
+    const mock = createQueueMock(order)
+    const admit = mock.onPrompt
+    // The last prompt's re-admission fails, for example because its file was deleted.
+    mock.onPrompt = (input) => {
+      if (input.body.text === order[2]) throw new Error("Attachment file is gone")
+      admit(input)
+    }
 
-  const view = await openQueue(page, mock)
-  await expect(view.rows).toHaveCount(3)
+    const view = await openQueue(page, mock)
+    await expect(view.rows).toHaveCount(3)
 
-  const first = view.rows.filter({ hasText: "first queued prompt" })
-  const third = view.rows.filter({ hasText: "third queued prompt" })
-  await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
-  await page.mouse.down()
-  const target = await third.boundingBox()
+    if (change === "reorder") {
+      const first = view.rows.filter({ hasText: order[0] })
+      const second = view.rows.filter({ hasText: order[1] })
+      await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
+      await page.mouse.down()
+      const target = await second.boundingBox()
 
-  if (!target) throw new Error("The target queue row is not visible")
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
-  await page.mouse.up()
+      if (!target) throw new Error("The target queue row is not visible")
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
+      await page.mouse.up()
+    }
 
-  // The two replacements admitted before the failure are withdrawn; the originals stay.
-  await expect.poll(() => mock.changes.length).toBe(2)
-  expect(mock.changes.every((change) => change.action === "cancel" && !change.inboxID.startsWith("inb_seed_"))).toBe(
-    true,
-  )
-  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
-  expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
-})
+    if (change === "edit") {
+      await view.rows.getByText(order[1], { exact: true }).click()
+      await expect(view.input).toHaveText(order[1])
+      await view.input.fill("second queued prompt, edited")
+      await view.input.press("Enter")
+    }
+
+    // The replacements admitted before the failure are withdrawn; the originals stay in place.
+    await expect.poll(() => mock.log.includes(`cancel:${mock.prompts.at(-1)?.id}`)).toBe(true)
+    await expect.poll(() => mock.changes.length).toBe(mock.prompts.length)
+    expect(mock.changes.every((entry) => entry.action === "cancel" && !entry.inboxID.startsWith("inb_seed_"))).toBe(
+      true,
+    )
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
+    expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
+  })
+}
 
 test("editing restores the existing draft and replaces only the original queue position", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "tighten the error copy", "third queued prompt"])
@@ -277,14 +289,67 @@ test("editing restores the existing draft and replaces only the original queue p
     "third queued prompt",
   ])
   await expect(view.input).toHaveText("my in-progress draft")
+  // One rewrite from the edited position: the replacement, then the prompts after it.
   expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
-    "tighten the error copy and add a retry hint",
     "tighten the error copy and add a retry hint",
     "third queued prompt",
   ])
   expect(mock.prompts.every((prompt) => prompt.delivery === "queue" && prompt.resume === false)).toBe(true)
-  expect(mock.changes.map((change) => change.action)).toEqual(["cancel", "cancel", "cancel"])
+  expect(mock.changes).toEqual([
+    { inboxID: "inb_seed_2", action: "cancel" },
+    { inboxID: "inb_seed_3", action: "cancel" },
+  ])
   expect(mock.log[0]).toBe("prompt:queue")
+})
+
+test("editing drops a file whose mention was deleted and keeps unmentioned context", async ({ page }) => {
+  const mock = createQueueMock(["inspect @main.ts here"])
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/main.ts" },
+      name: "main.ts",
+      mention: { start: 8, end: 16, text: "@main.ts" },
+    },
+    { data: "bm90ZXM=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/notes.md" }, name: "notes.md" },
+  ]
+  const view = await openQueue(page, mock)
+  await view.rows.getByText("inspect @main.ts here", { exact: true }).click()
+  await expect(view.input).toHaveText("inspect @main.ts here")
+  await view.input.fill("inspect here")
+  await view.input.press("Enter")
+
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(mock.prompts[0].files?.map((file) => file.uri)).toEqual(["file:///repo/notes.md"])
+})
+
+test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
+  const note = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
+  const mock = createQueueMock([note])
+  mock.rows[0].payload.metadata = {
+    displayText: "",
+    comments: [
+      {
+        path: "/repo/app.ts",
+        comment: "check the guard",
+        selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+        origin: "review",
+      },
+    ],
+  }
+  const view = await openQueue(page, mock)
+  // With no display text, the editor shows the note itself, so the edit owns it as text.
+  await view.rows.getByText(note, { exact: true }).click()
+  await expect(view.input).toHaveText(note)
+  await view.input.press("End")
+  await view.input.pressSequentially(", please")
+  await expect(view.input).toHaveText(`${note}, please`)
+  await view.input.press("Enter")
+
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(mock.prompts[0].text).toBe(`${note}, please`)
+  expect(mock.prompts[0].metadata).toMatchObject({ displayText: `${note}, please`, comments: [] })
 })
 
 test("Undo cancels only the selected queued prompt and focuses the restored input", async ({ page }) => {

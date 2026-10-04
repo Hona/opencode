@@ -85,18 +85,20 @@ export function createSessionQueue(input: {
         change.text,
       )
 
-      // Admit before cancelling so a failed replacement never discards the original.
+      // Admit before cancelling so a failed replacement never discards the original. A queued edit
+      // rebuilds its position in one rewrite, which leaves the queue unchanged if any admission fails.
       const admission = { ...replacement, id: change.replacement, delivery: change.delivery }
 
-      const admitted = await data.session.prompt(
-        change.delivery === "queue" ? { ...admission, resume: false } : admission,
-      )
+      if (change.delivery === "queue") {
+        await rewrite(change.inboxIDs, { original: change.original, admission: { ...admission, resume: false } })
+        cancelEdit()
 
+        return
+      }
+
+      await data.session.prompt(admission)
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
       cancelEdit()
-
-      if (change.delivery === "queue")
-        await rewrite(change.inboxIDs.map((id) => (id === change.original ? admitted.id : id)))
     },
     onError: notify,
     onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
@@ -125,7 +127,11 @@ export function createSessionQueue(input: {
   })
   onCleanup(() => cancelEdit())
 
-  const rewrite = async (inboxIDs: string[]) => {
+  // `replace` substitutes an edited prompt for the original at its position in the same rewrite.
+  const rewrite = async (
+    inboxIDs: string[],
+    replace?: { original: string; admission: Parameters<typeof data.session.prompt>[0] },
+  ) => {
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
 
     if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
@@ -134,7 +140,7 @@ export function createSessionQueue(input: {
     const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
 
     if (ordered.length !== current.length) throw new Error("Queued prompts changed before reordering")
-    const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id)
+    const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id || item.id === replace?.original)
 
     if (changed < 0) return
 
@@ -144,21 +150,25 @@ export function createSessionQueue(input: {
 
     for (const item of ordered.slice(changed)) {
       const admitted = await data.session
-        .prompt({
-          sessionID: input.sessionID,
-          text: item.payload.text,
-          files: item.payload.files?.map((file) => ({
-            uri: storedFileUri(file),
-            name: file.name,
-            description: file.description,
-            mention: file.mention,
-          })),
-          agents: item.payload.agents,
-          skills: item.payload.skills,
-          metadata: item.payload.metadata,
-          delivery: "queue",
-          resume: false,
-        })
+        .prompt(
+          item.id === replace?.original
+            ? replace.admission
+            : {
+                sessionID: input.sessionID,
+                text: item.payload.text,
+                files: item.payload.files?.map((file) => ({
+                  uri: storedFileUri(file),
+                  name: file.name,
+                  description: file.description,
+                  mention: file.mention,
+                })),
+                agents: item.payload.agents,
+                skills: item.payload.skills,
+                metadata: item.payload.metadata,
+                delivery: "queue",
+                resume: false,
+              },
+        )
         .catch(async (error) => {
           await Promise.all(
             replacements.map((inboxID) =>
@@ -444,8 +454,7 @@ async function editedPromptInput(
   const agents = [
     ...(payload?.agents?.filter(
       (agent) =>
-        agent.mention &&
-        text.includes(agent.mention.text) &&
+        (!agent.mention || text.includes(agent.mention.text)) &&
         !request.agents.some((entry) => entry.name === agent.name),
     ) ?? []),
     ...request.agents,
@@ -454,7 +463,7 @@ async function editedPromptInput(
   const skills = [
     ...(payload?.skills?.filter(
       (skill) =>
-        skill.mention && text.includes(skill.mention.text) && !request.skills.some((entry) => entry.id === skill.id),
+        (!skill.mention || text.includes(skill.mention.text)) && !request.skills.some((entry) => entry.id === skill.id),
     ) ?? []),
     ...request.skills,
   ]
@@ -463,8 +472,14 @@ async function editedPromptInput(
     sessionID,
     text: request.text + notes,
     files: [
+      // A stored file whose mention the edit deleted is dropped; unmentioned context stays.
       ...(payload?.files
-        ?.filter((file) => !isComposerAttachment(file))
+        ?.filter(
+          (file) =>
+            !isComposerAttachment(file) &&
+            (!file.mention || text.includes(file.mention.text)) &&
+            !request.files.some((entry) => entry.uri === storedFileUri(file)),
+        )
         .map((file) => ({
           uri: storedFileUri(file),
           name: file.name,
@@ -476,9 +491,11 @@ async function editedPromptInput(
     agents: agents.map((agent) => ({ name: agent.name, mention: mention(agent.mention) })),
     skills: skills.map((skill) => ({ id: skill.id, mention: mention(skill.mention) })),
     // Presentation metadata reads only with a comments list, which prompts from other clients lack.
+    // Comments survive while their notes stay out of the edited text; when the editor showed the
+    // notes as text (a prompt with no display text), the edit owns them and the comments go.
     metadata: {
-      comments: [],
       ...payload?.metadata,
+      comments: notes ? (payload?.metadata?.["comments"] ?? []) : [],
       displayText: request.displayText,
       attachments: request.attachments,
     },
