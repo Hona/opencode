@@ -294,18 +294,38 @@ test("Undo preserves mentioned file and agent references on resubmission", async
   expect(mock.prompts[0].agents).toMatchObject([{ name: "build", mention: { text: "@build" } }])
 })
 
-test("Undo does not discard hidden file context", async ({ page }) => {
-  const mock = createQueueMock(["inspect this file"])
-  mock.rows[0].payload.files = [
-    { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
-  ]
-  const view = await openQueue(page, mock)
-  await view.rows.getByRole("button", { name: "Undo" }).click()
-  await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
-  await expect(view.rows).toHaveCount(1)
-  await expect(view.input).toHaveText("")
-  expect(mock.changes).toEqual([])
-})
+for (const delivery of ["queue", "steer"] as const) {
+  test(`${delivery === "queue" ? "Undo" : "Revert on a pending steer"} does not discard hidden file context`, async ({
+    page,
+  }) => {
+    const mock = createQueueMock(["inspect this file"])
+    mock.rows[0].delivery = delivery
+    mock.rows[0].payload.files = [
+      { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+    ]
+    const view = await openQueue(page, mock)
+
+    if (delivery === "queue") {
+      await view.rows.getByRole("button", { name: "Undo" }).click()
+      await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
+      await expect(view.rows).toHaveCount(1)
+    }
+
+    if (delivery === "steer") {
+      const pending = page.locator(
+        `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${mock.rows[0].id}"]`,
+      )
+
+      await pending.hover()
+      await pending.getByRole("button", { name: "Revert message" }).click()
+      await expect(page.getByText("This prompt has file context the composer can't restore")).toBeVisible()
+      await expect(pending).toContainText("inspect this file")
+    }
+
+    await expect(view.input).toHaveText("")
+    expect(mock.changes).toEqual([])
+  })
+}
 
 test("Revert withdraws a pending steer without interrupting the running session", async ({ page }) => {
   const mock = createQueueMock([])
@@ -314,7 +334,7 @@ test("Revert withdraws a pending steer without interrupting the running session"
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname
 
-    if (path.endsWith("/interrupt") || path.endsWith("/revert/stage")) stops.push(path)
+    if (path.endsWith("/interrupt") || path.endsWith("/wait") || path.endsWith("/revert/stage")) stops.push(path)
   })
   const text = "U2: Also check the retry path."
   await view.input.fill(text)

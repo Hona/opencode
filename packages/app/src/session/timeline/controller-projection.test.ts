@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
-import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
@@ -127,7 +126,9 @@ describe("visibleTimelineMessages", () => {
       "msg_4",
     ])
 
-    // A notice admitted after the steers, before the next step, stays in the active turn below its work.
+    // A notice admitted after the steers, before the next step, sinks with them in admission order. The
+    // server delivers steers in that order and the store moves each delivered input to the end, so the
+    // rendered order does not change at delivery.
     const notice = {
       id: "msg_4a",
       sessionID: "ses_1",
@@ -137,25 +138,22 @@ describe("visibleTimelineMessages", () => {
       payload: { text: "", description: "Task finished" },
     } satisfies SessionInboxInfo
 
-    const withNotice = visibleTimelineMessages(
-      [...messages, { id: notice.id, type: "synthetic", ...notice.payload, time: notice.time }, work],
-      [...pending, notice],
+    const noticeMessage = {
+      id: notice.id,
+      type: "synthetic",
+      ...notice.payload,
+      time: notice.time,
+    } satisfies SessionMessageInfo
+
+    const pendingOrder = visibleTimelineMessages([...messages, noticeMessage, work], [...pending, notice])
+
+    const deliveredOrder = visibleTimelineMessages(
+      [messages[0], messages[1], work, messages[2], messages[3], noticeMessage],
+      [],
     )
 
-    expect(withNotice.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_4a", "msg_3", "msg_4"])
-    createRoot((dispose) => {
-      const projection = createTimelineProjection({
-        sessionMessages: () => withNotice,
-        status: () => ({ type: "busy" }),
-        reasoningMode: () => "compact",
-        shellToolDefaultOpen: () => false,
-        editToolDefaultOpen: () => false,
-        pendingUserMessageIDs: () => new Set(pending.map((item) => item.id)),
-      })
-
-      expect(projection.rows().find((row) => Predicate.isTagged(row, "Notice"))?.userMessageID).toBe("msg_1")
-      dispose()
-    })
+    expect(pendingOrder.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3", "msg_4", "msg_4a"])
+    expect(pendingOrder.map((message) => message.id)).toEqual(deliveredOrder.map((message) => message.id))
     expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",

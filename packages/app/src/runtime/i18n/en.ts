@@ -504,6 +504,7 @@ export const dict = {
   "session.queue.undo": "Undo",
   "session.queue.undoShell": "Leave shell mode before undoing a queued prompt",
   "session.queue.undoUnavailable": "Edit this prompt in the queue to preserve its file context",
+  "session.revert.pendingUnavailable": "This prompt has file context the composer can't restore",
   "session.queue.reorder": "Reorder queued prompt",
   "session.queue.attachments.one": "{{count}} attachment",
   "session.queue.attachments.other": "{{count}} attachments",

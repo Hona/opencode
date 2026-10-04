@@ -6,7 +6,9 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { commentContextItem } from "@/composer/comment-note"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
+import { promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
+import { queuedPromptUndoDraft, type QueuedPrompt } from "./composer/queue"
 import type { SessionModel } from "./model"
 
 export function createSessionRevert(input: {
@@ -48,10 +50,24 @@ export function createSessionRevert(input: {
     const target = prompt.capture()
 
     // An undelivered prompt has no history to rewind. Withdraw it like the TUI
-    // instead of interrupting the work it is waiting behind.
+    // instead of interrupting the work it is waiting behind. Rebuild the draft
+    // from the inbox payload like queue Undo: the message's display text drops
+    // path attachments, and cancelling first would lose them for good.
     if (data.session.input.has(sessionID, message.id)) {
+      const item = data.session.pending
+        .list(sessionID)
+        .find((entry): entry is QueuedPrompt => entry.type === "user" && entry.id === message.id)
+
+      const draft = item && queuedPromptUndoDraft(item)
+
+      if (!draft) {
+        showToast({ title: language.t("session.revert.pendingUnavailable") })
+
+        return
+      }
+
       if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      restore(target, message)
+      target.set(draft, promptLength(draft))
       owner.run(() => input.setActiveMessage(previous))
 
       return
