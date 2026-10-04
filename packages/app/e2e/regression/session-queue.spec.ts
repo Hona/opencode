@@ -1,9 +1,25 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import { PromptInput } from "@opencode/schema/prompt-input"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Schema } from "effect"
 import { provider } from "../utils/app"
+import type { MockServerConfig } from "../utils/mock-server"
 import { openSession } from "../utils/workspace"
 
 const sessionID = "ses_session_queue_regression"
+
+// The session.prompt payload, as the server's endpoint validates it.
+const PromptBody = Schema.Struct({
+  id: SessionMessage.ID.pipe(Schema.optional),
+  ...PromptInput.Prompt.fields,
+  metadata: SessionInbox.UserPayload.fields.metadata,
+  delivery: SessionInbox.Delivery.pipe(Schema.optional),
+  resume: Schema.Boolean.pipe(Schema.optional),
+})
+
+const decodePromptBody = Schema.decodeUnknownSync(PromptBody)
 
 type InboxRow = {
   id: string
@@ -12,11 +28,11 @@ type InboxRow = {
   type: "user"
   payload: {
     text: string
-    metadata?: Record<string, unknown>
+    metadata?: typeof PromptBody.Type.metadata
     files?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]
     agents?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["agents"]
   }
-  delivery: "steer" | "queue"
+  delivery: SessionInbox.Delivery
 }
 
 function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
@@ -28,16 +44,19 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     payload: { text },
     delivery: "queue",
   }))
+
   const events: OpenCodeEvent[] = []
-  const prompts: Record<string, unknown>[] = []
+  const prompts: (typeof PromptBody.Type)[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
   let sequence = 0
+
   const emit = <Type extends OpenCodeEvent["type"]>(
     type: Type,
     data: Extract<OpenCodeEvent, { type: Type }>["data"],
   ) => {
     sequence += 1
+    // SAFETY: `type` selects `data` from the same OpenCodeEvent member, so the pair is that member.
     events.push({
       id: `evt_queue_${sequence}`,
       type,
@@ -46,6 +65,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
       data,
     } as OpenCodeEvent)
   }
+
   return {
     rows,
     prompts,
@@ -54,20 +74,21 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     messages,
     emit,
     events: () => events.splice(0),
-    onPrompt: (input: { sessionID: string; body: Record<string, unknown> }) => {
-      prompts.push(input.body)
-      log.push(`prompt:${String(input.body.delivery ?? "steer")}`)
+    onPrompt: (input: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]) => {
+      const body = decodePromptBody(input.body)
+      prompts.push(body)
+      log.push(`prompt:${body.delivery ?? "steer"}`)
+
       const row: InboxRow = {
-        id: typeof input.body.id === "string" ? input.body.id : `inb_mock_${sequence}`,
+        id: body.id ?? `inb_mock_${sequence}`,
         sessionID: input.sessionID,
         time: { created: Date.now() },
         type: "user",
-        payload: {
-          text: typeof input.body.text === "string" ? input.body.text : "",
-          ...(input.body.metadata === undefined ? {} : { metadata: input.body.metadata as Record<string, unknown> }),
-        },
-        delivery: input.body.delivery === "queue" ? "queue" : "steer",
+        payload: { text: body.text },
+        delivery: body.delivery ?? "steer",
       }
+
+      if (body.metadata !== undefined) row.payload.metadata = body.metadata
       rows.push(row)
       emit("session.inbox.enqueued", {
         sessionID: input.sessionID,
@@ -80,12 +101,16 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
       log.push(`${input.action}:${input.inboxID}`)
       const index = rows.findIndex((row) => row.id === input.inboxID)
       const row = rows[index]
+
       if (!row) return
+
       if (input.action === "cancel") {
         rows.splice(index, 1)
         emit("session.inbox.cancelled", { sessionID: input.sessionID, inboxID: input.inboxID })
+
         return
       }
+
       row.delivery = input.action
       emit("session.inbox.delivery.changed", {
         sessionID: input.sessionID,
@@ -98,7 +123,8 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
 
 async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, followUpBehavior?: "queue" | "steer") {
   const model = { id: "queue-model", name: "Queue Model" }
-  await openSession(page, {
+
+  const options: Parameters<typeof openSession>[1] = {
     name: "SessionQueueRegression",
     sessions: [{ id: sessionID, title: "Session queue regression", model: { id: model.id, providerID: "opencode" } }],
     provider: provider(model),
@@ -108,9 +134,12 @@ async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, f
     onPrompt: mock.onPrompt,
     onInboxChange: mock.onInboxChange,
     events: mock.events,
-    ...(followUpBehavior ? { seed: { settings: { general: { followUpBehavior } } } } : {}),
-  })
+  }
+
+  if (followUpBehavior) options.seed = { settings: { general: { followUpBehavior } } }
+  await openSession(page, options)
   const composer = page.locator('[data-component="composer"]')
+
   return {
     composer,
     input: composer.locator('[data-component="composer-editor"]'),
@@ -143,6 +172,7 @@ test("dragging reorders queued prompts", async ({ page }) => {
   await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
   await page.mouse.down()
   const target = await third.boundingBox()
+
   if (!target) throw new Error("The target queue row is not visible")
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
   await page.mouse.up()
@@ -283,6 +313,7 @@ test("Revert withdraws a pending steer without interrupting the running session"
   const stops: string[] = []
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname
+
     if (path.endsWith("/interrupt") || path.endsWith("/revert/stage")) stops.push(path)
   })
   const text = "U2: Also check the retry path."
@@ -292,9 +323,11 @@ test("Revert withdraws a pending steer without interrupting the running session"
   await expect(view.input).toHaveText("")
 
   const inboxID = mock.rows[0].id
+
   const pending = page.locator(
     `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`,
   )
+
   await expect(pending).toContainText(text)
   await pending.hover()
   await pending.getByRole("button", { name: "Revert message" }).click()
@@ -313,6 +346,7 @@ for (const delivery of ["steer", "queue"] as const) {
     const userID = "msg_queue_initial_user"
     const assistantID = "msg_queue_continued_assistant"
     const followUp = "U2: Also check the retry path."
+
     const mock = createQueueMock(
       [],
       [
@@ -328,6 +362,7 @@ for (const delivery of ["steer", "queue"] as const) {
         },
       ],
     )
+
     const view = await openQueue(page, mock, delivery)
     const transcript = page.locator("[data-timeline-virtual-content]")
     const thinking = transcript.locator('[data-timeline-row="Thinking"]')
@@ -341,6 +376,7 @@ for (const delivery of ["steer", "queue"] as const) {
 
     const inboxID = mock.rows[0].id
     const pending = transcript.locator(`[data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`)
+
     if (delivery === "queue") {
       const queued = view.rows.filter({ hasText: followUp })
       await expect(queued).toBeVisible()
@@ -350,6 +386,7 @@ for (const delivery of ["steer", "queue"] as const) {
       await queued.getByRole("button", { name: "Steer", exact: true }).click()
       await expect.poll(() => mock.changes).toEqual([{ inboxID, action: "steer" }])
     }
+
     await expect(view.rows).toHaveCount(0)
     await expect(pending).toContainText(followUp)
     await expect(thinking).toHaveCount(0)
@@ -362,6 +399,7 @@ for (const delivery of ["steer", "queue"] as const) {
       model,
       started: Date.now(),
     })
+
     for (const tool of [
       { id: "tool_queue_read", name: "read", input: { path: "src/queue.ts" } },
       { id: "tool_queue_grep", name: "grep", input: { pattern: "retry", path: "src" } },
@@ -376,6 +414,7 @@ for (const delivery of ["steer", "queue"] as const) {
         executed: true,
       })
     }
+
     mock.emit("session.step.ended", {
       sessionID,
       assistantMessageID: assistantID,
@@ -405,6 +444,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect
       .poll(async () => {
         const boxes = await Promise.all([tools.boundingBox(), pending.boundingBox()])
+
         return boxes.every((box) => box !== null) && boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y
       })
       .toBe(true)
@@ -423,9 +463,11 @@ for (const delivery of ["steer", "queue"] as const) {
     mock.emit("session.step.started", { ...later, agent: "build", model, started: Date.now() })
     mock.emit("session.text.started", { ...later, ordinal: 0 })
     mock.emit("session.text.ended", { ...later, ordinal: 0, text: "A3: Now checking the retry path for U2." })
+
     const response = transcript
       .locator('[data-timeline-row="AssistantPart"]')
       .filter({ hasText: "A3: Now checking the retry path for U2." })
+
     await expect(response).toHaveAttribute("data-message-id", inboxID)
     await expect(thinking).toHaveCount(0)
     await expect(tools.or(pending).or(response)).toHaveText([

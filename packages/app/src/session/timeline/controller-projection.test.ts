@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
@@ -28,6 +29,7 @@ describe("visibleTimelineMessages", () => {
     delivery: "steer",
     payload: { text: "queued" },
   } satisfies SessionInboxInfo
+
   const work = {
     id: "msg_5",
     type: "assistant",
@@ -67,6 +69,7 @@ describe("visibleTimelineMessages", () => {
         timelineDetail: () => timelinePresets[2].value,
         pendingUserMessageIDs: () => new Set([steer.id]),
       })
+
       expect(projection.activeMessageID()).toBe("msg_1")
       expect(projection.rows().map((row) => [row._tag, row.userMessageID])).toEqual([
         ["UserMessage", "msg_1"],
@@ -123,6 +126,7 @@ describe("visibleTimelineMessages", () => {
       "msg_3",
       "msg_4",
     ])
+
     // A notice admitted after the steers, before the next step, stays in the active turn below its work.
     const notice = {
       id: "msg_4a",
@@ -132,10 +136,12 @@ describe("visibleTimelineMessages", () => {
       delivery: "steer",
       payload: { text: "", description: "Task finished" },
     } satisfies SessionInboxInfo
+
     const withNotice = visibleTimelineMessages(
       [...messages, { id: notice.id, type: "synthetic", ...notice.payload, time: notice.time }, work],
       [...pending, notice],
     )
+
     expect(withNotice.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_4a", "msg_3", "msg_4"])
     createRoot((dispose) => {
       const projection = createTimelineProjection({
@@ -146,7 +152,8 @@ describe("visibleTimelineMessages", () => {
         editToolDefaultOpen: () => false,
         pendingUserMessageIDs: () => new Set(pending.map((item) => item.id)),
       })
-      expect(projection.rows().find((row) => row._tag === "Notice")?.userMessageID).toBe("msg_1")
+
+      expect(projection.rows().find((row) => Predicate.isTagged(row, "Notice"))?.userMessageID).toBe("msg_1")
       dispose()
     })
     expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
@@ -211,6 +218,7 @@ describe("applyTimelineMessageHandoff", () => {
       ...handoff,
       files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }],
     } satisfies SessionMessageInfo
+
     expect(applyTimelineMessageHandoff([durable], handoff)).toEqual([durable])
   })
 })
