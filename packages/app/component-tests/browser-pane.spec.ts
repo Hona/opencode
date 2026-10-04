@@ -1,12 +1,10 @@
-import { fileURLToPath } from "node:url"
 import { expect, story } from "../../storybook/playwright/story"
-
-const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
+import { source } from "../../storybook/playwright/source"
 
 const modules = {
-  fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx"),
-  embeds: source("../src/runtime/extension/embeds.tsx"),
-  language: source("../src/runtime/i18n/language.tsx"),
+  fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx", import.meta.url),
+  embeds: source("../src/runtime/extension/embeds.tsx", import.meta.url),
+  language: source("../src/runtime/i18n/language.tsx", import.meta.url),
 }
 
 story.beforeEach(async ({ mount, page }) => {

@@ -35,6 +35,7 @@ import {
   type Router,
   type Servers,
   type SessionRef,
+  type SessionScreen,
   type Storage,
   type Workspaces,
 } from "../sdk"
@@ -395,7 +396,12 @@ type RegionHost = {
     }>
   >
   useExtensionHost(): { ready(): boolean }
-  createRegion(input: { region: "side"; view: Accessor<MountedSession>; tabs: Accessor<StripTabs> }): {
+  createRegion(input: {
+    region: "side"
+    view: Accessor<MountedSession>
+    screen: SessionScreen
+    tabs: Accessor<StripTabs>
+  }): {
     keys(): readonly string[]
     active(): string | undefined
     entry(key: string): { readonly tab: PanelTab } | undefined
@@ -512,12 +518,10 @@ export function mountBrowserRegion(input: RegionHost) {
     const view = () => views.get(store.session) ?? fallback
 
     // One screen object while the strip mounts, whichever session it routes.
-    const screen = {
-      get session() {
-        return view()
-      },
-      file,
-    }
+    // SAFETY: this fixture draws tab triggers only. Its file model implements the list, normalize and focus paths;
+    // comment, composer and file-view operations are never invoked here.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const screen = { file } as unknown as SessionScreen
 
     const layout = (extension: string): Layout => ({
       narrow: () => false,
@@ -652,6 +656,7 @@ export function mountBrowserRegion(input: RegionHost) {
       const region = input.createRegion({
         region: "side",
         view,
+        screen,
         tabs: () => ({
           all: () => strip(view().key).all,
           active: () => strip(view().key).active,
