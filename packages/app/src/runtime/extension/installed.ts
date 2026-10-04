@@ -2,7 +2,7 @@ import { createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import type { Bridge, Installed } from "@opencode/gui-extensions/sdk/bridge"
 
-/** The extensions main reports to this window: the initial list, then every list it pushes. */
+/** Saved enable preferences and manager metadata; activation and blocked-dependency status belong to the host. */
 export function createInstalled(bridge: Bridge | undefined) {
   const [state, setState] = createStore<{ list?: readonly Installed[] }>({})
   // A pushed list is newer than the initial reply, so a reply that arrives after one is dropped.

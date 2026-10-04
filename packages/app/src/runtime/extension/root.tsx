@@ -43,6 +43,7 @@ export function ExtensionRoot(props: ParentProps) {
     (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
   )
 
+  // Only enable preferences cross this boundary; the host derives blocked status from live hard dependencies.
   const disabled = createMemo(() => {
     const state = installed.enableState()
 
