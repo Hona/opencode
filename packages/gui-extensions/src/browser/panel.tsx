@@ -24,11 +24,11 @@ type PaneState = {
   /** The movement count at a submit; the next reported movement ends the submitted navigation. */
   navigating: number | undefined
   /** The tab whose element picker is on. */
-  picking: { session: Pick<MountedSession, "key">; tabID: Browser.TabID } | undefined
+  picking: { sessionKey: string; tabID: Browser.TabID } | undefined
   /** A picked element awaiting its comment. The page stays frozen as a still until it closes. */
   comment:
     | {
-        session: Pick<MountedSession, "key">
+        sessionKey: string
         tabID: Browser.TabID
         url: string
         /** The tab's navigation count at the pick; the element's ref dies when it changes. */
@@ -124,12 +124,12 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   }
 
   const inspectable = () => !!address() && !failed() && !suspended()
-  const picking = () => store.picking?.session.key === props.session.key && store.picking?.tabID === state()?.id
+  const picking = () => store.picking?.sessionKey === props.session.key && store.picking?.tabID === state()?.id
   // A comment on a picked element freezes the page so its editor can float above it.
-  const commenting = () => store.comment?.session.key === props.session.key && store.comment?.tabID === state()?.id
+  const commenting = () => store.comment?.sessionKey === props.session.key && store.comment?.tabID === state()?.id
 
   const setPicking = (current: NonNullable<PaneState["picking"]>, enabled: boolean) => {
-    props.model.inspect(current.session, current.tabID, enabled)
+    props.model.inspect({ key: current.sessionKey }, current.tabID, enabled)
     setStore("picking", enabled ? current : undefined)
   }
 
@@ -137,7 +137,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     const current = store.comment
 
     if (!current) return
-    props.model.highlight(current.session, current.tabID)
+    props.model.highlight({ key: current.sessionKey }, current.tabID)
     setStore("comment", undefined)
   }
 
@@ -147,7 +147,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     if (!tab || !inspectable()) return
 
     if (store.comment) closeComment()
-    setPicking({ session: props.session, tabID: tab.id }, !picking())
+    setPicking({ sessionKey: props.session.key, tabID: tab.id }, !picking())
   }
 
   const submitComment = (value: string) => {
@@ -158,7 +158,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
 
     // The draft outlives a reload or agent navigation, but the ref no longer names anything.
     const live =
-      props.session.key === current.session.key && tab?.id === current.tabID && tab.generation === current.generation
+      props.session.key === current.sessionKey && tab?.id === current.tabID && tab.generation === current.generation
 
     // The screen's composer, read when the user submits: it serves the session the pane shows.
     extension.screen.current()?.composer.attach(
@@ -235,12 +235,12 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
       onCleanup(
         props.model.onInspect(session, (event) => {
           if (event.active) {
-            setStore("picking", { session, tabID: event.tabID })
+            setStore("picking", { sessionKey: session.key, tabID: event.tabID })
 
             return
           }
 
-          if (store.picking?.session.key === session.key && store.picking.tabID === event.tabID)
+          if (store.picking?.sessionKey === session.key && store.picking.tabID === event.tabID)
             setStore("picking", undefined)
 
           if (!event.element) return
@@ -253,7 +253,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }
 
           setStore("comment", {
-            session,
+            sessionKey: session.key,
             tabID: tab.id,
             url: tab.url,
             generation: tab.generation,
@@ -269,9 +269,14 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   const endPicker = () => {
     const current = store.picking
 
-    if (current && (current.session.key !== props.session.key || current.tabID !== state()?.id || !visible()))
+    if (current && (current.sessionKey !== props.session.key || current.tabID !== state()?.id || !visible()))
       setPicking(current, false)
   }
+
+  onCleanup(() => {
+    if (store.picking) setPicking(store.picking, false)
+    closeComment()
+  })
 
   createKeyed(visible, endPicker, { otherwise: endPicker })
   createKeyed(
@@ -283,7 +288,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     (current) => {
       endPicker()
 
-      if (store.comment?.session.key !== current.session || store.comment.tabID !== current.tabID) closeComment()
+      if (store.comment?.sessionKey !== current.session || store.comment.tabID !== current.tabID) closeComment()
     },
     {
       equals: (previous, next) => previous.session === next.session && previous.tabID === next.tabID,
@@ -397,7 +402,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
             data-action="browser-inspect"
             disabled={!inspectable()}
             state={picking() ? "pressed" : undefined}
-            classList={{ "!text-v2-icon-icon-accent": picking() || !!store.comment }}
+            classList={{ "!text-v2-icon-icon-accent": picking() || commenting() }}
             aria-pressed={picking()}
             aria-label={extension.t("inspect")}
             onClick={toggleInspect}
