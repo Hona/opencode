@@ -302,6 +302,31 @@ test.describe("revert", () => {
     expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
   })
 
+  test("redo restores every reverted message at once, as in the TUI", async ({ page }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+
+    const { editor } = await openSession(page, {
+      ...workspace,
+      sessions: [{ id: "ses_revert_redo", title: "Session message revert", revert: { messageID: "msg_first" } }],
+      onRevertStage: (input) => staged.push(input),
+    })
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === "/api/session/ses_revert_redo/revert",
+    )
+
+    await editor.pressSequentially("/redo")
+    await expect(
+      page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+    ).toContainText("/redo")
+    await editor.press("Enter")
+
+    expect((await cleared).ok()).toBe(true)
+    expect(staged).toEqual([])
+  })
+
   test("hides revert actions in a child session", async ({ page }) => {
     await mockWorkspace(page, {
       ...workspace,

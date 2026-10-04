@@ -42,6 +42,7 @@ type ComposerSubmitInput = {
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   notify: {
     missingSelection: () => void
+    unqueueable: () => void
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected send is opaque; the notifier formats it
     failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
   }
@@ -92,6 +93,13 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
     if (!read) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
+
+      return
+    }
+
+    // Like the TUI, a shell command runs now or not at all; it cannot wait in the queue.
+    if (read.mode === "shell" && read.delivery === "queue") {
+      input.notify.unqueueable()
 
       return
     }

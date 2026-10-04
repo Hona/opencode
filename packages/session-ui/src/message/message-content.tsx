@@ -74,7 +74,7 @@ function modelLabel(
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset"
+    icon: "check" | "copy" | "reset" | "bullet-list" | "outline-trash"
     label: JSX.Element
   },
 ) {
@@ -258,7 +258,8 @@ export function CurrentUserMessageDisplay(props: {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
-  const [state, setState] = createStore({ copied: false, reverting: false })
+  const [state, setState] = createStore({ copied: false, reverting: false, updating: false })
+  const pending = createMemo(() => !!props.actions?.pending?.steer(props.message.id))
   const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
   const references = createMemo(() => props.references ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
@@ -290,6 +291,15 @@ export function CurrentUserMessageDisplay(props: {
     } finally {
       setState("reverting", false)
     }
+  }
+
+  const updatePending = async (action: "queue" | "remove") => {
+    const actions = props.actions?.pending
+
+    if (!actions || state.updating) return
+    setState("updating", true)
+    await actions[action]({ sessionID: props.sessionID, messageID: props.message.id })
+    setState("updating", false)
   }
 
   const renderAttachments = () => (
@@ -339,7 +349,11 @@ export function CurrentUserMessageDisplay(props: {
   )
 
   return (
-    <div data-component="user-message" data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}>
+    <div
+      data-component="user-message"
+      data-pending={pending() ? "true" : undefined}
+      data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
+    >
       <Show
         when={props.text}
         fallback={
@@ -375,7 +389,31 @@ export function CurrentUserMessageDisplay(props: {
               {stamp()}
             </span>
           </span>
-          <Show when={props.actions?.revert}>
+          <Show when={pending()}>
+            <MessageActionButton
+              icon="bullet-list"
+              label={i18n.t("ui.message.moveToQueue")}
+              disabled={state.updating}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void updatePending("queue")
+              }}
+              aria-label={i18n.t("ui.message.moveToQueue")}
+            />
+            <MessageActionButton
+              icon="outline-trash"
+              label={i18n.t("ui.message.deletePending")}
+              disabled={state.updating}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void updatePending("remove")
+              }}
+              aria-label={i18n.t("ui.message.deletePending")}
+            />
+          </Show>
+          <Show when={props.actions?.revert && !pending()}>
             <MessageActionButton
               icon="reset"
               label={i18n.t("ui.message.revertMessage")}
@@ -606,11 +644,7 @@ export function AssistantTextContent(props: {
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
         <div data-slot="text-part-body">
-          <PacedMarkdown
-            text={props.text}
-            cacheKey={props.id}
-            streaming={props.message.time.completed === undefined}
-          />
+          <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>
         <Show when={props.showCopy}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>

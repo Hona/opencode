@@ -168,6 +168,20 @@ async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, f
   }
 }
 
+async function runSlash(page: Page, input: Awaited<ReturnType<typeof openQueue>>["input"], name: string) {
+  await input.pressSequentially(`/${name}`)
+  await expect(page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]')).toContainText(
+    `/${name}`,
+  )
+  await input.press("Enter")
+}
+
+function userRow(page: Page, messageID: string) {
+  return page.locator(
+    `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${messageID}"]`,
+  )
+}
+
 test("follow-up preference controls Enter while Mod+Enter uses the alternate delivery", async ({ page }) => {
   const mock = createQueueMock([])
   const view = await openQueue(page, mock, "queue")
@@ -480,7 +494,7 @@ test("Undo preserves mentioned file and agent references on resubmission", async
 })
 
 for (const delivery of ["queue", "steer"] as const) {
-  test(`${delivery === "queue" ? "Undo" : "Revert on a pending steer"} keeps unmentioned file context`, async ({
+  test(`${delivery === "queue" ? "Undo" : "/undo of a pending steer"} keeps unmentioned file context`, async ({
     page,
   }) => {
     // Another client (for example ACP) can attach a file without mentioning it.
@@ -501,12 +515,8 @@ for (const delivery of ["queue", "steer"] as const) {
     if (delivery === "queue") await view.rows.getByRole("button", { name: "Undo" }).click()
 
     if (delivery === "steer") {
-      const pending = page.locator(
-        `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`,
-      )
-
-      await pending.hover()
-      await pending.getByRole("button", { name: "Revert message" }).click()
+      await expect(userRow(page, inboxID)).toContainText("inspect this file")
+      await runSlash(page, view.input, "undo")
     }
 
     // The file returns as a mention of its own URI, as in the TUI, rather than a snapshot.
@@ -526,7 +536,7 @@ for (const delivery of ["queue", "steer"] as const) {
   })
 }
 
-test("Revert withdraws a pending steer without interrupting the running session", async ({ page }) => {
+test("/undo withdraws a pending steer without interrupting the running session", async ({ page }) => {
   const mock = createQueueMock([])
   const view = await openQueue(page, mock, "steer")
   const stops: string[] = []
@@ -542,14 +552,10 @@ test("Revert withdraws a pending steer without interrupting the running session"
   await expect(view.input).toHaveText("")
 
   const inboxID = mock.rows[0].id
-
-  const pending = page.locator(
-    `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`,
-  )
+  const pending = userRow(page, inboxID)
 
   await expect(pending).toContainText(text)
-  await pending.hover()
-  await pending.getByRole("button", { name: "Revert message" }).click()
+  await runSlash(page, view.input, "undo")
 
   await expect(pending).toHaveCount(0)
   await expect(view.input).toHaveText(text)
@@ -557,7 +563,70 @@ test("Revert withdraws a pending steer without interrupting the running session"
   expect(stops).toEqual([])
 })
 
-test("Revert returns a pending steer's review comment to the composer", async ({ page }) => {
+test("reverting a delivered prompt leaves queued prompts alone, as in the TUI", async ({ page }) => {
+  const mock = createQueueMock(
+    ["U2: queued follow-up"],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  const view = await openQueue(page, mock)
+  const delivered = userRow(page, "msg_queue_delivered")
+
+  const staged = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/session/${sessionID}/revert/stage`,
+  )
+
+  await delivered.hover()
+  await delivered.getByRole("button", { name: "Revert message" }).click()
+  expect((await staged).ok()).toBe(true)
+
+  await expect(view.input).toHaveText("First prompt")
+  expect(mock.changes).toEqual([])
+  await expect(view.rows).toHaveCount(1)
+})
+
+test("a shell command cannot wait in the queue, as in the TUI", async ({ page }) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock, "queue")
+  const shells: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/shell`)) shells.push(request.url())
+  })
+
+  await view.input.pressSequentially("!")
+  await view.input.pressSequentially("git status")
+  await view.input.press("Enter")
+
+  await expect(page.getByText("This prompt cannot be queued")).toBeVisible()
+  await expect(view.input).toHaveText("git status")
+  expect(shells).toEqual([])
+  expect(mock.prompts).toEqual([])
+})
+
+for (const action of ["Move to queue", "Delete"] as const) {
+  test(`${action} on a pending steer replaces Revert, as in the TUI`, async ({ page }) => {
+    const mock = createQueueMock(["U2: Also check the retry path."])
+    const inboxID = mock.rows[0].id
+    mock.rows[0].delivery = "steer"
+    const view = await openQueue(page, mock)
+    const pending = userRow(page, inboxID)
+
+    await expect(pending).toContainText("U2: Also check the retry path.")
+    await pending.hover()
+    await expect(pending.getByRole("button", { name: "Revert message" })).toHaveCount(0)
+    await pending.getByRole("button", { name: action }).click()
+
+    await expect(pending).toHaveCount(0)
+    expect(mock.changes).toEqual([{ inboxID, action: action === "Delete" ? "cancel" : "queue" }])
+    // Neither action returns the prompt to the composer; a moved steer waits in the queue.
+    await expect(view.input).toHaveText("")
+    await expect(view.rows).toHaveCount(action === "Delete" ? 0 : 1)
+
+    if (action === "Move to queue") await expect(view.rows).toContainText("U2: Also check the retry path.")
+  })
+}
+
+test("/undo returns a pending steer's review comment to the composer", async ({ page }) => {
   const display = "tighten this"
   const comment = "check the guard"
 
@@ -589,12 +658,10 @@ test("Revert returns a pending steer's review comment to the composer", async ({
   ]
   const view = await openQueue(page, mock)
 
-  const pending = page.locator(
-    `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${row.id}"]`,
-  )
+  const pending = userRow(page, row.id)
 
-  await pending.hover()
-  await pending.getByRole("button", { name: "Revert message" }).click()
+  await expect(pending).toContainText(display)
+  await runSlash(page, view.input, "undo")
 
   await expect(pending).toHaveCount(0)
   await expect(view.input).toHaveText(display)
