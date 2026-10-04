@@ -9,7 +9,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, For, on, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession, type SessionScreen } from "../sdk"
 import { commentNote } from "./comment"
 import type { Model } from "./model"
 import type { PaneElement } from "./ipc"
@@ -41,7 +41,12 @@ type PaneState = {
   editorHeight: number
 }
 
-export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; session: MountedSession; model: Model }) {
+export default function SessionBrowserPane(props: {
+  tab: Accessor<PanelTab>
+  session: MountedSession
+  screen: SessionScreen
+  model: Model
+}) {
   const extension = useExtension()
   const keybinds = extension.keybinds
   const desktop = extension.desktop
@@ -109,7 +114,6 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     return tab ? props.model.embed(props.session, tab.id) : undefined
   }
 
-  let addressDisplay: HTMLDivElement | undefined
   let box: HTMLDivElement | undefined
   const scheme = () => field().match(/^https?:\/\//i)?.[0] ?? ""
 
@@ -160,8 +164,8 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     const live =
       props.session.key === current.sessionKey && tab?.id === current.tabID && tab.generation === current.generation
 
-    // The screen's composer, read when the user submits: it serves the session the pane shows.
-    extension.screen.current()?.composer.attach(
+    // The owning screen's composer serves the session the pane shows.
+    props.screen.composer.attach(
       commentNote({
         origin: extension.id,
         tabID: current.tabID,
@@ -428,7 +432,8 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }}
         >
           <input
-            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent text-transparent caret-v2-text-text-base placeholder:text-v2-text-text-faint outline-none focus:border-v2-border-border-focus"
+            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent placeholder:text-v2-text-text-faint outline-none focus:border-v2-border-border-focus"
+            classList={{ "text-v2-text-text-base": store.editing, "text-transparent": !store.editing }}
             spellcheck={false}
             autocomplete="off"
             value={field()}
@@ -439,7 +444,6 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               setStore({ editing: true, address: field() })
               event.currentTarget.select()
             }}
-            onClick={(event) => event.currentTarget.select()}
             onBlur={() =>
               setStore({
                 editing: false,
@@ -448,20 +452,20 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               })
             }
             onInput={(event) => setStore("address", event.currentTarget.value)}
-            onScroll={(event) => {
-              if (addressDisplay) addressDisplay.scrollLeft = event.currentTarget.scrollLeft
-            }}
           />
-          {/* Keep native input editing and selection while coloring the scheme, including during editing. */}
-          <div
-            aria-hidden="true"
-            class="absolute inset-0 flex items-center px-2 border border-transparent pointer-events-none"
-          >
-            <div ref={addressDisplay} class="w-full overflow-hidden whitespace-pre text-v2-text-text-base">
-              <span class="text-v2-text-text-muted">{scheme()}</span>
-              {field().slice(scheme().length)}
+          {/* At rest, draw the address with a muted scheme over the input's hidden text. While editing, the input
+              shows its own text so selection and the caret need no mirror. */}
+          <Show when={!store.editing}>
+            <div
+              aria-hidden="true"
+              class="absolute inset-0 flex items-center px-2 border border-transparent pointer-events-none"
+            >
+              <div class="w-full overflow-hidden whitespace-pre text-v2-text-text-base">
+                <span class="text-v2-text-text-muted">{scheme()}</span>
+                {field().slice(scheme().length)}
+              </div>
             </div>
-          </div>
+          </Show>
         </form>
       </div>
       <Show when={error() && !failed()}>
@@ -548,7 +552,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
                       onSubmit={submitComment}
                       mention={{
                         items: (query) =>
-                          extension.screen.current()?.file.search(query, { kind: "any" }) ?? Promise.resolve([]),
+                          props.screen.file.search(query, { kind: "any" }),
                       }}
                       selection={
                         <span class="flex min-w-0 items-center gap-1" dir="ltr">

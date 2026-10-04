@@ -1,7 +1,6 @@
-import { fileURLToPath } from "node:url"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
+const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
 const modules = {
   fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx"),
@@ -345,10 +344,12 @@ story("selects the full URL when the address field gains focus", async ({ page }
   await address.focus()
   await expect(address).toHaveJSProperty("selectionStart", 0)
   await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  // A click on the focused field places the caret instead of selecting the URL again.
   await address.press("ArrowRight")
   await address.click()
-  await expect(address).toHaveJSProperty("selectionStart", 0)
-  await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  await expect
+    .poll(() => address.evaluate((input: HTMLInputElement) => input.selectionStart === input.selectionEnd))
+    .toBe(true)
 })
 
 story("keeps the current page visible while a submitted URL loads", async ({ page }) => {

@@ -30,7 +30,7 @@ export function install(ctx: Context, client: Client) {
 
 export async function check(ctx: Context, client: Client) {
   const state = await client
-    .check(undefined, { signal: ctx.signal })
+    .check({ signal: ctx.signal })
     .catch((cause: unknown) => requestFailed(ctx, cause))
 
   if (!state || ctx.signal.aborted) return
