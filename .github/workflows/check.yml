@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # A pull request checks out its merge into the current base; the first parent is that base.
+          fetch-depth: 2
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -29,6 +32,6 @@ jobs:
       # oxlint problems, warn-level rules (anti-slop) included. Other packages are not affected.
       - name: Lint changed files
         if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}
-          bun run lint:changed ${{ github.event.pull_request.base.sha }}
+        # Against the merge's first parent, so base-branch commits the pull request has not merged are not counted as its
+        # changes (the event's base SHA can predate them).
+        run: bun run lint:changed HEAD^1
