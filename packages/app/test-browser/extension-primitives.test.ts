@@ -287,7 +287,7 @@ describe("extension primitives", () => {
           return handle
         },
         owner: null,
-        live: () => undefined,
+        sessions: { list: () => [], current: () => undefined },
       })
 
       return {
@@ -408,7 +408,7 @@ describe("extension primitives", () => {
           return persistedHandle({ store: { directory }, set: () => undefined, init: undefined })
         },
         owner: null,
-        live: (key) => (key === listed.key ? listed : undefined),
+        sessions: { list: () => [listed], current: () => first },
       }),
     }))
 
@@ -453,7 +453,7 @@ describe("extension primitives", () => {
           return persistedHandle({ store: { directory }, set: () => undefined, init: undefined })
         },
         owner: null,
-        live: () => undefined,
+        sessions: { list: () => [], current: view },
       }),
     }))
 
@@ -478,6 +478,55 @@ describe("extension primitives", () => {
       same: true,
       opened: ["/a", "/b"],
     })
+    root.store.dispose()
+    root.dispose()
+  })
+
+  test("a routed session store survives before its tab is listed, while a closed tab's store is dropped", () => {
+    const views = ["routed", "closed", "new"].map((id) =>
+      session(
+        () => `server\n${id}`,
+        () => ({ directory: `/${id}` }),
+      ),
+    )
+
+    const [listed, setListed] = createSignal<readonly SessionRef[]>([views[1]])
+    const [current, setCurrent] = createSignal<SessionRef | undefined>(views[0])
+    const ended: string[] = []
+
+    const root = createRoot((dispose) => ({
+      dispose,
+      store: createSessionStore({
+        open: (target) => {
+          onCleanup(() => void ended.push(target.key))
+
+          return persistedHandle({ store: { key: target.key }, set: () => undefined, init: undefined })
+        },
+        owner: null,
+        sessions: { list: listed, current },
+      }),
+    }))
+
+    const routed = root.store.get(views[0])
+    const closed = root.store.get(views[1])
+    const fresh = root.store.get(views[2])
+
+    // A deep link preloads before the titlebar lists its tab. Another tab closes in that window.
+    setListed([])
+    expect({ routed: root.store.get(views[0]) === routed, fresh: root.store.get(views[2]) === fresh, ended }).toEqual({
+      routed: true,
+      fresh: true,
+      ended: [views[1].key],
+    })
+    expect(root.store.get(views[1])).not.toBe(closed)
+
+    // Once listed, the routed store still survives its tab closing until the route leaves it.
+    setListed([views[0]])
+    setListed([])
+    expect(root.store.get(views[0])).toBe(routed)
+    setCurrent(undefined)
+    expect(ended).toEqual([views[1].key, views[0].key])
+    expect(root.store.get(views[0])).not.toBe(routed)
     root.store.dispose()
     root.dispose()
   })

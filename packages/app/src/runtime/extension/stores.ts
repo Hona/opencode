@@ -163,21 +163,45 @@ export function locatedHandle<T>(session: SessionRef, open: () => Persisted<T>) 
   return deferredHandle(createMemo(on(directory, (value) => (value === undefined ? undefined : open()))))
 }
 
-/** A declared session store: one handle per session, opened through `locatedHandle`. */
+/**
+ * A declared session store: one handle per session, opened through `locatedHandle`. Call it under an owner: an effect
+ * drops the store of a session whose tab closed.
+ */
 export function createSessionStore<T extends object>(input: {
   readonly open: (session: SessionRef) => Persisted<T>
   readonly owner: Owner | null
   /**
-   * The host's ref for a session key while a tab owns it, which follows its server's live controller. Reactive. The
-   * ref a store first opens with, such as a screen's `MountedSession`, reads its own screen's controller.
+   * The host's sessions. `list` holds the refs of open tabs, which follow their servers' live controllers; the ref a
+   * store first opens with, such as a screen's `MountedSession`, reads its own screen's controller. `current` is the
+   * routed session. Reactive.
    */
-  readonly live: (key: string) => SessionRef | undefined
+  readonly sessions: { list(): readonly SessionRef[]; current(): SessionRef | undefined }
 }) {
   const entries = new Map<string, { readonly handle: Persisted<T>; readonly dispose: () => void }>()
+  // Keys a tab has listed while their store was open; only these can close.
+  const listed = new Set<string>()
+
+  // Drops the stores of sessions whose tabs closed. The routed session keeps its store, and so does one no tab has
+  // listed yet: a deep link or a new session routes and preloads before the titlebar adds its tab.
+  createRenderEffect(() => {
+    const keys = new Set(input.sessions.list().map((session) => session.key))
+    const routed = input.sessions.current()?.key
+
+    untrack(() =>
+      entries.forEach((entry, key) => {
+        if (keys.has(key)) return void listed.add(key)
+
+        if (key === routed || !listed.has(key)) return
+        entry.dispose()
+        entries.delete(key)
+        listed.delete(key)
+      }),
+    )
+  })
 
   const create = (session: SessionRef) => {
-    // The first ref stands in until the host lists the key, and again if its tab closes before the store is pruned.
-    const current = () => input.live(session.key) ?? session
+    // The first ref stands in until the host lists the key, and again if its tab closes before the store drops.
+    const current = () => input.sessions.list().find((item) => item.key === session.key) ?? session
 
     const ref: SessionRef = {
       key: session.key,
@@ -207,19 +231,15 @@ export function createSessionStore<T extends object>(input: {
       const created = create(session)
       entries.set(session.key, created)
 
+      // Listed already, it closes with its tab.
+      if (untrack(input.sessions.list).some((item) => item.key === session.key)) listed.add(session.key)
+
       return created.handle
-    },
-    /** Drops the stores of sessions no tab owns any more. */
-    prune(keys: ReadonlySet<string>) {
-      entries.forEach((entry, key) => {
-        if (keys.has(key)) return
-        entry.dispose()
-        entries.delete(key)
-      })
     },
     dispose() {
       entries.forEach((entry) => entry.dispose())
       entries.clear()
+      listed.clear()
     },
   }
 }

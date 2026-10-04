@@ -7,7 +7,8 @@ export async function openWithDirection(page: Page, route: string, direction: "l
 
 /**
  * Opens the app at a route as the desktop shell starts it: the window's extensions run at once, and the app interface
- * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up.
+ * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up. One extension
+ * stays loading until `finish` runs; commands are published meanwhile, but the routes wait.
  */
 export async function openHeldStart(page: Page, route: string) {
   await page.goto(
@@ -18,6 +19,10 @@ export async function openHeldStart(page: Page, route: string) {
 
   return {
     // A modal open meanwhile hides the page outside it, so the button is found and clicked past the modal.
-    start: () => start.dispatchEvent("click"),
+    start: async () => {
+      await start.dispatchEvent("click")
+      await expect(page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true })).toBeEnabled()
+    },
+    finish: () => page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true }).dispatchEvent("click"),
   }
 }

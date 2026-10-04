@@ -704,7 +704,7 @@ function createHost(input: HostInput) {
           const store = createSessionStore({
             open: (session) => storage.store(name, { ...declaration, scope: { session } }),
             owner: root,
-            live: (key) => typed.sessions.list().find((session) => session.key === key),
+            sessions: typed.sessions,
           })
 
           stores[name] = store.get
@@ -713,18 +713,7 @@ function createHost(input: HostInput) {
           return []
         })
 
-        if (sessions.length > 0) {
-          own(() => sessions.forEach((store) => store.dispose()))
-
-          const list = typed.sessions
-
-          // Drops the stores of sessions whose tabs closed.
-          createRenderEffect(() => {
-            const keys = new Set(list.list().map((session) => session.key))
-
-            untrack(() => sessions.forEach((store) => store.prune(keys)))
-          })
-        }
+        if (sessions.length > 0) own(() => sessions.forEach((store) => store.dispose()))
 
         return Promise.all(loaded)
       },

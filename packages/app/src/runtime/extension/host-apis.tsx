@@ -5,7 +5,6 @@ import {
   createSignal,
   getOwner,
   on,
-  onCleanup,
   runWithOwner,
   untrack,
   type Accessor,
@@ -348,7 +347,7 @@ export type HostApis = ReturnType<typeof createHostApis>
 
 export { ExtensionAttachmentProvider, useExtensionAttachment } from "./attachment"
 
-/** Attaches the session and layout HostApis from inside the app interface. */
+/** Builds the session and layout attachment before readiness; its `attach` connects HostApis as the routes render. */
 export function createExtensionAttachment(apis: HostApis) {
   const global = useGlobal()
   const tabs = useTabs()
@@ -716,7 +715,7 @@ export function createExtensionAttachment(apis: HostApis) {
     layout.panel.setScroll(value, key, next)
   }
 
-  const detach = apis.attach({
+  const mounted: Attached = {
     sessions,
     current,
     screen,
@@ -766,11 +765,14 @@ export function createExtensionAttachment(apis: HostApis) {
         set: setScroll,
       },
     },
-  })
-
-  onCleanup(detach)
+  }
 
   return {
+    /**
+     * Mounts the interface for the HostApis; returns its detach. Called as the routes first render, which waits for
+     * every extension to settle, so writes and dialogs made before then apply after that render.
+     */
+    attach: () => apis.attach(mounted),
     /** The routed `MountedSession`. */
     current,
     region(value: Region) {

@@ -84,7 +84,20 @@ export function ExtensionAttachment(props: ParentProps) {
     <ExtensionAttachmentProvider value={attachment}>
       <ExtensionCommands />
       <ExtensionServerEndpoints />
-      <Show when={host.ready()}>{props.children}</Show>
+      <Show when={host.ready()}>
+        <MountedInterface attach={attachment.attach} />
+        {props.children}
+      </Show>
     </ExtensionAttachmentProvider>
   )
+}
+
+/**
+ * The app interface as the HostApis see it, mounted as the routes first render and not before: writes and dialogs made
+ * while extensions set up wait until then.
+ */
+function MountedInterface(props: { attach: () => () => void }) {
+  onCleanup(props.attach())
+
+  return null
 }

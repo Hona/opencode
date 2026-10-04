@@ -111,16 +111,21 @@ test("Don't show these in the future turns release notes off and closes What's N
   await expect.poll(() => stored(page, RELEASE_NOTES)).toEqual({ enabled: false })
 })
 
-test("What's New ready before the app mounts shows over the restored Settings and keeps focus", async ({ page }) => {
-  await serveChangelog(page)
+test("What's New opened after the attachment mounts waits for the routes, then keeps focus over restored Settings", async ({ page }) => {
+  const held = Promise.withResolvers<void>()
+  await serveChangelog(page, changelog, held.promise)
   await mockWorkspace(page, { name: "Whats New", sessions: [], seed: upgraded })
   const app = await openHeldStart(page, "/settings")
-  // What's New marks the release seen as it opens, here while the app is still starting.
-  await expect.poll(() => stored(page, SEEN)).toEqual({ version: "test" })
   await app.start()
+  held.resolve()
+  // What's New marks the release seen as it opens: after attachment, while an extension still holds the routes.
+  await expect.poll(() => stored(page, SEEN)).toEqual({ version: "test" })
 
   const dialog = page.getByRole("dialog")
   const focused = () => dialog.evaluate((element) => element.contains(document.activeElement))
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId("settings-screen")).toHaveCount(0)
+  await app.finish()
   await expect(page.getByTestId("settings-screen")).toBeAttached()
   await expect(dialog.getByRole("heading", { level: 1 })).toHaveText("Split panes")
   await expect.poll(focused).toBe(true)
@@ -181,11 +186,12 @@ for (const row of [
 }
 
 /** Serves this changelog and records each request for it. */
-async function serveChangelog(page: Page, body: typeof changelog | typeof cliOnly = changelog) {
+async function serveChangelog(page: Page, body: typeof changelog | typeof cliOnly = changelog, held?: Promise<void>) {
   const requests: string[] = []
 
-  await page.route("https://opencode.ai/changelog.json", (route) => {
+  await page.route("https://opencode.ai/changelog.json", async (route) => {
     requests.push(route.request().url())
+    await held
 
     return route.fulfill({ headers: cors, json: body })
   })
