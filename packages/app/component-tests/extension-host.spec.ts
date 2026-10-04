@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url"
 import type { Owner } from "solid-js"
 import type { Context, Contract, DialogHandle, Dialogs, SessionRef } from "@opencode/gui-extensions/sdk"
-import type { Bridge, BridgeMessage, Installed } from "@opencode/gui-extensions/sdk/bridge"
+import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/gui-extensions/sdk/bridge"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./extension-host.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
@@ -561,7 +561,7 @@ story("declared global stores load before setup, so setup reads the stored value
 story("startup enable state does not wait for the manager, and live updates beat older replies", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountExtensions, until } = await import(fixture)
-    const initial = Promise.withResolvers<readonly string[]>()
+    const initial = Promise.withResolvers<readonly EnableState[]>()
     const reply = Promise.withResolvers<readonly Installed[]>()
     const listeners = new Set<(message: BridgeMessage) => void>()
     const setups: string[] = []
@@ -589,6 +589,7 @@ story("startup enable state does not wait for the manager, and live updates beat
       runMenubarItem() {},
       configure() {},
       manager: {
+        initial: initial.promise,
         list: () => reply.promise,
         enable: async () => {},
         disable: async () => {},
@@ -601,7 +602,7 @@ story("startup enable state does not wait for the manager, and live updates beat
     }
 
     const host = mountExtensions({
-      manager: { bridge, disabled: initial.promise },
+      bridge,
       definitions: ["enabled", "disabled"].map((id) => ({
         id,
         renderer: async () => ({ default: () => void setups.push(id) }),
@@ -610,9 +611,30 @@ story("startup enable state does not wait for the manager, and live updates beat
 
     await new Promise((resolve) => setTimeout(resolve, 50))
     const before = [...setups]
-    initial.resolve(["disabled"])
+    initial.resolve([{ id: "disabled", enabled: false }])
     await until(() => host.ready())
     const started = { setups: [...setups], status: host.status("disabled") }
+    const unknown: { ready: boolean; setups: string[]; status?: string }[] = []
+
+    // A failed startup reply must not temporarily activate the disabled extension while list() waits.
+    for (const failure of ["unknown", "rejected"]) {
+      const initial = failure === "unknown" ? Promise.resolve(undefined) : Promise.reject(new Error("snapshot failed"))
+      const reply = Promise.withResolvers<readonly Installed[]>()
+
+      const failed = mountExtensions({
+        bridge: { ...bridge, manager: { ...bridge.manager, initial, list: () => reply.promise } },
+        definitions: [{ id: "disabled", renderer: async () => ({ default: () => void setups.push("wrongly enabled") }) }],
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const blocked = { ready: failed.ready(), setups: [...setups] }
+
+      reply.resolve(list(["disabled"]))
+      await until(() => failed.ready())
+      unknown.push({ ...blocked, status: failed.status("disabled") })
+      failed.unmount()
+    }
+
     listeners.forEach((listener) => listener({ type: "extensions", list: list(["enabled"]) }))
     await until(() => host.status("disabled") === "active" && host.status("enabled") === "disabled")
     reply.resolve(list(["disabled"]))
@@ -620,12 +642,16 @@ story("startup enable state does not wait for the manager, and live updates beat
     const updated = { setups: [...setups], status: [host.status("enabled"), host.status("disabled")] }
     host.unmount()
 
-    return { before, started, updated, listeners: listeners.size }
+    return { before, started, unknown, updated, listeners: listeners.size }
   }, fixture)
 
   expect(result).toEqual({
     before: [],
     started: { setups: ["enabled"], status: "disabled" },
+    unknown: [
+      { ready: false, setups: ["enabled"], status: "disabled" },
+      { ready: false, setups: ["enabled"], status: "disabled" },
+    ],
     updated: { setups: ["enabled", "disabled"], status: ["disabled", "active"] },
     listeners: 0,
   })

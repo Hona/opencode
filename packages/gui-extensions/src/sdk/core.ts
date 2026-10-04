@@ -86,6 +86,18 @@ export interface Definition {
    */
   readonly id: string
   /**
+   * Earlier extension ids, newest first, used to preserve desktop enable state after a rename. The current id's
+   * explicit setting wins; otherwise the first earlier id with a setting wins. Omit this for a new extension.
+   * With no setting under any id, the extension is enabled. Old rows stay intact; changes write under the current id.
+   * Stored keys, commands and panels still need their own migrations (`from`, the keybind map and `Panel.legacy`).
+   *
+   * @example
+   * ```ts
+   * Extension.define({ id: "details", legacy: ["summary"] })
+   * ```
+   */
+  readonly legacy?: readonly string[]
+  /**
    * The operating systems the extension runs on. Omit it to run everywhere, the web included. An extension that lists
    * any OS does not run on the web, where no OS is known.
    */

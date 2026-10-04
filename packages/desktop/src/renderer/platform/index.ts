@@ -58,7 +58,6 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
       return api.checkAppExists(appName)
     },
     extensions: createExtensionBridge(),
-    disabledExtensions: window.electron.disabledExtensions,
   }
 }
 

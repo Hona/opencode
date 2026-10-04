@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-sqlite"
 import { migrate, openDatabase } from "./database"
 import { migrations } from "./migration.gen"
-import { extension } from "./schema"
 
 const tables = (db: ReturnType<typeof drizzle>) =>
   db
@@ -34,50 +33,14 @@ describe("database", () => {
     expect(migrate(db)).toEqual([])
   })
 
-  test.each(
-    [
-      { name: "disabled", old: false, current: undefined, expected: false },
-      { name: "enabled", old: true, current: undefined, expected: true },
-      { name: "explicitly enabled", old: false, current: true, expected: true },
-      { name: "explicitly disabled", old: true, current: false, expected: false },
-    ].flatMap((input) =>
-      [
-        { oldID: "summary", newID: "details" },
-        { oldID: "usage", newID: "context" },
-      ].map((ids) => ({ ...input, ...ids })),
-    ),
-  )("keeps $name enable state when $oldID becomes $newID, without changing old rows", (input) => {
+  test("a failed migration rolls back the journal without losing existing data", () => {
     const native = new DatabaseSync(":memory:")
+    native.exec("CREATE TABLE state (value TEXT); INSERT INTO state VALUES ('kept')")
     const db = drizzle({ client: native })
-    native.exec("CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)")
-    migrations
-      .filter((migration) => migration.id <= "20260930041551_extension")
-      .forEach((migration) => {
-        migration.statements.forEach((statement) => native.exec(statement))
-        native.prepare("INSERT INTO migration VALUES (?, 0)").run(migration.id)
-      })
-    db.insert(extension)
-      .values({ id: input.oldID, enabled: input.old, manifest: "kept manifest", revision: "kept revision" })
-      .run()
 
-    if (input.current !== undefined)
-      db.insert(extension).values({ id: input.newID, enabled: input.current }).run()
-
-    migrate(db)
-
-    const rows = () => db.select().from(extension).orderBy(extension.id).all()
-
-    const expected = [
-      { id: input.oldID, enabled: input.old, manifest: "kept manifest", revision: "kept revision" },
-      { id: input.newID, enabled: input.expected, manifest: null, revision: null },
-    ].toSorted((a, b) => a.id.localeCompare(b.id))
-
-    expect(rows()).toEqual(expected)
-    db.update(extension).set({ enabled: !input.expected }).where(sql`${extension.id} = ${input.newID}`).run()
-    expect(migrate(db)).toEqual([])
-    expect(rows()).toEqual(
-      expected.map((row) => (row.id === input.newID ? { ...row, enabled: !input.expected } : row)),
-    )
+    expect(() => migrate(db)).toThrow()
+    expect(db.all(sql`SELECT id FROM migration`)).toEqual([])
+    expect(db.all(sql`SELECT value FROM state`)).toEqual([{ value: "kept" }])
     native.close()
   })
 

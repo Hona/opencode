@@ -1,7 +1,6 @@
 export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
-import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Path } from "effect"
 import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"
@@ -9,7 +8,7 @@ import { setStorageSnapshotProvider } from "./snapshot"
 import { createDraftStore } from "./drafts"
 import { importLegacyStores } from "./legacy"
 import { createStateStore } from "./state"
-import { extension } from "./schema"
+import { readEnableState } from "../extension/enable-state"
 
 export type Interface = ReturnType<typeof make>
 
@@ -48,12 +47,7 @@ export const layer = Layer.effect(
     )
     setStorageSnapshotProvider((names) => ({
       storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
-      disabledExtensions: storage.db
-        .select({ id: extension.id })
-        .from(extension)
-        .where(eq(extension.enabled, false))
-        .all()
-        .map((row) => row.id),
+      extensions: readEnableState(storage.db.$client),
     }))
     marks.storage = Date.now()
 
@@ -62,7 +56,9 @@ export const layer = Layer.effect(
 )
 
 // The file keeps its historical name; renaming it would mean moving the drafts it already holds.
-export function make(filename: string, onError?: NonNullable<Parameters<typeof createStateStore>[1]>["onError"]) {
+// SAFETY: this observer only reports caught write failures; it never interprets them as stored values.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
+export function make(filename: string, onError?: (error: unknown) => void) {
   const database = openDatabase(filename)
   const state = createStateStore(database.db, { onError })
   const drafts = createDraftStore(database.db, { onError })

@@ -122,9 +122,6 @@ type PlatformBase = {
 
   /** GUI extension bridge to the main-process extension host (desktop only). */
   extensions?: Bridge
-
-  /** Disabled GUI extensions from the desktop preload's startup snapshot, without a manager RPC call. */
-  disabledExtensions?: Promise<readonly string[]>
 }
 
 export type Platform = PlatformBase &

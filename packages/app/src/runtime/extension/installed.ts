@@ -3,13 +3,13 @@ import { createStore, reconcile } from "solid-js/store"
 import type { Bridge, Installed } from "@opencode/gui-extensions/sdk/bridge"
 
 /** The extensions main reports to this window: the initial list, then every list it pushes. */
-export function createInstalled(bridge: Bridge | undefined, initial?: Promise<readonly string[]>) {
+export function createInstalled(bridge: Bridge | undefined) {
   const [state, setState] = createStore<{ list?: readonly Installed[] }>({})
   // A pushed list is newer than the initial reply, so a reply that arrives after one is dropped.
   const pushed = { count: 0 }
-  const [disabled] = createResource(async () => new Set(await initial))
+  const [initial] = createResource(async () => (bridge ? bridge.manager.initial?.catch(() => undefined) : []))
 
-  // Metadata still loads for settings and failure reporting, but activation only needs the preload's ids.
+  // Metadata still loads for settings and failure reporting. Activation can use known preload rows before it arrives.
   createResource(async () => {
     if (!bridge) return
 
@@ -29,9 +29,7 @@ export function createInstalled(bridge: Bridge | undefined, initial?: Promise<re
     )
 
   return {
-    disabled: createMemo(() =>
-      state.list ? new Set(state.list.flatMap((item) => (item.enabled ? [] : [item.id]))) : disabled.latest,
-    ),
+    enableState: createMemo(() => state.list ?? initial.latest),
     list: () => state.list ?? [],
   }
 }

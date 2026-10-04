@@ -38,6 +38,7 @@ Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, 
 | Field      | What it declares                                                              | In the context                                    |
 | ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
 | `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                                          |
+| `legacy`   | Earlier extension ids, newest first; preserves desktop enable state after a rename |                                                   |
 | `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                                   |
 | `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
 | `uses`     | Optional dependencies other extensions provide; it works while one is missing | `ctx.uses.name()` is `Live<T>`                    |
@@ -379,7 +380,15 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 - `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners; a pick returns undefined when that key holds none of its fields, never an object of undefined fields, so the next home is read.
 - `update(fn)` edits the draft, or returns the next value, which replaces the stored one, in both processes. In the window it waits for the load, then applies in call order.
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
-- Renaming an extension moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data.
+- Renaming an extension moves four things: enable state (`Definition.legacy`), stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data.
+
+Declare earlier ids newest first, for example `Extension.define({ id: "details", legacy: ["summary"] })`. The current id's explicit enable setting always wins. Without one, the first earlier id with a setting wins; with no setting at all, the extension is enabled. Both desktop hosts use this rule. Old rows stay intact, and enable/disable changes write only under the current id. A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled extensions.
+
+<!-- source: src/details/index.ts#legacy -->
+
+```ts
+legacy: ["summary"],
+```
 
 ## Runtime rules
 

@@ -2,10 +2,10 @@ import { contextBridge, ipcRenderer, webUtils } from "electron"
 import {
   DragCancelEvent,
   IpcTransportPort,
-  StorageSnapshotChannel,
+  WindowSnapshotChannel,
   storageSnapshotNames,
+  type WindowSnapshot,
 } from "../shared/ipc-transport"
-import type { WindowSnapshot } from "../shared/window-snapshot"
 import { windowBootstrapFromArguments } from "../shared/window-bootstrap"
 
 ipcRenderer.on(IpcTransportPort, (event) => {
@@ -20,13 +20,13 @@ const bootstrap = windowBootstrapFromArguments(process.argv)
 
 // Asked before the page runs, so the stores the shell reads are hydrated on the first render.
 const snapshot: Promise<WindowSnapshot> = ipcRenderer
-  .invoke(StorageSnapshotChannel, storageSnapshotNames(bootstrap.id))
-  .catch(() => ({ storage: {}, disabledExtensions: [] }))
+  .invoke(WindowSnapshotChannel, storageSnapshotNames(bootstrap.id))
+  .catch(() => ({ storage: {} }))
 
 contextBridge.exposeInMainWorld("electron", {
   windowID: bootstrap.id,
   bootstrap,
   storageSnapshot: snapshot.then((snapshot) => snapshot.storage),
-  disabledExtensions: snapshot.then((snapshot) => snapshot.disabledExtensions),
+  extensions: snapshot.then((snapshot) => snapshot.extensions),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 })
