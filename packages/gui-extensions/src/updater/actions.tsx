@@ -12,13 +12,7 @@ type Context = SetupContext<typeof definition>
 
 /** Restarts into the staged update. A beta build moving to stable confirms the installer download first. */
 export function install(ctx: Context, client: Client) {
-  const download = () =>
-    client.install().catch((cause: unknown) => {
-      showToast({
-        title: ctx.t("common.requestFailed"),
-        description: cause instanceof Error && cause.message ? cause.message : ctx.t("common.requestFailed"),
-      })
-    })
+  const download = () => client.install().catch((cause: unknown) => requestFailed(ctx, cause))
 
   const state = client.state()
 
@@ -35,14 +29,9 @@ export function install(ctx: Context, client: Client) {
 }
 
 export async function check(ctx: Context, client: Client) {
-  const state = await client.check(undefined, { signal: ctx.signal }).catch((cause: unknown) => {
-    if (ctx.signal.aborted) return
-
-    showToast({
-      title: ctx.t("common.requestFailed"),
-      description: cause instanceof Error && cause.message ? cause.message : ctx.t("common.requestFailed"),
-    })
-  })
+  const state = await client
+    .check(undefined, { signal: ctx.signal })
+    .catch((cause: unknown) => requestFailed(ctx, cause))
 
   if (!state || ctx.signal.aborted) return
 
@@ -64,6 +53,15 @@ export async function check(ctx: Context, client: Client) {
   if (state.status === "error") {
     showToast({ title: ctx.t("common.requestFailed"), description: state.message })
   }
+}
+
+function requestFailed(ctx: Context, cause: unknown) {
+  if (ctx.signal.aborted) return
+
+  showToast({
+    title: ctx.t("common.requestFailed"),
+    description: cause instanceof Error && cause.message ? cause.message : undefined,
+  })
 }
 
 function DialogStableDownload(props: {
