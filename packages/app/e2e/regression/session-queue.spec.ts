@@ -288,42 +288,44 @@ test("Undo preserves mentioned file and agent references on resubmission", async
   await expect(view.input).toHaveText("inspect @main.ts with @build")
   await view.input.press("Enter")
   await expect.poll(() => mock.prompts.length).toBe(1)
+  // Like the TUI, a restored mention points at the file it named rather than a snapshot of it.
   expect(mock.prompts[0].files).toMatchObject([
-    { uri: "data:text/plain;base64,aGk=", mention: { text: "@main.ts", start: 8, end: 16 } },
+    { uri: "file:///repo/main.ts", mention: { text: "@main.ts", start: 8, end: 16 } },
   ])
   expect(mock.prompts[0].agents).toMatchObject([{ name: "build", mention: { text: "@build" } }])
 })
 
 for (const delivery of ["queue", "steer"] as const) {
-  test(`${delivery === "queue" ? "Undo" : "Revert on a pending steer"} does not discard hidden file context`, async ({
+  test(`${delivery === "queue" ? "Undo" : "Revert on a pending steer"} keeps unmentioned file context`, async ({
     page,
   }) => {
+    // Another client (for example ACP) can attach a file without mentioning it.
     const mock = createQueueMock(["inspect this file"])
+    const inboxID = mock.rows[0].id
     mock.rows[0].delivery = delivery
     mock.rows[0].payload.files = [
       { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
     ]
     const view = await openQueue(page, mock)
 
-    if (delivery === "queue") {
-      await view.rows.getByRole("button", { name: "Undo" }).click()
-      await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
-      await expect(view.rows).toHaveCount(1)
-    }
+    if (delivery === "queue") await view.rows.getByRole("button", { name: "Undo" }).click()
 
     if (delivery === "steer") {
       const pending = page.locator(
-        `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${mock.rows[0].id}"]`,
+        `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`,
       )
 
       await pending.hover()
       await pending.getByRole("button", { name: "Revert message" }).click()
-      await expect(page.getByText("This prompt has file context the composer can't restore")).toBeVisible()
-      await expect(pending).toContainText("inspect this file")
     }
 
-    await expect(view.input).toHaveText("")
-    expect(mock.changes).toEqual([])
+    await expect(view.input).toHaveText("inspect this file")
+    await expect(view.composer.locator('[data-component="composer-attachments"]')).toContainText("main.ts")
+    expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
+
+    await view.input.press("Enter")
+    await expect.poll(() => mock.prompts.length).toBe(1)
+    expect(mock.prompts[0].files).toMatchObject([{ uri: "data:text/plain;base64,aGk=", name: "main.ts" }])
   })
 }
 
@@ -399,7 +401,10 @@ test("Revert returns a pending steer's review comment to the composer", async ({
 
   await expect(pending).toHaveCount(0)
   await expect(view.input).toHaveText(display)
-  await expect(view.composer.locator('[data-component="composer-attachments"]')).toContainText(comment)
+  // The comment card is the only card: its context file is regenerated from it, not restored twice.
+  const cards = view.composer.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(cards).toHaveCount(1)
+  await expect(cards).toContainText(comment)
   expect(mock.changes).toEqual([{ inboxID: row.id, action: "cancel" }])
 })
 

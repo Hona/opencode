@@ -1,7 +1,9 @@
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"
+import type { FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import { readPromptPresentation } from "./comment-note"
+import { commentContextItem, readPromptPresentation } from "./comment-note"
+import { buildPromptRequest } from "./request"
+import { contextItemKey } from "./schema"
 import { Skill } from "@opencode/schema/skill"
 
 type Inline =
@@ -17,6 +19,7 @@ type Inline =
         startChar: number
         endChar: number
       }
+      url?: string
       mime?: string
       filename?: string
     }
@@ -38,11 +41,14 @@ type Inline =
 
 function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["selection"] {
   const queryIndex = url.indexOf("?")
+
   if (queryIndex === -1) return undefined
   const params = new URLSearchParams(url.slice(queryIndex + 1))
   const startLine = Number(params.get("start"))
   const endLine = Number(params.get("end"))
+
   if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return undefined
+
   return {
     startLine,
     endLine,
@@ -51,24 +57,50 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
   }
 }
 
+// A user message or a pending inbox item: the materialized transcript row shares the inbox payload's shape.
+export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">
+
+// Restores the composer content that produced a prompt, losing nothing it carried. Review comments
+// return through extractPromptComments and regenerate their files, so those files are left out here;
+// any other unmentioned file returns as an attachment, and unmatched agents and skills as trailing parts.
 export function extractPromptFromMessage(
-  message: SessionMessageUser,
+  message: PromptSource,
   opts?: { directory?: string; attachmentName?: string },
 ): Prompt {
-  const text = readPromptPresentation(message.metadata)?.displayText ?? message.text
+  const presentation = readPromptPresentation(message.metadata)
+  const text = presentation?.displayText ?? message.text
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
+
+  const commentFiles = new Set(
+    buildPromptRequest({
+      prompt: [],
+      context: (presentation?.comments ?? [])
+        .map(commentContextItem)
+        .map((item) => ({ ...item, key: contextItemKey(item) })),
+      images: [],
+      text: "",
+      sessionDirectory: directory ?? "",
+    }).files.map((file) => file.uri),
+  )
+
   const toRelative = (path: string) => {
     if (!directory) return path
     const prefix = directory.endsWith("/") ? directory : directory + "/"
+
     if (path.startsWith(prefix)) return path.slice(prefix.length)
+
     return path
   }
+
   const inline: Inline[] = []
-  const images: ImageAttachmentPart[] = []
+  const trailing: Inline[] = []
+  const attachments: (ImageAttachmentPart | PathAttachmentPart)[] = []
+
   for (const file of message.files ?? []) {
     const mention = file.mention
     const uri = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+
     if (mention) {
       inline.push({
         type: "file",
@@ -77,63 +109,85 @@ export function extractPromptFromMessage(
         value: mention.text,
         path: toRelative(mention.text.startsWith("@") ? mention.text.slice(1) : mention.text),
         selection: selectionFromFileUrl(uri),
+        url: uri,
+        mime: file.mime,
+        filename: file.name,
       })
       continue
     }
+
+    if (file.source.type === "uri" && commentFiles.has(file.source.uri)) continue
+
     const dataUrl =
       file.source.type === "uri" && file.source.uri.startsWith("data:")
         ? file.source.uri
         : file.data
           ? `data:${file.mime};base64,${file.data}`
           : undefined
+
     if (!dataUrl) continue
-    images.push({
+    attachments.push({
       type: "image",
-      id: `${message.id}:file:${images.length}`,
+      id: `${message.id}:file:${attachments.length}`,
       filename: file.name ?? attachmentName,
       mime: file.mime,
       blob: createLegacyBlobReference(dataUrl),
     })
   }
+
   for (const agent of message.agents ?? []) {
     const mention = agent.mention
-    if (!mention) continue
-    inline.push({
-      type: "agent",
-      start: mention.start,
-      end: mention.end,
-      value: mention.text,
-      name: agent.name,
-    })
+    const part = { type: "agent" as const, name: agent.name }
+
+    if (!mention) trailing.push({ ...part, start: -1, end: -1, value: `@${agent.name}` })
+
+    if (mention) inline.push({ ...part, start: mention.start, end: mention.end, value: mention.text })
   }
+
   for (const attached of message.skills ?? []) {
     const mention = attached.mention
-    if (!mention) continue
-    inline.push({
-      type: "skill",
-      start: mention.start,
-      end: mention.end,
-      value: mention.text,
-      id: Skill.ID.make(attached.id),
-      name: Skill.Name.make(attached.name),
-    })
+    const part = { type: "skill" as const, id: Skill.ID.make(attached.id), name: Skill.Name.make(attached.name) }
+
+    if (!mention) trailing.push({ ...part, start: -1, end: -1, value: `@${attached.id}` })
+
+    if (mention) inline.push({ ...part, start: mention.start, end: mention.end, value: mention.text })
   }
-  return buildPrompt(text, inline, images)
+
+  attachments.push(
+    ...(presentation?.attachments ?? []).map(
+      (file, index): PathAttachmentPart => ({
+        type: "path",
+        id: `${message.id}:path:${index}`,
+        filename: file.name,
+        mime: file.mime,
+        path: file.path,
+      }),
+    ),
+  )
+
+  return buildPrompt(text, inline, trailing, attachments)
 }
 
-export function extractPromptComments(message: SessionMessageUser) {
+export function extractPromptComments(message: Pick<PromptSource, "metadata">) {
   return readPromptPresentation(message.metadata)?.comments ?? []
 }
 
-function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart[]): Prompt {
+function buildPrompt(
+  text: string,
+  inline: Inline[],
+  trailing: Inline[],
+  attachments: (ImageAttachmentPart | PathAttachmentPart)[],
+): Prompt {
   inline.sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start
+
     return a.end - b.end
   })
 
   const result: Prompt = []
   let position = 0
   let cursor = 0
+  let tail = ""
 
   const pushText = (content: string) => {
     if (!content) return
@@ -144,77 +198,69 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
       end: position + content.length,
     })
     position += content.length
+    tail = content
   }
 
-  const pushFile = (item: Extract<Inline, { type: "file" }>) => {
+  const pushPart = (item: Inline) => {
     const content = item.value
-    const attachment: FileAttachmentPart = {
+    const span = { content, start: position, end: position + content.length }
+    position += content.length
+    tail = content
+
+    if (item.type === "agent") {
+      result.push({ type: "agent", name: item.name, ...span })
+
+      return
+    }
+
+    if (item.type === "skill") {
+      result.push({ type: "skill", id: item.id, name: item.name, ...span })
+
+      return
+    }
+
+    result.push({
       type: "file",
       path: item.path,
-      content,
-      start: position,
-      end: position + content.length,
       selection: item.selection,
+      url: item.url,
       mime: item.mime,
       filename: item.filename,
-    }
-    result.push(attachment)
-    position += content.length
+      ...span,
+    } satisfies FileAttachmentPart)
   }
 
-  const pushAgent = (item: Extract<Inline, { type: "agent" }>) => {
-    const content = item.value
-    const mention: AgentPart = {
-      type: "agent",
-      name: item.name,
-      content,
-      start: position,
-      end: position + content.length,
-    }
-    result.push(mention)
-    position += content.length
-  }
+  // A mention whose recorded offsets no longer index the text (another client may count
+  // display width) is found by its text; one missing from the text returns at the end.
+  const unplaced = inline.flatMap((item) => {
+    if (!item.value) return []
 
-  const pushSkill = (item: Extract<Inline, { type: "skill" }>) => {
-    const content = item.value
-    const skill: SkillPart = {
-      type: "skill",
-      id: item.id,
-      name: item.name,
-      content,
-      start: position,
-      end: position + content.length,
-    }
-    result.push(skill)
-    position += content.length
-  }
+    const mismatch =
+      item.start < cursor ||
+      item.end < item.start ||
+      item.end > text.length ||
+      text.slice(item.start, item.end) !== item.value
 
-  for (const item of inline) {
-    if (item.start < 0 || item.end < item.start) continue
+    const start = mismatch ? text.indexOf(item.value, cursor) : item.start
 
-    const expected = item.value
-    if (!expected) continue
-
-    const mismatch = item.end > text.length || item.start < cursor || text.slice(item.start, item.end) !== expected
-    const start = mismatch ? text.indexOf(expected, cursor) : item.start
-    if (start === -1) continue
-    const end = mismatch ? start + expected.length : item.end
-
+    if (start === -1) return [item]
     pushText(text.slice(cursor, start))
+    pushPart(item)
+    cursor = start + item.value.length
 
-    if (item.type === "file") pushFile(item)
-    if (item.type === "agent") pushAgent(item)
-    if (item.type === "skill") pushSkill(item)
-
-    cursor = end
-  }
+    return []
+  })
 
   pushText(text.slice(cursor))
+
+  for (const item of [...unplaced, ...trailing]) {
+    if (tail && !/\s$/.test(tail)) pushText(" ")
+    pushPart(item)
+  }
 
   if (result.length === 0) {
     result.push({ type: "text", content: "", start: 0, end: 0 })
   }
 
-  if (images.length === 0) return result
-  return [...result, ...images]
+  return [...result, ...attachments]
 }

@@ -4,14 +4,14 @@ import { useMutation } from "@tanstack/solid-query"
 import { Option, Schema } from "effect"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Skill } from "@opencode/schema/skill"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
-import type { ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
+import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { readPromptPresentation } from "@/composer/comment-note"
+import { commentContextItem, readPromptPresentation } from "@/composer/comment-note"
+import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -45,7 +45,7 @@ export function createSessionQueue(input: {
     mutationFn: async (
       change:
         | { type: "reorder"; inboxIDs: string[] }
-        | { type: "undo"; item: QueuedPrompt; prompt: Prompt }
+        | { type: "undo"; item: QueuedPrompt; prompt: Prompt; comments: ContextItem[] }
         | {
             type: "edit"
             inboxIDs: string[]
@@ -68,6 +68,7 @@ export function createSessionQueue(input: {
           : [...change.prompt, ...draft.filter(isAttachment)]
 
         input.draft.set(prompt, promptLength(prompt))
+        change.comments.forEach((comment) => input.draft.context.add(comment))
         input.restoreFocus(promptLength(prompt))
 
         return
@@ -184,15 +185,14 @@ export function createSessionQueue(input: {
       return
     }
 
-    const prompt = queuedPromptUndoDraft(item)
+    const source = { id: item.id, ...item.payload }
 
-    if (!prompt) {
-      showToast({ title: language.t("session.queue.undoUnavailable") })
-
-      return
-    }
-
-    mutation.mutate({ type: "undo", item, prompt })
+    mutation.mutate({
+      type: "undo",
+      item,
+      prompt: extractPromptFromMessage(source, { directory: location().directory }),
+      comments: extractPromptComments(source).map(commentContextItem),
+    })
   }
 
   const reorder = (inboxIDs: string[]) => {
@@ -371,100 +371,6 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
         path: file.path,
       }),
     ),
-  ]
-}
-
-// Use the full model-visible text so comment notes and path references remain
-// in the draft. Convert mentioned files, agents, and skills back into editor
-// parts; a detached draft cannot represent non-mentioned file context.
-function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
-  if (item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention)) return
-  const parts = mentionedPromptParts(item, item.payload.text)
-
-  if (!parts) return
-
-  return [...parts, ...queuedPromptAttachments(item).filter((part) => part.type === "image")]
-}
-
-// Splits `text` around the payload's mentioned files, agents, and skills, whose offsets index the
-// composer text that produced the prompt. Undefined when an unmentioned agent or skill cannot
-// return to the editor, or when a mention no longer matches the text.
-export function mentionedPromptParts(item: QueuedPrompt, text: string): Prompt | undefined {
-  if (item.payload.agents?.some((agent) => !agent.mention) || item.payload.skills?.some((skill) => !skill.mention))
-    return
-
-  const references = [
-    ...(item.payload.files ?? []).flatMap((file) =>
-      file.mention
-        ? [
-            {
-              type: "file" as const,
-              content: file.mention.text,
-              start: file.mention.start,
-              end: file.mention.end,
-              path: file.name ?? file.mention.text.replace(/^@/, ""),
-              filename: file.name,
-              mime: file.mime,
-              url: `data:${file.mime};base64,${file.data}`,
-            },
-          ]
-        : [],
-    ),
-    ...(item.payload.agents ?? []).flatMap((agent) =>
-      agent.mention
-        ? [
-            {
-              type: "agent" as const,
-              content: agent.mention.text,
-              start: agent.mention.start,
-              end: agent.mention.end,
-              name: agent.name,
-            },
-          ]
-        : [],
-    ),
-    ...(item.payload.skills ?? []).flatMap((skill) =>
-      skill.mention
-        ? [
-            {
-              type: "skill" as const,
-              content: skill.mention.text,
-              start: skill.mention.start,
-              end: skill.mention.end,
-              id: Skill.ID.make(skill.id),
-              name: Skill.Name.make(skill.name),
-            },
-          ]
-        : [],
-    ),
-  ].sort((left, right) => left.start - right.start)
-
-  if (
-    references.some(
-      (part, index) =>
-        part.start < (references[index - 1]?.end ?? 0) || text.slice(part.start, part.end) !== part.content,
-    )
-  )
-    return
-
-  const parts: Prompt = references.flatMap((part, index) => {
-    const start = references[index - 1]?.end ?? 0
-
-    return [
-      ...(part.start > start
-        ? [{ type: "text" as const, content: text.slice(start, part.start), start, end: part.start }]
-        : []),
-      part,
-    ]
-  })
-
-  const start = references.at(-1)?.end ?? 0
-
-  return [
-    ...parts,
-    ...(text.length > start || !parts.length
-      ? [{ type: "text" as const, content: text.slice(start), start, end: text.length }]
-      : []),
   ]
 }
 

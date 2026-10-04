@@ -81,6 +81,66 @@ describe("extractPromptFromMessage", () => {
     expect(extractPromptFromMessage(message)[0]).toMatchObject({ type: "text", content: "model text" })
   })
 
+  test("restores every input another client sent without duplicating review comment files", () => {
+    const message = {
+      id: "msg_1",
+      type: "user",
+      text: "model text",
+      metadata: {
+        displayText: "日本 @main.ts",
+        comments: [
+          {
+            path: "/repo/app.ts",
+            comment: "check this",
+            selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+          },
+        ],
+        attachments: [{ name: "report.zip", mime: "application/zip", path: "/repo/report.zip" }],
+      },
+      files: [
+        // Display-width offsets, as the TUI records them after wide characters.
+        {
+          data: "",
+          mime: "text/plain",
+          source: { type: "uri", uri: "file:///repo/main.ts" },
+          name: "main.ts",
+          mention: { text: "@main.ts", start: 5, end: 13 },
+        },
+        {
+          data: "aGk=",
+          mime: "text/plain",
+          source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+          name: "app.ts",
+        },
+        {
+          data: "bm90ZXM=",
+          mime: "text/markdown",
+          source: { type: "uri", uri: "file:///repo/notes.md" },
+          name: "notes.md",
+        },
+      ],
+      agents: [{ name: "plan" }],
+      skills: [{ id: "review", name: "Review" }],
+      time: { created: 1 },
+    } satisfies SessionMessageUser
+
+    expect(extractPromptFromMessage(message, { directory: "/repo" })).toMatchObject([
+      { type: "text", content: "日本 " },
+      { type: "file", content: "@main.ts", url: "file:///repo/main.ts" },
+      { type: "text", content: " " },
+      { type: "agent", content: "@plan", name: "plan" },
+      { type: "text", content: " " },
+      { type: "skill", content: "@review", id: "review" },
+      {
+        type: "image",
+        filename: "notes.md",
+        mime: "text/markdown",
+        blob: { url: "data:text/markdown;base64,bm90ZXM=" },
+      },
+      { type: "path", filename: "report.zip", path: "/repo/report.zip" },
+    ])
+  })
+
   test("restores skill mentions as structured Composer parts", () => {
     const message = {
       id: "msg_1",
