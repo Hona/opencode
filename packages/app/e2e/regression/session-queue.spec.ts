@@ -358,6 +358,51 @@ test("Revert withdraws a pending steer without interrupting the running session"
   expect(stops).toEqual([])
 })
 
+test("Revert returns a pending steer's review comment to the composer", async ({ page }) => {
+  const display = "tighten this"
+  const comment = "check the guard"
+
+  const mock = createQueueMock([
+    `${display}\nThe user made the following comment regarding line 2 of /repo/app.ts: ${comment}`,
+  ])
+
+  const row = mock.rows[0]
+  row.delivery = "steer"
+  row.payload.metadata = {
+    displayText: display,
+    comments: [
+      {
+        path: "/repo/app.ts",
+        comment,
+        selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+        origin: "review",
+      },
+    ],
+  }
+  // The comment's context file, which a resubmission regenerates from the restored comment.
+  row.payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+      name: "app.ts",
+    },
+  ]
+  const view = await openQueue(page, mock)
+
+  const pending = page.locator(
+    `[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${row.id}"]`,
+  )
+
+  await pending.hover()
+  await pending.getByRole("button", { name: "Revert message" }).click()
+
+  await expect(pending).toHaveCount(0)
+  await expect(view.input).toHaveText(display)
+  await expect(view.composer.locator('[data-component="composer-attachments"]')).toContainText(comment)
+  expect(mock.changes).toEqual([{ inboxID: row.id, action: "cancel" }])
+})
+
 for (const delivery of ["steer", "queue"] as const) {
   test(`keeps finished tools above a pending ${delivery === "queue" ? "queue-to-steer" : "steer"} follow-up`, async ({
     page,

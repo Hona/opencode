@@ -4,11 +4,13 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { commentContextItem } from "@/composer/comment-note"
+import { commentContextItem, readPromptPresentation } from "@/composer/comment-note"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { promptLength } from "@/composer/prompt-parts"
+import { buildPromptRequest } from "@/composer/request"
+import { contextItemKey } from "@/composer/schema"
 import { showToast } from "@/shell/notifications/toast"
-import { queuedPromptUndoDraft, type QueuedPrompt } from "./composer/queue"
+import { mentionedPromptParts, queuedPromptAttachments, type QueuedPrompt } from "./composer/queue"
 import type { SessionModel } from "./model"
 
 export function createSessionRevert(input: {
@@ -50,15 +52,14 @@ export function createSessionRevert(input: {
     const target = prompt.capture()
 
     // An undelivered prompt has no history to rewind. Withdraw it like the TUI
-    // instead of interrupting the work it is waiting behind. Rebuild the draft
-    // from the inbox payload like queue Undo: the message's display text drops
-    // path attachments, and cancelling first would lose them for good.
+    // instead of interrupting the work it is waiting behind. The draft is
+    // rebuilt before cancelling, which would otherwise lose context for good.
     if (data.session.input.has(sessionID, message.id)) {
       const item = data.session.pending
         .list(sessionID)
         .find((entry): entry is QueuedPrompt => entry.type === "user" && entry.id === message.id)
 
-      const draft = item && queuedPromptUndoDraft(item)
+      const draft = item && pendingDraft(item, location().directory)
 
       if (!draft) {
         showToast({ title: language.t("session.revert.pendingUnavailable") })
@@ -67,7 +68,8 @@ export function createSessionRevert(input: {
       }
 
       if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      target.set(draft, promptLength(draft))
+      target.set(draft.prompt, promptLength(draft.prompt))
+      target.context.replaceComments(draft.comments)
       owner.run(() => input.setActiveMessage(previous))
 
       return
@@ -75,8 +77,10 @@ export function createSessionRevert(input: {
 
     // Interrupt acknowledges before the execution settles, and staging a busy Session fails. The
     // local status can lag the server either way, so always settle first; both are idle no-ops.
-    await server.api.session.interrupt({ sessionID }).catch(() => undefined)
-    await server.api.session.wait({ sessionID }).catch(() => undefined)
+    // Like the TUI, stop at the first failure instead of waiting on work that was never interrupted.
+    if (!(await request(() => server.api.session.interrupt({ sessionID })))) return
+
+    if (!(await request(() => server.api.session.wait({ sessionID })))) return
 
     if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
     // Reverting to a previous prompt discards the pending queue (and pending
@@ -157,3 +161,30 @@ export function createSessionRevert(input: {
 }
 
 export type SessionRevert = ReturnType<typeof createSessionRevert>
+
+// Restores a pending prompt as the composer content that submitted it: display text and mentions,
+// attachments, and review comments. Comments regenerate the context files they attached, so any
+// other unmentioned file means the composer cannot hold the prompt and the result is undefined.
+function pendingDraft(item: QueuedPrompt, directory: string) {
+  const presentation = readPromptPresentation(item.payload.metadata)
+  const parts = mentionedPromptParts(item, presentation?.displayText ?? item.payload.text)
+
+  if (!parts) return
+  const prompt = [...parts, ...queuedPromptAttachments(item)]
+  const comments = (presentation?.comments ?? []).map(commentContextItem)
+
+  const restored = new Set(
+    buildPromptRequest({
+      prompt,
+      context: comments.map((comment) => ({ ...comment, key: contextItemKey(comment) })),
+      images: [],
+      text: "",
+      sessionDirectory: directory,
+    }).files.flatMap((file) => (file.mention ? [] : [file.uri])),
+  )
+
+  if (item.payload.files?.some((file) => !file.mention && file.source.type === "uri" && !restored.has(file.source.uri)))
+    return
+
+  return { prompt, comments }
+}

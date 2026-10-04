@@ -377,14 +377,21 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
 // Use the full model-visible text so comment notes and path references remain
 // in the draft. Convert mentioned files, agents, and skills back into editor
 // parts; a detached draft cannot represent non-mentioned file context.
-export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
-  if (
-    item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention) ||
-    item.payload.agents?.some((agent) => !agent.mention) ||
-    item.payload.skills?.some((skill) => !skill.mention)
-  )
+function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
+  if (item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention)) return
+  const parts = mentionedPromptParts(item, item.payload.text)
+
+  if (!parts) return
+
+  return [...parts, ...queuedPromptAttachments(item).filter((part) => part.type === "image")]
+}
+
+// Splits `text` around the payload's mentioned files, agents, and skills, whose offsets index the
+// composer text that produced the prompt. Undefined when an unmentioned agent or skill cannot
+// return to the editor, or when a mention no longer matches the text.
+export function mentionedPromptParts(item: QueuedPrompt, text: string): Prompt | undefined {
+  if (item.payload.agents?.some((agent) => !agent.mention) || item.payload.skills?.some((skill) => !skill.mention))
     return
-  const text = item.payload.text
 
   const references = [
     ...(item.payload.files ?? []).flatMap((file) =>
@@ -458,7 +465,6 @@ export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
     ...(text.length > start || !parts.length
       ? [{ type: "text" as const, content: text.slice(start), start, end: text.length }]
       : []),
-    ...queuedPromptAttachments(item).filter((part) => part.type === "image"),
   ]
 }
 
