@@ -1,5 +1,4 @@
 import type { BackgroundTask } from "@opencode/gui-extensions/sdk"
-import { useData } from "@opencode/session-ui/context"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -9,6 +8,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { useServer } from "@/runtime/server/current"
+import { useOpenSessionRoute } from "@/session/session-identity-header"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 
@@ -24,12 +24,15 @@ type RunningItem = {
 }
 
 export function SessionRunningMenu(props: {
+  sessionID?: string
+  // The session whose running work is listed: this one, or its parent inside a subagent.
+  owner?: string
   blocking: readonly { type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]
   tasks: readonly BackgroundTask[]
   onReveal: (target: string) => void
 }) {
   const language = useLanguage()
-  const data = useData()
+  const openRoute = useOpenSessionRoute()
   const server = useServer()
   const sdk = useServerSDK()
   const sessionAgent = (id: string | undefined) => (id ? server.ctx.data.session.get(id)?.agent : undefined)
@@ -65,12 +68,18 @@ export function SessionRunningMenu(props: {
     return language.plural("session.running.working", count)
   })
 
-  const open = (item: RunningItem) => {
-    if (item.sessionID && data.navigateToSession) {
-      data.navigateToSession(item.sessionID)
+  // Inside a subagent, its own row is listed among its siblings.
+  const viewing = (item: RunningItem) => !!item.sessionID && item.sessionID === props.sessionID
 
-      return
-    }
+  const open = (item: RunningItem) => {
+    const current = props.sessionID
+
+    if (!current || viewing(item)) return
+
+    if (item.sessionID) return openRoute(current, item.sessionID)
+
+    // Shell calls and starting subagent calls live in the owner's timeline.
+    if (props.owner && props.owner !== current) return openRoute(current, props.owner)
 
     props.onReveal(item.target)
   }
@@ -101,7 +110,8 @@ export function SessionRunningMenu(props: {
           as="button"
           type="button"
           aria-label={label()}
-          class="ms-1.5 flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
+          // 8px from the ··· menu, or from the padded title inside a subagent, which has no menu.
+          class={`${props.owner === props.sessionID ? "ms-1.5" : "ms-0.5"} flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover`}
         >
           <TextShimmer text={label()} active />
         </Menu.Trigger>
@@ -111,6 +121,8 @@ export function SessionRunningMenu(props: {
               {(item) => (
                 <Menu.Item
                   class="group/running-item"
+                  classList={{ "!bg-v2-overlay-simple-overlay-hover": viewing(item) }}
+                  aria-current={viewing(item) ? "page" : undefined}
                   onSelect={() => open(item)}
                   onKeyDown={(event) => {
                     if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return

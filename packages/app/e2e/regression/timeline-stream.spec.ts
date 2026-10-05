@@ -974,6 +974,64 @@ test.describe("background shortcut", () => {
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
   })
+
+  test("lists sibling subagents inside a subagent and switches between them", async ({ page }) => {
+    const siblings = [
+      { id: "ses_sibling_one", agent: "explore", description: "Draft TUI proposal" },
+      { id: "ses_sibling_two", agent: "build", description: "Fix context controls" },
+    ]
+
+    await setupTimeline(page, {
+      settings: { timelineDetail: detailed },
+      sessionMessages: [
+        user,
+        {
+          id: "msg_siblings",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: siblings.map((item) => ({
+            type: "tool" as const,
+            id: `call_${item.id}`,
+            name: "subagent",
+            state: {
+              status: "running" as const,
+              input: { description: item.description, agent: item.agent },
+              metadata: { sessionID: item.id },
+            },
+            time: { created: 2 },
+          })),
+          time: { created: 2 },
+        },
+      ],
+      sessions: [
+        session(),
+        ...siblings.map((item) =>
+          session({ id: item.id, parentID: sessionID, title: item.description, agent: item.agent }),
+        ),
+      ],
+      sessionStatus: Object.fromEntries(
+        [sessionID, ...siblings.map((item) => item.id)].map((id) => [id, { type: "busy" }]),
+      ),
+    })
+
+    const header = page.locator("[data-session-title]")
+    const list = page.getByRole("menu", { name: "2 working…", exact: true })
+
+    await header.getByRole("button", { name: "2 working…", exact: true }).click()
+    await list.getByRole("menuitem", { name: /Draft TUI proposal/ }).click()
+    await expect(page).toHaveURL(/\/session\/ses_sibling_one$/)
+
+    await header.getByRole("button", { name: "2 working…", exact: true }).click()
+    await expect(list.getByRole("menuitem")).toHaveText([
+      /^Explore\s*Draft TUI proposal/,
+      /^Build\s*Fix context controls/,
+    ])
+    await expect(list.getByRole("menuitem", { name: /Draft TUI proposal/ })).toHaveAttribute("aria-current", "page")
+    await expect(list.getByRole("menuitem", { name: /Fix context controls/ })).not.toHaveAttribute("aria-current")
+    await list.getByRole("menuitem", { name: /Fix context controls/ }).click()
+    await expect(page).toHaveURL(/\/session\/ses_sibling_two$/)
+  })
 })
 
 test.describe("compaction", () => {
