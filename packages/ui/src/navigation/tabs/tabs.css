@@ -600,6 +600,7 @@
   flex: 1 1 0;
   min-width: 0;
   width: auto;
+  height: var(--tabs-bar-height);
   padding-inline-end: 0;
   border-bottom: none;
 }
