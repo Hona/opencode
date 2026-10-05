@@ -890,6 +890,7 @@ for (const direction of ["ltr", "rtl"] as const) {
         )
       })
       .toBe(true)
+
     for (const control of [
       panel.locator('[data-slot="session-side-panel-actions"]'),
       panel.getByRole("button", { name: "Open file", exact: true }),
@@ -902,6 +903,7 @@ for (const direction of ["ltr", "rtl"] as const) {
         })
         .toBe(closed.y + closed.height / 2)
     }
+
     await toggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()
