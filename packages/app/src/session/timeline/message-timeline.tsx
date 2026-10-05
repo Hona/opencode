@@ -26,9 +26,10 @@ import { parseCommentNote, readPromptPresentation } from "@/composer/comment-not
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
+import { SessionRunningMenu } from "@/session/header/session-running-menu"
 
 type SessionBackground = {
-  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
+  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string; agent?: string }[]>
   tasks: Accessor<readonly BackgroundTask[]>
   move: () => Promise<void>
 }
@@ -308,6 +309,20 @@ function MessageTimelineView(
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
 
+  // A target is a tool call ID or the shell ID a backgrounded shell call reports.
+  const revealTool = (target: string) => {
+    const tool = [...messageByID().values()]
+      .flatMap((message) => (message.type === "assistant" ? message.content : []))
+      .findLast(
+        (content) =>
+          content.type === "tool" &&
+          (content.id === target ||
+            (content.state.status !== "streaming" && content.state.metadata?.shellID === target)),
+      )
+
+    if (tool?.type === "tool") virtualized.revealPart(tool.id)
+  }
+
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
 
   const backgroundHintPresence = createAnimatedPresence(
@@ -543,6 +558,11 @@ function MessageTimelineView(
                       </Menu>
                     )}
                   </Show>
+                  <SessionRunningMenu
+                    blocking={props.background.blocking()}
+                    tasks={props.background.tasks()}
+                    onReveal={revealTool}
+                  />
                 </div>
               </div>
               <Show when={sessionID()} keyed>

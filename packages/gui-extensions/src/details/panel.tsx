@@ -3,7 +3,6 @@ import { Icon } from "@opencode/ui/icon"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { createMemo, Show } from "solid-js"
 import { useExtension, type Project, type MountedSession } from "../sdk"
-import { BackgroundWork } from "./background"
 import { workspaceDirectories } from "./paths"
 import { ProjectDetailsCard } from "./project-card"
 import { SessionServerPanel } from "./server-panel"
@@ -120,7 +119,6 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
               </span>
             </button>
           </Show>
-          <BackgroundWork tasks={props.session.background} mobile={props.mobile} />
         </ProjectDetailsCard>
         <Show when={props.disclosure.project() && props.session.local && props.diffs?.length && !props.moveDismissed}>
           <div class="session-summary-move">

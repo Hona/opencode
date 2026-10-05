@@ -781,7 +781,7 @@ test.describe("background shortcut", () => {
               name: "subagent",
               state: {
                 status: "completed",
-                input: { description: "Background task" },
+                input: { description: "Background task", agent: "explore" },
                 content: [{ type: "text", text: "working" }],
                 metadata: { sessionID: backgroundID, status: "running" },
               },
@@ -814,7 +814,7 @@ test.describe("background shortcut", () => {
               name: "subagent",
               state: {
                 status: "running",
-                input: { description: "Foreground task" },
+                input: { description: "Foreground task", agent: "build" },
                 metadata: { sessionID: blockingID },
               },
               time: { created: 4 },
@@ -825,8 +825,8 @@ test.describe("background shortcut", () => {
       ],
       sessions: [
         session(),
-        session({ id: backgroundID, parentID: sessionID, title: "Background task" }),
-        session({ id: blockingID, parentID: sessionID, title: "Foreground task" }),
+        session({ id: backgroundID, parentID: sessionID, title: "Background task", agent: "explore" }),
+        session({ id: blockingID, parentID: sessionID, title: "Foreground task", agent: "build" }),
       ],
       sessionStatus: {
         [sessionID]: { type: "busy" },
@@ -860,16 +860,43 @@ test.describe("background shortcut", () => {
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
     await expect(used).toHaveText(/^Used\s*3\s*Agent, Shell$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
-    await used.click()
+    await page.getByRole("button", { name: "3 running", exact: true }).click()
+    const list = page.getByRole("menu", { name: "3 running", exact: true })
+    await expect(list.getByRole("menuitem")).toHaveText([
+      /^Build\s*Foreground task$/,
+      /^Explore\s*Background task$/,
+      /^Shell\s*sleep 120$/,
+    ])
+    await list.getByRole("menuitem", { name: /sleep 120/ }).click()
+    await expect(list).toHaveCount(0)
     await expect(used).toHaveAttribute("aria-expanded", "true")
-    await page.getByRole("button", { name: "Session details" }).click()
-    const summary = page.getByRole("button", { name: "2 background tasks running", exact: true })
-    await expect(summary).toContainText("2")
-    await summary.click()
-    const list = page.locator('[data-component="session-background-list"]')
-    await expect(list).toContainText("Background task")
-    await expect(list).toContainText("sleep 120")
-    await expect(list).not.toContainText("Foreground task")
+    const shellCall = page.locator('[data-timeline-part-id="call_shell_backgrounded"]')
+    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+    await expect(shellCall).toBeInViewport()
+
+    await page.getByRole("button", { name: "3 running", exact: true }).click()
+
+    const interrupt = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${blockingID}/interrupt`,
+    )
+
+    const foreground = list.getByRole("menuitem", { name: /Foreground task/ })
+
+    await foreground.hover()
+    await foreground.getByRole("button", { name: "Interrupt subagent", exact: true }).click()
+    await interrupt
+    await expect(list).toBeVisible()
+
+    const kill = page.waitForRequest(
+      (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/shell/shell_backgrounded",
+    )
+
+    await list.getByRole("menuitem", { name: /sleep 120/ }).hover()
+    await page.keyboard.press("Delete")
+    await kill
+    await page.keyboard.press("Escape")
+    await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
     await expect(

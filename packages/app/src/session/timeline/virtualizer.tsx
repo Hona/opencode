@@ -7,6 +7,7 @@ import {
   type VirtualItem,
 } from "@tanstack/solid-virtual"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
+import { Predicate } from "effect"
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
@@ -739,6 +740,31 @@ export function createTimelineVirtualizer(input: Input) {
       patchGroupKeys,
       value: (key: string) => toolOpen[key],
       set: (key: string, open: boolean) => setToolOpen(key, open),
+    },
+    // Scrolls to a tool part and expands it, and the collapsed context group that hides it.
+    revealPart: (partID: string) => {
+      if (!active()) return
+
+      const index = rows().findIndex(
+        (row) =>
+          Predicate.isTagged(row, "AssistantPart") &&
+          (row.group.type === "part"
+            ? row.group.ref.partID === partID
+            : row.group.refs.some((ref) => ref.partID === partID)),
+      )
+
+      const row = rows()[index]
+
+      if (!Predicate.isTagged(row, "AssistantPart")) return
+
+      const key = row.group.key
+
+      setToolOpen(
+        row.group.type === "context" ? { [`context:${key}`]: true, [`${key}:tool:${partID}`]: true } : { [key]: true },
+      )
+      input.onUnpin()
+      prepareNavigation()
+      virtualizer.scrollToIndex(index, { align: "center" })
     },
     View,
   }
