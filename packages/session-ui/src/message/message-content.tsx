@@ -349,11 +349,7 @@ export function CurrentUserMessageDisplay(props: {
   )
 
   return (
-    <div
-      data-component="user-message"
-      data-pending={pending() ? "true" : undefined}
-      data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
-    >
+    <div data-component="user-message" data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}>
       <Show
         when={props.text}
         fallback={
@@ -490,6 +486,25 @@ function CurrentHighlightedText(props: {
 
 type HighlightSegment = { text: string; type?: "file" | "agent" }
 
+/** A compaction the server admitted but has not started, drawn as the divider a started one opens with. */
+export function SessionCompactionQueued() {
+  const i18n = useI18n()
+
+  return (
+    <div data-component="session-compaction-message">
+      <CompactionDivider label={i18n.t("ui.messagePart.compaction.queued")} />
+    </div>
+  )
+}
+
+function CompactionDivider(props: { label: string }) {
+  return (
+    <div class="py-2">
+      <TimelineSeparator label={props.label} />
+    </div>
+  )
+}
+
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
@@ -538,9 +553,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <div data-component="session-compaction-message">
-      <div class="py-2">
-        <TimelineSeparator label={i18n.t("ui.messagePart.compaction.started")} />
-      </div>
+      <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
           <div data-slot="text-part-body">

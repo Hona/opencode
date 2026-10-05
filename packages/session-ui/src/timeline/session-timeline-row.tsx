@@ -20,7 +20,11 @@ import {
   SessionUserMessage,
   currentContentDefaultOpen,
 } from "../message/current-message"
-import { AssistantReasoningContent, SessionCompactionMessage } from "../message/message-content"
+import {
+  AssistantReasoningContent,
+  SessionCompactionMessage,
+  SessionCompactionQueued,
+} from "../message/message-content"
 import type { ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
@@ -805,8 +809,8 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div class="py-2">
-              <TimelineSeparator label={i18n.t("ui.message.compactionQueued")} />
+            <div data-slot="session-turn-compaction">
+              <SessionCompactionQueued />
             </div>
           </div>
         </Frame>

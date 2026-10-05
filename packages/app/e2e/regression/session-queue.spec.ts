@@ -635,7 +635,7 @@ test("/compact runs with the composer model and shows a queued compaction, as in
   await expect(userRow(page, "msg_queue_delivered")).toContainText("First prompt")
   await runSlash(page, view.input, "compact")
 
-  await expect(page.locator('[data-timeline-row="CompactionQueued"]')).toHaveText("Compaction queued")
+  await expect(page.locator('[data-timeline-row="CompactionQueued"]')).toHaveText("Session compaction queued")
   // The row is optimistic; the model switch still precedes the admission.
   await expect.poll(() => mock.log).toEqual(["model", "compact"])
   expect(models).toMatchObject([{ model: { id: "queue-model", providerID: "opencode" } }])

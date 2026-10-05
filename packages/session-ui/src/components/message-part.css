@@ -1531,12 +1531,6 @@
     background: var(--v2-background-bg-layer-01);
   }
 
-  /* An undelivered steer drops its fill, like the TUI's neutral border. */
-  &[data-pending] [data-slot="user-message-text"] {
-    background: transparent;
-    box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
-  }
-
   [data-slot="user-message-comments"] {
     display: flex;
     flex-direction: column;
