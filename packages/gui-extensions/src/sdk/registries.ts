@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
 import type { IconName } from "@opencode/ui/icons/catalog"
-import { Point } from "./core"
+import { Registry } from "./core"
 import type { SessionRef, MountedSession, SessionScreen } from "./host-apis"
 
 /** The name of a shared icon; derived from the dependency-free UI artwork catalog, not a component's props. */
@@ -593,7 +593,7 @@ export type Slot = {
 }[keyof SlotMap]
 
 /**
- * A point: a command in the palette, with an optional keybind and slash command.
+ * A registry: a command in the palette, with an optional keybind and slash command.
  *
  * @example
  * ```ts
@@ -607,20 +607,20 @@ export type Slot = {
  * })
  * ```
  */
-export const Command = Point.define<Command>("command")
+export const Command = Registry.define<Command>("command")
 
 /**
- * A point: an item of a host menu.
+ * A registry: an item of a host menu.
  *
  * @example
  * ```ts
  * ctx.add(MenuItem, { menu: "session.panel", id: "open", title: ctx.t("open"), icon: "folder", run: () => open() })
  * ```
  */
-export const MenuItem = Point.define<MenuItem>("menu-item")
+export const MenuItem = Registry.define<MenuItem>("menu-item")
 
 /**
- * A point: tabs in the session's side region, or the dock.
+ * A registry: tabs in the session's side region, or the dock.
  *
  * @example
  * ```ts
@@ -632,60 +632,60 @@ export const MenuItem = Point.define<MenuItem>("menu-item")
  * })
  * ```
  */
-export const Panel = Point.define<Panel>("panel")
+export const Panel = Registry.define<Panel>("panel")
 
 /**
- * A point: a settings page, a section on a host page, or rows in a host section.
+ * A registry: a settings page, a section on a host page, or rows in a host section.
  *
  * @example
  * ```ts
  * ctx.add(SettingsPage, { id: "updates", page: "general", title: ctx.t("title"), render: () => <Section /> })
  * ```
  */
-export const SettingsPage = Point.define<SettingsPage>("settings-page")
+export const SettingsPage = Registry.define<SettingsPage>("settings-page")
 
 /**
- * A point: a source of servers the app lists.
+ * A registry: a source of servers the app lists.
  *
  * @example
  * ```ts
  * ctx.add(Server, () => ({ ready: loaded(), entries: hosts().map(toEntry) }))
  * ```
  */
-export const Server = Point.define<Server>("server")
+export const Server = Registry.define<Server>("server")
 
 /**
- * A point: opens local links, such as file paths in messages.
+ * A registry: opens local links, such as file paths in messages.
  *
  * @example
  * ```ts
  * ctx.add(LinkHandler, { match: (link) => link.href.endsWith(".md"), open: (link) => preview(link) })
  * ```
  */
-export const LinkHandler = Point.define<LinkHandler>("link-handler")
+export const LinkHandler = Registry.define<LinkHandler>("link-handler")
 
 /**
- * A point: a titlebar pill, or the dev channel badge as a toggle.
+ * A registry: a titlebar pill, or the dev channel badge as a toggle.
  *
  * @example
  * ```ts
  * ctx.add(TitlebarItem, () => (ready() ? { id: "update", label: ctx.t("restart"), run: install } : undefined))
  * ```
  */
-export const TitlebarItem = Point.define<TitlebarItem>("titlebar-item")
+export const TitlebarItem = Registry.define<TitlebarItem>("titlebar-item")
 
 /**
- * A point: content for one of the host's slots (`SlotMap`).
+ * A registry: content for one of the host's slots (`SlotMap`).
  *
  * @example
  * ```ts
  * ctx.add(Slot, { at: "session.header", render: (input) => <Usage session={input.session} /> })
  * ```
  */
-export const Slot = Point.define<Slot>("slot")
+export const Slot = Registry.define<Slot>("slot")
 
 /**
- * A point: CSS the host adds to the document while the item is contributed. Import the file with `?inline`.
+ * A registry: CSS the host adds to the document while the item is contributed. Import the file with `?inline`.
  *
  * @example
  * ```ts
@@ -693,4 +693,4 @@ export const Slot = Point.define<Slot>("slot")
  * ctx.add(Style, css)
  * ```
  */
-export const Style = Point.define<string>("style")
+export const Style = Registry.define<string>("style")
