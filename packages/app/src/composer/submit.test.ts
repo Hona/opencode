@@ -198,10 +198,10 @@ describe("Composer submission", () => {
       current: { agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } },
       calls: ["switch-model"],
     },
-    // A prompt commits a staged revert, which would delete the switches made after its boundary.
+    // A prompt commits a staged revert, which would delete the model switch made after its boundary.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" }, revert: { messageID: "msg_reverted" } },
-      calls: ["revert-commit", "switch-agent", "switch-model"],
+      calls: ["switch-agent", "revert-commit", "switch-model"],
     },
   ])("applies the selection before sending one captured value: $calls", async (row) => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
