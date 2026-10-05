@@ -29,7 +29,7 @@ import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionRunningMenu } from "@/session/header/session-running-menu"
 
 type SessionBackground = {
-  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string; agent?: string }[]>
+  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
   tasks: Accessor<readonly BackgroundTask[]>
   move: () => Promise<void>
 }

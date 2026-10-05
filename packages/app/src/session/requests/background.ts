@@ -70,14 +70,12 @@ export function createSessionBackground(input: {
           if (part.name !== "shell" && part.name !== "subagent") return []
           const value = part.name === "shell" ? part.state.metadata.shellID : part.state.metadata.sessionID
           const label = part.name === "shell" ? part.state.input.command : part.state.input.description
-          const agent = part.name === "subagent" ? part.state.input.agent : undefined
           return [
             {
               type: part.name as "shell" | "subagent",
               partID: part.id,
               id: typeof value === "string" ? value : undefined,
               label: typeof label === "string" ? label : undefined,
-              agent: typeof agent === "string" ? agent : undefined,
             },
           ]
         }) ?? [],
@@ -97,7 +95,7 @@ export function createSessionBackground(input: {
         )
       )
         return []
-      return [{ id: info.id, type: "subagent" as const, label: info.title ?? info.id, agent: info.agent }]
+      return [{ id: info.id, type: "subagent" as const, label: info.title ?? info.id }]
     })
     const running = input.shells().flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []

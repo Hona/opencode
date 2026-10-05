@@ -1,5 +1,4 @@
 import type { BackgroundTask } from "@opencode/gui-extensions/sdk"
-import { taskAgent } from "@opencode/session-ui/agent-tone"
 import { useData } from "@opencode/session-ui/context"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { Icon } from "@opencode/ui/icon"
@@ -13,6 +12,8 @@ import { useServer } from "@/runtime/server/current"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 
+const neutral = "light-dark(var(--v2-text-text-base), #ffffff)"
+
 type RunningItem = {
   key: string
   type: "subagent" | "shell"
@@ -23,7 +24,7 @@ type RunningItem = {
 }
 
 export function SessionRunningMenu(props: {
-  blocking: readonly { type: "shell" | "subagent"; partID: string; id?: string; label?: string; agent?: string }[]
+  blocking: readonly { type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]
   tasks: readonly BackgroundTask[]
   onReveal: (target: string) => void
 }) {
@@ -31,18 +32,29 @@ export function SessionRunningMenu(props: {
   const data = useData()
   const server = useServer()
   const sdk = useServerSDK()
+  const sessionAgent = (id: string | undefined) => (id ? server.ctx.data.session.get(id)?.agent : undefined)
 
   // Foreground shells stay out: the timeline already shows them at the bottom.
   const items = createMemo<RunningItem[]>(() => [
     ...props.blocking.flatMap((task) =>
       task.type === "subagent"
-        ? [{ ...task, key: task.id ?? task.partID, sessionID: task.id, target: task.partID }]
+        ? [
+            {
+              ...task,
+              key: task.id ?? task.partID,
+              agent: sessionAgent(task.id),
+              sessionID: task.id,
+              target: task.partID,
+            },
+          ]
         : [],
     ),
-    ...props.tasks
-      .filter((task) => task.type === "subagent")
-      .map((task) => ({ ...task, key: task.id, sessionID: task.id, target: task.id })),
-    ...props.tasks.filter((task) => task.type === "shell").map((task) => ({ ...task, key: task.id, target: task.id })),
+    ...props.tasks.flatMap((task) =>
+      task.type === "subagent"
+        ? [{ ...task, key: task.id, agent: task.agent ?? sessionAgent(task.id), sessionID: task.id, target: task.id }]
+        : [],
+    ),
+    ...props.tasks.flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   ])
 
   const label = createMemo(() => {
@@ -96,73 +108,74 @@ export function SessionRunningMenu(props: {
         <Menu.Portal>
           <Menu.Content class="w-60" aria-label={label()}>
             <For each={items()}>
-              {(item) => {
-                const agent = createMemo(() => taskAgent(item.agent, data.store.agent))
+              {(item) => (
+                <Menu.Item
+                  class="group/running-item"
+                  onSelect={() => open(item)}
+                  onKeyDown={(event) => {
+                    if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
 
-                return (
-                  <Menu.Item
-                    class="group/running-item"
-                    onSelect={() => open(item)}
-                    onKeyDown={(event) => {
-                      if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
-
-                      event.preventDefault()
-                      stop(item)
+                    event.preventDefault()
+                    stop(item)
+                  }}
+                >
+                  <Show
+                    when={item.type === "subagent"}
+                    fallback={<Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />}
+                  >
+                    {/* Built-in agents have theme tokens; any other agent keeps the neutral color. */}
+                    <SessionProgressIndicatorV2
+                      class="shrink-0"
+                      style={{
+                        color: item.agent ? `var(--v2-agent-${item.agent.toLowerCase()}-solid, ${neutral})` : neutral,
+                      }}
+                    />
+                  </Show>
+                  <span class="shrink-0 font-[530]">
+                    {item.type === "shell"
+                      ? language.t("ui.tool.shell")
+                      : item.agent
+                        ? `${item.agent[0].toUpperCase()}${item.agent.slice(1)}`
+                        : language.t("ui.tool.agent.default")}
+                  </span>
+                  {/* Menu rows end 6px in for trailing controls; text alone ends 12px in, like the leading edge. */}
+                  <span
+                    dir="auto"
+                    class="me-1.5 min-w-0 flex-1 truncate text-v2-text-text-muted"
+                    classList={{
+                      "group-hover/running-item:me-0 group-data-[highlighted]/running-item:me-0 [@media(hover:none)]:me-0":
+                        stoppable(item),
                     }}
                   >
-                    <Show
-                      when={item.type === "subagent"}
-                      fallback={<Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />}
-                    >
-                      <SessionProgressIndicatorV2
-                        class="shrink-0"
-                        style={{ color: agent().v2Color ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                    {item.label}
+                  </span>
+                  <Show when={stoppable(item)}>
+                    {/* The button's own display rule outranks utilities, so this wrapper shows and hides it. */}
+                    <span class="hidden shrink-0 group-hover/running-item:flex group-data-[highlighted]/running-item:flex [@media(hover:none)]:flex">
+                      {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
+                      <IconButton
+                        type="button"
+                        size="small"
+                        variant="ghost-muted"
+                        tabIndex={-1}
+                        icon={<Icon name="outline-xmark" />}
+                        aria-label={language.t(
+                          item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent",
+                        )}
+                        onPointerDown={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                        }}
+                        onPointerUp={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          stop(item)
+                        }}
                       />
-                    </Show>
-                    <span class="shrink-0 font-[530]">
-                      {item.type === "shell"
-                        ? language.t("ui.tool.shell")
-                        : (agent().name ?? language.t("ui.tool.agent.default"))}
                     </span>
-                    {/* Menu rows end 6px in for trailing controls; text alone ends 12px in, like the leading edge. */}
-                    <span
-                      dir="auto"
-                      class="me-1.5 min-w-0 flex-1 truncate text-v2-text-text-muted"
-                      classList={{
-                        "group-hover/running-item:me-0 group-data-[highlighted]/running-item:me-0 [@media(hover:none)]:me-0":
-                          stoppable(item),
-                      }}
-                    >
-                      {item.label}
-                    </span>
-                    <Show when={stoppable(item)}>
-                      {/* The button's own display rule outranks utilities, so this wrapper shows and hides it. */}
-                      <span class="hidden shrink-0 group-hover/running-item:flex group-data-[highlighted]/running-item:flex [@media(hover:none)]:flex">
-                        {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
-                        <IconButton
-                          type="button"
-                          size="small"
-                          variant="ghost-muted"
-                          tabIndex={-1}
-                          icon={<Icon name="outline-xmark" />}
-                          aria-label={language.t(
-                            item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent",
-                          )}
-                          onPointerDown={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                          }}
-                          onPointerUp={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            stop(item)
-                          }}
-                        />
-                      </span>
-                    </Show>
-                  </Menu.Item>
-                )
-              }}
+                  </Show>
+                </Menu.Item>
+              )}
             </For>
           </Menu.Content>
         </Menu.Portal>

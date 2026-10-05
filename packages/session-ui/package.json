@@ -12,7 +12,6 @@
     "./timeline/detail": "./src/timeline/detail.ts",
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
     "./timeline": "./src/timeline/session-timeline.tsx",
-    "./agent-tone": "./src/tools/agent-tone.ts",
     "./basic-tool": "./src/components/basic-tool.tsx",
     "./dock-prompt": "./src/components/dock-prompt.tsx",
     "./file": "./src/components/file.tsx",
