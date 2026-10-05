@@ -176,27 +176,30 @@ const unsafeCSS = `
   );
 }
 
-[data-diff-header],
-[data-diff],
-[data-file] {
-  [data-separator] {
-    height: 24px;
-  }
-  [data-column-number] {
-    cursor: default !important;
-  }
+/* Flat rules: this string is not lowered at build time, and Safari before 17.2 drops nested rules. */
+[data-diff-header] [data-separator],
+[data-diff] [data-separator],
+[data-file] [data-separator] {
+  height: 24px;
+}
 
-  &[data-interactive-line-numbers] [data-column-number] {
-    cursor: default !important;
-  }
+[data-diff-header] [data-column-number],
+[data-diff] [data-column-number],
+[data-file] [data-column-number] {
+  cursor: default !important;
+}
 
-  &[data-interactive-lines] [data-line] {
-    cursor: auto !important;
-  }
-  [data-code] {
-    overflow-x: auto !important;
-    overflow-y: clip !important;
-  }
+[data-diff-header][data-interactive-lines] [data-line],
+[data-diff][data-interactive-lines] [data-line],
+[data-file][data-interactive-lines] [data-line] {
+  cursor: auto !important;
+}
+
+[data-diff-header] [data-code],
+[data-diff] [data-code],
+[data-file] [data-code] {
+  overflow-x: auto !important;
+  overflow-y: clip !important;
 }
 
 ${lineCommentStyles}
