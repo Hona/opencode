@@ -4,7 +4,7 @@ import { defineConfig } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
-import pkg from "./package.json"
+import pkg from "./package.json" with { type: "json" }
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -27,7 +27,8 @@ export default defineConfig({
   plugins: [
     desktopPlugin,
     icons(channel),
-    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url)), pkg.version),
+    // Release builds run before the release bumps package.json, so prefer the version the release passes in.
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url)), process.env.OPENCODE_VERSION ?? pkg.version),
     sentry,
   ],
   server: {

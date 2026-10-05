@@ -40,6 +40,8 @@ export function watchServiceWorkerUpdates(registration: ServiceWorkerRegistratio
   registration.addEventListener("updatefound", found)
   document.addEventListener("visibilitychange", visible)
   navigator.serviceWorker.addEventListener("controllerchange", switched)
+  // The page's own navigation may already have started downloading a new build before this watcher attached.
+  found()
   check()
 
   return () => {

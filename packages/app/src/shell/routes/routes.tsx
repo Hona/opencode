@@ -98,23 +98,21 @@ function AppLayout(props: ParentProps) {
   }
 
   return (
-    <Show
-      when={servers.list.length > 0 && !signedOut()}
-      fallback={
-        <>
-          <ConnectServerScreen url={signedOut()?.http.url} />
-          {/* The shell owns the toast region; a signed-out app still needs it for the update prompt. */}
-          <ToastRegion />
-        </>
-      }
-    >
-      <LayoutProvider>
-        <SettingsSurfaceProvider>
-          <ExtensionAttachment>
-            <Shell>{props.children}</Shell>
-          </ExtensionAttachment>
-        </SettingsSurfaceProvider>
-      </LayoutProvider>
-    </Show>
+    <>
+      <Show
+        when={servers.list.length > 0 && !signedOut()}
+        fallback={<ConnectServerScreen url={signedOut()?.http.url} />}
+      >
+        <LayoutProvider>
+          <SettingsSurfaceProvider>
+            <ExtensionAttachment>
+              <Shell>{props.children}</Shell>
+            </ExtensionAttachment>
+          </SettingsSurfaceProvider>
+        </LayoutProvider>
+      </Show>
+      {/* Outside the Show: a new region starts empty, so switching screens would drop shown toasts. */}
+      <ToastRegion />
+    </>
   )
 }

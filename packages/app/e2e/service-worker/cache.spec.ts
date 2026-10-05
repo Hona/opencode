@@ -357,17 +357,36 @@ fixture(
     site.rerelease()
     await update(page)
     await waiting(page)
+    // The app reloads itself once the new worker takes over.
+    const reloaded = page.waitForEvent("load")
     await page.getByRole("button", { name: "Reload to update", exact: true }).click()
+    await reloaded
 
-    await expect
-      .poll(async () => {
-        const response = await page.goto(`${site.url}/workspace/after`)
-
-        return { fromServiceWorker: response?.fromServiceWorker(), release: response?.headers()["x-release"] }
-      })
-      .toEqual({ fromServiceWorker: true, release: "2" })
+    const response = await page.goto(`${site.url}/workspace/after`)
+    expect({ fromServiceWorker: response?.fromServiceWorker(), release: response?.headers()["x-release"] }).toEqual({
+      fromServiceWorker: true,
+      release: "2",
+    })
   },
 )
+
+fixture("offers a build that was still downloading when the app opened", async ({ page, site }) => {
+  await install(page, site.url)
+  site.requests.length = 0
+  site.deploy("blocked")
+  const worker = await update(page)
+  await expect.poll(() => site.requests.includes("/large.bin")).toBe(true)
+  expect(await worker.evaluate((worker) => worker.state)).toBe("installing")
+  await page.reload()
+  await expect(page.getByRole("heading")).toHaveText("old")
+  // The app's watcher attaches while the build is still downloading.
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.installing?.state)).toBe(
+    "installing",
+  )
+
+  site.release()
+  await expect(page.getByRole("button", { name: "Reload to update", exact: true })).toBeVisible()
+})
 
 for (const fault of ["failed", "html", "corrupt", "mixed-html"] as const) {
   fixture(`retains the old complete build when a precache download is ${fault}`, async ({ page, context, site }) => {
