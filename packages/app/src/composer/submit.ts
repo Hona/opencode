@@ -484,6 +484,10 @@ async function sendPrompt(
 ) {
   const request = await buildSubmissionRequest(session, value)
 
+  // Like the TUI, a staged revert settles first. The server commits it on admission and deletes every row from
+  // its boundary on, which would include the agent and model switches made just below.
+  if (session.current()?.revert) await session.api.revert.commit({ sessionID: session.id })
+
   // Switching agent or model reconfigures the session immediately, and with it
   // the remainder of a running turn. A steer targets that turn, so its
   // selection applies now; a queued follow-up must not reconfigure the turn it
