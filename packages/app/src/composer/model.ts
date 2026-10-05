@@ -79,10 +79,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const attachments = createMemo(() => prompt.current().filter(isAttachment))
 
-  const commentCount = createMemo(() => {
+  const contextCount = createMemo(() => {
     if (mode() === "shell") return 0
 
-    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+    return prompt.context.items().filter((item) => item.type === "file" || !!item.comment.trim()).length
   })
 
   const blank = createMemo(() => {
@@ -91,7 +91,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
 
-    return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
+    return text.trim().length === 0 && attachments().length === 0 && contextCount() === 0
   })
 
   const stopping = createMemo(() => adapter.working() && blank())

@@ -4,8 +4,8 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { commentContextItem } from "@/composer/comment-note"
-import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
+
+import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
@@ -38,8 +38,11 @@ export function createSessionRevert(input: {
       attachmentName: language.t("common.attachment"),
     })
 
+    const context = extractPromptContext(message, { directory: location().directory })
+
     target.set(restored, promptLength(restored))
-    target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
+    target.context.replaceComments(context.comments)
+    context.files.forEach((item) => target.context.add(item))
   }
 
   const stage = async (message: SessionMessageUser, previous: SessionMessageUser | undefined) => {

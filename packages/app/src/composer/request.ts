@@ -149,7 +149,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     if (!comment && used.has(uri)) return []
     used.add(uri)
 
-    const file = { uri, mime: "text/plain", name: getFilename(item.path) }
+    const file = { uri, mime: "text/plain", name: item.name ?? getFilename(item.path), description: item.description }
 
     if (!comment) return [file]
 

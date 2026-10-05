@@ -10,8 +10,8 @@ import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } fro
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { commentContextItem, readPromptPresentation } from "@/composer/comment-note"
-import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
+import { readPromptPresentation } from "@/composer/comment-note"
+import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -45,7 +45,7 @@ export function createSessionQueue(input: {
     mutationFn: async (
       change:
         | { type: "reorder"; inboxIDs: string[] }
-        | { type: "undo"; item: QueuedPrompt; prompt: Prompt; comments: ContextItem[] }
+        | { type: "undo"; item: QueuedPrompt; prompt: Prompt; context: ContextItem[] }
         | {
             type: "edit"
             inboxIDs: string[]
@@ -71,7 +71,7 @@ export function createSessionQueue(input: {
             : [...clonePrompt(draft), ...change.prompt.filter(isAttachment)]
 
         input.draft.set(prompt, promptLength(prompt))
-        change.comments.forEach((comment) => input.draft.context.add(comment))
+        change.context.forEach((item) => input.draft.context.add(item))
         input.restoreFocus(promptLength(prompt))
 
         return
@@ -217,6 +217,7 @@ export function createSessionQueue(input: {
     }
 
     const source = { id: item.id, ...item.payload }
+    const context = extractPromptContext(source, { directory: location().directory })
 
     mutation.mutate({
       type: "undo",
@@ -225,7 +226,7 @@ export function createSessionQueue(input: {
         directory: location().directory,
         attachmentName: language.t("common.attachment"),
       }),
-      comments: extractPromptComments(source).map(commentContextItem),
+      context: [...context.comments, ...context.files],
     })
   }
 

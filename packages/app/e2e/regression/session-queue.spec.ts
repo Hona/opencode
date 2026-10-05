@@ -533,20 +533,21 @@ for (const delivery of ["queue", "steer"] as const) {
       await runSlash(page, view.input, "undo")
     }
 
-    // The file returns as a mention of its own URI, as in the TUI, rather than a snapshot.
-    await expect(view.input).toHaveText("inspect this file @/repo/main.ts")
+    // Like the TUI, the file returns attached without a mention, as a chip rather than prompt text.
+    const chip = view.composer.locator('[data-slot="composer-context-file"]')
+
+    await expect(view.input).toHaveText("inspect this file")
+    await expect(chip).toHaveCount(1)
+    await expect(chip).toContainText("main.ts")
     expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
 
     await view.input.press("Enter")
     await expect.poll(() => mock.prompts.length).toBe(1)
     expect(mock.prompts[0].files).toMatchObject([
-      {
-        uri: "file:///repo/main.ts",
-        name: "main.ts",
-        description: "the failing version",
-        mention: { text: "@/repo/main.ts" },
-      },
+      { uri: "file:///repo/main.ts", name: "main.ts", description: "the failing version" },
     ])
+    expect(mock.prompts[0].files?.[0]?.mention).toBeUndefined()
+    await expect(chip).toHaveCount(0)
   })
 }
 

@@ -147,6 +147,9 @@ export const FileContextItem = Persistence.struct({
   commentID: Persistence.optional(Schema.String),
   commentOrigin: Persistence.optional(Schema.Literals(["review", "file"])),
   preview: Persistence.optional(Schema.String),
+  // A file restored from a sent prompt keeps the name and description it was sent with.
+  name: Persistence.optional(Schema.String),
+  description: Persistence.optional(Schema.String),
 })
 
 export type FileContextItem = typeof FileContextItem.Type

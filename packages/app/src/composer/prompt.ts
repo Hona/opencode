@@ -3,7 +3,7 @@ import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
-import { contextItemKey } from "./schema"
+import { contextItemKey, type FileContextItem } from "./schema"
 import { createPathHelpers, decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
 import { Skill } from "@opencode/schema/skill"
 
@@ -62,10 +62,9 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
 // A user message or a pending inbox item: the materialized transcript row shares the inbox payload's shape.
 export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">
 
-// Restores the composer content that produced a prompt, losing nothing it carried. Review comments
-// return through extractPromptComments and regenerate their files, so those files are left out here;
-// other unmentioned file references, agents, and skills return as trailing mentions, and inline
-// files as attachments.
+// Restores the composer content that produced a prompt, losing nothing it carried. File references
+// without a mention return as context through extractPromptContext; unmentioned agents and skills
+// return as trailing mentions, and inline files as attachments.
 export function extractPromptFromMessage(
   message: PromptSource,
   opts?: { directory?: string; attachmentName?: string },
@@ -74,18 +73,6 @@ export function extractPromptFromMessage(
   const text = presentation?.displayText ?? message.text
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
-
-  const commentFiles = new Set(
-    buildPromptRequest({
-      prompt: [],
-      context: (presentation?.comments ?? [])
-        .map(commentContextItem)
-        .map((item) => ({ ...item, key: contextItemKey(item) })),
-      images: [],
-      text: "",
-      sessionDirectory: directory ?? "",
-    }).files.map((file) => file.uri),
-  )
 
   const toRelative = (path: string) => {
     if (!directory) return path
@@ -120,33 +107,8 @@ export function extractPromptFromMessage(
       continue
     }
 
-    if (file.source.type === "uri" && commentFiles.has(file.source.uri)) continue
-
-    // A file reference keeps its URI, as the TUI keeps it: an inline snapshot would lose a directory's
-    // meaning and the file's location. The composer holds file references as mentions.
-    if (file.source.type === "uri" && file.source.uri.startsWith("file:")) {
-      const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(
-        /^\/([A-Za-z]:)/,
-        "$1",
-      )
-
-      // The workspace root itself has no relative path, so it keeps its absolute one.
-      const path = (directory && createPathHelpers(() => directory).normalize(file.source.uri)) || absolute
-
-      trailing.push({
-        type: "file",
-        start: -1,
-        end: -1,
-        value: `@${path}`,
-        path,
-        selection: selectionFromFileUrl(file.source.uri),
-        url: file.source.uri,
-        mime: file.mime,
-        filename: file.name,
-        description: file.description,
-      })
-      continue
-    }
+    // A file reference returns as a context chip through extractPromptContext.
+    if (file.source.type === "uri" && file.source.uri.startsWith("file:")) continue
 
     // Stored files carry their bytes, and an empty file has empty data; only a local handoff row
     // leaves data empty because its bytes live at a blob URL.
@@ -202,8 +164,47 @@ export function extractPromptFromMessage(
   return buildPrompt(text, inline, trailing, attachments)
 }
 
-export function extractPromptComments(message: Pick<PromptSource, "metadata">) {
-  return readPromptPresentation(message.metadata)?.comments ?? []
+/**
+ * The composer context a sent prompt restores: its comments, and the files it attached without a mention. Like the
+ * TUI, an unmentioned file keeps its URI rather than becoming text; comment files are regenerated from the comments.
+ */
+export function extractPromptContext(message: PromptSource, opts?: { directory?: string }) {
+  const comments = (readPromptPresentation(message.metadata)?.comments ?? []).map(commentContextItem)
+  const directory = opts?.directory
+
+  const regenerated = new Set(
+    buildPromptRequest({
+      prompt: [],
+      context: comments.map((item) => ({ ...item, key: contextItemKey(item) })),
+      images: [],
+      text: "",
+      sessionDirectory: directory ?? "",
+    }).files.map((file) => file.uri),
+  )
+
+  const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
+    if (file.mention || file.source.type !== "uri" || !file.source.uri.startsWith("file:")) return []
+
+    if (regenerated.has(file.source.uri)) return []
+
+    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(
+      /^\/([A-Za-z]:)/,
+      "$1",
+    )
+
+    return [
+      {
+        type: "file",
+        // The workspace root itself has no relative path, so it keeps its absolute one.
+        path: (directory && createPathHelpers(() => directory).normalize(file.source.uri)) || absolute,
+        selection: selectionFromFileUrl(file.source.uri),
+        name: file.name,
+        description: file.description,
+      },
+    ]
+  })
+
+  return { comments, files }
 }
 
 function buildPrompt(

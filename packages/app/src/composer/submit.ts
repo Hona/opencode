@@ -153,9 +153,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         await started.cleanupReady
         await started.complete?.()
         input.adapter.submitted()
-        submission.context
-          .filter((item) => !!item.comment?.trim())
-          .forEach((item) => submission.target().context.remove(item.key))
+        // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
+        submission.context.forEach((item) => submission.target().context.remove(item.key))
         input.comments.clear()
         clearSubmission(input, submission)
         void sending.then((result) => {
@@ -268,9 +267,10 @@ function readSubmission(
 
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
-  const comments = context.filter((item) => !!item.comment?.trim()).length
+  // A file chip is content like an attachment; a note or file comment counts only with text.
+  const attached = context.some((item) => item.type === "file" || !!item.comment.trim())
 
-  if (!text.trim() && !prompt.some(isAttachment) && comments === 0) return
+  if (!text.trim() && !prompt.some(isAttachment) && !attached) return
 
   const controls = input.adapter.controls()
   const model = controls.model.selection.current()
@@ -357,6 +357,16 @@ function restoreSubmission(
             },
       ),
   )
+  restored.context.forEach((item) => {
+    if (item.type === "file" && !item.comment?.trim())
+      restored.target.context.add({
+        type: "file",
+        path: item.path,
+        selection: item.selection,
+        name: item.name,
+        description: item.description,
+      })
+  })
 
   // A recovered follow-up changes the payload, so it must use a new admission ID.
   if (value.mode === "normal" && restored.prompt === submission.prompt) {

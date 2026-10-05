@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import { extractPromptComments, extractPromptFromMessage } from "./prompt"
+import { extractPromptContext, extractPromptFromMessage } from "./prompt"
+import { buildPromptRequest } from "./request"
+import { contextItemKey } from "./schema"
 
 describe("extractPromptFromMessage", () => {
   test("restores uploaded attachments in order, optimistic data URLs, and review comments", () => {
@@ -41,9 +43,10 @@ describe("extractPromptFromMessage", () => {
         blob: { id: url, url },
       })),
     ])
-    expect(extractPromptComments(message)).toMatchObject([
-      { path: "src/app.ts", comment: "check this", origin: "review" },
-    ])
+    expect(extractPromptContext(message)).toMatchObject({
+      comments: [{ type: "file", path: "src/app.ts", comment: "check this", commentOrigin: "review" }],
+      files: [],
+    })
   })
 
   test("keeps the directory of a file mention without an at-sign", () => {
@@ -139,24 +142,36 @@ describe("extractPromptFromMessage", () => {
       { type: "text", content: "日本 " },
       { type: "file", content: "@main.ts", url: "file:///repo/main.ts" },
       { type: "text", content: " " },
-      {
-        type: "file",
-        content: "@notes.md",
-        path: "notes.md",
-        url: "file:///repo/notes.md",
-        description: "the failing version",
-      },
-      { type: "text", content: " " },
-      // A directory keeps its URI rather than turning into a snapshot of its listing.
-      { type: "file", content: "@src", path: "src", url: "file:///repo/src", mime: "application/x-directory" },
-      { type: "text", content: " " },
-      { type: "file", content: "@/repo", path: "/repo", url: "file:///repo" },
-      { type: "text", content: " " },
       { type: "agent", content: "@plan", name: "plan" },
       { type: "text", content: " " },
       { type: "skill", content: "@review", id: "review" },
       { type: "image", filename: "empty.txt", mime: "text/plain", blob: { url: "data:text/plain;base64," } },
       { type: "path", filename: "report.zip", path: "/repo/report.zip" },
+    ])
+
+    // Unmentioned file references return as context chips, not mention text, as the TUI keeps them.
+    const context = extractPromptContext(message, { directory: "/repo" })
+
+    expect(context.files).toEqual([
+      { type: "file", path: "notes.md", name: "notes.md", description: "the failing version" },
+      // A directory keeps its URI rather than turning into a snapshot of its listing.
+      { type: "file", path: "src", name: "src" },
+      { type: "file", path: "/repo", name: "repo" },
+    ])
+    // Resubmitting the restored context sends each file once, under the URI, name, and description it had.
+    expect(
+      buildPromptRequest({
+        prompt: [],
+        context: [...context.comments, ...context.files].map((item) => ({ ...item, key: contextItemKey(item) })),
+        images: [],
+        text: "",
+        sessionDirectory: "/repo",
+      }).files.map((file) => [file.uri, file.name, file.description]),
+    ).toEqual([
+      ["file:///repo/app.ts?start=2&end=2", "app.ts", undefined],
+      ["file:///repo/notes.md", "notes.md", "the failing version"],
+      ["file:///repo/src", "src", undefined],
+      ["file:///repo", "repo", undefined],
     ])
   })
 
