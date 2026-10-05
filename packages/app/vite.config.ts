@@ -2,6 +2,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
+import { diffsStyleFallback } from "./vite.diffs"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
 
@@ -25,6 +26,7 @@ const sentry =
 export default defineConfig({
   plugins: [
     desktopPlugin,
+    diffsStyleFallback(),
     icons(channel),
     serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
     sentry,
