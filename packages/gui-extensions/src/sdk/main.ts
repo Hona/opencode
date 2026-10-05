@@ -393,7 +393,7 @@ export interface MenubarItem {
 }
 
 /**
- * A registry: an item of the native app menu, contributed from a main entry. Windows without a native menubar show it
+ * The registry of native app menu items, contributed from main entries. Windows without a native menubar show them
  * in the in-app menu.
  *
  * @example

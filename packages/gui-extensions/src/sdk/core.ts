@@ -153,8 +153,8 @@ declare const brand: unique symbol
 declare const problem: unique symbol
 
 /**
- * A token kind: a named registry that accepts contributions. The extension or host that owns the registry decides how
- * to use its items; others `ctx.add` to it. Define one with `Registry.define`.
+ * A token kind: a typed list that accepts contributions. The extension or host that owns the registry decides how to
+ * use its items; others `ctx.add` to it. Define one with `Registry.define`.
  *
  * @example
  * ```ts

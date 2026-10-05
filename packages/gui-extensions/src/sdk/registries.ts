@@ -593,7 +593,7 @@ export type Slot = {
 }[keyof SlotMap]
 
 /**
- * A registry: a command in the palette, with an optional keybind and slash command.
+ * The registry of palette commands, each with an optional keybind and slash command.
  *
  * @example
  * ```ts
@@ -610,7 +610,7 @@ export type Slot = {
 export const Command = Registry.define<Command>("command")
 
 /**
- * A registry: an item of a host menu.
+ * The registry of host menu items.
  *
  * @example
  * ```ts
@@ -620,7 +620,7 @@ export const Command = Registry.define<Command>("command")
 export const MenuItem = Registry.define<MenuItem>("menu-item")
 
 /**
- * A registry: tabs in the session's side region, or the dock.
+ * The registry of panels: tabs in the session's side region, or the dock.
  *
  * @example
  * ```ts
@@ -635,7 +635,7 @@ export const MenuItem = Registry.define<MenuItem>("menu-item")
 export const Panel = Registry.define<Panel>("panel")
 
 /**
- * A registry: a settings page, a section on a host page, or rows in a host section.
+ * The registry of settings pages, sections on host pages, and rows in host sections.
  *
  * @example
  * ```ts
@@ -645,7 +645,7 @@ export const Panel = Registry.define<Panel>("panel")
 export const SettingsPage = Registry.define<SettingsPage>("settings-page")
 
 /**
- * A registry: a source of servers the app lists.
+ * The registry of server sources the app lists.
  *
  * @example
  * ```ts
@@ -655,7 +655,7 @@ export const SettingsPage = Registry.define<SettingsPage>("settings-page")
 export const Server = Registry.define<Server>("server")
 
 /**
- * A registry: opens local links, such as file paths in messages.
+ * The registry of handlers that open local links, such as file paths in messages.
  *
  * @example
  * ```ts
@@ -665,7 +665,7 @@ export const Server = Registry.define<Server>("server")
 export const LinkHandler = Registry.define<LinkHandler>("link-handler")
 
 /**
- * A registry: a titlebar pill, or the dev channel badge as a toggle.
+ * The registry of titlebar pills, and of the toggle the dev channel badge runs.
  *
  * @example
  * ```ts
@@ -675,7 +675,7 @@ export const LinkHandler = Registry.define<LinkHandler>("link-handler")
 export const TitlebarItem = Registry.define<TitlebarItem>("titlebar-item")
 
 /**
- * A registry: content for one of the host's slots (`SlotMap`).
+ * The registry of content for the host's slots (`SlotMap`).
  *
  * @example
  * ```ts
@@ -685,7 +685,7 @@ export const TitlebarItem = Registry.define<TitlebarItem>("titlebar-item")
 export const Slot = Registry.define<Slot>("slot")
 
 /**
- * A registry: CSS the host adds to the document while the item is contributed. Import the file with `?inline`.
+ * The registry of CSS the host adds to the document while each item is contributed. Import the file with `?inline`.
  *
  * @example
  * ```ts
