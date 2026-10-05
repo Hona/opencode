@@ -274,6 +274,16 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(c.id).locator("[data-titlebar-tab-title]")).toHaveText(c.title)
   await expect(tab(c.id).locator(progress)).toHaveCount(0)
   await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
+  // The pulse lasts one animation, so record that it appeared rather than racing its removal.
+  await tab(c.id).evaluate((element) => {
+    const observer = new MutationObserver(() => {
+      if (!element.querySelector('[data-slot="tab-prompt-pulse"]')) return
+      element.setAttribute("data-test-pulsed", "")
+      observer.disconnect()
+    })
+
+    observer.observe(element, { childList: true, subtree: true })
+  })
 
   await workspace.push([
     {
@@ -289,9 +299,49 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
     } satisfies Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>,
   ])
 
-  await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(1)
+  await expect(tab(c.id)).toHaveAttribute("data-test-pulsed", "")
+  await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
   await expect(tab(c.id).locator(progress)).toBeVisible()
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
+})
+
+test("selecting a tab with waiting work waits for its transcript instead of showing only the inbox", async ({
+  page,
+}) => {
+  await openSession(page, {
+    name: "TabInboxTranscript",
+    sessions: [a, b],
+    pageMessages: (id) => ({
+      items:
+        id === b.id ? [{ id: "msg_tab_b_history", type: "user", text: "Earlier prompt", time: { created: 1 } }] : [],
+    }),
+    inbox: [
+      {
+        id: "inb_tab_b_steer",
+        sessionID: b.id,
+        time: { created: 2 },
+        type: "user",
+        payload: { text: "Pending steer" },
+        delivery: "steer",
+      },
+    ],
+  })
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  // The inactive tab read its inbox, which materializes the pending steer as a transcript row.
+  await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+
+  const transcript = await holdRoute(page, (url) => url.pathname === `/api/session/${b.id}/message`)
+  await page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
+  await transcript.arrived
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCount(0)
+
+  transcript.release()
+  await expect(page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_tab_b_history"]')).toContainText(
+    "Earlier prompt",
+  )
+  await expect(page.locator('[data-timeline-row="UserMessage"][data-message-id="inb_tab_b_steer"]')).toContainText(
+    "Pending steer",
+  )
 })
 
 test("inactive tabs load attention and inbox, but read the transcript only on selection", async ({ page }) => {
@@ -336,7 +386,7 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
 
   const attention = Promise.all(
     [fixture.targetID, fixture.childID].flatMap((id) =>
-      ["permission", "form"].map((kind) =>
+      ["permission", "form", "inbox"].map((kind) =>
         page.waitForResponse((response) => new URL(response.url()).pathname === `/api/session/${id}/${kind}`),
       ),
     ),

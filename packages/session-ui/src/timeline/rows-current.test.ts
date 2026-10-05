@@ -409,6 +409,32 @@ describe("current session timeline rows", () => {
     expect(result.rows[2].userMessageID).toBe(document.messages[0].id)
   })
 
+  test("places a queued compaction ahead of a pending notice, which the server delivers after it", () => {
+    const document = storyDocument([{ type: "text", text: "Working" }], true)
+
+    const notice = {
+      id: "notice",
+      type: "synthetic",
+      text: "done",
+      description: "Background work completed",
+      time: { created: 10 },
+    } satisfies SessionMessageInfo
+
+    const result = Timeline.constructSessionMessageRows(
+      [...document.messages, notice],
+      true,
+      document.status,
+      new Set(["notice"]),
+      false,
+      false,
+      undefined,
+      undefined,
+      ["inb_compact"],
+    )
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "CompactionQueued", "Notice"])
+  })
+
   test("keeps live thinking above a notice that arrives while it streams", () => {
     const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
 

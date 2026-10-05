@@ -96,6 +96,11 @@ export function createSessionQueue(input: {
         return
       }
 
+      // Like a queued edit, an original the server delivered meanwhile keeps the edit draft instead of sending twice.
+      const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
+
+      if (!pending.some((item) => item.id === change.original && item.type === "user" && item.delivery === "queue"))
+        throw new Error("Queued prompt was delivered before the edit")
       await data.session.prompt(admission)
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
       cancelEdit()
@@ -230,14 +235,22 @@ export function createSessionQueue(input: {
     })
   }
 
+  // Re-admitting a queued prompt commits a staged revert, which drops every prompt queued after its boundary.
+  const refuseReverted = () => {
+    if (!data.session.get(input.sessionID)?.revert) return false
+    showToast({ title: language.t("session.queue.reverted") })
+
+    return true
+  }
+
   const reorder = (inboxIDs: string[]) => {
-    if (mutation.isPending) return Promise.resolve()
+    if (mutation.isPending || refuseReverted()) return Promise.resolve()
 
     return mutation.mutateAsync({ type: "reorder", inboxIDs }).catch(() => undefined)
   }
 
   const edit = (id: string) => {
-    if (mutation.isPending) return false
+    if (mutation.isPending || refuseReverted()) return false
 
     if (state.editing?.id === id) return true
     const item = queued().find((entry) => entry.id === id)
@@ -283,7 +296,7 @@ export function createSessionQueue(input: {
   const confirmEdit = (delivery: ComposerDelivery) => {
     const editing = state.editing
 
-    if (!editing || mutation.isPending) return
+    if (!editing || mutation.isPending || refuseReverted()) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
     const attachments = prompt.filter(isAttachment)

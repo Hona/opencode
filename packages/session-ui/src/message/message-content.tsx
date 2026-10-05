@@ -368,7 +368,8 @@ export function CurrentUserMessageDisplay(props: {
         </div>
       </Show>
       {renderAttachments()}
-      <Show when={props.text || comments().length > 0}>
+      {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
+      <Show when={props.text || comments().length > 0 || pending()}>
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <Show when={metaHead()}>

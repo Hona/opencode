@@ -68,7 +68,7 @@ export type TimelineProjectionInput = {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
-  pendingUserMessageIDs?: ReadonlySet<string>
+  pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs?: readonly string[]
   previousRows?: TimelineRow.TimelineRow[]
 }
@@ -80,7 +80,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.sessionMessages,
     input.reasoningMode !== "hidden",
     input.status,
-    input.pendingUserMessageIDs,
+    input.pendingInputIDs,
     input.shellToolDefaultOpen ?? false,
     input.editToolDefaultOpen ?? false,
     undefined,
@@ -122,7 +122,7 @@ export function createReactiveTimelineProjection(input: {
   shellToolDefaultOpen?: Accessor<boolean>
   editToolDefaultOpen?: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
-  pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
+  pendingInputIDs?: Accessor<ReadonlySet<string>>
   queuedCompactionIDs?: Accessor<readonly string[]>
 }) {
   const sessionMessageByID = createMemo(
@@ -151,7 +151,7 @@ export function createReactiveTimelineProjection(input: {
       input.sessionMessages(),
       input.reasoningMode() !== "hidden",
       input.status(),
-      input.pendingUserMessageIDs?.(),
+      input.pendingInputIDs?.(),
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
       (content, showReasoning, detail) =>
@@ -217,7 +217,7 @@ export namespace Timeline {
     messages: SessionMessageInfo[],
     showReasoning: boolean,
     status: SessionStatus,
-    pendingUserMessageIDs?: ReadonlySet<string>,
+    pendingInputIDs?: ReadonlySet<string>,
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
     isRenderable = renderable,
@@ -285,7 +285,7 @@ export namespace Timeline {
       current = turn
     })
 
-    const activeMessageID = turns.findLast((turn) => !pendingUserMessageIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
+    const activeMessageID = turns.findLast((turn) => !pendingInputIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
 
     const visibleNotice = (message: Notice) =>
       !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
@@ -342,8 +342,13 @@ export namespace Timeline {
       }),
     ]
 
-    // Like the TUI, a queued compaction waits after the active turn and ahead of undelivered prompts.
-    const pendingAt = rows.findIndex((row) => pendingUserMessageIDs?.has(row.userMessageID))
+    // Like the TUI, a queued compaction waits after the active turn and ahead of every undelivered input:
+    // steers, which own turns, and synthetic notices, which ride at the end of the active one.
+    const pendingAt = rows.findIndex(
+      (row) =>
+        pendingInputIDs?.has(row.userMessageID) ||
+        (Predicate.isTagged(row, "Notice") && pendingInputIDs?.has(row.messageID)),
+    )
 
     rows.splice(
       pendingAt < 0 ? rows.length : pendingAt,

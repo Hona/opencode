@@ -81,8 +81,7 @@ export const DialogFork: Component = () => {
         dialog.close()
         const target = prompt.capture({ dir, id: forked.id })
         target.set(restored)
-        target.context.replaceComments(context.comments)
-        context.files.forEach((item) => target.context.add(item))
+        target.context.replace([...context.comments, ...context.files])
         navigate(sessionHref(server.key, forked.id))
       })
       .catch((cause: unknown) => {

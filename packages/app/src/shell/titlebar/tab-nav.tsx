@@ -245,7 +245,7 @@ export function TabNavItem(props: {
       }}
     >
       <Show when={promptPulse()} keyed>
-        <span data-slot="tab-prompt-pulse" aria-hidden="true" />
+        <span data-slot="tab-prompt-pulse" aria-hidden="true" onAnimationEnd={() => setPromptPulse(0)} />
       </Show>
       <Menu.Context.Trigger
         as="a"

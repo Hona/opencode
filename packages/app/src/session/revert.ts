@@ -41,8 +41,8 @@ export function createSessionRevert(input: {
     const context = extractPromptContext(message, { directory: location().directory })
 
     target.set(restored, promptLength(restored))
-    target.context.replaceComments(context.comments)
-    context.files.forEach((item) => target.context.add(item))
+    // The restored prompt replaces the draft, so chips from an earlier restore do not ride along.
+    target.context.replace([...context.comments, ...context.files])
   }
 
   const stage = async (message: SessionMessageUser, previous: SessionMessageUser | undefined) => {

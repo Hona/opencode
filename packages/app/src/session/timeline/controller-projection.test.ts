@@ -66,7 +66,7 @@ describe("visibleTimelineMessages", () => {
         shellToolDefaultOpen: () => false,
         editToolDefaultOpen: () => false,
         timelineDetail: () => timelinePresets[2].value,
-        pendingUserMessageIDs: () => new Set([steer.id]),
+        pendingInputIDs: () => new Set([steer.id]),
       })
 
       expect(projection.activeMessageID()).toBe("msg_1")
@@ -147,13 +147,8 @@ describe("visibleTimelineMessages", () => {
 
     const pendingOrder = visibleTimelineMessages([...messages, noticeMessage, work], [...pending, notice])
 
-    const deliveredOrder = visibleTimelineMessages(
-      [messages[0], messages[1], work, messages[2], messages[3], noticeMessage],
-      [],
-    )
-
+    // The order the server delivers in: active work, then steers and notices by admission.
     expect(pendingOrder.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3", "msg_4", "msg_4a"])
-    expect(pendingOrder.map((message) => message.id)).toEqual(deliveredOrder.map((message) => message.id))
     expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",

@@ -155,12 +155,24 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   }
 }
 
-async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, followUpBehavior?: "queue" | "steer") {
+async function openQueue(
+  page: Page,
+  mock: ReturnType<typeof createQueueMock>,
+  followUpBehavior?: "queue" | "steer",
+  revert?: string,
+) {
   const model = { id: "queue-model", name: "Queue Model" }
 
   const options: Parameters<typeof openSession>[1] = {
     name: "SessionQueueRegression",
-    sessions: [{ id: sessionID, title: "Session queue regression", model: { id: model.id, providerID: "opencode" } }],
+    sessions: [
+      {
+        id: sessionID,
+        title: "Session queue regression",
+        model: { id: model.id, providerID: "opencode" },
+        revert: revert ? { messageID: revert } : undefined,
+      },
+    ],
     provider: provider(model),
     pageMessages: () => ({ items: mock.messages }),
     sessionStatus: () => ({ [sessionID]: { type: "running" } }),
@@ -278,7 +290,9 @@ for (const change of ["reorder", "edit"] as const) {
     if (change === "edit") {
       await view.rows.getByText(order[1], { exact: true }).click()
       await expect(view.input).toHaveText(order[1])
-      await view.input.fill("second queued prompt, edited")
+      await expect(view.input).toBeFocused()
+      await view.input.press("End")
+      await view.input.pressSequentially(", edited")
       await view.input.press("Enter")
     }
 
@@ -312,7 +326,9 @@ test("editing restores the existing draft and replaces only the original queue p
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
   await expect(view.input).toBeFocused()
-  await view.input.fill("tighten the error copy and add a retry hint")
+  // fill() on a composer that holds text can append, so extend the loaded text instead.
+  await view.input.press("End")
+  await view.input.pressSequentially(" and add a retry hint")
   await expect(view.input).toHaveText("tighten the error copy and add a retry hint")
   await view.input.press("Enter")
 
@@ -335,21 +351,56 @@ test("editing restores the existing draft and replaces only the original queue p
   expect(mock.log[0]).toBe("prompt:queue")
 })
 
-test("editing a prompt the server delivered meanwhile keeps the edit draft", async ({ page }) => {
-  const mock = createQueueMock(["first queued prompt", "second queued prompt"])
-  const view = await openQueue(page, mock)
-  await view.rows.getByText("second queued prompt", { exact: true }).click()
-  await expect(view.input).toHaveText("second queued prompt")
-  await view.input.fill("second queued prompt, edited")
-  // The server delivers the original before the edit lands; this client has not heard yet.
-  mock.rows.splice(1, 1)
-  await view.input.press("Enter")
+for (const delivery of ["queue", "steer"] as const) {
+  test(`editing a prompt the server delivered meanwhile keeps the edit draft (${delivery})`, async ({ page }) => {
+    const mock = createQueueMock(["first queued prompt", "second queued prompt"])
+    const view = await openQueue(page, mock, "queue")
+    await view.rows.getByText("second queued prompt", { exact: true }).click()
+    await expect(view.input).toHaveText("second queued prompt")
+    await expect(view.input).toBeFocused()
+    await view.input.press("End")
+    await view.input.pressSequentially(", edited")
+    // The server delivers the original before the edit lands; this client has not heard yet.
+    mock.rows.splice(1, 1)
+    await view.input.press(delivery === "queue" ? "Enter" : "ControlOrMeta+Enter")
 
-  await expect(page.getByText("Request failed")).toBeVisible()
-  await expect(view.input).toHaveText("second queued prompt, edited")
-  expect(mock.prompts).toEqual([])
-  expect(mock.changes).toEqual([])
-})
+    await expect(page.getByText("Request failed")).toBeVisible()
+    await expect(view.input).toHaveText("second queued prompt, edited")
+    expect(mock.prompts).toEqual([])
+    expect(mock.changes).toEqual([])
+  })
+}
+
+for (const change of ["reorder", "edit"] as const) {
+  test(`a staged revert refuses a queue ${change}, whose admission would commit it`, async ({ page }) => {
+    const order = ["first queued prompt", "second queued prompt"]
+
+    const mock = createQueueMock(order, [
+      { id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } },
+    ])
+
+    const view = await openQueue(page, mock, undefined, "msg_queue_delivered")
+    await expect(view.rows).toHaveCount(2)
+
+    if (change === "reorder") {
+      await view.rows.filter({ hasText: order[0] }).getByRole("button", { name: "Reorder queued prompt" }).hover()
+      await page.mouse.down()
+      const target = await view.rows.filter({ hasText: order[1] }).boundingBox()
+
+      if (!target) throw new Error("The target queue row is not visible")
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
+      await page.mouse.up()
+    }
+
+    if (change === "edit") await view.rows.getByText(order[1], { exact: true }).click()
+
+    await expect(page.getByText("Redo the revert before you reorder or edit queued prompts")).toBeVisible()
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
+    await expect(view.input).toHaveText("")
+    expect(mock.prompts).toEqual([])
+    expect(mock.changes).toEqual([])
+  })
+}
 
 test("editing drops a file whose mention was deleted and keeps unmentioned context", async ({ page }) => {
   const mock = createQueueMock(["inspect @main.ts here"])
@@ -366,7 +417,10 @@ test("editing drops a file whose mention was deleted and keeps unmentioned conte
   const view = await openQueue(page, mock)
   await view.rows.getByText("inspect @main.ts here", { exact: true }).click()
   await expect(view.input).toHaveText("inspect @main.ts here")
-  await view.input.fill("inspect here")
+  // The edit focuses the composer a frame after loading it; keys sent earlier miss it.
+  await expect(view.input).toBeFocused()
+  await view.input.press("ControlOrMeta+a")
+  await view.input.pressSequentially("inspect here")
   await view.input.press("Enter")
 
   await expect.poll(() => mock.prompts.length).toBe(1)
@@ -541,7 +595,12 @@ for (const delivery of ["queue", "steer"] as const) {
     await expect(chip).toContainText("main.ts")
     expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
 
-    await view.input.press("Enter")
+    // A chip alone is content: with the text gone, the prompt can still be sent.
+    await expect(view.input).toBeFocused()
+    await view.input.press("ControlOrMeta+a")
+    await view.input.press("Backspace")
+    await expect(view.input).toHaveText("")
+    await view.composer.locator('[data-action="composer-submit"]').click()
     await expect.poll(() => mock.prompts.length).toBe(1)
     expect(mock.prompts[0].files).toMatchObject([
       { uri: "file:///repo/main.ts", name: "main.ts", description: "the failing version" },
@@ -550,6 +609,39 @@ for (const delivery of ["queue", "steer"] as const) {
     await expect(chip).toHaveCount(0)
   })
 }
+
+test("reverting to another prompt replaces the file chips of an earlier restore", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [
+      { id: "msg_queue_first", type: "user", text: "First prompt", time: { created: 1 } },
+      {
+        id: "msg_queue_second",
+        type: "user",
+        text: "Second prompt",
+        files: [
+          { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+        ],
+        time: { created: 2 },
+      },
+    ],
+  )
+
+  const view = await openQueue(page, mock)
+  const chip = view.composer.locator('[data-slot="composer-context-file"]')
+
+  for (const [id, text, chips] of [
+    ["msg_queue_second", "Second prompt", 1],
+    ["msg_queue_first", "First prompt", 0],
+  ] as const) {
+    const row = userRow(page, id)
+
+    await row.hover()
+    await row.getByRole("button", { name: "Revert message" }).click()
+    await expect(view.input).toHaveText(text)
+    await expect(chip).toHaveCount(chips)
+  }
+})
 
 test("/undo withdraws a pending steer without interrupting the running session", async ({ page }) => {
   const mock = createQueueMock([])
