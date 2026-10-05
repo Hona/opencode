@@ -1156,7 +1156,12 @@ function mockHandlers(
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
         sessionBackground: () => noContent,
-        sessionInbox: () => Effect.sync(() => ({ data: resolve(config.inbox ?? []) })),
+        sessionInbox: (ctx) =>
+          Effect.sync(() => ({
+            data: resolve(config.inbox ?? []).filter(
+              (item) => Predicate.isObject(item) && item.sessionID === ctx.params.sessionID,
+            ),
+          })),
         sessionPrompt: (ctx) =>
           Effect.sync(() => {
             const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
@@ -1178,7 +1183,7 @@ function mockHandlers(
         // Like the server, a compaction is admitted as a steered inbox item under the proposed ID.
         sessionCompact: (ctx) =>
           Effect.sync(() => {
-            const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), (): Schema.JsonObject => ({}))
             config.onCompact?.({ sessionID: ctx.params.sessionID, body })
 
             return {

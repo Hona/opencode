@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,
@@ -240,7 +240,61 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
   await expect(tabA.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
 })
 
-test("inactive tabs load attention, but read transcript and inbox only on selection", async ({ page }) => {
+test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
+  page,
+}) => {
+  const workspace = await openSession(page, {
+    name: "TabInbox",
+    sessions: [a, b, c],
+    inbox: [
+      {
+        id: "inb_tab_b",
+        sessionID: b.id,
+        time: { created: 1 },
+        type: "user",
+        payload: { text: "Queued follow-up" },
+        delivery: "queue",
+      },
+      // Parked synthetic context, such as a user shell's output, waits without work.
+      {
+        id: "inb_tab_c",
+        sessionID: c.id,
+        time: { created: 1 },
+        type: "synthetic",
+        payload: { text: "Shell output", description: "Shell finished" },
+        delivery: "steer",
+      },
+    ],
+  })
+
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+  const progress = '[data-component="session-progress-indicator-v2"]'
+
+  await expect(tab(b.id).locator(progress)).toBeVisible()
+  await expect(tab(c.id).locator("[data-titlebar-tab-title]")).toHaveText(c.title)
+  await expect(tab(c.id).locator(progress)).toHaveCount(0)
+  await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
+
+  await workspace.push([
+    {
+      id: "evt_tab_c_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: c.id, seq: 1, version: 1 },
+      data: {
+        sessionID: c.id,
+        inboxID: "inb_tab_c_prompt",
+        item: { type: "user", payload: { text: "Another client's prompt" }, delivery: "queue" },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>,
+  ])
+
+  await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(1)
+  await expect(tab(c.id).locator(progress)).toBeVisible()
+  await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
+})
+
+test("inactive tabs load attention and inbox, but read the transcript only on selection", async ({ page }) => {
   const reads: string[] = []
   const mutations: string[] = []
   const errors: string[] = []
@@ -307,16 +361,14 @@ test("inactive tabs load attention, but read transcript and inbox only on select
     state.text,
   )
 
-  for (const id of [fixture.sourceID, fixture.targetID]) {
-    expect(reads.filter((path) => path === `/api/session/${id}/message`)).toHaveLength(1)
+  // Every tab reads its inbox once, since waiting work keeps a tab busy; selection reuses that read.
+  for (const id of [fixture.sourceID, fixture.targetID, fixture.childID])
     expect(reads.filter((path) => path === `/api/session/${id}/inbox`)).toHaveLength(1)
-  }
 
-  expect(
-    reads.filter(
-      (path) => path === `/api/session/${fixture.childID}/message` || path === `/api/session/${fixture.childID}/inbox`,
-    ),
-  ).toEqual([])
+  for (const id of [fixture.sourceID, fixture.targetID])
+    expect(reads.filter((path) => path === `/api/session/${id}/message`)).toHaveLength(1)
+
+  expect(reads.filter((path) => path === `/api/session/${fixture.childID}/message`)).toEqual([])
   expect(mutations).toEqual([])
   expect(errors).toEqual([])
 })
