@@ -2,7 +2,16 @@ import { artifactKind, artifactMime, type ArtifactKind } from "@opencode/util/ar
 import type { FileContent } from "@/runtime/server/types"
 
 /** Kinds whose bytes are kept as base64 so media elements can play them without a text round trip. */
-const binaryKinds = new Set<ArtifactKind>(["image", "audio", "video", "pdf", "font"])
+const binaryKinds = new Set<ArtifactKind>([
+  "image",
+  "audio",
+  "video",
+  "pdf",
+  "font",
+  "document",
+  "spreadsheet",
+  "presentation",
+])
 
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */
 function isBinaryBytes(bytes: Uint8Array) {

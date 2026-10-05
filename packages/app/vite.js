@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
+import { dirname, join } from "node:path"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
@@ -27,6 +28,21 @@ if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
 // stable. Vite applies `exclude` to every import inside a pre-bundle too, which would leave a bare
 // `import "marked"` in mermaid's chunk that the browser cannot resolve from this package.
 const workerDeps = ["@shikijs/stream", "marked", "marked-shiki", "remend"]
+
+// The Office previews load their wasm through `new URL(..., import.meta.url)`, which a pre-bundle would move away
+// from the wasm files.
+const officeDeps = ["@betteroffice/docx", "@betteroffice/pptx", "@betteroffice/xlsx"]
+
+// The font package's own loader references all 66 faces, so every one would ship. The previews import only the
+// faces they use from this directory instead.
+const officeFonts = join(
+  dirname(
+    createRequire(fileURLToPath(new URL("../gui-extensions/package.json", import.meta.url))).resolve(
+      "@betteroffice/fonts/package.json",
+    ),
+  ),
+  "assets",
+)
 
 /** @type {import("rolldown").Plugin} */
 const bundleNestedWorkerDeps = {
@@ -63,6 +79,7 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            "@betteroffice/fonts/assets": officeFonts,
           },
         },
         define: {
@@ -72,7 +89,7 @@ export default [
           format: "es",
         },
         optimizeDeps: {
-          exclude: workerDeps,
+          exclude: [...workerDeps, ...officeDeps],
           include: ["@opencode/session-ui > mermaid", "@opencode/session-ui > mermaid > katex"],
           rolldownOptions: { plugins: [bundleNestedWorkerDeps] },
         },

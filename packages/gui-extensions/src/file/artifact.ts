@@ -84,15 +84,20 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
   return { rows, total, columns }
 }
 
+/** The raw bytes of loaded content. */
+export function bytesFromContent(content: FileContent) {
+  if (content.encoding !== "base64") return new TextEncoder().encode(content.content)
+
+  return Uint8Array.from(atob(content.content), (char) => char.charCodeAt(0))
+}
+
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */
 export function blobUrlFromContent(content: FileContent) {
   const type = content.mimeType ?? "application/octet-stream"
 
   if (content.encoding !== "base64") return URL.createObjectURL(new Blob([content.content], { type }))
-  const raw = atob(content.content)
-  const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0))
 
-  return URL.createObjectURL(new Blob([bytes], { type }))
+  return URL.createObjectURL(new Blob([bytesFromContent(content)], { type }))
 }
 
 /**

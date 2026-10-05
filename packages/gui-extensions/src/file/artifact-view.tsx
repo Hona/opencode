@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
@@ -10,14 +11,23 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
-import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
+import { FileViewer } from "./contract"
 import { workspaceFileUrl } from "./path"
 
 type ArtifactMode = "preview" | "source"
 
 /** Facts a viewer learns from the decoded media, shown in the toolbar. */
-type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
+type ArtifactInfo = {
+  width?: number
+  height?: number
+  duration?: number
+  rows?: number
+  columns?: number
+  /** Facts an extension's viewer reports, already localized. */
+  details?: readonly string[]
+}
 
 type ViewerState = { readonly mode: ArtifactMode; readonly info: ArtifactInfo; readonly undecodable: boolean }
 
@@ -89,11 +99,19 @@ export default function ArtifactView(props: {
       info.duration ? formatDuration(info.duration) : undefined,
       info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
+      ...(info.details ?? []),
       formatBytes(locale.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
   })
 
   const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => change({ undecodable: true }) }
+
+  // A kind the file view does not render itself goes to the first extension viewer that lists it.
+  const viewer = createMemo(() => {
+    const value = kind()
+
+    return value === "binary" ? undefined : ctx.list(FileViewer).find((item) => item.kinds.includes(value))
+  })
 
   const rendered = () => (
     <ScrollView class="min-h-0 flex-1">
@@ -124,7 +142,11 @@ export default function ArtifactView(props: {
         }
       />
       <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
-        <Switch>
+        <Switch
+          fallback={
+            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
+          }
+        >
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -142,8 +164,15 @@ export default function ArtifactView(props: {
           </Match>
           <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
-          <Match when={kind() === "binary"}>
-            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
+          <Match when={viewer()}>
+            {(viewer) => (
+              <ArtifactViewer
+                viewer={viewer()}
+                content={props.content}
+                onDetails={(details) => change({ info: { details } })}
+                onError={media.onError}
+              />
+            )}
           </Match>
         </Switch>
       </Show>
@@ -504,6 +533,20 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Hands a file to an extension's viewer, decoding its bytes once per loaded content. */
+function ArtifactViewer(props: {
+  viewer: FileViewer
+  content: FileContent
+  onDetails: (details: readonly string[]) => void
+  onError: () => void
+}) {
+  const bytes = createMemo(() => bytesFromContent(props.content))
+
+  return (
+    <Dynamic component={props.viewer.View} bytes={bytes()} onDetails={props.onDetails} onError={props.onError} />
   )
 }
 

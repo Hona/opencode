@@ -22,7 +22,20 @@ export function serviceWorker(directory: string) {
       navigateFallbackDenylist: [/^\/(?:api|auth)(?:\/|$)/, /^\/(?:_assets|assets)(?:\/|$)/],
       // Include lazy chunks and non-JS dependencies, not just the startup bundle.
       globPatterns: ["**/*"],
-      globIgnores: ["**/*.map", "_headers", "_redirects"],
+      globIgnores: [
+        "**/*.map",
+        "_headers",
+        "_redirects",
+        // The Office previews' engines and fonts (about 45 MB) load only when an Office file opens.
+        "**/docx_*_bg-*.wasm",
+        "**/ooxml_opc_bg-*.wasm",
+        "**/pptx_wasm_bg-*.wasm",
+        "**/xlsx_wasm_bg-*.wasm",
+        "**/residentEngineWorker-*.js",
+        "**/Carlito-*.ttf",
+        "**/Caladea-*.ttf",
+        "**/Liberation{Sans,Serif,Mono}-*.ttf",
+      ],
       maximumFileSizeToCacheInBytes: Number.MAX_SAFE_INTEGER,
       manifestTransforms: [
         async (entries) => ({

@@ -1,6 +1,7 @@
-import type { JSX } from "solid-js"
+import type { Component, JSX } from "solid-js"
+import type { ArtifactKind } from "@opencode/util/artifact"
 import type { ChangeKind } from "../review/contract"
-import { Contract, type MountedSession, type SessionScreen } from "../sdk"
+import { Contract, Registry, type MountedSession, type SessionScreen } from "../sdk"
 
 export interface FileTreeProps {
   /** The session screen that owns the rendered files. */
@@ -46,3 +47,22 @@ export interface OpenInApp {
 }
 
 export const OpenInApp = Contract.define<OpenInApp, "file.openInApp">("file.openInApp")
+
+export interface FileViewerProps {
+  /** The file's bytes. A new array is a reloaded file. */
+  readonly bytes: Uint8Array
+  /** Shows facts about the file, such as "3 sheets", in the toolbar before its size. */
+  onDetails(details: readonly string[]): void
+  /** The file could not be opened; the file view shows its binary placeholder instead. */
+  onError(): void
+}
+
+/** A viewer for a kind of file the file view does not render itself, such as an Office document. */
+export interface FileViewer {
+  /** The kinds it renders. A file the first matching viewer cannot open, or no viewer lists, shows as binary. */
+  readonly kinds: readonly ArtifactKind[]
+  /** Renders one file in the file view's stage. Bind it with `bindExtension` in setup. */
+  readonly View: Component<FileViewerProps>
+}
+
+export const FileViewer = Registry.define<FileViewer>("file.viewer")
