@@ -87,6 +87,7 @@ type MessageTimelineProps = {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
+  reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
@@ -225,6 +226,7 @@ function MessageTimelineView(
     },
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
+    reveal: props.reveal,
   })
 
   const VirtualizedTimeline = virtualized.View
@@ -315,20 +317,6 @@ function MessageTimelineView(
       )
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
-
-  // A target is a tool call ID or the shell ID a backgrounded shell call reports.
-  const revealTool = (target: string) => {
-    const tool = [...messageByID().values()]
-      .flatMap((message) => (message.type === "assistant" ? message.content : []))
-      .findLast(
-        (content) =>
-          content.type === "tool" &&
-          (content.id === target ||
-            (content.state.status !== "streaming" && content.state.metadata?.shellID === target)),
-      )
-
-    if (tool?.type === "tool") virtualized.revealPart(tool.id)
-  }
 
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
 
@@ -570,7 +558,7 @@ function MessageTimelineView(
                     owner={props.background.running.sessionID()}
                     blocking={props.background.running.blocking()}
                     tasks={props.background.running.tasks()}
-                    onReveal={revealTool}
+                    onReveal={virtualized.revealPart}
                   />
                 </div>
               </div>

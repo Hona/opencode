@@ -975,16 +975,37 @@ test.describe("background shortcut", () => {
     await expect(backgroundCard).toContainText("Background task (background)")
   })
 
-  test("lists sibling subagents inside a subagent and switches between them", async ({ page }) => {
+  test("moves between siblings and to the parent's shell from inside a subagent", async ({ page }) => {
     const siblings = [
       { id: "ses_sibling_one", agent: "explore", description: "Draft TUI proposal" },
       { id: "ses_sibling_two", agent: "build", description: "Fix context controls" },
     ]
 
-    await setupTimeline(page, {
+    const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
       sessionMessages: [
         user,
+        {
+          id: "msg_sibling_shell",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            {
+              type: "tool",
+              id: "call_sibling_shell",
+              name: "shell",
+              state: {
+                status: "completed",
+                input: { command: "sleep 120" },
+                content: [{ type: "text", text: "working" }],
+                metadata: { shellID: "shell_sibling", status: "running" },
+              },
+              time: { created: 2, completed: 3 },
+            },
+          ],
+          time: { created: 2, completed: 3 },
+        },
         {
           id: "msg_siblings",
           type: "assistant",
@@ -1015,22 +1036,53 @@ test.describe("background shortcut", () => {
       ),
     })
 
-    const header = page.locator("[data-session-title]")
-    const list = page.getByRole("menu", { name: "2 working…", exact: true })
+    await timeline.transport.send({
+      id: "evt_sibling_shell_created",
+      created: 3,
+      type: "shell.created",
+      location: { directory },
+      data: {
+        info: {
+          id: "shell_sibling",
+          status: "running",
+          command: "sleep 120",
+          cwd: directory,
+          shell: "bash",
+          file: "/tmp/sibling.out",
+          metadata: { sessionID },
+          time: { started: 2 },
+        },
+      },
+    })
 
-    await header.getByRole("button", { name: "2 working…", exact: true }).click()
+    const header = page.locator("[data-session-title]")
+    const trigger = header.getByRole("button", { name: "3 running", exact: true })
+    const list = page.getByRole("menu", { name: "3 running", exact: true })
+
+    await trigger.click()
     await list.getByRole("menuitem", { name: /Draft TUI proposal/ }).click()
     await expect(page).toHaveURL(/\/session\/ses_sibling_one$/)
 
-    await header.getByRole("button", { name: "2 working…", exact: true }).click()
+    await trigger.click()
     await expect(list.getByRole("menuitem")).toHaveText([
       /^Explore\s*Draft TUI proposal/,
       /^Build\s*Fix context controls/,
+      /^Shell\s*sleep 120/,
     ])
     await expect(list.getByRole("menuitem", { name: /Draft TUI proposal/ })).toHaveAttribute("aria-current", "page")
     await expect(list.getByRole("menuitem", { name: /Fix context controls/ })).not.toHaveAttribute("aria-current")
     await list.getByRole("menuitem", { name: /Fix context controls/ }).click()
     await expect(page).toHaveURL(/\/session\/ses_sibling_two$/)
+
+    // The shell call lives in the parent: the row opens it there, expanded.
+    await trigger.click()
+    await list.getByRole("menuitem", { name: /sleep 120/ }).click()
+    await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
+
+    const shellCall = page.locator('[data-timeline-part-id="call_sibling_shell"]')
+
+    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+    await expect(shellCall).toBeInViewport()
   })
 })
 

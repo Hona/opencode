@@ -78,8 +78,8 @@ export function SessionRunningMenu(props: {
 
     if (item.sessionID) return openRoute(current, item.sessionID)
 
-    // Shell calls and starting subagent calls live in the owner's timeline.
-    if (props.owner && props.owner !== current) return openRoute(current, props.owner)
+    // Shell calls and starting subagent calls live in the owner's timeline, which reveals them once open.
+    if (props.owner && props.owner !== current) return openRoute(current, props.owner, item.target)
 
     props.onReveal(item.target)
   }
