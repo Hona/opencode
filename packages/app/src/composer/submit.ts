@@ -267,10 +267,10 @@ function readSubmission(
 
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
-  // A file chip is content like an attachment; a note or file comment counts only with text.
-  const attached = context.some((item) => item.type === "file" || !!item.comment.trim())
+  // Like the TUI's blank Enter, file chips alone send nothing; they wait for text.
+  const comments = context.filter((item) => !!item.comment?.trim()).length
 
-  if (!text.trim() && !prompt.some(isAttachment) && !attached) return
+  if (!text.trim() && !prompt.some(isAttachment) && comments === 0) return
 
   const controls = input.adapter.controls()
   const model = controls.model.selection.current()

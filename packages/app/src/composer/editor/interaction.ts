@@ -427,8 +427,7 @@ export function createComposerEditor(input: {
 
       if (persisted.prompt.some(isAttachment)) return true
 
-      // A file chip is content on its own, as in readSubmission; a comment counts once it has text.
-      if (persisted.context.items.some((item) => item.type === "file" || !!item.comment?.trim())) return true
+      if (persisted.context.items.some((item) => !!item.comment?.trim())) return true
 
       return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
     },

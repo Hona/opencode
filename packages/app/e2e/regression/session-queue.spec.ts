@@ -595,12 +595,16 @@ for (const delivery of ["queue", "steer"] as const) {
     await expect(chip).toContainText("main.ts")
     expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
 
-    // A chip alone is content: with the text gone, the prompt can still be sent.
+    // Like the TUI's blank Enter, a chip alone sends nothing: without text the draft reads as blank.
     await expect(view.input).toBeFocused()
     await view.input.press("ControlOrMeta+a")
     await view.input.press("Backspace")
     await expect(view.input).toHaveText("")
-    await view.composer.locator('[data-action="composer-submit"]').click()
+    await expect(view.composer.locator('[data-action="composer-submit"]')).toHaveAttribute("aria-label", "Stop")
+    await expect(chip).toHaveCount(1)
+
+    await view.input.pressSequentially("inspect this file")
+    await view.input.press("Enter")
     await expect.poll(() => mock.prompts.length).toBe(1)
     expect(mock.prompts[0].files).toMatchObject([
       { uri: "file:///repo/main.ts", name: "main.ts", description: "the failing version" },
