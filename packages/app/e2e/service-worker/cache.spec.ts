@@ -9,15 +9,16 @@ import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { serviceWorker } from "../../vite.pwa"
 
-// The app's real update watcher, so each fixture build behaves like the shipped app.
 /** The registration global of a service worker's scope, where `replacement.evaluate` callbacks run. */
 declare const registration: ServiceWorkerRegistration
 
+// The app's real update watcher, so each fixture build behaves like the shipped app.
 const updates = fileURLToPath(new URL("../../src/runtime/platform/service-worker.ts", import.meta.url))
 
 type Site = {
   url: string
   deploy: (fault?: "failed" | "html" | "corrupt" | "mixed-html" | "blocked") => void
+  rerelease: () => void
   legacy: () => void
   requests: string[]
   release: () => void
@@ -30,8 +31,13 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
       const builds: Record<string, Record<string, Buffer>> = {}
 
       try {
-        for (const version of ["old", "new"]) {
-          const root = join(directory, version)
+        // The re-release ships the old build's exact files under the next release.
+        for (const [name, version, release] of [
+          ["old", "old", "1"],
+          ["new", "new", "2"],
+          ["rerelease", "old", "2"],
+        ]) {
+          const root = join(directory, name)
           const outDir = join(root, "dist")
           await mkdir(join(root, "public", "nested"), { recursive: true })
           await Promise.all(
@@ -63,9 +69,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
             root,
             logLevel: "silent",
             build: { outDir, assetsDir: "_assets", sourcemap: true },
-            plugins: serviceWorker(outDir),
+            plugins: serviceWorker(outDir, release),
           })
-          builds[version] = Object.fromEntries(
+          builds[name] = Object.fromEntries(
             await Promise.all(
               (await readdir(outDir, { recursive: true, withFileTypes: true }))
                 .filter((entry) => entry.isFile())
@@ -96,6 +102,8 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
       const path = url.pathname
       requests.push(path)
       response.setHeader("cache-control", "no-store")
+      // Stands in for headers the server changes between releases, such as its Content-Security-Policy.
+      response.setHeader("x-release", state.version === "old" ? "1" : "2")
 
       if (path === "/observer.html")
         return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Worker observer</title>")
@@ -168,6 +176,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
         deploy: (fault = undefined) => {
           state.version = "new"
           state.fault = fault ?? ""
+        },
+        rerelease: () => {
+          state.version = "rerelease"
         },
         legacy: () => {
           state.legacy = true
@@ -333,6 +344,28 @@ fixture(
     await page.getByRole("button", { name: "Load lazy" }).click()
     await expect(page.getByRole("status")).toHaveText("new nested lazy loaded")
     await expect(page.getByRole("button", { name: "Reload to update", exact: true })).toHaveCount(0)
+  },
+)
+
+fixture(
+  "a release refreshes the cached page and its headers even when the page's bytes did not change",
+  async ({ page, site, builds }) => {
+    expect(builds.rerelease["/index.html"]).toEqual(builds.old["/index.html"])
+    await install(page, site.url)
+    expect((await page.goto(`${site.url}/workspace/before`))?.headers()["x-release"]).toBe("1")
+
+    site.rerelease()
+    await update(page)
+    await waiting(page)
+    await page.getByRole("button", { name: "Reload to update", exact: true }).click()
+
+    await expect
+      .poll(async () => {
+        const response = await page.goto(`${site.url}/workspace/after`)
+
+        return { fromServiceWorker: response?.fromServiceWorker(), release: response?.headers()["x-release"] }
+      })
+      .toEqual({ fromServiceWorker: true, release: "2" })
   },
 )
 
