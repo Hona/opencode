@@ -84,12 +84,12 @@ export function SessionRunningMenu(props: {
 
   return (
     <Show when={items().length > 0}>
-      <Menu gutter={4} placement="bottom-start">
+      <Menu gutter={6} placement="bottom-start">
         <Menu.Trigger
           as="button"
           type="button"
           aria-label={label()}
-          class="flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
+          class="ms-1.5 flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
         >
           <TextShimmer text={label()} active />
         </Menu.Trigger>
@@ -124,7 +124,15 @@ export function SessionRunningMenu(props: {
                         ? language.t("ui.tool.shell")
                         : (agent().name ?? language.t("ui.tool.agent.default"))}
                     </span>
-                    <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
+                    {/* Menu rows end 6px in for trailing controls; text alone ends 12px in, like the leading edge. */}
+                    <span
+                      dir="auto"
+                      class="me-1.5 min-w-0 flex-1 truncate text-v2-text-text-muted"
+                      classList={{
+                        "group-hover/running-item:me-0 group-data-[highlighted]/running-item:me-0 [@media(hover:none)]:me-0":
+                          stoppable(item),
+                      }}
+                    >
                       {item.label}
                     </span>
                     <Show when={stoppable(item)}>
