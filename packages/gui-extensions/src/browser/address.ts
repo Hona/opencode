@@ -30,23 +30,13 @@ export function searches(input: string) {
 }
 
 /**
- * The address split as the field draws it at rest: the site, which reads in full, and the rest, which is muted. Web
- * schemes are hidden; a workspace file shows its file name as the site.
+ * The address as the field draws it at rest: always the whole URL, with its host emphasized. The parts join back to
+ * exactly the text given, so the drawing lines up with the input's own text.
  */
 export function addressParts(url: string) {
-  if (!URL.canParse(url)) return { site: url, rest: "" }
-  const parsed = new URL(url)
+  const match = /^([a-z][a-z\d+.-]*:\/\/)?([^/?#]*)(.*)$/is.exec(url)
 
-  if (parsed.protocol === "file:") {
-    const name = decodeURIComponent(parsed.pathname.split("/").findLast((part) => !!part) ?? "")
-
-    return { site: name || url, rest: "" }
-  }
-
-  if (!/^https?:$/.test(parsed.protocol)) return { site: url, rest: "" }
-  const rest = `${parsed.pathname}${parsed.search}${parsed.hash}`
-
-  return { site: parsed.host, rest: rest === "/" ? "" : rest }
+  return { scheme: match?.[1] ?? "", host: match?.[2] ?? url, rest: match?.[3] ?? "" }
 }
 
 /**

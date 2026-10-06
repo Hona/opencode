@@ -164,9 +164,8 @@ export default function SessionBrowserPane(props: {
   const commenting = () => store.comment?.sessionKey === props.session.key && store.comment?.tabID === state()?.id
   const noting = () => store.note?.sessionKey === props.session.key && store.note?.tabID === state()?.id
 
-  // The address field shows the page's site and title at rest, and its full address on hover.
+  // The address field always shows the whole URL; at rest it draws the host emphasized.
   const parts = () => addressParts(field())
-  const title = () => (store.editing || !state()?.title || state()?.title === field() ? "" : (state()?.title ?? ""))
   const site = () => !!field() && !store.editing
 
   // Suggestions follow what the user typed; a focused address is not a query.
@@ -292,7 +291,7 @@ export default function SessionBrowserPane(props: {
         tabID: current.tabID,
         url: current.url,
         title: current.title,
-        label: current.title || addressParts(current.url).site,
+        label: current.title || addressParts(current.url).host || current.url,
         comment: value,
       }),
     )
@@ -647,19 +646,14 @@ export default function SessionBrowserPane(props: {
                   event.currentTarget.blur()
                 }}
               />
-              {/* At rest, draw the site and the page title over the input's hidden text, and the full address on hover.
-                  While editing, the input shows its own text so selection and the caret need no mirror. */}
+              {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
+                  input shows its own text so selection and the caret need no mirror. */}
               <Show when={!store.editing && field()}>
                 <div aria-hidden="true" data-slot="browser-address-display">
-                  <span class="shrink-0">{parts().site}</span>
-                  <Show when={title()}>
-                    <span data-slot="browser-address-titled">
-                      <span data-slot="browser-address-separator">/</span>
-                      <span data-slot="browser-address-title">{title()}</span>
-                    </span>
-                  </Show>
-                  <span data-slot="browser-address-full">
-                    <span data-slot="browser-address-rest">{parts().rest}</span>
+                  <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined}>
+                    <span data-slot="browser-address-muted">{parts().scheme}</span>
+                    {parts().host}
+                    <span data-slot="browser-address-path">{parts().rest}</span>
                   </span>
                 </div>
               </Show>
@@ -976,7 +970,7 @@ export default function SessionBrowserPane(props: {
                     <span class="flex min-w-0 items-center gap-1" dir="ltr">
                       <Icon name="outline-globe" size="small" class="shrink-0" />
                       <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
-                        {current().title || addressParts(current().url).site}
+                        {current().title || addressParts(current().url).host || current().url}
                       </span>
                     </span>
                   }
@@ -1161,7 +1155,7 @@ function SiteInformation(props: {
         >
           <div class="flex items-center justify-between gap-2">
             <Popover.Title data-slot="browser-site-host" dir="ltr">
-              {addressParts(props.url).site}
+              {addressParts(props.url).host || props.url}
             </Popover.Title>
             {/* A plain button: Kobalte's close button carries the open popover's data-expanded, which icon buttons
                 draw as pressed. */}

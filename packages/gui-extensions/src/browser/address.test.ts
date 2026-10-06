@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { resolveAddress } from "./address"
+import { addressParts, resolveAddress } from "./address"
 import { remember, suggest } from "./history"
 
 test("the address field navigates to what reads as an address and searches for anything else", () => {
@@ -34,6 +34,25 @@ test("the address field navigates to what reads as an address and searches for a
     search("css grid gap"),
     search("localhost 3000"),
   ])
+})
+
+test("the field draws the whole URL, split around its host, in exactly the input's characters", () => {
+  const urls = [
+    "https://developer.mozilla.org/en-US/docs/Web?q=1#top",
+    "http://localhost:5173/",
+    "https://alpha.example",
+    "file:///C:/repo/out/index.html",
+    "HTTPS://Example.COM/%7Euser",
+  ]
+
+  expect(urls.map(addressParts)).toEqual([
+    { scheme: "https://", host: "developer.mozilla.org", rest: "/en-US/docs/Web?q=1#top" },
+    { scheme: "http://", host: "localhost:5173", rest: "/" },
+    { scheme: "https://", host: "alpha.example", rest: "" },
+    { scheme: "file://", host: "", rest: "/C:/repo/out/index.html" },
+    { scheme: "HTTPS://", host: "Example.COM", rest: "/%7Euser" },
+  ])
+  expect(urls.map((url) => Object.values(addressParts(url)).join(""))).toEqual(urls)
 })
 
 test("history keeps one newest-first visit per URL and suggests addresses that complete the query first", () => {
