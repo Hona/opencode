@@ -1,3 +1,4 @@
+import { base64ToBytes } from "@opencode/util/base64"
 import type { FileContent } from "../sdk"
 
 /** Approximate on-disk size of loaded content. */
@@ -88,7 +89,7 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
 export function bytesFromContent(content: FileContent) {
   if (content.encoding !== "base64") return new TextEncoder().encode(content.content)
 
-  return Uint8Array.from(atob(content.content), (char) => char.charCodeAt(0))
+  return base64ToBytes(content.content)
 }
 
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */

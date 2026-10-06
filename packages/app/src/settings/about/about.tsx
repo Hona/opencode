@@ -3,6 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { showToast } from "@/shell/notifications/toast"
 import legal from "./legal.svg"
 import anomalyBrush from "./anomaly-brush.svg"
 import { AnimatedWordmark } from "./animated-wordmark"
@@ -55,11 +56,28 @@ export function SettingsAbout(props: { active: boolean }) {
     </ExternalLink>,
   ]
 
+  let noticesButton: HTMLButtonElement | undefined
+
   const showNotices = async () => {
     // The license texts load only when someone reads them.
-    const { default: DialogThirdPartyNotices } = await import("./notices/dialog")
+    const loaded = await import("./notices/dialog").catch(() => undefined)
 
-    void dialog.show(() => <DialogThirdPartyNotices />)
+    if (!loaded) {
+      showToast({ variant: "error", title: language.t("settings.about.notices.loadFailed") })
+
+      return
+    }
+
+    // dialog.show has no trigger for Kobalte to restore, so closing returns focus to the button by hand.
+    void dialog.show(() => (
+      <loaded.default
+        onCloseAutoFocus={(event) => {
+          if (!noticesButton?.isConnected) return
+          event.preventDefault()
+          noticesButton.focus({ preventScroll: true })
+        }}
+      />
+    ))
   }
 
   return (
@@ -100,7 +118,7 @@ export function SettingsAbout(props: { active: boolean }) {
         <p>{language.t("settings.about.trademark")}</p>
         <p>{language.t("settings.about.typeset")}</p>
         <p>
-          <button type="button" class="settings-about-link" onClick={() => void showNotices()}>
+          <button ref={noticesButton} type="button" class="settings-about-link" onClick={() => void showNotices()}>
             {language.t("settings.about.notices.title")}
           </button>
         </p>

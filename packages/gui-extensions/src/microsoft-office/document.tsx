@@ -1,207 +1,293 @@
-import { onCleanup, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { Schema } from "effect"
+import { createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
 import { Loader } from "@opencode/ui/loader"
-import { buildResidentRegionLayoutRequest, computeLayout, getLayoutKernelInputs } from "@betteroffice/docx/editor"
-import { createRustMeasureSource, type BundledFontProvider } from "@betteroffice/docx/layout"
-import {
-  buildRustDisplayList,
-  createCanvasImageResolver,
-  GlyphCache,
-  presentDisplayPageBackBuffer,
-  rasterizeDisplayPageToBackBuffer,
-  type DisplayPage,
-} from "@betteroffice/docx/layout/render"
-import { createYrsSession, type YrsSession } from "@betteroffice/docx/yrs"
-import { createKeyed, useExtension } from "../sdk"
-import { faceUrl, fallbackFace, loadFace, officeFace } from "./fonts"
-import { OfficePages, type PaintPage } from "./pages"
+import { createKeyed, createLatest, useExtension } from "../sdk"
+import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
+import { layerFont, lineHeight, type WordLink, type WordMethods, type WordPageSize, type WordSpan } from "./word-protocol"
+import { createWorkerClient } from "./worker-rpc"
 import type { FileViewerProps } from "../file/contract"
 
-type Opened = { readonly pages: readonly DisplayPage[]; readonly paint: PaintPage }
+type Opened = {
+  readonly pages: Accessor<readonly WordPageSize[]>
+  /** The pages shown so far are the document's first; the rest are still being laid out. */
+  readonly loading: Accessor<boolean>
+  readonly paint: PaintPage
+  /** The page's text layer. */
+  readonly text: (index: number, signal: AbortSignal) => Promise<readonly WordSpan[]>
+  /** Where a bookmark sits: its page and the height on it, in page pixels. Waits for the layout when it needs to. */
+  readonly bookmark: (name: string) => Promise<{ readonly index: number; readonly y: number } | undefined>
+  /** Lays the rest of the document out, a step at a time between paints; resolves with its page count. */
+  readonly finish: () => Promise<number>
+}
 
-/** The engine session one opening owns; freed when the bytes change or the view closes. */
-type Owned = { session: YrsSession | undefined }
+type Client = ReturnType<typeof createWorkerClient<WordMethods>>
 
-const FontRequirements = Schema.fromJsonString(
-  Schema.Array(
-    Schema.Struct({
-      key: Schema.String,
-      family: Schema.String,
-      bold: Schema.Boolean,
-      italic: Schema.Boolean,
-      scripts: Schema.optional(Schema.Array(Schema.Literals(["cjk-sc", "cjk-tc", "cjk-jp", "cjk-kr", "arabic", "hebrew"]))),
-    }),
-  ),
-)
+/** Scrolls the page column; set once the column mounts. */
+type Scroll = { to: ScrollToPage | undefined }
 
-const decodeFontRequirements = Schema.decodeUnknownSync(FontRequirements)
+/** A value built on first use. */
+type Lazy<T> = { value: T | undefined }
+
+/** How many page rows one update adds once the whole document is laid out. */
+const rowSlice = 100
 
 /**
- * A read-only, paginated Word document. It loads only the Yrs engine: the parse and layout engines, the background
- * worker and the collaboration code stay unloaded, and embedded fonts give way to the bundled metric-compatible faces.
+ * A read-only, paginated Word document. Its engine runs in a worker of its own (`document.worker.ts`), which opens the
+ * file, lays it out, builds and paints its pages and computes their text; the window only shows the bitmaps and the text
+ * layer, so no engine work holds it. The worker loads only the Yrs engine: the parse and layout engines and the
+ * collaboration code stay unloaded, and embedded fonts give way to the bundled metric-compatible faces. The first pages
+ * show as soon as they are laid out, and the rest lay out in short steps between paints. A transparent text layer over
+ * each page makes its text selectable, findable and readable, and its links followable.
  */
 export default function OfficeDocument(props: FileViewerProps) {
   const ctx = useExtension()
-  const [state, setState] = createStore<{ opened: Opened | undefined }>({ opened: undefined })
+  const [opened, setOpened] = createSignal<Opened>()
 
-  // Syncs one engine session with the loaded bytes.
+  // Syncs one document worker with the loaded bytes. Terminating it is what frees the engine's memory.
   createKeyed(
     () => props.bytes,
     (bytes) => {
       const controller = new AbortController()
-      const owned: Owned = { session: undefined }
+      const worker = new Worker(new URL("./document.worker.ts", import.meta.url), { type: "module" })
+      const client = createWorkerClient<WordMethods>(worker)
 
+      const fail = () => {
+        if (controller.signal.aborted) return
+
+        controller.abort()
+        props.onError()
+      }
+
+      // A worker that dies after the pages showed takes them with it.
+      worker.addEventListener("error", fail)
       onCleanup(() => {
         controller.abort()
-        owned.session?.destroy()
-        setState({ opened: undefined })
+        client.close()
+        setOpened(undefined)
       })
 
-      void open(bytes, controller.signal, owned).then(
-        (opened) => {
+      void open(client, bytes)
+        .then((value) => {
           if (controller.signal.aborted) return
 
-          setState({ opened })
-          props.onDetails([ctx.plural("pages", opened.pages.length)])
-        },
-        () => {
-          if (!controller.signal.aborted) props.onError()
-        },
-      )
+          setOpened(value)
+
+          return value.finish().then((count) => {
+            if (!controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
+          })
+        })
+        .catch(fail)
     },
   )
 
   return (
     <Show
-      when={state.opened}
+      when={opened()}
       fallback={
         <div class="flex min-h-0 flex-1 items-center justify-center">
           <Loader />
         </div>
       }
     >
-      {(opened) => (
-        <OfficePages
-          pages={opened().pages}
-          maxScale={1}
-          paint={opened().paint}
-          label={(index) => ctx.t("page", { number: index + 1 })}
-        />
-      )}
+      {(opened) => {
+        const scroll: Scroll = { to: undefined }
+
+        const follow = (link: WordLink) => {
+          if (link.kind === "external") return ctx.system.openExternal(link.url)
+
+          void opened()
+            .bookmark(link.bookmark)
+            .then(
+              (target) => {
+                if (target) scroll.to?.(target.index, target.y)
+              },
+              () => undefined,
+            )
+        }
+
+        return (
+          <OfficePages
+            pages={opened().pages()}
+            maxScale={1}
+            paint={opened().paint}
+            label={(index) => ctx.t("page", { number: index + 1 })}
+            overlay={(input) => <WordTextLayer index={input.index} text={opened().text} follow={follow} />}
+            text
+            footer={(index) => (
+              <Show when={opened().loading() && index === opened().pages().length - 1}>
+                <Loader />
+              </Show>
+            )}
+            onScrollTo={(scrollTo) => {
+              scroll.to = scrollTo
+            }}
+          />
+        )
+      }}
     </Show>
   )
 }
 
-/** Lays the document out into pages. Every engine call after `signal` aborts is skipped: the session is freed then. */
-async function open(bytes: Uint8Array, signal: AbortSignal, owned: Owned): Promise<Opened> {
-  const session = await createYrsSession()
-
-  // A view that closed while the engine loaded never saw this session.
-  if (signal.aborted) {
-    session.destroy()
-    throw signal.reason
-  }
-
-  owned.session = session
-
-  const document = session.openDocx(bytes, true, { mediaTokens: true }).document
-  const settings = document.package.settings
-
-  const measure = createRustMeasureSource({
-    engine: {
-      registerFont: (font) => (signal.aborted ? -1 : session.registerFont(font)),
-      registerSubstituteFont: (id, family) => (signal.aborted ? id : session.registerSubstituteFont(id, family)),
-      clearFonts: () => {
-        if (!signal.aborted) session.clearFonts()
-      },
-    },
-    bundled: wordFonts(signal),
-  })
-
-  measure.setCompat(settings?.compatibilityFlags)
-
-  const renderEnv = {
-    themeColors: Object.fromEntries(
-      Object.entries(document.package.theme?.colorScheme ?? {}).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    ),
-    defaultTabStopTwips: settings?.defaultTabStop ?? null,
-    numericIds: {},
-    mediaTokens: true,
-  }
-
-  const requirements = decodeFontRequirements(
-    session.layoutFontRequirementsJson(JSON.stringify(buildResidentRegionLayoutRequest(document, 0, renderEnv))),
-  ).map((requirement) => ({ ...requirement, scripts: requirement.scripts && [...requirement.scripts] }))
-
-  await measure.prepareFontRequirements(requirements)
-
-  if (signal.aborted) throw signal.reason
-
-  const measurement = measure.measurementConfigForRequirements(requirements)
-
-  if (!measurement) throw new Error("The document's fonts could not be prepared")
-
-  const layout = computeLayout({ document, pageGap: 0, session, renderEnv, measurement }).layout
-  const kernel = getLayoutKernelInputs(layout)
-
-  if (!kernel) throw new Error("The document produced no pages")
-
-  // The session builds the display list, so the separate layout engine never loads.
-  const list = await buildRustDisplayList(
-    {
-      measured: kernel.measured,
-      options: kernel.options,
-      layout,
-      fontChains: measurement.fontChains,
-      headersFooters: kernel.headersFooters,
-    },
-    { buildDisplayListJson: (input) => session.buildDisplayListJson(input) },
+/**
+ * Transparent text over a page's painted glyphs. Positions are fractions of the page and sizes fractions of its width
+ * (container query units), so the layer tracks the page's CSS size at once while a resize waits to repaint.
+ */
+function WordTextLayer(props: {
+  index: number
+  text: (index: number, signal: AbortSignal) => Promise<readonly WordSpan[]>
+  follow: (link: WordLink) => void
+}) {
+  const spans = createLatest(
+    () => props.index,
+    (index, signal) => props.text(index, signal),
   )
 
-  const glyphCache = new GlyphCache({
-    provider: (font, glyph) => {
-      if (signal.aborted) throw new Error("The document is closed")
+  return (
+    <div
+      class="absolute inset-0 select-text overflow-hidden whitespace-pre text-transparent [container-type:inline-size] selection:bg-[rgb(0_120_215/0.3)] selection:text-transparent"
+      // Separators flow at the layer's corner; at no size they keep words and paragraphs apart in copied text unseen.
+      style={{ "font-family": layerFont, "font-size": "0", "line-height": lineHeight }}
+    >
+      <For each={spans.latest}>
+        {(span) => (
+          <>
+            <Show
+              when={span.link}
+              fallback={
+                <span dir={span.dir} class="absolute origin-top-left cursor-text" style={place(span)}>
+                  {span.text}
+                </span>
+              }
+            >
+              {(link) => (
+                <span
+                  role="link"
+                  tabIndex={0}
+                  title={span.title}
+                  dir={span.dir}
+                  class="absolute origin-top-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-focus"
+                  style={place(span)}
+                  onClick={(event) => {
+                    // A drag that ends on the link selects text instead of following it.
+                    if (event.button === 0 && (globalThis.getSelection()?.isCollapsed ?? true)) props.follow(link())
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return
 
-      return session.outlineGlyphJson(font, glyph)
-    },
-  })
+                    event.preventDefault()
+                    props.follow(link())
+                  }}
+                >
+                  {span.text}
+                </span>
+              )}
+            </Show>
+            <Show when={span.after === "br"}>
+              <br />
+            </Show>
+            <Show when={span.after === "tab"}>{"\t"}</Show>
+          </>
+        )}
+      </For>
+    </div>
+  )
+}
 
-  const resolveImage = createCanvasImageResolver({
-    media: (token) => (signal.aborted ? null : session.mediaSource(token)),
-    mediaScope: () => (signal.aborted ? -1 : session.mediaScope()),
-  })
+function place(span: WordSpan) {
+  return {
+    left: `${span.left * 100}%`,
+    top: `${span.top * 100}%`,
+    "font-size": `${span.size * 100}cqw`,
+    transform: span.transform,
+  }
+}
+
+/** Opens the bytes in the worker and returns as soon as the document's first pages can show. */
+async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
+  // The view keeps its bytes for a reopen; the worker takes a copy.
+  const copy = bytes.slice().buffer
+  const first = await client.call("open", { bytes: copy }, { transfer: [copy] })
+  const [pages, setPages] = createSignal(first.pages)
+  const [loading, setLoading] = createSignal(first.loading)
+
+  const layOut = async (): Promise<number> => {
+    const step = await client.call("layout", undefined)
+
+    if (!step.done) return layOut()
+
+    const shown = pages()
+
+    // A page keeps its row, and its bitmap, unless the full layout changed it.
+    const sizes = step.pages.map((page, index) => {
+      const size = shown[index]
+
+      return size && step.kept[index] && sameSize(size, page) ? size : page
+    })
+
+    await reveal(sizes, shown.length)
+    setLoading(false)
+
+    return sizes.length
+  }
+
+  // Adds the pages' rows a slice at a time, so no one update builds hundreds of them.
+  const reveal = async (sizes: readonly WordPageSize[], shown: number): Promise<void> => {
+    const next = Math.min(sizes.length, shown + rowSlice)
+
+    setPages(sizes.slice(0, next))
+
+    if (next === sizes.length) return
+
+    await new Promise((resolve) => setTimeout(resolve))
+
+    return reveal(sizes, next)
+  }
+
+  const rest: Lazy<Promise<number>> = { value: undefined }
+
+  const finish = () => (rest.value ??= loading() ? layOut() : Promise.resolve(pages().length))
 
   return {
-    pages: list.pages,
+    pages,
+    loading,
+    finish,
     paint: async (index, canvas, scale, current) => {
-      const page = list.pages[index]
-
-      if (!page) return
-
-      const buffer = await rasterizeDisplayPageToBackBuffer(
-        globalThis.document.createElement("canvas"),
-        page,
-        { glyphCache, resolveImage },
-        window.devicePixelRatio || 1,
-        scale,
+      const painted = client.call(
+        "paint",
+        { index, scale, ratio: window.devicePixelRatio || 1 },
+        // A newer paint of the page, such as at another scale, replaces this one while it waits.
+        { key: `paint:${index}` },
       )
 
-      if (current() && !signal.aborted) presentDisplayPageBackBuffer(canvas, buffer, page, scale)
+      // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
+      // that: each built page holds megabytes in the engine.
+      void client.call("build", { index: index + 1 }, { key: "build" }).catch(() => undefined)
+
+      const bitmap = await painted
+
+      if (!bitmap) return
+
+      const context = current() ? canvas.getContext("bitmaprenderer") : null
+
+      if (!context) return bitmap.close()
+
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      context.transferFromImageBitmap(bitmap)
+    },
+    text: (index, signal) => client.call("text", { index }, { signal }),
+    bookmark: async (name) => {
+      const found = await client.call("bookmark", { name })
+
+      // The bookmark may sit past the pages laid out so far.
+      if (found || !loading()) return found
+
+      await finish()
+
+      return client.call("bookmark", { name })
     },
   }
 }
 
-/** Word families resolve to the bundled faces with the same metrics; any other family to the closest kind. */
-function wordFonts(signal: AbortSignal): BundledFontProvider {
-  return {
-    resolve: (family, bold, italic) => {
-      const face = officeFace(family)
-
-      return face ? () => loadFace(faceUrl(face, bold, italic), signal) : undefined
-    },
-    resolveLastResort: (family, bold, italic) => () => loadFace(faceUrl(fallbackFace(family), bold, italic), signal),
-  }
+function sameSize(size: WordPageSize, page: WordPageSize) {
+  return size.width === page.width && size.height === page.height && size.background === page.background
 }

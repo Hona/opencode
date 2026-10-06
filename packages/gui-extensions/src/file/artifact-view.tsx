@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -29,7 +29,13 @@ type ArtifactInfo = {
   details?: readonly string[]
 }
 
-type ViewerState = { readonly mode: ArtifactMode; readonly info: ArtifactInfo; readonly undecodable: boolean }
+type ViewerState = {
+  readonly mode: ArtifactMode
+  readonly info: ArtifactInfo
+  readonly undecodable: boolean
+  /** Why the file shows as binary, when a viewer said. */
+  readonly reason?: string
+}
 
 type ImageZoom = { readonly url: string; readonly zoom: "fit" | "actual"; readonly overflow: boolean }
 
@@ -104,7 +110,12 @@ export default function ArtifactView(props: {
     ].filter((item): item is string => !!item)
   })
 
-  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => change({ undecodable: true }) }
+  // A file that fails also drops the facts its viewer reported, such as a page count.
+  const fail = (reason?: string) => change({ undecodable: true, info: {}, reason })
+
+  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => fail() }
+
+  const size = () => formatBytes(locale.locale(), contentBytes(props.content))
 
   // A kind the file view does not render itself goes to the first extension viewer that lists it.
   const viewer = createMemo(() => {
@@ -142,11 +153,7 @@ export default function ArtifactView(props: {
         }
       />
       <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
-        <Switch
-          fallback={
-            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
-          }
-        >
+        <Switch fallback={<ArtifactBinary path={props.path} size={size()} reason={state().reason} />}>
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -168,9 +175,11 @@ export default function ArtifactView(props: {
             {(viewer) => (
               <ArtifactViewer
                 viewer={viewer()}
+                path={props.path}
+                size={size()}
                 content={props.content}
                 onDetails={(details) => change({ info: { details } })}
-                onError={media.onError}
+                onError={fail}
               />
             )}
           </Match>
@@ -536,21 +545,31 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   )
 }
 
-/** Hands a file to an extension's viewer, decoding its bytes once per loaded content. */
+/**
+ * Hands a file to an extension's viewer, decoding its bytes once per loaded content. Bytes the viewer rejects, and a
+ * viewer that throws, show the binary placeholder in this area alone rather than the whole file panel failing.
+ */
 function ArtifactViewer(props: {
   viewer: FileViewer
+  path: string
+  size: string
   content: FileContent
   onDetails: (details: readonly string[]) => void
-  onError: () => void
+  onError: (reason?: string) => void
 }) {
   const bytes = createMemo(() => bytesFromContent(props.content))
+  const problem = createMemo(() => props.viewer.problem?.(bytes()))
 
   return (
-    <Dynamic component={props.viewer.View} bytes={bytes()} onDetails={props.onDetails} onError={props.onError} />
+    <Show when={!problem()} fallback={<ArtifactBinary path={props.path} size={props.size} reason={problem()} />}>
+      <ErrorBoundary fallback={<ArtifactBinary path={props.path} size={props.size} />}>
+        <Dynamic component={props.viewer.View} bytes={bytes()} onDetails={props.onDetails} onError={props.onError} />
+      </ErrorBoundary>
+    </Show>
   )
 }
 
-function ArtifactBinary(props: { path: string; size: string }) {
+function ArtifactBinary(props: { path: string; size: string; reason?: string }) {
   const ctx = useExtension()
 
   return (
@@ -559,6 +578,7 @@ function ArtifactBinary(props: { path: string; size: string }) {
         <FileIcon node={{ path: props.path, type: "file" }} class="size-8 text-text-weak" />
         <div class="text-14-medium text-text-strong">{getFilename(props.path)}</div>
         <div class="text-13-regular text-text-weak">{ctx.t("view.binary", { size: props.size })}</div>
+        <Show when={props.reason}>{(reason) => <div class="text-13-regular text-text-weak">{reason()}</div>}</Show>
       </div>
     </div>
   )

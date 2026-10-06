@@ -351,8 +351,6 @@
 
 .settings-notice pre {
   margin: 0;
-  max-height: 320px;
-  overflow: auto;
   font-family: var(--font-family-mono);
   font-size: 11px;
   line-height: var(--line-height-compact);
@@ -365,6 +363,77 @@
   padding: 12px;
   border-radius: 8px;
   background: var(--v2-background-bg-layer-02);
+}
+
+.settings-crates {
+  padding-top: 20px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-crates h3,
+.settings-crates h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-crates h4 {
+  margin-top: 8px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-crate {
+  line-height: var(--line-height-compact);
+}
+
+.settings-crate-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-crate-heading > span:first-child {
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading a {
+  color: var(--v2-text-text-base);
+}
+
+.settings-crate-heading > span:last-child {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading strong {
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate p {
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.settings-crates summary span {
+  margin-inline-start: 8px;
+}
+
+.settings-crates details > p {
+  margin-top: 8px;
 }
 
 .settings-back {

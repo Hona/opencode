@@ -26,15 +26,13 @@ export function serviceWorker(directory: string) {
         "**/*.map",
         "_headers",
         "_redirects",
-        // The Office previews' engines and fonts (about 45 MB) load only when an Office file opens.
+        // The Office previews' engines and fonts (about 52 MB) load only when an Office file opens.
         "**/docx_*_bg-*.wasm",
         "**/ooxml_opc_bg-*.wasm",
         "**/pptx_wasm_bg-*.wasm",
         "**/xlsx_wasm_bg-*.wasm",
         "**/residentEngineWorker-*.js",
-        "**/Carlito-*.ttf",
-        "**/Caladea-*.ttf",
-        "**/Liberation{Sans,Serif,Mono}-*.ttf",
+        "**/{Carlito,Caladea,LiberationSans,LiberationSerif,LiberationMono,NotoSansArabic,NotoNaskhArabic,NotoSansHebrew,Gelasio,ComicRelief,Inter,Roboto,SourceSans3,DMSans,DMSerifDisplay,OpenSans,Montserrat,Poppins,Oswald,Heebo}-*.ttf",
       ],
       maximumFileSizeToCacheInBytes: Number.MAX_SAFE_INTEGER,
       manifestTransforms: [
