@@ -91,6 +91,11 @@ function zoomKey(input: Electron.Input) {
   if (input.key === "0") return "reset"
 }
 
+/** The address a cookie is removed by: its domain without the leading dot, its path, and its scheme. */
+function cookieURL(cookie: Electron.Cookie) {
+  return `${cookie.secure ? "https" : "http"}://${(cookie.domain ?? "").replace(/^\./, "")}${cookie.path ?? "/"}`
+}
+
 /** The next preset in the direction, or 100%; the current factor at either end. */
 function zoomStep(current: number, direction: "in" | "out" | "reset") {
   if (direction === "reset") return 1
@@ -540,6 +545,28 @@ export function createBrowserPage(
     },
     zoom(direction: "in" | "out" | "reset") {
       if (!closed) zoom(direction)
+    },
+    async site() {
+      const url = contents.getURL()
+
+      if (closed || !destinationOrigin(url)) return { cookies: 0 }
+
+      return { cookies: (await contents.session.cookies.get({ url })).length }
+    },
+    /** Deletes what the page's site stored: the cookies its address can read, and its origin's storage. */
+    async clearSite() {
+      const url = contents.getURL()
+      const origin = destinationOrigin(url)
+
+      if (closed || !origin) return
+      const cookies = await contents.session.cookies.get({ url })
+      await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
+      await contents.session.clearStorageData({
+        origin,
+        storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
+      })
+
+      if (!closed) contents.reload()
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,

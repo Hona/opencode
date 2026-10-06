@@ -1,5 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
+import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
+import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
 import { Loader } from "@opencode/ui/loader"
@@ -571,6 +573,16 @@ export default function SessionBrowserPane(props: {
               <SiteInformation
                 url={address()}
                 server={props.session.server.local ? undefined : props.session.server.name}
+                site={() => {
+                  const tab = state()
+
+                  return tab ? props.model.site(props.session, tab.id) : undefined
+                }}
+                clear={() => {
+                  const tab = state()
+
+                  return tab ? props.model.clearSite(props.session, tab.id) : undefined
+                }}
               />
             </Show>
             <div data-slot="browser-address-text">
@@ -1049,9 +1061,25 @@ const connections = {
   file: { icon: "folder", title: "site.file", description: "site.file.description" },
 } as const
 
-/** The page's connection and where its traffic goes, under the site button at the address field's start. */
-function SiteInformation(props: { url: string; server: string | undefined }) {
+/**
+ * What the page can do and what can reach it, under the site button at the address field's start: its connection,
+ * its stored data, the permissions it never gets, the agent's access, and the network it loads through.
+ */
+function SiteInformation(props: {
+  url: string
+  server: string | undefined
+  /** The page's cookie count; undefined while the pane cannot answer. */
+  site: () => Promise<{ cookies: number }> | undefined
+  clear: () => Promise<void> | undefined
+}) {
   const extension = useExtension()
+
+  // `load` counts openings and clears, so a count for an earlier one never replaces a later one.
+  const [state, setState] = createStore<{ open: boolean; cookies?: number; clearing: boolean; load: number }>({
+    open: false,
+    clearing: false,
+    load: 0,
+  })
 
   const kind = () => {
     const value = connection(props.url)
@@ -1059,8 +1087,46 @@ function SiteInformation(props: { url: string; server: string | undefined }) {
     return value ? connections[value] : undefined
   }
 
+  // Only web pages have cookies and ask for permissions; a workspace file has neither.
+  const web = () => {
+    const value = connection(props.url)
+
+    return !!value && value !== "file"
+  }
+
+  const load = () => {
+    const run = state.load + 1
+    setState({ load: run, cookies: undefined })
+    void props.site()?.then(
+      (value) => {
+        if (state.load === run) setState("cookies", value.cookies)
+      },
+      () => undefined,
+    )
+  }
+
+  const clear = () => {
+    setState("clearing", true)
+    void (props.clear() ?? Promise.reject(new Error("browser.pane.unavailable")))
+      .catch(() => showToast({ title: extension.t("common.requestFailed") }))
+      .finally(() => {
+        setState("clearing", false)
+        load()
+      })
+  }
+
   return (
-    <Popover placement="bottom-start" gutter={8} modal={false}>
+    <Popover
+      open={state.open}
+      placement="bottom-start"
+      gutter={8}
+      modal={false}
+      onOpenChange={(open) => {
+        setState("open", open)
+
+        if (open) load()
+      }}
+    >
       <Tooltip placement="top" value={extension.t("site.info")}>
         <Popover.Trigger
           as={IconButton}
@@ -1072,33 +1138,82 @@ function SiteInformation(props: { url: string; server: string | undefined }) {
         />
       </Tooltip>
       <Popover.Portal>
-        <Popover.Content data-component="browser-site">
-          <div data-slot="browser-site-host" dir="ltr">
-            {addressParts(props.url).site}
+        <Popover.Content
+          data-component="browser-site"
+          // The panel takes focus itself rather than its close button, so a pointer opening shows no focus ring there.
+          onOpenAutoFocus={(event: Event) => {
+            event.preventDefault()
+
+            if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus()
+          }}
+        >
+          <div class="flex items-center justify-between gap-2">
+            <Popover.Title data-slot="browser-site-host" dir="ltr">
+              {addressParts(props.url).site}
+            </Popover.Title>
+            {/* A plain button: Kobalte's close button carries the open popover's data-expanded, which icon buttons
+                draw as pressed. */}
+            <IconButton
+              variant="ghost-muted"
+              size="small"
+              aria-label={extension.t("common.close")}
+              icon={<Icon name="outline-xmark" />}
+              onClick={() => setState("open", false)}
+            />
           </div>
           <Show when={kind()}>
             {(value) => (
-              <div data-slot="browser-site-row">
-                <Icon name={value().icon} class="shrink-0" />
-                <div class="flex flex-col gap-1">
-                  <span class="text-v2-text-text-base">{extension.t(value().title)}</span>
-                  <Show when={value().description}>
-                    {(description) => <span data-slot="browser-site-detail">{extension.t(description())}</span>}
-                  </Show>
-                </div>
-              </div>
+              <SiteRow
+                icon={value().icon}
+                title={extension.t(value().title)}
+                detail={value().description ? extension.t(value().description ?? "") : undefined}
+              />
             )}
           </Show>
+          <Show when={web()}>
+            <SiteRow
+              icon="outline-cookie"
+              title={extension.t("site.cookies")}
+              detail={state.cookies === undefined ? undefined : extension.plural("site.cookies.count", state.cookies)}
+            >
+              <Button
+                size="small"
+                variant="neutral"
+                disabled={state.clearing || state.cookies === undefined}
+                onClick={clear}
+              >
+                {extension.t("site.cookies.clear")}
+              </Button>
+            </SiteRow>
+            <SiteRow
+              icon="outline-eye-slash"
+              title={extension.t("site.permissions")}
+              detail={extension.t("site.permissions.description")}
+            />
+          </Show>
+          <SiteRow
+            icon="select-element"
+            title={extension.t("site.agent")}
+            detail={extension.t("site.agent.description")}
+          />
           <Show when={props.server}>
-            {(server) => (
-              <div data-slot="browser-site-row">
-                <Icon name="server" class="shrink-0" />
-                <span data-slot="browser-site-detail">{extension.t("site.network", { server: server() })}</span>
-              </div>
-            )}
+            {(server) => <SiteRow icon="server" title={extension.t("site.network", { server: server() })} />}
           </Show>
         </Popover.Content>
       </Popover.Portal>
     </Popover>
+  )
+}
+
+function SiteRow(props: { icon: IconName; title: string; detail?: string; children?: JSX.Element }) {
+  return (
+    <div data-slot="browser-site-row">
+      <Icon name={props.icon} class="shrink-0" />
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="text-v2-text-text-base">{props.title}</span>
+        <Show when={props.detail}>{(detail) => <span data-slot="browser-site-detail">{detail()}</span>}</Show>
+      </div>
+      {props.children}
+    </div>
   )
 }

@@ -81,6 +81,8 @@ type PaneFixtureState = {
   history: History
   /** URLs the pane opened in the system browser. */
   external: string[]
+  /** Cookies the page's address can read. */
+  cookies: number
 }
 
 // A 16px blue square, as main reports a page icon.
@@ -135,6 +137,7 @@ export function mountBrowserPane(input: PaneHost) {
       zoom: 1,
       history: { visits: [] },
       external: [],
+      cookies: 3,
     })
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
@@ -181,15 +184,19 @@ export function mountBrowserPane(input: PaneHost) {
     // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
     const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
 
+    const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
+      (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(params?.[name] ?? ""),
+      )
+
     const base = {
       id: "browser",
       keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
       desktop: { zoom: () => 1 },
       embeds,
-      t: (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
-        (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(params?.[name] ?? ""),
-        ),
+      t,
+      // English plural forms, as the host picks them.
+      plural: (key: string, count: number) => t(`${key}.${count === 1 ? "one" : "other"}`, { count }),
     }
 
     const panel: PanelFrame = {
@@ -319,6 +326,12 @@ export function mountBrowserPane(input: PaneHost) {
         const next = value.zoom === "reset" ? 1 : (steps[index + (value.zoom === "in" ? 1 : -1)] ?? store.zoom)
         setStore("zoom", next)
         emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
+      },
+      site: async () => ({ cookies: store.cookies }),
+      // Main deletes the site's data and reloads the page.
+      clearSite: async () => {
+        setStore({ cookies: 0, generation: store.generation + 1 })
+        report()
       },
       close: async () => undefined,
       state: () => undefined,
@@ -767,6 +780,8 @@ export function mountBrowserRegion(input: RegionHost) {
       inspect: async () => undefined,
       highlight: async () => undefined,
       zoom: async () => undefined,
+      site: async () => ({ cookies: 0 }),
+      clearSite: async () => undefined,
       close: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {

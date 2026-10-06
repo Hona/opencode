@@ -450,6 +450,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
       live.get(session.key)?.connection.zoom(tabID, zoom)
     },
+    /** The page's cookie count; undefined while the pane cannot answer. */
+    site: (session: Session, tabID: Browser.TabID) => live.get(session.key)?.connection.site(tabID),
+    /** Deletes the page's cookies and stored data, and reloads it. */
+    clearSite: (session: Session, tabID: Browser.TabID) => live.get(session.key)?.connection.clearSite(tabID),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits,
     clearHistory: () => {

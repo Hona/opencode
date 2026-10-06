@@ -19,6 +19,8 @@ export type Registration = {
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
+  site(tabID: Browser.TabID): Promise<{ cookies: number }>
+  clearSite(tabID: Browser.TabID): Promise<void>
   close(): void
 }
 
@@ -246,6 +248,9 @@ export function createConnection(input: {
     zoom(tabID: Browser.TabID, zoom: Zoom) {
       state.registration?.zoom(tabID, zoom)
     },
+    /** The page's site data; undefined while no registration can answer. */
+    site: (tabID: Browser.TabID) => state.registration?.site(tabID),
+    clearSite: (tabID: Browser.TabID) => state.registration?.clearSite(tabID),
     dispose() {
       disposed = true
       clearTimeout(retry)
@@ -293,6 +298,8 @@ function open(
       if (status.closed) return
       void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
     },
+    site: (tabID) => ready.then(() => client.site({ binding, tabID })),
+    clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     close() {
       if (status.closed) return
       status.closed = true

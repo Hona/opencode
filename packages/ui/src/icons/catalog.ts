@@ -210,6 +210,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M7 12.6667C5.71133 12.6667 4.66667 10.1296 4.66667 7C4.66667 3.87039 5.71133 1.33333 7 1.33333C8.2426 1.33333 9.25833 3.69221 9.32933 6.66667" stroke="currentColor" stroke-miterlimit="10"/><path d="M12.6667 6.66667H1.33333" stroke="currentColor"/><path d="M12.6667 7.72825V7C12.6667 3.87039 10.1296 1.33333 7 1.33333C3.8704 1.33333 1.33333 3.87039 1.33333 7C1.33333 10.1296 3.8704 12.6667 7 12.6667H7.58694" stroke="currentColor" stroke-miterlimit="10"/><path d="M9.5 11.5H13.5M11.5 9.5V13.5" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
   },
+  "outline-cookie": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M14 8.5A6 6 0 1 1 7.5 2a2 2 0 0 0 2.5 2.5 2 2 0 0 0 2.5 2.5c.4.6.9 1.1 1.5 1.5Z" stroke="currentColor" stroke-linejoin="round"/><path d="M5.5 6.5h.01M5.5 10h.01M8.5 9h.01M10.5 11.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`,
+  },
   "outline-browser-annotate": {
     viewBox: "0 0 16 16",
     body: `<path d="M10.6667 2H14V5.33333M2 5.33333V2H5.33333M2 10.6667V14H5.33333" stroke="currentColor" stroke-linecap="square"/><path d="M11.8571 11.8572L14 14M6.50008 6.50033L14.0001 9.00033L9.00008 14.0003L6.50008 6.50033Z" stroke="currentColor" stroke-linecap="square"/>`,

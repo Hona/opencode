@@ -192,9 +192,9 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 300px;
-  padding: 12px;
+  gap: 14px;
+  width: 320px;
+  padding: 12px 12px 14px;
   border-radius: 12px;
   background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-floating);
@@ -207,9 +207,12 @@
   transform-origin: var(--kb-popover-content-transform-origin);
 
   [data-slot="browser-site-host"] {
+    min-width: 0;
+    margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: inherit;
     font-weight: 530;
   }
 
@@ -218,6 +221,12 @@
     gap: 8px;
     align-items: flex-start;
     color: var(--v2-icon-icon-muted);
+  }
+
+  /* An action beside a row's text, centered on it. */
+  [data-slot="browser-site-row"] > [data-component="button-v2"] {
+    flex: none;
+    align-self: center;
   }
 
   [data-slot="browser-site-detail"] {

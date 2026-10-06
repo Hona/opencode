@@ -328,6 +328,12 @@ export function createBrowserPane(input: {
     zoom(window: number, binding: string, tabID: Browser.TabID, direction: "in" | "out" | "reset") {
       owned(window, binding).pages.get(tabID)?.zoom(direction)
     },
+    async site(window: number, binding: string, tabID: Browser.TabID) {
+      return (await owned(window, binding).pages.get(tabID)?.site()) ?? { cookies: 0 }
+    },
+    async clearSite(window: number, binding: string, tabID: Browser.TabID) {
+      await owned(window, binding).pages.get(tabID)?.clearSite()
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       const entry = owned(window, binding)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)

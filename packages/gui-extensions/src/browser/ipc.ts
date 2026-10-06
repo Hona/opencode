@@ -82,6 +82,14 @@ export const BrowserPane = Ipc.define({
     zoom: {
       input: Schema.Struct({ binding, tabID: Browser.TabID, zoom: Schema.Literals(["in", "out", "reset"]) }),
     },
+    // The site data the page's address can read in this desktop's browser: its cookie count. Zero for a page that is
+    // not a web page.
+    site: {
+      input: Schema.Struct({ binding, tabID: Browser.TabID }),
+      output: Schema.Struct({ cookies: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
+    },
+    // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
+    clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
   },
   events: {

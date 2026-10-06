@@ -424,6 +424,15 @@ story("focuses the address field when the page uses the address shortcut", async
   await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
 })
 
+story("shows the page's cookies in the site information and clears them", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  await expect(site).toContainText("3 cookies in use")
+  await site.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(site).toContainText("0 cookies in use")
+})
+
 story("zooms the page from the browser options and shows its zoom", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Browser options", exact: true }).click()

@@ -74,6 +74,8 @@ function fixture(strip: string[] = []) {
       highlights.push(input)
     },
     zoom: async () => undefined,
+    site: async () => ({ cookies: 0 }),
+    clearSite: async () => undefined,
     close: async (input) => {
       closed.push(input.binding)
     },
