@@ -542,7 +542,8 @@ export default function SessionBrowserPane(props: {
           anchorRef={() => anchor}
           placement="bottom-start"
           gutter={4}
-          sameWidth
+          // The list overhangs the field by its 8px padding, so suggestion icons and text line up with the field's.
+          shift={-8}
           modal={false}
         >
           <form
@@ -551,6 +552,7 @@ export default function SessionBrowserPane(props: {
             data-component="browser-address"
             data-editing={store.editing ? "" : undefined}
             data-site={site() ? "" : undefined}
+            data-address={store.editing && !store.typed && field() ? "" : undefined}
             onPointerDown={(event) => {
               // The whole field focuses the input, as the site button and page actions handle their own clicks.
               if (event.target === event.currentTarget) {
@@ -569,7 +571,13 @@ export default function SessionBrowserPane(props: {
               input?.blur()
             }}
           >
-            <Show when={site()} fallback={<PageIcon icon={store.editing && field() ? page()?.icon : undefined} />}>
+            {/* Editing shows the icon of the page Enter would open: the page's own, or the chosen suggestion's. */}
+            <Show
+              when={site()}
+              fallback={
+                <PageIcon icon={store.editing && field() ? (store.typed ? chosen()?.icon : page()?.icon) : undefined} />
+              }
+            >
               <SiteInformation
                 url={address()}
                 server={props.session.server.local ? undefined : props.session.server.name}
@@ -661,7 +669,7 @@ export default function SessionBrowserPane(props: {
                 {(visit) => (
                   <div aria-hidden="true" data-slot="browser-address-hint">
                     <span class="invisible">{store.address}</span>
-                    <span>{` - ${bare(visit().url)}`}</span>
+                    <span class="ms-1.5">{`- ${bare(visit().url)}`}</span>
                   </div>
                 )}
               </Show>
@@ -826,29 +834,33 @@ export default function SessionBrowserPane(props: {
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="flex size-full flex-col items-center gap-[76px] overflow-y-auto px-6 pt-20 pb-10">
-            <div class="flex w-full max-w-[360px] flex-col items-center gap-4 text-center">
-              <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
-              <div class="flex flex-col gap-2">
-                <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                  {extension.t("home.title")}
-                </div>
-                <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {extension.t("home.description")}
-                </div>
-              </div>
-            </div>
-            {/* One visit is enough to list; the list stops at a handful. */}
-            <Show when={recent().length > 0}>
-              <div class="flex w-full max-w-[685px] flex-col gap-4">
-                <div class="px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {extension.t("home.recent")}
-                </div>
+          {/* As designed: the heading 80px from the top, the recent list centered above a 160px bottom inset. The
+              minimum height keeps a full list clear of the heading in a short pane, which then scrolls. */}
+          <div dir="auto" class="size-full overflow-y-auto">
+            <div class="relative flex min-h-[max(100%,732px)] items-center justify-center px-6 pb-40">
+              <div class="absolute inset-x-6 top-20 mx-auto flex max-w-[360px] flex-col items-center gap-4 text-center">
+                <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
                 <div class="flex flex-col gap-2">
-                  <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
+                  <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                    {extension.t("home.title")}
+                  </div>
+                  <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                    {extension.t("home.description")}
+                  </div>
                 </div>
               </div>
-            </Show>
+              {/* One visit is enough to list; the list stops at a handful. */}
+              <Show when={recent().length > 0}>
+                <div class="flex w-full max-w-[685px] flex-col gap-4">
+                  <div class="px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                    {extension.t("home.recent")}
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
+                  </div>
+                </div>
+              </Show>
+            </div>
           </div>
         </Show>
         <Show when={failed() && !suspended()}>

@@ -153,8 +153,8 @@ const setup: Setup<typeof definition> = (ctx) => {
       },
       label: () => (
         <div class="flex items-center gap-1.5">
-          <Show when={icon()} fallback={<Icon name="outline-globe" size="small" />}>
-            {(source) => <img src={source()} alt="" class="size-3.5 shrink-0 object-contain" />}
+          <Show when={icon()} fallback={<Icon name="outline-globe" class="shrink-0" />}>
+            {(source) => <img src={source()} alt="" class="size-4 shrink-0 object-contain" />}
           </Show>
           <span class="max-w-40 truncate">{text()}</span>
         </div>

@@ -32,6 +32,11 @@
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
   }
 
+  /* A focused page address sits where it sat at rest, 32px in; typed text and the placeholder sit at 30px. */
+  &[data-editing][data-address] {
+    gap: 8px;
+  }
+
   [data-slot="browser-address-text"] {
     position: relative;
     flex: 1 1 0;
@@ -125,6 +130,7 @@
 /* Suggestions from the browsing history, under the address field. */
 [data-component="browser-suggestions"] {
   z-index: 60;
+  width: calc(var(--kb-popper-anchor-width) + 16px);
   padding: 8px;
   border-radius: 12px;
   background: var(--v2-background-bg-base);
@@ -187,14 +193,19 @@
   }
 }
 
+/* Suggestions read the address at full strength; the new tab page mutes it. */
+[data-component="browser-suggestions"] [data-slot="browser-page-row-url"] {
+  color: var(--v2-text-text-base);
+}
+
 /* Site information under the site button. */
 [data-component="browser-site"] {
   z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   width: 320px;
-  padding: 12px 12px 14px;
+  padding: 12px;
   border-radius: 12px;
   background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-floating);
