@@ -506,7 +506,7 @@
       "name": "@opencode/gui-extensions",
       "version": "2.0.24",
       "dependencies": {
-        "@betteroffice/docx": "0.4.1",
+        "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
         "@betteroffice/pptx": "0.2.0",
         "@betteroffice/xlsx": "0.3.0",
@@ -1637,7 +1637,7 @@
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
-    "@betteroffice/docx": ["@betteroffice/docx@0.4.1", "", { "peerDependencies": { "@betteroffice/fonts": "^0" }, "optionalPeers": ["@betteroffice/fonts"] }, "sha512-kPGQA0Jxkv2nBxofwNvUttfvOoXwj+VEiBMS0vB4AIJZ3dM/d7IeZw2s5/V1huhn9if9aVE4X5kwhWVZIvC1HA=="],
+    "@betteroffice/docx": ["@betteroffice/docx@0.4.3", "", { "peerDependencies": { "@betteroffice/fonts": "^0" }, "optionalPeers": ["@betteroffice/fonts"] }, "sha512-CEErXJH3iCsi2a61gTNkAofLCzSTcktLmp710gGhMwbBfOqwQ2yI7dRFBV3ElGa9JxkS03IfejvLX0sAvlTrUQ=="],
 
     "@betteroffice/fonts": ["@betteroffice/fonts@0.4.0", "", { "peerDependencies": { "@betteroffice/fonts-cjk": "^0" }, "optionalPeers": ["@betteroffice/fonts-cjk"] }, "sha512-x1BVwYDAgY5R6TWI4t9NLguSiAEbH5GItN2ZlpBIFoRXTIJgjBsXd6sUxPGpexXOyY6KdhRjG8XvHjyAYxEGCw=="],
 

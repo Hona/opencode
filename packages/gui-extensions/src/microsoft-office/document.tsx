@@ -250,7 +250,7 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
       )
 
       // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
-      // that: each built page holds megabytes in the engine.
+      // that, and a paint releases the pages far from its own: each built page holds megabytes in the engine.
       void client.call("build", { index: index + 1 }, { key: "build" }).catch(() => undefined)
 
       const bitmap = await painted

@@ -45,6 +45,13 @@ const firstPages = 3
 /** How long one layout step may hold back a paint that waits behind it, in milliseconds. */
 const stepBudget = 24
 
+/**
+ * How many pages either side of the page painted last stay built. A built page holds about 5 MB in the engine and
+ * builds again in about 100 ms. This keeps every page near the viewport, which paints a viewport ahead in both
+ * directions, and lets a reader scroll back a few screens without waiting, while a long read holds at most 21 pages.
+ */
+const keptAround = 10
+
 type Opened = Awaited<ReturnType<typeof open>>
 
 /** A value built on first use. */
@@ -158,7 +165,7 @@ async function open(bytes: Uint8Array) {
   // body block takes.
   const layout = { loading: decodeLayoutReply(prefix).provisional ?? false, begun: false, cost: 3 }
 
-  // Builds a page's content the first time it is needed; later frames keep it.
+  // Builds a page's content when it is needed and not built, the first time or again after `release`.
   const built = (index: number) => {
     const page = retained.frame.displayList.pages[index]
 
@@ -170,6 +177,25 @@ async function open(bytes: Uint8Array) {
     )
 
     return retained.frame.displayList.pages[index]
+  }
+
+  // Gives back the built pages far from the page about to paint, so a long read keeps only the pages around the
+  // viewport. A released page keeps its geometry and document positions, which bookmarks search, and builds again
+  // when it is needed.
+  const release = (painted: number) => {
+    // The engine releases pages of the whole document's layout only, and few pages show before it.
+    if (layout.loading) return
+
+    const far = retained.frame.displayList.pages.flatMap((page, index) =>
+      !page.unbuilt && Math.abs(painted - index) > keptAround ? [index] : [],
+    )
+
+    if (far.length === 0) return
+
+    const frame = session.releaseDisplayPagesFrame(far, retained.frame.frameEpoch)
+
+    // A superseded release changes nothing; the next one tries again.
+    if (frame) retained.frame = applyFrameDelta(retained.frame, decodeFrameDelta(frame))
   }
 
   // The whole document's layout replaces the prefix's frame.
@@ -232,6 +258,9 @@ async function open(bytes: Uint8Array) {
       return progress.layoutJson === undefined ? { done: false as const } : complete(progress.layoutJson)
     },
     paint: async (index: number, scale: number, ratio: number) => {
+      // Released first, so the page builds in the memory they free.
+      release(index)
+
       const page = built(index)
 
       if (!page) return undefined
