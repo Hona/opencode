@@ -2,6 +2,7 @@ import { For, Show } from "solid-js"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup, type DialogProps } from "@opencode/ui/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { fonts } from "./fonts"
 import { crateNotices, notices } from "./notices"
 
 const licenseOf = new Map(crateNotices.texts.map((text) => [text.id, text.license]))
@@ -40,6 +41,26 @@ export default function DialogThirdPartyNotices(props: { onCloseAutoFocus?: Dial
             </section>
           )}
         </For>
+        <section class="settings-notice settings-crates">
+          <h3 class="settings-notice-heading">{language.t("settings.about.notices.fonts.title")}</h3>
+          <p>{language.t("settings.about.notices.fonts.description")}</p>
+          <ul class="settings-crate-list">
+            <For each={fonts.families}>
+              {(family) => (
+                <li class="settings-crate">
+                  <div class="settings-crate-heading">
+                    <ExternalLink href={family.url}>{family.name}</ExternalLink>
+                  </div>
+                  <p>{family.copyright.join("\n")}</p>
+                </li>
+              )}
+            </For>
+          </ul>
+          <details>
+            <summary>SIL Open Font License 1.1</summary>
+            <pre>{fonts.license}</pre>
+          </details>
+        </section>
         <section class="settings-notice settings-crates">
           <h3 class="settings-notice-heading">{language.t("settings.about.notices.crates.title")}</h3>
           <p>{language.t("settings.about.notices.crates.description")}</p>

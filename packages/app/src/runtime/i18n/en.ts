@@ -664,7 +664,9 @@ export const dict = {
   "settings.about.notices.title": "Third-party notices",
   "settings.about.notices.description": "OpenCode includes the following open source software.",
   "settings.about.notices.license": "License text",
-  "settings.about.notices.font": "Font",
+  "settings.about.notices.fonts.title": "Fonts in the Office previews",
+  "settings.about.notices.fonts.description":
+    "Each family is distributed under the SIL Open Font License 1.1, with the copyright lines below.",
   "settings.about.notices.eigenpal": "Portions of BetterOffice derive from it.",
   "settings.about.notices.loadFailed": "Could not load the third-party notices",
   "settings.about.notices.crates.title": "Rust crates in the Office engines",
