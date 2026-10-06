@@ -88,16 +88,24 @@
   }
 
   /* One line of the whole URL, ending in an ellipsis where the field ends. The scheme and the path are muted around
-     the host; an address without a host, such as a workspace file, keeps its path at full strength. */
+     the host, and so is the ellipsis, which takes the line's color and almost always cuts the path. An address
+     without a host, such as a workspace file, keeps its path at full strength. */
   [data-slot="browser-address-url"] {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+
+    &[data-host] {
+      color: var(--v2-text-text-faint);
+    }
   }
 
-  [data-slot="browser-address-muted"],
-  [data-slot="browser-address-url"][data-host] [data-slot="browser-address-path"] {
+  [data-slot="browser-address-muted"] {
     color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="browser-address-host"] {
+    color: var(--v2-text-text-base);
   }
 
   /* Page actions show on hover and while the field has focus. */

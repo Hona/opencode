@@ -652,8 +652,8 @@ export default function SessionBrowserPane(props: {
                 <div aria-hidden="true" data-slot="browser-address-display">
                   <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined}>
                     <span data-slot="browser-address-muted">{parts().scheme}</span>
-                    {parts().host}
-                    <span data-slot="browser-address-path">{parts().rest}</span>
+                    <span data-slot="browser-address-host">{parts().host}</span>
+                    {parts().rest}
                   </span>
                 </div>
               </Show>
