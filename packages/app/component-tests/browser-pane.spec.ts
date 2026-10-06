@@ -282,10 +282,25 @@ story("restores the current URL each time the same submitted navigation is block
       await address.press("Enter")
       await expect(address).toHaveValue("https://blocked.example/")
       await root.getByRole("button", { name: "Block navigation", exact: true }).click()
-      await expect(root.getByRole("alert")).toHaveText("Request failed")
+      await expect(root.getByRole("alert")).toHaveText("Only web pages can open here.")
       await expect(address).toHaveValue("https://alpha.example/")
       await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
     })
+  }
+})
+
+story("explains why a typed address cannot open instead of searching for it", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+  for (const [typed, reason] of [
+    ["ftp://example.com", "Only web pages can open here."],
+    ["https://user:pass@example.com", "Addresses with a user name or password can't open here."],
+  ]) {
+    await address.fill(typed)
+    await address.press("Enter")
+    await expect(root.getByRole("alert")).toHaveText(reason)
+    await expect(address).toHaveValue("https://alpha.example/")
   }
 })
 

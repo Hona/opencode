@@ -9,7 +9,15 @@ import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
-import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, normalizeURL, type Policy } from "./policy"
+import {
+  allowedDestination,
+  destinationOrigin,
+  fileURLWithin,
+  localFileURL,
+  normalizeURL,
+  refusal,
+  type Policy,
+} from "./policy"
 import type { PaneElement } from "./ipc"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
@@ -381,7 +389,8 @@ export function createBrowserPage(
 
     if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
-    options.publish("ERR_BLOCKED_BY_CLIENT")
+    // The same reason a typed address gets, so a blocked link and a blocked address read alike.
+    options.publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
   }
 
   contents.on("will-frame-navigate", guard)

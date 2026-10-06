@@ -850,7 +850,7 @@ export default function SessionBrowserPane(props: {
       </div>
       <Show when={error() && !failed()}>
         <div
-          class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted"
+          class="shrink-0 px-3 py-1.5 text-12-regular text-v2-state-fg-danger border-b border-v2-border-border-muted"
           role="alert"
           aria-live="assertive"
         >

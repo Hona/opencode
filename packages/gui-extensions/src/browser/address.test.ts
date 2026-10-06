@@ -21,12 +21,17 @@ test("the address field navigates to what reads as an address and searches for a
       "localhost 3000",
       "ABOUT:BLANK",
       "file:///C:/repo/index.html",
-      // Text main would not open searches instead of failing: credentials, a missing host, another scheme.
+      // A typed scheme is an address even where main refuses it, which then says why.
+      "file://server/share/x.html",
+      "ftp://example.com",
+      "about:config",
+      // Text that is no URL searches: no host, a space in it, or a host main would not open as a web page.
+      "https://",
+      "http:// foo",
+      "about: the movie",
       "user@example.com",
       ":8080",
-      "https://",
-      "about:config",
-      "ftp://example.com",
+      "error: cannot find module",
     ].map(resolveAddress),
   ).toEqual([
     "about:blank",
@@ -43,11 +48,15 @@ test("the address field navigates to what reads as an address and searches for a
     search("localhost 3000"),
     "about:blank",
     "file:///C:/repo/index.html",
+    "file://server/share/x.html",
+    "ftp://example.com",
+    "about:config",
+    search("https://"),
+    search("http:// foo"),
+    search("about: the movie"),
     search("user@example.com"),
     search(":8080"),
-    search("https://"),
-    search("about:config"),
-    search("ftp://example.com"),
+    search("error: cannot find module"),
   ])
 })
 

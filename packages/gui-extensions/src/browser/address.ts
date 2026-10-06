@@ -16,15 +16,16 @@ export function resolveAddress(input: string) {
 }
 
 /**
- * Whether the address field would search for the text rather than open it. Only what main opens is an address: a web
- * page without credentials, a file (main still checks that it lies in the workspace), or a blank page.
+ * Whether the address field would search for the text rather than open it. A typed scheme means an address, which
+ * main opens or explains why not; it searches only when the text is no URL at all, such as a bare `https://`. Text
+ * without one is an address when it names a host main opens as a web page.
  */
 export function searches(input: string) {
   const value = input.trim()
 
-  if (!value || value.toLowerCase() === "about:blank") return false
+  if (!value || /^about:\S*$/i.test(value)) return false
 
-  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return !opens(value)
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return !URL.canParse(value)
 
   if (/\s/.test(value)) return true
   const host = value.split(/[/?#]/, 1)[0] ?? ""
@@ -33,11 +34,7 @@ export function searches(input: string) {
     /^(?:localhost|\[[\da-f:.]+\])(?::\d+)?$/i.test(host) || /:\d+$/.test(host) || /^[^.]+(?:\.[^.]+)+$/.test(host)
 
   // Main adds the scheme the same way, so the text opens only if the whole URL it becomes does.
-  return !named || !opens(`https://${value}`)
-}
-
-function opens(url: string) {
-  return !!destinationOrigin(url) || (URL.canParse(url) && new URL(url).protocol === "file:")
+  return !named || !destinationOrigin(`https://${value}`)
 }
 
 /**
