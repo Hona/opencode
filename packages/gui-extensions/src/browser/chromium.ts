@@ -91,9 +91,15 @@ function zoomKey(input: Electron.Input) {
   if (input.key === "0") return "reset"
 }
 
-/** The address a cookie is removed by: its domain without the leading dot, its path, and its scheme. */
+/**
+ * The address a cookie is removed by: its domain without the leading dot, its path, and its scheme. An IPv6 host
+ * needs its brackets in a URL.
+ */
 function cookieURL(cookie: Electron.Cookie) {
-  return `${cookie.secure ? "https" : "http"}://${(cookie.domain ?? "").replace(/^\./, "")}${cookie.path ?? "/"}`
+  const domain = (cookie.domain ?? "").replace(/^\./, "")
+  const host = domain.includes(":") && !domain.startsWith("[") ? `[${domain}]` : domain
+
+  return `${cookie.secure ? "https" : "http"}://${host}${cookie.path ?? "/"}`
 }
 
 /** The next preset in the direction, or 100%; the current factor at either end. */
@@ -218,7 +224,8 @@ export function createBrowserPage(
 
   const detail = () => {
     if (closed) return
-    const next: PageDetail = { zoom: contents.getZoomFactor() }
+    // Chromium's factor for the outermost presets can land a rounding error outside them.
+    const next: PageDetail = { zoom: Math.min(5, Math.max(0.25, contents.getZoomFactor())) }
 
     if (icon) next.icon = icon
     const key = `${next.zoom}:${next.icon ?? ""}`
@@ -322,19 +329,22 @@ export function createBrowserPage(
     // error statuses are real documents from the user's server and stay visible.
     if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
 
-    // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do.
-    if (!URL.canParse(url) || new URL(url).origin !== origin) {
+    // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do. Files and blank
+    // pages have no shared origin, so each keeps none.
+    const next = destinationOrigin(url) ?? url
+
+    if (next !== origin) {
       icon = undefined
       iconRequest++
     }
 
-    origin = URL.canParse(url) ? new URL(url).origin : ""
-    // Chromium keeps a zoom per origin, so a new site may have its own.
-    detail()
+    origin = next
 
     // A blank or failed document paints at commit; a real one waits for dom-ready.
     if (url === "about:blank" || failure) settle()
     publish()
+    // After the state that names the new URL. Chromium keeps a zoom per origin, so a new site may have its own.
+    detail()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // Cancelled navigation and failed subframes do not replace the current page.
@@ -553,7 +563,10 @@ export function createBrowserPage(
 
       return { cookies: (await contents.session.cookies.get({ url })).length }
     },
-    /** Deletes what the page's site stored: the cookies its address can read, and its origin's storage. */
+    /**
+     * Deletes what the page's site stored: the cookies its address can read, and its origin's storage. Resolves once
+     * the page reloaded without them, so a count read next includes what the reload set again.
+     */
     async clearSite() {
       const url = contents.getURL()
       const origin = destinationOrigin(url)
@@ -566,7 +579,10 @@ export function createBrowserPage(
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
 
-      if (!closed) contents.reload()
+      if (closed) return
+      contents.reload()
+      // A slow page still cleared; the count then reads what it set so far.
+      await waitFor(() => closed || !contents.isLoading(), new AbortController().signal, 30_000).catch(() => undefined)
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,

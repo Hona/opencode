@@ -1,3 +1,5 @@
+import { destinationOrigin } from "./policy"
+
 /** Where text that is not an address goes. Shared with the system browser's default so results look familiar. */
 const SEARCH = "https://www.google.com/search?q="
 
@@ -8,25 +10,34 @@ const SEARCH = "https://www.google.com/search?q="
 export function resolveAddress(input: string) {
   const value = input.trim()
 
-  if (!value) return "about:blank"
+  if (!value || value.toLowerCase() === "about:blank") return "about:blank"
 
   return searches(value) ? `${SEARCH}${encodeURIComponent(value)}` : value
 }
 
-/** Whether the address field would search for the text rather than open it. */
+/**
+ * Whether the address field would search for the text rather than open it. Only what main opens is an address: a web
+ * page without credentials, a file (main still checks that it lies in the workspace), or a blank page.
+ */
 export function searches(input: string) {
   const value = input.trim()
 
-  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value) || /^about:/i.test(value)) return false
+  if (!value || value.toLowerCase() === "about:blank") return false
 
-  if (!value || /\s/.test(value)) return !!value
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return !opens(value)
+
+  if (/\s/.test(value)) return true
   const host = value.split(/[/?#]/, 1)[0] ?? ""
 
-  return !(
-    /^(?:localhost|\[[\da-f:.]+\])(?::\d+)?$/i.test(host) ||
-    /:\d+$/.test(host) ||
-    /^[^.]+(?:\.[^.]+)+$/.test(host)
-  )
+  const named =
+    /^(?:localhost|\[[\da-f:.]+\])(?::\d+)?$/i.test(host) || /:\d+$/.test(host) || /^[^.]+(?:\.[^.]+)+$/.test(host)
+
+  // Main adds the scheme the same way, so the text opens only if the whole URL it becomes does.
+  return !named || !opens(`https://${value}`)
+}
+
+function opens(url: string) {
+  return !!destinationOrigin(url) || (URL.canParse(url) && new URL(url).protocol === "file:")
 }
 
 /**

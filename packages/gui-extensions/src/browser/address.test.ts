@@ -19,6 +19,14 @@ test("the address field navigates to what reads as an address and searches for a
       "mdn",
       "css grid gap",
       "localhost 3000",
+      "ABOUT:BLANK",
+      "file:///C:/repo/index.html",
+      // Text main would not open searches instead of failing: credentials, a missing host, another scheme.
+      "user@example.com",
+      ":8080",
+      "https://",
+      "about:config",
+      "ftp://example.com",
     ].map(resolveAddress),
   ).toEqual([
     "about:blank",
@@ -33,6 +41,13 @@ test("the address field navigates to what reads as an address and searches for a
     search("mdn"),
     search("css grid gap"),
     search("localhost 3000"),
+    "about:blank",
+    "file:///C:/repo/index.html",
+    search("user@example.com"),
+    search(":8080"),
+    search("https://"),
+    search("about:config"),
+    search("ftp://example.com"),
   ])
 })
 

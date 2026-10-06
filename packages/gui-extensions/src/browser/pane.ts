@@ -489,9 +489,10 @@ export function createBrowserPane(input: {
       inspect: (event) => {
         if (entry.pages.has(id)) report(entry, { type: "inspect", tabID: id, ...event })
       },
-      // Straight to the window: icons and zoom are local to this desktop, like the embed.
+      // Icons and zoom are local to this desktop, but wait behind the states reported before them, so the window files
+      // a new page's icon under that page's URL.
       detail: (value) => {
-        if (entry.pages.has(id)) publish(entry, { type: "page", tabID: id, ...value })
+        if (entry.pages.has(id)) report(entry, { type: "page", tabID: id, ...value })
       },
       zoomed: () => entry.pages.forEach((page) => page.detail()),
       address: () => {

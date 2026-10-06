@@ -39,6 +39,7 @@ test("file documents load only from allowed workspace roots and never from a hos
   expect(() => normalizeURL("file:///home/me/repo/x.html")).toThrow()
   expect(() => normalizeURL("file:///etc/passwd", { fileRoots: roots })).toThrow()
   expect(normalizeURL("localhost:3000", { fileRoots: roots })).toBe("http://localhost:3000")
+  expect(normalizeURL("app.localhost:3000/")).toBe("http://app.localhost:3000/")
 })
 
 test("windows workspace roots match drive-letter file URLs", () => {

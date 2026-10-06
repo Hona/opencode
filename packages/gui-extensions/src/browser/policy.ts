@@ -50,7 +50,7 @@ export function allowedDestination(input: string, policy?: Policy) {
 
 export function normalizeURL(input: string, policy?: Policy) {
   const value = input.trim() || "about:blank"
-  const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+  const local = /^(?:(?:[a-z\d-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
 
   const url =
     value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`
