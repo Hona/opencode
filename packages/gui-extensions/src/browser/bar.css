@@ -65,6 +65,13 @@
     color: var(--v2-text-text-base);
   }
 
+  /* Focus leaving the window (or into the page) ends editing but keeps the input's selection, which Chromium paints
+     over transparent text. At rest only the drawn address shows. */
+  &:not([data-editing]) [data-slot="browser-address-input"]::selection {
+    color: transparent;
+    background-color: transparent;
+  }
+
   [data-slot="browser-address-display"],
   [data-slot="browser-address-hint"] {
     position: absolute;

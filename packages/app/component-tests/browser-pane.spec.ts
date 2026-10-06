@@ -352,6 +352,51 @@ story("selects the full URL when the address field gains focus", async ({ page }
     .toBe(true)
 })
 
+story("draws only the address at rest when focus leaves the window with the field selected", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  // Chromium blurs the field when the window or the native page takes focus, and the field keeps its full selection.
+  await address.evaluate((input: HTMLInputElement) => {
+    input.dispatchEvent(new FocusEvent("blur"))
+    input.select()
+  })
+  await expect(address).toHaveJSProperty("selectionStart", 0)
+  await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
+  await page.mouse.move(0, 0)
+
+  // Computed ::selection styles do not report the default highlight, so compare the input's own paint with the
+  // selection collapsed. The drawn address is hidden: a selection layer can change how its text is antialiased.
+  await page.addStyleTag({ content: '[data-slot="browser-address-display"] { visibility: hidden }' })
+  const field = root.locator('[data-component="browser-address"]')
+  const selected = (await field.screenshot()).toString("base64")
+  await address.evaluate((input: HTMLInputElement) => input.setSelectionRange(0, 0))
+  const collapsed = (await field.screenshot()).toString("base64")
+
+  const changed = await page.evaluate(
+    async (shots) => {
+      const pixels = await Promise.all(
+        shots.map(async (data) => {
+          const image = new Image()
+          image.src = `data:image/png;base64,${data}`
+          await image.decode()
+          const canvas = new OffscreenCanvas(image.width, image.height)
+          canvas.getContext("2d")?.drawImage(image, 0, 0)
+
+          return canvas.getContext("2d")?.getImageData(0, 0, image.width, image.height).data ?? new Uint8ClampedArray()
+        }),
+      )
+
+      return Array.from({ length: (pixels[0]?.length ?? 0) / 4 }, (_, index) => index * 4).filter((offset) =>
+        [0, 1, 2].some((channel) => pixels[0]?.[offset + channel] !== pixels[1]?.[offset + channel]),
+      ).length
+    },
+    [selected, collapsed],
+  )
+
+  expect(changed).toBe(0)
+})
+
 story("keeps the current page visible while a submitted URL loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
