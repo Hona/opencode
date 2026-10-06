@@ -20,7 +20,10 @@ export function anchorRange(anchor: XlsxAnchor): CellRange[] {
 
 /** An A1 cell or range, such as "B2" or "A1:F20"; undefined for anything else. */
 export function parseRange(a1: string): CellRange | undefined {
-  const [first, last = first] = a1.split(":").map(parseCell)
+  // A lone cell is its own last corner; an empty one, as in "A1:", names no range.
+  const corners = a1.split(":")
+  const first = parseCell(corners[0] ?? "")
+  const last = corners.length === 1 ? first : parseCell(corners[1] ?? "")
 
   if (!first || !last) return undefined
 

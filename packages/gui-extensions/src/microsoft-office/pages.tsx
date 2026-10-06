@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createKeyed } from "../sdk"
 import { paper } from "./paper"
@@ -11,6 +11,9 @@ export type PageOverlay = (input: { readonly index: number; readonly scale: numb
 
 /** Scrolls the column so a point of a page shows near the top. */
 export type ScrollToPage = (index: number, y: number) => void
+
+/** A page's size and paper colour; a new object for a page is a changed page, which paints again. */
+type PageSize = { readonly width: number; readonly height: number; readonly background?: string }
 
 /** Tells a page whether it is near the viewport. */
 type Watch = (element: Element, change: (near: boolean) => void) => void
@@ -44,7 +47,7 @@ const maxSlice = 200
  * and mount the work for each at once.
  */
 export function OfficePages(props: {
-  pages: readonly { readonly width: number; readonly height: number; readonly background?: string }[]
+  pages: readonly PageSize[]
   maxScale: number
   paint: PaintPage
   label: (index: number) => string
@@ -165,28 +168,27 @@ export function OfficePages(props: {
   return (
     <div ref={scroller} data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
       <div class="flex flex-col items-center gap-4 py-6">
-        <For each={shown()}>
+        {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
+        <Index each={shown()}>
           {(page, index) => (
             <div class="flex shrink-0 flex-col items-center gap-3">
               <OfficePage
-                ref={(element) => (pages[index()] = element)}
+                ref={(element) => (pages[index] = element)}
                 watch={watch}
-                index={index()}
-                width={page.width}
-                height={page.height}
-                background={page.background}
-                scale={fit(width(), page.width)}
-                rasterScale={fit(settled(), page.width)}
+                index={index}
+                page={page()}
+                scale={fit(width(), page().width)}
+                rasterScale={fit(settled(), page().width)}
                 ratio={ratio()}
                 paint={props.paint}
                 overlay={props.overlay}
                 text={props.text ?? false}
-                label={props.label(index())}
+                label={props.label(index)}
               />
-              {props.footer?.(index())}
+              {props.footer?.(index)}
             </div>
           )}
-        </For>
+        </Index>
       </div>
     </div>
   )
@@ -196,9 +198,7 @@ function OfficePage(props: {
   ref: (element: HTMLDivElement) => void
   watch: Watch
   index: number
-  width: number
-  height: number
-  background: string | undefined
+  page: PageSize
   scale: number
   rasterScale: number
   ratio: number
@@ -225,10 +225,10 @@ function OfficePage(props: {
       aria-label={props.text ? props.label : undefined}
       class="relative shrink-0 shadow-[var(--v2-elevation-raised)]"
       style={{
-        width: `${props.width * props.scale}px`,
-        height: `${props.height * props.scale}px`,
+        width: `${props.page.width * props.scale}px`,
+        height: `${props.page.height * props.scale}px`,
         // Paper keeps the document's own colour in every theme, as it would print.
-        background: props.background ?? paper,
+        background: props.page.background ?? paper,
       }}
     >
       <canvas
@@ -243,8 +243,7 @@ function OfficePage(props: {
           <PageBitmap
             canvas={target()}
             index={props.index}
-            width={props.width}
-            height={props.height}
+            page={props.page}
             scale={props.scale}
             rasterScale={props.rasterScale}
             ratio={props.ratio}
@@ -261,27 +260,28 @@ function OfficePage(props: {
 function PageBitmap(props: {
   canvas: HTMLCanvasElement
   index: number
-  width: number
-  height: number
+  page: PageSize
   scale: number
   rasterScale: number
   ratio: number
   paint: PaintPage
   overlay: PageOverlay | undefined
 }) {
-  // The bitmap's size in device pixels: a new scale that rounds to the same size keeps the bitmap it has.
+  // The bitmap's size in device pixels: a new scale that rounds to the same size keeps the bitmap it has. A changed
+  // page paints again, and its old bitmap shows until the new one replaces it.
   const raster = createMemo(
-    () => (props.rasterScale > 0 ? { scale: props.rasterScale, ratio: props.ratio } : false),
+    () => (props.rasterScale > 0 ? { scale: props.rasterScale, ratio: props.ratio, page: props.page } : false),
     undefined,
     {
       equals: (previous, next) =>
         previous === next ||
         (!!previous &&
           !!next &&
-          Math.round(props.width * previous.scale * previous.ratio) ===
-            Math.round(props.width * next.scale * next.ratio) &&
-          Math.round(props.height * previous.scale * previous.ratio) ===
-            Math.round(props.height * next.scale * next.ratio)),
+          previous.page === next.page &&
+          Math.round(props.page.width * previous.scale * previous.ratio) ===
+            Math.round(props.page.width * next.scale * next.ratio) &&
+          Math.round(props.page.height * previous.scale * previous.ratio) ===
+            Math.round(props.page.height * next.scale * next.ratio)),
     },
   )
 

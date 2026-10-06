@@ -14,7 +14,8 @@ type Request = { readonly id: number; readonly method: string; readonly key?: st
 type Cancel = { readonly cancel: number }
 
 type Response =
-  | { readonly id: number; readonly ok: true; readonly value: unknown }
+  /** `transferred` lists the objects the reply moved, so a reply nobody waits for can close its bitmaps. */
+  | { readonly id: number; readonly ok: true; readonly value: unknown; readonly transferred: readonly Transferable[] }
   | { readonly id: number; readonly ok: false; readonly superseded: boolean; readonly message: string }
 
 /** A value a method returns with the buffers to move to the caller rather than copy. */
@@ -73,7 +74,12 @@ export function createWorkerClient<M extends Methods>(worker: Worker) {
   worker.onmessage = (event: MessageEvent<Response>) => {
     const call = pending.get(event.data.id)
 
-    if (!call) return
+    // A reply that crossed its call's cancel on the way: its bitmaps would hold their memory until collected.
+    if (!call) {
+      if (event.data.ok) closeBitmaps(event.data.transferred)
+
+      return
+    }
 
     pending.delete(event.data.id)
     call.settle(event.data)
@@ -125,7 +131,10 @@ export function createWorkerClient<M extends Methods>(worker: Worker) {
 }
 
 /** Whether a call runs, and which call it is, so its caller can abort it. */
-type ServerState = { running: boolean; current: { readonly id: number; readonly controller: AbortController } | undefined }
+type ServerState = {
+  running: boolean
+  current: { readonly id: number; readonly controller: AbortController } | undefined
+}
 
 /**
  * The worker's end: runs calls one at a time, in order, letting messages through between them. A handler's signal
@@ -171,17 +180,32 @@ export function serveWorker<M extends Methods>(handlers: {
       const input = request.input as never
 
       await Promise.try(() => handler(input, controller.signal)).then(
-        (result) =>
-          result instanceof Transfer
-            ? reply({ id: request.id, ok: true, value: result.value }, result.transfer)
-            : reply({ id: request.id, ok: true, value: result }),
-        (cause: unknown) =>
+        (result) => {
+          const transfer = result instanceof Transfer ? result.transfer : []
+
+          // The caller already settled a call it aborted, so nothing would take the reply or its bitmaps.
+          if (controller.signal.aborted) return closeBitmaps(transfer)
+
+          reply(
+            {
+              id: request.id,
+              ok: true,
+              value: result instanceof Transfer ? result.value : result,
+              transferred: transfer,
+            },
+            transfer,
+          )
+        },
+        (cause: unknown) => {
+          if (controller.signal.aborted) return
+
           reply({
             id: request.id,
             ok: false,
             superseded: false,
             message: cause instanceof Error ? cause.message : String(cause),
-          }),
+          })
+        },
       )
     }
 
@@ -214,4 +238,11 @@ export function serveWorker<M extends Methods>(handlers: {
     queue.push(event.data)
     void run()
   }
+}
+
+/** Frees the bitmaps among objects that were moved for a reply nobody takes. */
+function closeBitmaps(transfer: readonly Transferable[]) {
+  transfer.forEach((item) => {
+    if (item instanceof ImageBitmap) item.close()
+  })
 }

@@ -22,6 +22,7 @@ import {
 } from "@betteroffice/xlsx/headless"
 import { createKeyed, createLatest, useExtension } from "../sdk"
 import type { FileViewerProps } from "../file/contract"
+import { externalUrl } from "./links"
 import { paper } from "./paper"
 import { columnName, contains, coverMerges, hiddenAt, lastCell, settleMerges, skipHidden } from "./sheet-cells"
 import {
@@ -50,6 +51,9 @@ type Shown = { readonly layout: SheetLayout; readonly target: CellAddr | undefin
  * arrived, so a late reply never replaces a newer one, and the newest request while its reply is on the way.
  */
 type FrameOrder = { requested: string; sent: number; received: number; pending: SheetFrameRequest | undefined }
+
+/** The newest sheet pick's request: a newer pick withdraws it, whether it waits for the worker or runs there. */
+type Picking = { controller: AbortController | undefined }
 
 /** The most cells one copy reads; a larger selection would hold the workbook worker for seconds. */
 const copyLimit = 200_000
@@ -116,22 +120,30 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
   )
 
   const active = () => state.selecting ?? state.shown?.layout.info.activeSheet
+  const picking: Picking = { controller: undefined }
 
   const show = (index: number, target?: CellAddr) => {
     const opened = state.opened
 
-    if (!opened || (index === state.shown?.layout.info.activeSheet && !target)) return
+    if (!opened || (index === active() && !target)) return
 
+    picking.controller?.abort()
+
+    // Back to the sheet on show: the pick that was opening is withdrawn, and the grid stays.
+    if (index === state.shown?.layout.info.activeSheet && !target) return void setState("selecting", undefined)
+
+    const controller = new AbortController()
+
+    picking.controller = controller
     setState("selecting", index)
 
-    // A newer pick replaces one still waiting for the worker.
-    void opened.client.call("show", { sheet: index }, { key: "show" }).then(
+    void opened.client.call("show", { sheet: index }, { signal: controller.signal }).then(
       (layout) => {
         // Replaced, not merged as a path setter would, so the grid below mounts afresh for the sheet.
         if (state.opened === opened) setState({ shown: { layout, target }, selecting: undefined })
       },
       (error: Error) => {
-        if (state.opened !== opened || error instanceof SupersededError || error instanceof WorkerClosedError) return
+        if (state.opened !== opened || error instanceof WorkerClosedError) return
 
         // One sheet that fails to open leaves the others readable: the sheet on show stays.
         setState("selecting", undefined)
@@ -843,7 +855,7 @@ function SpreadsheetGrid(props: {
 
     if (!link) return undefined
 
-    if (safeExternalHyperlink(link) || (link.location && parseHyperlinkLocation(link.location, name()))) return link
+    if (sheetLinkUrl(link) || (link.location && parseHyperlinkLocation(link.location, name()))) return link
 
     return undefined
   }
@@ -853,7 +865,7 @@ function SpreadsheetGrid(props: {
 
     if (!link) return
 
-    const url = safeExternalHyperlink(link)
+    const url = sheetLinkUrl(link)
 
     if (url) return ctx.system.openExternal(url)
 
@@ -1065,11 +1077,18 @@ function SpreadsheetGrid(props: {
 
 /** What a link's tooltip shows: where it goes, under any text of its own, so the text cannot hide the target. */
 function linkTitle(link: HyperlinkRegion) {
-  const target = safeExternalHyperlink(link) ?? link.location ?? ""
+  const target = sheetLinkUrl(link) ?? link.location ?? ""
 
   if (!link.tooltip || link.tooltip === target) return target
 
   return `${link.tooltip}\n${target}`
+}
+
+/** A link's web or mail address: the engine's check, which lets `tel:` through, then the schemes the host opens. */
+function sheetLinkUrl(link: HyperlinkRegion) {
+  const url = safeExternalHyperlink(link)
+
+  return url ? externalUrl(url) : undefined
 }
 
 /** Where to scroll so a cell shows: at the start, or just enough to bring it fully into view. */

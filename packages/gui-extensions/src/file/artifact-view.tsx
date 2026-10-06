@@ -559,13 +559,33 @@ function ArtifactViewer(props: {
   onDetails: (details: readonly string[]) => void
   onError: (reason?: string) => void
 }) {
-  const bytes = createMemo(() => bytesFromContent(props.content))
-  const problem = createMemo(() => props.viewer.problem?.(bytes()))
+  // Checked together, so the check only ever reads bytes freshly decoded, never ones the viewer has moved away.
+  const decoded = createMemo(() => {
+    const bytes = bytesFromContent(props.content)
+
+    return { bytes, problem: props.viewer.problem?.(bytes) }
+  })
 
   return (
-    <Show when={!problem()} fallback={<ArtifactBinary path={props.path} size={props.size} reason={problem()} />}>
-      <ErrorBoundary fallback={<ArtifactBinary path={props.path} size={props.size} />}>
-        <Dynamic component={props.viewer.View} bytes={bytes()} onDetails={props.onDetails} onError={props.onError} />
+    <Show
+      when={!decoded().problem}
+      fallback={<ArtifactBinary path={props.path} size={props.size} reason={decoded().problem} />}
+    >
+      <ErrorBoundary
+        // Taking the error makes Solid call this once per error, untracked, rather than render it as a reactive child.
+        fallback={(_) => {
+          // Fails the file as a rejection does: its details leave the toolbar, and a reloaded file mounts a new viewer.
+          props.onError()
+
+          return <ArtifactBinary path={props.path} size={props.size} />
+        }}
+      >
+        <Dynamic
+          component={props.viewer.View}
+          bytes={decoded().bytes}
+          onDetails={props.onDetails}
+          onError={props.onError}
+        />
       </ErrorBoundary>
     </Show>
   )

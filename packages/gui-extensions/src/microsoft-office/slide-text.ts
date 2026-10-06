@@ -162,7 +162,7 @@ export function withoutMedia(bytes: Uint8Array): Uint8Array {
 
   if (count === 0xffff || directory === 0xffffffff || directory > end) return bytes
 
-  const entries = readEntries(view, directory, count)
+  const entries = readEntries(view, directory, end, count)
 
   if (!entries || !entries.some((entry) => entry.name.startsWith("ppt/media/"))) return bytes
 
@@ -224,18 +224,23 @@ function endOfDirectory(view: DataView) {
   return undefined
 }
 
-function readEntries(view: DataView, directory: number, count: number) {
+/**
+ * The central directory's records, from `directory` up to the end record at `end`; undefined when one is malformed: it
+ * runs past the directory, or its local header does not sit before it.
+ */
+function readEntries(view: DataView, directory: number, end: number, count: number) {
   const decoder = new TextDecoder()
 
   return Array.from({ length: count }).reduce<{ at: number; entries: Entry[] } | undefined>(
     (state) => {
-      if (!state || state.at + 46 > view.byteLength || view.getUint32(state.at, true) !== 0x02014b50) return undefined
+      if (!state || state.at + 46 > end || view.getUint32(state.at, true) !== 0x02014b50) return undefined
 
       const nameLength = view.getUint16(state.at + 28, true)
       const length = 46 + nameLength + view.getUint16(state.at + 30, true) + view.getUint16(state.at + 32, true)
       const local = view.getUint32(state.at + 42, true)
 
-      if (local === 0xffffffff) return undefined
+      // A local header is 30 bytes before its name and data.
+      if (state.at + length > end || local + 30 > directory) return undefined
 
       const name = decoder.decode(new Uint8Array(view.buffer, view.byteOffset + state.at + 46, nameLength))
 

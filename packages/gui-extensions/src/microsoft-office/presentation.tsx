@@ -166,13 +166,8 @@ function createPaint(client: Client, painted: (index: number, failed: boolean) =
           error instanceof SupersededError || error instanceof WorkerClosedError ? undefined : { kind: "failed" },
       )
 
+    // A withdrawn paint rejects above, and the worker closes any bitmap it made for it.
     if (!result || result.kind === "cancelled") return
-
-    if (signal.aborted) {
-      if (result.kind === "painted") result.bitmap.close()
-
-      return
-    }
 
     painted(index, result.kind === "failed")
 
@@ -190,6 +185,9 @@ function createPaint(client: Client, painted: (index: number, failed: boolean) =
     // The worker cannot decode SVG pictures, so the window rasterizes them at the size the slide draws them and the
     // slide paints again with them.
     const bitmaps = await Promise.all(result.vectors.map(rasterize))
+
+    // A slide that left while its pictures rasterized has no paint to finish.
+    if (signal.aborted) return bitmaps.forEach((bitmap) => bitmap.bitmap?.close())
 
     await client
       .call("vectors", bitmaps, { transfer: bitmaps.flatMap((bitmap) => (bitmap.bitmap ? [bitmap.bitmap] : [])) })

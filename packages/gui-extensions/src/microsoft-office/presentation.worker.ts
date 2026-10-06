@@ -1,5 +1,4 @@
 import {
-  decodePresentationImage,
   initWasm,
   needsElementDecode,
   openPresentation,
@@ -134,15 +133,14 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
   }
 
   const decode = async (asset: string): Promise<Picture> => {
-    const bytes = handle.mediaBytes(asset)
-    const source = await decodePresentationImage(bytes, asset).catch(() => undefined)
+    const blob = presentationImageBlob(handle.mediaBytes(asset))
 
-    if (source instanceof ImageBitmap) return { kind: "bitmap", bitmap: await bounded(source) }
+    // SVG decodes through an image element, which a worker lacks.
+    if (needsElementDecode(blob)) return { kind: "vector", blob, bitmap: undefined, failed: false }
 
-    // The decoder draws SVG through an image element, which a worker lacks.
-    const blob = presentationImageBlob(bytes)
+    const source = await createImageBitmap(blob).catch(() => undefined)
 
-    return needsElementDecode(blob) ? { kind: "vector", blob, bitmap: undefined, failed: false } : { kind: "missing" }
+    return source ? { kind: "bitmap", bitmap: await bounded(source) } : { kind: "missing" }
   }
 
   const picture = (asset: string) => {
@@ -259,13 +257,18 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
       )
     },
 
-    /** Keeps the window's rasterized SVG pictures, in place of any coarser ones. */
+    /**
+     * Keeps the window's rasterized SVG pictures in place of coarser ones. A finer one that a paint at a larger scale
+     * returned stays, and so does any one when the window could not rasterize the picture again.
+     */
     vectors: (bitmaps: readonly VectorBitmap[]) =>
       Promise.all(
         bitmaps.map(async (entry) => {
           const found = await picture(entry.asset)
 
           if (found.kind !== "vector") return entry.bitmap?.close()
+
+          if (found.bitmap && (!entry.bitmap || covers(found.bitmap, entry.bitmap))) return entry.bitmap?.close()
 
           found.bitmap?.close()
           found.bitmap = entry.bitmap

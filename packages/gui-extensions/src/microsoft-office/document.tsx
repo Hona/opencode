@@ -1,8 +1,16 @@
-import { batch, createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
+import { createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Loader } from "@opencode/ui/loader"
 import { createKeyed, createLatest, useExtension } from "../sdk"
 import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
-import { layerFont, lineHeight, type WordLink, type WordMethods, type WordPageSize, type WordSpan } from "./word-protocol"
+import {
+  layerFont,
+  lineHeight,
+  type WordLink,
+  type WordMethods,
+  type WordPageSize,
+  type WordSpan,
+} from "./word-protocol"
 import { createWorkerClient, movableBuffer } from "./worker-rpc"
 import type { FileViewerProps } from "../file/contract"
 
@@ -56,6 +64,7 @@ export default function OfficeDocument(props: FileViewerProps) {
 
       // A worker that dies after the pages showed takes them with it.
       worker.addEventListener("error", fail)
+      worker.addEventListener("messageerror", fail)
       onCleanup(() => {
         controller.abort()
         client.close()
@@ -68,9 +77,13 @@ export default function OfficeDocument(props: FileViewerProps) {
 
           setOpened(value)
 
-          return value.finish().then((count) => {
-            if (!controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
-          })
+          // The worker runs calls in order, so the full layout waits until the first pages have asked for their paints:
+          // they do once the column is laid out and its observer reports them, which takes up to two frames.
+          return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            .then(() => (controller.signal.aborted ? undefined : value.finish()))
+            .then((count) => {
+              if (count !== undefined && !controller.signal.aborted) props.onDetails([ctx.plural("pages", count)])
+            })
         })
         .catch(fail)
     },
@@ -107,7 +120,14 @@ export default function OfficeDocument(props: FileViewerProps) {
             maxScale={1}
             paint={opened().paint}
             label={(index) => ctx.t("page", { number: index + 1 })}
-            overlay={(input) => <WordTextLayer index={input.index} text={opened().text} follow={follow} />}
+            overlay={(input) => (
+              <WordTextLayer
+                index={input.index}
+                page={opened().pages()[input.index]}
+                text={opened().text}
+                follow={follow}
+              />
+            )}
             text
             footer={(index) => (
               <Show when={opened().loading() && index === opened().pages().length - 1}>
@@ -130,12 +150,15 @@ export default function OfficeDocument(props: FileViewerProps) {
  */
 function WordTextLayer(props: {
   index: number
+  /** The page's size object, which the full layout replaces when it changes the page. */
+  page: WordPageSize | undefined
   text: (index: number, signal: AbortSignal) => Promise<readonly WordSpan[]>
   follow: (link: WordLink) => void
 }) {
+  // A changed page asks for its text again; the old text stays until the new arrives.
   const spans = createLatest(
-    () => props.index,
-    (index, signal) => props.text(index, signal),
+    () => props.page,
+    (_, signal) => props.text(props.index, signal),
   )
 
   return (
@@ -203,36 +226,33 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
   // The view owns its bytes, so they move to the worker rather than being copied.
   const buffer = movableBuffer(bytes)
   const first = await client.call("open", { bytes: buffer }, { transfer: [buffer] })
-  const [pages, setPages] = createSignal(first.pages)
-  const [loading, setLoading] = createSignal(first.loading)
+  const [layout, setLayout] = createStore({ pages: first.pages, loading: first.loading })
 
   const layOut = async (): Promise<number> => {
     const step = await client.call("layout", undefined)
 
     if (!step.done) return layOut()
 
-    const shown = pages()
-
-    // A page keeps its row, and its bitmap, unless the full layout changed it.
+    // A page keeps its object, and so its bitmap and text layer, unless the full layout changed it. A changed page
+    // keeps its row and paints again over its old bitmap.
     const sizes = step.pages.map((page, index) => {
-      const size = shown[index]
+      const size = layout.pages[index]
 
       return size && step.kept[index] && sameSize(size, page) ? size : page
     })
 
     // The column mounts the new rows a slice at a time.
-    batch(() => {
-      setPages(sizes)
-      setLoading(false)
-    })
+    setLayout({ pages: sizes, loading: false })
 
     return sizes.length
   }
 
   const rest: Lazy<Promise<number>> = { value: undefined }
-  // Each page's text layer, kept for its row: a page that scrolls back into view shows it without asking the worker. A
-  // page the full layout changed gets a new row, and asks again.
+  // Each page's text layer, kept for its page object: a page that scrolls back into view shows it without asking the
+  // worker. A page the full layout changed gets a new object, and asks again.
   const texts = new WeakMap<WordPageSize, readonly WordSpan[]>()
+  const pages = () => layout.pages
+  const loading = () => layout.loading
 
   const finish = () => (rest.value ??= loading() ? layOut() : Promise.resolve(pages().length))
 
@@ -253,11 +273,12 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
       // that, and a paint releases the pages far from its own: each built page holds megabytes in the engine.
       void client.call("build", { index: index + 1 }, { key: "build" }).catch(() => undefined)
 
+      // A withdrawn paint rejects here, and the worker closes any bitmap it made for it.
       const bitmap = await painted
 
       if (!bitmap) return
 
-      const context = signal.aborted ? null : canvas.getContext("bitmaprenderer")
+      const context = canvas.getContext("bitmaprenderer")
 
       if (!context) return bitmap.close()
 

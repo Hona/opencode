@@ -43,7 +43,10 @@ export function scriptFace(script: BundledFontScript, bold: boolean, italic: boo
   return shipped(script) ? resolveScriptFallbackFace(script, bold, italic) : undefined
 }
 
-/** A bundled face's bytes. The font package caches them, so a face loads once per window. */
+/**
+ * A bundled face's bytes. The font package caches them per worker, so a face loads once per open file; the browser's
+ * caches, which every worker shares, serve the files to the next.
+ */
 export function loadFace(face: BundledFontFace) {
   return loadBundledFontBytes(face)
 }

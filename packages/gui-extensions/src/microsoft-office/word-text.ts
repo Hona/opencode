@@ -8,7 +8,8 @@ import {
   type GlyphRunPrimitive,
   type TextRunPrimitive,
 } from "@betteroffice/docx/layout/render"
-import { lineHeight, type WordLink, type WordSpan } from "./word-protocol"
+import { wordLink } from "./links"
+import { lineHeight, type WordSpan } from "./word-protocol"
 
 /** Measures text in the layer's font. */
 export type TextMeasure = {
@@ -18,7 +19,6 @@ export type TextMeasure = {
   readonly ascent: number
   readonly descent: number
 }
-
 
 /**
  * Builds a page's text layer from its display list: its header, body, notes and footer in reading order. Each glyph
@@ -32,18 +32,6 @@ export function pageText(page: DisplayPage, measure: TextMeasure): WordSpan[] {
   return [page.header?.primitives ?? [], body, ...notes, page.footer?.primitives ?? []].flatMap((region) =>
     regionText(region, page, measure),
   )
-}
-
-/** Where a primitive's link leads, if it is one a reader may follow. */
-export function wordLink(href: string | undefined): WordLink | undefined {
-  if (!href) return undefined
-
-  if (href.startsWith("#")) return href.length > 1 ? { kind: "internal", bookmark: href.slice(1) } : undefined
-
-  const url = URL.parse(href)
-
-  // Only these schemes open in the system browser; anything else, such as `javascript:` or `file:`, stays text.
-  return url && ["http:", "https:", "mailto:"].includes(url.protocol) ? { kind: "external", url: url.href } : undefined
 }
 
 /**

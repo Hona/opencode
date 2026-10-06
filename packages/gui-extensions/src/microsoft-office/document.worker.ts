@@ -1,5 +1,9 @@
 import { Schema } from "effect"
-import { buildResidentRegionLayoutRequest, getLayoutKernelInputs, workerLayoutComputation } from "@betteroffice/docx/editor"
+import {
+  buildResidentRegionLayoutRequest,
+  getLayoutKernelInputs,
+  workerLayoutComputation,
+} from "@betteroffice/docx/editor"
 import { createRustMeasureSource } from "@betteroffice/docx/layout"
 import {
   applyFrameDelta,
@@ -27,7 +31,9 @@ const FontRequirements = Schema.fromJsonString(
       family: Schema.String,
       bold: Schema.Boolean,
       italic: Schema.Boolean,
-      scripts: Schema.optional(Schema.Array(Schema.Literals(["cjk-sc", "cjk-tc", "cjk-jp", "cjk-kr", "arabic", "hebrew"]))),
+      scripts: Schema.optional(
+        Schema.Array(Schema.Literals(["cjk-sc", "cjk-tc", "cjk-jp", "cjk-kr", "arabic", "hebrew"])),
+      ),
     }),
   ),
 )
@@ -71,8 +77,8 @@ serveWorker<WordMethods>({
     return { pages: loaded.pages().map(pageSize), loading: loaded.loading() }
   },
   layout: () => required().step(),
-  paint: async (input) => {
-    const bitmap = await required().paint(input.index, input.scale, input.ratio)
+  paint: async (input, signal) => {
+    const bitmap = await required().paint(input.index, input.scale, input.ratio, signal)
 
     return bitmap ? new Transfer(bitmap, [bitmap]) : undefined
   },
@@ -257,7 +263,10 @@ async function open(bytes: Uint8Array) {
 
       return progress.layoutJson === undefined ? { done: false as const } : complete(progress.layoutJson)
     },
-    paint: async (index: number, scale: number, ratio: number) => {
+    paint: async (index: number, scale: number, ratio: number, signal: AbortSignal) => {
+      // A page that scrolled away before its paint began, or while it rasterized, needs no bitmap.
+      if (signal.aborted) return undefined
+
       // Released first, so the page builds in the memory they free.
       release(index)
 
@@ -280,6 +289,8 @@ async function open(bytes: Uint8Array) {
 
       await rasterizeDisplayPageToBackBuffer(surface, page, { glyphCache, resolveImage: images.resolve }, ratio, scale)
       images.trim()
+
+      if (signal.aborted) return undefined
 
       return surface.transferToImageBitmap()
     },
