@@ -34,6 +34,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
       (await existing()).inspect(caller.window, input.binding, input.tabID, input.enabled),
     highlight: async (input, caller) =>
       (await existing()).highlight(caller.window, input.binding, input.tabID, input.ref),
+    zoom: async (input, caller) => (await existing()).zoom(caller.window, input.binding, input.tabID, input.zoom),
     close: async (input, caller) => (await existing()).close(caller.window, input.binding),
   })
 

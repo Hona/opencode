@@ -6,6 +6,10 @@ type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
 export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
 
+export type PageEvent = Extract<PaneEvent, { type: "page" }>
+
+export type Zoom = "in" | "out" | "reset"
+
 export type Connection = ReturnType<typeof createConnection>
 
 export type Registration = {
@@ -14,6 +18,7 @@ export type Registration = {
   command(command: Browser.Action): Promise<void>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
+  zoom(tabID: Browser.TabID, zoom: Zoom): void
   close(): void
 }
 
@@ -46,6 +51,10 @@ export function createConnection(input: {
   focus: (tabID: Browser.TabID) => void
   preview: (path: string) => void
   inspect: (event: InspectEvent) => void
+  /** A page's icon or zoom changed. */
+  page: (event: PageEvent) => void
+  /** The user pressed the address shortcut while the page had focus. */
+  address: (tabID: Browser.TabID) => void
 }) {
   const state: ConnectionState = { browser: null, embeds: {}, suspended: false }
   let disposed = false
@@ -142,6 +151,10 @@ export function createConnection(input: {
 
         if (event.type === "inspect") return input.inspect(event)
 
+        if (event.type === "page") return input.page(event)
+
+        if (event.type === "address") return input.address(event.tabID)
+
         if (event.type === "embed") {
           state.embeds = { ...state.embeds, [event.tabID]: event.embed }
 
@@ -230,6 +243,9 @@ export function createConnection(input: {
     highlight(tabID: Browser.TabID, ref?: Browser.Ref) {
       state.registration?.highlight(tabID, ref)
     },
+    zoom(tabID: Browser.TabID, zoom: Zoom) {
+      state.registration?.zoom(tabID, zoom)
+    },
     dispose() {
       disposed = true
       clearTimeout(retry)
@@ -272,6 +288,10 @@ function open(
       void ready
         .then(() => client.highlight(ref === undefined ? { binding, tabID } : { binding, tabID, ref }))
         .catch(() => undefined)
+    },
+    zoom(tabID, zoom) {
+      if (status.closed) return
+      void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
     },
     close() {
       if (status.closed) return

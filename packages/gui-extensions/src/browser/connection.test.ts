@@ -73,6 +73,7 @@ function fixture(strip: string[] = []) {
     highlight: async (input) => {
       highlights.push(input)
     },
+    zoom: async () => undefined,
     close: async (input) => {
       closed.push(input.binding)
     },
@@ -106,6 +107,8 @@ function fixture(strip: string[] = []) {
     focus: (tabID) => routed.focus.push(tabID),
     preview: (path) => routed.preview.push(path),
     inspect: (event) => routed.inspect.push(event),
+    page: () => undefined,
+    address: () => undefined,
   })
 
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)
