@@ -171,10 +171,11 @@ export default function ArtifactView(props: {
           </Match>
           <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
-          <Match when={viewer()}>
+          {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
+          <Match when={viewer()} keyed>
             {(viewer) => (
               <ArtifactViewer
-                viewer={viewer()}
+                viewer={viewer}
                 path={props.path}
                 size={size()}
                 content={props.content}
@@ -546,8 +547,9 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
 }
 
 /**
- * Hands a file to an extension's viewer, decoding its bytes once per loaded content. Bytes the viewer rejects, and a
- * viewer that throws, show the binary placeholder in this area alone rather than the whole file panel failing.
+ * Hands a file to an extension's viewer, decoding its bytes once per loaded content; the viewer owns them, and may move
+ * their buffer to a worker. Bytes the viewer rejects, and a viewer that throws, show the binary placeholder in this
+ * area alone rather than the whole file panel failing.
  */
 function ArtifactViewer(props: {
   viewer: FileViewer

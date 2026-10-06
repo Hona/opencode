@@ -1,9 +1,9 @@
-import { createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
+import { batch, createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
 import { Loader } from "@opencode/ui/loader"
 import { createKeyed, createLatest, useExtension } from "../sdk"
 import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
 import { layerFont, lineHeight, type WordLink, type WordMethods, type WordPageSize, type WordSpan } from "./word-protocol"
-import { createWorkerClient } from "./worker-rpc"
+import { createWorkerClient, movableBuffer } from "./worker-rpc"
 import type { FileViewerProps } from "../file/contract"
 
 type Opened = {
@@ -26,9 +26,6 @@ type Scroll = { to: ScrollToPage | undefined }
 
 /** A value built on first use. */
 type Lazy<T> = { value: T | undefined }
-
-/** How many page rows one update adds once the whole document is laid out. */
-const rowSlice = 100
 
 /**
  * A read-only, paginated Word document. Its engine runs in a worker of its own (`document.worker.ts`), which opens the
@@ -203,9 +200,9 @@ function place(span: WordSpan) {
 
 /** Opens the bytes in the worker and returns as soon as the document's first pages can show. */
 async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
-  // The view keeps its bytes for a reopen; the worker takes a copy.
-  const copy = bytes.slice().buffer
-  const first = await client.call("open", { bytes: copy }, { transfer: [copy] })
+  // The view owns its bytes, so they move to the worker rather than being copied.
+  const buffer = movableBuffer(bytes)
+  const first = await client.call("open", { bytes: buffer }, { transfer: [buffer] })
   const [pages, setPages] = createSignal(first.pages)
   const [loading, setLoading] = createSignal(first.loading)
 
@@ -223,26 +220,19 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
       return size && step.kept[index] && sameSize(size, page) ? size : page
     })
 
-    await reveal(sizes, shown.length)
-    setLoading(false)
+    // The column mounts the new rows a slice at a time.
+    batch(() => {
+      setPages(sizes)
+      setLoading(false)
+    })
 
     return sizes.length
   }
 
-  // Adds the pages' rows a slice at a time, so no one update builds hundreds of them.
-  const reveal = async (sizes: readonly WordPageSize[], shown: number): Promise<void> => {
-    const next = Math.min(sizes.length, shown + rowSlice)
-
-    setPages(sizes.slice(0, next))
-
-    if (next === sizes.length) return
-
-    await new Promise((resolve) => setTimeout(resolve))
-
-    return reveal(sizes, next)
-  }
-
   const rest: Lazy<Promise<number>> = { value: undefined }
+  // Each page's text layer, kept for its row: a page that scrolls back into view shows it without asking the worker. A
+  // page the full layout changed gets a new row, and asks again.
+  const texts = new WeakMap<WordPageSize, readonly WordSpan[]>()
 
   const finish = () => (rest.value ??= loading() ? layOut() : Promise.resolve(pages().length))
 
@@ -250,12 +240,13 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
     pages,
     loading,
     finish,
-    paint: async (index, canvas, scale, current) => {
+    paint: async (index, canvas, scale, signal) => {
       const painted = client.call(
         "paint",
         { index, scale, ratio: window.devicePixelRatio || 1 },
-        // A newer paint of the page, such as at another scale, replaces this one while it waits.
-        { key: `paint:${index}` },
+        // A newer paint of the page, such as at another scale, replaces this one while it waits, and a page that
+        // scrolled away withdraws it.
+        { key: `paint:${index}`, signal },
       )
 
       // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
@@ -266,7 +257,7 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
 
       if (!bitmap) return
 
-      const context = current() ? canvas.getContext("bitmaprenderer") : null
+      const context = signal.aborted ? null : canvas.getContext("bitmaprenderer")
 
       if (!context) return bitmap.close()
 
@@ -274,7 +265,18 @@ async function open(client: Client, bytes: Uint8Array): Promise<Opened> {
       canvas.height = bitmap.height
       context.transferFromImageBitmap(bitmap)
     },
-    text: (index, signal) => client.call("text", { index }, { signal }),
+    text: async (index, signal) => {
+      const page = pages()[index]
+      const cached = page && texts.get(page)
+
+      if (cached) return cached
+
+      const spans = await client.call("text", { index }, { signal })
+
+      if (page) texts.set(page, spans)
+
+      return spans
+    },
     bookmark: async (name) => {
       const found = await client.call("bookmark", { name })
 

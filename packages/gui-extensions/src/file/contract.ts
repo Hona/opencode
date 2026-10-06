@@ -49,7 +49,10 @@ export interface OpenInApp {
 export const OpenInApp = Contract.define<OpenInApp, "file.openInApp">("file.openInApp")
 
 export interface FileViewerProps {
-  /** The file's bytes. A new array is a reloaded file. */
+  /**
+   * The file's bytes, which this view owns: it may move their buffer elsewhere, such as to a worker, instead of copying
+   * it. A new array is a reloaded file.
+   */
   readonly bytes: Uint8Array
   /** Shows facts about the file, such as "3 sheets", in the toolbar before its size. */
   onDetails(details: readonly string[]): void

@@ -39,6 +39,12 @@ const maxBitmapSide = 16384
  */
 const shadowPixelsPerPixel = 16
 
+/**
+ * How many bytes of decoded pictures stay for repaints; the least recently drawn go first past it. A deck of camera
+ * photos holds about 17 MB per picture, even scaled down to `maxImageSide`.
+ */
+const pictureBudget = 128 * 1024 * 1024
+
 type Size = { readonly width: number; readonly height: number }
 
 /**
@@ -63,9 +69,10 @@ serveWorker<SlideMethods>({
 
     await initWasm()
 
-    const handle = openPresentation(input.bytes)
+    const bytes = new Uint8Array(input.bytes)
+    const handle = openPresentation(bytes)
     const snapshot = handle.snapshot()
-    const text = deckText(input.bytes, snapshot)
+    const text = deckText(bytes, snapshot)
     const fonts = slideFonts(handle, workerFonts())
 
     await fonts.load(text)
@@ -83,7 +90,8 @@ serveWorker<SlideMethods>({
     )
   },
   paint: async (input, signal) => {
-    const painted = await required().paint(input.index, input.density, signal)
+    const deck = required()
+    const painted = await deck.paint(input.index, input.density, signal).finally(deck.trim)
 
     return painted.kind === "painted" ? new Transfer(painted, [painted.bitmap]) : painted
   },
@@ -109,6 +117,9 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
   // A frame depends on the slide alone, so a new scale or pixel ratio paints the frame laid out before.
   const frames = new Map<number, Promise<SlideDisplayList | undefined>>()
   const pictures = new Map<string, Promise<Picture>>()
+  // The decoded bitmaps, least recently drawn first, which `trim` keeps within `pictureBudget`.
+  const drawn = new Map<string, ImageBitmap>()
+  const surface = new OffscreenCanvas(1, 1)
 
   const frame = (index: number) => {
     const cached = frames.get(index)
@@ -160,14 +171,21 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
         maxBitmapSide / Math.max(laid.width, laid.height),
       )
 
-      const canvas = new OffscreenCanvas(
-        Math.max(1, Math.round(laid.width * scale)),
-        Math.max(1, Math.round(laid.height * scale)),
-      )
+      // One canvas paints every slide: a paint that was withdrawn leaves its pixels for the next to clear, rather than a
+      // slide-sized canvas each until the worker collects garbage. A reset context starts as a new canvas's does.
+      const canvas = surface
+      const width = Math.max(1, Math.round(laid.width * scale))
+      const height = Math.max(1, Math.round(laid.height * scale))
+
+      if (canvas.width !== width) canvas.width = width
+
+      if (canvas.height !== height) canvas.height = height
 
       const context = canvas.getContext("2d")
 
       if (!context) return { kind: "failed" }
+
+      context.reset()
 
       const needs = vectorSizes(laid.primitives, scale)
       const wanted = new Map<string, VectorRequest>()
@@ -178,7 +196,12 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
 
         const found = await picture(asset)
 
-        if (found.kind === "bitmap") return found.bitmap
+        if (found.kind === "bitmap") {
+          drawn.delete(asset)
+          drawn.set(asset, found.bitmap)
+
+          return found.bitmap
+        }
 
         if (found.kind === "missing" || found.failed) return null
 
@@ -216,6 +239,24 @@ function createDeck(handle: PresentationHandle, layout: (index: number) => Promi
       if (signal.aborted) return { kind: "cancelled" }
 
       return { kind: "painted", bitmap: canvas.transferToImageBitmap(), vectors: [...wanted.values()] }
+    },
+
+    /** Closes the least recently drawn pictures past the budget; they decode again when drawn. Call it between paints. */
+    trim: () => {
+      ;[...drawn].reduce(
+        (total, [asset, bitmap]) => {
+          if (total <= pictureBudget) return total
+
+          const freed = pixelBytes(bitmap)
+
+          bitmap.close()
+          drawn.delete(asset)
+          pictures.delete(asset)
+
+          return total - freed
+        },
+        [...drawn.values()].reduce((total, bitmap) => total + pixelBytes(bitmap), 0),
+      )
     },
 
     /** Keeps the window's rasterized SVG pictures, in place of any coarser ones. */
@@ -269,6 +310,10 @@ function vectorSizes(primitives: readonly SlidePrimitive[], scale: number) {
   primitives.forEach(visit)
 
   return sizes
+}
+
+function pixelBytes(bitmap: ImageBitmap) {
+  return bitmap.width * bitmap.height * 4
 }
 
 /** Whether a rasterized SVG picture is as fine as `need`; undefined needs the picture's own size, rasterized once. */

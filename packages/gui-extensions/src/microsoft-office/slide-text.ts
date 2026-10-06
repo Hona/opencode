@@ -106,7 +106,7 @@ const scriptRanges: readonly (readonly [FallbackScript, RegExp])[] = [
  * engine's inspection does not decode, the slides' own runs stand in, without theme fonts or hidden flags.
  */
 export function deckText(bytes: Uint8Array, snapshot: DeckSnapshot): DeckText {
-  return Option.match(decodeInspected(inspectPresentation(bytes)), {
+  return Option.match(decodeInspected(inspectPresentation(withoutMedia(bytes))), {
     onNone: () => fromSnapshot(snapshot),
     onSome: (inspected) => {
       const scheme = inspected.themes?.flatMap((theme) => (theme.theme?.fontScheme ? [theme.theme.fontScheme] : []))[0]
@@ -141,6 +141,110 @@ export function deckText(bytes: Uint8Array, snapshot: DeckSnapshot): DeckText {
       )
     },
   })
+}
+
+/** A file in the deck's zip package: where its central directory record and its local data sit. */
+type Entry = { readonly name: string; readonly record: number; readonly length: number; readonly local: number }
+
+/**
+ * The package without its pictures and media. The inspection reads only the deck's text and styles, but returns every
+ * picture as base64, which for a deck of photos costs tens of megabytes of engine memory the worker never gives back.
+ * Entries keep their compressed bytes. A package this cannot read, such as a ZIP64 one, stays as it is.
+ */
+export function withoutMedia(bytes: Uint8Array): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const end = endOfDirectory(view)
+
+  if (end === undefined) return bytes
+
+  const count = view.getUint16(end + 10, true)
+  const directory = view.getUint32(end + 16, true)
+
+  if (count === 0xffff || directory === 0xffffffff || directory > end) return bytes
+
+  const entries = readEntries(view, directory, count)
+
+  if (!entries || !entries.some((entry) => entry.name.startsWith("ppt/media/"))) return bytes
+
+  // An entry's local header and data run up to the next entry's, or to the central directory.
+  const starts = entries.map((entry) => entry.local).toSorted((left, right) => left - right)
+
+  const kept = entries
+    .filter((entry) => !entry.name.startsWith("ppt/media/"))
+    .map((entry) => ({ entry, start: entry.local, end: starts.find((start) => start > entry.local) ?? directory }))
+
+  // Where each kept entry's local data and directory record land in the new package.
+  const locals = offsets(kept.map((part) => part.end - part.start))
+  const records = offsets(kept.map((part) => part.entry.length))
+  const size = locals.at(-1) ?? 0
+  const directorySize = records.at(-1) ?? 0
+  const out = new Uint8Array(size + directorySize + 22)
+  const writer = new DataView(out.buffer)
+
+  kept.forEach((part, index) => {
+    const local = locals[index] ?? 0
+    const record = size + (records[index] ?? 0)
+
+    out.set(bytes.subarray(part.start, part.end), local)
+    out.set(bytes.subarray(part.entry.record, part.entry.record + part.entry.length), record)
+    writer.setUint32(record + 42, local, true)
+  })
+
+  const tail = size + directorySize
+
+  out.set(bytes.subarray(end, end + 22), tail)
+  writer.setUint16(tail + 8, kept.length, true)
+  writer.setUint16(tail + 10, kept.length, true)
+  writer.setUint32(tail + 12, directorySize, true)
+  writer.setUint32(tail + 16, size, true)
+  writer.setUint16(tail + 20, 0, true)
+
+  return out
+}
+
+/** Where each length starts when they are laid end to end, then where the last ends. */
+function offsets(lengths: readonly number[]) {
+  return lengths.reduce(
+    (list, length) => {
+      list.push((list.at(-1) ?? 0) + length)
+
+      return list
+    },
+    [0],
+  )
+}
+
+/** Where the end of central directory record starts, searched back from the end past any comment. */
+function endOfDirectory(view: DataView) {
+  const last = view.byteLength - 22
+  const first = Math.max(0, last - 0xffff)
+
+  for (let at = last; at >= first; at--) if (view.getUint32(at, true) === 0x06054b50) return at
+
+  return undefined
+}
+
+function readEntries(view: DataView, directory: number, count: number) {
+  const decoder = new TextDecoder()
+
+  return Array.from({ length: count }).reduce<{ at: number; entries: Entry[] } | undefined>(
+    (state) => {
+      if (!state || state.at + 46 > view.byteLength || view.getUint32(state.at, true) !== 0x02014b50) return undefined
+
+      const nameLength = view.getUint16(state.at + 28, true)
+      const length = 46 + nameLength + view.getUint16(state.at + 30, true) + view.getUint16(state.at + 32, true)
+      const local = view.getUint32(state.at + 42, true)
+
+      if (local === 0xffffffff) return undefined
+
+      const name = decoder.decode(new Uint8Array(view.buffer, view.byteOffset + state.at + 46, nameLength))
+
+      state.entries.push({ name, record: state.at, length, local })
+
+      return { at: state.at + length, entries: state.entries }
+    },
+    { at: directory, entries: [] },
+  )?.entries
 }
 
 type Run = { readonly text: string; readonly style: typeof RunStyle.Type | null | undefined }

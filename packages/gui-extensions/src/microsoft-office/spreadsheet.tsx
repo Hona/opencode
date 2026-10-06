@@ -34,8 +34,8 @@ import {
   trackIndex,
   type Painted,
 } from "./sheet-paint"
-import type { SheetFrameRequest, SheetLayout, SheetMethods, SheetTab } from "./sheet-protocol"
-import { createWorkerClient, SupersededError, WorkerClosedError } from "./worker-rpc"
+import type { SheetFrameRequest, SheetLayout, SheetMethods, SheetTab, SheetViewport } from "./sheet-protocol"
+import { createWorkerClient, movableBuffer, SupersededError, WorkerClosedError } from "./worker-rpc"
 
 /** The workbook worker's end in the window. */
 type Client = ReturnType<typeof createWorkerClient<SheetMethods>>
@@ -44,6 +44,12 @@ type Opened = { readonly client: Client; readonly tabs: readonly SheetTab[] }
 
 /** The sheet on show, and the cell a link asked for when one opened it. */
 type Shown = { readonly layout: SheetLayout; readonly target: CellAddr | undefined }
+
+/**
+ * The frames a grid asked the worker for: the newest request's key, how many were sent and the order of the newest that
+ * arrived, so a late reply never replaces a newer one, and the newest request while its reply is on the way.
+ */
+type FrameOrder = { requested: string; sent: number; received: number; pending: SheetFrameRequest | undefined }
 
 /** The most cells one copy reads; a larger selection would hold the workbook worker for seconds. */
 const copyLimit = 200_000
@@ -95,10 +101,10 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
         setState({ opened: undefined, shown: undefined, selecting: undefined })
       })
 
-      // The worker gets a copy, so the file view keeps its bytes.
-      const copy = bytes.slice().buffer
+      // The view owns its bytes, so they move to the worker rather than being copied.
+      const buffer = movableBuffer(bytes)
 
-      void client.call("open", { bytes: copy }, { transfer: [copy], signal: controller.signal }).then((opened) => {
+      void client.call("open", { bytes: buffer }, { transfer: [buffer], signal: controller.signal }).then((opened) => {
         if (controller.signal.aborted) return
 
         if (!opened) return props.onError()
@@ -253,8 +259,8 @@ function SpreadsheetGrid(props: {
   let painted: Painted | undefined
   // That frame's grid and links where the screen shows them, which pointer hits and links read.
   let shown: { grid: GridMeta | undefined; links: DisplayList } | undefined
-  // The newest frame asked for, and the order of the newest that arrived, so a late reply never replaces a newer one.
-  const frames = { requested: "", sent: 0, received: 0 }
+  // The frames asked for, so a late reply never replaces a newer one.
+  const frames: FrameOrder = { requested: "", sent: 0, received: 0, pending: undefined }
   // When the sheet last scrolled, and the timer that paints once it settles.
   const scrolling = { at: -Infinity, timer: 0 }
   // Whether the sheet still has to scroll to where the workbook last showed it, or to a link's target.
@@ -364,7 +370,7 @@ function SpreadsheetGrid(props: {
     const x = Math.max(0, left - margin.x)
     const y = Math.max(0, top - margin.y)
 
-    request({
+    const input: SheetFrameRequest = {
       sheet: sheet(),
       x: left,
       y: top,
@@ -380,7 +386,36 @@ function SpreadsheetGrid(props: {
               height: Math.min(top + size.height + margin.y, limit.y + view.frozenHeight) - y,
             }
           : undefined,
-    })
+    }
+
+    // While the sheet scrolls, a frame that still reaches half its margin past the screen serves on, so the worker
+    // paints the next one only as the scroll nears its edge.
+    const needed = limit && {
+      x: Math.max(0, left - margin.x / 2),
+      y: Math.max(0, top - margin.y / 2),
+      right: Math.min(left + size.width + margin.x / 2, limit.x + view.frozenWidth),
+      bottom: Math.min(top + size.height + margin.y / 2, limit.y + view.frozenHeight),
+    }
+
+    const serves = (frame: { readonly request: SheetFrameRequest; readonly viewport: SheetViewport } | undefined) =>
+      !!frame &&
+      !!needed &&
+      interchangeable(frame.request, input) &&
+      frame.viewport.x <= needed.x &&
+      frame.viewport.y <= needed.y &&
+      frame.viewport.x + frame.viewport.width >= needed.right &&
+      frame.viewport.y + frame.viewport.height >= needed.bottom
+
+    const pending = frames.pending
+
+    if (
+      !moving ||
+      !(
+        serves(painted && { request: painted.request, viewport: painted.frame.viewport }) ||
+        serves(pending?.wider && { request: pending, viewport: pending.wider })
+      )
+    )
+      request(input)
 
     // Until the first frame arrives the paper shows.
     if (!painted) return setView({ left, top, ...size })
@@ -444,11 +479,18 @@ function SpreadsheetGrid(props: {
     if (key === frames.requested) return
 
     frames.requested = key
+    frames.pending = input
 
     const order = ++frames.sent
 
+    const settled = () => {
+      if (order === frames.sent) frames.pending = undefined
+    }
+
     void props.client.call("frame", input, { key: "frame", signal: controller.signal }).then(
       (reply) => {
+        settled()
+
         if (order < frames.received) return reply?.bitmap.close()
 
         frames.received = order
@@ -464,6 +506,8 @@ function SpreadsheetGrid(props: {
         schedule()
       },
       (error: Error) => {
+        settled()
+
         if (error instanceof SupersededError || controller.signal.aborted) return
 
         setState("failed", true)
@@ -1035,6 +1079,18 @@ function place(start: number, size: number, current: number, visible: number, al
   if (start + size > current + visible) return start + size - visible
 
   return current
+}
+
+/** Whether two frames draw the same sheet into the same screen, so one can stand in for the other. */
+function interchangeable(left: SheetFrameRequest, right: SheetFrameRequest) {
+  return (
+    left.sheet === right.sheet &&
+    left.ratio === right.ratio &&
+    left.width === right.width &&
+    left.height === right.height &&
+    left.offset.x === right.offset.x &&
+    left.offset.y === right.offset.y
+  )
 }
 
 function clamp(value: number, max: number) {

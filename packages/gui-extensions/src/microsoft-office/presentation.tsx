@@ -12,7 +12,7 @@ import {
   type VectorBitmap,
   type VectorRequest,
 } from "./slide-protocol"
-import { createWorkerClient, SupersededError, WorkerClosedError } from "./worker-rpc"
+import { createWorkerClient, movableBuffer, SupersededError, WorkerClosedError } from "./worker-rpc"
 import type { FileViewerProps } from "../file/contract"
 
 type Opened = { readonly slides: readonly SlideSummary[]; readonly paint: PaintPage }
@@ -67,18 +67,15 @@ export default function OfficePresentation(props: FileViewerProps) {
         if (!controller.signal.aborted) setState("failed", index, failed)
       }
 
-      // The worker takes a copy: the bytes stay with the file for the toolbar and the next open.
-      const copy = bytes.slice()
+      // The view owns its bytes, so they move to the worker rather than being copied.
+      const buffer = movableBuffer(bytes)
 
-      void client.call("open", { bytes: copy }, { transfer: [copy.buffer], signal: controller.signal }).then(
-        (slides) => {
-          if (controller.signal.aborted) return
+      void client.call("open", { bytes: buffer }, { transfer: [buffer], signal: controller.signal }).then((slides) => {
+        if (controller.signal.aborted) return
 
-          setState({ opened: { slides, paint: createPaint(client, painted) } })
-          props.onDetails([ctx.plural("slides", slides.length)])
-        },
-        fail,
-      )
+        setState({ opened: { slides, paint: createPaint(client, painted) } })
+        props.onDetails([ctx.plural("slides", slides.length)])
+      }, fail)
     },
   )
 
@@ -149,38 +146,29 @@ export default function OfficePresentation(props: FileViewerProps) {
 }
 
 /**
- * Paints slides through the worker. A newer paint of the same slide replaces a queued one there, and each paint
- * withdraws the queued paints of slides a scroll or resize took away, so the worker paints what shows first.
+ * Paints slides through the worker. A newer paint of the same slide replaces a queued one there, and a slide that a
+ * scroll or resize took away withdraws its paint, so the worker paints what shows first.
  */
 function createPaint(client: Client, painted: (index: number, failed: boolean) => void): PaintPage {
-  const queued = new Set<{ readonly current: () => boolean; readonly controller: AbortController }>()
-
-  const paint = async (index: number, canvas: HTMLCanvasElement, scale: number, current: () => boolean, again: boolean) => {
-    queued.forEach((entry) => {
-      if (!entry.current()) entry.controller.abort()
-    })
-
-    const entry = { current, controller: new AbortController() }
-
-    queued.add(entry)
-
+  const paint = async (
+    index: number,
+    canvas: HTMLCanvasElement,
+    scale: number,
+    signal: AbortSignal,
+    again: boolean,
+  ) => {
     const result = await client
-      .call(
-        "paint",
-        { index, density: (window.devicePixelRatio || 1) * scale },
-        { key: `slide-${index}`, signal: entry.controller.signal },
-      )
+      .call("paint", { index, density: (window.devicePixelRatio || 1) * scale }, { key: `slide-${index}`, signal })
       .then(
         (value): SlidePainted | undefined => value,
         // A replaced or withdrawn paint shows nothing; a closed or stopped worker reports itself.
         (error: Error): SlidePainted | undefined =>
           error instanceof SupersededError || error instanceof WorkerClosedError ? undefined : { kind: "failed" },
       )
-      .finally(() => queued.delete(entry))
 
     if (!result || result.kind === "cancelled") return
 
-    if (!current()) {
+    if (signal.aborted) {
       if (result.kind === "painted") result.bitmap.close()
 
       return
@@ -206,12 +194,12 @@ function createPaint(client: Client, painted: (index: number, failed: boolean) =
     await client
       .call("vectors", bitmaps, { transfer: bitmaps.flatMap((bitmap) => (bitmap.bitmap ? [bitmap.bitmap] : [])) })
       .then(
-        () => (current() ? paint(index, canvas, scale, current, true) : undefined),
+        () => (signal.aborted ? undefined : paint(index, canvas, scale, signal, true)),
         () => bitmaps.forEach((bitmap) => bitmap.bitmap?.close()),
       )
   }
 
-  return (index, canvas, scale, current) => paint(index, canvas, scale, current, false)
+  return (index, canvas, scale, signal) => paint(index, canvas, scale, signal, false)
 }
 
 function show(canvas: HTMLCanvasElement, bitmap: ImageBitmap) {

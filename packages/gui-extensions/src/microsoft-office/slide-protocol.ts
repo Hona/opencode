@@ -38,7 +38,7 @@ export type SlidePainted =
 /** The PowerPoint worker's methods. */
 export type SlideMethods = {
   /** Opens the deck once per worker, its fonts included. Rejects when the engine cannot read it. */
-  readonly open: Method<{ readonly bytes: Uint8Array }, readonly SlideSummary[]>
+  readonly open: Method<{ readonly bytes: ArrayBuffer }, readonly SlideSummary[]>
   /** Paints one slide at `density` device pixels per CSS pixel. */
   readonly paint: Method<{ readonly index: number; readonly density: number }, SlidePainted>
   /** Hands over SVG pictures rasterized for `VectorRequest`s. */
