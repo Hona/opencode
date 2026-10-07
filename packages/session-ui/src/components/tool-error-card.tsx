@@ -15,6 +15,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   open?: boolean
   onOpenChange?: (open: boolean) => void
   subtitle?: string
+  input?: string
   href?: string
   onSubtitleClick?: (event: MouseEvent) => void
 }
@@ -38,6 +39,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "open",
     "onOpenChange",
     "subtitle",
+    "input",
     "href",
     "onSubtitleClick",
   ])
@@ -92,14 +94,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     return head[0].toUpperCase() + head.slice(1)
   })
 
-  const detail = createMemo(() => {
-    const parts = tail().split(": ")
-
-    if (parts.length <= 1) return ""
-
-    return parts.slice(1).join(": ").trim()
-  })
-
   const copy = async () => {
     const text = cleaned()
 
@@ -108,6 +102,27 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
+
+  const copyButton = () => (
+    <Tooltip
+      appearance="standard"
+      value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
+      placement="top"
+      gutter={4}
+    >
+      <IconButton
+        icon={<Icon name={copied() ? "check" : "copy"} />}
+        size="normal"
+        variant="ghost"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.stopPropagation()
+          void copy()
+        }}
+        aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
+      />
+    </Tooltip>
+  )
 
   return (
     <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
@@ -122,7 +137,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
                     <span data-slot="basic-tool-tool-title">{name()}</span>
-                    <Show when={split.subtitle}>
+                    <Show when={split.subtitle && (split.href || !(open() && split.input))}>
                       <Show
                         when={split.href}
                         fallback={<span data-slot="basic-tool-tool-subtitle">{split.subtitle}</span>}
@@ -140,7 +155,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <span data-slot="tool-error-card-summary">{summary()}</span>
+                    <Show when={!open()}>
+                      <span data-slot="tool-error-card-summary">{summary()}</span>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -148,35 +165,35 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
             <Collapsible.Arrow />
           </div>
         </Collapsible.Trigger>
-        <Show when={detail()}>
-          <Collapsible.Content>
-            <div data-slot="tool-error-card-content">
-              <Show when={open()}>
-                <div data-slot="tool-error-card-copy">
-                  <Tooltip
-                    appearance="standard"
-                    value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
-                    placement="top"
-                    gutter={4}
-                  >
-                    <IconButton
-                      icon={<Icon name={copied() ? "check" : "copy"} />}
-                      size="normal"
-                      variant="ghost"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void copy()
-                      }}
-                      aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
-                    />
-                  </Tooltip>
+        <Collapsible.Content>
+          <Show
+            when={split.input}
+            fallback={
+              <div data-slot="tool-error-card-content">
+                <Show when={open()}>
+                  <div data-slot="tool-error-card-copy">{copyButton()}</div>
+                </Show>
+                <CardDescription>{cleaned()}</CardDescription>
+              </div>
+            }
+          >
+            {(input) => (
+              <div data-component="bash-output" data-variant="shell" dir="ltr">
+                <div data-slot="bash-scroll" data-scrollable tabIndex={0} role="region" aria-label={i18n.t("ui.scrollView.ariaLabel")}>
+                  <pre data-slot="bash-pre">
+                    <code>
+                      <span data-slot="bash-command">{input()}</span>
+                      <span data-slot="bash-result">
+                        <span data-slot="bash-copy">{copyButton()}</span>
+                        {cleaned()}
+                      </span>
+                    </code>
+                  </pre>
                 </div>
-              </Show>
-              <CardDescription>{detail()}</CardDescription>
-            </div>
-          </Collapsible.Content>
-        </Show>
+              </div>
+            )}
+          </Show>
+        </Collapsible.Content>
       </Collapsible>
     </Card>
   )

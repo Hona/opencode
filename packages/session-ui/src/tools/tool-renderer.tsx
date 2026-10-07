@@ -1488,6 +1488,7 @@ export function ToolDisplay(
                   open={props.open}
                   onOpenChange={props.onOpenChange}
                   subtitle={taskSubtitle() ?? errorSubtitle()}
+                  input={toolErrorInput(props)}
                   href={taskHref()}
                   onSubtitleClick={(event) => {
                     if (!data.navigateToSession) return
@@ -1553,6 +1554,20 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   }
 
   return undefined
+}
+
+function toolErrorInput(props: ToolProps) {
+  if (props.tool === "execute" && typeof props.input.code === "string") return props.input.code.trimEnd()
+
+  if (props.tool === "shell") {
+    const command = props.input.command ?? props.metadata.command
+
+    return typeof command === "string" && command ? command : undefined
+  }
+
+  if (props.tool === "question" || Object.keys(props.input).length === 0) return undefined
+
+  return JSON.stringify(props.input, null, 2)
 }
 
 function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {

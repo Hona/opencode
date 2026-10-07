@@ -129,6 +129,21 @@
     pointer-events: auto;
   }
 
+  > [data-component="collapsible"].tool-collapsible:has([data-component="bash-output"]) {
+    gap: var(--tool-content-gap);
+  }
+
+  [data-component="bash-output"] {
+    -webkit-user-select: text;
+    user-select: text;
+
+    [data-slot="bash-result"] {
+      position: relative;
+      padding-inline-end: 44px;
+      color: var(--v2-state-fg-danger);
+    }
+  }
+
   [data-slot="tool-error-card-content"] :where(*)::selection {
     background: var(--v2-state-bg-danger);
     color: var(--v2-text-text-base);
