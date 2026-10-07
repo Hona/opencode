@@ -33,12 +33,23 @@
   }
 
   :is(p, li, blockquote) {
+    text-align: justify;
+    text-justify: inter-word;
     text-wrap: pretty;
+    hyphens: auto;
+    hyphenate-limit-chars: 6 3 3;
   }
 
-  /* Keep streaming lines prefix-stable so words on earlier lines never reflow backward mid-stream */
+  :not(pre) > code,
+  a {
+    hyphens: none;
+  }
+
+  /* Keep streaming lines prefix-stable and flush-start so earlier lines never reflow or snap-stretch mid-stream */
   :is(h1, h2, h3, h4, h5, h6, p, li, blockquote):has([data-markdown-word]) {
+    text-align: start;
     text-wrap: stable;
+    hyphens: none;
   }
 
   /* Spacing for flow */
