@@ -61,7 +61,11 @@ export default function PairingPage(props: {
   // Reading pending query data would suspend the entire settings surface.
   const localInfo = () => (local.isSuccess ? local.data : undefined)
 
-  const routes = createMemo(() => pairingRoutes(localInfo()?.urls ?? [], links.value.custom))
+  // A valid address being typed counts at once, so "Pair device" appears without leaving the field; it is saved on
+  // Enter or when the field loses focus.
+  const routes = createMemo(() =>
+    pairingRoutes(localInfo()?.urls ?? [], customAddress(custom.draft.trim()) ?? links.value.custom),
+  )
 
   const code = async (signal: AbortSignal) => {
     const server = props.server()

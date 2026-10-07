@@ -24,7 +24,14 @@ export function useRedeemPairing(): RedeemPairing {
 
     if (!link) return legacyPairingLink(value) ? { error: language.t("server.connect.link.legacy") } : undefined
 
-    if (last.pairing && last.code === link.code) return { pairing: last.pairing }
+    // The same code again: reuse its token. An address the user edited since (another forwarded port, say) wins; the
+    // token works on every address of the server.
+    if (last.pairing && last.code === link.code) {
+      const url = link.urls.includes(last.pairing.url) ? last.pairing.url : (link.urls[0] ?? last.pairing.url)
+
+      return { pairing: { url, password: last.pairing.password } }
+    }
+
     const result = await redeemPairingLink(link)
 
     if (result.type === "paired") {

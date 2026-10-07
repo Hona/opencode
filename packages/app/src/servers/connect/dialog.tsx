@@ -50,9 +50,10 @@ export const DialogServer: Component<{
   const camera = createCameraAvailability()
 
   const form = createFormController({
+    // Close first: onSave may open the next dialog, such as the folder picker an interrupted action continues with.
     onSelect: (server) => {
-      props.onSave?.(server)
       dialog.close()
+      props.onSave?.(server)
     },
   })
 
@@ -409,8 +410,8 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
         if (normalized === original.http.url) add(connection)
 
         if (normalized !== original.http.url) replace(ServerConnection.key(original), connection)
-        options.onSelect?.(connection)
         reset()
+        options.onSelect?.(connection)
 
         return
       }
