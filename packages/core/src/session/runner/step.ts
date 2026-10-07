@@ -170,12 +170,7 @@ export const make = Effect.gen(function* () {
               })
             : undefined
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
-        const llmError =
-          llmFailure && !recorded.providerFailed
-            ? toSessionError(llmFailure)
-            : Exit.isFailure(stream) && !streamInterrupted && !recorded.providerFailed
-              ? toSessionError(Cause.squash(stream.cause))
-              : undefined
+        const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&

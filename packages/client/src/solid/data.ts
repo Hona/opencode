@@ -1041,7 +1041,7 @@ export function createData(config: CreateDataInput) {
               : event.type === "session.execution.failed"
                 ? "failed"
                 : "interrupted",
-          ...(event.type === "session.execution.failed" && event.data.error ? { error: event.data.error } : {}),
+          ...(event.type === "session.execution.failed" ? { error: event.data.error } : {}),
           time: { created: event.created },
         })
         if (
