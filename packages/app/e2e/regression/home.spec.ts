@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import { holdRoute, seed, sessionHref } from "../utils/app"
+import { holdRoute, NO_PROVIDER, project, seed, sessionHref } from "../utils/app"
+import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { mockRemoteServer } from "../utils/workspace"
 import { expectAppVisible } from "../utils/waits"
 
 test.use({ serviceWorkers: "block" })
@@ -85,8 +87,11 @@ test("Home shows loaded sessions before the location request resolves", async ({
 test("Home and the directory picker load without newer browser APIs", async ({ page }) => {
   await page.addInitScript(() => {
     // Safari 16.6 has none of these APIs. Remove them before the web entry runs.
+    // SAFETY: `Partial` only makes the static method optional so `delete` type-checks; the target is the real global.
     delete (Map as Partial<typeof Map>).groupBy
+    // SAFETY: as above, for the real global `Promise`.
     delete (Promise as Partial<typeof Promise>).withResolvers
+    // SAFETY: as above, for the real global `Promise`.
     delete (Promise as Partial<typeof Promise>).try
   })
   await openHome(page, { fileList: () => [] })
@@ -99,6 +104,36 @@ test("Home and the directory picker load without newer browser APIs", async ({ p
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(target).toBeVisible()
+})
+
+test("adding a project to a signed-out server re-pairs it, then continues at the paired address", async ({ page }) => {
+  // The saved address rejects the new token, so saving moves the server to the link's address.
+  const paired = "http://127.0.0.1:4098"
+  await mockRemoteServer(page, { name: "Remote", password: "old-password" })
+  await mockOpenCodeServer(page, {
+    server: paired,
+    directory: "/remote/paired",
+    project: project({ id: "proj_paired", directory: "/remote/paired" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    fileList: () => [],
+    password: "session-token",
+    pairing: { code: "one-time-code", token: "session-token" },
+  })
+  await openHome(page, { fileList: () => [] })
+  const remote = page.locator("[data-home-row]").filter({ hasText: "Remote" })
+  await expect(page.getByRole("button", { name: "Authenticate", exact: true })).toBeVisible()
+
+  await remote.getByRole("button", { name: "Add project", exact: true }).click()
+  const editor = page.getByRole("dialog", { name: "Edit server" })
+  await editor.getByLabel("Pairing link", { exact: true }).fill(`${paired}/auth/connect/one-time-code`)
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+
+  // The folder picker reads the paired address; the removed one would reject the request.
+  const picker = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Select folder" }) })
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
 })
 
 const recovery = "C:/OpenCode/Worktrees/project-menu-recovery"

@@ -69,6 +69,7 @@ type Attached = {
   keybind: (command: string) => readonly string[]
   matches: (command: string, event: KeyboardEvent) => boolean
   servers: Accessor<readonly string[]>
+  server: (id: string) => ServerRef | undefined
 }
 
 /**
@@ -269,7 +270,10 @@ export function createHostApis() {
       keys: (bind) => formatKeybindParts(bind, language.t),
       matches: (command, event) => current()?.matches(command, event) ?? false,
     }),
-    servers: () => ({ list: () => current()?.servers() ?? [] }),
+    servers: () => ({
+      list: () => current()?.servers() ?? [],
+      get: (id) => current()?.server(id),
+    }),
     workspaces: (_extension, _owner, _context, register) => ({
       on(_event, handler) {
         removed.add(handler)
@@ -783,6 +787,7 @@ export function createExtensionAttachment(apis: HostApis) {
     keybind: command.keybindParts,
     matches: command.matches,
     servers: () => global.servers.list().map(ServerConnection.key),
+    server,
     // SAFETY: an extension names a page it contributed through `SettingsPage`, which settings lists as an extension tab.
     settings: (page) => surface.open(page as Parameters<typeof surface.open>[0]),
     layout: {
