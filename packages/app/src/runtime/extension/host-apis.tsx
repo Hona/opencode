@@ -393,15 +393,28 @@ export function createExtensionAttachment(apis: HostApis) {
 
     if (existing) return existing
     const key = ServerConnection.Key.make(id)
+    // The controller starts on first use, not when the ref is made: reading `builtin` to find a server must not
+    // connect to every listed server, such as one the runtime holds back because it rejects its credentials.
+    let started: Accessor<ServerCtx> | undefined
 
-    const live = runWithOwner(owner, () =>
-      createMemo<ServerCtx>((previous) => global.serverCtx(key) ?? previous, global.ensureServerCtx(conn)),
-    )!
+    const live = () => {
+      started ??= runWithOwner(owner, () =>
+        createMemo<ServerCtx>(
+          (previous) => global.serverCtx(key) ?? previous,
+          global.ensureServerCtx(connection(id) ?? conn),
+        ),
+      )!
+
+      return started()
+    }
+
+    // What the app's server list already says, without a controller.
+    const listed = () => connection(id) ?? live().sdk.server
 
     const ref: ServerRef = {
       id,
       get name() {
-        return serverName(live().sdk.server) || id
+        return serverName(listed()) || id
       },
       get url() {
         return live().sdk.url
@@ -416,10 +429,10 @@ export function createExtensionAttachment(apis: HostApis) {
         return live().data
       },
       get local() {
-        return ServerConnection.local(live().sdk.server)
+        return ServerConnection.local(listed())
       },
       get builtin() {
-        return ServerConnection.builtin(live().sdk.server)
+        return ServerConnection.builtin(listed())
       },
       get compatible() {
         return !global.servers.health[key]?.incompatible

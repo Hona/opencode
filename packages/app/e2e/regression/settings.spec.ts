@@ -809,6 +809,43 @@ test("the add server dialog pairs from a one-time link and explains a spent one"
   )
 })
 
+test("a pairing code with several addresses keeps the first one that works with its token", async ({ page }) => {
+  // The first address cannot redeem codes (nothing serves /auth/connect there), but the token works on it, as on every
+  // address of one server. The second address redeems the code.
+  const first = "http://127.0.0.1:4098"
+  const second = "http://127.0.0.1:4099"
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+
+  for (const [server, pairing] of [
+    [first, undefined],
+    [second, { code: "one-time-code", token: "session-token" }],
+  ] as const) {
+    await mockOpenCodeServer(page, {
+      server,
+      directory: "/remote/paired",
+      project: project({ id: "proj_paired", directory: "/remote/paired" }),
+      provider: NO_PROVIDER,
+      sessions: [],
+      pageMessages: () => ({ items: [] }),
+      password: "session-token",
+      pairing,
+    })
+  }
+
+  const { settings } = await open(page)
+  await settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" }).hover()
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const editor = page.getByRole("dialog", { name: "Add server" })
+  await editor
+    .getByLabel("Pairing link", { exact: true })
+    .fill(JSON.stringify({ code: "one-time-code", urls: [first, second] }))
+  await editor.getByRole("button", { name: "Add server", exact: true }).click()
+
+  await expect(editor).toBeHidden()
+  await expect(settings.getByText(first, { exact: true })).toBeVisible()
+  await expect(settings.getByText(second, { exact: true })).toHaveCount(0)
+})
+
 test("the tab layout preference switches to vertical tabs and survives reload", async ({ page }) => {
   const { settings } = await open(page)
   const layout = settings.locator('[data-action="settings-tab-layout"]')

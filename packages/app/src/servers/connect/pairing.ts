@@ -1,5 +1,6 @@
 import { isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
+import { checkServerHealth } from "@/runtime/server/health"
 import { normalizeServerUrl } from "@/runtime/server/registry"
 
 export function serverAddress(value: string) {
@@ -88,12 +89,26 @@ export function redeemPairingLink(link: { urls: ReadonlyArray<string>; code: str
         .server.connect({ code: link.code }, { signal: AbortSignal.timeout(5_000) })
         .then((session): Pairing => ({ url, password: session.token })),
     ),
-  ).then(
-    (pairing): Redeemed => ({ type: "paired", pairing }),
-    // Only a server's answer proves the code is spent; addresses that could not be reached leave it valid.
-    (error): Redeemed =>
-      error instanceof AggregateError && error.errors.some(isUnauthorizedError)
-        ? { type: "expired" }
-        : { type: "unreachable" },
   )
+    .then((pairing) => preferFirst(link.urls, pairing))
+    .then(
+      (pairing): Redeemed => ({ type: "paired", pairing }),
+      // Only a server's answer proves the code is spent; addresses that could not be reached leave it valid.
+      (error): Redeemed =>
+        error instanceof AggregateError && error.errors.some(isUnauthorizedError)
+          ? { type: "expired" }
+          : { type: "unreachable" },
+    )
+}
+
+// The token works on every address of the server, so keep the first one (the address the user chose in Pairing) when it
+// is reachable, even if a nearer address answered sooner: a local network address stops working away from that network.
+async function preferFirst(urls: ReadonlyArray<string>, pairing: Pairing): Promise<Pairing> {
+  const first = urls[0]
+
+  if (!first || first === pairing.url) return pairing
+  const http = { url: first, password: pairing.password }
+  const health = await checkServerHealth(http, globalThis.fetch, { signal: AbortSignal.timeout(5_000), retryCount: 0 })
+
+  return health.healthy ? http : pairing
 }

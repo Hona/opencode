@@ -8,11 +8,12 @@ export type Redemption = { readonly pairing: Pairing } | { readonly error: strin
 /** Redeems a pasted or scanned pairing link; resolves undefined when the value is not a pairing link at all. */
 export type RedeemPairing = (value: string) => Promise<Redemption | undefined>
 
-/** The last link a form redeemed, and the token the server returned for it. */
-type Redeemed = { link?: string; pairing?: Pairing }
+/** The code of the last link a form redeemed, and the token the server returned for it. */
+type Redeemed = { code?: string; pairing?: Pairing }
 
 // Pasted and scanned links share one redeem path so every surface explains a failure the same way.
-// Each form keeps the last token it redeemed: the code is spent, so a retry after a failed connection check reuses it.
+// Each form keeps the last token it redeemed: the code is spent, so a retry after a failed connection check reuses it,
+// whichever form the link takes (a scanned QR payload, or the link the scanner then shows).
 export function useRedeemPairing(): RedeemPairing {
   const language = useLanguage()
   const platform = usePlatform()
@@ -23,11 +24,11 @@ export function useRedeemPairing(): RedeemPairing {
 
     if (!link) return legacyPairingLink(value) ? { error: language.t("server.connect.link.legacy") } : undefined
 
-    if (last.pairing && last.link === value.trim()) return { pairing: last.pairing }
+    if (last.pairing && last.code === link.code) return { pairing: last.pairing }
     const result = await redeemPairingLink(link)
 
     if (result.type === "paired") {
-      last.link = value.trim()
+      last.code = link.code
       last.pairing = result.pairing
 
       return { pairing: result.pairing }

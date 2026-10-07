@@ -3,11 +3,12 @@ import { onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
+import { pairingLink } from "./pairing"
 import type { RedeemPairing } from "./redeem"
 import "./scanner.css"
 
 // Redeems with the form's own redeem, so the form keeps the token and a failed connection check retries without the
-// spent code; the form gets back the scanned link and fills it in.
+// spent code; the form gets back a link it can show, and fills it in.
 export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: string) => void; onCancel: () => void }) {
   const language = useLanguage()
   const [state, setState] = createStore({ error: "", ready: false, redeeming: false })
@@ -34,7 +35,9 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
 
           if (redeemed && "pairing" in redeemed) {
             scanner.stop()
-            props.onScan(result.data)
+            // A QR code carries {"code","urls"} JSON; the form shows the link for the address that paired instead.
+            const code = pairingLink(result.data)?.code
+            props.onScan(code ? new URL(`/auth/connect/${code}`, redeemed.pairing.url).href : result.data)
 
             return
           }
