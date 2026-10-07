@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
-import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
+import {
+  applyTimelineErrorNotifications,
+  applyTimelineMessageHandoff,
+  visibleTimelineMessages,
+} from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 
@@ -178,6 +182,54 @@ describe("visibleTimelineMessages", () => {
       "msg_3",
     ])
     expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+  })
+
+  test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {
+    const failed = [
+      { id: "msg_3", type: "user", text: "queued", time: { created: 3 } },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: 'Agent not found: "build"' },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(visibleTimelineMessages(failed, [steer]).map((message) => message.id)).toEqual(["msg_3", "msg_idle"])
+  })
+})
+
+describe("applyTimelineErrorNotifications", () => {
+  test("enriches failed idle markers without errors using matching session notifications", () => {
+    const source = [
+      { id: "msg_1", type: "user", text: "first", time: { created: 100 } },
+      { id: "msg_idle_1", type: "idle", outcome: "failed", time: { created: 120 } },
+      { id: "msg_2", type: "user", text: "second", time: { created: 200 } },
+      {
+        id: "msg_idle_2",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "provider.auth", message: "Unauthorized" },
+        time: { created: 220 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const notifications = [
+      { time: 145, error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" } },
+      { time: 230, error: { type: "provider.auth", message: "Unauthorized" } },
+    ]
+
+    expect(applyTimelineErrorNotifications(source, [])).toBe(source)
+    expect(applyTimelineErrorNotifications(source, notifications)).toEqual([
+      source[0],
+      {
+        ...source[1],
+        error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
+      },
+      source[2],
+      source[3],
+    ])
   })
 })
 

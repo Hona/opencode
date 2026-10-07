@@ -19,7 +19,12 @@ import { sessionTitle } from "@/session/title"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
 import { usePlatform } from "@/runtime/platform/platform"
-import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
+import {
+  applyTimelineErrorNotifications,
+  applyTimelineMessageHandoff,
+  timelineChildTitle,
+  visibleTimelineMessages,
+} from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
@@ -62,6 +67,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const serverSDK = useServerSDK()
   const server = useServer()
   const data = server.ctx.data
+  const notification = server.ctx.notification
   const settings = useSettings()
   const tabs = useTabs()
   const dialog = useDialog()
@@ -78,8 +84,15 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const projectedMessages = createMemo(() => {
     const id = input.session.identity.sessionID()
 
+    const messages = id
+      ? applyTimelineErrorNotifications(
+          handedOffMessages(),
+          notification.session.all(id).flatMap((item) => (item.type === "error" ? [item] : [])),
+        )
+      : handedOffMessages()
+
     return visibleTimelineMessages(
-      handedOffMessages(),
+      messages,
       id ? data.session.pending.list(id) : [],
       input.session.data.info()?.revert?.messageID,
     )
