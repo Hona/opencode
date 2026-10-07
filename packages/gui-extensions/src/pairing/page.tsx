@@ -61,11 +61,13 @@ export default function PairingPage(props: {
   // Reading pending query data would suspend the entire settings surface.
   const localInfo = () => (local.isSuccess ? local.data : undefined)
 
-  // A valid address being typed counts at once, so "Pair device" appears without leaving the field; it is saved on
-  // Enter or when the field loses focus.
-  const routes = createMemo(() =>
-    pairingRoutes(localInfo()?.urls ?? [], customAddress(custom.draft.trim()) ?? links.value.custom),
-  )
+  // The custom address field starts with the saved address, so a valid address being typed counts at once and a cleared
+  // or invalid one does not; it is saved on Enter, when the field loses focus, and when the dialog opens.
+  const routes = createMemo(() => pairingRoutes(localInfo()?.urls ?? [], customAddress(custom.draft.trim()) ?? ""))
+
+  // Whether the server itself listens only on this computer. Not derived from the routes above, so typing a custom
+  // address does not remove the notice above the field while the user types.
+  const listensLocally = () => local.isSuccess && pairingRoutes(local.data.urls, "").length === 0
 
   const code = async (signal: AbortSignal) => {
     const server = props.server()
@@ -153,7 +155,8 @@ export default function PairingPage(props: {
               <Show when={routes().length > 0}>
                 <Button
                   variant="neutral"
-                  onClick={() =>
+                  onClick={() => {
+                    saveCustom()
                     dialogs.open(() => (
                       <DialogPairing
                         title={ctx.t("connection")}
@@ -167,13 +170,13 @@ export default function PairingPage(props: {
                         code={code}
                       />
                     ))
-                  }
+                  }}
                 >
                   {ctx.t("local.open")}
                 </Button>
               </Show>
             </Row>
-            <Show when={local.isSuccess && routes().length === 0}>
+            <Show when={listensLocally()}>
               <div class="flex flex-col gap-2 py-4" role="status">
                 <div class="flex items-center gap-2 text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
                   <Icon name="lock" size="small" class="shrink-0 text-v2-icon-icon-muted" />

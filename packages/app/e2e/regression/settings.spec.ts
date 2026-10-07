@@ -810,14 +810,14 @@ test("the add server dialog pairs from a one-time link and explains a spent one"
 })
 
 test("a pairing code with several addresses keeps the first one that works with its token", async ({ page }) => {
-  // The first address cannot redeem codes (nothing serves /auth/connect there), but the token works on it, as on every
-  // address of one server. The second address redeems the code.
+  // Both addresses reach one server. The second spends the code first, so the first answers 401, and the token works on
+  // it as on every address of that server.
   const first = "http://127.0.0.1:4098"
   const second = "http://127.0.0.1:4099"
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
 
   for (const [server, pairing] of [
-    [first, undefined],
+    [first, { code: "spent-by-the-other-address", token: "session-token" }],
     [second, { code: "one-time-code", token: "session-token" }],
   ] as const) {
     await mockOpenCodeServer(page, {

@@ -341,7 +341,12 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       // A server address typed here belongs to the password form.
       const address = bareServerAddress(store.link)
 
-      if (address) return void setStore({ method: "password", link: "", values: { ...store.values, url: address } })
+      if (address) {
+        setStore({ method: "password", link: "", values: { ...store.values, url: address } })
+        preview()
+
+        return
+      }
 
       return void setStore("error", language.t("server.connect.link.invalid"))
     }
@@ -371,8 +376,11 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       const name = store.values.name.trim() || undefined
       const password = http.password
 
+      // Nothing changed: close, unless the server rejects these credentials, so saving checks them and the action that
+      // asked for sign-in can continue.
       if (
         original?.type === "http" &&
+        !global.servers.health[ServerConnection.key(original)]?.unauthorized &&
         normalized === original.http.url &&
         name === original.displayName &&
         password === original.http.password
