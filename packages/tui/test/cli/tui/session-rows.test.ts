@@ -628,6 +628,12 @@ test("shows a persisted execution failure once, after the prompt that caused it"
     { type: "message", messageID: "user" },
     { type: "assistant-footer", messageID: "assistant" },
   ])
+  const interrupted = { ...clean, error: { type: "aborted", message: "Step interrupted" } }
+  const exhausted = {
+    ...failed,
+    error: { type: "aborted", message: "Execution was interrupted repeatedly and will not be resumed automatically." },
+  }
+  expect(reduceSessionRows([user, interrupted, exhausted]).at(-1)).toEqual({ type: "message", messageID: "idle" })
   expect(reduceSessionRows([user, failed], new Set(["user"]))).toEqual([
     { type: "message", messageID: "user" },
     { type: "message", messageID: "idle" },

@@ -1377,5 +1377,24 @@ describe("current session timeline rows", () => {
     expect(Timeline.constructSessionMessageRows(duplicate, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
       ["UserMessage", "Error"],
     )
+
+    const exhausted = [
+      duplicate[0],
+      { ...duplicate[1], error: { type: "aborted", message: "Step interrupted" } },
+      {
+        ...duplicate[2],
+        error: {
+          type: "aborted",
+          message: "Execution was interrupted repeatedly and will not be resumed automatically.",
+        },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(exhausted, true, { type: "idle" }).rows.at(-1)).toEqual(
+      new TimelineRow.Error({
+        userMessageID: "msg_user",
+        text: "Execution was interrupted repeatedly and will not be resumed automatically.",
+      }),
+    )
   })
 })

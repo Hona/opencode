@@ -590,7 +590,7 @@ function isInterrupted(error: SessionMessageAssistant["error"]) {
 }
 
 function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
-  return message.type === "idle" && message.outcome === "failed" && !!message.error && !isInterrupted(message.error)
+  return message.type === "idle" && message.outcome === "failed" && !!message.error
 }
 
 function shellFailed(message: SessionMessageShell) {

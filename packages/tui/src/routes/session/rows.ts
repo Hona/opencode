@@ -391,7 +391,7 @@ export function reduceSessionRows(
     if (message.type !== "assistant") {
       if (message.type === "idle") {
         flushTurn(rows)
-        if (message.outcome === "failed" && message.error && message.error.type !== "aborted" && !failureShown)
+        if (message.outcome === "failed" && message.error && !failureShown)
           rows.push({ entry: { type: "message", messageID: message.id }, path: [], closesPrevious: true })
         failureShown = false
         return rows
