@@ -1012,6 +1012,103 @@ test.describe("background shortcut", () => {
     await expect(backgroundCard).toContainText("Background task (background)")
   })
 
+  test("lands a shell revealed from far below just under its stuck group header", async ({ page }) => {
+    const search = (index: number) => ({
+      type: "tool" as const,
+      id: `call_far_search_${index}`,
+      name: "grep",
+      state: {
+        status: "completed" as const,
+        input: { pattern: `needle_${index}` },
+        content: [{ type: "text" as const, text: "No matches" }],
+        metadata: {},
+      },
+      time: { created: 2, completed: 3 },
+    })
+
+    const timeline = await setupTimeline(page, {
+      settings: { timelineDetail: detailed },
+      sessionMessages: [
+        user,
+        {
+          ...completed,
+          content: [
+            {
+              type: "text",
+              text: Array.from({ length: 40 }, (_, index) => `Earlier note ${index + 1}.`).join("\n\n"),
+            },
+            ...Array.from({ length: 2 }, (_, index) => search(index)),
+            {
+              type: "tool",
+              id: "call_far_shell",
+              name: "shell",
+              state: {
+                status: "completed",
+                input: { command: "sleep 120" },
+                content: [{ type: "text", text: "working" }],
+                metadata: { shellID: "shell_far", status: "running" },
+              },
+              time: { created: 2, completed: 3 },
+            },
+            // The open group outgrows the viewport, so aligning the group instead of the shell misses it.
+            ...Array.from({ length: 40 }, (_, index) => search(index + 2)),
+            {
+              type: "text",
+              text: Array.from({ length: 80 }, (_, index) => `Follow-up note ${index + 1}.`).join("\n\n"),
+            },
+          ],
+        },
+      ],
+      sessionStatus: { [sessionID]: { type: "busy" } },
+    })
+
+    await timeline.transport.send({
+      id: "evt_far_shell_created",
+      created: 3,
+      type: "shell.created",
+      location: { directory },
+      data: {
+        info: {
+          id: "shell_far",
+          status: "running",
+          command: "sleep 120",
+          cwd: directory,
+          shell: "bash",
+          file: "/tmp/far.out",
+          metadata: { sessionID },
+          time: { started: 2 },
+        },
+      },
+    })
+
+    const group = page
+      .locator('[data-component="collapsed-tool-group"]')
+      .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
+    const shellTrigger = page.locator('[data-timeline-part-id="call_far_shell"] [data-slot="collapsible-trigger"]')
+
+    await expect(page.getByText("Follow-up note 80.", { exact: true })).toBeInViewport()
+    await expect(shellTrigger).toHaveCount(0)
+    await page.getByRole("button", { name: "1 running", exact: true }).click()
+    await page
+      .getByRole("menu", { name: "1 running", exact: true })
+      .getByRole("menuitem", { name: /sleep 120/ })
+      .click()
+
+    await expect(group).toHaveAttribute("aria-expanded", "true")
+    await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
+    await expect(shellTrigger).toBeInViewport()
+    await expect
+      .poll(async () => {
+        const [header, shell] = await Promise.all([group.boundingBox(), shellTrigger.boundingBox()])
+
+        return header && shell ? Math.round(shell.y - (header.y + header.height)) : undefined
+      })
+      .toBe(0)
+    // Nothing covers the row, so it takes the next click.
+    await shellTrigger.click({ trial: true })
+  })
+
   test("hides the running switcher when viewing the only running subagent", async ({ page }) => {
     const childID = "ses_only_running_child"
 

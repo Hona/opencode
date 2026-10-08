@@ -183,6 +183,7 @@ export function createTimelineVirtualizer(input: Input) {
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   let batchingColdSizes = false
+  let holdFrame: number | undefined
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -410,12 +411,56 @@ export function createTimelineVirtualizer(input: Input) {
     )
     input.onUnpin()
     prepareNavigation()
-    virtualizer.scrollToIndex(found.index, { align: "center" })
+    holdPart(found.index, found.partID)
 
     return true
   }
 
+  // Keeps a revealed tool's top edge just below the sticky headers it scrolls under, until the user scrolls or a
+  // second passes. Mounting the row and measuring content above it move that edge; the tool's own growth does not.
+  function holdPart(index: number, partID: string) {
+    const until = performance.now() + 1000
+    const find = () => virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(partID)}"]`)
+
+    // A row outside the rendered range has to mount before the tool inside it can be measured.
+    if (!find()) virtualizer.scrollToIndex(index, { align: "start" })
+
+    const step = () => {
+      holdFrame = undefined
+      const root = listRoot()
+
+      if (!active() || !root || performance.now() > until) return
+      const element = find()
+
+      if (element) {
+        const offset = Math.min(
+          root.scrollHeight - root.clientHeight,
+          Math.max(
+            0,
+            root.scrollTop +
+              element.getBoundingClientRect().top -
+              root.getBoundingClientRect().top -
+              parseFloat(getComputedStyle(element).scrollMarginTop),
+          ),
+        )
+
+        if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
+      }
+
+      holdFrame = requestAnimationFrame(step)
+    }
+
+    step()
+  }
+
+  function stopHold() {
+    if (holdFrame !== undefined) cancelAnimationFrame(holdFrame)
+    holdFrame = undefined
+  }
+
   function prepareNavigation() {
+    stopHold()
+
     if (touchStart === undefined) touchScrolling = false
     flushTouchAdjustment()
   }
@@ -600,6 +645,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
   // the end must stop following, even though the resulting position still looks like the end.
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
+    stopHold()
     input.onUserScroll(event.target)
 
     if (event.deltaY < 0) input.onUnpin()
@@ -607,6 +653,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchStart = (event: TouchEvent) => {
     clearTouchTarget()
+    stopHold()
     input.onUserScroll(event.target)
     touchScrolling = true
     touchStart = event.touches[0]?.clientY
@@ -663,6 +710,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    stopHold()
     input.onUserScroll(event.target)
     pointerHeld = true
   }
@@ -688,6 +736,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (!isScrollKeyTarget(event.target, key)) return
 
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
+    stopHold()
     input.onUserScroll(event.currentTarget)
 
     if (upwardKeys.has(key)) input.onUnpin()
@@ -874,6 +923,7 @@ export function createTimelineVirtualizer(input: Input) {
     })
 
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
+    stopHold()
     coldPending = false
     contentObserver?.disconnect()
     viewportObserver?.disconnect()
