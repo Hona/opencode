@@ -25,9 +25,12 @@ export const PaneElement = Schema.Struct({
 
 export type PaneElement = typeof PaneElement.Type
 
+const request = text(128)
+
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
-  Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
+  // The agent's browser.preview; the window answers with `previewed` under the same request ID.
+  Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048), requestID: request }),
   Schema.Struct({
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
@@ -90,6 +93,15 @@ export const BrowserPane = Ipc.define({
     },
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    // The window opened the agent's preview, or names why it could not.
+    previewed: {
+      input: Schema.Struct({
+        binding,
+        requestID: request,
+        opened: Schema.Boolean,
+        reason: Schema.optionalKey(Schema.Literals(["queued", "unavailable"])),
+      }),
+    },
     close: { input: Schema.Struct({ binding }) },
   },
   events: {
