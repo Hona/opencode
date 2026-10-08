@@ -470,7 +470,7 @@ export function createSessionTimelineRowRenderer(input: {
       data-timeline-spacing={Predicate.isTagged(props.row, "AssistantPart") ? props.row.spacing : undefined}
       classList={{
         "min-w-0 w-full max-w-full": true,
-        "md:max-w-[1000px] md:mx-auto": input.centered?.(),
+        "md:max-w-session md:mx-auto": input.centered?.(),
         "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
         "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
         "pt-6": Predicate.isTagged(props.row, "Error"),

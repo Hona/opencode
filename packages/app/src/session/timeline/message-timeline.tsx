@@ -410,7 +410,7 @@ function MessageTimelineView(
           <div
             classList={{
               "min-w-0 w-full max-w-full": true,
-              "md:max-w-[1000px] md:mx-auto": props.centered,
+              "md:max-w-session md:mx-auto": props.centered,
             }}
           >
             <div
