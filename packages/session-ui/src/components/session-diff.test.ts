@@ -109,6 +109,7 @@ describe("session diff", () => {
     ["a new file", "@@ -0,0 +1,3 @@\n+one\n+two\n+three\n"],
     ["a deleted file", "@@ -1,3 +0,0 @@\n-one\n-two\n-three\n"],
     ["a leading marker", "@@ -1,1 +1,1 @@\n\\ No newline at end of file\n-old\n+new\n"],
+    ["interleaved changes", "@@ -1,4 +1,4 @@\n keep\n-a\n+b\n-c\n+d\n keep\n"],
   ])("splits complete patches with %s like a fresh file diff", (_, hunk) => {
     const patch = `${header}${hunk}`
     const contents = completePatchContents(patch)!
@@ -121,8 +122,9 @@ describe("session diff", () => {
     expect({ ...resolveFileDiff({ file: "a.ts", patch }), cacheKey: undefined }).toEqual({ ...expected, cacheKey: undefined })
   })
 
-  test.each(["a\tb.ts", '"quoted".ts', " padded.ts "])("keeps the exact file name %j for complete patches", (file) => {
+  test.each(["a\tb.ts", "a\nb.ts", '"quoted"', " padded.ts "])("keeps the exact file name %j for complete patches", (file) => {
     expect(resolveFileDiff({ file, patch: `${header}@@ -1,2 +1,2 @@\n one\n-old\n+new\n` }).name).toBe(file)
+    expect(resolveFileDiff({ file, patch: `${header}@@ -0,0 +0,0 @@\n` }).name).toBe(file)
   })
 
   test("collapses unchanged runs in complete patches into the hunks of a fresh file diff", () => {

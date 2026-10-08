@@ -72,7 +72,7 @@ function fileDiffFromPatch(file: string, patch: string) {
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
 
   // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
-  value.cacheKey ??= highlightKey(key)
+  value.cacheKey = highlightKey(key)
   patchFileDiffCache.set(key, value)
 
   while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
@@ -153,10 +153,9 @@ function completePatch(patch: string) {
 }
 
 // A complete patch already carries the producer's line diff. Splitting its single full-context hunk at long
-// unchanged runs yields the collapsed hunks Pierre would get by diffing the reconstructed files again, in linear time.
+// unchanged runs yields, in linear time, the collapsed hunks Pierre would get by diffing the reconstructed files
+// again whenever that alignment is unambiguous.
 function fileDiffFromCompletePatch(file: string, patch: { before: string; after: string; lines: string[] }) {
-  if (!patch.before && !patch.after) return emptyFileDiff(file)
-
   // Pierre reads names back from header text, so a fixed header keeps tabs, quotes, and newlines in `file` intact.
   const value =
     processFile(`--- a\n+++ a\n${splitHunk(patch.lines)}`, {
