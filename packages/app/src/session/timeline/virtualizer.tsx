@@ -110,12 +110,14 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
+
   const [rendering, setRendering] = createStore<{
     initialTail: boolean
     scrollAdjustment: number
     /** A revealed tool whose top edge stays put until the user scrolls. */
     anchor?: { key: string; partID: string }
   }>({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
 
@@ -410,7 +412,6 @@ export function createTimelineVirtualizer(input: Input) {
 
     const key = found.group.key
 
-    input.onUnpin()
     prepareNavigation()
     // Opening the group and anchoring its row render the tool synchronously, wherever the row is.
     batch(() => {
@@ -421,6 +422,12 @@ export function createTimelineVirtualizer(input: Input) {
       )
       setRendering("anchor", { key: TimelineRow.key(rows()[found.index]!), partID: found.partID })
     })
+    // Until its ResizeObserver delivers, the opened row keeps its collapsed size, so the timeline may not scroll yet
+    // (and cannot unpin) or ends above the tool. Commit the real size first.
+    const opened = virtualContent?.querySelector<HTMLElement>(`[data-index="${found.index}"]`)
+
+    if (opened) resizeItem(found.index, opened.offsetHeight)
+    input.onUnpin()
     pinAnchor()
 
     return true
@@ -753,7 +760,8 @@ export function createTimelineVirtualizer(input: Input) {
     const atEnd = maxScroll - scrollTop <= endEpsilon
     const arrived = scrollTop > previousTop + endEpsilon || maxScroll < previousMaxScroll
 
-    if (maxScroll <= 1 || (atEnd && arrived)) input.onPin()
+    // An anchor holds its tool even when reaching it lands at the end; only the user's own scroll lets it go.
+    if (maxScroll <= 1 || (atEnd && arrived && !rendering.anchor)) input.onPin()
     else if ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon) input.onUnpin()
     settleColdBottom()
     input.onScheduleScrollState(root)
