@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { parseDiffFromFile } from "@pierre/diffs"
 import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
@@ -84,6 +85,33 @@ describe("session diff", () => {
 
     expect(fileDiff.isPartial).toBe(false)
     expect(fileDiff.additionLines).toEqual(["one\n", "new\n"])
+  })
+
+  test("keeps the producer's line alignment for complete patches", () => {
+    // Valid but not minimal: diffing the rebuilt files again would keep `b` as unchanged context.
+    const fileDiff = resolveFileDiff({
+      file: "a.ts",
+      patch: "diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,3 @@\n a\n-b\n-c\n+b\n+d\n",
+    })
+
+    expect(fileDiff.isPartial).toBe(false)
+    expect(fileDiff.hunks.map((hunk) => [hunk.deletionLines, hunk.additionLines])).toEqual([[2, 2]])
+  })
+
+  test("collapses unchanged runs in complete patches into the hunks of a fresh file diff", () => {
+    const before = Array.from({ length: 40 }, (_, index) => `line ${index}\n`)
+    const after = before.map((line, index) => (index === 3 || index === 30 ? `changed ${index}\n` : line))
+    const body = before.map((line, index) => (line === after[index] ? ` ${line}` : `-${line}+${after[index]}`)).join("")
+
+    const fileDiff = resolveFileDiff({
+      file: "a.ts",
+      patch: `diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,40 +1,40 @@\n${body}`,
+    })
+
+    expect(fileDiff.hunks).toHaveLength(2)
+    expect(fileDiff.hunks).toEqual(
+      parseDiffFromFile({ name: "a.ts", contents: before.join("") }, { name: "a.ts", contents: after.join("") }).hunks,
+    )
   })
 
   test("keeps ordinary leading tool patches partial", () => {

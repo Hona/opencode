@@ -1,4 +1,4 @@
-import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
+import { parseDiffFromFile, parsePatchFiles, processFile, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
 import { checksum } from "@opencode/util/encode"
 import type { FileDiffInfo } from "@opencode/client/promise"
@@ -31,13 +31,9 @@ const diffCacheLimit = 16
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
-  if (typeof diff.patch === "string") return fileDiffFromPatch(diff.file, diff.patch)
+  if (diff.patch !== undefined) return fileDiffFromPatch(diff.file, diff.patch)
 
-  return fileDiffFromContent(
-    diff.file,
-    typeof diff.before === "string" ? diff.before : "",
-    typeof diff.after === "string" ? diff.after : "",
-  )
+  return fileDiffFromContent(diff.file, diff.before ?? "", diff.after ?? "")
 }
 
 export function normalize(diff: ReviewDiff): ViewDiff {
@@ -67,14 +63,14 @@ function fileDiffFromPatch(file: string, patch: string) {
     return hit
   }
 
-  const contents = completePatchContents(patch)
-  const input = contents ? undefined : patchInput(file, patch)
+  const complete = completePatch(patch)
+  const input = complete ? undefined : patchInput(file, patch)
 
-  const value = contents
-    ? fileDiffFromContent(file, contents.before, contents.after)
+  const value = complete
+    ? fileDiffFromCompletePatch(file, complete)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
 
-  // Complete patches already carry a content key from fileDiffFromContent; partial patches are keyed by the patch text.
+  // Complete patches already carry a content key from fileDiffFromCompletePatch; partial patches are keyed by the patch text.
   value.cacheKey ??= highlightKey(key)
   patchFileDiffCache.set(key, value)
 
@@ -84,6 +80,14 @@ function fileDiffFromPatch(file: string, patch: string) {
 }
 
 export function completePatchContents(patch: string) {
+  const complete = completePatch(patch)
+
+  if (!complete) return
+
+  return { before: complete.before, after: complete.after }
+}
+
+function completePatch(patch: string) {
   try {
     const parsed = parsePatch(patch)[0]
 
@@ -141,10 +145,94 @@ export function completePatchContents(patch: string) {
     const text = (lines: Array<{ text: string; newline: boolean }>) =>
       lines.map((line) => line.text + (line.newline ? "\n" : "")).join("")
 
-    return { before: text(before), after: text(after) }
+    return { before: text(before), after: text(after), lines: hunk.lines }
   } catch {
     return
   }
+}
+
+// A complete patch already carries the producer's line diff. Splitting its single full-context hunk at long
+// unchanged runs yields the collapsed hunks Pierre would get by diffing the reconstructed files again, in linear time.
+function fileDiffFromCompletePatch(file: string, patch: { before: string; after: string; lines: string[] }) {
+  if (!patch.before && !patch.after) return emptyFileDiff(file)
+
+  const value =
+    processFile(`--- ${file}\n+++ ${file}\n${splitHunk(patch.lines)}`, {
+      isGitDiff: false,
+      oldFile: { name: file, contents: patch.before },
+      newFile: { name: file, contents: patch.after },
+    }) ?? fileDiffFromContent(file, patch.before, patch.after)
+
+  value.cacheKey = highlightKey(`${file}\0${patch.before}\0${patch.after}`)
+
+  return value
+}
+
+// Pierre's file diffs use jsdiff's default of four context lines; longer unchanged runs end one hunk and start the next.
+const hunkContext = 4
+
+function splitHunk(lines: string[]) {
+  const rows = lines.reduce<{ line: string; marker?: string }[]>((result, line) => {
+    const previous = result.at(-1)
+
+    if (line.startsWith("\\") && previous) {
+      previous.marker = line
+
+      return result
+    }
+
+    result.push({ line })
+
+    return result
+  }, [])
+
+  const changes = rows.flatMap((row, index) => (row.line.startsWith(" ") ? [] : [index]))
+
+  const ranges = changes.reduce<{ start: number; end: number }[]>((result, index) => {
+    const previous = result.at(-1)
+    const start = Math.max(0, index - hunkContext)
+    const end = Math.min(rows.length - 1, index + hunkContext)
+
+    if (previous && start <= previous.end + 1) {
+      previous.end = end
+
+      return result
+    }
+
+    result.push({ start, end })
+
+    return result
+  }, [])
+
+  const positions = rows.reduce<{ old: number; new: number }[]>(
+    (result, row) => {
+      const current = result.at(-1)!
+
+      result.push({
+        old: current.old + (row.line.startsWith("+") ? 0 : 1),
+        new: current.new + (row.line.startsWith("-") ? 0 : 1),
+      })
+
+      return result
+    },
+    [{ old: 0, new: 0 }],
+  )
+
+  return ranges
+    .map((range) => {
+      const start = positions[range.start]!
+      const end = positions[range.end + 1]!
+      const oldCount = end.old - start.old
+      const newCount = end.new - start.new
+
+      const body = rows
+        .slice(range.start, range.end + 1)
+        .map((row) => (row.marker ? `${row.line}\n${row.marker}` : row.line))
+        .join("\n")
+
+      return `@@ -${oldCount === 0 ? start.old : start.old + 1},${oldCount} +${newCount === 0 ? start.new : start.new + 1},${newCount} @@\n${body}`
+    })
+    .join("\n")
 }
 
 function patchInput(file: string, patch: string) {
