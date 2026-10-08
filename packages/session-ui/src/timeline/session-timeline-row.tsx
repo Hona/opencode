@@ -140,7 +140,7 @@ export function createSessionTimelineRowRenderer(input: {
       : undefined
   }
 
-  const padding = () => input.padding?.() ?? "px-4 md:px-5"
+  const padding = () => input.padding?.() ?? "px-4 md:px-6"
 
   const indexGroupContents = (refs: PartRef[]) => {
     const result = new Map<string, Map<string, SessionMessageAssistant["content"][number]>>()
