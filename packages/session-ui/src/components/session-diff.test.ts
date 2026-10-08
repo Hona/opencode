@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { parseDiffFromFile } from "@pierre/diffs"
-import { normalize, resolveFileDiff, text } from "./session-diff"
+import { completePatchContents, normalize, resolveFileDiff, text } from "./session-diff"
+
+const header = "diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n"
 
 describe("session diff", () => {
   test.each([
@@ -89,13 +91,38 @@ describe("session diff", () => {
 
   test("keeps the producer's line alignment for complete patches", () => {
     // Valid but not minimal: diffing the rebuilt files again would keep `b` as unchanged context.
-    const fileDiff = resolveFileDiff({
-      file: "a.ts",
-      patch: "diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,3 @@\n a\n-b\n-c\n+b\n+d\n",
-    })
+    const patch = `${header}@@ -1,3 +1,3 @@\n a\n-b\n-c\n+b\n+d\n`
+    const fileDiff = resolveFileDiff({ file: "a.ts", patch })
 
     expect(fileDiff.isPartial).toBe(false)
     expect(fileDiff.hunks.map((hunk) => [hunk.deletionLines, hunk.additionLines])).toEqual([[2, 2]])
+    // A content diff of the same files has different hunks, so it must not share the highlight identity.
+    expect(resolveFileDiff({ file: "a.ts", before: "a\nb\nc\n", after: "a\nb\nd\n" }).cacheKey).not.toBe(
+      fileDiff.cacheKey,
+    )
+  })
+
+  test.each([
+    ["missing final newlines", "@@ -1,2 +1,2 @@\n one\n-two\n\\ No newline at end of file\n+three\n\\ No newline at end of file\n"],
+    ["an added final newline", "@@ -1,2 +1,2 @@\n one\n-two\n\\ No newline at end of file\n+two\n"],
+    ["CRLF lines", "@@ -1,3 +1,3 @@\n one\r\n-two\r\n+three\r\n four\r\n"],
+    ["a new file", "@@ -0,0 +1,3 @@\n+one\n+two\n+three\n"],
+    ["a deleted file", "@@ -1,3 +0,0 @@\n-one\n-two\n-three\n"],
+    ["a leading marker", "@@ -1,1 +1,1 @@\n\\ No newline at end of file\n-old\n+new\n"],
+  ])("splits complete patches with %s like a fresh file diff", (_, hunk) => {
+    const patch = `${header}${hunk}`
+    const contents = completePatchContents(patch)!
+
+    const expected = parseDiffFromFile(
+      { name: "a.ts", contents: contents.before },
+      { name: "a.ts", contents: contents.after },
+    )
+
+    expect({ ...resolveFileDiff({ file: "a.ts", patch }), cacheKey: undefined }).toEqual({ ...expected, cacheKey: undefined })
+  })
+
+  test.each(["a\tb.ts", '"quoted".ts', " padded.ts "])("keeps the exact file name %j for complete patches", (file) => {
+    expect(resolveFileDiff({ file, patch: `${header}@@ -1,2 +1,2 @@\n one\n-old\n+new\n` }).name).toBe(file)
   })
 
   test("collapses unchanged runs in complete patches into the hunks of a fresh file diff", () => {
@@ -105,7 +132,7 @@ describe("session diff", () => {
 
     const fileDiff = resolveFileDiff({
       file: "a.ts",
-      patch: `diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,40 +1,40 @@\n${body}`,
+      patch: `${header}@@ -1,40 +1,40 @@\n${body}`,
     })
 
     expect(fileDiff.hunks).toHaveLength(2)

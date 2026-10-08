@@ -31,7 +31,8 @@ const diffCacheLimit = 16
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
-  if (diff.patch !== undefined) return fileDiffFromPatch(diff.file, diff.patch)
+  // Untyped persisted payloads may carry `patch: null`; those render from their contents.
+  if (diff.patch != null) return fileDiffFromPatch(diff.file, diff.patch)
 
   return fileDiffFromContent(diff.file, diff.before ?? "", diff.after ?? "")
 }
@@ -70,7 +71,7 @@ function fileDiffFromPatch(file: string, patch: string) {
     ? fileDiffFromCompletePatch(file, complete)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
 
-  // Complete patches already carry a content key from fileDiffFromCompletePatch; partial patches are keyed by the patch text.
+  // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
   value.cacheKey ??= highlightKey(key)
   patchFileDiffCache.set(key, value)
 
@@ -156,14 +157,15 @@ function completePatch(patch: string) {
 function fileDiffFromCompletePatch(file: string, patch: { before: string; after: string; lines: string[] }) {
   if (!patch.before && !patch.after) return emptyFileDiff(file)
 
+  // Pierre reads names back from header text, so a fixed header keeps tabs, quotes, and newlines in `file` intact.
   const value =
-    processFile(`--- ${file}\n+++ ${file}\n${splitHunk(patch.lines)}`, {
+    processFile(`--- a\n+++ a\n${splitHunk(patch.lines)}`, {
       isGitDiff: false,
       oldFile: { name: file, contents: patch.before },
       newFile: { name: file, contents: patch.after },
-    }) ?? fileDiffFromContent(file, patch.before, patch.after)
+    }) ?? emptyFileDiff(file)
 
-  value.cacheKey = highlightKey(`${file}\0${patch.before}\0${patch.after}`)
+  value.name = file
 
   return value
 }
@@ -175,8 +177,9 @@ function splitHunk(lines: string[]) {
   const rows = lines.reduce<{ line: string; marker?: string }[]>((result, line) => {
     const previous = result.at(-1)
 
-    if (line.startsWith("\\") && previous) {
-      previous.marker = line
+    // A marker annotates the line before it; completePatch ignores a marker with nothing to annotate.
+    if (line.startsWith("\\")) {
+      if (previous) previous.marker = line
 
       return result
     }
