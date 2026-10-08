@@ -110,7 +110,12 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
-  const [rendering, setRendering] = createStore({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+  const [rendering, setRendering] = createStore<{
+    initialTail: boolean
+    scrollAdjustment: number
+    /** A revealed tool whose top edge stays put until the user scrolls. */
+    anchor?: { key: string; partID: string }
+  }>({ initialTail: coldBottomMount, scrollAdjustment: 0 })
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
 
@@ -137,6 +142,7 @@ export function createTimelineVirtualizer(input: Input) {
     const id = input.projection.activeMessageID()
     const active = id ? (input.projection.messageLastRowIndex().get(id) ?? -1) : -1
     const initialTail = rendering.initialTail && input.pinned()
+    const anchored = rendering.anchor ? rowKeys().indexOf(rendering.anchor.key) : -1
 
     return (range: Range) => {
       // Batch a bounded cheap suffix, but stop before unknown/large content.
@@ -164,7 +170,7 @@ export function createTimelineVirtualizer(input: Input) {
         : defaultRangeExtractor({ ...range, overscan: 2 })
 
       return filterVirtualIndexes(
-        [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b),
+        [...new Set([...indexes, ...[active, anchored].filter((index) => index >= 0)])].sort((a, b) => a - b),
         range.count,
       )
     }
@@ -183,7 +189,6 @@ export function createTimelineVirtualizer(input: Input) {
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   let batchingColdSizes = false
-  let holdFrame: number | undefined
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -337,6 +342,7 @@ export function createTimelineVirtualizer(input: Input) {
         })
       })
       batchingColdSizes = false
+      pinAnchor()
 
       if (coldPending) pinColdBottom()
       settleColdBottom()
@@ -404,62 +410,54 @@ export function createTimelineVirtualizer(input: Input) {
 
     const key = found.group.key
 
-    setToolOpen(
-      found.group.type === "context"
-        ? { [`context:${key}`]: true, [`${key}:tool:${found.partID}`]: true }
-        : { [key]: true },
-    )
     input.onUnpin()
     prepareNavigation()
-    holdPart(found.index, found.partID)
+    // Opening the group and anchoring its row render the tool synchronously, wherever the row is.
+    batch(() => {
+      setToolOpen(
+        found.group.type === "context"
+          ? { [`context:${key}`]: true, [`${key}:tool:${found.partID}`]: true }
+          : { [key]: true },
+      )
+      setRendering("anchor", { key: TimelineRow.key(rows()[found.index]!), partID: found.partID })
+    })
+    pinAnchor()
 
     return true
   }
 
-  // Keeps a revealed tool's top edge just below the sticky headers it scrolls under, until the user scrolls or a
-  // second passes. Mounting the row and measuring content above it move that edge; the tool's own growth does not.
-  function holdPart(index: number, partID: string) {
-    const until = performance.now() + 1000
-    const find = () => virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(partID)}"]`)
+  // Puts the anchored tool's top edge at its scroll margin, just below the headers that stick above it. Its own
+  // growth extends downward, so only size changes at or above its row can move it; each of those calls this again.
+  function pinAnchor() {
+    const anchor = rendering.anchor
+    const root = listRoot()
 
-    // A row outside the rendered range has to mount before the tool inside it can be measured.
-    if (!find()) virtualizer.scrollToIndex(index, { align: "start" })
+    if (!anchor || !root) return
+    const element = virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`)
 
-    const step = () => {
-      holdFrame = undefined
-      const root = listRoot()
+    // Following the end is a different position to hold.
+    if (!element || !active() || input.pinned()) return releaseAnchor()
 
-      if (!active() || !root || performance.now() > until) return
-      const element = find()
+    const offset = Math.min(
+      root.scrollHeight - root.clientHeight,
+      Math.max(
+        0,
+        root.scrollTop +
+          element.getBoundingClientRect().top -
+          root.getBoundingClientRect().top -
+          parseFloat(getComputedStyle(element).scrollMarginTop),
+      ),
+    )
 
-      if (element) {
-        const offset = Math.min(
-          root.scrollHeight - root.clientHeight,
-          Math.max(
-            0,
-            root.scrollTop +
-              element.getBoundingClientRect().top -
-              root.getBoundingClientRect().top -
-              parseFloat(getComputedStyle(element).scrollMarginTop),
-          ),
-        )
-
-        if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
-      }
-
-      holdFrame = requestAnimationFrame(step)
-    }
-
-    step()
+    if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
   }
 
-  function stopHold() {
-    if (holdFrame !== undefined) cancelAnimationFrame(holdFrame)
-    holdFrame = undefined
+  function releaseAnchor() {
+    if (rendering.anchor) setRendering("anchor", undefined)
   }
 
   function prepareNavigation() {
-    stopHold()
+    releaseAnchor()
 
     if (touchStart === undefined) touchScrolling = false
     flushTouchAdjustment()
@@ -645,7 +643,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
   // the end must stop following, even though the resulting position still looks like the end.
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
-    stopHold()
+    releaseAnchor()
     input.onUserScroll(event.target)
 
     if (event.deltaY < 0) input.onUnpin()
@@ -653,7 +651,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchStart = (event: TouchEvent) => {
     clearTouchTarget()
-    stopHold()
+    releaseAnchor()
     input.onUserScroll(event.target)
     touchScrolling = true
     touchStart = event.touches[0]?.clientY
@@ -710,7 +708,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-    stopHold()
+    releaseAnchor()
     input.onUserScroll(event.target)
     pointerHeld = true
   }
@@ -736,7 +734,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (!isScrollKeyTarget(event.target, key)) return
 
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
-    stopHold()
+    releaseAnchor()
     input.onUserScroll(event.currentTarget)
 
     if (upwardKeys.has(key)) input.onUnpin()
@@ -923,7 +921,6 @@ export function createTimelineVirtualizer(input: Input) {
     })
 
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
-    stopHold()
     coldPending = false
     contentObserver?.disconnect()
     viewportObserver?.disconnect()
