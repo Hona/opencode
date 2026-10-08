@@ -28,6 +28,8 @@ const browser: Browser.State = {
       canGoBack: true,
       canGoForward: false,
       generation: 3,
+      owner: "user",
+      watched: false,
     },
   ],
   focusedTabID: tabID,
@@ -46,6 +48,8 @@ function fixture(strip: string[] = []) {
   const calls: { input: Parameters<Client["register"]>[0]; commands: Browser.Action[] }[] = []
   const closed: string[] = []
   const highlights: { binding: string; tabID: Browser.TabID; ref?: Browser.Ref }[] = []
+  // What the window answered the agent's previews, in call order.
+  const answers: Parameters<Client["previewed"]>[0][] = []
 
   const routed: Record<"preview" | "inspect" | "focus", unknown[]> = {
     preview: [],
@@ -76,6 +80,9 @@ function fixture(strip: string[] = []) {
     zoom: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
+    previewed: async (input) => {
+      answers.push(input)
+    },
     close: async (input) => {
       closed.push(input.binding)
     },
@@ -107,7 +114,7 @@ function fixture(strip: string[] = []) {
       },
     },
     focus: (tabID) => routed.focus.push(tabID),
-    preview: (path) => routed.preview.push(path),
+    preview: (path, requestID) => routed.preview.push({ path, requestID }),
     inspect: (event) => routed.inspect.push(event),
     page: () => undefined,
     address: () => undefined,
@@ -117,7 +124,7 @@ function fixture(strip: string[] = []) {
   connection.wake()
   emit(0, { type: "state", state: browser })
 
-  return { connection, calls, states, target, ipc, owner, routed, highlights, closed, listeners, emit, strip }
+  return { connection, calls, states, target, ipc, owner, routed, highlights, answers, closed, listeners, emit, strip }
 }
 
 const element = {
@@ -128,14 +135,20 @@ const element = {
 }
 
 test.each([
-  { route: "preview" as const, event: { type: "preview", path: "docs/report.pdf" } as const, value: "docs/report.pdf" },
-  { route: "focus" as const, event: { type: "focus", tabID } as const, value: tabID },
   {
+    name: "preview",
+    route: "preview" as const,
+    event: { type: "preview", path: "docs/report.pdf", requestID: "req_preview" } as const,
+    value: { path: "docs/report.pdf", requestID: "req_preview" },
+  },
+  { name: "focus", route: "focus" as const, event: { type: "focus", tabID } as const, value: tabID },
+  {
+    name: "inspect",
     route: "inspect" as const,
     event: { type: "inspect", tabID, active: false, element } as const,
     value: { type: "inspect", tabID, active: false, element },
   },
-])("$route events reach the session without touching connection state", ({ route, event, value }) => {
+])("$name events reach the session without touching connection state", ({ route, event, value }) => {
   const app = fixture()
 
   try {
@@ -143,6 +156,31 @@ test.each([
     app.emit(0, event)
     expect(app.routed[route]).toEqual([value])
     expect(app.states).toHaveLength(before)
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+// Main matches each answer to its request by binding, so only the registration that heard the request answers it.
+test("preview answers reach main under the binding that asked, until it closes", async () => {
+  const app = fixture()
+
+  try {
+    const registration = app.states.at(-1)?.registration
+    registration?.previewed("req_open", true)
+    registration?.previewed("req_wait", false, "queued")
+    registration?.previewed("req_none", false, "unavailable")
+    await Bun.sleep(0)
+    const binding = app.calls[0].input.binding
+    expect(app.answers).toStrictEqual([
+      { binding, requestID: "req_open", opened: true },
+      { binding, requestID: "req_wait", opened: false, reason: "queued" },
+      { binding, requestID: "req_none", opened: false, reason: "unavailable" },
+    ])
+    app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
+    registration?.previewed("req_late", true)
+    await Bun.sleep(0)
+    expect(app.answers).toHaveLength(3)
   } finally {
     app.connection.dispose()
   }

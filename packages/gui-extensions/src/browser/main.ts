@@ -37,6 +37,8 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     zoom: async (input, caller) => (await existing()).zoom(caller.window, input.binding, input.tabID, input.zoom),
     site: async (input, caller) => (await existing()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await existing()).clearSite(caller.window, input.binding, input.tabID),
+    previewed: async (input, caller) =>
+      (await existing()).previewed(caller.window, input.binding, input.requestID, input.opened, input.reason),
     close: async (input, caller) => (await existing()).close(caller.window, input.binding),
   })
 

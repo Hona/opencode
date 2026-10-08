@@ -195,7 +195,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
           layout.open(key(tabID), ref, { tab: "select" })
         },
-        preview: (path) => preview(entry, path),
+        preview: (path, requestID) => preview(entry, path, requestID),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
         page: (event) => {
           setState("pages", id, (pages) => ({
@@ -288,10 +288,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           }),
       )
 
-      // Previews made while another session was on screen open once the user returns to this one.
+      // Previews made while another session was on screen open once the user returns to this one. The agent already
+      // heard they were queued.
       createKeyed(
         () => sessions.current()?.key === ref.key && ctx.screen.current(),
-        () => entry.previews.splice(0).forEach((path) => preview(entry, path)),
+        () => {
+          const view = sessions.current()
+
+          if (view) entry.previews.splice(0).forEach((href) => links.open({ href, session: view, background: true }))
+        },
       )
 
       return dispose
@@ -428,17 +433,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
-  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
-  const preview = (entry: Live, path: string) => {
+  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it. The
+  // agent hears at once whether it opened, waits, or has nothing to open it.
+  const preview = (entry: Live, path: string, requestID: string) => {
     const view = sessions.current()
 
     if (view?.key === entry.ref.key && ctx.screen.current()) {
-      links.open({ href: path, session: view, background: true })
+      const opened = links.open({ href: path, session: view, background: true })
+      entry.registration?.previewed(requestID, opened, opened ? undefined : "unavailable")
 
       return
     }
 
     if (!entry.previews.includes(path)) entry.previews.push(path)
+    entry.registration?.previewed(requestID, false, "queued")
   }
 
   return {

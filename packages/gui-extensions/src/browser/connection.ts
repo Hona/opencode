@@ -21,6 +21,8 @@ export type Registration = {
   zoom(tabID: Browser.TabID, zoom: Zoom): void
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  /** Answers the agent's preview: it opened, or why it did not. */
+  previewed(requestID: string, opened: boolean, reason?: "queued" | "unavailable"): void
   close(): void
 }
 
@@ -52,7 +54,8 @@ export function createConnection(input: {
     close: (tabID: string) => void
   }
   focus: (tabID: Browser.TabID) => void
-  preview: (path: string) => void
+  /** The agent's preview; answer it through the current registration's `previewed` under the same request ID. */
+  preview: (path: string, requestID: string) => void
   inspect: (event: InspectEvent) => void
   /** A page's icon or zoom changed. */
   page: (event: PageEvent) => void
@@ -150,7 +153,7 @@ export function createConnection(input: {
 
         if (event.type === "focus") return input.focus(event.tabID)
 
-        if (event.type === "preview") return input.preview(event.path)
+        if (event.type === "preview") return input.preview(event.path, event.requestID)
 
         if (event.type === "inspect") return input.inspect(event)
 
@@ -301,6 +304,12 @@ function open(
     },
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    previewed(requestID, opened, reason) {
+      if (status.closed) return
+      void ready
+        .then(() => client.previewed(reason ? { binding, requestID, opened, reason } : { binding, requestID, opened }))
+        .catch(() => undefined)
+    },
     close() {
       if (status.closed) return
       status.closed = true
