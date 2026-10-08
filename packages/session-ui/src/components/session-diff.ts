@@ -154,7 +154,7 @@ function completePatch(patch: string) {
 
 // A complete patch already carries the producer's line diff. Splitting its single full-context hunk at long
 // unchanged runs yields, in linear time, the collapsed hunks Pierre would get by diffing the reconstructed files
-// again whenever that alignment is unambiguous.
+// again whenever both algorithms choose the same alignment.
 function fileDiffFromCompletePatch(file: string, patch: { before: string; after: string; lines: string[] }) {
   // Pierre reads names back from header text, so a fixed header keeps tabs, quotes, and newlines in `file` intact.
   const value =
