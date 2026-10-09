@@ -1379,14 +1379,25 @@ describe("current session timeline rows", () => {
     )
 
     const exhausted = [
-      duplicate[0],
-      { ...duplicate[1], error: { type: "aborted", message: "Step interrupted" } },
+      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
       {
-        ...duplicate[2],
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "aborted", message: "Step interrupted" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
         error: {
           type: "aborted",
           message: "Execution was interrupted repeatedly and will not be resumed automatically.",
         },
+        time: { created: 4 },
       },
     ] satisfies SessionMessageInfo[]
 
