@@ -1,4 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
+import { Match } from "effect"
 import { createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"
@@ -99,7 +100,11 @@ export const LiveUserCommand = {
             setMessage((value) => ({
               ...value,
               status: args.outcome === "nonzero" ? "exited" : args.outcome,
-              exit: args.outcome === "nonzero" ? 1 : args.outcome === "exited" ? 0 : undefined,
+              exit: Match.value(args.outcome).pipe(
+                Match.when("nonzero", () => 1),
+                Match.when("exited", () => 0),
+                Match.orElse(() => undefined),
+              ),
               output: { output, cursor: output.length, size: output.length, truncated: false },
               time: { created: 1, completed: 2 },
             }))
@@ -272,8 +277,10 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
+  const initialPhase: "streaming" | "input" | "running" | "completed" = props.streaming ? "streaming" : "completed"
+
   const [state, setState] = createStore({
-    phase: props.streaming ? "streaming" : "completed",
+    phase: initialPhase,
     started: !props.existingGroup,
     lines: 3,
     sibling: false,
@@ -281,7 +288,16 @@ function InteractiveCommandStory(props: {
   })
 
   const document = createMemo(() => {
-    const phase = state.phase as "streaming" | "input" | "running" | "completed"
+    const phase = state.phase
+
+    const options: NonNullable<Parameters<typeof storyTool>[4]> = {
+      output:
+        phase === "running"
+          ? "still running"
+          : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
+    }
+
+    if (phase === "streaming") options.raw = ""
 
     const content: SessionMessageAssistant["content"] = [
       ...(props.existingGroup
@@ -300,13 +316,7 @@ function InteractiveCommandStory(props: {
                   : props.tool === "subagent"
                     ? { description: "Inspect lifecycle", agent: "explore", prompt: "Inspect lifecycle" }
                     : { command: "printf ready" },
-              {
-                output:
-                  phase === "running"
-                    ? "still running"
-                    : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
-                ...(phase === "streaming" ? { raw: "" } : {}),
-              },
+              options,
             ),
           ]
         : []),

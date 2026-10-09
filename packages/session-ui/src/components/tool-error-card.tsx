@@ -56,6 +56,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   const setOpen = (value: boolean) => {
     if (value) measure()
+
     if (props.open === undefined) setState("open", value)
     props.onOpenChange?.(value)
   }
@@ -63,24 +64,24 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   const name = createMemo(() => {
     if (split.title) return split.title
 
-    const map: Record<string, string> = {
-      read: "ui.tool.read",
-      list: "ui.tool.list",
-      glob: "ui.tool.glob",
-      grep: "ui.tool.grep",
-      subagent: "ui.tool.agent.default",
-      webfetch: "ui.tool.webfetch",
-      websearch: "ui.tool.websearch",
-      shell: "ui.tool.shell",
-      execute: "ui.tool.execute",
-      edit: "ui.messagePart.title.edit",
-      write: "ui.messagePart.title.write",
-      skill: "ui.tool.skill",
-      patch: "ui.tool.patch",
-      question: "ui.tool.questions",
-    }
+    const map = new Map([
+      ["read", "ui.tool.read"],
+      ["list", "ui.tool.list"],
+      ["glob", "ui.tool.glob"],
+      ["grep", "ui.tool.grep"],
+      ["subagent", "ui.tool.agent.default"],
+      ["webfetch", "ui.tool.webfetch"],
+      ["websearch", "ui.tool.websearch"],
+      ["shell", "ui.tool.shell"],
+      ["execute", "ui.tool.execute"],
+      ["edit", "ui.messagePart.title.edit"],
+      ["write", "ui.messagePart.title.write"],
+      ["skill", "ui.tool.skill"],
+      ["patch", "ui.tool.patch"],
+      ["question", "ui.tool.questions"],
+    ])
 
-    const key = map[split.tool]
+    const key = map.get(split.tool)
 
     if (!key) return split.tool
 
