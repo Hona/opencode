@@ -5,12 +5,14 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 
-type Root = { readonly token: string; readonly directory: string }
+/** A served folder, or with `file` only that one file in it. */
+type Root = { readonly token: string; readonly directory: string; readonly file?: string }
 
 // Local files reach the desktop's tabs as http pages on the server's loopback, which the desktop already reaches
-// through its server-network tunnel. Each served folder gets an unguessable path prefix. Served pages share one origin,
-// so a page's scripts can read whatever is served: only the file's folder and its subfolders, without dotfiles such as
-// `.env` or `.git`, and without symlinks that lead elsewhere.
+// through its server-network tunnel. Each root gets an unguessable path prefix. Served pages share one origin, so a
+// page's scripts can read whatever is served, and the agent can read it through them without file permissions. So a
+// workspace page brings its folder and subfolders, without dotfiles such as `.env` or `.git` and without symlinks that
+// lead elsewhere, and a page outside the workspace or in a dot-folder brings nothing but itself.
 export const make = Effect.fn("BrowserServe.make")(function* (directory: string) {
   const roots = new Map<string, Root>()
   const state: { server?: ReturnType<typeof Bun.serve>; closed: boolean } = { closed: false }
@@ -56,9 +58,21 @@ export const make = Effect.fn("BrowserServe.make")(function* (directory: string)
           const path = await realpath(resolve(directory, input))
           if (!(await stat(path)).isFile()) throw new Error("The path names a directory. Pass the HTML file inside it.")
           if (basename(path).startsWith(".")) throw new Error("Dotfiles are not served. Rename the file.")
-          const base = dirname(path)
-          const root = roots.get(base) ?? { token: crypto.randomUUID(), directory: base }
-          roots.set(base, root)
+          const rest = relative(await realpath(directory), path)
+          const parts = rest.split(sep)
+          // A workspace page outside dot-folders brings its folder; any other page brings only itself.
+          const folder = !isAbsolute(rest) && parts[0] !== ".." && !parts.some((part) => part.startsWith("."))
+          if (!folder && !/\.(?:html?|xhtml|svg)$/i.test(path))
+            throw new Error(
+              "Outside the workspace, or in a folder such as .git, only an HTML or SVG page is served. Copy the file into the workspace.",
+            )
+          const id = folder ? dirname(path) : path
+          const root = roots.get(id) ?? {
+            token: crypto.randomUUID(),
+            directory: dirname(path),
+            file: folder ? undefined : path,
+          }
+          roots.set(id, root)
           return `http://127.0.0.1:${start().port}/${root.token}/${encodeURIComponent(basename(path))}`
         },
         catch: (error) =>
@@ -75,7 +89,7 @@ export type Serve = Effect.Success<ReturnType<typeof make>>
 // A file the root may serve, after symlinks: inside the root, with no part starting with a dot (a dotfile or `..`).
 async function servable(root: Root, path: string) {
   const real = await realpath(path).catch(() => undefined)
-  if (!real) return undefined
+  if (!real || (root.file !== undefined && real !== root.file)) return undefined
   const rest = relative(root.directory, real)
   if (isAbsolute(rest) || rest.split(sep).some((part) => part.startsWith("."))) return undefined
   return (await stat(real)).isFile() ? real : undefined

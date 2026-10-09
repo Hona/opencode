@@ -400,7 +400,10 @@ export const Operations = [
         description: "Element locator; a function script then receives the element as its first argument.",
       }),
       ...script,
-      saveTo: optional(serverPath),
+      saveTo: optional(short).annotate({
+        description:
+          "Workspace path on the server to write the JSON result to instead of returning it. An existing file is not replaced unless the browser saved it.",
+      }),
       timeoutMs: timeoutMs(30_000),
     },
     Schema.Struct({ ...page, value: Schema.Json, path: optional(Schema.String) }),
@@ -570,7 +573,10 @@ export const Operations = [
       ...optionalTarget,
       fullPage: optional(Schema.Boolean),
       viewport: optional(Viewport),
-      path: optional(serverPath).annotate({ description: "Server-local path to save to; default a temporary file." }),
+      path: optional(serverPath).annotate({
+        description:
+          "Workspace path on the server to save to; default a temporary file. An existing file is not replaced unless the browser saved it.",
+      }),
       format: optional(Schema.Literals(["png", "jpeg", "webp"])),
       quality: optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
       maxWidth: optional(Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 4_000 }))),
@@ -600,7 +606,10 @@ export const Operations = [
     {
       ...tab,
       id: FileID.annotate({ description: "File ID from browser.files.list or a capture." }),
-      path: optional(serverPath).annotate({ description: "Server-local path to save to; default a temporary file." }),
+      path: optional(serverPath).annotate({
+        description:
+          "Workspace path on the server to save to; default a temporary file. An existing file is not replaced unless the browser saved it.",
+      }),
     },
     saved,
   ),
@@ -895,6 +904,9 @@ export const Definition = Rpc.define({
 export function deadline(action: Action) {
   const margin = 15_000
   if (action.type === "watch") return action.durationMs + margin
+  // Typing presses keys one by one, with the pause between them; a long text outlasts any fixed deadline.
+  if (action.type === "type")
+    return Math.max(60_000, (action.timeoutMs ?? 5_000) + margin + action.text.length * ((action.delayMs ?? 0) + 10))
   if ("timeoutMs" in action) return Math.max(60_000, (action.timeoutMs ?? 0) + margin)
   if (action.type === "lighthouse" || action.type === "profile.stop" || action.type === "heap.snapshot") return 120_000
   return 60_000

@@ -18,6 +18,15 @@ const Stored = Schema.Struct({
 
 type Stored = typeof Stored.Type
 
+/** A tab as the pane saves it; empty optional fields are left out of the stored row. */
+type Saved = {
+  readonly id: Browser.TabID
+  readonly url: string
+  readonly owner?: Browser.Tab["owner"]
+  readonly key?: string | undefined
+  readonly viewport?: { readonly width: number; readonly height: number } | undefined
+}
+
 const empty: Stored = { tabs: [], focusedTabID: null }
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
@@ -39,7 +48,7 @@ export function createBrowserRestoreStore(storage: Storage) {
 
   return {
     load: (key: string) => store(key).value,
-    save(key: string, state: Stored) {
+    save(key: string, state: { readonly tabs: readonly Saved[]; readonly focusedTabID: Browser.TabID | null }) {
       const target = store(key)
 
       const value = {

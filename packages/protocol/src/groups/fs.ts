@@ -16,7 +16,8 @@ const ListQuery = Schema.Struct({
 const WriteQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: Schema.String.annotate({
-    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+    description:
+      "An absolute path or a path relative to the requested location. Missing parent directories are created.",
   }),
 })
 

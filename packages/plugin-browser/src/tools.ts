@@ -48,7 +48,8 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     // its tab, reloaded so the user sees the file as it is now.
     if (action.type === "preview" && /\.(?:html?|xhtml)$/i.test(action.path)) {
       const url = yield* serve.url(action.path)
-      const opened = yield* send({ type: "tabs.open", url, key: `preview:${action.path}`, focus: true }, tool)
+      // Keyed by the served URL, which names the file however its path was written.
+      const opened = yield* send({ type: "tabs.open", url, key: `preview:${url}`, focus: true }, tool)
       const tab = yield* Effect.fromResult(
         Schema.decodeUnknownResult(Schema.Struct({ id: Browser.TabID, reused: Schema.Boolean }))(opened.value).pipe(
           Result.mapError(invalid("tabs.open")),

@@ -155,6 +155,7 @@ test("a local file is served with its folder, without dotfiles, parents or symli
     await Bun.write(join(workspace, "site", ".git", "config"), "[remote]")
     await Bun.write(join(workspace, "secret.txt"), "no")
     await Bun.write(join(outside, "secret.txt"), "no")
+    await Bun.write(join(outside, "report.html"), "<p>report</p>")
     // Package managers link node_modules entries to folders elsewhere.
     await symlink(outside, join(workspace, "site", "node_modules"), "junction")
     const text = (url: string) => fetch(url).then((response) => response.text())
@@ -181,8 +182,20 @@ test("a local file is served with its folder, without dotfiles, parents or symli
           )
           expect(statuses).toEqual([404, 404, 404, 404, 404, 404])
 
-          const missing = yield* Effect.flip(serve.url("nope.html"))
-          expect(missing.message).toContain("check that the file exists on the server")
+          // Outside the workspace a page brings nothing but itself.
+          const report = yield* serve.url(join(outside, "report.html"))
+          expect(yield* Effect.promise(() => text(report))).toBe("<p>report</p>")
+          expect(
+            yield* Effect.promise(() => fetch(new URL("secret.txt", report).href).then((response) => response.status)),
+          ).toBe(404)
+
+          const refused = yield* Effect.forEach(
+            ["nope.html", "site/.git/config", join(outside, "secret.txt")],
+            (path) => Effect.flip(serve.url(path)).pipe(Effect.map((error) => error.message)),
+          )
+          expect(refused[0]).toContain("check that the file exists on the server")
+          expect(refused[1]).toContain("only an HTML or SVG page is served")
+          expect(refused[2]).toContain("only an HTML or SVG page is served")
           return page
         }),
       ),

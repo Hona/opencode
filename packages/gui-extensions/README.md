@@ -35,16 +35,16 @@ Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, 
 
 `Extension.define` is the manifest. The host reads it before any entry loads.
 
-| Field      | What it declares                                                              | In the context                                    |
-| ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                                          |
+| Field      | What it declares                                                                   | In the context                                    |
+| ---------- | ---------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids        | `ctx.id`                                          |
 | `legacy`   | Earlier extension ids, newest first; preserves desktop enable state after a rename |                                                   |
-| `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                                   |
-| `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
-| `uses`     | Optional dependencies other extensions provide; it works while one is missing | `ctx.uses.name()` is `Live<T>`                    |
-| `requires` | Hard dependencies; setup runs only while all are active                       | `ctx.requires.name` is `T`                        |
-| `stores`   | State the host stores: window stores load before they are read, main's always | `ctx.stores.name`, each process its own           |
-| `i18n`     | The extension's copy                                                          | `ctx.t`, `ctx.plural`                             |
+| `os`       | The operating systems it runs on; omit it to run everywhere, the web included      |                                                   |
+| `provides` | Contracts from the window entry, Ipcs from the main entry                          | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
+| `uses`     | Optional dependencies other extensions provide; it works while one is missing      | `ctx.uses.name()` is `Live<T>`                    |
+| `requires` | Hard dependencies; setup runs only while all are active                            | `ctx.requires.name` is `T`                        |
+| `stores`   | State the host stores: window stores load before they are read, main's always      | `ctx.stores.name`, each process its own           |
+| `i18n`     | The extension's copy                                                               | `ctx.t`, `ctx.plural`                             |
 
 - [`src/renderer.ts`](src/renderer.ts) and [`src/main.ts`](src/main.ts) list the built-ins, each through `Extension.compose`. These are the only files that name extensions.
 - Another extension imports only your `contract.ts`.
@@ -483,7 +483,10 @@ export default Extension.define({
     // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
     keepScreenActive: Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] }),
     // An address of this computer the server cannot see (a VPN, tunnel or proxy), and the address links use.
-    links: Store.global(Schema.Struct({ custom: Schema.String, selected: Schema.String }), { custom: "", selected: "" }),
+    links: Store.global(Schema.Struct({ custom: Schema.String, selected: Schema.String }), {
+      custom: "",
+      selected: "",
+    }),
   },
   i18n: { en },
 })

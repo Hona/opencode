@@ -71,6 +71,7 @@ test("the server waits for long actions instead of timing them out at a fixed mi
   expect(Browser.deadline({ type: "tabs.list" })).toBe(60_000)
   expect(Browser.deadline({ type: "wait", tabID, timeoutMs: 110_000 })).toBe(125_000)
   expect(Browser.deadline({ type: "watch", tabID, script: "1", durationMs: 90_000 })).toBe(105_000)
+  expect(Browser.deadline({ type: "type", tabID, text: "x".repeat(10_000), delayMs: 500 })).toBe(5_120_000)
 })
 
 test("browser files are bounded bytes, not remote filesystem paths", () => {

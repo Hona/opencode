@@ -56,12 +56,17 @@ does not invalidate them.
 - Environment: `emulate` (viewport, color scheme, motion, media, offline, time zone, locale, user agent), `storage`, `addInitScript`.
 - Performance: `profile.start`/`profile.stop` (trace or CPU, analysis inline), `heap.snapshot` (summary and growth inline), `heap.query`, `heap.object`, `lighthouse`.
 
-Local files open through `path`: the server serves the file's folder and its
-subfolders, without dotfiles such as `.env` or `.git`, on a loopback address
+Local files open through `path`: the server serves them on a loopback address
 with an unguessable prefix, which the desktop reaches through its
-server-network tunnel. Served pages share one origin, so a page's scripts can
-read anything served; that is why parent folders and dotfiles stay out. The
-server starts on first use and stops with the plugin.
+server-network tunnel. Served pages share one origin, so a page's scripts, and
+the agent through them, can read anything served without file permissions:
+
+- A workspace page brings its folder and subfolders, without dotfiles such as
+  `.env` or `.git` and without symlinks that lead out of the folder.
+- An HTML or SVG page outside the workspace, or in a dot-folder, brings only
+  itself. Other files there are refused.
+
+The server starts on first use and stops with the plugin.
 
 Subagent sessions use the browser of the session that started them. A
 subagent copies its parent's permissions when it starts, so it sees the

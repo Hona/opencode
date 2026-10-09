@@ -459,6 +459,10 @@ export function createBrowserPane(input: {
           id: tab.id,
           // A restored page can publish before Chromium assigns its URL.
           url: tab.url || entry.tabs.get(tab.id)?.url || "about:blank",
+          // Without these, an agent tab would come back as a user's tab: native, and unusable while hidden.
+          owner: tab.owner,
+          key: tab.key,
+          viewport: tab.viewport,
         })),
         focusedTabID: entry.focusedTabID,
       })
@@ -616,13 +620,12 @@ export function createBrowserPane(input: {
     }
 
     if (action.type === "tabs.open") {
-      const reused = action.key
-        ? Array.from(entry.pages.values()).find((page) => {
-            const tab = page.state()
-
-            return tab.key === action.key && tab.owner === "agent"
-          })
+      const match = action.key
+        ? inventory(entry).tabs.find((tab) => tab.key === action.key && tab.owner === "agent")
         : undefined
+
+      // A restored tab has no page until something shows or uses it.
+      const reused = match ? load(entry, match.id) : undefined
 
       const page = reused ?? create(entry, true, undefined, undefined, { owner: origin, key: action.key })
 

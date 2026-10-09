@@ -466,7 +466,7 @@ describe("actionable", () => {
     document.body.innerHTML = `
       <button id="save">Save</button><button id="off" disabled>Off</button>
       <fieldset disabled><input id="locked"></fieldset><div aria-disabled="true"><button id="aria">A</button></div>
-      <input id="readonly" readonly><button id="gone" style="display:none">Gone</button>
+      <input id="readonly" readonly><input id="submit" type="submit" value="Send"><button id="gone" style="display:none">Gone</button>
       <div id="backdrop" class="modal-backdrop"></div>`
     document.elementFromPoint = () => byId("backdrop")
 
@@ -474,6 +474,7 @@ describe("actionable", () => {
     expect(await actionable("locked", "fill")).toEqual({ ok: false, reason: "disabled" })
     expect(await actionable("aria", "click")).toEqual({ ok: false, reason: "disabled" })
     expect(await actionable("readonly", "type")).toEqual({ ok: false, reason: "not editable" })
+    expect(await actionable("submit", "type")).toEqual({ ok: false, reason: "not editable" })
     expect(await actionable("gone", "hover")).toEqual({ ok: false, reason: "not visible" })
     expect(await actionable("save", "click")).toEqual({ ok: false, reason: "covered by div#backdrop.modal-backdrop" })
     expect(await actionable("save", "fill")).toEqual({ ok: false, reason: "not editable" })
@@ -523,13 +524,12 @@ test("storage reads, writes, and clears entries", () => {
   expect(call("storage", window, "session", "get")).toEqual([])
 })
 
-test("idle measures time since the last DOM mutation", async () => {
+// A mutation resetting it is checked in Electron: happy-dom holds observer callbacks in a WeakRef, so a garbage
+// collection between two test files can silently drop one.
+test("idle measures time since it started watching the document", async () => {
   expect(call("idle", window)).toBe(0)
   await Bun.sleep(40)
   expect(call("idle", window)).toBeGreaterThanOrEqual(30)
-  document.body.append(document.createElement("div"))
-  await Bun.sleep(0)
-  expect(call("idle", window)).toBeLessThan(30)
 })
 
 test("suggest ranks visible interactive elements by word overlap", () => {

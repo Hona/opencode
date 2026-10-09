@@ -97,20 +97,27 @@ export const destination = Effect.fn("BrowserFiles.destination")(
           const rest = relative(root, target)
           return !isAbsolute(rest) && rest.split(sep)[0] !== ".."
         }
-        // The nearest folder that exists decides where a new file really lands.
+        // The nearest folder that exists decides where a new file really lands. A broken symlink exists but has no real
+        // path, and the folders it would create are wherever it points, so it fails instead.
         const existing = async (folder: string): Promise<string> =>
-          realpath(folder).catch(() => (dirname(folder) === folder ? folder : existing(dirname(folder))))
+          realpath(folder).catch(async (error: unknown) => {
+            if (
+              dirname(folder) === folder ||
+              (await lstat(folder).then(
+                () => true,
+                () => false,
+              ))
+            )
+              throw error
+            return existing(dirname(folder))
+          })
         if (!within(directory, path) || !within(await realpath(directory), await existing(dirname(path))))
           throw new Error(
             "the path is outside the workspace. Browser saves skip edit permissions, so they stay in the workspace. Pass a workspace path, or omit it to save a temporary file and move that with your file tools.",
           )
-        if (
-          !written.has(path) &&
-          (await lstat(path).then(
-            () => true,
-            () => false,
-          ))
-        )
+        const found = await lstat(path).catch(() => undefined)
+        // A file this plugin saved may be replaced, unless something swapped it for a link since.
+        if (found && (!written.has(path) || found.isSymbolicLink()))
           throw new Error(
             "a file already exists there, and the browser replaces only files it saved itself. Pass a new path, or omit it to save a temporary file.",
           )

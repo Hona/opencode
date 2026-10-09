@@ -1054,7 +1054,8 @@ export function createData(config: CreateDataInput) {
             (item) =>
               item.type === "assistant" &&
               item.content.some(
-                (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+                (part) =>
+                  part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
               ),
           )
         ) {

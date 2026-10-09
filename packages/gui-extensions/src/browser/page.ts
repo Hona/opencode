@@ -565,6 +565,8 @@ export const PAGE_HELPERS = String.raw`function () {
   function editable(el) {
     if (el.getAttribute("aria-readonly") === "true") return false;
     const tag = tagOf(el);
+    // Button-like inputs take no text; typing into one would press keys on a button.
+    if (tag === "input" && (BUTTON_TYPES.has(el.type) || el.type === "hidden" || el.type === "file")) return false;
     if (tag === "input" || tag === "textarea") return !el.readOnly;
     if (tag === "select") return true;
     return el.isContentEditable === true;

@@ -109,6 +109,9 @@ const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.7
 // The agent's tabs start at a desktop layout instead of the narrow pane's width.
 const defaultSize = { width: 1280, height: 800 }
 
+const staleRef =
+  "Element ref is stale: its element left the page. Use a locator (text=, role=, label=, CSS) or call browser.find again."
+
 // Roles whose elements an agent acts on; each gets a ref in a snapshot.
 const actionableRoles = new Set([
   "button",
@@ -718,11 +721,13 @@ export function createBrowserPage(
       flatten: true,
       filter: [{ type: "iframe", exclude: false }, { exclude: true }],
     }),
-    // An offscreen page never has the app's focus; it must still behave as the focused page it is to the agent.
+    // An offscreen page never has the app's focus; it must still behave as the focused page it is to the agent. On
+    // macOS and Linux, WebContents.focus() also focuses the owner window, which would show this hidden window and
+    // activate the app, so there focus emulation alone stands in.
     ...(host
       ? [
           cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true }),
-          Promise.resolve().then(() => contents.focus()),
+          ...(process.platform === "win32" ? [Promise.resolve().then(() => contents.focus())] : []),
         ]
       : []),
     ...(emulation.viewport && !host ? [applyViewport()] : []),
@@ -866,7 +871,8 @@ export function createBrowserPage(
       clearTimeout(flash)
       detachNetwork?.()
       contents.session.off("will-download", download)
-      await profiling.dispose()
+      // A recording that fails to stop must not keep the hidden window alive.
+      await profiling.dispose().catch(() => undefined)
       cdp.dispose()
       refs.clear()
       named.clear()
@@ -1441,6 +1447,9 @@ export function createBrowserPage(
         "Pass one condition to browser.wait: load, text, gone, target (with state), url, script, or idle.",
       )
 
+    if (action.state !== undefined && action.target === undefined && action.text === undefined)
+      throw new BrowserError("invalid", "state applies to target or text. Pass one of them with it.")
+
     if (action.idle !== undefined && action.idle > timeout)
       throw new BrowserError(
         "invalid",
@@ -1458,6 +1467,13 @@ export function createBrowserPage(
     const pattern = action.url === undefined ? undefined : urlPattern(action.url)
     let observed: Schema.Json | undefined
 
+    // A ref whose element left the page matches nothing: it is gone, hidden, and detached.
+    const present = (list: readonly Step[], pick: boolean) =>
+      locate(list, action.frameID, scope, pick).catch((error: Error) => {
+        if (/ref is stale/.test(String(error.message))) return { located: undefined, count: 0, visible: 0 }
+        throw error
+      })
+
     const check = async (): Promise<boolean> => {
       if (action.load)
         return (
@@ -1473,30 +1489,25 @@ export function createBrowserPage(
       }
 
       if (action.text !== undefined) {
-        const present = await call(
+        // attached and detached are about the DOM, so hidden text counts for them.
+        const visible = action.state !== "attached" && action.state !== "detached"
+
+        const found = await call(
           Schema.Boolean,
           "textPresent",
           await windowObject(action.frameID, scope),
-          [{ value: action.text }, { value: true }],
+          [{ value: action.text }, { value: visible }],
           scope,
         )
 
-        return action.state === "hidden" || action.state === "detached" ? !present : present
+        return action.state === "hidden" || action.state === "detached" ? !found : found
       }
 
-      if (gone !== undefined) {
-        // A ref whose element left the page is gone too.
-        const found = await locate(gone, action.frameID, scope, false).catch((error: Error) => {
-          if (/ref is stale/.test(String(error.message))) return { visible: 0 }
-          throw error
-        })
-
-        return found.visible === 0
-      }
+      if (gone !== undefined) return (await present(gone, false)).visible === 0
 
       if (action.target !== undefined) {
         const state = action.state ?? "visible"
-        const found = await locate(steps(action.target), action.frameID, scope, state === "enabled")
+        const found = await present(steps(action.target), state === "enabled")
 
         if (state === "attached") return found.count > 0
 
@@ -1516,7 +1527,7 @@ export function createBrowserPage(
           scope,
         )
 
-        return ready.ok || !/disabled|not visible|detached/.test(ready.reason)
+        return ready.ok || !/disabled|not visible|not attached/.test(ready.reason)
       }
 
       if (action.script !== undefined) {
@@ -1586,7 +1597,8 @@ export function createBrowserPage(
         last = json
       }
 
-      await delay(every, signal)
+      // The last sleep ends with the duration, inside the server's deadline.
+      await delay(Math.max(0, Math.min(every, action.durationMs - (Date.now() - started))), signal)
     }
 
     return { tab: state(), samples, ended: samples.length >= max ? ("samples" as const) : ("duration" as const) }
@@ -1633,6 +1645,19 @@ export function createBrowserPage(
     if (first?.kind === "ref") {
       const element = refElement(first.ref)
       const remote = await remoteOf(element, scope)
+
+      // A removed element can stay alive in memory, so its ref still resolves.
+      const connected = await cdp.send(
+        "Runtime.callFunctionOn",
+        {
+          objectId: remote.objectId,
+          functionDeclaration: "function () { return this.isConnected }",
+          returnByValue: true,
+        },
+        remote.sessionID,
+      )
+
+      if (connected.result.value !== true) throw new Error(staleRef)
 
       // A hidden element keeps its ref, so wait({ gone }) and state "hidden" need its visibility.
       if (!rest.length) {
@@ -1830,10 +1855,7 @@ export function createBrowserPage(
       element.sessionID,
     )
 
-    if (!object.object.objectId)
-      throw new Error(
-        "Element ref is stale: its element left the page. Use a locator (text=, role=, label=, CSS) or call browser.find again.",
-      )
+    if (!object.object.objectId) throw new Error(staleRef)
 
     return { objectId: object.object.objectId, sessionID: element.sessionID }
   }
@@ -2454,7 +2476,8 @@ export function createBrowserPage(
 
     const restore = action.viewport ? await temporaryViewport(action.viewport) : undefined
 
-    try {
+    // The tab is reported after its own size is back: the viewport applies to this capture only.
+    const shot = await (async () => {
       const located = action.target ? await resolve(action.target, "exists", 5_000, false, signal, scope) : undefined
       const element = located ? await rect(located.element, true) : undefined
       const metrics = await cdp.send("Page.getLayoutMetrics")
@@ -2475,7 +2498,9 @@ export function createBrowserPage(
             }
 
       const pixelRatio =
-        contents.getZoomFactor() * (host ? scale : electron.screen.getDisplayMatching(win.getBounds()).scaleFactor)
+        contents.getZoomFactor() *
+        (emulation.viewport?.deviceScaleFactor ||
+          (host ? scale : electron.screen.getDisplayMatching(win.getBounds()).scaleFactor))
 
       const scaled = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
 
@@ -2504,10 +2529,10 @@ export function createBrowserPage(
 
       const id = await files.save(`screenshot.${format}`, `image/${format}`, data, [...captureSources, ...sourceURLs()])
 
-      return [{ tab: state(), width: size.width, height: size.height }, [await transfer(id)]]
-    } finally {
-      await restore?.()
-    }
+      return { id, width: size.width, height: size.height }
+    })().finally(() => restore?.())
+
+    return [{ tab: state(), width: shot.width, height: shot.height }, [await transfer(shot.id)]]
   }
 
   /** Renders the page at another size until the returned restore runs. */

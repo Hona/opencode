@@ -252,8 +252,9 @@ function input(entry: Entry, body: string) {
   decodePresenterEvents(body).forEach((event) => {
     if (entry.page.isDestroyed()) return
 
-    // Offscreen contents take keyboard and pointer input only while they have focus.
-    if (event.kind === "focus" || !entry.focused) {
+    // Offscreen contents take keyboard and pointer input only while they have focus. On macOS and Linux focusing them
+    // also focuses their hidden window, which would show it; the page's focus emulation stands in there.
+    if (process.platform === "win32" && (event.kind === "focus" || !entry.focused)) {
       entry.page.focus()
       entry.focused = true
     }
@@ -313,6 +314,8 @@ const context = canvas.getContext("2d")
 const view = { width: 0, height: 0, scale: 1, left: 0, top: 0 }
 let bitmap = null
 let after = 0
+// The canvas width the newest frame was shrunk to; a wider canvas asks for the frame again.
+let fetched = 0
 let cursorAfter = 0
 let running = false
 let watching = false
@@ -325,6 +328,7 @@ const layout = () => {
     canvas.width = Math.round(width * ratio)
     canvas.height = Math.round(height * ratio)
   }
+  if (bitmap && canvas.width > fetched) after = Math.max(0, after - 1)
   view.scale = view.width && view.height ? Math.min(width / view.width, height / view.height, 1) : 1
   view.left = (width - view.width * view.scale) / 2
   view.top = (height - view.height * view.scale) / 2
@@ -338,7 +342,8 @@ const frames = async () => {
   running = true
   while (document.visibilityState === "visible") {
     try {
-      const response = await fetch("/frame?after=" + after + "&width=" + canvas.width, { cache: "no-store" })
+      const width = canvas.width
+      const response = await fetch("/frame?after=" + after + "&width=" + width, { cache: "no-store" })
       // 204 is a long poll with nothing new; anything else waits before asking again.
       if (response.status === 204) continue
       if (response.status !== 200) {
@@ -346,6 +351,7 @@ const frames = async () => {
         continue
       }
       after = Number(response.headers.get("x-frame")) || after
+      fetched = width
       view.width = Number(response.headers.get("x-width")) || view.width
       view.height = Number(response.headers.get("x-height")) || view.height
       const next = await createImageBitmap(await response.blob())
@@ -431,6 +437,8 @@ canvas.addEventListener("keyup", key("up"))
 canvas.addEventListener("compositionend", (event) => { if (event.data) send({ kind: "text", text: event.data }) })
 canvas.addEventListener("paste", (event) => event.preventDefault())
 
+// Sized before the first frame request, so that frame is not shrunk to the canvas's default 300 pixels.
+layout()
 new ResizeObserver(layout).observe(canvas)
 
 document.addEventListener("visibilitychange", () => {
