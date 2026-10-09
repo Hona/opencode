@@ -14,20 +14,24 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   serve: BrowserServe.Serve,
 ) {
   const directory = ctx.location.directory
+  // Files saved to a path the agent named; a later save may replace these, and no other existing file.
+  const written = new Set<string>()
 
   // Sends one action to the desktop and saves the files it returns where the action asked.
   const send = Effect.fn("BrowserTools.send")(function* (action: Browser.Action, tool: Tool.Context) {
-    const target = yield* connection.target(tool.sessionID, action)
-    const uploads =
-      action.type === "upload" || action.type === "drop" ? yield* BrowserFiles.read(action.paths, directory) : []
-    const response = yield* target.request(uploads)
-    const destination =
+    const requested =
       action.type === "screenshot" || action.type === "files.get"
         ? action.path
         : action.type === "evaluate"
           ? action.saveTo
           : undefined
-    const saved = yield* BrowserFiles.save(response.files, destination === undefined ? undefined : { path: destination, directory })
+    // Checked before the action runs, so a refused path does not leave a script's side effects behind.
+    const path = requested === undefined ? undefined : yield* BrowserFiles.destination(requested, directory, written)
+    const target = yield* connection.target(tool.sessionID, action)
+    const uploads =
+      action.type === "upload" || action.type === "drop" ? yield* BrowserFiles.read(action.paths, directory) : []
+    const response = yield* target.request(uploads)
+    const saved = yield* BrowserFiles.save(response.files, path === undefined ? undefined : { path, written })
     return { value: response.value, files: response.files, saved }
   })
 
@@ -40,11 +44,17 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       try: () => normalizeAction(input),
       catch: (error) => new Tool.Error({ message: error instanceof Error ? error.message : invalidURL, error }),
     })
-    // An HTML preview is a served browser tab, so every browser tool works on it.
-    if (action.type === "preview" && /\.(?:html?|xhtml|svg)$/i.test(action.path)) {
+    // An HTML preview is a served browser tab, so every browser tool works on it. Previewing the same file again reuses
+    // its tab, reloaded so the user sees the file as it is now.
+    if (action.type === "preview" && /\.(?:html?|xhtml)$/i.test(action.path)) {
       const url = yield* serve.url(action.path)
       const opened = yield* send({ type: "tabs.open", url, key: `preview:${action.path}`, focus: true }, tool)
-      const tab = yield* decodeTab(opened.value)
+      const tab = yield* Effect.fromResult(
+        Schema.decodeUnknownResult(Schema.Struct({ id: Browser.TabID, reused: Schema.Boolean }))(opened.value).pipe(
+          Result.mapError(invalid("tabs.open")),
+        ),
+      )
+      if (tab.reused) yield* send({ type: "reload", tabID: tab.id }, tool)
       return exportResult({ path: action.path, opened: true, tabID: tab.id }, [])
     }
     if (action.type === "preview") yield* BrowserFiles.exists(action.path, directory)
@@ -107,11 +117,6 @@ const invalid = (name: string) => (error: Schema.SchemaError) =>
 // Select the expected method's schema, not an unrelated successful browser result.
 const decodeOutput = (operation: Browser.Operation, value: unknown) =>
   Effect.fromResult(Schema.decodeUnknownResult(operation.output)(value).pipe(Result.mapError(invalid(operation.name))))
-
-const decodeTab = (value: unknown) =>
-  Effect.fromResult(
-    Schema.decodeUnknownResult(Schema.Struct({ id: Browser.TabID }))(value).pipe(Result.mapError(invalid("tabs.open"))),
-  )
 
 function exportResult<Output>(output: Output, files: readonly Browser.File[]) {
   return {

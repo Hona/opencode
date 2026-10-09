@@ -40,8 +40,6 @@ export const PresenterEvent = Schema.Union([
   // Text an input method composed.
   Schema.Struct({ kind: Schema.Literal("text"), text: Schema.String.check(Schema.isMaxLength(10_000)) }),
   Schema.Struct({ kind: Schema.Literal("focus") }),
-  // The presenter's own size in CSS pixels, which an unpinned page follows.
-  Schema.Struct({ kind: Schema.Literal("resize"), width: Schema.Finite, height: Schema.Finite }),
 ])
 
 export type PresenterEvent = typeof PresenterEvent.Type
@@ -80,8 +78,12 @@ const renamed = new Map(
   }),
 )
 
-// Named keys Electron's keyboard events accept as they are.
+// Named keys Electron's keyboard events accept as they are. Modifiers count too: pages react to holding Shift or Alt.
 const named = new Set([
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
   "Enter",
   "Tab",
   "Escape",
@@ -163,6 +165,23 @@ function modifiers(input: Modifiers) {
     ...(input.alt ? ["alt" as const] : []),
     ...(input.meta ? ["meta" as const] : []),
   ]
+}
+
+// macOS Cmd chords the app menu turns into editing commands. Cmd+Shift+Z is redo.
+const editKeys = new Map(
+  Object.entries({ c: "copy", x: "cut", v: "paste", a: "selectAll" } satisfies Record<string, EditCommand>),
+)
+
+type EditCommand = "copy" | "cut" | "paste" | "selectAll" | "undo" | "redo"
+
+/** The editing command a macOS Cmd chord names, or undefined for any other key. */
+export function editCommand(event: Extract<PresenterEvent, { kind: "key" }>): EditCommand | undefined {
+  if (!event.modifiers.meta || event.modifiers.control || event.modifiers.alt) return undefined
+  const key = event.key.toLowerCase()
+
+  if (key === "z") return event.modifiers.shift ? "redo" : "undo"
+
+  return event.modifiers.shift ? undefined : editKeys.get(key)
 }
 
 /** The Electron key code of a DOM key, or undefined for keys the page cannot take (dead keys, IME processing). */

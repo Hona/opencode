@@ -1,6 +1,6 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { type BrowserWindow, MessageChannelMain } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -19,7 +19,7 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
-import { getLastFocusedWindow } from "./windows"
+import { getLastFocusedWindow, getMainWindows, onMainWindow } from "./windows"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Extensions.layer)
 
@@ -76,13 +76,15 @@ export const registerIpcHandlers = Effect.gen(function* () {
     if (!win.webContents.isLoading() && win.webContents.getURL()) post()
   }
 
-  const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
+  // Only app windows get the desktop RPC port. Other windows, such as offscreen web pages an extension renders, show
+  // untrusted content and must not reach it.
+  const stop = yield* Effect.sync(() => {
+    getMainWindows().forEach((win) => wire(win))
 
-  yield* Effect.sync(() => {
-    app.on("browser-window-created", onWindowCreated)
-    BrowserWindow.getAllWindows().forEach((win) => wire(win))
+    return onMainWindow(wire)
   })
-  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", onWindowCreated)))
+
+  yield* Effect.addFinalizer(() => Effect.sync(stop))
 
   return {
     installMenu: () => createMenu(menu),

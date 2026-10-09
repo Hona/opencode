@@ -1,13 +1,11 @@
 import electron, { type BrowserWindow, type NativeImage, type WebContents, type WebContentsView } from "electron"
-import { decodePresenterEvents, toInputEvents } from "./presenter-input"
+import { decodePresenterEvents, editCommand, toInputEvents } from "./presenter-input"
 
 export type Presenters = ReturnType<typeof createPresenters>
 
 export type Presenter = {
   /** The view the host embed system lays out where the page would be. */
   readonly view: WebContentsView
-  /** Re-applies the size policy, after the agent pinned or cleared a viewport. */
-  resize(): void
   dispose(): void
 }
 
@@ -16,15 +14,14 @@ type Waiter = () => void
 type Entry = {
   readonly page: WebContents
   readonly window: BrowserWindow
-  readonly pinned: () => { readonly width: number; readonly height: number } | undefined
   frame: number
   image?: NativeImage
   frames: Set<Waiter>
   cursor: { id: number; value: string }
   cursors: Set<Waiter>
-  /** The presenter's last reported CSS size, which an unpinned page follows. */
-  size?: { width: number; height: number }
   focused: boolean
+  /** When the next frame may be encoded, in `performance.now()` time. */
+  encode: number
 }
 
 // Electron's cursor names, as CSS cursors.
@@ -90,7 +87,8 @@ export function createPresenters() {
 
     if (url.pathname === "/") return new Response(page, { headers: { ...headers, "content-type": "text/html" } })
 
-    if (url.pathname === "/frame") return frame(entry, Number(url.searchParams.get("after") ?? 0))
+    if (url.pathname === "/frame")
+      return frame(entry, Number(url.searchParams.get("after") ?? 0), Number(url.searchParams.get("width") ?? 0))
 
     if (url.pathname === "/events") return cursor(entry, Number(url.searchParams.get("after") ?? 0))
 
@@ -108,20 +106,18 @@ export function createPresenters() {
       /** The offscreen page's contents and the hidden window that owns them. */
       readonly page: WebContents
       readonly window: BrowserWindow
-      /** The agent pinned a viewport: the page keeps it and the presenter letterboxes it. */
-      readonly pinned: () => { readonly width: number; readonly height: number } | undefined
     }): Presenter {
       const host = `${crypto.randomUUID()}.presenter.invalid`
 
       const entry: Entry = {
         page: input.page,
         window: input.window,
-        pinned: input.pinned,
         frame: 0,
         frames: new Set(),
         cursor: { id: 0, value: "default" },
         cursors: new Set(),
         focused: false,
+        encode: 0,
       }
 
       // Only the newest frame is kept; a presenter that falls behind skips to it.
@@ -159,7 +155,6 @@ export function createPresenters() {
 
       return {
         view,
-        resize: () => size(entry),
         dispose() {
           entries.delete(host)
           wake(entry.frames)
@@ -208,26 +203,41 @@ function newer(waiters: Set<Waiter>, current: () => number, after: number) {
   })
 }
 
-async function frame(entry: Entry, after: number) {
+async function frame(entry: Entry, after: number, width: number) {
   await newer(entry.frames, () => entry.frame, after)
+  // Encoding runs on the main thread, which every window's input and IPC share; frames take at most a quarter of it.
+  // Measured in Electron 44: a 2560x1600 frame costs about 32 ms as JPEG, and 16 ms shrunk to 1280 wide first.
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, entry.encode - performance.now())))
 
-  // A page that has not painted since the presenter appeared still has a picture to show.
+  // A page that has not painted since the presenter appeared still has a picture to show. A failed capture is no new
+  // frame, so the presenter waits for a paint instead of asking again at once.
   if (!entry.image && !entry.page.isDestroyed()) {
-    entry.image = await entry.page.capturePage().catch(() => undefined)
-    entry.frame++
+    const image = await entry.page.capturePage().catch(() => undefined)
+
+    if (image && !image.isEmpty()) {
+      entry.image = image
+      entry.frame++
+    }
   }
 
-  if (entry.frame <= after || !entry.image || entry.image.isEmpty())
-    return new Response(null, { status: 204, headers })
-  const [width, height] = entry.window.isDestroyed() ? [0, 0] : entry.window.getContentSize()
+  if (entry.frame <= after || !entry.image || entry.image.isEmpty()) return new Response(null, { status: 204, headers })
+  const [cssWidth, cssHeight] = entry.window.isDestroyed() ? [0, 0] : entry.window.getContentSize()
+  const started = performance.now()
 
-  return new Response(new Uint8Array(entry.image.toJPEG(90)), {
+  // The pane draws the page scaled to fit, so pixels beyond the canvas's own are never seen.
+  const image =
+    width > 0 && entry.image.getSize().width > width ? entry.image.resize({ width, quality: "good" }) : entry.image
+
+  const jpeg = image.toJPEG(85)
+  entry.encode = performance.now() + 3 * (performance.now() - started)
+
+  return new Response(new Uint8Array(jpeg), {
     headers: {
       ...headers,
       "content-type": "image/jpeg",
       "x-frame": String(entry.frame),
-      "x-width": String(width ?? 0),
-      "x-height": String(height ?? 0),
+      "x-width": String(cssWidth ?? 0),
+      "x-height": String(cssHeight ?? 0),
     },
   })
 }
@@ -242,13 +252,6 @@ function input(entry: Entry, body: string) {
   decodePresenterEvents(body).forEach((event) => {
     if (entry.page.isDestroyed()) return
 
-    if (event.kind === "resize") {
-      entry.size = { width: Math.round(event.width), height: Math.round(event.height) }
-      size(entry)
-
-      return
-    }
-
     // Offscreen contents take keyboard and pointer input only while they have focus.
     if (event.kind === "focus" || !entry.focused) {
       entry.page.focus()
@@ -261,21 +264,36 @@ function input(entry: Entry, body: string) {
       return
     }
 
+    // On macOS the app menu, not the page, turns Cmd+C and similar chords into editing commands, and an offscreen page
+    // has no menu, so the command runs on the page itself.
+    const command = process.platform === "darwin" && event.kind === "key" ? editCommand(event) : undefined
+
+    if (command) {
+      if (event.kind === "key" && event.type === "down") edit(entry.page, command)
+
+      return
+    }
+
     toInputEvents(event).forEach((item) => entry.page.sendInputEvent(item))
   })
 }
 
-/** An unpinned page takes the presenter's size; a pinned one keeps the agent's. */
-function size(entry: Entry) {
-  if (entry.window.isDestroyed() || entry.pinned() || !entry.size) return
-  const width = Math.min(4_000, Math.max(200, entry.size.width))
-  const height = Math.min(4_000, Math.max(200, entry.size.height))
-  const [current, currentHeight] = entry.window.getContentSize()
+function edit(page: WebContents, command: NonNullable<ReturnType<typeof editCommand>>) {
+  if (command === "copy") return page.copy()
 
-  if (current !== width || currentHeight !== height) entry.window.setContentSize(width, height)
+  if (command === "cut") return page.cut()
+
+  if (command === "paste") return page.paste()
+
+  if (command === "selectAll") return page.selectAll()
+
+  if (command === "undo") return page.undo()
+
+  return page.redo()
 }
 
-// The presenter page: draws the newest frame letterboxed into the view and posts the user's input, in order.
+// The presenter page: draws the newest frame into the view, scaled down to fit and letterboxed, and posts the user's
+// input, in order. The page keeps the agent's size whatever the pane's, so watching never changes its layout.
 const page = `<!doctype html>
 <html>
 <head>
@@ -320,8 +338,13 @@ const frames = async () => {
   running = true
   while (document.visibilityState === "visible") {
     try {
-      const response = await fetch("/frame?after=" + after, { cache: "no-store" })
-      if (response.status !== 200) continue
+      const response = await fetch("/frame?after=" + after + "&width=" + canvas.width, { cache: "no-store" })
+      // 204 is a long poll with nothing new; anything else waits before asking again.
+      if (response.status === 204) continue
+      if (response.status !== 200) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        continue
+      }
       after = Number(response.headers.get("x-frame")) || after
       view.width = Number(response.headers.get("x-width")) || view.width
       view.height = Number(response.headers.get("x-height")) || view.height
@@ -358,7 +381,6 @@ let sending = false
 const send = (event) => {
   const last = queue[queue.length - 1]
   if (event.kind === "mouse" && event.type === "move" && last && last.kind === "mouse" && last.type === "move") queue[queue.length - 1] = event
-  else if (event.kind === "resize" && last && last.kind === "resize") queue[queue.length - 1] = event
   else queue.push(event)
   void flush()
 }
@@ -409,14 +431,7 @@ canvas.addEventListener("keyup", key("up"))
 canvas.addEventListener("compositionend", (event) => { if (event.data) send({ kind: "text", text: event.data }) })
 canvas.addEventListener("paste", (event) => event.preventDefault())
 
-let resizing = 0
-new ResizeObserver(() => {
-  layout()
-  clearTimeout(resizing)
-  resizing = setTimeout(() => {
-    if (canvas.clientWidth && canvas.clientHeight) send({ kind: "resize", width: canvas.clientWidth, height: canvas.clientHeight })
-  }, 50)
-}).observe(canvas)
+new ResizeObserver(layout).observe(canvas)
 
 document.addEventListener("visibilitychange", () => {
   void frames()

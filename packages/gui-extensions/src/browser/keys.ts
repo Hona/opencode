@@ -123,8 +123,7 @@ export function parseChord(chord: string): KeyEvent {
   // Control or Meta chords are shortcuts: they type nothing.
   const typing = (modifiers & (CONTROL | META)) === 0
 
-  const text =
-    key.key === "Enter" ? "\r" : key.key.length === 1 ? (shift ? key.key.toUpperCase() : key.key) : undefined
+  const text = key.key === "Enter" ? "\r" : key.key.length === 1 ? (shift ? key.key.toUpperCase() : key.key) : undefined
 
   const event = { ...key, key: shift && key.key.length === 1 ? key.key.toUpperCase() : key.key, modifiers }
 
@@ -133,7 +132,8 @@ export function parseChord(chord: string): KeyEvent {
 
 /** The key event that types one character, or undefined when it has no key (emoji, most non-Latin text). */
 export function typedKey(char: string): KeyEvent | undefined {
-  if (char === "\n" || char === "\r") return { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, modifiers: 0, text: "\r" }
+  if (char === "\n" || char === "\r")
+    return { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, modifiers: 0, text: "\r" }
 
   if (char === "\t") return { key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 0 }
   const key = keyFor(char)
@@ -146,7 +146,8 @@ export function typedKey(char: string): KeyEvent | undefined {
 
 function keyFor(name: string): Omit<KeyEvent, "modifiers" | "text"> | undefined {
   const lower = name.toLowerCase()
-  const entry = named.get(lower)
+  // A typed space is the Space key, which pages check by code.
+  const entry = named.get(lower === " " ? "space" : lower)
 
   if (entry) return { key: entry[0], code: entry[1], windowsVirtualKeyCode: entry[2] }
 

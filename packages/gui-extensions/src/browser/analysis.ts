@@ -47,7 +47,7 @@ export function analyzeTrace(value: Schema.Json, limit = 100) {
 
   if (Option.isNone(decoded))
     throw new Error(
-      "Selected file is not a Chromium performance trace. Record one with browser.profile.start({tabID, kind: \"trace\"}) and browser.profile.stop({tabID}).",
+      'Selected file is not a Chromium performance trace. Record one with browser.profile.start({tabID, kind: "trace"}) and browser.profile.stop({tabID}).',
     )
   const trace = decoded.value
   const events = new Map<string, { name: string; count: number; totalMs: number; maxMs: number }>()
@@ -89,7 +89,7 @@ export function analyzeCpu(value: Schema.Json, limit = 100) {
 
   if (Option.isNone(decoded))
     throw new Error(
-      "Selected file is not a CPU profile. Record one with browser.profile.start({tabID, kind: \"cpu\"}) and browser.profile.stop({tabID}).",
+      'Selected file is not a CPU profile. Record one with browser.profile.start({tabID, kind: "cpu"}) and browser.profile.stop({tabID}).',
     )
   const profile = decoded.value
   const times = new Map<number, number>()

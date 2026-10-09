@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   decodePresenterEvents,
+  editCommand,
   keyName,
   toInputEvents,
   type Modifiers,
@@ -32,18 +33,50 @@ test("untrusted batches keep valid events and drop the rest", () => {
 
 // Measured in Electron 44: a char event for a named key inserts its name ("Insert", "F24") into a focused input.
 const keys: Array<{ key: string; code: string; modifiers: Modifiers; expected: ReplayedInput[] }> = [
-  { key: "a", code: "KeyA", modifiers: none, expected: [{ type: "keyDown", keyCode: "a", modifiers: [] }, { type: "char", keyCode: "a", modifiers: [] }] },
-  { key: "Enter", code: "Enter", modifiers: none, expected: [{ type: "keyDown", keyCode: "Enter", modifiers: [] }, { type: "char", keyCode: "\r", modifiers: [] }] },
+  {
+    key: "a",
+    code: "KeyA",
+    modifiers: none,
+    expected: [
+      { type: "keyDown", keyCode: "a", modifiers: [] },
+      { type: "char", keyCode: "a", modifiers: [] },
+    ],
+  },
+  {
+    key: "Enter",
+    code: "Enter",
+    modifiers: none,
+    expected: [
+      { type: "keyDown", keyCode: "Enter", modifiers: [] },
+      { type: "char", keyCode: "\r", modifiers: [] },
+    ],
+  },
   { key: "ArrowUp", code: "ArrowUp", modifiers: none, expected: [{ type: "keyDown", keyCode: "Up", modifiers: [] }] },
   { key: "Insert", code: "Insert", modifiers: none, expected: [{ type: "keyDown", keyCode: "Insert", modifiers: [] }] },
   { key: "F24", code: "F24", modifiers: none, expected: [{ type: "keyDown", keyCode: "F24", modifiers: [] }] },
-  { key: " ", code: "Space", modifiers: none, expected: [{ type: "keyDown", keyCode: "Space", modifiers: [] }, { type: "char", keyCode: " ", modifiers: [] }] },
-  { key: "v", code: "KeyV", modifiers: { ...none, control: true }, expected: [{ type: "keyDown", keyCode: "v", modifiers: ["control"] }] },
+  {
+    key: " ",
+    code: "Space",
+    modifiers: none,
+    expected: [
+      { type: "keyDown", keyCode: "Space", modifiers: [] },
+      { type: "char", keyCode: " ", modifiers: [] },
+    ],
+  },
+  {
+    key: "v",
+    code: "KeyV",
+    modifiers: { ...none, control: true },
+    expected: [{ type: "keyDown", keyCode: "v", modifiers: ["control"] }],
+  },
   {
     key: "@",
     code: "KeyQ",
     modifiers: { ...none, control: true, alt: true },
-    expected: [{ type: "keyDown", keyCode: "@", modifiers: ["control", "alt"] }, { type: "char", keyCode: "@", modifiers: ["control", "alt"] }],
+    expected: [
+      { type: "keyDown", keyCode: "@", modifiers: ["control", "alt"] },
+      { type: "char", keyCode: "@", modifiers: ["control", "alt"] },
+    ],
   },
   { key: "Dead", code: "KeyE", modifiers: none, expected: [{ type: "keyDown", keyCode: "e", modifiers: [] }] },
   { key: "Process", code: "Unidentified", modifiers: none, expected: [] },
@@ -54,7 +87,13 @@ test.each(keys)("key $key ($code) replays as typed input", (item) => {
 })
 
 test("key up and auto-repeat keep their modifiers", () => {
-  expect(toInputEvents(key({ type: "up", key: "Shift", code: "ShiftLeft" }))).toEqual([])
+  // Pages react to holding a modifier on its own, such as Shift to extend a selection.
+  expect(toInputEvents(key({ key: "Shift", code: "ShiftLeft", modifiers: { ...none, shift: true } }))).toEqual([
+    { type: "keyDown", keyCode: "Shift", modifiers: ["shift"] },
+  ])
+  expect(toInputEvents(key({ type: "up", key: "Shift", code: "ShiftLeft" }))).toEqual([
+    { type: "keyUp", keyCode: "Shift", modifiers: [] },
+  ])
   expect(toInputEvents(key({ type: "up", key: "x", code: "KeyX", modifiers: { ...none, shift: true } }))).toEqual([
     { type: "keyUp", keyCode: "x", modifiers: ["shift"] },
   ])
@@ -80,8 +119,50 @@ test("mouse events carry the button, click count, and held buttons", () => {
     toInputEvents({ kind: "mouse", type: "down", x: 1, y: 2, button: 2, buttons: 2, clicks: 1, modifiers: none }),
   ).toEqual([{ type: "mouseDown", x: 1, y: 2, button: "right", clickCount: 1, modifiers: ["rightbuttondown"] }])
   expect(
-    toInputEvents({ kind: "mouse", type: "move", x: 5, y: 5, button: 0, buttons: 1, clicks: 0, modifiers: { ...none, shift: true } }),
+    toInputEvents({
+      kind: "mouse",
+      type: "move",
+      x: 5,
+      y: 5,
+      button: 0,
+      buttons: 1,
+      clicks: 0,
+      modifiers: { ...none, shift: true },
+    }),
   ).toEqual([{ type: "mouseMove", x: 5, y: 5, button: "left", clickCount: 1, modifiers: ["shift", "leftbuttondown"] }])
+})
+
+// An offscreen page has no app menu to turn these chords into commands on macOS.
+test("macOS Cmd chords name their editing command", () => {
+  const meta = { ...none, meta: true }
+  expect(
+    ["c", "x", "v", "a", "z"].map((name) =>
+      editCommand({ kind: "key", type: "down", key: name, code: "", repeat: false, modifiers: meta }),
+    ),
+  ).toEqual(["copy", "cut", "paste", "selectAll", "undo"])
+  expect(
+    editCommand({
+      kind: "key",
+      type: "down",
+      key: "Z",
+      code: "KeyZ",
+      repeat: false,
+      modifiers: { ...meta, shift: true },
+    }),
+  ).toBe("redo")
+  expect(
+    editCommand({
+      kind: "key",
+      type: "down",
+      key: "c",
+      code: "KeyC",
+      repeat: false,
+      modifiers: { ...none, control: true },
+    }),
+  ).toBeUndefined()
+  expect(
+    editCommand({ kind: "key", type: "down", key: "k", code: "KeyK", repeat: false, modifiers: meta }),
+  ).toBeUndefined()
 })
 
 test("key names follow the physical key when the logical one is unknown", () => {

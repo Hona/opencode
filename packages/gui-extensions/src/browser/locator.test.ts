@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isExplicitLocator, parseLocator, type Step } from "./locator"
+import { parseLocator, type Step } from "./locator"
 
 describe("parseLocator", () => {
   test.each<[string, readonly Step[]]>([
@@ -105,31 +105,5 @@ describe("parseLocator", () => {
 
   test("errors teach the grammar", () => {
     expect(() => parseLocator("")).toThrow(/text=Save.*role=button\[name=.*nth=0/)
-  })
-})
-
-describe("isExplicitLocator", () => {
-  test.each([
-    ["css=#a", true],
-    ["text=Save", true],
-    ["TEXT=Save", true],
-    ['role=button[name="Send"]', true],
-    ["label=Email", true],
-    ["placeholder=Search", true],
-    ["testid=x", true],
-    ["xpath=//a", true],
-    ["nth=0", true],
-    ["@e12", true],
-    ["e12", true],
-    ["@e12 >> text=Save", true],
-    ['"Save"', true],
-    ["//main", true],
-    ["#a >> #b", true],
-    ["Save draft", false],
-    ["#save", false],
-    ["button.primary", false],
-    ["e12 apples", false],
-  ])("%s → %p", (input, explicit) => {
-    expect(isExplicitLocator(input)).toBe(explicit)
   })
 })

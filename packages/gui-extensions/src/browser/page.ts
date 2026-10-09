@@ -110,6 +110,8 @@ export const PageEntries = Schema.Array(Schema.Struct({ name: Schema.String, val
 export const PAGE_HELPERS = String.raw`function () {
   "use strict";
   const IDLE = Symbol.for("opencode.browser.idle");
+  // The agent's own mistake, such as a malformed selector: the driver reports it at once instead of retrying.
+  class Invalid extends Error {}
   const SKIP = new Set(["script", "style", "template", "noscript", "head"]);
   const UNREAD = new Set(["script", "style", "template", "noscript", "head", "title", "svg", "canvas", "iframe", "object", "embed", "audio", "video", "input", "textarea", "select", "datalist"]);
   const BLOCK = new Set(["address", "article", "aside", "blockquote", "body", "br", "caption", "center", "dd", "details", "dialog", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "html", "legend", "li", "main", "menu", "nav", "ol", "option", "p", "pre", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"]);
@@ -199,9 +201,9 @@ export const PAGE_HELPERS = String.raw`function () {
       case "testid":
         return elementsUnder(root, true).filter((el) => ["data-testid", "data-test-id", "data-test"].some((name) => el.getAttribute(name) === step.id));
       case "ref":
-        throw new Error("A ref such as @e12 is only valid as the first step of a locator.");
+        throw new Invalid("A ref such as @e12 is only valid as the first step of a locator.");
       default:
-        throw new Error("Unknown locator step " + JSON.stringify(step.kind) + ".");
+        throw new Invalid("Unknown locator step " + JSON.stringify(step.kind) + ".");
     }
   }
 
@@ -237,7 +239,7 @@ export const PAGE_HELPERS = String.raw`function () {
       try {
         found = tree.querySelectorAll(selector);
       } catch (error) {
-        throw new Error("Invalid CSS selector " + JSON.stringify(selector) + '. Prefix other locators with their engine: text=Save, role=button[name="Send"], label=Email, placeholder=Search, testid=submit, xpath=//main//a.');
+        throw new Invalid("Invalid CSS selector " + JSON.stringify(selector) + '. Prefix other locators with their engine: text=Save, role=button[name="Send"], label=Email, placeholder=Search, testid=submit, xpath=//main//a.');
       }
       for (const el of found) hits.add(el);
     };
@@ -253,7 +255,7 @@ export const PAGE_HELPERS = String.raw`function () {
     try {
       result = doc.evaluate(relative, root, null, 7, null);
     } catch (error) {
-      throw new Error("Invalid XPath " + JSON.stringify(expression) + ": " + (error && error.message ? error.message : String(error)));
+      throw new Invalid("Invalid XPath " + JSON.stringify(expression) + ": " + (error && error.message ? error.message : String(error)));
     }
     const out = [];
     for (let index = 0; index < result.snapshotLength; index++) {
@@ -757,7 +759,7 @@ export const PAGE_HELPERS = String.raw`function () {
     let end = text.length;
     if (after) {
       const at = lower.indexOf(String(after).toLowerCase());
-      if (at < 0) throw new Error("The phrase " + JSON.stringify(after) + " (after) does not occur in the text. Read without after, or pick a phrase from the text.");
+      if (at < 0) throw new Invalid("The phrase " + JSON.stringify(after) + " (after) does not occur in the text. Read without after, or pick a phrase from the text.");
       start = at + String(after).length;
     }
     if (before) {

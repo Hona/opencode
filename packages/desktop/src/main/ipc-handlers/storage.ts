@@ -1,10 +1,10 @@
-import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { StorageRpcs } from "../../shared/ipc-rpc"
 import { StorageChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { IpcPortHandoff } from "../ipc-transport"
 import { DesktopStorage } from "../storage"
+import { getMainWindows } from "../windows"
 import { sender } from "./context"
 
 export const storageHandlers = StorageRpcs.toLayer(
@@ -21,7 +21,7 @@ export const storageHandlers = StorageRpcs.toLayer(
           const origin = sender(handoff, context)
           const event = new StorageChanged({ name, insert, remove, revision })
 
-          for (const win of BrowserWindow.getAllWindows()) {
+          for (const win of getMainWindows()) {
             if (win.webContents !== origin) emitIpcEvent(win.webContents, event)
           }
 

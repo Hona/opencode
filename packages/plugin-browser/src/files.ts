@@ -83,11 +83,53 @@ export const exists = Effect.fn("BrowserFiles.exists")((input: string, directory
 )
 
 /**
- * Saves returned bytes on the server. With a destination, the single file goes to that path (parent folders are
- * created); otherwise each file gets its own temporary directory.
+ * Resolves a path the agent asked to save to. The plugin cannot ask for edit permission, so the path must stay inside
+ * the workspace, through symlinks too, and must not name an existing file that this plugin did not save itself.
+ */
+export const destination = Effect.fn("BrowserFiles.destination")(
+  (input: string, directory: string, written: ReadonlySet<string>) =>
+    Effect.tryPromise({
+      try: async () => {
+        const { lstat, realpath } = await import("node:fs/promises")
+        const { dirname, isAbsolute, relative, resolve, sep } = await import("node:path")
+        const path = resolve(directory, input)
+        const within = (root: string, target: string) => {
+          const rest = relative(root, target)
+          return !isAbsolute(rest) && rest.split(sep)[0] !== ".."
+        }
+        // The nearest folder that exists decides where a new file really lands.
+        const existing = async (folder: string): Promise<string> =>
+          realpath(folder).catch(() => (dirname(folder) === folder ? folder : existing(dirname(folder))))
+        if (!within(directory, path) || !within(await realpath(directory), await existing(dirname(path))))
+          throw new Error(
+            "the path is outside the workspace. Browser saves skip edit permissions, so they stay in the workspace. Pass a workspace path, or omit it to save a temporary file and move that with your file tools.",
+          )
+        if (
+          !written.has(path) &&
+          (await lstat(path).then(
+            () => true,
+            () => false,
+          ))
+        )
+          throw new Error(
+            "a file already exists there, and the browser replaces only files it saved itself. Pass a new path, or omit it to save a temporary file.",
+          )
+        return path
+      },
+      catch: (error) =>
+        new Tool.Error({
+          message: `Cannot save to ${input}: ${error instanceof Error ? error.message : String(error)}`,
+          error,
+        }),
+    }),
+)
+
+/**
+ * Saves returned bytes on the server. With a destination from `destination`, the single file goes to that path (parent
+ * folders are created) and joins `written`; otherwise each file gets its own temporary directory.
  */
 export const save = Effect.fn("BrowserFiles.save")(
-  (files: readonly Browser.File[], destination?: { path: string; directory: string }) =>
+  (files: readonly Browser.File[], destination?: { path: string; written: Set<string> }) =>
     Effect.tryPromise({
       try: async (): Promise<Saved[]> => {
         if (files.length === 0) return []
@@ -96,13 +138,15 @@ export const save = Effect.fn("BrowserFiles.save")(
             `Capture files exceed the ${limit} total transfer limit. Use a smaller screenshot, a shorter trace/profile, or a smaller page for heap capture; do not retry the identical capture.`,
           )
         const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises")
-        const { dirname, join, resolve } = await import("node:path")
+        const { dirname, join } = await import("node:path")
         const { tmpdir } = await import("node:os")
         if (destination) {
           const file = files[0]!
-          const path = resolve(destination.directory, destination.path)
+          const path = destination.path
           await mkdir(dirname(path), { recursive: true })
-          await writeFile(path, file.data)
+          // "wx" also refuses a file that appeared after the destination was checked.
+          await writeFile(path, file.data, { flag: destination.written.has(path) ? "w" : "wx" })
+          destination.written.add(path)
           return [{ id: file.id, name: file.name, mime: file.mime, bytes: file.data.byteLength, path }]
         }
         const directory = await mkdtemp(join(tmpdir(), "opencode-browser-"))

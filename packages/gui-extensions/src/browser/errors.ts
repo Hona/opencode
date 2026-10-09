@@ -56,7 +56,14 @@ export function browserFailure(action: Browser.Action, cause: unknown): Extract<
 
   return {
     type: "failure",
-    code: cause instanceof BrowserError ? cause.code : viz ? "tab_hidden" : network ? "navigation_failed" : "operation_failed",
+    code:
+      cause instanceof BrowserError
+        ? cause.code
+        : viz
+          ? "tab_hidden"
+          : network
+            ? "navigation_failed"
+            : "operation_failed",
     message: `browser.${action.type} failed. ${hint ? `${hint} Details: ${detail.slice(0, 400)}` : detail}`.slice(
       0,
       2_048,

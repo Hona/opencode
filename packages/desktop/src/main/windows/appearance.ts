@@ -1,5 +1,5 @@
-import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import type { Path } from "effect"
+import { app, type BrowserWindow, nativeImage, nativeTheme } from "electron"
+import { Option, Schema, type Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
 import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
@@ -18,26 +18,14 @@ const minZoomLevel = 0.2
 
 let backgroundColor: string | undefined
 
-export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
-  const mode = tone()
-
-  return {
+export function windowAppearance(
+  path: Path.Path,
+  paths: DesktopPaths.Resolved,
+): Electron.BrowserWindowConstructorOptions & { webPreferences: Electron.WebPreferences } {
+  const options = {
     title: "OpenCode",
     icon: iconPath(path, paths),
     backgroundColor: backgroundColor ?? storedBackgroundColor(),
-    ...(process.platform === "darwin"
-      ? {
-          titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 14, y: 14 },
-        }
-      : {}),
-    ...(process.platform === "win32"
-      ? {
-          frame: false,
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
-        }
-      : {}),
     webPreferences: {
       preload: paths.preloadPath,
       contextIsolation: true,
@@ -45,6 +33,14 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
       sandbox: true,
     },
   }
+
+  if (process.platform === "darwin")
+    return { ...options, titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 14 } }
+
+  if (process.platform === "win32")
+    return { ...options, frame: false, titleBarStyle: "hidden", titleBarOverlay: overlay({ mode: tone() }) }
+
+  return options
 }
 
 export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
@@ -54,12 +50,13 @@ export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-export function setBackgroundColor(color: string) {
+/** Applies the renderer's theme background to the app windows; other windows show content with its own background. */
+export function setBackgroundColor(color: string, windows: readonly BrowserWindow[]) {
   // The renderer reports its theme background on every boot; electron-store rewrites and fsyncs the
   // settings file on each set, so only persist a change.
   if (getBackgroundColor() !== color) getStore().set(BACKGROUND_COLOR_KEY, color)
   backgroundColor = color
-  BrowserWindow.getAllWindows().forEach((win) => {
+  windows.forEach((win) => {
     win.setBackgroundColor(color)
 
     if (process.platform === "darwin") win.invalidateShadow()
@@ -69,7 +66,7 @@ export function setBackgroundColor(color: string) {
 export function getBackgroundColor() {
   const stored = getStore().get(BACKGROUND_COLOR_KEY)
 
-  return backgroundColor ?? (typeof stored === "string" ? stored : undefined)
+  return backgroundColor ?? Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(stored))
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
@@ -88,9 +85,9 @@ export function updateTitlebar(win: BrowserWindow) {
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 
-export function setPinchZoomEnabled(enabled: boolean) {
+export function setPinchZoomEnabled(enabled: boolean, windows: readonly BrowserWindow[]) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
-  BrowserWindow.getAllWindows().forEach((win) => {
+  windows.forEach((win) => {
     pinchZoomEnabled.set(win, enabled)
     emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
 

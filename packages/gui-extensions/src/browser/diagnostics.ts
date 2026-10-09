@@ -300,7 +300,8 @@ export function createDiagnostics(cdp: Cdp) {
     finish(key, event.timestamp)
   })
 
-  const frame = (direction: Browser.SocketFrame["direction"]) =>
+  const frame =
+    (direction: Browser.SocketFrame["direction"]) =>
     (
       event: { requestId: string; timestamp: number; response: { opcode: number; payloadData: string } },
       sessionID?: string,
@@ -338,7 +339,8 @@ export function createDiagnostics(cdp: Cdp) {
 
   // "navigation" (the current document), "start" (everything retained), or a cursor from an earlier result.
   const since = (value: string | undefined) => {
-    if (value === undefined || value === "navigation") return (item: { generation: number }) => item.generation === generation
+    if (value === undefined || value === "navigation")
+      return (item: { generation: number }) => item.generation === generation
 
     if (value === "start") return () => true
 

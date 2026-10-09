@@ -16,9 +16,6 @@ type Engine = (typeof ENGINES)[number]
 
 const REF = /^@?e[1-9][0-9]*$/
 
-const EXPLICIT =
-  /^(?:(?:css|xpath|text|role|label|placeholder|testid|nth)\s*=|@?e[1-9][0-9]*(?:\s*>>|$)|["']|\/\/|\.\.|\(\/\/)/i
-
 const SYNTAX =
   'Locator syntax: a ref "@e12"; CSS such as "#save" (the default); "text=Save" (substring, any case) or "text=\\"Save\\"" (exact); "role=button[name=\\"Send\\"]"; "label=Email"; "placeholder=Search"; "testid=submit"; "xpath=//main//a". Chain steps with " >> " and pick one match with " >> nth=0" (-1 is the last).'
 
@@ -31,11 +28,6 @@ export function parseLocator(input: string): readonly Step[] {
   if (!input.trim()) throw new Error(`The locator is empty. ${SYNTAX}`)
 
   return split(input).map((part, index) => step(part, index, input))
-}
-
-/** Whether a string is a locator with an explicit engine (css=, text=, role=, …, @eN) rather than plain text. */
-export function isExplicitLocator(input: string): boolean {
-  return EXPLICIT.test(input.trim()) || input.includes(">>")
 }
 
 // Splits on ">>" outside quotes, brackets, and parentheses. An unquoted text value runs to the next ">>",

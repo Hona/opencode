@@ -194,7 +194,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       return {
         tab,
         inspect: () =>
-          request(rpc, browser, action, tab, [], { inspect: true }).pipe(
+          request(rpc, browser, action, [], { inspect: true }).pipe(
             Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
             Effect.mapError(
               (error) =>
@@ -208,7 +208,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ),
           ),
         request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(rpc, browser, action, tab, files, { target }),
+          request(rpc, browser, action, files, { target }),
       }
     }),
   }
@@ -218,7 +218,6 @@ const request = Effect.fn("BrowserConnection.request")(function* (
   rpc: RpcRegistration<typeof Browser.Definition>,
   browser: Attachment,
   action: Browser.Action,
-  tab: Browser.Tab | undefined,
   files: readonly Browser.File[],
   inspection: Pick<Browser.Command, "inspect" | "target">,
 ) {
@@ -229,7 +228,7 @@ const request = Effect.fn("BrowserConnection.request")(function* (
       ? { ...action, paths: files.map((file) => file.name) }
       : action
   browser.pending.set(requestID, {
-    command: { action: command, ...(tab ? { generation: tab.generation } : {}), files, ...inspection },
+    command: { action: command, files, ...inspection },
     result: pending,
   })
   return yield* rpc.events.emit("control", { type: "command", connectionID: browser.connectionID, requestID }).pipe(

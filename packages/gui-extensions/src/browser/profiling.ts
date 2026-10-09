@@ -79,7 +79,7 @@ export function createProfiling(
     if (!cpu)
       return Promise.reject(
         new Error(
-          "No CPU profile has been started in this tab. Call browser.profile.start({tabID, kind: \"cpu\"}), perform the interaction to inspect, then browser.profile.stop({tabID}).",
+          'No CPU profile has been started in this tab. Call browser.profile.start({tabID, kind: "cpu"}), perform the interaction to inspect, then browser.profile.stop({tabID}).',
         ),
       )
 

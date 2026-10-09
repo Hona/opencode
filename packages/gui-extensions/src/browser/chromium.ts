@@ -9,7 +9,7 @@ import { createDiagnostics } from "./diagnostics"
 import { BrowserError } from "./errors"
 import { loadIcon } from "./icon"
 import { parseChord, typedKey, type KeyEvent } from "./keys"
-import { isExplicitLocator, parseLocator, type Step } from "./locator"
+import { parseLocator, type Step } from "./locator"
 import {
   PageControl,
   PageCount,
@@ -295,15 +295,14 @@ export function createBrowserPage(
   // Whether the user can see the tab, and how many agent operations are running on it.
   let watched = false
   let busy = 0
-  let unpinned: number[] | undefined
 
-  // An offscreen tab paints at full rate while watched, while the agent works on it, and not at all otherwise; its
-  // scripts keep running either way.
+  // An offscreen tab paints while watched or while the agent works on it, and not at all otherwise; its scripts keep
+  // running either way. Each frame is copied to the main thread, and the presenter shows at most 30 a second.
   const paint = () => {
     if (!host || contents.isDestroyed()) return
 
     if (watched || busy > 0) {
-      contents.setFrameRate(watched ? 60 : 30)
+      contents.setFrameRate(30)
 
       if (!contents.isPainting()) contents.startPainting()
 
@@ -883,11 +882,7 @@ export function createBrowserPage(
   }
 
   function offscreenSurface(window: BrowserWindow) {
-    const created = options.presenters.create({
-      page: window.webContents,
-      window,
-      pinned: () => emulation.viewport && { width: emulation.viewport.width, height: emulation.viewport.height },
-    })
+    const created = options.presenters.create({ page: window.webContents, window })
 
     return { contents: window.webContents, view: created.view, presenter: created }
   }
@@ -923,8 +918,9 @@ export function createBrowserPage(
     try {
       return await run(action, transfers, signal, scope, captureSources, transfer)
     } finally {
-      scope.sessions.forEach((sessionID) =>
-        void cdp.send("Runtime.releaseObjectGroup", { objectGroup: scope.group }, sessionID).catch(() => undefined),
+      scope.sessions.forEach(
+        (sessionID) =>
+          void cdp.send("Runtime.releaseObjectGroup", { objectGroup: scope.group }, sessionID).catch(() => undefined),
       )
     }
   }
@@ -947,8 +943,7 @@ export function createBrowserPage(
           if (action.history === "back" ? !history.canGoBack() : !history.canGoForward())
             throw new BrowserError("invalid", `This tab has no page to go ${action.history} to.`)
 
-          if (action.history === "back") history.goBack()
-          else history.goForward()
+          void (action.history === "back" ? history.goBack() : history.goForward())
           await loaded(before, action.waitUntil ?? "load", action.timeoutMs ?? 30_000, signal)
 
           return result({ ...state(), status })
@@ -982,8 +977,7 @@ export function createBrowserPage(
           contents.navigationHistory.goForward()
 
         if (action.type === "reload") {
-          if ("hard" in action && action.hard) contents.reloadIgnoringCache()
-          else contents.reload()
+          void ("hard" in action && action.hard ? contents.reloadIgnoringCache() : contents.reload())
         }
 
         if (action.type === "stop") {
@@ -1011,7 +1005,7 @@ export function createBrowserPage(
         return result({ tab: state(), ...(await find(action, scope)) })
       case "read": {
         const self = action.target
-          ? (await resolve(action.target, "exists", 5_000, false, signal, scope)).remote
+          ? (await resolve(action.target, "exists", 5_000, false, signal, scope, { frameID: action.frameID })).remote
           : await windowObject(action.frameID, scope)
 
         const value = await call(
@@ -1041,7 +1035,13 @@ export function createBrowserPage(
         })
 
         if (!action.saveTo) return result({ tab: state(), value })
-        const id = await files.save("result.json", "application/json", Buffer.from(JSON.stringify(value)), captureSources)
+
+        const id = await files.save(
+          "result.json",
+          "application/json",
+          Buffer.from(JSON.stringify(value)),
+          captureSources,
+        )
 
         return result({ tab: state(), value: null }, [await transfer(id)])
       }
@@ -1049,15 +1049,9 @@ export function createBrowserPage(
       case "click":
         return result(
           await acting(signal, async () => {
-            const located = await resolve(
-              action.target,
-              "click",
-              action.timeoutMs,
-              action.force,
-              signal,
-              scope,
-              action.position,
-            )
+            const located = await resolve(action.target, "click", action.timeoutMs, action.force, signal, scope, {
+              position: action.position,
+            })
 
             await click(located.element, action.button ?? "left", action.count ?? 1, action.modifiers, action.position)
 
@@ -1099,7 +1093,7 @@ export function createBrowserPage(
             }
 
             if (action.clear) {
-              await press(parseChord(process.platform === "darwin" ? "Meta+A" : "Control+A"))
+              await selectAll()
               await press(parseChord("Backspace"))
             }
 
@@ -1107,8 +1101,7 @@ export function createBrowserPage(
               abortError(signal)
               const key = typedKey(char)
 
-              if (key) await press(key)
-              else await cdp.send("Input.insertText", { text: char })
+              await (key ? press(key) : cdp.send("Input.insertText", { text: char }))
 
               if (action.delayMs) await delay(action.delayMs, signal)
             }
@@ -1121,13 +1114,7 @@ export function createBrowserPage(
       case "press":
         return result(
           await acting(signal, async () => {
-            const chord = (() => {
-              try {
-                return parseChord(action.key)
-              } catch (error) {
-                throw new BrowserError("invalid", error instanceof Error ? error.message : String(error))
-              }
-            })()
+            const chord = keys(action.key)
 
             const located = action.target
               ? await resolve(action.target, "exists", action.timeoutMs, false, signal, scope)
@@ -1210,14 +1197,24 @@ export function createBrowserPage(
             const element = located.element
 
             if (action.type === "upload") {
-              const control = await call(PageControl, "control", located.remote, [{ objectId: located.remote.objectId }], scope)
+              const control = await call(
+                PageControl,
+                "control",
+                located.remote,
+                [{ objectId: located.remote.objectId }],
+                scope,
+              )
 
               if (control.kind !== "file")
                 throw new BrowserError(
                   "not_actionable",
                   `${action.target} is not a file input. Pass a locator for input[type=file] (it may be hidden behind a styled button, which is fine), or use browser.drop for a drop area.`,
                 )
-              await cdp.send("DOM.setFileInputFiles", { files: local, backendNodeId: element.backendID }, element.sessionID)
+              await cdp.send(
+                "DOM.setFileInputFiles",
+                { files: local, backendNodeId: element.backendID },
+                element.sessionID,
+              )
 
               return located.count
             }
@@ -1261,8 +1258,7 @@ export function createBrowserPage(
       }
 
       case "profile.start":
-        if (action.kind === "trace") await profiling.startTrace(action.durationMs)
-        else await profiling.startCpu()
+        await (action.kind === "trace" ? profiling.startTrace(action.durationMs) : profiling.startCpu())
         recordingKind = action.kind
 
         return result({ tab: state(), recording: true })
@@ -1297,7 +1293,12 @@ export function createBrowserPage(
         const summary = await profiling.analyze({ type: "heap.summary", fileID: id, limit: action.limit ?? 50 })
 
         const growth = action.compareTo
-          ? await profiling.analyze({ type: "heap.compare", before: action.compareTo, after: id, limit: action.limit ?? 50 })
+          ? await profiling.analyze({
+              type: "heap.compare",
+              before: action.compareTo,
+              after: id,
+              limit: action.limit ?? 50,
+            })
           : undefined
 
         return result(
@@ -1319,7 +1320,12 @@ export function createBrowserPage(
       case "heap.object":
         return result({
           tab: state(),
-          ...(await profiling.analyze({ type: "heap.object", fileID: action.fileID, id: action.id, limit: action.limit })),
+          ...(await profiling.analyze({
+            type: "heap.object",
+            fileID: action.fileID,
+            id: action.id,
+            limit: action.limit,
+          })),
         })
       case "lighthouse": {
         const { audit } = await import("./lighthouse")
@@ -1422,7 +1428,8 @@ export function createBrowserPage(
 
   async function wait(action: Extract<Browser.Action, { type: "wait" }>, signal: AbortSignal, scope: Scope) {
     const started = Date.now()
-    const timeout = action.timeoutMs ?? 10_000
+    // Idle needs that long without activity, so its default timeout leaves room for it.
+    const timeout = action.timeoutMs ?? Math.max(10_000, (action.idle ?? 0) + 5_000)
 
     const given = [action.load, action.text, action.gone, action.target, action.url, action.script, action.idle].filter(
       (value) => value !== undefined,
@@ -1434,6 +1441,12 @@ export function createBrowserPage(
         "Pass one condition to browser.wait: load, text, gone, target (with state), url, script, or idle.",
       )
 
+    if (action.idle !== undefined && action.idle > timeout)
+      throw new BrowserError(
+        "invalid",
+        `idle ${action.idle} ms cannot pass within timeoutMs ${timeout}. Raise timeoutMs above idle, or omit it.`,
+      )
+
     // No condition is a plain delay, which is what a wait without one always meant.
     if (!given.length) {
       await delay(timeout, signal)
@@ -1441,8 +1454,8 @@ export function createBrowserPage(
       return { tab: state(), met: true, elapsedMs: Date.now() - started }
     }
 
-    const gone = action.gone
-    const goneSteps = gone !== undefined && isExplicitLocator(gone) ? steps(gone) : undefined
+    const gone = action.gone === undefined ? undefined : steps(action.gone)
+    const pattern = action.url === undefined ? undefined : urlPattern(action.url)
     let observed: Schema.Json | undefined
 
     const check = async (): Promise<boolean> => {
@@ -1455,9 +1468,8 @@ export function createBrowserPage(
 
       if (action.url !== undefined) {
         observed = contents.getURL()
-        const pattern = /^\/(.+)\/([a-z]*)$/.exec(action.url)
 
-        return pattern ? new RegExp(pattern[1] ?? "", pattern[2]).test(observed) : observed.includes(action.url)
+        return pattern ? pattern.test(observed) : observed.includes(action.url)
       }
 
       if (action.text !== undefined) {
@@ -1473,17 +1485,13 @@ export function createBrowserPage(
       }
 
       if (gone !== undefined) {
-        if (goneSteps) return (await within(await windowObject(action.frameID, scope), goneSteps, "", scope, false)).visible === 0
+        // A ref whose element left the page is gone too.
+        const found = await locate(gone, action.frameID, scope, false).catch((error: Error) => {
+          if (/ref is stale/.test(String(error.message))) return { visible: 0 }
+          throw error
+        })
 
-        const present = await call(
-          Schema.Boolean,
-          "textPresent",
-          await windowObject(action.frameID, scope),
-          [{ value: gone }, { value: true }],
-          scope,
-        )
-
-        return !present
+        return found.visible === 0
       }
 
       if (action.target !== undefined) {
@@ -1535,8 +1543,11 @@ export function createBrowserPage(
       abortError(signal)
 
       const met = await check().catch((error: Error) => {
-        // A wrong condition fails at once; a document changing under the check is retried.
+        // A wrong condition fails at once. A document changing under the check is retried, and so is a script that
+        // throws until the page is ready; its last error is what the agent sees if the wait ends unmet.
         if (error instanceof BrowserError && error.code === "invalid") throw error
+
+        if (action.script !== undefined) observed = { error: String(error.message).slice(0, 400) }
 
         return false
       })
@@ -1591,6 +1602,30 @@ export function createBrowserPage(
     }
   }
 
+  function keys(chord: string) {
+    try {
+      return parseChord(chord)
+    } catch (error) {
+      throw new BrowserError("invalid", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** A `/regex/flags` URL condition as a RegExp; a plain string is a substring, so it has none. */
+  function urlPattern(url: string) {
+    const match = /^\/(.+)\/([a-z]*)$/.exec(url)
+
+    if (!match) return undefined
+
+    try {
+      return new RegExp(match[1] ?? "", match[2])
+    } catch (error) {
+      throw new BrowserError(
+        "invalid",
+        `${url} is not a valid regular expression: ${error instanceof Error ? error.message : String(error)}. Fix it, or pass a plain substring of the URL.`,
+      )
+    }
+  }
+
   /** Finds a locator's first visible match without waiting; also counts every match. */
   async function locate(list: readonly Step[], frameID: string | undefined, scope: Scope, pick = true) {
     const [first, ...rest] = list
@@ -1599,7 +1634,18 @@ export function createBrowserPage(
       const element = refElement(first.ref)
       const remote = await remoteOf(element, scope)
 
-      if (!rest.length) return { located: { element, remote, count: 1 }, count: 1, visible: 1 }
+      // A hidden element keeps its ref, so wait({ gone }) and state "hidden" need its visibility.
+      if (!rest.length) {
+        const info = await call(
+          PageInfo,
+          "info",
+          remote,
+          [{ objectId: remote.objectId }, { value: [] }, { value: [] }],
+          scope,
+        )
+
+        return { located: { element, remote, count: 1 }, count: 1, visible: info.visible ? 1 : 0 }
+      }
 
       return within(remote, rest, element.frameID, scope, pick)
     }
@@ -1645,7 +1691,8 @@ export function createBrowserPage(
     force: boolean | undefined,
     signal: AbortSignal,
     scope: Scope,
-    position?: { x: number; y: number },
+    /** `position` is the point an explicit click names; `frameID` is the frame to search, default the main frame. */
+    where: { position?: { x: number; y: number }; frameID?: string } = {},
   ): Promise<Located> {
     const list = steps(target)
     const timeout = timeoutMs ?? 5_000
@@ -1655,7 +1702,7 @@ export function createBrowserPage(
     while (true) {
       abortError(signal)
 
-      const found = await locate(list, undefined, scope).catch((error: Error) => {
+      const found = await locate(list, where.frameID, scope).catch((error: Error) => {
         // A stale ref or bad syntax will not fix itself; a document changing under the search will.
         if (error instanceof BrowserError || /ref is stale/.test(String(error.message))) throw error
 
@@ -1671,9 +1718,12 @@ export function createBrowserPage(
         if (force || readiness === "exists") return found.located
 
         // The point an explicit click position names is hit-tested instead of the center.
-        const args: Protocol.Runtime.CallArgument[] = [{ objectId: found.located.remote.objectId }, { value: readiness }]
+        const args: Protocol.Runtime.CallArgument[] = [
+          { objectId: found.located.remote.objectId },
+          { value: readiness },
+        ]
 
-        if (position) args.push({ value: position })
+        if (where.position) args.push({ value: where.position })
 
         const ready = await call(PageOutcome, "actionable", found.located.remote, args, scope).catch(
           () => ({ ok: false, reason: "changed while checking" }) as const,
@@ -1754,13 +1804,21 @@ export function createBrowserPage(
     scope.sessions.add(context?.sessionID)
 
     const [value, tree] = await Promise.all([
-      cdp.send("Runtime.evaluate", { expression: "window", contextId: context?.id, objectGroup: scope.group }, context?.sessionID),
+      cdp.send(
+        "Runtime.evaluate",
+        { expression: "window", contextId: context?.id, objectGroup: scope.group },
+        context?.sessionID,
+      ),
       frameID ? undefined : cdp.send("Page.getFrameTree"),
     ])
 
     if (!value.result.objectId) throw new Error("The page has no window to run in yet; it may still be loading.")
 
-    return { objectId: value.result.objectId, sessionID: context?.sessionID, frameID: frameID ?? tree?.frameTree.frame.id ?? "" }
+    return {
+      objectId: value.result.objectId,
+      sessionID: context?.sessionID,
+      frameID: frameID ?? tree?.frameTree.frame.id ?? "",
+    }
   }
 
   async function remoteOf(element: Element, scope: Scope): Promise<Remote> {
@@ -1803,10 +1861,18 @@ export function createBrowserPage(
       self.sessionID,
     )
 
-    if (value.exceptionDetails)
-      throw new Error(
-        `${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).replace(/^Error: /, "").slice(0, 400)}`,
+    if (value.exceptionDetails) {
+      const message = (value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).replace(
+        /^(?:Error|Invalid): /,
+        "",
       )
+
+      // The helpers throw `Invalid` for the agent's own mistakes, such as a malformed selector; retrying cannot fix them.
+      if (value.exceptionDetails.exception?.className === "Invalid")
+        throw new BrowserError("invalid", (message.split("\n")[0] ?? message).slice(0, 400))
+
+      throw new Error(message.slice(0, 400))
+    }
 
     return Schema.decodeUnknownSync(schema)(value.result.value)
   }
@@ -1906,8 +1972,7 @@ export function createBrowserPage(
               .flatMap((property) => (property.value?.objectId ? [property.value.objectId] : []))
           })
 
-    const total =
-      rest.length === 0 ? 1 : (await call(PageCount, "count", self, [{ value: rest }], scope)).count
+    const total = rest.length === 0 ? 1 : (await call(PageCount, "count", self, [{ value: rest }], scope)).count
 
     const matches = await Promise.all(
       objects.slice(0, limit).map(async (objectId) => {
@@ -1933,7 +1998,11 @@ export function createBrowserPage(
     const tree = await frames()
 
     const selected = action.target
-      ? (await resolve(action.target, "exists", 5_000, false, new AbortController().signal, scope)).element
+      ? (
+          await resolve(action.target, "exists", 5_000, false, new AbortController().signal, scope, {
+            frameID: action.frameID,
+          })
+        ).element
       : undefined
 
     const frameID = selected?.frameID || action.frameID || tree[0]?.id
@@ -1998,13 +2067,13 @@ export function createBrowserPage(
 
         if (ref) refsAdded++
 
-        const flags = (["checked", "disabled", "expanded", "selected", "pressed", "required", "invalid"] as const).flatMap(
-          (flag) => {
-            const value = properties.get(flag)
+        const flags = (
+          ["checked", "disabled", "expanded", "selected", "pressed", "required", "invalid"] as const
+        ).flatMap((flag) => {
+          const value = properties.get(flag)
 
-            return value !== undefined && value !== false && value !== "false" ? [`${flag}=${value}`] : []
-          },
-        )
+          return value !== undefined && value !== false && value !== "false" ? [`${flag}=${value}`] : []
+        })
 
         const value =
           refable && node.value?.value !== undefined && String(node.value.value)
@@ -2057,7 +2126,8 @@ export function createBrowserPage(
     const evaluation = (async () => {
       if (input.target || isFunction) {
         const element = input.target
-          ? (await resolve(input.target, "exists", 5_000, false, input.signal, input.scope)).remote
+          ? (await resolve(input.target, "exists", 5_000, false, input.signal, input.scope, { frameID: input.frameID }))
+              .remote
           : undefined
 
         const self = element ?? (await windowObject(input.frameID, input.scope))
@@ -2148,8 +2218,8 @@ export function createBrowserPage(
     return delivered(cdp.send("Input.dispatchMouseEvent", params))
   }
 
-  async function press(key: KeyEvent) {
-    await delivered(cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key }))
+  async function press(key: KeyEvent, commands?: string[]) {
+    await delivered(cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key, commands }))
     await delivered(
       cdp.send("Input.dispatchKeyEvent", {
         type: "keyUp",
@@ -2161,13 +2231,24 @@ export function createBrowserPage(
     )
   }
 
-  /** A user's tab that is not on screen can stall input; that is reported instead of hanging. */
+  // On macOS the browser, not the page, turns Cmd+A into Select All, so the key event carries the command itself.
+  function selectAll() {
+    return press(parseChord(process.platform === "darwin" ? "Meta+A" : "Control+A"), ["selectAll"])
+  }
+
+  /** A user's tab that is not on screen, or a page whose main thread is busy, can stall input; that is reported. */
   function delivered<A>(sent: Promise<A>) {
     if (host) return sent
 
     return Promise.race([
       sent,
       delay(5_000).then(() => {
+        if (watched)
+          throw new BrowserError(
+            "timeout",
+            "The page did not take the input within 5 s; its main thread may be busy. Wait, then inspect the page before repeating the input.",
+          )
+
         throw new BrowserError(
           "tab_hidden",
           "The page did not take the input: it is one of the user's own tabs and is not on screen. Open the page in your own tab with browser.tabs.open({url}) (agent tabs work in the background), or ask the user to show this tab.",
@@ -2271,7 +2352,7 @@ export function createBrowserPage(
     await cdp.send("DOM.focus", { backendNodeId: located.element.backendID }, located.element.sessionID)
     // Focusing this field blurs the previous one; a validation dialog from that blur must stop here.
     abortError(signal)
-    await press(parseChord(process.platform === "darwin" ? "Meta+A" : "Control+A"))
+    await selectAll()
     await press(parseChord("Backspace"))
     abortError(signal)
 
@@ -2393,7 +2474,9 @@ export function createBrowserPage(
               height: metrics.cssVisualViewport.clientHeight,
             }
 
-      const pixelRatio = contents.getZoomFactor() * (host ? scale : electron.screen.getDisplayMatching(win.getBounds()).scaleFactor)
+      const pixelRatio =
+        contents.getZoomFactor() * (host ? scale : electron.screen.getDisplayMatching(win.getBounds()).scaleFactor)
+
       const scaled = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
 
       if (bounds.width <= 0 || bounds.height <= 0)
@@ -2403,7 +2486,10 @@ export function createBrowserPage(
         )
 
       if (bounds.width * bounds.height * (scaled * pixelRatio) ** 2 > 16_000_000)
-        throw new BrowserError("invalid", "Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+        throw new BrowserError(
+          "invalid",
+          "Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.",
+        )
       const format = action.format ?? "png"
 
       const capture = await cdp.send("Page.captureScreenshot", {
@@ -2416,10 +2502,7 @@ export function createBrowserPage(
       const data = Buffer.from(capture.data, "base64")
       const size = electron.nativeImage.createFromBuffer(data).getSize()
 
-      const id = await files.save(`screenshot.${format}`, `image/${format}`, data, [
-        ...captureSources,
-        ...sourceURLs(),
-      ])
+      const id = await files.save(`screenshot.${format}`, `image/${format}`, data, [...captureSources, ...sourceURLs()])
 
       return [{ tab: state(), width: size.width, height: size.height }, [await transfer(id)]]
     } finally {
@@ -2439,32 +2522,22 @@ export function createBrowserPage(
     }
   }
 
-  /** Applies the pinned viewport, or lets the page follow the pane again. */
+  /** Applies the pinned viewport, or returns the page to its default size. */
   async function applyViewport() {
     const viewport = emulation.viewport
 
     if (host) {
-      // The size the page had before a pin, which it returns to when no presenter reports one.
-      if (viewport) {
-        unpinned ??= host.getContentSize()
-        host.setContentSize(viewport.width, viewport.height)
-      }
+      // An agent tab has the agent's size whatever the pane's; the presenter scales it to fit.
+      host.setContentSize(viewport?.width ?? defaultSize.width, viewport?.height ?? defaultSize.height)
 
-      if (!viewport && unpinned) {
-        host.setContentSize(unpinned[0] ?? defaultSize.width, unpinned[1] ?? defaultSize.height)
-        unpinned = undefined
-      }
-
-      presenter?.resize()
-
-      if (viewport && (viewport.mobile || viewport.deviceScaleFactor))
-        await cdp.send("Emulation.setDeviceMetricsOverride", {
-          width: viewport.width,
-          height: viewport.height,
-          deviceScaleFactor: viewport.deviceScaleFactor ?? 0,
-          mobile: viewport.mobile ?? false,
-        })
-      else await cdp.send("Emulation.clearDeviceMetricsOverride")
+      await (viewport && (viewport.mobile || viewport.deviceScaleFactor)
+        ? cdp.send("Emulation.setDeviceMetricsOverride", {
+            width: viewport.width,
+            height: viewport.height,
+            deviceScaleFactor: viewport.deviceScaleFactor ?? 0,
+            mobile: viewport.mobile ?? false,
+          })
+        : cdp.send("Emulation.clearDeviceMetricsOverride"))
 
       // A resized offscreen window lays out on its next frame; the agent's next read must see the new size.
       const width = viewport?.width ?? host.getContentSize()[0]
@@ -2535,16 +2608,20 @@ export function createBrowserPage(
       downloadThroughput: -1,
       uploadThroughput: -1,
     })
-    await cdp
-      .send("Emulation.setTimezoneOverride", { timezoneId: emulation.timezone ?? "" })
-      .catch(() => {
-        if (emulation.timezone)
-          throw new BrowserError("invalid", `Unknown time zone ${emulation.timezone}. Use an IANA name such as Europe/Berlin.`)
-      })
-    await cdp.send("Emulation.setLocaleOverride", emulation.locale ? { locale: emulation.locale } : {}).catch(() => {
-      if (emulation.locale) throw new BrowserError("invalid", `Unknown locale ${emulation.locale}. Use a BCP 47 tag such as de-DE.`)
+    await cdp.send("Emulation.setTimezoneOverride", { timezoneId: emulation.timezone ?? "" }).catch(() => {
+      if (emulation.timezone)
+        throw new BrowserError(
+          "invalid",
+          `Unknown time zone ${emulation.timezone}. Use an IANA name such as Europe/Berlin.`,
+        )
     })
-    await cdp.send("Emulation.setUserAgentOverride", { userAgent: emulation.userAgent ?? contents.session.getUserAgent() })
+    await cdp.send("Emulation.setLocaleOverride", emulation.locale ? { locale: emulation.locale } : {}).catch(() => {
+      if (emulation.locale)
+        throw new BrowserError("invalid", `Unknown locale ${emulation.locale}. Use a BCP 47 tag such as de-DE.`)
+    })
+    await cdp.send("Emulation.setUserAgentOverride", {
+      userAgent: emulation.userAgent ?? contents.session.getUserAgent(),
+    })
     publish()
 
     return { ...emulation }

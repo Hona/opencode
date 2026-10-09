@@ -259,7 +259,9 @@ export const Operations = [
     "tabs.open",
     "Open a browser tab and wait for it to load. The agent's tabs render even while the user cannot see them, so every tool works on them in the background. Pass url for a web page or path for a local HTML file (the server serves its folder and subfolders, without dotfiles, so assets beside it load). With key, an open tab with the same key is reused instead of opening a duplicate. localhost means the connected server.",
     {
-      url: optional(short).annotate({ description: "HTTP/HTTPS URL or about:blank. Omit both url and path for a blank tab." }),
+      url: optional(short).annotate({
+        description: "HTTP/HTTPS URL or about:blank. Omit both url and path for a blank tab.",
+      }),
       path: optional(serverPath),
       key: optional(short).annotate({
         description:
@@ -282,12 +284,7 @@ export const Operations = [
     tab,
     Tab,
   ),
-  operation(
-    "tabs.close",
-    "Close this browser tab, abort its work, and release its resources.",
-    tab,
-    State,
-  ),
+  operation("tabs.close", "Close this browser tab, abort its work, and release its resources.", tab, State),
   operation(
     "preview",
     "Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab. HTML pages open as a browser tab whose tabID works with every browser tool. The path is server-local: relative to the workspace or absolute.",
@@ -443,7 +440,12 @@ export const Operations = [
     {
       ...tab,
       ...target,
-      value: Schema.Union([Schema.String.check(Schema.isMaxLength(100_000)), Schema.Finite, Schema.Boolean, Schema.Array(short)]),
+      value: Schema.Union([
+        Schema.String.check(Schema.isMaxLength(100_000)),
+        Schema.Finite,
+        Schema.Boolean,
+        Schema.Array(short),
+      ]),
       timeoutMs: timeoutMs(5_000),
     },
     acted,
@@ -509,13 +511,16 @@ export const Operations = [
   ),
   operation(
     "wait",
-    'Wait for a condition and report whether it was met; a timeout is a result (met: false), not an error. Pass one condition: load: true; text (visible text appears); gone (text or a locator disappears); target with optional state "visible" (default), "hidden", "attached", "detached", or "enabled"; url (a substring of the URL); script (truthy result, with args); or idle (milliseconds without network requests or DOM changes). state also applies to text. With no condition it waits timeoutMs as a plain delay: Code Mode has no timers, so this is how to pause. Survives navigation during the wait.',
+    'Wait for a condition and report whether it was met; a timeout is a result (met: false), not an error. Pass one condition: load: true; text (visible text appears); gone (a locator stops matching anything visible, such as .spinner, role=dialog, or text=Loading); target with optional state "visible" (default), "hidden", "attached", "detached", or "enabled"; url (a substring of the URL); script (truthy result, with args); or idle (milliseconds without network requests or DOM changes; the default timeout leaves room for it). state also applies to text. A malformed locator or /regex/ fails at once. With no condition it waits timeoutMs as a plain delay: Code Mode has no timers, so this is how to pause. Survives navigation during the wait.',
     {
       ...tab,
       ...frame,
       load: optional(Schema.Literal(true)),
       text: optional(short),
-      gone: optional(short).annotate({ description: "Text, or a locator such as role=dialog, that must disappear." }),
+      gone: optional(Locator).annotate({
+        description:
+          "A locator that must stop matching anything visible, such as .spinner, role=dialog, or text=Loading.",
+      }),
       target: optional(Locator),
       state: optional(Schema.Literals(["visible", "hidden", "attached", "detached", "enabled"])),
       url: optional(short),
@@ -534,7 +539,7 @@ export const Operations = [
       met: Schema.Boolean,
       elapsedMs: count,
       observed: optional(Schema.Json).annotate({
-        description: "What the page showed when the wait ended: the script's last value, or the URL.",
+        description: "What the page showed when the wait ended: the script's last value or error, or the URL.",
       }),
     }),
   ),
@@ -660,7 +665,9 @@ export const Operations = [
     "Change how the page is rendered: viewport, color scheme, reduced motion, print media, offline network, time zone, locale, or user agent. Settings stay until changed or reset.",
     {
       ...tab,
-      viewport: optional(Schema.NullOr(Viewport)).annotate({ description: "Page size; null follows the pane again." }),
+      viewport: optional(Schema.NullOr(Viewport)).annotate({
+        description: "Page size; null returns an agent tab to 1280x800 and a user's tab to the pane's size.",
+      }),
       colorScheme: optional(Schema.NullOr(Schema.Literals(["light", "dark"]))),
       reducedMotion: optional(Schema.NullOr(Schema.Literals(["reduce", "no-preference"]))),
       media: optional(Schema.NullOr(Schema.Literals(["screen", "print"]))),
@@ -686,7 +693,7 @@ export const Operations = [
   ),
   operation(
     "storage",
-    'Read or change this page origin\'s localStorage or sessionStorage, or the cookies its URL can read. get returns entries (cookie values are redacted); set writes entries; clear removes the named keys, or all when keys is omitted. Set storage before navigating to sign in or seed state.',
+    "Read or change this page origin's localStorage or sessionStorage, or the cookies its URL can read. get returns entries (cookie values are redacted); set writes entries; clear removes the named keys, or all when keys is omitted. Set storage before navigating to sign in or seed state.",
     {
       ...tab,
       action: Schema.Literals(["get", "set", "clear"]),
@@ -766,9 +773,7 @@ export const Operations = [
       edges: count,
       selfBytes: Schema.Finite,
       classes: heapClasses,
-      growth: optional(
-        Schema.Array(Schema.Struct({ name: short, countDelta: Schema.Int, bytesDelta: Schema.Finite })),
-      ),
+      growth: optional(Schema.Array(Schema.Struct({ name: short, countDelta: Schema.Int, bytesDelta: Schema.Finite }))),
     }),
   ),
   operation(
@@ -823,7 +828,6 @@ export const Target = Schema.Struct({ resources: Schema.Array(text), key: text }
 export type Target = typeof Target.Type
 export const Command = Schema.Struct({
   action: Action,
-  generation: optional(count),
   files: Schema.Array(File),
   inspect: optional(Schema.Boolean),
   target: optional(Target),

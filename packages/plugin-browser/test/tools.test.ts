@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { Effect } from "effect"
@@ -12,7 +12,14 @@ const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 const navigate = (url: string) => BrowserTools.normalizeAction({ type: "navigate", tabID, url })
 
 test("URL normalization rejects filesystem paths and file URLs, and points at path instead", () => {
-  for (const path of ["/tmp/page.html", "./page.html", "../page.html", "C:\\Users\\me\\page.html", "D:/page.html", "file:///tmp/a.html"])
+  for (const path of [
+    "/tmp/page.html",
+    "./page.html",
+    "../page.html",
+    "C:\\Users\\me\\page.html",
+    "D:/page.html",
+    "file:///tmp/a.html",
+  ])
     expect(() => navigate(path)).toThrow("pass path instead of url")
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
@@ -85,32 +92,71 @@ test("saved capture names never escape their directory or name a Windows device"
   }
 })
 
-test("a capture saved to a chosen path creates its folders", async () => {
+// The plugin cannot ask for edit permission, so a page's download must not land on a real file such as ~/.bashrc.
+test("a capture saved to a named path stays in the workspace and replaces only files it saved", async () => {
   const directory = await mkdtemp(join(tmpdir(), "browser-save-"))
+  const outside = await mkdtemp(join(tmpdir(), "browser-outside-"))
   try {
-    const saved = await Effect.runPromise(
-      BrowserFiles.save(
-        [{ id: Browser.FileID.make(`file_${crypto.randomUUID()}`), name: "s.png", mime: "image/png", data: new Uint8Array([1, 2]) }],
-        { path: "pr/after.png", directory },
+    await Bun.write(join(directory, "README.md"), "keep")
+    await symlink(outside, join(directory, "link"), "junction")
+    const written = new Set<string>()
+    const save = (input: string, byte: number) =>
+      Effect.runPromise(
+        BrowserFiles.destination(input, directory, written).pipe(
+          Effect.flatMap((path) =>
+            BrowserFiles.save(
+              [
+                {
+                  id: Browser.FileID.make(`file_${crypto.randomUUID()}`),
+                  name: "s.png",
+                  mime: "image/png",
+                  data: new Uint8Array([byte]),
+                },
+              ],
+              { path, written },
+            ),
+          ),
+        ),
+      )
+
+    expect((await save("pr/after.png", 1))[0]?.path).toBe(join(directory, "pr", "after.png"))
+    await save("pr/after.png", 2)
+    expect(new Uint8Array(await Bun.file(join(directory, "pr", "after.png")).arrayBuffer())).toEqual(
+      new Uint8Array([2]),
+    )
+
+    const refused = await Promise.all(
+      ["README.md", "../escape.png", join(outside, "a.png"), "link/a.png"].map((input) =>
+        save(input, 3).then(
+          () => "saved",
+          (error: Error) => error.message,
+        ),
       ),
     )
-    expect(saved[0]?.path).toBe(join(directory, "pr", "after.png"))
-    expect(new Uint8Array(await Bun.file(join(directory, "pr", "after.png")).arrayBuffer())).toEqual(new Uint8Array([1, 2]))
+    expect(refused[0]).toContain("a file already exists there")
+    for (const message of refused.slice(1)) expect(message).toContain("the path is outside the workspace")
+    expect(await Bun.file(join(directory, "README.md")).text()).toBe("keep")
+    expect(await readdir(outside)).toEqual([])
   } finally {
     await rm(directory, { recursive: true, force: true })
+    await rm(outside, { recursive: true, force: true })
   }
 })
 
 // Agents built throwaway servers (and one committed its fixtures) because tabs could not open local HTML. Served pages
 // share one origin, so a page's scripts can read whatever is served.
-test("a local file is served with its folder, without dotfiles or parents, until the plugin stops", async () => {
+test("a local file is served with its folder, without dotfiles, parents or symlinks out, until the plugin stops", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "browser-serve-"))
+  const outside = await mkdtemp(join(tmpdir(), "browser-outside-"))
   try {
     await Bun.write(join(workspace, "site", "index.html"), '<link rel="stylesheet" href="assets/a.css">')
     await Bun.write(join(workspace, "site", "assets", "a.css"), "body{}")
     await Bun.write(join(workspace, "site", ".env"), "TOKEN=secret")
     await Bun.write(join(workspace, "site", ".git", "config"), "[remote]")
     await Bun.write(join(workspace, "secret.txt"), "no")
+    await Bun.write(join(outside, "secret.txt"), "no")
+    // Package managers link node_modules entries to folders elsewhere.
+    await symlink(outside, join(workspace, "site", "node_modules"), "junction")
     const text = (url: string) => fetch(url).then((response) => response.text())
 
     const page = await Effect.runPromise(
@@ -123,12 +169,17 @@ test("a local file is served with its folder, without dotfiles or parents, until
           expect(yield* Effect.promise(() => text(new URL("assets/a.css", page).href))).toBe("body{}")
           const statuses = yield* Effect.promise(() =>
             Promise.all(
-              [".env", ".git/config", "..%2Fsecret.txt", "assets%2F..%2F..%2Fsecret.txt"].map((path) =>
-                fetch(new URL(path, page).href).then((response) => response.status),
-              ),
+              [
+                ".env",
+                ".git/config",
+                "..%2Fsecret.txt",
+                "assets%2F..%2F..%2Fsecret.txt",
+                "node_modules/secret.txt",
+                "%E0%A4%A",
+              ].map((path) => fetch(new URL(path, page).href).then((response) => response.status)),
             ),
           )
-          expect(statuses).toEqual([404, 404, 404, 404])
+          expect(statuses).toEqual([404, 404, 404, 404, 404, 404])
 
           const missing = yield* Effect.flip(serve.url("nope.html"))
           expect(missing.message).toContain("check that the file exists on the server")
@@ -137,8 +188,14 @@ test("a local file is served with its folder, without dotfiles or parents, until
       ),
     )
     // The plugin's scope closing stops the server.
-    expect(await fetch(page).then(() => "open", () => "closed")).toBe("closed")
+    expect(
+      await fetch(page).then(
+        () => "open",
+        () => "closed",
+      ),
+    ).toBe("closed")
   } finally {
     await rm(workspace, { recursive: true, force: true })
+    await rm(outside, { recursive: true, force: true })
   }
 })

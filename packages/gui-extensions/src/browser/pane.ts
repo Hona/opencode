@@ -19,6 +19,9 @@ type Target = { readonly server: string; readonly session: string; readonly rest
 
 type Previewed = { readonly opened: boolean; readonly reason: "queued" | "unavailable" | undefined }
 
+/** The most tabs a session's pages may bring the session to by opening links in new tabs. */
+const PAGE_OPENED_TAB_LIMIT = 20
+
 /** Who asked for an action: the agent through the server, or the user through the pane's own controls. */
 type Origin = "agent" | "user"
 
@@ -516,8 +519,10 @@ export function createBrowserPane(input: {
       shared,
       embeds: input.embeds,
       fail,
-      // A link the agent's tab opens in a new tab becomes another agent tab; the agent finds it in tabs.list.
+      // A link the agent's tab opens in a new tab becomes another agent tab; the agent finds it in tabs.list. Each is a
+      // hidden window with its own renderer, so a page that keeps opening tabs stops at the limit.
       open: (url, background) => {
+        if (entry.pages.size >= PAGE_OPENED_TAB_LIMIT) return
         const opened = create(entry, true, undefined, undefined, { owner: "agent" })
 
         if (!background) focus(entry, opened.state().id)

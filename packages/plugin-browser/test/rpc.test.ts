@@ -37,7 +37,23 @@ test("element parameters share one locator schema", () => {
     ),
   )
   expect(locators.map((item) => item.operation)).toEqual(
-    expect.arrayContaining(["click", "hover", "fill", "type", "press", "scroll", "find", "read", "evaluate", "wait", "screenshot", "snapshot", "upload", "drop", "drag"]),
+    expect.arrayContaining([
+      "click",
+      "hover",
+      "fill",
+      "type",
+      "press",
+      "scroll",
+      "find",
+      "read",
+      "evaluate",
+      "wait",
+      "screenshot",
+      "snapshot",
+      "upload",
+      "drop",
+      "drag",
+    ]),
   )
   const decode = Schema.decodeUnknownSync(Browser.Action)
   for (const target of ["@e12", "text=Save", 'role=button[name="Send"]', "#id >> nth=1"])

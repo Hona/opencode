@@ -24,9 +24,10 @@ Mode calls). Three guarantees remove most of their failures:
 - **Agent tabs always render.** Tabs the agent opens are offscreen Chromium
   pages. They paint, lay out, run animation frames, and take input whether the
   Review pane shows them, the app is minimized, or nobody watches. A presenter
-  view in the pane streams their frames and forwards the user's input. An
-  unwatched, idle tab stops painting; its scripts keep running. The user's own
-  tabs stay native views.
+  view in the pane streams their frames, scaled to fit, and forwards the user's
+  input. The page keeps its own size (1280x800, or a pinned `viewport`), so
+  watching never changes its layout. An unwatched, idle tab stops painting; its
+  scripts keep running. The user's own tabs stay native views.
 - **One locator grammar.** Every element parameter (`target`, `from`, `to`)
   takes a ref from `snapshot`/`find`, CSS, `text=`, `role=…[name=…]`, `label=`,
   `placeholder=`, `testid=`, or `xpath=`, chained with `>>` and `nth=`. Locators
@@ -60,8 +61,13 @@ subfolders, without dotfiles such as `.env` or `.git`, on a loopback address
 with an unguessable prefix, which the desktop reaches through its
 server-network tunnel. Served pages share one origin, so a page's scripts can
 read anything served; that is why parent folders and dotfiles stay out. The
-server starts on first use and stops with the plugin. Subagent sessions use
-the browser of the session that started them.
+server starts on first use and stops with the plugin.
+
+Subagent sessions use the browser of the session that started them. A
+subagent copies its parent's permissions when it starts, so it sees the
+browser tools only if the parent's browser was attached at that moment; one
+that keeps them after the parent's browser detaches gets a clear error
+instead.
 
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.

@@ -15,7 +15,7 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import { getLastFocusedWindow, getMainWindows, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -36,7 +36,7 @@ export const appHandlers = AppRpcs.toLayer(
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
       AppCheckAppExists: ({ appName }) => checkAppExists(appName).pipe(Effect.orDie),
       AppResolveAppPath: ({ appName }) => resolveAppPath(appName).pipe(Effect.orDie),
-      AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
+      AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color, getMainWindows())),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

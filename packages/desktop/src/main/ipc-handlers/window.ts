@@ -2,7 +2,14 @@ import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
-import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, setWindowThemeReady, updateTitlebar } from "../windows"
+import {
+  getMainWindows,
+  getPinchZoomEnabled,
+  setPinchZoomEnabled,
+  setTitlebar,
+  setWindowThemeReady,
+  updateTitlebar,
+} from "../windows"
 import { sender } from "./context"
 
 export const windowHandlers = WindowRpcs.toLayer(
@@ -35,7 +42,7 @@ export const windowHandlers = WindowRpcs.toLayer(
           if (win) updateTitlebar(win)
         }),
       WindowGetPinchZoomEnabled: () => Effect.sync(getPinchZoomEnabled),
-      WindowSetPinchZoomEnabled: ({ enabled }) => Effect.sync(() => setPinchZoomEnabled(enabled)),
+      WindowSetPinchZoomEnabled: ({ enabled }) => Effect.sync(() => setPinchZoomEnabled(enabled, getMainWindows())),
       WindowSetTitlebar: ({ theme }, context) =>
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))

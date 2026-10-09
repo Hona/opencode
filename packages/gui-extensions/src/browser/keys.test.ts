@@ -37,5 +37,6 @@ test("typing maps characters to key presses, and leaves characters without a key
   expect(typedKey("H")).toEqual({ key: "H", code: "KeyH", windowsVirtualKeyCode: 72, modifiers: 8, text: "H" })
   expect(typedKey("\n")?.key).toBe("Enter")
   expect(typedKey(".")?.windowsVirtualKeyCode).toBe(190)
+  expect(typedKey(" ")).toEqual({ key: " ", code: "Space", windowsVirtualKeyCode: 32, modifiers: 0, text: " " })
   expect(typedKey("😀")).toBeUndefined()
 })
