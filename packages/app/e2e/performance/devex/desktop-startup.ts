@@ -1,5 +1,6 @@
 import { Service } from "@opencode/client/service"
 import { chromium, expect, type Browser, type Page, type TestInfo } from "@playwright/test"
+import { Schema } from "effect"
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
@@ -43,7 +44,9 @@ type Milestone = (typeof milestones)[number]
 
 type Phase = (typeof phases)[number]
 
-type ServiceInfo = { id: string; version: string; url: string; pid: number }
+const ServiceInfo = Schema.Struct({ id: Schema.String, version: Schema.String, url: Schema.String, pid: Schema.Number })
+
+type ServiceInfo = typeof ServiceInfo.Type
 
 export type DesktopStartupSample = {
   run: number
@@ -168,10 +171,7 @@ async function initializeColdProfile(root: string) {
     ),
   )
   await Promise.all([
-    writeFile(
-      join(root, "desktop", "opencode.settings"),
-      JSON.stringify({ firstLaunchOnboardingComplete: true }),
-    ),
+    writeFile(join(root, "desktop", "opencode.settings"), JSON.stringify({ firstLaunchOnboardingComplete: true })),
     writeFile(join(root, "desktop", "opencode.global.dat"), JSON.stringify({ language: '{"locale":"en"}' })),
   ])
   const registration = join(root, "desktop", "opencode", "service-local.json")
@@ -343,6 +343,7 @@ async function startThemeObservation(page: Page) {
 
 async function requireStableTheme(page: Page) {
   const states = await page.evaluate(() => {
+    // SAFETY: only `installThemeObservation` writes these optional globals, in the declared shapes.
     const target = window as ThemeWindow
     target.__OPENCODE_THEME_OBSERVER__?.disconnect()
 
@@ -353,6 +354,7 @@ async function requireStableTheme(page: Page) {
 }
 
 function installThemeObservation() {
+  // SAFETY: this function is the only writer of these optional globals, in the declared shapes.
   const target = window as ThemeWindow
 
   const observeRoot = () => {
@@ -396,12 +398,13 @@ function installThemeObservation() {
 }
 
 async function observeOutput(stream: NodeJS.ReadableStream, record: (line: string) => void) {
-  const decoder = new TextDecoder()
+  // The stream decodes UTF-8 itself, keeping characters split across chunks intact.
+  stream.setEncoding("utf8")
   const output: string[] = []
   let pending = ""
 
   for await (const chunk of stream) {
-    const text = typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })
+    const text = String(chunk)
     output.push(text)
     pending += text
     const lines = pending.split(/\r?\n/)
@@ -409,19 +412,16 @@ async function observeOutput(stream: NodeJS.ReadableStream, record: (line: strin
     lines.forEach(record)
   }
 
-  const final = decoder.decode()
-  output.push(final)
-  pending += final
-
   if (pending) record(pending)
 
   return output.join("")
 }
 
 async function readService(profile: Awaited<ReturnType<typeof createColdProfile>>) {
-  const value: unknown = JSON.parse(await readFile(profile.registration, "utf8"))
+  const value = Schema.decodeUnknownSync(Schema.fromJsonString(ServiceInfo))(
+    await readFile(profile.registration, "utf8"),
+  )
 
-  if (!isServiceInfo(value)) throw new Error("Desktop service registration is invalid")
   const url = new URL(value.url)
   const port = Number(url.port)
 
@@ -433,21 +433,6 @@ async function readService(profile: Awaited<ReturnType<typeof createColdProfile>
     throw new Error(`Desktop service used unexpected version ${value.version}`)
 
   return value
-}
-
-function isServiceInfo(value: unknown): value is ServiceInfo {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "id" in value &&
-    typeof value.id === "string" &&
-    "version" in value &&
-    typeof value.version === "string" &&
-    "url" in value &&
-    typeof value.url === "string" &&
-    "pid" in value &&
-    typeof value.pid === "number"
-  )
 }
 
 function requireMilestones(observed: Partial<Record<Milestone, number>>) {
