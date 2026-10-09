@@ -2,7 +2,7 @@ import { Service } from "@opencode/client/service"
 import { chromium, expect, type Browser, type Page, type TestInfo } from "@playwright/test"
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { startChromeTrace } from "../chrome-trace"
 
@@ -195,6 +195,9 @@ function startDesktop(profile: Awaited<ReturnType<typeof createColdProfile>>) {
       OPENCODE_DESKTOP_TEST_ROOT: profile.root,
       OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT: "0",
       OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION: "1",
+      // The test root also redirects XDG_CACHE_HOME, which would move Bun's transpiler cache and make
+      // every sample transpile the source CLI from scratch. A dev start reuses the developer's cache.
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: process.env.BUN_RUNTIME_TRANSPILER_CACHE_PATH ?? bunTranspilerCache(),
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -301,6 +304,15 @@ function startDesktop(profile: Awaited<ReturnType<typeof createColdProfile>>) {
       if (errors.length) throw new AggregateError(errors, "Desktop benchmark cleanup failed")
     },
   }
+}
+
+// Bun's default location for its runtime transpiler cache.
+function bunTranspilerCache() {
+  if (process.env.XDG_CACHE_HOME) return join(process.env.XDG_CACHE_HOME, "bun", "@t@")
+
+  if (process.platform === "darwin") return join(homedir(), "Library", "Caches", "bun", "@t@")
+
+  return join(homedir(), ".bun", "install", "cache", "@t@")
 }
 
 async function waitForHome(page: Page, mark: (name: Milestone) => void) {
@@ -413,7 +425,8 @@ async function readService(profile: Awaited<ReturnType<typeof createColdProfile>
   const url = new URL(value.url)
   const port = Number(url.port)
 
-  if (url.hostname !== "127.0.0.1" || !Number.isInteger(port) || port <= 0)
+  // The isolated dev service listens on every interface so paired devices can reach it.
+  if (!["127.0.0.1", "0.0.0.0"].includes(url.hostname) || !Number.isInteger(port) || port <= 0)
     throw new Error(`Desktop service used unexpected endpoint ${value.url}`)
 
   if (!value.version.startsWith("2.0.0-local-"))
