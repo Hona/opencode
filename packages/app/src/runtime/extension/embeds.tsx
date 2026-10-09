@@ -95,12 +95,16 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       .catch(() => undefined)
       .then(async (data) => {
         const url = data ? URL.createObjectURL(new Blob([new Uint8Array(data)], { type: "image/jpeg" })) : ""
+        const image = new Image()
 
-        if (url) {
-          const image = new Image()
-          image.src = url
-          await image.decode().catch(() => undefined)
-        }
+        if (url) image.src = url
+
+        const decoded =
+          !!url &&
+          (await image
+            .decode()
+            .then(() => true)
+            .catch(() => false))
 
         if (capturing !== id) {
           if (url) URL.revokeObjectURL(url)
@@ -109,8 +113,9 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         }
 
         capturing = undefined
-        // A failed capture still hides the embed; the box shows its background as before.
-        replaceSnapshot({ id, url, presented: !url })
+        // A failed capture still hides the embed; the box shows its background as before. A still that
+        // cannot decode never paints, so Element Timing would never report it.
+        replaceSnapshot({ id, url, presented: !decoded })
         schedule()
       })
   }
@@ -123,7 +128,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     if (!snapshot || snapshot.presented) return
 
     if (!list.getEntries().some((entry) => "url" in entry && entry.url === snapshot.url)) return
-    setStore("snapshot", { ...snapshot, presented: true })
+    setStore("snapshot", "presented", true)
     schedule()
   })
 
