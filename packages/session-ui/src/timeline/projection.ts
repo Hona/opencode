@@ -543,6 +543,7 @@ export namespace Timeline {
         case "idle":
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
+
           if (entry === lastStep)
             rows.push(
               new TimelineRow.Error({
