@@ -97,13 +97,27 @@
     user-select: text;
   }
 
+  [data-slot="tool-error-card-subtitle"],
   [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    margin: 0;
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
-    line-height: var(--line-height-compact);
+    line-height: var(--line-height-base);
     letter-spacing: -0.04px;
-    color: var(--v2-text-text-faint);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="tool-error-card-subtitle"] {
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: 4px;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    color: var(--v2-state-fg-danger);
   }
 
   > [data-component="collapsible"].tool-collapsible[data-open="true"] [data-slot="tool-error-card-content"] {
@@ -127,21 +141,6 @@
   &:focus-within [data-slot="tool-error-card-copy"] {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  > [data-component="collapsible"].tool-collapsible:has([data-component="bash-output"]) {
-    gap: var(--tool-content-gap);
-  }
-
-  [data-component="bash-output"] {
-    -webkit-user-select: text;
-    user-select: text;
-
-    [data-slot="bash-result"] {
-      position: relative;
-      padding-inline-end: 44px;
-      color: var(--v2-state-fg-danger);
-    }
   }
 
   [data-slot="tool-error-card-content"] :where(*)::selection {

@@ -52,10 +52,10 @@ story("expands a failed execute to its full code and error", async ({ mount }) =
   await timeline.getByRole("button", { name: /^Used 5 / }).click()
   const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
   await failed.getByRole("button", { name: /Invalid browser URL/ }).click()
-  await expect(failed.locator('[data-slot="bash-command"]')).toContainText(
+  await expect(failed.locator('[data-slot="tool-error-card-subtitle"]')).toContainText(
     "const shot = await tools.browser.screenshot({ tabID: tab.id, fullPage: true });",
   )
-  await expect(failed.locator('[data-slot="bash-result"]')).toContainText(
+  await expect(failed.locator('[data-slot="card-description"]')).toContainText(
     "The connected server must be able to reach the address; localhost refers to that server.",
   )
 })
