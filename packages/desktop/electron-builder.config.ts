@@ -26,6 +26,10 @@ const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/ope
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
 
+// fpm compresses rpm payloads with xz -9, whose large blocks leave little to parallelize. Level 6 compresses the
+// desktop payload about 2.3x faster for a file about 3% larger.
+const rpmCompressionFpm = ["--rpm-compression-level", "6"]
+
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
 
@@ -203,7 +207,7 @@ export function getConfig() {
         appId,
         productName: "OpenCode Dev",
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-dev", fpm: [...rpmCompressionFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -219,7 +223,7 @@ export function getConfig() {
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-beta", fpm: [...rpmCompressionFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -235,7 +239,7 @@ export function getConfig() {
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "opencode", fpm: [...rpmCompressionFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }
