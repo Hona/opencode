@@ -3,7 +3,7 @@ import type { Schema } from "effect"
 import {
   Registry,
   type BaseContext,
-  type Build,
+  type App,
   type Cleanup,
   type Declared,
   type DeclaredStores,
@@ -22,6 +22,8 @@ import type { Scope } from "./scope"
 export * from "./core"
 
 export * from "./scope"
+
+export * as Plugin from "./plugin"
 
 /** The app's main windows. */
 export interface Windows {
@@ -225,7 +227,7 @@ type MainStores<D> = [D] extends [never]
 
 /**
  * The spec of each Ipc the definition declares in `provides`, as a full token or an `Ipc.ref`; any spec when there is
- * no definition, as for an installed extension's plain JavaScript.
+ * no definition, as for a plain JavaScript bundle.
  */
 type ProvidedSpec<D> = [D] extends [never]
   ? IpcSpec
@@ -292,14 +294,14 @@ export interface MainContext<D = never> extends BaseContext {
    */
   readonly lifecycle: Lifecycle
   /**
-   * The running build; `platform` is always "desktop".
+   * The running app, as `ctx.app` in server and TUI plugins; `platform` is always "desktop".
    *
    * @example
    * ```ts
-   * if (!ctx.build.packaged) return
+   * if (!ctx.app.packaged) return
    * ```
    */
-  readonly build: Build
+  readonly app: App
   /**
    * The server endpoints the app's windows use.
    *
@@ -366,7 +368,7 @@ export interface MainContext<D = never> extends BaseContext {
  * export default setup
  * ```
  */
-export type MainSetup<D extends Definition = never> = (ctx: MainContext<D>) => void | Promise<void>
+export type MainSetup<D extends Pick<Definition, "id"> = never> = (ctx: MainContext<D>) => Cleanup | void | Promise<Cleanup | void>
 
 /** An item of the native app menu. */
 export interface MenubarItem {

@@ -29,7 +29,7 @@ test.each([
 ])("both hosts resolve $name from real database rows, and a new setting wins", (input) => {
   const database = openDatabase(":memory:")
   const definition = { id: "current", legacy: ["previous", "older"] }
-  const manager = createManager(database.db, () => false, [definition])
+  const manager = createManager(database.db, [definition])
   input.rows.forEach((row) => database.db.insert(extension).values(row).run())
 
   expect(manager.enabled(definition.id)).toBe(input.expected)
@@ -48,7 +48,7 @@ test.each([
 
 test.each([details, context])("$id preserves disabled state from its shipping legacy declaration", (definition) => {
   const database = openDatabase(":memory:")
-  const manager = createManager(database.db, () => false, [definition])
+  const manager = createManager(database.db, [definition])
   database.db.insert(extension).values({ id: definition.legacy[0], enabled: false }).run()
 
   expect(manager.enabled(definition.id)).toBe(false)

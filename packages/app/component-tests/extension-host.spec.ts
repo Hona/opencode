@@ -573,6 +573,61 @@ story("a contribution that throws renders nothing and records the error; the oth
   })
 })
 
+story("plugin GUIs join, hot-reload in place, run their returned cleanup and leave, without holding startup", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountExtensions, until } = await import(fixture)
+    const builtinLoad = Promise.withResolvers<void>()
+    const log: string[] = []
+
+    // Each setup returns its cleanup, as a server or TUI plugin's setup does.
+    const entry = (name: string) => async () => ({
+      default: () => {
+        log.push(`setup ${name}`)
+
+        return () => void log.push(`cleanup ${name}`)
+      },
+    })
+
+    const builtin = {
+      id: "builtin",
+      renderer: async () => {
+        await builtinLoad.promise
+
+        return entry("builtin")()
+      },
+    }
+
+    const host = mountExtensions({ definitions: [builtin] })
+    // A plugin that joins before the built-ins settle, and never loads, must not hold the app's first render.
+    host.define([builtin, { id: "stuck", renderer: () => new Promise<never>(() => {}) }])
+    builtinLoad.resolve()
+    await until(() => host.ready())
+    const startup = { ready: host.ready(), stuck: host.status("stuck") }
+
+    host.define([builtin, { id: "acme", renderer: entry("acme 1") }])
+    await until(() => host.status("acme") === "active")
+    // A new revision of the plugin's bundle is a new definition under the same id.
+    host.define([builtin, { id: "acme", renderer: entry("acme 2") }])
+    await until(() => log.includes("setup acme 2"))
+    const reloaded = [...log]
+
+    host.define([builtin])
+    await until(() => log.includes("cleanup acme 2"))
+    const outcome = { startup, reloaded, log: [...log], gone: host.status("acme") ?? "none" }
+
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual({
+    startup: { ready: true, stuck: "loading" },
+    reloaded: ["setup builtin", "setup acme 1", "cleanup acme 1", "setup acme 2"],
+    log: ["setup builtin", "setup acme 1", "cleanup acme 1", "setup acme 2", "cleanup acme 2"],
+    gone: "none",
+  })
+})
+
 story("an extension that requires a contract starts once it is active and restarts with it", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountExtensions, until, Contract, onCleanup } = await import(fixture)
@@ -729,7 +784,7 @@ story("developer settings show a blocked hard dependency instead of loading fore
 
     await until(() => !!host.container.textContent?.includes("consumer"))
   }, fixture)
-  const settings = page.getByRole("region", { name: "Extensions", exact: true })
+  const settings = page.getByRole("region", { name: "Plugins", exact: true })
   await settings.screenshot({ path: info.outputPath("requires-status.png") })
   await expect(settings.getByText("Blocked", { exact: true })).toBeVisible()
   await expect(settings.getByText("Loading", { exact: true })).toHaveCount(0)
@@ -930,16 +985,13 @@ story("startup enable state does not wait for the manager, and live updates beat
       capture: async () => undefined,
       runMenubarItem() {},
       configure() {},
+      plugins() {},
       manager: {
         initial: initial.promise,
         list: () => reply.promise,
         enable: async () => {},
         disable: async () => {},
         reload: async () => {},
-        install: async () => {},
-        remove: async () => {},
-        source: async () => "",
-        asset: () => "",
       },
     }
 

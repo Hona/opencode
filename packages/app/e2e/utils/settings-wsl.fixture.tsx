@@ -202,15 +202,12 @@ export function mount(input: {
       capture: async () => undefined,
       runMenubarItem: () => undefined,
       configure: () => undefined,
+      plugins: () => undefined,
       manager: {
         list: async () => [],
         enable: async () => undefined,
         disable: async () => undefined,
         reload: async () => undefined,
-        install: async () => undefined,
-        remove: async () => undefined,
-        source: async () => "",
-        asset: () => "",
       },
     }
 

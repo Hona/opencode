@@ -1,3 +1,4 @@
+import type { OpenCodeClient } from "@opencode/client/promise"
 import type { Schema } from "effect"
 import type { Accessor } from "solid-js"
 
@@ -44,13 +45,20 @@ export type Catalog = {
 }
 
 /**
- * What a main entry's setup returns. Teardown is not returned: main uses `ctx.scope.addFinalizer` and
- * `ctx.scope.signal`. Window setup is synchronous and returns nothing.
+ * What a main entry's setup returns: optionally a cleanup, or a promise of one, which runs when the instance goes away,
+ * as a server or TUI plugin's returned cleanup does. `ctx.scope.addFinalizer` and `ctx.scope.signal` also work. Window
+ * setup is synchronous and may return only a cleanup.
  */
-type Result = void | Promise<void>
+type Result = Cleanup | void | Promise<Cleanup | void>
 
-/** The running build. One shape in the window and in main. */
-export interface Build {
+/** A JSON value, as plugin options in `opencode.json` hold. */
+export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
+
+/** A plugin's options from its `opencode.json` entry, as server and TUI plugins receive them. */
+export type PluginOptions = { readonly [key: string]: Json }
+
+/** The running app. One shape in the window and in main. */
+export interface App {
   /**
    * The app version, e.g. `2.0.20`. Web and desktop windows always know it; it is `""` only in a window whose platform
    * reports none, such as a test or Storybook fixture, as no build-time version constant exists in every build.
@@ -89,8 +97,8 @@ export interface Definition {
    * Earlier extension ids, newest first, used to preserve desktop enable state after a rename. The current id's
    * explicit setting wins; otherwise the first earlier id with a setting wins. Omit this for a new extension.
    * With no setting under any id, the extension is enabled. Old rows stay intact; changes write under the current id.
-    * Stored keys, commands and panels still need their own migrations (`from`, the keybind map and `Panel.legacy`).
-    * This restores the enable preference only; hard dependencies still gate activation and can leave it blocked.
+   * Stored keys, commands and panels still need their own migrations (`from`, the keybind map and `Panel.legacy`).
+   * This restores the enable preference only; hard dependencies still gate activation and can leave it blocked.
    *
    * @example
    * ```ts
@@ -467,6 +475,27 @@ export interface IpcProvider<S extends IpcSpec> {
  * (`ctx.layout`, `ctx.storage`, …), created on first read, and `provide` for the contracts it hosts.
  */
 export interface BaseContext {
+  /**
+   * The plugin's options from `opencode.json`, as `ctx.options` in its server and TUI halves. Empty for a built-in.
+   *
+   * @example
+   * ```ts
+   * // "plugins": [{ "package": "opencode-acme", "options": { "team": "core" } }]
+   * const team = ctx.options.team
+   * ```
+   */
+  readonly options: PluginOptions
+  /**
+   * The client of the server that runs the plugin, the desktop app's own server, as `context.client` in a TUI plugin.
+   * Call the plugin's server half through it. A new client after that server restarts; read it where you call it.
+   * Undefined for a built-in.
+   *
+   * @example
+   * ```ts
+   * const acme = ctx.client?.rpc(Acme)
+   * ```
+   */
+  readonly client: OpenCodeClient | undefined
   /**
    * The extension's id, `Definition.id`.
    *

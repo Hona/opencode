@@ -91,15 +91,12 @@ function fakeBridge() {
     capture: async () => undefined,
     runMenubarItem: () => {},
     configure: () => {},
+    plugins: () => {},
     manager: {
       list: async () => [],
       enable: async () => {},
       disable: async () => {},
       reload: async () => {},
-      install: async () => {},
-      remove: async () => {},
-      source: async () => "",
-      asset: () => "",
     },
   }
 

@@ -27,6 +27,7 @@ import {
   type SlotMap,
   type IconName,
   type Setup,
+  type Cleanup,
 } from "./index"
 import type { MainSetup } from "./main"
 
@@ -159,15 +160,15 @@ export const setup: Setup<typeof Consumer> = (ctx) => {
   ctx.stores.view.set({ open: "wrong" })
 }
 
-equal<ReturnType<Setup<typeof Consumer>>, undefined>(true)
+equal<ReturnType<Setup<typeof Consumer>>, Cleanup | void>(true)
 
-// @ts-expect-error an async window setup returns a Promise, not undefined
+// @ts-expect-error an async window setup returns a Promise, not nothing or a cleanup
 export const asyncSetup: Setup<typeof Consumer> = async () => {}
 
 // @ts-expect-error a window setup cannot return an object either
 export const returningSetup: Setup<typeof Consumer> = () => ({ open: true })
 
-equal<ReturnType<MainSetup<typeof Consumer>>, void | Promise<void>>(true)
+equal<ReturnType<MainSetup<typeof Consumer>>, Cleanup | void | Promise<Cleanup | void>>(true)
 
 equal<PanelProps["screen"], SessionScreen>(true)
 
@@ -279,7 +280,7 @@ export const mainStores: MainSetup<typeof Split> = (ctx) => {
 }
 
 // A main entry provides only the Ipcs its definition declares, a reference through its full token; with no
-// definition, as for an installed extension's plain JavaScript, any Ipc.
+// definition, as for a plain JavaScript bundle, any Ipc.
 const Other = Ipc.define({ id: "fixture.other", methods: { ping: {} } })
 
 const RefProvider = Extension.define({ id: "refProvider", provides: { pane: PaneRef } })

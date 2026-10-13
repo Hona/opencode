@@ -11,7 +11,7 @@ const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
   // SSH lives in the desktop main process.
-  if (ctx.build.platform !== "desktop") return
+  if (ctx.app.platform !== "desktop") return
   const router = ctx.router
   const ipc = ctx.uses.ssh
   const layout = ctx.layout

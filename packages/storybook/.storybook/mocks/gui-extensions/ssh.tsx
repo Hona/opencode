@@ -92,7 +92,7 @@ export function SshProvider(props: ParentProps) {
   })
   return (
     <ExtensionHostProvider
-      definitions={[extension]}
+      definitions={() => [extension]}
       disabled={() => none}
       // The SSH extension's renderer reads no other HostApi in these stories.
       apis={{ ...apis, layout: () => layout } as HostApiFactories}

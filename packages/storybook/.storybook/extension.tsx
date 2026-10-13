@@ -3,8 +3,8 @@ import { pluralCategory } from "@opencode/ui/context/i18n"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   ExtensionContext,
+  type App,
   type Appearance,
-  type Build,
   type Catalog,
   type Context,
   type Definition,
@@ -66,8 +66,10 @@ function createStoryContext(definition: Definition) {
     list: () => [],
     provide: unavailable("ctx.provide"),
     ...Object.fromEntries(Object.entries(apis).map(([name, create]) => [name, create()])),
-    // Stories render on the web, outside any route.
+    // Stories render built-ins on the web, outside any route: no plugin options or plugin server client.
     desktop: undefined,
+    options: {},
+    client: undefined,
     t: (key: string, params?: Params) => {
       const template = catalog.latest[key]
       if (template !== undefined) return resolveTemplate(template, params)
@@ -87,10 +89,10 @@ function createStoryContext(definition: Definition) {
   return context as unknown as Context
 }
 
-/** The host's build, locale, appearance, router, keybind, server and workspace APIs for a story, by context property. */
-export function createStoryHostApis(platform: Build["platform"]) {
+/** The host's app, locale, appearance, router, keybind, server and workspace APIs for a story, by context property. */
+export function createStoryHostApis(platform: App["platform"]) {
   const language = useLanguage()
-  const build: Build = { version: "", channel: "dev", platform, packaged: false }
+  const app: App = { version: "", channel: "dev", platform, packaged: false }
   const locale: Locale = { locale: language.intl, direction: language.direction, setDirection: language.setDirection }
   const appearance: Appearance = { font: () => "var(--font-family-mono)" }
   const router: Router = { routing: () => false, path: () => "/" }
@@ -98,7 +100,7 @@ export function createStoryHostApis(platform: Build["platform"]) {
   const servers: Servers = { list: () => [], get: () => undefined }
   const workspaces: Workspaces = { on: () => () => {} }
   return {
-    build: () => build,
+    app: () => app,
     locale: () => locale,
     appearance: () => appearance,
     router: () => router,
