@@ -813,6 +813,7 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagents",
   "settings.timeline.category.notices": "Notices",
   "settings.timeline.category.tools": "Other tools",
+  "settings.timeline.category.commentary": "Commentary",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

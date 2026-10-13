@@ -205,6 +205,15 @@ export function createSessionTimelineRowRenderer(input: {
             ]
           const message = input.projection.messageByID().get(ref.messageID)
 
+          if (content?.type === "text" && message?.type === "assistant")
+            return [
+              {
+                type: "text",
+                id: ref.partID,
+                render: () => <SessionAssistantContent message={message} content={content} contentID={ref.partID} />,
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")

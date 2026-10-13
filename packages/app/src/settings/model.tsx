@@ -114,6 +114,7 @@ const generalSchema = Persistence.struct({
     subagents: placementOnlySchema,
     notices: placementOnlySchema,
     tools: placementOnlySchema,
+    commentary: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,

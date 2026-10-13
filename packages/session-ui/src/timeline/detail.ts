@@ -1,7 +1,7 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { shellResultFailed } from "../message/current-tool-state"
 
-export const timelineCategories = ["shell", "edit", "thinking", "subagents", "notices", "tools"] as const
+export const timelineCategories = ["shell", "edit", "thinking", "subagents", "notices", "tools", "commentary"] as const
 
 export type TimelineCategory = (typeof timelineCategories)[number]
 
@@ -16,6 +16,7 @@ export type TimelineDetail = {
   subagents: { placement: TimelinePlacement }
   notices: { placement: TimelinePlacement }
   tools: { placement: TimelinePlacement }
+  commentary: { placement: TimelinePlacement }
 }
 
 export const timelinePresets = [
@@ -28,6 +29,7 @@ export const timelinePresets = [
       subagents: { placement: "separate" },
       notices: { placement: "separate" },
       tools: { placement: "separate" },
+      commentary: { placement: "separate" },
     },
   },
   {
@@ -39,6 +41,7 @@ export const timelinePresets = [
       subagents: { placement: "separate" },
       notices: { placement: "grouped" },
       tools: { placement: "grouped" },
+      commentary: { placement: "separate" },
     },
   },
   {
@@ -50,6 +53,7 @@ export const timelinePresets = [
       subagents: { placement: "grouped" },
       notices: { placement: "grouped" },
       tools: { placement: "grouped" },
+      commentary: { placement: "separate" },
     },
   },
   {
@@ -61,6 +65,7 @@ export const timelinePresets = [
       subagents: { placement: "grouped" },
       notices: { placement: "hidden" },
       tools: { placement: "hidden" },
+      commentary: { placement: "separate" },
     },
   },
   {
@@ -72,6 +77,7 @@ export const timelinePresets = [
       subagents: { placement: "hidden" },
       notices: { placement: "hidden" },
       tools: { placement: "hidden" },
+      commentary: { placement: "separate" },
     },
   },
 ] as const satisfies readonly { id: string; value: TimelineDetail }[]

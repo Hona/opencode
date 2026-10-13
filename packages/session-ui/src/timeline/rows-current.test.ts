@@ -554,6 +554,54 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test.each([
+    ["grouped", "assistant-part:context:context:msg_a1:msg_a1:text:0"],
+    ["hidden", "assistant-part:context:context:msg_a1:tool_read"],
+  ] as const)("%s commentary keeps the answer of each turn", (placement, group) => {
+    const step = (id: string, content: SessionMessageAssistant["content"]) =>
+      ({
+        id,
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content,
+        time: { created: 2, completed: 3 },
+      }) satisfies SessionMessageInfo
+
+    const source = [
+      { id: "msg_user", type: "user", text: "fix", time: { created: 1 } },
+      step("msg_a1", [{ type: "text", text: "Checking." }, storyTool("tool_read", "read", "completed", {})]),
+      step("msg_a2", [
+        { type: "text", text: "Checks pass.", state: { phase: "commentary" } },
+        { type: "text", text: "Fixed." },
+      ]),
+      { id: "msg_stop", type: "user", text: "stop", time: { created: 4 } },
+      step("msg_a3", [{ type: "text", text: "Looking." }, storyTool("tool_grep", "grep", "completed", {})]),
+    ] satisfies SessionMessageInfo[]
+
+    const rows = Timeline.constructSessionMessageRows(
+      source,
+      false,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      { ...timelinePresets[2].value, commentary: { placement } },
+    ).rows
+
+    // The interrupted second turn has no answer, so its last commentary stays visible.
+    expect(rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_user",
+      group,
+      "assistant-part:part:part:msg_a2:msg_a2:text:1",
+      "turn-gap:msg_stop",
+      "user-message:msg_stop",
+      "assistant-part:part:part:msg_a3:msg_a3:text:0",
+      "assistant-part:context:context:msg_a3:tool_grep",
+    ])
+  })
+
   test("keeps assistant errors and retries before later notices", () => {
     const result = Timeline.constructSessionMessageRows(
       [

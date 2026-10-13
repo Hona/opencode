@@ -356,6 +356,20 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
+    const commentary = new Set(
+      detail && detail.commentary.placement !== "separate"
+        ? turns.flatMap((turn) =>
+            turnCommentary(turn.entries, turn.id !== activeMessageID || status.type === "idle", (content) =>
+              isRenderable(content, showReasoning, detail),
+            ),
+          )
+        : [],
+    )
+
+    const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
+      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
+      isRenderable(content, showReasoning, detail)
+
     const visibleNotice = (message: Notice) =>
       !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
 
@@ -372,7 +386,7 @@ export namespace Timeline {
                 entry.type === "diff" ||
                 !!entry.message.error ||
                 !!entry.message.retry ||
-                entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
+                entry.message.content.some((content) => visible(content, showReasoning, detail)),
           )
         })
       : turns
@@ -407,8 +421,9 @@ export namespace Timeline {
           turn.id === activeMessageID,
           shellToolDefaultOpen,
           editToolDefaultOpen,
-          isRenderable,
+          visible,
           detail,
+          commentary,
         )
       }),
     ]
@@ -465,6 +480,7 @@ export namespace Timeline {
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    commentary: ReadonlySet<Content> = new Set(),
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -524,7 +540,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, detail).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -646,6 +662,26 @@ function shellFailed(message: SessionMessageShell) {
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
+}
+
+// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
+// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
+// without an answer keeps its last text, so an interrupted turn still ends with something to read.
+function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
+  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
+  const lastTool = contents.findLastIndex((content) => content.type === "tool")
+
+  const commentary = contents.filter(
+    (content, index) =>
+      content.type === "text" &&
+      (content.state?.phase === "commentary" || (content.state?.phase !== "final_answer" && index < lastTool)),
+  )
+
+  const texts = contents.filter((content) => content.type === "text" && visible(content))
+
+  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
+
+  return commentary.filter((content) => content !== texts.at(-1))
 }
 
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
@@ -853,6 +889,7 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
@@ -890,6 +927,7 @@ function groupContent(
       shellToolDefaultOpen,
       editToolDefaultOpen,
       adjacent?.type === "context" && adjacent.tools,
+      commentary,
       detail,
     )
 
@@ -919,11 +957,12 @@ function contentGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ) {
   if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
 
-  if (content.type !== "reasoning") return undefined
+  if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
   return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
 }
