@@ -3,6 +3,7 @@ import pkg from "electron-updater"
 import { Effect } from "effect"
 import type { Platform } from "./machine"
 import { requiresStableMacInstaller, stableMacDownload } from "./migration"
+import { nativeArm64Installers } from "./native-installer"
 
 const updateClient = pkg.autoUpdater
 
@@ -50,6 +51,20 @@ export const make = Effect.fn("Updater.platform")(function* (channel: string) {
         const result = await updateClient.checkForUpdates()
 
         if (!result?.isUpdateAvailable) return undefined
+        const files = result.updateInfo.files
+
+        const native = nativeArm64Installers(files, {
+          platform: process.platform,
+          translated: app.runningUnderARM64Translation,
+        })
+
+        // downloadUpdate() reads this same list, so narrowing it moves an emulated x64 install to the ARM64 build.
+        if (native) {
+          files.splice(0, files.length, ...native)
+          runFork(
+            Effect.logInfo("updating emulated x64 install to native ARM64", { urls: native.map((file) => file.url) }),
+          )
+        }
 
         return { mode: "restart", version: result.updateInfo.version } as const
       },
@@ -66,8 +81,10 @@ function stageUpdate(options: { readonly differential: boolean }) {
     return Effect.tryPromise({
       try: () => {
         // Only the NSIS cache goes stale: macOS refreshes its cached zip with every download and AppImage reads the
-        // blockmap embedded in the running file.
-        updateClient.disableDifferentialDownload = process.platform === "win32" && !options.differential
+        // blockmap embedded in the running file. An emulated x64 install updates to the ARM64 installer, which cannot
+        // be patched from the cached x64 one.
+        updateClient.disableDifferentialDownload =
+          process.platform === "win32" && (!options.differential || app.runningUnderARM64Translation)
 
         return updateClient.downloadUpdate()
       },
