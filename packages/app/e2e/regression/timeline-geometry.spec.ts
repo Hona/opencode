@@ -506,7 +506,7 @@ for (const failed of [false, true]) {
 
     // Records the prompt row in every frame from submission until Working has shown.
     const observation = await page.evaluateHandle((text) => {
-      const frames: { prompt?: number; working: boolean }[] = []
+      const frames: { prompt: number | undefined; working: boolean }[] = []
       let frame = 0
 
       const sample = () => {
@@ -515,7 +515,7 @@ for (const failed of [false, true]) {
         )
 
         frames.push({
-          ...(prompt ? { prompt: prompt.getBoundingClientRect().y } : {}),
+          prompt: prompt?.getBoundingClientRect().y,
           working: !!document.querySelector('[data-component="session-working"]'),
         })
         frame = requestAnimationFrame(sample)
