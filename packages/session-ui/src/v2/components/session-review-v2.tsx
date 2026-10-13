@@ -280,7 +280,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           <Tooltip openDelay={2000} inactive={props.refreshDisabled} value={i18n.t("ui.sessionReviewV2.refresh")}>
             <IconButton
               icon={
-                <Show when={props.refreshing} fallback={<Icon name="outline-rotate-clockwise" />}>
+                <Show when={props.refreshing} fallback={<Icon name="rotate-clockwise" />}>
                   <Loader />
                 </Show>
               }
