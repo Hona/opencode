@@ -229,7 +229,7 @@ describe("Composer submission", () => {
     await submitInput(active(state, target)).submit(new Event("submit"))
     const request = await admitted.promise
 
-    expect(calls).toEqual(row.calls)
+    expect(calls).toEqual([...row.calls])
     expect(request.delivery).toBe("steer")
     expect(request.text).toBe("ship it")
     expect(request.id).toMatch(/^msg_/)
