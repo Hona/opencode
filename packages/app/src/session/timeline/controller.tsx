@@ -158,6 +158,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       subagents: { ...detail.subagents },
       notices: { ...detail.notices },
       tools: { ...detail.tools },
+      commentary: { ...detail.commentary },
     }
   })
 
