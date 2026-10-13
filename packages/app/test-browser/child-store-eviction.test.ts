@@ -34,6 +34,7 @@ const queryOptions = {
 // Runs under the browser build: the server build of Solid never re-runs the memo.
 test("keeps project stores alive when a memo over more directories than the store limit re-runs", async () => {
   const created: string[] = []
+  const hydrations: Promise<string>[] = []
   const directories = Array.from({ length: MAX_DIR_STORES + 10 }, (_, index) => `/project-${index}`)
   // Stops hydrating after a bound so a regression fails instead of hanging the runner.
   const limit = directories.length * 10
@@ -53,6 +54,8 @@ test("keeps project stores alive when a memo over more directories than the stor
 
       return "stored"
     })
+
+    hydrations.push(init)
 
     return [...store, init, Object.assign(() => true, { promise: init })]
   }
@@ -96,7 +99,8 @@ test("keeps project stores alive when a memo over more directories than the stor
   })
 
   try {
-    await Bun.sleep(20)
+    // A recreated store starts another hydration, so wait until none is left.
+    while (hydrations.length > 0) await Promise.all(hydrations.splice(0))
 
     expect(created.filter((key) => key === "workspace:project")).toHaveLength(directories.length)
     expect(directories.map((directory) => root.manager.children[directory]?.[0].projectMeta?.name)).toEqual(
