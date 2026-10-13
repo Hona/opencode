@@ -1,4 +1,5 @@
 import { release } from "node:os"
+import { describeArch } from "@opencode/util/arch"
 
 export function describeOS() {
   const name =
@@ -9,7 +10,7 @@ export function describeOS() {
         : process.platform === "linux"
           ? "Linux"
           : process.platform
-  return `${name} ${release()} (${process.arch})`
+  return `${name} ${release()} (${describeArch()})`
 }
 
 export function describeTerminal() {

@@ -4,6 +4,7 @@ export * as SkillPlugin from "./skill.js"
 
 import { define, type Context } from "@opencode/plugin/effect/plugin"
 import { Document } from "@opencode/schema/config"
+import { describeArch } from "@opencode/util/arch"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
@@ -60,7 +61,7 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
     "",
     `- opencode version: ${app.version}`,
     `- install/channel: ${app.channel}`,
-    `- OS: ${os.type()} ${os.release()} (${os.platform()} ${os.arch()})`,
+    `- OS: ${os.type()} ${os.release()} (${os.platform()} ${describeArch()})`,
     `- Terminal: ${terminal()}`,
     `- Shell: ${shell()}`,
     `- Active plugins: ${plugins.length === 0 ? "None found in config" : plugins.join(", ")}`,
