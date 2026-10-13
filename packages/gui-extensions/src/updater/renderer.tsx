@@ -91,7 +91,7 @@ const setup: Setup<typeof definition> = (ctx) => {
  * and a disabled What's New only remember the version.
  */
 function whatsNew(ctx: SetupContext<typeof definition>) {
-  const version = ctx.build.version
+  const version = ctx.app.version
   const seen = ctx.stores.seen
   const previous = seen.value.version
 

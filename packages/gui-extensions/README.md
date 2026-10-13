@@ -104,8 +104,8 @@ stateDiagram-v2
 ```
 
 - A registration ends with the current Solid owner: a component, a `createKeyed` run, or else the extension.
-- Teardown of other work: `onCleanup` in the window, `ctx.scope.addFinalizer` in main. Setup returns nothing.
-- Window setup is synchronous: its `undefined` return type rejects async functions, and the host fails thenable-returning JavaScript setups instead of waiting for them. Put async work in `createKeyed` or `createLatest`, with `ctx.signal` or a signal derived from it. Only main setup may be async. After each `await` there is no owner; return if the signal aborted before registering or changing state. Late registrations remain safe: the host releases them when the owner or instance ended.
+- Teardown of other work: return a cleanup from setup, as server and TUI plugins do, or use `onCleanup` in the window and `ctx.scope.addFinalizer` in main.
+- Window setup is synchronous: its `Cleanup | void` return type rejects async functions, and the host fails thenable-returning JavaScript setups instead of waiting for them. Put async work in `createKeyed` or `createLatest`, with `ctx.signal` or a signal derived from it. Only main setup may be async. After each `await` there is no owner; return if the signal aborted before registering or changing state. Late registrations remain safe: the host releases them when the owner or instance ended.
 
 The updater listens to its main side's `check` event once per generation of that side. When main restarts, the run ends and its listener goes with it:
 
@@ -239,7 +239,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | `ctx.dialogs`                | `Dialogs`                                                      | `open` returns a handle to close; a dialog closes with its owner  |
 | `ctx.links`                  | `Links`                                                        | Opens a local link, or checks it exists, with the best handler    |
 | `ctx.embeds`                 | `Embeds`                                                       | Shows a web page the main entry created                           |
-| `ctx.build`                  | `Build`                                                        | Version, channel, platform, packaged                              |
+| `ctx.app`                    | `App`                                                          | Version, channel, platform, packaged                              |
 | `ctx.locale`                 | `Locale`                                                       | Locale and writing direction                                      |
 | `ctx.appearance`             | `Appearance`                                                   | The user's mono font                                              |
 | `ctx.router`                 | `Router`                                                       | The route path, and whether it is changing                        |
@@ -250,7 +250,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | `ctx.storage` (main)         | `Storage`                                                      | Synchronous storage, the same `Persisted` shape                   |
 | `ctx.log` (main)             | `Log`                                                          | The desktop log file                                              |
 | `ctx.lifecycle` (main)       | `Lifecycle`                                                    | `restart(handoff, { keep })`                                      |
-| `ctx.build` (main)           | `Build`                                                        | The same shape; `platform` is `"desktop"`                         |
+| `ctx.app` (main)             | `App`                                                          | The same shape; `platform` is `"desktop"`                         |
 | `ctx.serverEndpoints` (main) | `ServerEndpoints`                                              | URL and credentials of a server the windows use                   |
 | `ctx.windows` (main)         | `Windows`                                                      | The app's main windows                                            |
 | `ctx.embeds` (main)          | `Embeds`                                                       | `create(view, window)` places a web page                          |

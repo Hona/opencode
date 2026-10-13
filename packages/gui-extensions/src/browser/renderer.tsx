@@ -29,7 +29,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   })
 
   // The native pane is a desktop feature.
-  if (ctx.build.platform !== "desktop") return
+  if (ctx.app.platform !== "desktop") return
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)

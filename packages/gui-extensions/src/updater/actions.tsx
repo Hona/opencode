@@ -46,7 +46,7 @@ export async function check(ctx: Context, client: Client) {
       variant: "success",
       icon: () => <Icon name="circle-check" />,
       title: ctx.t("toast.latest.title"),
-      description: ctx.t("toast.latest.description", { version: ctx.build.version }),
+      description: ctx.t("toast.latest.description", { version: ctx.app.version }),
     })
   }
 

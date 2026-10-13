@@ -8,7 +8,7 @@ import type definition from "./index"
 const loadDialog = () => import("./dialog")
 
 const setup: Setup<typeof definition> = (ctx) => {
-  if (ctx.build.platform !== "desktop") return
+  if (ctx.app.platform !== "desktop") return
   const ipc = ctx.uses.wsl
   const dialog = ctx.dialogs
   const Row = lazy(() => import("./row"))

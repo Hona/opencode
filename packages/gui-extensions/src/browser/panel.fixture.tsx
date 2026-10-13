@@ -19,7 +19,7 @@ import {
   Live,
   PanelContext,
   type Appearance,
-  type Build,
+  type App,
   type ComposerNote,
   type Context,
   type Definition,
@@ -568,7 +568,7 @@ type RegionHost = {
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   ExtensionHostProvider: Component<
     ParentProps<{
-      definitions: readonly Definition[]
+      definitions: Accessor<readonly Definition[]>
       disabled: Accessor<ReadonlySet<string> | undefined>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (extension: string) => object | undefined }
@@ -779,7 +779,7 @@ export function mountBrowserRegion(input: RegionHost) {
       remove() {},
     })
 
-    const build: Build = { version: "", channel: "dev", platform: "desktop", packaged: false }
+    const about: App = { version: "", channel: "dev", platform: "desktop", packaged: false }
     const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
     const appearance: Appearance = { font: () => "monospace" }
     const router: Router = { routing: () => false, path: () => "/" }
@@ -824,7 +824,7 @@ export function mountBrowserRegion(input: RegionHost) {
     }
 
     const apis = {
-      build: () => build,
+      app: () => about,
       locale: () => locale,
       appearance: () => appearance,
       router: () => router,
@@ -946,7 +946,7 @@ export function mountBrowserRegion(input: RegionHost) {
       <DialogProvider>
         <input.Shell>
           <input.ExtensionHostProvider
-            definitions={input.definitions}
+            definitions={() => input.definitions}
             disabled={() => new Set<string>()}
             apis={apis}
             whenMounted={(run) => {

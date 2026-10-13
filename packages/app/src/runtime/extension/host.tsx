@@ -40,6 +40,7 @@ import {
   type Links,
   type Messages,
   type Persisted,
+  type PluginOptions,
   type Registry,
   type Ipc,
   type IpcClient,
@@ -49,6 +50,7 @@ import {
   type SetupContext,
   type Token,
 } from "@opencode/gui-extensions/sdk"
+import type { OpenCodeClient } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createSessionStore, whenLoaded } from "./stores"
 
@@ -63,11 +65,16 @@ type Instance = {
   definition: Definition
   context: InstanceContext
   dispose: () => void
+  /** Runs `fn` when the instance goes away, as a cleanup a setup returns. */
+  own(fn: Cleanup): Cleanup
   /** Opens the declared stores. Settles once the global stores have loaded. */
   prepare(): Promise<readonly void[]>
   /** Starts loading the declared session stores for a mounted session. */
   preload(session: SessionRef): void
 }
+
+/** What a plugin's GUI reads of its plugin: its options, and the client of the server that runs it, read each time. */
+export type PluginInput = { readonly options: PluginOptions; readonly client: () => OpenCodeClient | undefined }
 
 /** The APIs a window context exposes as properties. */
 type HostApis = Omit<Context, keyof BaseContext | "signal" | "provide">
@@ -127,7 +134,7 @@ export function useExtensionHost() {
 }
 
 type HostInput = {
-  definitions: readonly Definition[]
+  definitions: Accessor<readonly Definition[]>
   disabled: Accessor<ReadonlySet<string> | undefined>
   apis: HostApiFactories
   /**
@@ -137,6 +144,8 @@ type HostInput = {
   whenMounted: (run: () => void) => () => void
   /** The renderer client of an Ipc while it is available; omitted where there is no main process. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
+  /** What a plugin's GUI reads of its plugin: its options, and the client of the server that runs it. */
+  plugin?: (id: string) => PluginInput | undefined
   /** How many times an Ipc became available. Reactive. */
   generation?: (token: Ipc) => number
   /** An extension's main entry failed. Reactive. */
@@ -170,15 +179,21 @@ function createHost(input: HostInput) {
   // The extension that provides a token: the one declaring it in `provides`, else the one whose id prefixes it.
   const providers = new Map<string, string | undefined>()
 
+  const all = input.definitions
+
   const providerOf = (id: string) => {
-    if (providers.has(id)) return providers.get(id)
+    const current = providers.get(id)
+
+    if (current) return current
+
+    // Tracked while unresolved: a plugin that joins later resolves its readers.
+    const definitions = all()
 
     const found =
-      input.definitions.find((definition) =>
-        Object.values(definition.provides ?? {}).some((token) => token.id === id),
-      ) ?? input.definitions.find((definition) => definition.id === id || id.startsWith(`${definition.id}.`))
+      definitions.find((definition) => Object.values(definition.provides ?? {}).some((token) => token.id === id)) ??
+      definitions.find((definition) => definition.id === id || id.startsWith(`${definition.id}.`))
 
-    providers.set(id, found?.id)
+    if (found) providers.set(id, found.id)
 
     return found?.id
   }
@@ -450,7 +465,7 @@ function createHost(input: HostInput) {
         }
 
         // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
-        const setup = module.default as (ctx: InstanceContext) => void
+        const setup = module.default as (ctx: InstanceContext) => Cleanup | void
 
         const start = () =>
           void Promise.try(() =>
@@ -459,6 +474,9 @@ function createHost(input: HostInput) {
               () =>
                 untrack(() => {
                   const returned = setup(instance.context)
+
+                  // A returned cleanup runs when the extension goes away, as server and TUI plugins' do.
+                  if (Predicate.isFunction(returned)) return void instance.own(returned)
 
                   if (!Predicate.isPromiseLike(returned)) return
 
@@ -618,8 +636,14 @@ function createHost(input: HostInput) {
 
     const stores: Stores = {}
 
+    const plugin = input.plugin?.(extension)
+
     const context = {
       id: extension,
+      options: plugin?.options ?? {},
+      get client() {
+        return plugin?.client()
+      },
       signal: controller.signal,
       add<T>(registry: Registry<T>, item: T | (() => T | undefined)) {
         if (late()) return () => {}
@@ -720,6 +744,7 @@ function createHost(input: HostInput) {
     return {
       definition,
       context: typed,
+      own,
       prepare() {
         const storage = typed.storage
 
@@ -794,13 +819,16 @@ function createHost(input: HostInput) {
   const replaced = new Map<string, Definition>()
   const latest = (definition: Definition) => replaced.get(definition.id) ?? definition
 
+  // The definitions the host starts with: the built-ins. Definitions that join later (plugins) never hold the gate.
+  const initial = new Set(untrack(all))
+
   // The startup gate: once every entry settled it stays open, so enabling or reloading an extension later
   // never unmounts the app. An entry waiting on a hard contract that is disabled or failed has settled too.
   const ready = createMemo<boolean>(
     (settled) =>
       settled ||
       (!!input.disabled() &&
-        input.definitions.every((definition) => {
+        [...initial].every((definition) => {
           if (!definition.renderer) return true
 
           const status = state.status[definition.id]
@@ -818,7 +846,7 @@ function createHost(input: HostInput) {
 
   // `requires` gating: an extension starts once every hard contract is active and restarts with a new generation of
   // any of them. Activation is never ordered by the graph; only these extensions wait, and only for their contracts.
-  input.definitions.forEach((definition) => {
+  const watchRequires = (definition: Definition) => {
     const tokens = Object.values(definition.requires ?? {})
 
     if (tokens.length === 0) return
@@ -851,24 +879,68 @@ function createHost(input: HostInput) {
         ),
       ),
     )
-  })
+  }
+
+  // The definitions the host starts with watch under the host itself.
+  initial.forEach(watchRequires)
+
+  // Definitions that join later (plugins) watch in their own roots, which end with the definition.
+  const watchers = new Map<Definition, () => void>()
+  // The definition object each id was last listed with; a new object for a listed id replaces it.
+  const listed = new Map<string, Definition>()
+
+  // Forgets everything about an extension whose definition left or was replaced, so the next pass starts it afresh.
+  const forget = (id: string) => {
+    deactivate(id)
+    replaced.delete(id)
+    providers.forEach((extension, token) => {
+      if (extension === id) providers.delete(token)
+    })
+    watchers.forEach((dispose, definition) => {
+      if (definition.id !== id) return
+      dispose()
+      watchers.delete(definition)
+    })
+    setState("status", id, undefined)
+    setState("failures", id, undefined)
+  }
 
   // Establish requirement watchers before activation, including their initial state. Publish every disabled status
   // before starting enabled entries, so declaration order cannot leave a hard-dependency chain loading forever.
   createMemo(() => {
     const disabled = input.disabled()
+    const definitions = all()
 
     if (!disabled) return
 
     untrack(() =>
       batch(() => {
-        input.definitions
+        const ids = new Set(definitions.map((definition) => definition.id))
+        Array.from(listed.keys()).forEach((id) => {
+          if (ids.has(id)) return
+          listed.delete(id)
+          forget(id)
+        })
+        definitions.forEach((definition) => {
+          const before = listed.get(definition.id)
+          listed.set(definition.id, definition)
+
+          if (before && before !== definition) forget(definition.id)
+        })
+        definitions.forEach((definition) => {
+          if (initial.has(definition) || watchers.has(definition) || !definition.requires) return
+          createRoot((dispose) => {
+            watchers.set(definition, dispose)
+            watchRequires(definition)
+          }, owner)
+        })
+        definitions
           .filter((definition) => disabled.has(definition.id))
           .forEach((definition) => {
             deactivate(definition.id)
             setState("status", definition.id, "disabled")
           })
-        input.definitions
+        definitions
           .filter((definition) => !disabled.has(definition.id))
           .forEach((definition) => {
             if (instances.has(definition.id) || state.status[definition.id] === "loading") return
@@ -891,7 +963,7 @@ function createHost(input: HostInput) {
     list,
     items,
     links,
-    definitions: () => input.definitions.map(latest),
+    definitions: () => all().map(latest),
     context: (id: string): Context | undefined => instances.get(id)?.context,
     fail,
     /** Starts loading every active extension's declared session stores for a session that mounts. */
@@ -900,7 +972,7 @@ function createHost(input: HostInput) {
     },
     /** `next` replaces the definition, e.g. after a development hot update. */
     reload(id: string, next?: Definition) {
-      const definition = next ?? input.definitions.find((item) => item.id === id)
+      const definition = next ?? untrack(all).find((item) => item.id === id)
 
       if (!definition) return
 

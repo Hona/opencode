@@ -4,7 +4,9 @@
  * Payloads are structured-clone values already encoded with the Ipc's schemas. The `ipc` fields name an Ipc by id.
  */
 
-import type { Definition } from "./core"
+import { Predicate, Schema } from "effect"
+import type { Cleanup, Definition } from "./core"
+import type { MainSetup } from "./main"
 
 /** One explicit desktop enable-state row. An absent row means there is no setting under that id. */
 export interface EnableState {
@@ -28,6 +30,279 @@ export function extensionEnabled(definition: Pick<Definition, "id" | "legacy">, 
     .find((item) => item !== undefined)
 
   return row?.enabled ?? true
+}
+
+/**
+ * The modules a plugin's `./gui` bundle may require that both processes provide, each its own instance. Main maps
+ * `@opencode/plugin/gui` to the main SDK and a window maps `@opencode/plugin/gui/main` to the window SDK: both export the
+ * same `Extension`, `Store`, `Ipc`, `Contract` and `Registry`, so one definition and contract serve both processes.
+ */
+export const pluginSharedModules = [
+  "effect",
+  "@opencode/plugin/gui",
+  "@opencode/plugin/gui/main",
+  "@opencode/schema/rpc",
+  "@opencode/client",
+  "@opencode/client/effect",
+] as const
+
+/** The modules only a window provides to a plugin's `./gui` bundle; main gives the bundle an inert placeholder. */
+export const pluginWindowModules = [
+  "solid-js",
+  "solid-js/web",
+  "solid-js/store",
+  "@opencode/plugin/gui/file",
+  "@opencode/plugin/gui/review",
+  "@opencode/plugin/gui/browser",
+  "@opencode/plugin/gui/updater",
+  "@opencode/client/solid",
+] as const
+
+/** A module name in `pluginSharedModules` or `pluginWindowModules`. */
+export type PluginModule = (typeof pluginSharedModules)[number] | (typeof pluginWindowModules)[number]
+
+// Node's `builtinModules`, which a window cannot import; bundles may name them with or without `node:`.
+const nodeBuiltins = new Set([
+  "assert",
+  "assert/strict",
+  "async_hooks",
+  "buffer",
+  "child_process",
+  "cluster",
+  "console",
+  "constants",
+  "crypto",
+  "dgram",
+  "diagnostics_channel",
+  "dns",
+  "dns/promises",
+  "domain",
+  "events",
+  "fs",
+  "fs/promises",
+  "http",
+  "http2",
+  "https",
+  "inspector",
+  "inspector/promises",
+  "module",
+  "net",
+  "os",
+  "path",
+  "path/posix",
+  "path/win32",
+  "perf_hooks",
+  "process",
+  "punycode",
+  "querystring",
+  "readline",
+  "readline/promises",
+  "repl",
+  "stream",
+  "stream/consumers",
+  "stream/promises",
+  "stream/web",
+  "string_decoder",
+  "sys",
+  "timers",
+  "timers/promises",
+  "tls",
+  "trace_events",
+  "tty",
+  "url",
+  "util",
+  "util/types",
+  "v8",
+  "vm",
+  "wasi",
+  "worker_threads",
+  "zlib",
+])
+
+/**
+ * Whether only the desktop app's main process provides a module: `electron` and Node built-ins. A window gives a
+ * plugin's `./gui` bundle an inert placeholder for it.
+ *
+ * @param name - The name the bundle requires.
+ * @returns True for `electron`, `node:` names and Node built-ins.
+ */
+export function mainOnlyModule(name: string) {
+  return name === "electron" || name.startsWith("node:") || nodeBuiltins.has(name)
+}
+
+/**
+ * A placeholder for a module that exists only in the other process, so one plugin `./gui` bundle runs in both: a window
+ * gets one for `electron` and Node built-ins, main gets one for Solid and the window-only modules. Bundlers hoist
+ * `require` calls and Solid hoists template creation to module scope, so the placeholder accepts any property read,
+ * call or construction and returns itself, and ignores writes. It is never a thenable, so a promise never waits on
+ * it, and nothing is an instance of it. Code that actually runs in the wrong process gets placeholders back instead of
+ * working values; keep each process's code in its entry.
+ *
+ * @param name - The module's name, shown when the placeholder is converted to a string.
+ * @returns The placeholder.
+ */
+export function inertModule(name: string): InertModule {
+  const label = `[inert module ${name}]`
+
+  const handler: ProxyHandler<InertModule> = {
+    get(_, key) {
+      if (key === "then") return undefined
+
+      if (key === Symbol.toPrimitive || key === "toString") return () => label
+
+      if (key === Symbol.hasInstance) return () => false
+
+      return placeholder
+    },
+    set: () => true,
+    defineProperty: () => true,
+    deleteProperty: () => true,
+    apply: () => placeholder,
+    construct: () => placeholder,
+  }
+
+  // Each placeholder wraps its own function, so nothing one bundle does to it reaches another's.
+  const placeholder = new Proxy<InertModule>(function inert() {}, handler)
+
+  return placeholder
+}
+
+/** A placeholder `inertModule` returns: it answers every property read, call and construction with itself. */
+export type InertModule = () => void
+
+/** The declarations of a plugin's GUI the host reads. */
+export type PluginDefinition = Pick<Definition, "id" | "os" | "provides" | "uses" | "requires" | "stores" | "i18n">
+
+/** A plugin's `./gui` bundle as `evaluatePluginBundle` read it. */
+export interface PluginBundle {
+  /** The declarations of its `Plugin.define`, checked. */
+  readonly definition: PluginDefinition
+  /** Its window `setup`; undefined in a plugin for main only. */
+  readonly setup?: (ctx: never) => Cleanup | void
+  /** Its `main` setup; undefined in a plugin for windows only. */
+  readonly main?: MainSetup
+}
+
+/** The process that evaluates a plugin's `./gui` bundle with `evaluatePluginBundle`. */
+export interface PluginBundleHost {
+  /** The server plugin's id, which the GUI must declare. */
+  readonly id: string
+  /**
+   * Which process evaluates the bundle.
+   * - `window`: checks the dependencies in `uses` and `requires` too.
+   * - `main`: drops them; main never reads them, and a token from a window-only module is an inert placeholder there.
+   */
+  readonly process: "window" | "main"
+  /**
+   * Returns the module the bundle requires.
+   *
+   * @param name - The module name the bundle passes to `require`.
+   * @returns The module this process provides.
+   * @throws For a module this process does not provide.
+   */
+  require(name: string): object
+}
+
+/**
+ * Evaluates a plugin's `./gui` bundle, a CommonJS module whose default export is its `Plugin.define`, and checks it:
+ * the declarations the host reads, the server plugin's id, and at least one setup. Both hosts call it, each with its own
+ * `require`. The bundle's code is trusted as much as the server that runs the app, which already runs the plugin's
+ * server entry.
+ *
+ * @param code - The bundle's CommonJS code.
+ * @param host - The process evaluating it.
+ * @returns The checked plugin.
+ * @throws When evaluation throws, the default export is not a `Plugin.define` this app supports, its id differs, or it
+ *   has no setup.
+ */
+export function evaluatePluginBundle(code: string, host: PluginBundleHost): PluginBundle {
+  const id = host.id
+  const module: BundleModule = { exports: {} }
+
+  new Function("require", "module", "exports", code)(host.require, module, module.exports)
+  // `export default` compiles to `exports.default`, or to `module.exports` itself in a bundler's default mode.
+  const plugin = Predicate.hasProperty(module.exports, "default") ? module.exports.default : module.exports
+
+  if (!matchesPlugin(plugin) || (host.process === "window" && !matchesDependencies(plugin)))
+    throw new Error("A plugin's ./gui bundle must default-export a `Plugin.define` from `@opencode/plugin/gui`")
+
+  if (plugin.id !== id) throw new Error(`A plugin's GUI must take its server plugin's id "${id}", not "${plugin.id}"`)
+
+  if (!plugin.setup && !plugin.main)
+    throw new Error("A plugin's GUI must have a window `setup`, a `main` setup, or both")
+
+  return {
+    definition: {
+      id,
+      os: plugin.os,
+      // SAFETY: `matchesPlugin` checked the tokens the host reads, and `is` keeps each token's identity and spec.
+      provides: plugin.provides as PluginDefinition["provides"],
+      // SAFETY: as above, in a window; main drops them.
+      uses: host.process === "window" ? (plugin.uses as PluginDefinition["uses"]) : undefined,
+      // SAFETY: as above.
+      requires: host.process === "window" ? (plugin.requires as PluginDefinition["requires"]) : undefined,
+      // SAFETY: `matchesPlugin` checked each store's scope and schema; `is` keeps the declaration whole.
+      stores: plugin.stores as PluginDefinition["stores"],
+      i18n: plugin.i18n && { ...plugin.i18n, en: plugin.i18n.en ?? {} },
+    },
+    // SAFETY: a bundle is plain JavaScript; a function is all the host can check of a setup.
+    setup: plugin.setup as PluginBundle["setup"],
+    // SAFETY: as above, for the main setup.
+    main: plugin.main as PluginBundle["main"],
+  }
+}
+
+/** The CommonJS module a bundle fills. */
+type BundleModule = { exports: object }
+
+// What the host reads of a plugin's GUI, checked once here: a malformed token or store would otherwise throw inside
+// the host's shared memos and take every plugin down. Tokens keep their identity: `is` checks without copying.
+const Token = Schema.Struct({ kind: Schema.Literals(["contract", "ipc"]), id: Schema.String })
+
+const Tokens = Schema.Record(Schema.String, Token)
+
+const Setup = Schema.declare(Predicate.isFunction)
+
+const matchesDependencies = Schema.is(
+  Schema.Struct({ uses: Schema.optional(Tokens), requires: Schema.optional(Tokens) }),
+)
+
+const matchesPlugin = Schema.is(
+  Schema.Struct({
+    id: Schema.String,
+    os: Schema.optional(Schema.Array(Schema.Literals(["macos", "windows", "linux"]))),
+    provides: Schema.optional(Tokens),
+    uses: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    requires: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    stores: Schema.optional(
+      Schema.Record(
+        Schema.String,
+        Schema.Struct({
+          scope: Schema.Literals(["global", "session", "main"]),
+          schema: Schema.declare(Schema.isSchema),
+        }),
+      ),
+    ),
+    // A plugin's catalog ships every locale inline; only built-ins load locales lazily.
+    i18n: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String))),
+    setup: Schema.optional(Setup),
+    main: Schema.optional(Setup),
+  }),
+)
+
+/**
+ * Whether a plugin's GUI may take an id. Built-ins win: a plugin cannot take a built-in's id or earlier id, an id that
+ * nests under one or that one nests under (tokens and stored keys resolve by dot-separated prefix), or the `opencode`
+ * namespace. Both hosts check it, each against its own built-ins.
+ *
+ * @param id - The server plugin's id.
+ * @param builtins - The host's built-in definitions, on every OS.
+ * @returns True when no built-in claims the id.
+ */
+export function pluginIdAvailable(id: string, builtins: readonly Pick<Definition, "id" | "legacy">[]) {
+  return [{ id: "opencode" }, ...builtins]
+    .flatMap((definition) => [definition.id, ...(definition.legacy ?? [])])
+    .every((taken) => id !== taken && !id.startsWith(`${taken}.`) && !taken.startsWith(`${id}.`))
 }
 
 /** Where an embed sits in its window, as the renderer measured it. */
@@ -65,22 +340,24 @@ export interface BridgeLayout {
   }
 }
 
-/** An extension as the extension manager lists it. */
+/** A GUI plugin as main lists it: a built-in, or the GUI of a plugin on the desktop app's own server. */
 export interface Installed {
-  /** The extension's id. */
+  /** The plugin's id. */
   readonly id: string
-  /** Its display name. */
-  readonly name: string
-  /** Its version; the app's version for built-ins. */
-  readonly version: string
   /** Ships with the app. */
   readonly builtin: boolean
   /** The user has it enabled. */
   readonly enabled: boolean
-  /** Changes when an installed archive is replaced or reloaded. */
-  readonly revision?: string
   /** Why its main entry failed, if it did. */
   readonly error?: string
+}
+
+/** A plugin on the desktop app's own server that ships a `./gui` bundle, as a window reports it to main. */
+export interface BridgePlugin {
+  /** The server plugin's id, which its GUI takes. */
+  readonly id: string
+  /** The bundle's opaque revision from the server; a new one makes main read and run the bundle again. */
+  readonly revision: string
 }
 
 /**
@@ -147,7 +424,7 @@ export interface BridgeMenubarItem {
 
 /** What the desktop preload exposes to the renderer host; undefined on the web. */
 export interface Bridge {
-  /** The app runs packaged, as main's `Build.packaged` says; the window's `Build` reports the same. */
+  /** The app runs packaged, as main's `App.packaged` says; the window's `App` reports the same. */
   readonly packaged: boolean
   /**
    * Calls an Ipc method.
@@ -224,6 +501,14 @@ export interface Bridge {
       readonly password?: string
     }[],
   ): void
+  /**
+   * Tells main which plugins on the desktop app's own server ship a `./gui` bundle. Main reads each bundle from that
+   * server itself, never from the window, runs its `main` export if it has one, and lists every plugin so the manager
+   * can enable and disable it.
+   *
+   * @param plugins - The plugins the window found, after its id and OS checks.
+   */
+  plugins(plugins: readonly BridgePlugin[]): void
   /** The extension manager. */
   readonly manager: {
     /**
@@ -252,30 +537,5 @@ export interface Bridge {
      * @param id - The extension's id.
      */
     reload(id: string): Promise<void>
-    /**
-     * Installs an archive.
-     *
-     * @param source - The archive's bytes, or a URL to download it from.
-     */
-    install(source: Uint8Array | string): Promise<void>
-    /**
-     * Removes an installed extension and its stored state. Built-ins refuse.
-     *
-     * @param id - The extension's id.
-     */
-    remove(id: string): Promise<void>
-    /**
-     * CommonJS renderer bundle of an installed extension.
-     *
-     * @param id - The extension's id.
-     */
-    source(id: string): Promise<string>
-    /**
-     * The URL of an installed extension's asset.
-     *
-     * @param id - The extension's id.
-     * @param path - The asset's path in the archive.
-     */
-    asset(id: string, path: string): string
   }
 }

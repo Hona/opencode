@@ -7,7 +7,7 @@ import { logContext } from "./log"
 import { make } from "./machine"
 
 const setup: MainSetup<typeof definition> = async (ctx) => {
-  const build = ctx.build
+  const build = ctx.app
   const lifecycle = ctx.lifecycle
   const enabled = build.packaged && build.channel !== "dev"
   // Holds no resources, so it needs no cleanup.

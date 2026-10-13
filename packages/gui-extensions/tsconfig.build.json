@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    // Declarations only, so plugin authors' compiler options do not typecheck the SDK's implementation.
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  // The GUI plugin SDK @opencode/plugin publishes as @opencode/plugin/gui (packages/plugin/script/gui.ts): the window and
+  // main entries, and the contracts plugins may use.
+  "include": [],
+  "files": [
+    "src/sdk/index.ts",
+    "src/sdk/main.ts",
+    "src/file/contract.ts",
+    "src/review/contract.ts",
+    "src/browser/contract.ts",
+    "src/updater/contract.ts"
+  ]
+}

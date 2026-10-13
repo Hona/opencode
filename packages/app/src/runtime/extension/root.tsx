@@ -1,8 +1,9 @@
-import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { extensionEnabled } from "@opencode/gui-extensions/sdk/bridge"
+import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { extensionEnabled, type Bridge } from "@opencode/gui-extensions/sdk/bridge"
 import type { Definition } from "@opencode/gui-extensions/sdk"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
+import { PluginGuiLoader, type PluginGui } from "./plugins"
 import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionHostProvider, useExtensionHost } from "./host"
@@ -15,6 +16,9 @@ import { ExtensionServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
 
 const HostApisContext = createContext<HostApis>()
+
+// Desktop only: a window loads plugin GUIs from the app's own server and reports them to main over the bridge.
+const PluginsContext = createContext<{ bridge: Bridge; set: (plugins: readonly PluginGui[]) => void }>()
 
 const ExtensionHotReload = import.meta.env.DEV ? lazy(() => import("./hmr")) : undefined
 
@@ -38,9 +42,20 @@ export function ExtensionRoot(props: ParentProps) {
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
-  // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
-  const definitions = builtins.filter(
+  const localBuiltins = builtins.filter(
     (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
+  )
+
+  // The GUIs of the plugins on the app's own server, found once the app interface lists its servers.
+  const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
+
+  // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
+  const definitions = createMemo<readonly Definition[]>(
+    () => [...localBuiltins, ...plugins().map((plugin) => plugin.definition)],
+    [],
+    {
+      equals: (a, b) => a.length === b.length && a.every((definition, index) => definition === b[index]),
+    },
   )
 
   // Only enable preferences cross this boundary; the host derives blocked status from live hard dependencies.
@@ -49,32 +64,35 @@ export function ExtensionRoot(props: ParentProps) {
 
     if (!state) return undefined
 
-    return new Set(definitions.flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])))
+    return new Set(definitions().flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])))
   })
 
   const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
 
   return (
     <HostApisContext.Provider value={apis}>
-      <ExtensionHostProvider
-        definitions={definitions}
-        disabled={disabled}
-        apis={apis.apis}
-        whenMounted={apis.whenMounted}
-        ipc={bridge ? (token) => ipcs.client(token) : undefined}
-        generation={ipcs.generation}
-        failed={failed}
-      >
-        <ExtensionStyles />
-        {ExtensionHotReload && (
-          <Suspense>
-            <ExtensionHotReload />
-          </Suspense>
-        )}
-        <MenubarItemsProvider value={menubar}>
-          <ExtensionServersProvider failed={failed}>{props.children}</ExtensionServersProvider>
-        </MenubarItemsProvider>
-      </ExtensionHostProvider>
+      <PluginsContext.Provider value={bridge && { bridge, set: setPlugins }}>
+        <ExtensionHostProvider
+          definitions={definitions}
+          disabled={disabled}
+          apis={apis.apis}
+          whenMounted={apis.whenMounted}
+          ipc={bridge ? (token) => ipcs.client(token) : undefined}
+          plugin={(id) => plugins().find((plugin) => plugin.definition.id === id)}
+          generation={ipcs.generation}
+          failed={failed}
+        >
+          <ExtensionStyles />
+          {ExtensionHotReload && (
+            <Suspense>
+              <ExtensionHotReload />
+            </Suspense>
+          )}
+          <MenubarItemsProvider value={menubar}>
+            <ExtensionServersProvider failed={failed}>{props.children}</ExtensionServersProvider>
+          </MenubarItemsProvider>
+        </ExtensionHostProvider>
+      </PluginsContext.Provider>
     </HostApisContext.Provider>
   )
 }
@@ -83,11 +101,13 @@ export function ExtensionRoot(props: ParentProps) {
 export function ExtensionAttachment(props: ParentProps) {
   const host = useExtensionHost()
   const attachment = createExtensionAttachment(useHostApis())
+  const plugins = useContext(PluginsContext)
 
   return (
     <ExtensionAttachmentProvider value={attachment}>
       <ExtensionCommands />
       <ExtensionServerEndpoints />
+      <Show when={plugins}>{(value) => <PluginGuiLoader bridge={value().bridge} onChange={value().set} />}</Show>
       <Show when={host.ready()}>
         <MountedInterface attach={attachment.attach} />
         {props.children}

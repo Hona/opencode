@@ -4,7 +4,7 @@ import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
-  const channel = ctx.build.channel
+  const channel = ctx.app.channel
   // Window-local; every window starts with the bar hidden.
   const [visible, setVisible] = createSignal(false)
 

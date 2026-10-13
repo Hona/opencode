@@ -1,10 +1,10 @@
 import { app, BrowserWindow } from "electron"
 import { builtins } from "@opencode/gui-extensions/main"
-import type { BridgeLayout, BridgeMenubarItem } from "@opencode/gui-extensions/sdk/bridge"
+import { pluginIdAvailable, type BridgeLayout, type BridgeMenubarItem } from "@opencode/gui-extensions/sdk/bridge"
 import {
   MenubarItem,
   type BaseContext,
-  type Build,
+  type App,
   type Caller,
   type Catalog,
   type Cleanup,
@@ -22,13 +22,15 @@ import {
   type Messages,
   type OS,
   type Params,
+  type PluginOptions,
   type Registry,
   type ServerEndpoint,
   type ServerEndpoints,
   type Windows,
 } from "@opencode/gui-extensions/sdk/main"
+import type { OpenCodeClient } from "@opencode/client"
 import { Exit, Match, Predicate, Schema } from "effect"
-import type { ExtensionEndpoint, ExtensionInstalled } from "../../shared/ipc-rpc/extensions"
+import type { ExtensionEndpoint, ExtensionInstalled, ExtensionPlugin } from "../../shared/ipc-rpc/extensions"
 import {
   ExtensionAvailable,
   ExtensionEvent,
@@ -56,7 +58,7 @@ import { createLifecycle, type ErrorLog, type Instance, type Revision } from "./
 import { createManager } from "./manager"
 import { evaluateMain } from "./module"
 import { getStore } from "../storage/store"
-import { createStorage, namespace } from "./storage"
+import { createStorage } from "./storage"
 import { createEmbeds } from "./embeds"
 
 export type ExtensionHost = ReturnType<typeof createHost>
@@ -65,8 +67,21 @@ type Loaded = {
   readonly setup: MainSetup
   readonly i18n?: Catalog
   readonly stores?: Definition["stores"]
-  /** A built-in's declared `provides`, the only Ipcs it may provide; unknown for an installed extension. */
+  /** The declared `provides`, the only Ipcs it may provide. */
   readonly provides?: NonNullable<Definition["provides"]>
+  /** A plugin's options from `opencode.json`; built-ins have none. */
+  readonly options?: PluginOptions
+  /** The client of the server that runs a plugin, read each time; built-ins have none. */
+  readonly client?: () => OpenCodeClient | undefined
+}
+
+const loadClient = () => import("@opencode/client")
+
+/** The client of the app's own server, made once the client module loaded and again when the endpoint changes. */
+type SidecarClient = {
+  module?: Awaited<ReturnType<typeof loadClient>>
+  key?: string
+  client?: OpenCodeClient
 }
 
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
@@ -125,18 +140,16 @@ export function createHost(input: {
   const definitions: readonly Definition[] = builtins
   const local = definitions.filter((definition) => !definition.os || definition.os.includes(os))
 
-  const manager = createManager(
-    input.db,
-    (id) => id.startsWith("opencode") || definitions.some((definition) => definition.id === id),
-    definitions,
-  )
+  const manager = createManager(input.db, definitions)
 
   const embeds = createEmbeds()
+  // Plugins on the app's own server that ship a `./gui` bundle, as the windows last reported them. Main reads each
+  // bundle from that server first-hand, never from a window.
+  const plugins = new Map<string, ExtensionPlugin>()
   const entries = new Map<string, Entry>()
   const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
-  const reloads = new Map<string, number>()
   const closed = new Set<(win: BrowserWindow) => void>()
   const status = { sequence: 0, disposed: false, menubarQueued: false }
 
@@ -257,7 +270,7 @@ export function createHost(input: {
     }
   }
 
-  const build = { version: VERSION, channel: CHANNEL, platform: "desktop", packaged: app.isPackaged } satisfies Build
+  const about = { version: VERSION, channel: CHANNEL, platform: "desktop", packaged: app.isPackaged } satisfies App
 
   const serverEndpoints = { get: server } satisfies ServerEndpoints
 
@@ -292,18 +305,41 @@ export function createHost(input: {
         )
     }
 
-    const manifest = manager.installed().find((item) => item.id === id)?.manifest
-    const entry = manifest?.main
+    if (!plugins.has(id)) return undefined
 
-    if (!manifest || !entry) return undefined
+    return () =>
+      readPluginBundle(id).then(async (bundle) =>
+        prepare(id, { ...(await evaluateMain(bundle.code, id)), options: bundle.options, client: sidecarClient }),
+      )
+  }
 
-    return () => {
-      const source = manager.file(id, entry)
+  // The client of the app's own server, with the credential only main holds; a new one when its endpoint changes.
+  const sidecar: SidecarClient = {}
 
-      if (!source) return Promise.reject(new ExtensionError("invalidManifest"))
+  const sidecarClient = () => {
+    const endpoint = server("sidecar")
 
-      return evaluateMain(source.toString("utf8"), manifest.imports.main ?? []).then((loaded) => prepare(id, loaded))
-    }
+    if (!endpoint || !sidecar.module) return undefined
+    const key = JSON.stringify([endpoint.url, endpoint.headers])
+
+    if (sidecar.key !== key)
+      Object.assign(sidecar, {
+        key,
+        client: sidecar.module.OpenCode.make({ baseUrl: endpoint.url, headers: { ...endpoint.headers } }),
+      })
+
+    return sidecar.client
+  }
+
+  // The plugin's `./gui` bundle, read from the app's own server itself, never from a window.
+  const readPluginBundle = async (id: string) => {
+    sidecar.module ??= await loadClient()
+    const client = sidecarClient()
+
+    if (!client) throw new ExtensionError("unavailable")
+    const response = await client.plugin.gui({ id })
+
+    return response.data
   }
 
   const resolveMessages = async (catalog?: Catalog): Promise<Messages> => {
@@ -363,13 +399,13 @@ export function createHost(input: {
 
     function provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
     function provide(token: Ipc, impl: IpcImpl<IpcSpec>): IpcProvider<IpcSpec> {
-      // Installed extensions are plain JavaScript: a contract token here has no spec to serve.
+      // Plugin bundles are plain JavaScript: a contract token here has no spec to serve.
       if (token.kind !== "ipc") throw new Error("Contracts are provided by an extension's renderer entry")
 
       const ipc = token.id
       const declared = loaded.provides
 
-      // A built-in's definition is known: it provides only the Ipcs it declares, so the windows' `uses` find them.
+      // A declared definition is known: it provides only the Ipcs it declares, so the windows' `uses` find them.
       if (declared && !Object.values(declared).some((item) => item.kind === "ipc" && item.id === ipc))
         throw new Error(`${id} provides Ipc "${ipc}" its definition does not declare in provides`)
 
@@ -442,6 +478,10 @@ export function createHost(input: {
 
     const context: MainContext = {
       id,
+      options: loaded.options ?? {},
+      get client() {
+        return loaded.client?.()
+      },
       scope: instance.scope,
       // The declared main stores, opened on the first read; main storage reads synchronously, so they are loaded.
       get stores() {
@@ -463,8 +503,8 @@ export function createHost(input: {
             lifecycle.restart(options?.keep ?? instance.scope, () => input.restart(handoff)),
         } satisfies Lifecycle)
       },
-      get build() {
-        return build
+      get app() {
+        return about
       },
       get serverEndpoints() {
         return serverEndpoints
@@ -522,32 +562,29 @@ export function createHost(input: {
       ready: resolveMessages(loaded.i18n).then((messages) => {
         translation.messages = messages
       }),
-      setup: () => loaded.setup(context),
+      // A returned cleanup is a finalizer, as a server or TUI plugin's returned cleanup runs when it stops.
+      setup: () =>
+        Promise.resolve(loaded.setup(context)).then((cleanup) => {
+          if (Predicate.isFunction(cleanup)) instance.scope.addFinalizer(cleanup)
+        }),
     }
   }
 
-  const known = (id: string) =>
-    local.some((definition) => definition.id === id) || manager.installed().some((item) => item.id === id)
+  const known = (id: string) => local.some((definition) => definition.id === id) || plugins.has(id)
 
   const installed = (): ExtensionInstalled[] => [
     ...local.map((definition) => ({
       id: definition.id,
-      // Built-ins are named by the renderer's own copy.
-      name: definition.id,
-      version: VERSION,
       builtin: true,
       enabled: manager.enabled(definition.id),
-      ...revision(reloads.get(definition.id)?.toString()),
       ...failure(lifecycle.failure(definition.id)),
     })),
-    ...manager.installed().map((item) => ({
-      id: item.id,
-      name: item.manifest?.name ?? item.id,
-      version: item.manifest?.version ?? "",
+
+    ...[...plugins.keys()].map((id) => ({
+      id,
       builtin: false,
-      enabled: item.enabled,
-      ...revision(item.revision),
-      ...failure(item.manifest ? lifecycle.failure(item.id) : "invalidManifest"),
+      enabled: manager.enabled(id),
+      ...failure(lifecycle.failure(id)),
     })),
   ]
 
@@ -599,8 +636,7 @@ export function createHost(input: {
   return {
     /** Activates every enabled main extension. The app calls this once its first window is up. */
     async start() {
-      const ids = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)]
-      await Promise.all(ids.map((id) => lifecycle.activate(id)))
+      await Promise.all(local.map((definition) => lifecycle.activate(definition.id)))
     },
     /** Activates the declared provider ahead of `start`, falling back to the Ipc id's extension prefix. */
     demand(ipc: string) {
@@ -612,7 +648,7 @@ export function createHost(input: {
 
       const id =
         declared?.id ??
-        [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)].find(
+        [...local.map((definition) => definition.id), ...plugins.keys()].find(
           (id) => ipc === id || ipc.startsWith(`${id}.`),
         )
 
@@ -681,44 +717,45 @@ export function createHost(input: {
       await lifecycle.deactivate(id)
       changed()
     },
-    /** A development tool: packaged builds refuse it. A reload that fails keeps the last good revision running. */
+    /** Reloads an extension. A reload that fails keeps the last good revision running. */
     async reload(id: string) {
       if (!known(id)) throw new ExtensionError("notFound")
-
-      if (local.some((definition) => definition.id === id)) reloads.set(id, (reloads.get(id) ?? 0) + 1)
-      else manager.bump(id)
+      // A plugin's reload reads its bundle from the server again.
       await lifecycle.reload(id)
       changed()
     },
-    async install(source: Uint8Array | string) {
-      const manifest = await manager.install(source)
-      lifecycle.forget(manifest.id)
-      await lifecycle.deactivate(manifest.id)
-      changed()
-      await lifecycle.activate(manifest.id)
-    },
-    async remove(id: string) {
-      if (local.some((definition) => definition.id === id)) throw new ExtensionError("builtin")
 
-      if (!known(id)) throw new ExtensionError("notFound")
-      // Inside the queue, so an activation queued meanwhile finds the extension already gone.
-      await lifecycle.deactivate(id, () => {
-        manager.remove(id)
-        input.state.clear(namespace(id))
-        lifecycle.forget(id)
+    /**
+     * Takes the plugins a window found on the app's own server. Each one's `main` setup starts, reloads when its
+     * revision changes, and stops when the plugin is gone. A plugin cannot take an id a built-in claims.
+     */
+    plugins(list: readonly ExtensionPlugin[]) {
+      const next = new Map(
+        list.flatMap((plugin) => (pluginIdAvailable(plugin.id, definitions) ? [[plugin.id, plugin] as const] : [])),
+      )
+
+      const removed = [...plugins.keys()].filter((id) => !next.has(id))
+
+      const changes = [...next.values()].flatMap((plugin) => {
+        const previous = plugins.get(plugin.id)
+
+        if (previous?.revision === plugin.revision) return []
+
+        return [{ plugin, previous }]
       })
+
+      if (removed.length === 0 && changes.length === 0) return
+      removed.forEach((id) => plugins.delete(id))
+      changes.forEach((change) => plugins.set(change.plugin.id, change.plugin))
       changed()
+      removed.forEach((id) => void lifecycle.deactivate(id, () => lifecycle.forget(id)))
+      changes.forEach((change) => {
+        if (!change.previous) return void lifecycle.activate(change.plugin.id)
+
+        if (manager.enabled(change.plugin.id)) void lifecycle.reload(change.plugin.id)
+      })
     },
-    source(id: string) {
-      const manifest = manager.installed().find((item) => item.id === id)?.manifest
 
-      if (!manifest) throw new ExtensionError("notFound")
-      const file = manager.file(id, manifest.renderer)
-
-      if (!file) throw new ExtensionError("notFound")
-
-      return file.toString("utf8")
-    },
     /** Disposes every main extension but one a restart handoff keeps; quitting awaits their async cleanups. */
     async dispose() {
       status.disposed = true
@@ -734,7 +771,7 @@ function read(entry: Entry) {
   return isGetter(entry.value) ? entry.value() : entry.value
 }
 
-// Installed extensions are plain JavaScript: these check the shapes the SDK types promise before the host relies on them.
+// Plugin bundles are plain JavaScript: these check the shapes the SDK types promise before the host relies on them.
 function isGetter(value: Item): value is () => Item {
   return Predicate.isFunction(value)
 }
@@ -757,10 +794,6 @@ function isMenubarItem(value: Item): value is MenubarItem {
     Predicate.isString(value.label) &&
     Predicate.isFunction(value.run)
   )
-}
-
-function revision(value: string | undefined) {
-  return value === undefined ? {} : { revision: value }
 }
 
 function failure(value: string | undefined) {

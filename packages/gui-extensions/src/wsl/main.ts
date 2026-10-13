@@ -13,7 +13,7 @@ const Id = Schema.Struct({ id: Schema.NonEmptyString })
 
 const setup: MainSetup<typeof definition> = (ctx) => {
   const cli = ctx.cli
-  const packaged = ctx.build.packaged
+  const packaged = ctx.app.packaged
   const desktopLog = ctx.log
   const t = ctx.t
   const runtime = createWslRuntime(t)

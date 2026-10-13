@@ -1,7 +1,7 @@
 import type { Accessor } from "solid-js"
 import type {
   BaseContext,
-  Build,
+  App,
   Cleanup,
   Contract,
   Declared,
@@ -153,14 +153,14 @@ export interface Context extends BaseContext {
    */
   readonly embeds: Embeds
   /**
-   * The running build.
+   * The running app: its version, release channel and platform, as `ctx.app` in server and TUI plugins.
    *
    * @example
    * ```ts
-   * if (ctx.build.channel === "dev") showDebug()
+   * if (ctx.app.channel === "dev") showDebug()
    * ```
    */
-  readonly build: Build
+  readonly app: App
   /**
    * The interface language and its writing direction.
    *
@@ -310,4 +310,4 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
  * export default setup
  * ```
  */
-export type Setup<D extends Definition> = (ctx: SetupContext<D>) => undefined
+export type Setup<D extends Pick<Definition, "id">> = (ctx: SetupContext<D>) => Cleanup | void
