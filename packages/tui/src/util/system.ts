@@ -1,5 +1,4 @@
 import { release } from "node:os"
-import { describeArch } from "@opencode/util/arch"
 
 export function describeOS() {
   const name =
@@ -10,7 +9,10 @@ export function describeOS() {
         : process.platform === "linux"
           ? "Linux"
           : process.platform
-  return `${name} ${release()} (${describeArch()})`
+  // Under emulation on Windows ARM64, process.arch reads x64 but PROCESSOR_IDENTIFIER still names the ARM host.
+  const emulated =
+    process.platform === "win32" && process.arch === "x64" && process.env.PROCESSOR_IDENTIFIER?.startsWith("ARM")
+  return `${name} ${release()} (${process.arch}${emulated ? ", emulated on ARM64" : ""})`
 }
 
 export function describeTerminal() {
