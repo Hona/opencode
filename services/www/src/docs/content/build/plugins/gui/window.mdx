@@ -1,9 +1,11 @@
 ---
 title: "Window SDK"
-description: "Contribute panels, commands, settings, slots, menus, and reactive stores with @opencode/plugin/gui."
+description: "Contribute panels, commands, settings, slots, menus, and stored state with @opencode/plugin/gui."
 ---
 
-A plugin's `setup` runs in every desktop app window. Pass it to `Plugin.define` from `@opencode/plugin/gui` in the plugin's [`./gui` file](/build/plugins/gui/package#define-the-gui). `setup` is synchronous and may return a cleanup function; see [Lifetimes and cleanup](/build/plugins/gui#lifetimes-and-cleanup).
+A plugin's `setup` runs in every desktop app window. Pass it to `Plugin.define` from `@opencode/plugin/gui` in the
+plugin's [`./gui` file](/build/plugins/gui/package#define-the-gui). `setup` is synchronous and may return a cleanup
+function; see [Lifetimes and cleanup](/build/plugins/gui#lifetimes-and-cleanup).
 
 ```tsx title="src/gui.tsx"
 import { Command, Plugin } from "@opencode/plugin/gui"
@@ -23,14 +25,17 @@ export default Plugin.define({
 
 ## Components
 
-Inside Solid components, call `usePlugin<typeof definition>()` to access the same context object that `setup` receives. Type it from the declarations in their own file ([split across files](/build/plugins/gui/package#split-across-files)), so the component and the definition do not reference each other.
+Inside Solid components, call `usePlugin<typeof definition>()` for the same context object that `setup` receives. Type
+it from the declarations in their own file ([split across files](/build/plugins/gui/package#split-across-files)), so the
+component and the definition do not import each other.
 
-```tsx title="src/gui/renderer.tsx"
+```tsx title="src/gui/window.tsx"
 import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
 import type { definition } from "./definition"
 
 function StatusLabel() {
   const ctx = usePlugin<typeof definition>()
+
   return <span>{ctx.t("title")}</span>
 }
 
@@ -39,13 +44,19 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 }
 ```
 
+`usePlugin` throws outside a plugin's contribution, for example in a component another plugin renders. Wrap a component
+you provide on a contract with `bindPlugin`; see [Contracts](/build/plugins/gui#contracts).
+
 ## Registries
 
-Pass a registry token to `ctx.add(Registry, item)` to contribute to the window shell. Pass a function `() => item | undefined` to make a contribution reactive.
+Pass a registry token to `ctx.add(Registry, item)` to contribute to the window shell. Pass a function
+`() => item | undefined` to make the contribution reactive; return `undefined` to withdraw it until the function returns
+an item again.
 
-### `Command`
+### Commands
 
-Adds an action to the command palette, **Settings > Shortcuts**, and optionally the composer's `/` slash menu. The host publishes the command as `${ctx.id}.${command.id}`.
+`Command` adds an action to the command palette, **Settings > Shortcuts**, and optionally the composer's `/` menu. The
+host publishes the command as `<id>.<command id>`.
 
 ```ts
 import { Command } from "@opencode/plugin/gui"
@@ -60,22 +71,39 @@ ctx.add(Command, {
   },
   section: "terminal",
   bind: "ctrl+`",
-  slash: { name: "terminal", after: "open" },
+  slash: { name: "notes", after: "open" },
   featured: true,
-  editable: true,
   get enabled() {
     return !!ctx.sessions.current()
   },
   run: () => {
     const session = ctx.sessions.current()
-    if (session) ctx.layout.toggle("terminal:main", session)
+
+    if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
   },
 })
 ```
 
-### `Panel`
+| Field | Purpose |
+| --- | --- |
+| `id` | Local id; the host publishes `<plugin id>.<id>`. |
+| `title` | The palette label. |
+| `description` | The palette's second line. |
+| `group` | The palette category, as translated text. |
+| `section` | The **Settings > Shortcuts** section. Defaults to `general`. |
+| `bind` | The default keybind, for example `mod+shift+t`. Users can change it. |
+| `slash` | Also offers the command in the `/` menu: `{ name, arguments?, after? }`. With `arguments: true`, the text after the name goes to `run`. |
+| `hidden` | Keeps the command out of the palette; its keybind still works. |
+| `suggested` | Also lists the command under **Suggested** while it is enabled. |
+| `featured` | Lists the command when the palette opens without a query. |
+| `enabled` | `false` takes the command out of the palette and turns its keybind off. Reactive. |
+| `scope` | A CSS selector the keyboard focus must be inside for the binding to apply. |
+| `editable` | The binding also fires while a text field has focus. |
+| `run(input?)` | Runs the command. `input` is the slash command's argument text. |
 
-Contributes tabs to a session's side panel (`region: "side"`) or bottom/side dock (`region: "dock"`).
+### Panels
+
+`Panel` contributes tabs to a session's side region (`region: "side"`) or dock (`region: "dock"`).
 
 ```tsx
 import { Panel, type PanelTab } from "@opencode/plugin/gui"
@@ -98,20 +126,53 @@ ctx.add(Panel, {
 
 All panel callbacks (`list`, `render`, `focus`, `close`, `normalize`) receive a single input object:
 
-- Read `props.session` and `props.tab` as reactive getters where you use them—never destructure them at the top of `render`. When the user switches from session A to session B, the panel stays mounted and `props.session` updates in place.
-- `props.screen` is the constant owning `SessionScreen` (`file`, `comment`, `composer`), whose actions always target whichever session is currently routed.
-- Return the **same `PanelTab` object reference** from `list` while a tab is unchanged so the host does not remount its tab trigger.
+- Read `props.session` and `props.tab` as reactive getters where you use them. Never destructure them at the top of
+  `render`: when the user switches from session A to session B, the panel stays mounted and `props.session` updates in
+  place.
+- `props.screen` is the constant owning `SessionScreen` (`file`, `comment`, `composer`). Its actions always target the
+  session that is routed.
+- Return the same `PanelTab` object from `list` while a tab is unchanged, so the host does not remount its trigger.
 
-### `SettingsPage`
+| `Panel` field | Purpose |
+| --- | --- |
+| `id`, `region` | The panel's id within the plugin, and `"side"` or `"dock"`. |
+| `list(input)` | The tabs to show. `input.open` holds this plugin's stored tab ids. Reactive. |
+| `render(props)` | Renders a tab's content once. |
+| `focus(input)` | Runs when a tab is selected. `input.restored` is true for the selection the region mounts with. |
+| `close(props)` | Runs after the host removes a tab. |
+| `normalize(input)` | The canonical form of a stored tab id that can be stored more than one way. |
+| `mobile` | A narrow-screen view: `{ title, order, kind, icon }`. |
+| `wide` | Asks for the wider session minimum while the side region is open. |
+| `transient` | Tabs are not restored. |
+| `legacy` | Stored tab keys from an earlier version, mapped to this panel's tab ids. |
 
-Contributes a standalone page to **Settings**, a section on an existing host page (`page: "general"` or `page: "servers"`), or rows inside the host's General section (`page: "general", section: "general"`).
+| `PanelTab` field | Purpose |
+| --- | --- |
+| `id`, `title` | The tab id (host key `<plugin id>:<id>`) and its accessible name. |
+| `label(state)` | Custom trigger content. `state` has `active`, `preview`, and `session`. |
+| `pinned` | Listed without being opened, first, and never closed or dragged. |
+| `draggable` | The user can reorder the tab. Defaults to `true`. |
+| `closable` | The close button's look: `"compact"`, `"hover"`, or `false`. |
+| `transient` | A launcher tab, such as **Open file**, that the next preview replaces. |
+| `first` | Renders before the tabs in stored order. |
+| `fallback` | Opts into fallback selection when the stored selection is missing. |
+| `group` | Tabs in one group share one render that stays mounted. |
+| `missing` | Struck through, for example a file that no longer exists. |
+| `hidden` | Listed and selectable but not drawn, for a restored tab whose content is not known yet. |
+| `file` | The workspace path the tab shows, listed as one of the session's open files. |
+| `tabbable` | The tab panel joins the tab order, for content without focusable elements. |
+| `dom` | Stable DOM ids for the trigger and the panel. |
+
+### Settings pages
+
+`SettingsPage` contributes a page to **Settings**, a section on a host page (`page: "general"` or `page: "servers"`), or
+rows in the host's General section (`page: "general", section: "general"`).
 
 ```tsx
-import { lazy, Suspense } from "solid-js"
+import { lazy, onCleanup, Suspense } from "solid-js"
 import { onIdle, SettingsPage } from "@opencode/plugin/gui"
 
 const Page = lazy(() => import("./page"))
-onIdle(() => void Page.preload())
 
 ctx.add(SettingsPage, {
   id: "pairing",
@@ -120,31 +181,30 @@ ctx.add(SettingsPage, {
   get title() {
     return ctx.t("title")
   },
-  entries: [
-    {
-      id: "pairing",
-      title: ctx.t("title"),
-      keywords: "pair device qr local",
-    },
-  ],
+  entries: [{ id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" }],
   render: () => (
     <Suspense>
       <Page />
     </Suspense>
   ),
 })
+
+// Compile the page while the app idles, so it opens without a wait.
+onCleanup(onIdle(() => void Page.preload()))
 ```
 
-### `Slot`
+| Field | Purpose |
+| --- | --- |
+| `id` | The page's settings tab value (`/settings?tab=<id>`) and the argument to `ctx.layout.settings`. |
+| `page`, `section` | Adds a section to a host page, or rows to its General section, instead of a page. |
+| `title`, `icon` | The nav label and icon of a page. |
+| `available` | Where the page is offered, for example `"desktop"`. Omit it for everywhere. |
+| `entries` | Search metadata, indexed without mounting the page. |
+| `render(input)` | Renders the page, section, or rows. |
 
-Renders UI into one of the four window slots:
+### Slots
 
-| Slot | Placement | Input properties |
-| --- | --- | --- |
-| `"window.bottom"` | Full-width strip at the bottom of the window above toasts | `{}` |
-| `"session.header"` | The session timeline title row | `{ screen, session, active }` |
-| `"session.panel.end"` | Actions at the trailing end of the side panel tab strip | `{ screen, session }` |
-| `"session.panel.sidebar"` | The collapsible inner sidebar of the side panel | `{ screen, session }` |
+`Slot` renders UI into one of four window slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -156,68 +216,226 @@ ctx.add(Slot, {
 })
 ```
 
-### `MenuItem`, `TitlebarItem`, `LinkHandler`, `Server`, and `Style`
+| Slot | Placement | Input properties |
+| --- | --- | --- |
+| `"window.bottom"` | Full-width strip at the bottom of the window above toasts | `{}` |
+| `"session.header"` | The session timeline title row | `{ screen, session, active }` |
+| `"session.panel.end"` | Actions at the trailing end of the side panel tab strip | `{ screen, session }` |
+| `"session.panel.sidebar"` | The collapsible inner sidebar of the side panel | `{ screen, session }` |
 
-- **`MenuItem`**: Adds an entry to `"session.panel"` (the `+` button before side panel tabs), `"server.add"` (the **Add server** menu), or `"server.row"` (each server's row menu in Settings).
-- **`TitlebarItem`**: Renders a pill button in the window titlebar (`placement: "titlebar"`) or turns the dev channel badge into a toggle (`placement: "channel"`).
-- **`LinkHandler`**: Intercepts local file or custom links clicked in messages or composer chips (`match(link)` and `open(link)` with optional `priority`).
-- **`Server`**: Contributes a dynamic list of `ServerEntry` connections (used by `ssh` and `wsl`).
-- **`Style`**: Injects a CSS string into `document.head` while the contribution is active.
+### Menu items
+
+`MenuItem` adds an entry to the side panel's **+** menu (`"session.panel"`), the **Add server** menu (`"server.add"`),
+or each server's row menu in Settings (`"server.row"`).
 
 ```ts
-import { MenuItem, Style, TitlebarItem } from "@opencode/plugin/gui"
-import css from "./panel.css?inline"
-
-ctx.add(Style, css)
+import { MenuItem } from "@opencode/plugin/gui"
 
 ctx.add(MenuItem, {
   menu: "session.panel",
   id: "open",
-  title: "Notes",
+  title: ctx.t("menu.open"),
   icon: "folder",
-  keybind: "notes.open",
+  keybind: `${ctx.id}.open`,
   run: () => {
     const session = ctx.sessions.current()
-    if (session) ctx.layout.open("notes:main", session)
+
+    if (session) ctx.layout.open(`${ctx.id}:main`, session)
   },
 })
+```
+
+| Field | Menus | Purpose |
+| --- | --- | --- |
+| `menu`, `id`, `title` | All | The menu, the item's id within the plugin, and its label. |
+| `order` | All | Ascending sort order. Defaults to `0`. |
+| `icon`, `keybind` | `session.panel` | The item's icon, and the published command id whose shortcut it shows. |
+| `when(server)`, `enabled(server)` | `server.row` | Lists the item only on some rows, and shows it disabled on others. |
+| `run` | All | Runs the item. A `server.row` item receives the row's server key. |
+
+### Titlebar items
+
+`TitlebarItem` renders a pill button in the window titlebar (`placement: "titlebar"`), or turns the dev channel badge
+into a toggle (`placement: "channel"`).
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
 
 ctx.add(TitlebarItem, () =>
-  ready() ? { id: "sync", label: "Syncing", icon: "server", busy: true, run: () => sync() } : undefined,
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
 )
+```
+
+| Field | Purpose |
+| --- | --- |
+| `id`, `label`, `title` | The item's id, its visible label, and an accessible name when it differs. |
+| `placement` | `"titlebar"` (default) or `"channel"`. |
+| `icon`, `busy`, `pressed` | The pill's icon, a spinner that disables it, and a pressed state. |
+| `run` | Runs on click. Omit it for an item that only shows. |
+
+### Link handlers
+
+`LinkHandler` opens local file or custom links that users click in messages or composer chips. The handler with the
+highest `priority` whose `match` returns true opens the link.
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+| `Link` field | Purpose |
+| --- | --- |
+| `href` | The target: a path, URL, or `file://` link. |
+| `origin` | The plugin that produced the linked item. |
+| `exact` | The path is a known workspace file, not a guess from text. |
+| `background` | Must not switch the narrow-screen view. |
+| `base` | The workspace-relative directory the link was written in. |
+| `session` | The session the link belongs to. |
+
+Without `exists`, `ctx.links.exists` answers `false`, so text never looks like a link the handler cannot open.
+
+### Servers
+
+`Server` contributes a list of server connections, such as the built-in `ssh` and `wsl` plugins' servers.
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(Server, () => ({
+  ready: loaded(),
+  entries: machines().map((machine) => ({
+    id: machine.id,
+    name: machine.name,
+    label: "Acme",
+    state: machine.url ? "ready" : "starting",
+    http: machine.url ? { url: machine.url } : undefined,
+  })),
+}))
+```
+
+| Field | Purpose |
+| --- | --- |
+| `ready` | Startup waits for every source. A ready source's entries are its complete inventory. |
+| `order` | Ascending sort order of sources. |
+| `entries` | The servers. Each entry's key is `<plugin id>:<id>`. |
+
+| `ServerEntry` field | Purpose |
+| --- | --- |
+| `id`, `name`, `label` | The entry's id, its display name, and a short badge. |
+| `state` | `"stopped"`, `"starting"`, `"auth"`, `"ready"`, `"failed"`, or `"incompatible"`. |
+| `listed` | `false` keeps the entry out of the app's server list; Settings still shows it. |
+| `http` | The endpoint, once the server is `ready`. |
+| `reconnect`, `connect`, `remove` | Re-resolves a dropped endpoint, prepares a server that is not ready, and runs before removal. |
+| `row`, `cover` | The server's settings row, and a cover over the routed session while the server is not ready. |
+
+### Styles
+
+`Style` injects a CSS string into the document while the contribution is active.
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
 ```
 
 ## Host APIs
 
-Host APIs are lazy getters on `ctx`. None of them throw before the app interface mounts; early writes (`ctx.layout.open`, `ctx.dialogs.open`, store updates) queue in call order and apply as soon as the first route renders.
+Host APIs are properties of `ctx`. None of them throw before the app interface mounts: reads return their documented
+defaults, and early writes, such as `ctx.layout.open`, `ctx.dialogs.open`, and store updates, wait and apply in call
+order once the first route renders.
 
 | Property | Description |
 | --- | --- |
-| `ctx.layout` | Open, close, or toggle side and dock panel keys (`<id>:<tab>`), query `narrow()`, manage scroll offsets, or open `settings(page)` and `project(server, title)`. |
-| `ctx.sessions` | `list()` open session tabs and read `current()`, the frozen `MountedSession` for the active route. |
-| `ctx.screen` | Read `current()`, the `SessionScreen` (`file`, `comment`, `composer`) for the active session route. |
-| `ctx.storage` | Open runtime-keyed `store(key, options)`, window-local `memory(key, { initial })`, or `remove(key, options)`. |
-| `ctx.dialogs` | `open((handle) => <Dialog onDone={handle.close} />, { replace? })`. Closes automatically when its owning scope ends. |
-| `ctx.servers` | `list()` server IDs and `get(id)` a live, authenticated `ServerRef` (`client`, `data`, `url`, `builtin`, `local`). |
-| `ctx.system` | Cross-platform `copy(text)`, `save({ name, content })`, and `openExternal(url)`. |
-| `ctx.desktop` | Desktop-only (`undefined` on web): `os`, `window`, `zoom()`, `launch(path, app?)`, `reveal(path)`, `installed(app)`, `forceFocus(enabled)`. |
-| `ctx.embeds` | Render a main-process `WebContentsView` inside `<ctx.embeds.View id={id} visible={visible} />` or `capture(id)` a JPEG still. |
-| `ctx.links` | Route a local `Link` to the highest-priority `LinkHandler` via `ctx.links.open(link)`. |
-| `ctx.keybinds` | Format a command's shortcut (`keybind("ext.cmd")`), format raw chords (`keys("mod+k")`), or test a `KeyboardEvent` (`matches("ext.cmd", event)`). |
-| `ctx.locale` | Read `locale()`, `direction()` (`"ltr"` \| `"rtl"`), or call `setDirection()`. |
-| `ctx.appearance` | Read `font("mono")` for the user's configured monospace font family. |
-| `ctx.router` | Read `path()` and `routing()`. |
-| `ctx.workspaces` | Listen to `on("remove", ({ server, directory }) => …)` to clean up workspace-scoped stores. |
-| `ctx.options` | The plugin's options from its `opencode.json(c)` entry, the same object the server half gets. Empty for built-in plugins. |
-| `ctx.client` | The OpenCode client of the desktop app's own server, which runs the plugin. Call your server half with `ctx.client?.rpc(AcmeRpc)`. `undefined` for built-in plugins; read it where you call it, because it changes after that server restarts. |
-| `ctx.app` | Read `{ version, channel, platform, packaged }`, like `ctx.app` in server and TUI plugins. |
+| `ctx.layout` | Opens, closes, and queries panel tabs and regions. See [Layout](#layout). |
+| `ctx.sessions` | `list()` the open session tabs and read `current()`, the routed `MountedSession`. |
+| `ctx.screen` | Reads `current()`, the routed `SessionScreen` (`file`, `comment`, `composer`). |
+| `ctx.storage` | Opens stores for keys known only at runtime. See [Runtime stores](#runtime-stores). |
+| `ctx.dialogs` | `open(render, { replace? })` and `active()`. See [Dialogs](#dialogs). |
+| `ctx.servers` | `list()` server ids and `get(id)` a live `ServerRef`. See [Servers and server events](#servers-and-server-events). |
+| `ctx.system` | `copy(text)`, `save({ name, content })`, and `openExternal(url)` on every platform. |
+| `ctx.desktop` | Desktop only (`undefined` on the web): `os`, `window`, `zoom()`, `launch(path, app?)`, `reveal(path)`, `installed(app)`, and `forceFocus(enabled)`. |
+| `ctx.embeds` | Renders a main-process `WebContentsView` in `<ctx.embeds.View id={id} visible={visible} />`, or `capture(id)` a JPEG still. |
+| `ctx.links` | `open(link)` routes a `Link` to a `LinkHandler`; `exists(link)` asks whether its target exists. |
+| `ctx.keybinds` | Formats a command's shortcut, formats raw chords, and tests keyboard events. See [Keybinds](#keybinds). |
+| `ctx.locale` | `locale()`, `direction()` (`"ltr"` or `"rtl"`), and `setDirection()`. |
+| `ctx.appearance` | `font("mono")`, the user's monospace font family. |
+| `ctx.router` | `path()` and `routing()`. |
+| `ctx.workspaces` | `on("remove", ({ server, directory }) => …)` to clean up workspace-scoped stores. |
+| `ctx.options`, `ctx.client`, `ctx.app` | The plugin's options, its server client, and app metadata. See [Shared context](/build/plugins/gui#shared-context). |
 
-### Attaching files and notes to the composer
+### Layout
 
-Use `ctx.screen.current()?.composer` inside an event handler or command to attach files or structured notes to the user's next prompt:
+`ctx.layout.open(key, session, options?)` opens a panel tab by its key, `<plugin id>:<tab id>`. It works for sessions
+that are not mounted, and a `dock` panel's key opens the dock.
 
 ```ts
-ctx.screen.current()?.composer.attach({
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+| Member | Purpose |
+| --- | --- |
+| `open`, `close`, `toggle` | Opens, closes, or toggles a tab by key for a session. |
+| `state(key, session)` | `"closed"`, `"open"`, `"active"`, or `"visible"`. |
+| `stored(session)` | This plugin's tab ids stored in the session's side strip. |
+| `ready()` | The stored layout has loaded. |
+| `narrow()` | The viewport is under 768px. |
+| `side.opened(session)`, `side.toggle(session)` | The side region's state. |
+| `sidebar.opened()` | The inner sidebar preference that every side panel shares. |
+| `dock.opened(session)`, `dock.placement()` | The dock's state and whether it sits at the `"side"` or `"bottom"`. |
+| `scroll` | Scroll offsets stored per session and key. |
+| `settings(page?)`, `project(server, title)` | Opens Settings, or a project's directory picker and a new draft. |
+
+| `open` option | Purpose |
+| --- | --- |
+| `tab` | `"open"` (default) selects the tab in the preview slot; `"preview"` makes it the new preview; `"append"` adds it without selecting it; `"select"` adds and selects it, keeping the preview. |
+| `background` | On narrow screens, keeps the current view and opens the side region, for an action the user did not start from the panel. |
+
+### Sessions and the session screen
+
+`ctx.sessions.current()` is the routed session, and `ctx.screen.current()` is its screen. Both are `undefined` on Home
+and on a draft. Read them where you act, never once in `setup`.
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+| `MountedSession` field | Purpose |
+| --- | --- |
+| `key` | `<server id>\n<session id>`, unique across servers. Key per-session state by it. |
+| `id`, `server`, `tab` | The session's id, its `ServerRef`, and the key of the shell tab that owns it. |
+| `pending` | The server is still creating the session. |
+| `location`, `directory`, `local` | Where the session runs, its workspace directory, and whether that is the project root. |
+| `project`, `listedProject` | The session's project, and the sidebar project it belongs to. |
+| `visit` | A new object each time the session is routed. |
+| `background` | Shell commands and subagents the session moved to the background. |
+
+| Screen member | Purpose |
+| --- | --- |
+| `file` | The workspace's files: `root`, `resolve`, `get`, `sync`, `exists`, `search`, `tree`, `selection`, and `scroll`. |
+| `comment` | Line comments of the next prompt: `list`, `add`, `update`, `remove`, `focus`, and `active`. |
+| `composer` | The composer: `attach`, `update`, and `detach`. See below. |
+
+### Attach files and notes to the composer
+
+Use `ctx.screen.current()?.composer` in an event handler or command to attach a file or a note to the user's next
+prompt.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
   type: "note",
   origin: ctx.id,
   commentID: crypto.randomUUID(),
@@ -229,20 +447,71 @@ ctx.screen.current()?.composer.attach({
 })
 ```
 
-## Stored state (`Store`)
+- `update(commentID, { comment?, preview? })` changes an attached part; a note takes only a new `comment`.
+- `detach(commentID)` removes an attached part.
 
-Desktop windows load persisted state asynchronously over IPC, while the web reads `localStorage` synchronously. Declare stores in `Plugin.define({ stores })` so the host loads them for you:
+### Servers and server events
+
+`ctx.servers.get(id)` returns a live `ServerRef`. The desktop app's own server, which runs your plugin, has the id
+`"sidecar"`. React to its events with `data.on`:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+| `ServerRef` field | Purpose |
+| --- | --- |
+| `id`, `name`, `url` | The host key (`"sidecar"`, an http URL, or `<plugin id>:<id>`), its display name, and its base URL. |
+| `client` | The server's API client. |
+| `data` | The server's synced data (sessions, projects, …) and `on(type, handler)` for its events. Reactive. |
+| `local`, `builtin` | The server is local, and it is the app's own server. |
+| `compatible`, `connected` | The server's version works with this app, and its event connection is up. |
+| `password` | The HTTP basic password the user configured, if any. |
+
+Read `client`, `data`, and `url` from the live `ServerRef` each time: a restarted server gets a new client under the
+same id.
+
+### Dialogs
+
+`ctx.dialogs.open(render, { replace? })` opens a dialog above the open ones and returns a handle whose `close()` closes
+it. The dialog also closes when its owning scope ends.
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+`ctx.dialogs.active()` is `true` while any dialog is open.
+
+### Keybinds
+
+`ctx.keybinds` reads the user's shortcut for a published command id.
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+## Stored state
+
+Desktop windows load stored state over IPC, while the web reads `localStorage` at once. Declare stores in
+`Plugin.define({ stores })`, so the host loads them for you.
 
 | Declaration | Context shape | When it loads |
 | --- | --- | --- |
 | `Store.global(schema, initial, from?)` | `ctx.stores.name.value` (never `undefined`) | Before `setup` runs |
-| `Store.session(schema, initial, from?)` | `ctx.stores.name(session).value` (`T \| undefined`) | When `session` mounts |
-| `ctx.storage.store(key, options)` | `store.value` (`T \| undefined`) | When opened (for runtime keys like `server + directory`) |
+| `Store.session(schema, initial, from?)` | `ctx.stores.name(session).value` (`T` or `undefined`) | When `session` mounts |
+| `Store.main(schema, initial, from?)` | `ctx.stores.name` in `main` only | Always loaded |
 
-Mutate objects in place with `update(draft => …)` (which must return `undefined`) or replace the entire value with `set(next)`:
+Mutate a value in place with `update(draft => …)`, which must return nothing, or replace it with `set(next)`:
 
 ```ts
-// Global store: already loaded before setup
 const enabled = ctx.stores.prefs.value.enabled
 
 ctx.stores.prefs.update((draft) => {
@@ -250,11 +519,190 @@ ctx.stores.prefs.update((draft) => {
 })
 ```
 
+- `ready()` is `true` once the value has loaded. Writes made before then wait and apply in call order.
+- `from` imports a value once from an older home, while the store holds none: a stored key such as
+  `"extension.acme.settings"`, or `{ key, pick }` for part of a shared key. Pass a list to try several homes, newest
+  first.
+
+### Runtime stores
+
+`ctx.storage.store(key, options)` opens a store for a key known only at runtime. `scope` keeps one value per server,
+directory, or session.
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+| `scope` | Where the value lives |
+| --- | --- |
+| `"global"` | One value for the app. The default. |
+| `{ server, directory? }` | One value per server, or per workspace directory on it. |
+| `{ session }` | One value per session, opened again when the session moves to a new directory. |
+
+- A runtime store's `value` is `undefined` until it loads.
+- `ctx.storage.memory(key, { initial })` keeps window-local state that survives plugin reloads but not window reloads.
+- `ctx.storage.remove(key, { scope, from })` deletes the value, so the key reads as `initial` again.
+
 ## Reactive primitives
 
-Built-in plugins ban raw `createEffect`, `createRenderEffect`, and `createComputed` imports to prevent state-sync bugs. Use the SDK's reactive helpers instead:
+Built-in plugins ban raw `createEffect`, `createRenderEffect`, and `createComputed` imports to prevent state-sync bugs.
+Use the SDK's helpers instead.
 
-- **`createKeyed(source, fn, { otherwise?, equals? })`**: Runs `fn` in a fresh owner scope each time `source` changes (or for each active generation of a `ctx.uses` accessor). Anything registered with `ctx` inside `fn` is cleaned up automatically when the key changes.
-- **`createLatest(source, (value, signal) => promise)`**: Fetches async data whenever `source` changes, aborts stale in-flight requests, and never triggers a Solid `<Suspense>` blanking boundary on refetch.
-- **`createVisitState(initial)`**: Creates a `[value, setValue]` signal inside a panel or slot that resets automatically whenever the user navigates away from the session and returns.
-- **`usePanel()` / `useDrawer()`**: Access the surrounding panel frame (`placement()`, `sidebar.opened()`, `sidebar.toggle()`) or close the mobile drawer (`useDrawer().close()`).
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` runs `fn` in a fresh owner for each key: each active generation of a
+`ctx.uses` accessor, or each value of a plain accessor. Anything registered inside `fn` ends with that run.
+
+```ts
+createKeyed(ctx.uses.updater, (updater) => void updater.on("check", () => checkNow()))
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` fetches whenever `source` changes, aborts stale requests, and never
+suspends.
+
+```ts
+const active = createLatest(ctx.uses.awake, (awake, signal) => awake.screenActive({ signal }))
+const awake = () => active.latest ?? false
+```
+
+| Field | Value |
+| --- | --- |
+| `latest` | The last result, kept while a newer request runs. `undefined` before the first. |
+| `loading` | A request for the current value is in flight. |
+| `error` | The current request's rejection, if any. |
+
+### createVisitState
+
+`createVisitState(initial)` creates a `[value, setValue]` signal in a panel or slot that resets whenever the user
+leaves the session and returns.
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+### onIdle
+
+`onIdle(fn)` runs `fn` when the main thread is idle and returns a function that cancels it. Preload lazy chunks with it.
+
+```ts
+onCleanup(onIdle(() => void Page.preload()))
+```
+
+### usePanel and useDrawer
+
+`usePanel()` reads the surrounding panel frame: `placement()`, `sidebar.opened()`, and `sidebar.toggle()`. `useDrawer()`
+returns the mobile drawer around a contribution, or `undefined` outside one.
+
+```ts
+const close = () => useDrawer()?.close()
+```
+
+## Built-in contracts
+
+Built-in plugins provide these tokens to other plugins. Declare one in `uses`: it is `inactive` while its built-in plugin
+is off, and on the web for `Ipc` tokens.
+
+### Files
+
+`@opencode/plugin/gui/file` exports the file plugin's tree and **Open in** button, and the `FileViewer` registry.
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+| Token | Kind | Members |
+| --- | --- | --- |
+| `FileTree` | Contract | `Tree(props)` and `List(props)`: a virtualized tree or list of workspace files with change markers and `onFileClick(path)`. |
+| `OpenInApp` | Contract | `Button(props)`: the desktop **Open in** button for a session's workspace. |
+| `FileViewer` | Registry | `kinds` it renders, an optional `problem(bytes)` check, and a `View` that receives `bytes`, `onDetails(details)`, and `onError(reason?)`. |
+
+### Review changes
+
+`@opencode/plugin/gui/review` exports `Changes`, the review plugin's view of a session's changes, and `ChangeKind`
+(`"add"`, `"del"`, or `"mix"`).
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+// uses: { changes: Changes }
+const count = () => {
+  const changes = ctx.uses.changes()
+  const session = ctx.sessions.current()
+
+  return changes.status === "active" && session ? changes.value.diffs(session).length : 0
+}
+```
+
+| Member | Purpose |
+| --- | --- |
+| `diffs(session)`, `ready(session)` | The current review mode's diffs, and whether they have loaded. Reactive. |
+| `kinds(session)` | The `ChangeKind` of each changed file and directory, by path. |
+| `active(session)` | The file the review panel shows. |
+| `details(session)` | The session directory's uncommitted changes, independent of the review mode. |
+| `focus(session, path)`, `open(session)` | Shows a file, or all changes, in the review panel. |
+| `watch(screen, source)` | Keeps a view's changes loaded while it shows them: `"tree"`, `"files"`, or `"details"`. |
+| `onReveal(listener)` | Runs when review reveals a change, for example from a composer comment. |
+
+### Browser
+
+`@opencode/plugin/gui/browser` exports `Browser`, the desktop browser pane of a session.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+// uses: { browser: Browser }
+const session = ctx.sessions.current()
+const live = ctx.uses.browser()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+| Member | Purpose |
+| --- | --- |
+| `attached(session)` | The session has a browser pane. |
+| `canOpen(session, path?)` | A workspace file or http(s) URL can open in the pane. |
+| `open(session, url)` | Opens a URL as a browser tab in the session's side panel. |
+| `openFile(session, path)` | Opens a workspace file as a `file://` tab. |
+
+### Updater
+
+`@opencode/plugin/gui/updater` exports `Updater`, the desktop updater's `Ipc`, and `UpdaterState`.
+
+```ts
+import { Updater } from "@opencode/plugin/gui/updater"
+
+// uses: { updater: Updater }
+const live = ctx.uses.updater()
+
+if (live.status === "active" && live.value.state()?.status === "ready") void live.value.install()
+```
+
+| Member | Purpose |
+| --- | --- |
+| `state()` | The app-wide `UpdaterState`: `"disabled"`, `"idle"`, `"checking"`, `"downloading"`, `"ready"`, `"download-required"`, `"up-to-date"`, `"installing"`, or `"error"`. |
+| `check()` | Checks for an update and resolves with the new state. |
+| `install()` | Restarts into a staged update, or opens the installer download. |
+| `on("check", listener)` | The app menu asks the focused window to check, with in-app feedback. |

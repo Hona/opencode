@@ -38,7 +38,7 @@ acme                 Active    Reload  [on]
 | Control | Behavior |
 | --- | --- |
 | **Switch** | Enables or disables the plugin across all desktop windows. The preference persists in the desktop database across restarts. |
-| **Reload** | Reloads both the window entry and the main-process entry and clears any recorded failure. If a main-process reload fails, the last working revision remains active. |
+| **Reload** | Reloads both the window setup and the main setup and clears any recorded failure. If a main setup reload fails, the last working revision remains active. |
 
 When you disable a plugin, the host immediately withdraws all of its commands, panels, slots, titlebar items, native menu items, and settings pages in a single frame.
 
@@ -69,7 +69,7 @@ opencode plugin remove opencode-acme
 ```
 
 <Callout type="note">
-A plugin's GUI uses the plugin's ID. If a built-in plugin already uses that ID, the built-in plugin loads and the plugin's GUI does not.
+A plugin's GUI uses the plugin's ID. If a built-in plugin already uses that ID, the built-in plugin loads and the plugin's GUI does not; **Settings > Plugins** lists the plugin as not loaded.
 </Callout>
 
 <CardGroup cols={1}>

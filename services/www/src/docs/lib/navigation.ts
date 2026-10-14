@@ -126,12 +126,12 @@ export const docsSections: DocsSection[] = [
         ],
       },
       {
-        title: "GUI Plugins",
+        title: "GUI plugins",
         items: [
           { title: "Overview", slug: "build/plugins/gui" },
           { title: "Package and build", slug: "build/plugins/gui/package" },
           { title: "Window SDK", slug: "build/plugins/gui/window" },
-          { title: "Main Process & IPC", slug: "build/plugins/gui/main" },
+          { title: "Main process & IPC", slug: "build/plugins/gui/main" },
         ],
       },
       {
