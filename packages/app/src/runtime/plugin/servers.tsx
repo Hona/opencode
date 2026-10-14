@@ -6,6 +6,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { usePluginHost } from "./host"
+import { renamedFrom } from "./stores"
 
 /** A server a plugin contributes. `key` is `${plugin}:${entry.id}`. */
 export type PluginServer = { readonly key: string; readonly plugin: string; readonly entry: ServerEntry }
@@ -48,7 +49,13 @@ export function PluginServersProvider(props: ParentProps<{ failed: (plugin: stri
 
 function createPluginServers(failed: (plugin: string) => boolean) {
   const host = usePluginHost()
-  const [known, setKnown, , knownReady] = persisted(Persist.global("extension.servers"), Inventories, {})
+
+  const [known, setKnown, , knownReady] = persisted(
+    { ...Persist.global("plugin.servers"), copyFrom: [renamedFrom(Persist.global("extension.servers"))] },
+    Inventories,
+    {},
+  )
+
   const sources = createMemo(() => host.items(Server).toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0)))
   // Only a ready source reports its complete inventory. One that reloads, fails or has not started keeps its last
   // inventory as stopped entries, so its servers' tabs, drafts and routes outlive the outage.

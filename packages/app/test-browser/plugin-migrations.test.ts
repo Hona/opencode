@@ -2,9 +2,9 @@ import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { Panel, type StoreDeclaration } from "@opencode/plugin/gui"
 import type { Platform } from "@/runtime/platform/platform"
-import { persisted, removePersisted } from "@/runtime/persistence/storage"
+import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { legacyKeys } from "@/runtime/plugin/panel-keys"
-import { globalStoreTarget } from "@/runtime/plugin/stores"
+import { globalStoreTarget, renamedStoreName, storeName } from "@/runtime/plugin/stores"
 import { migrateKeybinds } from "@/settings/keybinds/migration"
 import context from "../../gui-plugins/src/context/index"
 import contextSetup from "../../gui-plugins/src/context/renderer"
@@ -21,50 +21,61 @@ const web: Platform = {
   openDirectoryPickerDialog: async () => null,
 }
 
+const renamedPrefs = { projectExpanded: false, serverExpanded: false }
+
 // Every key and id a built-in stored under an older name, and the home it reaches. Each row fails without its mapping.
 test.each([
   {
-    name: "settings sessionSummary, from before plugins → extension.details.prefs",
+    name: "extension.details.prefs, from before the plugin rename, ahead of the store's own older homes",
     home: () =>
-      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:extension.details.prefs", [
+      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:plugin.details.prefs", [
+        ["opencode.global.dat:extension.details.prefs", renamedPrefs],
+        ["settings.v3", { sessionSummary: { projectExpanded: true, serverExpanded: true } }],
+      ]),
+    expected: renamedPrefs,
+  },
+  {
+    name: "settings sessionSummary, from before plugins → plugin.details.prefs",
+    home: () =>
+      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:plugin.details.prefs", [
         ["settings.v3", { sessionSummary: { projectExpanded: false, serverExpanded: true } }],
       ]),
     expected: { projectExpanded: false, serverExpanded: true },
   },
   {
     // An older home without the field holds no value, so the import reads on to the next one.
-    name: "layout review.diffStyle, from the unprefixed layout when the newer one lacks it → extension.review.diff",
+    name: "layout review.diffStyle, from the unprefixed layout when the newer one lacks it → plugin.review.diff",
     home: () =>
-      imported("review", "diff", review.stores.diff, "opencode.global.dat:extension.review.diff", [
+      imported("review", "diff", review.stores.diff, "opencode.global.dat:plugin.review.diff", [
         ["opencode.global.dat:layout", { fileTree: { opened: true } }],
         ["layout", { review: { diffStyle: "unified" } }],
       ]),
     expected: { diffStyle: "unified" },
   },
   {
-    name: "Preferences releaseNotes → extension.updater.releaseNotes",
+    name: "Preferences releaseNotes → plugin.updater.releaseNotes",
     home: () =>
       imported(
         "updater",
         "releaseNotes",
         updater.stores.releaseNotes,
-        "opencode.global.dat:extension.updater.releaseNotes",
+        "opencode.global.dat:plugin.updater.releaseNotes",
         [["settings.v3", { general: { releaseNotes: false } }]],
       ),
     expected: { enabled: false },
   },
   {
-    name: "Preferences mobileDiffWrap → extension.review.mobileDiff",
+    name: "Preferences mobileDiffWrap → plugin.review.mobileDiff",
     home: () =>
-      imported("review", "mobileDiff", review.stores.mobileDiff, "opencode.global.dat:extension.review.mobileDiff", [
+      imported("review", "mobileDiff", review.stores.mobileDiff, "opencode.global.dat:plugin.review.mobileDiff", [
         ["settings.v3", { general: { mobileDiffWrap: false } }],
       ]),
     expected: { wrap: false },
   },
   {
-    name: "What's New highlights.v1 → extension.updater.seen",
+    name: "What's New highlights.v1 → plugin.updater.seen",
     home: () =>
-      imported("updater", "seen", updater.stores.seen, "opencode.global.dat:extension.updater.seen", [
+      imported("updater", "seen", updater.stores.seen, "opencode.global.dat:plugin.updater.seen", [
         ["highlights.v1", { version: "2.0.20" }],
       ]),
     expected: { version: "2.0.20" },
@@ -83,6 +94,16 @@ test.each([
   expect(row.home()).toEqual(row.expected)
 })
 
+test("the import from before the plugin rename leaves the old key for builds that still read it", () => {
+  imported("details", "prefs", details.stores.prefs, "opencode.global.dat:plugin.details.prefs", [
+    ["opencode.global.dat:extension.details.prefs", renamedPrefs],
+  ])
+
+  expect(JSON.parse(localStorage.getItem("opencode.global.dat:extension.details.prefs") ?? "null")).toEqual(
+    renamedPrefs,
+  )
+})
+
 /** Opens a declared global store over storage holding only `seed`, and reads the key it now lives under. */
 function imported(
   plugin: string,
@@ -92,8 +113,9 @@ function imported(
   seed: readonly (readonly [string, object])[],
 ) {
   localStorage.clear()
-  // Also forgets the persistence layer's cached copy of the new key from an earlier row.
-  removePersisted(globalStoreTarget(plugin, name, undefined), web)
+  // Also forgets the persistence layer's cached copies of the new and the pre-rename key from an earlier row.
+  removePersisted(Persist.global(storeName(plugin, name)), web)
+  removePersisted(Persist.global(renamedStoreName(plugin, name)), web)
   seed.forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)))
   createRoot((dispose) => {
     persisted(globalStoreTarget(plugin, name, declaration.from), declaration.schema, declaration.initial, web)

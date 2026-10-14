@@ -28,8 +28,8 @@ test.each([false, true])("the early snapshot keeps explicit rows even with legac
   const db = new DatabaseSync(path.join(root, "drafts.sqlite"))
   migrateDatabase(db)
   db.prepare("INSERT INTO state (name, key, value, updated_at) VALUES (?, ?, ?, 0)").run("shell", "theme", "dark")
-  db.prepare("INSERT INTO extension (id, enabled) VALUES (?, ?)").run("previous", 0)
-  db.prepare("INSERT INTO extension (id, enabled) VALUES (?, ?)").run("current", 1)
+  db.prepare("INSERT INTO plugin (id, enabled) VALUES (?, ?)").run("previous", 0)
+  db.prepare("INSERT INTO plugin (id, enabled) VALUES (?, ?)").run("current", 1)
   db.close()
 
   if (legacy) await Bun.write(path.join(root, "default.dat"), "{}")

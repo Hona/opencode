@@ -16,9 +16,10 @@ type Decoded<T> = { value?: { readonly json: string | null; readonly current: T 
 export type SettingsFiles = (file?: string) => SettingsStore
 
 /**
- * Each plugin's values live in the `state` table under `extension.<id>`, stored as canonical JSON. Writes are rare,
- * so each one reaches the database before it returns and survives a crash. A `from` imports an older value once from
- * a settings file or another state namespace.
+ * Each plugin's values live in the `state` table under `plugin.<id>`, stored as canonical JSON. Writes are rare, so
+ * each one reaches the database before it returns and survives a crash. A `from` imports an older value once from a
+ * settings file or another state namespace; every store first imports from `extension.<id>`, where builds before the
+ * plugin rename kept it.
  */
 export function createStorage(state: StateStore, settings: SettingsFiles, id: string): Storage {
   const name = namespace(id)
@@ -35,12 +36,14 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
     return created
   }
 
-  const sources = (from: MainStoreFrom | readonly MainStoreFrom[] | undefined) =>
-    [from ?? []].flat().map((item) => source(state, settings, item))
+  const sources = (key: string, from: MainStoreFrom | readonly MainStoreFrom[] | undefined) =>
+    [{ state: [renamedNamespace(id), key] } as const, ...[from ?? []].flat()].map((item) =>
+      source(state, settings, item),
+    )
 
   const remove = (key: string, from: MainStoreFrom | readonly MainStoreFrom[] | undefined) => {
     // The old copies go too, or the next read would import one again.
-    sources(from).forEach((older) => older.remove())
+    sources(key, from).forEach((older) => older.remove())
 
     if (state.get(name, key) !== null) state.delete(name, key)
     state.flush()
@@ -53,7 +56,7 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
   return {
     store(key, options) {
       const codec = Schema.toCodecJson(options.schema)
-      const legacy = sources(options.from)
+      const legacy = sources(key, options.from)
       const entry = shared(key)
       const decoded: Decoded<typeof options.initial> = {}
 
@@ -129,6 +132,11 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
 }
 
 export function namespace(id: string) {
+  return `plugin.${id}`
+}
+
+/** The namespace a plugin's main stores had before plugins were renamed from extensions. */
+function renamedNamespace(id: string) {
   return `extension.${id}`
 }
 
