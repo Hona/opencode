@@ -21,12 +21,11 @@ const evaluate = (code: string, process: "window" | "main" = "window") =>
   })
 
 describe("plugin GUI bundles", () => {
-  test("read the default export's declarations and setups, and drop what a plugin may not declare", () => {
+  test("read the default export's declarations and setups", () => {
     const bundle = evaluate(`
       const sdk = require("@opencode/plugin/gui")
       exports.default = sdk.Plugin.define({
         id: "acme",
-        legacy: ["review"],
         provides: { notes: sdk.Contract.define("acme.notes") },
         i18n: { fr: { title: "Notes" } },
         setup() {},
@@ -34,8 +33,6 @@ describe("plugin GUI bundles", () => {
     `)
 
     expect(bundle.definition.provides?.notes?.id).toBe("acme.notes")
-    // An earlier id would let a plugin read a built-in's enable state.
-    expect("legacy" in bundle.definition).toBe(false)
     expect(bundle.definition.i18n).toEqual({ fr: { title: "Notes" }, en: {} })
     expect(bundle.setup).toBeFunction()
     expect(bundle.main).toBeUndefined()
@@ -115,13 +112,11 @@ test.each([
   ["file", false],
   ["file.extra", false],
   ["tools", false],
-  ["details", false],
-  ["session-details", false],
   ["opencode", false],
   ["opencode.acme", false],
   ["opencode-acme", true],
 ])("a plugin GUI may take the id %s: %s", (id, available) => {
-  const builtins = [{ id: "file" }, { id: "tools.git" }, { id: "details", legacy: ["session-details"] }]
+  const builtins = [{ id: "file" }, { id: "tools.git" }]
 
   expect(pluginIdAvailable(id, builtins)).toBe(available)
 })

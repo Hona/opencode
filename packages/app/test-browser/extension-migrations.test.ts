@@ -24,15 +24,7 @@ const web: Platform = {
 // Every key and id a built-in stored under an older name, and the home it reaches. Each row fails without its mapping.
 test.each([
   {
-    name: "namespace extension.summary.* → extension.details.*",
-    home: () =>
-      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:extension.details.prefs", [
-        ["opencode.global.dat:extension.summary.prefs", { projectExpanded: false, serverExpanded: false }],
-      ]),
-    expected: { projectExpanded: false, serverExpanded: false },
-  },
-  {
-    name: "settings sessionSummary, from before extensions → extension.details.prefs",
+    name: "settings sessionSummary, from before plugins → extension.details.prefs",
     home: () =>
       imported("details", "prefs", details.stores.prefs, "opencode.global.dat:extension.details.prefs", [
         ["settings.v3", { sessionSummary: { projectExpanded: false, serverExpanded: true } }],
@@ -78,22 +70,12 @@ test.each([
     expected: { version: "2.0.20" },
   },
   {
-    name: "keybind summary.toggle → details.toggle",
-    home: () => renamed([["summary.toggle", "f9"]]),
-    expected: { "details.toggle": "f9" },
-  },
-  {
-    name: "keybind session.summary.toggle, from before extensions → details.toggle",
+    name: "keybind session.summary.toggle, from before plugins → details.toggle",
     home: () => renamed([["session.summary.toggle", "f8"]]),
     expected: { "details.toggle": "f8" },
   },
   {
-    name: "panel key usage:context → context:main",
-    home: () => legacyKeys(contextPanels()).get("usage:context"),
-    expected: "context:main",
-  },
-  {
-    name: "panel key context, from before extensions → context:main",
+    name: "panel key context, from before plugins → context:main",
     home: () => legacyKeys(contextPanels()).get("context"),
     expected: "context:main",
   },

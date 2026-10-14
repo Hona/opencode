@@ -77,7 +77,9 @@ export function ExtensionRoot(props: ParentProps) {
 
     if (!state) return undefined
 
-    return new Set(definitions().flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])))
+    return new Set(
+      definitions().flatMap((definition) => (extensionEnabled(definition.id, state) ? [] : [definition.id])),
+    )
   })
 
   const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)

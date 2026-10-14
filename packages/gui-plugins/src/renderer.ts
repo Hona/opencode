@@ -1,5 +1,4 @@
 import { compose } from "@opencode/plugin/gui/host"
-import { legacy } from "./legacy"
 import { type Definition } from "@opencode/plugin/gui"
 import context from "./context"
 import contextRenderer from "./context/renderer"
@@ -38,13 +37,13 @@ const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["
  * checks this composition against the main one.
  */
 export const builtins = compose(
-  { ...context, legacy: legacy.context, renderer: eager(contextRenderer) },
+  { ...context, renderer: eager(contextRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
   { ...file, renderer: eager(fileRenderer) },
   { ...review, renderer: eager(reviewRenderer) },
-  { ...details, legacy: legacy.details, renderer: eager(detailsRenderer) },
+  { ...details, renderer: eager(detailsRenderer) },
   { ...browser, renderer: eager(browserRenderer) },
   { ...pairing, renderer: eager(pairingRenderer) },
   { ...updater, renderer: eager(updaterRenderer) },

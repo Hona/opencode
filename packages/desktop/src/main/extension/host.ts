@@ -140,7 +140,7 @@ export function createHost(input: {
   const definitions: readonly Definition[] = builtins
   const local = definitions.filter((definition) => !definition.os || definition.os.includes(os))
 
-  const manager = createManager(input.db, definitions)
+  const manager = createManager(input.db)
 
   const embeds = createEmbeds()
   // Plugins on the app's own server that ship a `./gui` bundle, each at the bundle main last read and runs. Main lists

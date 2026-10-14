@@ -242,8 +242,8 @@ export interface Panel {
   /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
   readonly transient?: boolean
   /**
-   * Stored tab keys from before plugins, or from this plugin's earlier id (e.g. "usage:context"), mapped to this
-   * panel's tab ids. The host rewrites them once.
+   * Stored tab keys from before plugins (e.g. "review"), or from this plugin's earlier id, mapped to this panel's tab
+   * ids. The host rewrites them once.
    */
   readonly legacy?: Readonly<Record<string, string>>
   /**

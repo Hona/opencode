@@ -85,8 +85,8 @@ export interface App {
 }
 
 /**
- * A plugin as the host runs it: its `Plugin.define` declarations, plus the lazily loaded entries and earlier ids the
- * host attaches (`renderer`, `main`, `legacy`). The host reads it before any entry loads.
+ * A plugin as the host runs it: its `Plugin.define` declarations, plus the lazily loaded entries the host attaches
+ * (`renderer`, `main`). The host reads it before any entry loads.
  */
 export interface Definition {
   /**
@@ -95,20 +95,6 @@ export interface Definition {
    * all of those; migrate them as the guide describes.
    */
   readonly id: string
-  /**
-   * Earlier plugin ids, newest first, used to preserve desktop enable state after a rename. The current id's
-   * explicit setting wins; otherwise the first earlier id with a setting wins. Omit this for a new plugin.
-   * With no setting under any id, the plugin is enabled. Old rows stay intact; changes write under the current id.
-   * Stored keys, commands and panels still need their own migrations (`from`, the keybind map and `Panel.legacy`).
-   * This restores the enable preference only; hard dependencies still gate activation and can leave it blocked.
-   * Built-ins only: the host lists attach it from `packages/gui-plugins/src/legacy.ts`.
-   *
-   * @example
-   * ```ts
-   * compose({ ...details, legacy: ["summary"] })
-   * ```
-   */
-  readonly legacy?: readonly string[]
   /**
    * The operating systems the plugin runs on. Omit it to run everywhere, the web included. A plugin that lists
    * any OS does not run on the web, where no OS is known.
@@ -564,13 +550,13 @@ export interface BaseContext {
  * names several older homes, newest first, and the first that holds a value is imported: for example a plugin's
  * earlier storage namespace, then the app key that namespace once replaced. The older home keeps its copy until the
  * store is removed.
- * - A string: a stored key of the same storage, e.g. `"extension.summary.prefs"` or `"workspace:terminal"`.
+ * - A string: a stored key of the same storage, e.g. `"extension.acme.settings"` or `"workspace:terminal"`.
  * - An object: a part of a shared key, chosen by `pick`.
  *
  * @example
  * ```ts
  * Store.global(Prefs, { projectExpanded: true }, [
- *   "extension.summary.prefs",
+ *   "extension.acme.settings",
  *   { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },
  * ])
  * ```
@@ -670,7 +656,7 @@ export interface MainStoreDeclaration<S extends MainSchema = MainSchema> {
  * @example
  * ```ts
  * stores: {
- *   prefs: Store.global(Prefs, { shown: true }, "extension.summary.prefs"),
+ *   prefs: Store.global(Prefs, { shown: true }, "extension.acme.settings"),
  *   view: Store.session(View, { open: [] }),
  *   count: Store.main(Schema.Number, 0),
  * }

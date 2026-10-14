@@ -193,7 +193,7 @@ Host APIs are lazy getters on `ctx`. None of them throw before the app interface
 
 | Property | Description |
 | --- | --- |
-| `ctx.layout` | Open, close, or toggle side and dock panel keys (`${extension}:${tab}`), query `narrow()`, manage scroll offsets, or open `settings(page)` and `project(server, title)`. |
+| `ctx.layout` | Open, close, or toggle side and dock panel keys (`<id>:<tab>`), query `narrow()`, manage scroll offsets, or open `settings(page)` and `project(server, title)`. |
 | `ctx.sessions` | `list()` open session tabs and read `current()`, the frozen `MountedSession` for the active route. |
 | `ctx.screen` | Read `current()`, the `SessionScreen` (`file`, `comment`, `composer`) for the active session route. |
 | `ctx.storage` | Open runtime-keyed `store(key, options)`, window-local `memory(key, { initial })`, or `remove(key, options)`. |

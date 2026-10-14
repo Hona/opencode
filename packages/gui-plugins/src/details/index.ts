@@ -9,11 +9,15 @@ export default Plugin.define({
   id: "details",
   uses: { changes: Changes },
   stores: {
-    // Stored under the extension's earlier id `summary`, and before extensions in the app settings.
-    prefs: Store.global(Prefs, { projectExpanded: true, serverExpanded: true }, [
-      "extension.summary.prefs",
-      { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },
-    ]),
+    // Stored before plugins in the app settings.
+    prefs: Store.global(
+      Prefs,
+      { projectExpanded: true, serverExpanded: true },
+      {
+        key: "settings.v3",
+        pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary,
+      },
+    ),
   },
   i18n: {
     en,
