@@ -1,6 +1,6 @@
 ---
 name: component-tests
-description: Use when writing, changing, debugging, or reviewing Storybook-based Playwright component tests. That covers specs in packages/app/component-tests or packages/session-ui/component-tests, `*.fixture.tsx` files there or beside source (such as packages/gui-extensions/src/browser/panel.fixture.tsx), the stories they mount, and the shared harness in packages/storybook (playwright/config.ts, playwright/story.ts, .storybook/main.ts, preview.tsx, mocks). Also use when a component test is flaky, passed on retry, or fails with "Execution context was destroyed", "Failed to fetch dynamically imported module", or `#storybook-root` hidden. Covers mount args, source modules imported by URL, Vite dependency pre-bundling and reloads, cold vs warm Storybook, mobile drawers, geometry, and checks before pushing.
+description: Use when writing, changing, debugging, or reviewing Storybook-based Playwright component tests. That covers specs in packages/app/component-tests or packages/session-ui/component-tests, `*.fixture.tsx` files there or beside source (such as packages/gui-plugins/src/browser/panel.fixture.tsx), the stories they mount, and the shared harness in packages/storybook (playwright/config.ts, playwright/story.ts, .storybook/main.ts, preview.tsx, mocks). Also use when a component test is flaky, passed on retry, or fails with "Execution context was destroyed", "Failed to fetch dynamically imported module", or `#storybook-root` hidden. Covers mount args, source modules imported by URL, Vite dependency pre-bundling and reloads, cold vs warm Storybook, mobile drawers, geometry, and checks before pushing.
 ---
 
 # Component tests
@@ -15,7 +15,7 @@ Read these first rather than repeating them:
 
 ## Stories and `mount`
 
-- **Location.** Put the story next to the production component under `src/` of `ui`, `session-ui`, `app` or `gui-extensions`. Storybook indexes only the `stories` globs in `packages/storybook/.storybook/main.ts:44-49`.
+- **Location.** Put the story next to the production component under `src/` of `ui`, `session-ui`, `app` or `gui-plugins`. Storybook indexes only the `stories` globs in `packages/storybook/.storybook/main.ts:44-49`.
 - **Story ID.** It is the meta `id` if one is set (`packages/session-ui/src/components/session-review.stories.tsx:25`). Otherwise it is the kebab-cased `title`, then `--`, then the kebab-cased export. Check it at `http://127.0.0.1:6006/?path=/story/<id>`. A wrong ID never renders, so `mount` waits out its full 30 s root wait (`story.ts:39`) and then fails.
 - **URL args can be dropped.** `mount(id, { args, globals })` writes them into the URL (`story.ts:20-36`). Storybook drops an arg when the story declares no `args`/`argTypes` entry for its key. It also drops one whose value is not `[A-Za-z0-9 _-]*`, a number, a hex color or `rgb()`/`hsl()`, which rules out paths, URLs and file names with dots. The only trace is the browser console warning "Omitted potentially unsafe URL args.", and the test then passes on the default scenario.
   - Give every arg a typed default. With `args: { split: false }` (`session-review.stories.tsx:129`), `split:false` arrives as a boolean.
@@ -29,7 +29,7 @@ Read these first rather than repeating them:
 
 Use these when the contract is not visible in a story, such as construction counts, unmount races or cache state.
 
-- **Fixture file.** Put a `*.fixture.tsx` file in `component-tests/` or beside the source it drives (`packages/gui-extensions/src/browser/panel.fixture.tsx`). It exports a `mountX()` that renders into a host with a `data-testid` (`packages/session-ui/component-tests/basic-tool.fixture.tsx:7-46`). Never end the name in `.spec` or `.test`.
+- **Fixture file.** Put a `*.fixture.tsx` file in `component-tests/` or beside the source it drives (`packages/gui-plugins/src/browser/panel.fixture.tsx`). It exports a `mountX()` that renders into a host with a `data-testid` (`packages/session-ui/component-tests/basic-tool.fixture.tsx:7-46`). Never end the name in `.spec` or `.test`.
 - **Mount it in three steps.**
   1. Mount a light story first, so that the app styles load.
   2. Import the fixture and call it inside `page.evaluate`.
@@ -103,7 +103,7 @@ From the owning package (`packages/session-ui` or `packages/app`):
    - Do not skip on Windows, and do not raise `config.ts` timeouts, retries or the `mount` wait.
    - If one test does genuinely expensive work, call `story.setTimeout(...)` in that test, with a comment that names the work.
 6. **Confirm CI ran the component legs.** E2E never runs on pushes to dev (`test.yml:28`), so no post-merge run catches a regression.
-   - The `affected` gate filters on `@opencode/app` and `@opencode/storybook` (`test.yml:52-53`). `ui`, `session-ui` and `gui-extensions` count through app's dependencies. `workflow_dispatch` forces the legs on (`test.yml:48-51`).
+   - The `affected` gate filters on `@opencode/app` and `@opencode/storybook` (`test.yml:52-53`). `ui`, `session-ui` and `gui-plugins` count through app's dependencies. `workflow_dispatch` forces the legs on (`test.yml:48-51`).
    - `test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
    - The required `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed (`test.yml:316-335`). Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
    - If CI skipped them, report your local cold run in the PR.

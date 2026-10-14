@@ -8,8 +8,8 @@ import type {
   PanelTab,
   SessionRef,
   SessionScreen,
-} from "@opencode/gui-extensions/sdk"
-import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/gui-extensions/sdk/bridge"
+} from "@opencode/plugin/gui"
+import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
 const fixture = sourceURL(new URL("./extension-host.fixture.tsx", import.meta.url))
@@ -707,7 +707,7 @@ story("an extension that requires a contract starts once it is active and restar
 
 story("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
-    const { bindExtension, createComponent, createSignal, Contract, mountExtensions, Slot, until, useExtension } =
+    const { bindPlugin, createComponent, createSignal, Contract, mountExtensions, Slot, until, usePlugin } =
       await import(fixture)
 
     const View: Contract<{ View: Component<{ readonly label: string }> }, "provider.view"> =
@@ -723,8 +723,8 @@ story("a contract component reads its provider context and preserves reactive pr
           renderer: async () => ({
             default: (ctx: Context) => {
               ctx.provide(View, {
-                View: bindExtension((props: { readonly label: string }) => {
-                  observed.context = useExtension().id
+                View: bindPlugin((props: { readonly label: string }) => {
+                  observed.context = usePlugin().id
                   observed.read = () => props.label
                   observed.mounts++
 
@@ -985,7 +985,7 @@ story("startup enable state does not wait for the manager, and live updates beat
       capture: async () => undefined,
       runMenubarItem() {},
       configure() {},
-      plugins() {},
+      pluginsChanged() {},
       manager: {
         initial: initial.promise,
         list: () => reply.promise,

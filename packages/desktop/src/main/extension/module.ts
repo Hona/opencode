@@ -4,8 +4,8 @@ import {
   inertModule,
   pluginWindowModules,
   type pluginSharedModules,
-} from "@opencode/gui-extensions/sdk/bridge"
-import type { MainSetup } from "@opencode/gui-extensions/sdk/main"
+} from "@opencode/plugin/gui/host"
+import type { MainSetup } from "@opencode/plugin/gui/main"
 import { ExtensionError } from "./error"
 
 const native = createRequire(import.meta.url)
@@ -14,8 +14,8 @@ const native = createRequire(import.meta.url)
 // checks against. In main, the window SDK's name resolves to the main SDK.
 const shared = {
   effect: () => import("effect"),
-  "@opencode/plugin/gui": () => import("@opencode/gui-extensions/sdk/main"),
-  "@opencode/plugin/gui/main": () => import("@opencode/gui-extensions/sdk/main"),
+  "@opencode/plugin/gui": () => import("@opencode/plugin/gui/main"),
+  "@opencode/plugin/gui/main": () => import("@opencode/plugin/gui/main"),
   "@opencode/schema/rpc": () => import("@opencode/schema/rpc"),
   "@opencode/client": () => import("@opencode/client"),
   "@opencode/client/effect": () => import("@opencode/client/effect"),
@@ -25,8 +25,8 @@ const windowOnly = new Set<string>(pluginWindowModules)
 
 /**
  * Evaluates a plugin's `./gui` bundle in main and returns what main runs: its `Plugin.define`'s `main` setup, or one that
- * does nothing for a plugin with none, and its `stores`, `provides` and catalog. `electron` and Node built-ins are the
- * real modules; the window-only modules are inert placeholders. A bundle that declares another id fails.
+ * does nothing for a plugin with none, and its `stores`, `provides`, `os` and catalog. `electron` and Node built-ins
+ * are the real modules; the window-only modules are inert placeholders. A bundle that declares another id fails.
  */
 export async function evaluateMain(code: string, id: string) {
   const modules = new Map<string, object>(
@@ -54,5 +54,6 @@ export async function evaluateMain(code: string, id: string) {
     i18n: bundle.definition.i18n,
     stores: bundle.definition.stores,
     provides: bundle.definition.provides,
+    os: bundle.definition.os,
   }
 }

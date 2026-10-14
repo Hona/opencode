@@ -11,7 +11,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const ui = path.resolve(here, "../../ui")
 const sessionUi = path.resolve(here, "../../session-ui")
 const app = path.resolve(here, "../../app/src")
-const extensions = path.resolve(here, "../../gui-extensions/src")
+const plugins = path.resolve(here, "../../gui-plugins/src")
 const mocks = path.resolve(here, "./mocks")
 
 // Component tests import real modules by URL (`source("../src/…")`, `new URL("./x.fixture.tsx", import.meta.url)`),
@@ -47,7 +47,7 @@ export default defineMain({
     "../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
     "../../session-ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
     "../../app/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
-    "../../gui-extensions/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../../gui-plugins/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
   ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
@@ -61,7 +61,7 @@ export default defineMain({
         // follow `new Worker(new URL(…))`), the modules component tests load, and the preview with the Storybook
         // runtime that its virtual entry imports, so the first browser request never discovers a new dependency.
         entries: [
-          entry("../../{ui,session-ui,app,gui-extensions}/src/**/*.{stories.tsx,worker.ts}"),
+          entry("../../{ui,session-ui,app,gui-plugins}/src/**/*.{stories.tsx,worker.ts}"),
           ...new Set(componentTestModules.map(entry)),
           entry("./preview.tsx"),
         ],
@@ -100,7 +100,7 @@ export default defineMain({
       },
       server: {
         fs: {
-          allow: [searchForWorkspaceRoot(process.cwd()), ui, sessionUi, app, extensions, mocks],
+          allow: [searchForWorkspaceRoot(process.cwd()), ui, sessionUi, app, plugins, mocks],
         },
       },
     })

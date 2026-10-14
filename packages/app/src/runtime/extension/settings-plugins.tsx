@@ -9,6 +9,7 @@ import { SettingsRow } from "@/settings/row"
 import { showToast } from "@/shell/notifications/toast"
 import { useExtensionHost } from "./host"
 import { createInstalled } from "./installed"
+import { useReservedPlugins } from "./root"
 
 /** Every plugin of this desktop window, built-in or from the app's own server, with enable and reload controls. */
 export function PluginsSettings() {
@@ -16,6 +17,7 @@ export function PluginsSettings() {
   const host = useExtensionHost()
   const bridge = usePlatform().extensions
   const installed = createInstalled(bridge)
+  const reserved = useReservedPlugins()
 
   const itemOf = (id: string) => installed.list().find((item) => item.id === id)
 
@@ -101,6 +103,16 @@ export function PluginsSettings() {
                       {definition.id}
                     </Switch>
                   </div>
+                </SettingsRow>
+              )}
+            </For>
+            <For each={reserved()}>
+              {(id) => (
+                <SettingsRow
+                  title={<bdi dir="ltr">{id}</bdi>}
+                  description={<span class="text-text-danger-base">{language.t("settings.plugins.reserved")}</span>}
+                >
+                  {null}
                 </SettingsRow>
               )}
             </For>

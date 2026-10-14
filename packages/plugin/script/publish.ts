@@ -2,7 +2,6 @@
 import { Script } from "@opencode/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
-import { buildGui } from "./gui"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -12,7 +11,6 @@ async function published(name: string, version: string) {
 }
 
 await $`bun run build`
-const gui = await buildGui()
 const originalText = await Bun.file("package.json").text()
 const pkg = JSON.parse(originalText) as {
   name: string
@@ -30,7 +28,6 @@ if (await published(pkg.name, pkg.version)) {
         return [key, { import: file + ".js", types: file + ".d.ts" }]
       }),
     ),
-    ...gui,
   }
   pkg.imports = Object.fromEntries(
     Object.entries(pkg.imports).map(([key, conditions]) => [

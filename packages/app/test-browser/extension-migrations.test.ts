@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { Panel, type StoreDeclaration } from "@opencode/gui-extensions/sdk"
+import { Panel, type StoreDeclaration } from "@opencode/plugin/gui"
 import type { Platform } from "@/runtime/platform/platform"
 import { persisted, removePersisted } from "@/runtime/persistence/storage"
 import { legacyKeys } from "@/runtime/extension/panel-keys"
 import { globalStoreTarget } from "@/runtime/extension/stores"
 import { migrateKeybinds } from "@/settings/keybinds/migration"
-import context from "../../gui-extensions/src/context/index"
-import contextSetup from "../../gui-extensions/src/context/renderer"
-import details from "../../gui-extensions/src/details/index"
-import review from "../../gui-extensions/src/review/index"
-import updater from "../../gui-extensions/src/updater/index"
+import context from "../../gui-plugins/src/context/index"
+import contextSetup from "../../gui-plugins/src/context/renderer"
+import details from "../../gui-plugins/src/details/index"
+import review from "../../gui-plugins/src/review/index"
+import updater from "../../gui-plugins/src/updater/index"
 
 /** A web window: storage is the page's localStorage. */
 const web: Platform = {

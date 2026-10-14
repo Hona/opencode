@@ -684,6 +684,7 @@ export const dict = {
   "settings.plugins.status.blocked": "Blocked",
   "settings.plugins.error.notFound": "Plugin not found",
   "settings.plugins.builtin": "Built-in",
+  "settings.plugins.reserved": "Not loaded. A built-in plugin already uses this ID.",
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",

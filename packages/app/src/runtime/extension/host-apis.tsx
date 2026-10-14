@@ -29,7 +29,7 @@ import {
   type StorageScope,
   type StoreFrom,
   type StoreOptions,
-} from "@opencode/gui-extensions/sdk"
+} from "@opencode/plugin/gui"
 import { usePlatform } from "@/runtime/platform/platform"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
@@ -248,6 +248,7 @@ export function createHostApis() {
           }
         : undefined,
     app: () => ({
+      name: "opencode",
       version: platform.version ?? "",
       // SAFETY: the build sets VITE_OPENCODE_CHANNEL to one of the release channels, or leaves it unset locally.
       channel: (import.meta.env.VITE_OPENCODE_CHANNEL ?? "local") as App["channel"],
