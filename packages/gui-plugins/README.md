@@ -34,12 +34,11 @@ src/pairing/
 
 Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, as in `src/ssh/` and `src/updater/`.
 
-`Plugin.define` is the manifest, the same call a third-party plugin's `./gui` makes. The host lists attach each built-in's lazy entries, and its earlier ids from [`src/legacy.ts`](src/legacy.ts). The host reads the manifest before any entry loads.
+`Plugin.define` is the manifest, the same call a third-party plugin's `./gui` makes. The host lists attach each built-in's lazy entries. The host reads the manifest before any entry loads.
 
 | Field      | What it declares                                                              | In the context                                    |
 | ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
 | `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                                          |
-| `legacy`   | Earlier plugin ids, newest first; preserves desktop enable state after a rename |                                                   |
 | `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                                   |
 | `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
 | `uses`     | Optional dependencies other plugins provide; it works while one is missing | `ctx.uses.name()` is `Live<T>`                    |
@@ -356,16 +355,20 @@ Desktop windows load storage over IPC; the web reads it synchronously. A read be
 
 Each process's `ctx.stores` holds only its own stores: reading a `Store.main` store in the window, or a window store in main, fails to compile.
 
-Details lists older homes, newest first: its earlier id's namespace, then the app key before it.
+Details imports its preferences from the app settings key it replaced:
 
 <!-- source: src/details/index.ts#prefs -->
 
 ```ts
-// Stored under the extension's earlier id `summary`, and before extensions in the app settings.
-prefs: Store.global(Prefs, { projectExpanded: true, serverExpanded: true }, [
-  "extension.summary.prefs",
-  { key: "settings.v3", pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary },
-]),
+// Stored before plugins in the app settings.
+prefs: Store.global(
+  Prefs,
+  { projectExpanded: true, serverExpanded: true },
+  {
+    key: "settings.v3",
+    pick: (value: { sessionSummary?: unknown } | null) => value?.sessionSummary,
+  },
+),
 ```
 
 Review imports one session's slice of an app key that holds every session:
@@ -402,25 +405,11 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 - `from` imports an older value once, while the store holds none. A list names older homes, newest first. With `pick`, the older key stays for its other owners; a pick returns undefined when that key holds none of its fields, never an object of undefined fields, so the next home is read.
 - `update(mutate)` edits a deep-mutable draft and must return nothing or `undefined`. Returning the next value is a compile error and throws at runtime in both processes; use `set(next)` to replace the complete value, including main primitives and lists. Plain `Schema.Struct` fields work without `mutableKey`. Window calls wait for load and apply in call order with each other; main writes reach disk immediately. Runtime-key stores have the same contract.
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
-- Renaming a plugin moves four things: enable state (`Definition.legacy`), stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data.
+- Renaming a plugin that has shipped moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data. The enable setting starts again under the new id.
 
-List earlier ids newest first in [`src/legacy.ts`](src/legacy.ts), for example `details: ["summary"]`. The current id's explicit enable setting always wins. Without one, the first earlier id with a setting wins; with no setting at all, the plugin is enabled. Both desktop hosts use this rule. Old rows stay intact, and enable/disable changes write only under the current id. A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
+The enable setting saved under a plugin's id wins; with none, the plugin is enabled. Both desktop hosts use this rule. A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
 
 The enable preference is separate from activation: an enabled plugin with an unavailable hard dependency is `blocked`. The window publishes disabled providers before starting enabled entries, so consumers settle as blocked regardless of declaration order.
-
-<!-- source: src/legacy.ts -->
-
-```ts
-/**
- * Earlier ids of renamed built-ins, newest first, by current id. Both hosts read them to keep a user's enable setting
- * across the rename; each built-in's stores, commands and panels migrate on their own (`from`, the keybind rename map,
- * `Panel.legacy`).
- */
-export const legacy = {
-  context: ["usage"],
-  details: ["summary"],
-}
-```
 
 ## Runtime rules
 
@@ -620,13 +609,13 @@ export default setup
  * checks that it provides every Ipc the renderer composition uses.
  */
 export const builtins = compose(
-  { ...context, legacy: legacy.context },
+  context,
   btw,
   debug,
   terminal,
   file,
   review,
-  { ...details, legacy: legacy.details },
+  details,
   { ...browser, main: () => import("./browser/main") },
   { ...pairing, main: () => import("./pairing/main") },
   { ...updater, main: () => import("./updater/main") },
@@ -646,13 +635,13 @@ The window list adds each window entry, loaded with the app:
  * checks this composition against the main one.
  */
 export const builtins = compose(
-  { ...context, legacy: legacy.context, renderer: eager(contextRenderer) },
+  { ...context, renderer: eager(contextRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
   { ...file, renderer: eager(fileRenderer) },
   { ...review, renderer: eager(reviewRenderer) },
-  { ...details, legacy: legacy.details, renderer: eager(detailsRenderer) },
+  { ...details, renderer: eager(detailsRenderer) },
   { ...browser, renderer: eager(browserRenderer) },
   { ...pairing, renderer: eager(pairingRenderer) },
   { ...updater, renderer: eager(updaterRenderer) },

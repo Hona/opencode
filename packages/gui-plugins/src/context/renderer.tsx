@@ -38,8 +38,8 @@ const setup: Setup<typeof definition> = (ctx) => {
     (): Panel => ({
       id: "main",
       region: "side",
-      // Stored before extensions as "context", then under the extension's earlier id `usage`.
-      legacy: { context: "main", "usage:context": "main" },
+      // Stored before plugins as "context".
+      legacy: { context: "main" },
       mobile: { title: ctx.t("mobile.title"), order: 40, kind: "menu", icon: "status" },
       list: (input) => (input.open.includes("main") ? [tab] : []),
       render: (props) => {

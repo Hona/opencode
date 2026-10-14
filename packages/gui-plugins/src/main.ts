@@ -1,5 +1,4 @@
 import { compose } from "@opencode/plugin/gui/host"
-import { legacy } from "./legacy"
 import context from "./context"
 import btw from "./btw"
 import debug from "./debug"
@@ -19,13 +18,13 @@ import microsoftOffice from "./microsoft-office"
  * checks that it provides every Ipc the renderer composition uses.
  */
 export const builtins = compose(
-  { ...context, legacy: legacy.context },
+  context,
   btw,
   debug,
   terminal,
   file,
   review,
-  { ...details, legacy: legacy.details },
+  details,
   { ...browser, main: () => import("./browser/main") },
   { ...pairing, main: () => import("./pairing/main") },
   { ...updater, main: () => import("./updater/main") },

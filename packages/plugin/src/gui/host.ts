@@ -11,9 +11,9 @@ import type { MainSetup } from "./main.js"
 
 /**
  * Composes the app's built-in plugins for one process, the way the host lists them: each built-in's `Plugin.define`
- * declarations plus the lazy entries and earlier ids only the host reads (`renderer`, `main`, `legacy`). Fails to
- * compile, naming the token id, when a `requires` token has no provider (`Missing<"id">`), when two built-ins provide the
- * same token (`Duplicate<"id">`), or when two share an id (`DuplicatePluginId<"id">`).
+ * declarations plus the lazy entries only the host reads (`renderer`, `main`). Fails to compile, naming the token id,
+ * when a `requires` token has no provider (`Missing<"id">`), when two built-ins provide the same token
+ * (`Duplicate<"id">`), or when two share an id (`DuplicatePluginId<"id">`).
  *
  * @param definitions - Every built-in of one process.
  * @returns The same definitions, as an array.
@@ -29,26 +29,22 @@ export function compose<const Ds extends readonly Definition[]>(...definitions: 
 
 /** One explicit desktop enable-state row. An absent row means there is no setting under that id. */
 export interface EnableState {
-  /** The plugin id the user saved a setting under, including ids from before a rename. */
+  /** The plugin id the user saved a setting under. */
   readonly id: string
   /** The saved setting: true enables the plugin; false disables it. */
   readonly enabled: boolean
 }
 
 /**
- * Resolves desktop enable state without changing stored rows. The current id wins, then legacy ids newest first;
- * no matching row means enabled. Both hosts use this rule, including a window's preload snapshot.
+ * Resolves desktop enable state: the row saved under the plugin's id, or enabled when there is none. Both hosts use
+ * this rule, including a window's preload snapshot.
  *
- * @param definition - The current id and its optional earlier ids.
+ * @param id - The plugin's id.
  * @param state - Explicit saved rows, or the manager's resolved list.
  * @returns Whether the plugin is enabled.
  */
-export function extensionEnabled(definition: Pick<Definition, "id" | "legacy">, state: readonly EnableState[]) {
-  const row = [definition.id, ...(definition.legacy ?? [])]
-    .map((id) => state.find((item) => item.id === id))
-    .find((item) => item !== undefined)
-
-  return row?.enabled ?? true
+export function extensionEnabled(id: string, state: readonly EnableState[]) {
+  return state.find((item) => item.id === id)?.enabled ?? true
 }
 
 /**
@@ -310,18 +306,18 @@ const matchesPlugin = Schema.is(
 )
 
 /**
- * Whether a plugin's GUI may take an id. Built-ins win: a plugin cannot take a built-in's id or earlier id, an id that
- * nests under one or that one nests under (tokens and stored keys resolve by dot-separated prefix), or the `opencode`
- * namespace. Both hosts check it, each against its own built-ins.
+ * Whether a plugin's GUI may take an id. Built-ins win: a plugin cannot take a built-in's id, an id that nests under
+ * one or that one nests under (tokens and stored keys resolve by dot-separated prefix), or the `opencode` namespace.
+ * Both hosts check it, each against its own built-ins.
  *
  * @param id - The server plugin's id.
  * @param builtins - The host's built-in definitions, on every OS.
  * @returns True when no built-in claims the id.
  */
-export function pluginIdAvailable(id: string, builtins: readonly Pick<Definition, "id" | "legacy">[]) {
-  return [{ id: "opencode" }, ...builtins]
-    .flatMap((definition) => [definition.id, ...(definition.legacy ?? [])])
-    .every((taken) => id !== taken && !id.startsWith(`${taken}.`) && !taken.startsWith(`${id}.`))
+export function pluginIdAvailable(id: string, builtins: readonly Pick<Definition, "id">[]) {
+  return [{ id: "opencode" }, ...builtins].every(
+    (taken) => id !== taken.id && !id.startsWith(`${taken.id}.`) && !taken.id.startsWith(`${id}.`),
+  )
 }
 
 /** Where an embed sits in its window, as the renderer measured it. */

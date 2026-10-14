@@ -997,7 +997,7 @@ story("startup enable state does not wait for the manager, and live updates beat
 
     const host = mountExtensions({
       bridge,
-      // The consumer comes first; the provider's old-id setting arrives asynchronously from the preload.
+      // The consumer comes first; the provider's setting arrives asynchronously from the preload.
       definitions: [
         {
           id: "dependent",
@@ -1022,7 +1022,6 @@ story("startup enable state does not wait for the manager, and live updates beat
         },
         {
           id: "disabled",
-          legacy: ["previous"],
           provides: { value: Provider },
           renderer: async () => ({
             default: (ctx: Context) => {
@@ -1036,7 +1035,7 @@ story("startup enable state does not wait for the manager, and live updates beat
 
     await new Promise((resolve) => setTimeout(resolve, 50))
     const before = [...setups]
-    initial.resolve([{ id: "previous", enabled: false }])
+    initial.resolve([{ id: "disabled", enabled: false }])
     await until(() => host.ready())
 
     const started = {

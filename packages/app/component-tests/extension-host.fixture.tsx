@@ -256,7 +256,7 @@ export function mountExtensions(input: {
       if (!state) return undefined
 
       return new Set(
-        definitions().flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])),
+        definitions().flatMap((definition) => (extensionEnabled(definition.id, state) ? [] : [definition.id])),
       )
     })
 

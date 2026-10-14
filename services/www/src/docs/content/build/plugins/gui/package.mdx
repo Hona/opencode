@@ -98,7 +98,6 @@ export default Plugin.define({
 | `main` | Runs once in the desktop app's main process. See [Main process & IPC](/build/plugins/gui/main). |
 
 - Define `setup`, `main`, or both. A GUI without either fails to load.
-- `legacy` is for built-in plugins only.
 - `ctx.client?.rpc(AcmeRpc)` calls the plugin's server half. See [RPC](/build/plugins/rpc).
 
 ### One file, two processes
