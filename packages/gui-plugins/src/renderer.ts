@@ -1,5 +1,4 @@
-import { compose } from "@opencode/plugin/gui/host"
-import { type Definition } from "@opencode/plugin/gui"
+import { compose, type Entry } from "@opencode/plugin/gui/host"
 import context from "./context"
 import contextRenderer from "./context/renderer"
 import btw from "./btw"
@@ -29,25 +28,25 @@ import microsoftOfficeRenderer from "./microsoft-office/renderer"
 
 // The window renders once every built-in is active, so the small renderer entries load with the app, like the
 // features they replaced. Heavy UI stays behind `lazy()` inside them.
-const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["default"]) => () =>
+const eager = (setup: Awaited<ReturnType<NonNullable<Entry["windowEntry"]>>>["default"]) => () =>
   Promise.resolve({ default: setup })
 
 /**
- * Built-in plugins with their renderer entries. The only place host builds name built-ins. `builtins.typecheck.ts`
+ * Built-in plugins with their window entries. The only place host builds name built-ins. `builtins.typecheck.ts`
  * checks this composition against the main one.
  */
 export const builtins = compose(
-  { ...context, renderer: eager(contextRenderer) },
-  { ...btw, renderer: eager(btwRenderer) },
-  { ...debug, renderer: eager(debugRenderer) },
-  { ...terminal, renderer: eager(terminalRenderer) },
-  { ...file, renderer: eager(fileRenderer) },
-  { ...review, renderer: eager(reviewRenderer) },
-  { ...details, renderer: eager(detailsRenderer) },
-  { ...browser, renderer: eager(browserRenderer) },
-  { ...pairing, renderer: eager(pairingRenderer) },
-  { ...updater, renderer: eager(updaterRenderer) },
-  { ...ssh, renderer: eager(sshRenderer) },
-  { ...wsl, renderer: eager(wslRenderer) },
-  { ...microsoftOffice, renderer: eager(microsoftOfficeRenderer) },
+  { ...context, windowEntry: eager(contextRenderer) },
+  { ...btw, windowEntry: eager(btwRenderer) },
+  { ...debug, windowEntry: eager(debugRenderer) },
+  { ...terminal, windowEntry: eager(terminalRenderer) },
+  { ...file, windowEntry: eager(fileRenderer) },
+  { ...review, windowEntry: eager(reviewRenderer) },
+  { ...details, windowEntry: eager(detailsRenderer) },
+  { ...browser, windowEntry: eager(browserRenderer) },
+  { ...pairing, windowEntry: eager(pairingRenderer) },
+  { ...updater, windowEntry: eager(updaterRenderer) },
+  { ...ssh, windowEntry: eager(sshRenderer) },
+  { ...wsl, windowEntry: eager(wslRenderer) },
+  { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
 )

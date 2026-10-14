@@ -7,7 +7,6 @@ import {
   type Cleanup,
   type Declared,
   type DeclaredStores,
-  type Definition,
   type Ipc,
   type IpcImpl,
   type IpcProvider,
@@ -17,6 +16,7 @@ import {
   type MainStoreFrom,
   type Persisted,
 } from "./core.js"
+import type { Declarations } from "./declarations.js"
 import type { Scope } from "./scope.js"
 
 export * from "./core.js"
@@ -368,7 +368,7 @@ export interface MainContext<D = never> extends BaseContext {
  * export default setup
  * ```
  */
-export type MainSetup<D extends Pick<Definition, "id"> = never> = (
+export type MainSetup<D extends Pick<Declarations, "id"> = never> = (
   ctx: MainContext<D>,
 ) => Cleanup | void | Promise<Cleanup | void>
 

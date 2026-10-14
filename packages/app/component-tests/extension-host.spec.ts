@@ -219,7 +219,7 @@ story(
         definitions: [
           {
             id: "single",
-            renderer: async () => ({
+            windowEntry: async () => ({
               default: (ctx: Context) => {
                 const tab = { id: "main", title: "Single" }
                 kept.ctx = ctx
@@ -230,7 +230,7 @@ story(
           },
           {
             id: "grouped",
-            renderer: async () => ({
+            windowEntry: async () => ({
               default: (ctx: Context) => {
                 const tab = { id: "main", title: "Grouped", group: "group" }
                 ctx.add(Panel, { id: "main", region: "side", list: () => [tab], render: render("grouped") })
@@ -310,7 +310,7 @@ story(
         definitions: [
           {
             id: "fixture",
-            renderer: async () => ({
+            windowEntry: async () => ({
               default: (ctx: Context) => {
                 // Setup runs before the interface mounts, as every built-in's does.
                 ctx.layout.open("fixture:main", session)
@@ -428,7 +428,7 @@ tiers.forEach((row) => {
           active: input.row.active ?? "gone:main",
           definitions: input.row.tabs.map((tab) => ({
             id: tab.id,
-            renderer: async () => ({
+            windowEntry: async () => ({
               default: (ctx: Context) => {
                 const item = { ...tab, id: "main" }
                 ctx.add(Panel, { id: "main", region: "side", list: () => [item], render: () => ctx.id })
@@ -491,7 +491,7 @@ story(
         definitions: [
           {
             id: "fixture",
-            renderer: async () => ({
+            windowEntry: async () => ({
               default: (ctx: Context) => {
                 const [on, set] = createSignal(true)
                 scope.end = () => set(false)
@@ -531,7 +531,7 @@ story("a contribution that throws renders nothing and records the error; the oth
       definitions: [
         {
           id: "fixture",
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context) => {
               ctx.add(Slot, {
                 at: "window.bottom",
@@ -545,7 +545,7 @@ story("a contribution that throws renders nothing and records the error; the oth
         },
         {
           id: "other",
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context) => void ctx.add(Slot, { at: "window.bottom", render: text("other") }),
           }),
         },
@@ -590,7 +590,7 @@ story("plugin GUIs join, hot-reload in place, run their returned cleanup and lea
 
     const builtin = {
       id: "builtin",
-      renderer: async () => {
+      windowEntry: async () => {
         await builtinLoad.promise
 
         return entry("builtin")()
@@ -599,15 +599,15 @@ story("plugin GUIs join, hot-reload in place, run their returned cleanup and lea
 
     const host = mountExtensions({ definitions: [builtin] })
     // A plugin that joins before the built-ins settle, and never loads, must not hold the app's first render.
-    host.define([builtin, { id: "stuck", renderer: () => new Promise<never>(() => {}) }])
+    host.define([builtin, { id: "stuck", windowEntry: () => new Promise<never>(() => {}) }])
     builtinLoad.resolve()
     await until(() => host.ready())
     const startup = { ready: host.ready(), stuck: host.status("stuck") }
 
-    host.define([builtin, { id: "acme", renderer: entry("acme 1") }])
+    host.define([builtin, { id: "acme", windowEntry: entry("acme 1") }])
     await until(() => host.status("acme") === "active")
     // A new revision of the plugin's bundle is a new definition under the same id.
-    host.define([builtin, { id: "acme", renderer: entry("acme 2") }])
+    host.define([builtin, { id: "acme", windowEntry: entry("acme 2") }])
     await until(() => log.includes("setup acme 2"))
     const reloaded = [...log]
 
@@ -640,7 +640,7 @@ story("an extension that requires a contract starts once it is active and restar
       {
         id: "provider",
         provides: { tree: Tree },
-        renderer: async () => {
+        windowEntry: async () => {
           await providerLoad.promise
 
           return { default: (ctx: Context) => void ctx.provide(Tree, { version: ++versions.value }) }
@@ -649,7 +649,7 @@ story("an extension that requires a contract starts once it is active and restar
       {
         id: "consumer",
         requires: { tree: Tree },
-        renderer: async () => ({
+        windowEntry: async () => ({
           default: (ctx: Context & { requires: { tree: { version: number } } }) => {
             const version = ctx.requires.tree.version
             log.push(`setup ${version}`)
@@ -669,7 +669,7 @@ story("an extension that requires a contract starts once it is active and restar
       definitions: [
         {
           ...definitions[0],
-          renderer: async () => {
+          windowEntry: async () => {
             throw new Error("provider failed")
           },
         },
@@ -720,7 +720,7 @@ story("a contract component reads its provider context and preserves reactive pr
         {
           id: "provider",
           provides: { view: View },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context) => {
               ctx.provide(View, {
                 View: bindPlugin((props: { readonly label: string }) => {
@@ -737,7 +737,7 @@ story("a contract component reads its provider context and preserves reactive pr
         {
           id: "consumer",
           requires: { view: View },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context & { requires: { view: { View: Component<{ readonly label: string }> } } }) => {
               const [label, setLabel] = createSignal("before")
               observed.change = () => setLabel("after")
@@ -777,8 +777,8 @@ story("developer settings show a blocked hard dependency instead of loading fore
       settings: true,
       disabled: ["provider"],
       definitions: [
-        { id: "provider", provides: { tree: Tree }, renderer: async () => ({ default: () => {} }) },
-        { id: "consumer", requires: { tree: Tree }, renderer: async () => ({ default: () => {} }) },
+        { id: "provider", provides: { tree: Tree }, windowEntry: async () => ({ default: () => {} }) },
+        { id: "consumer", requires: { tree: Tree }, windowEntry: async () => ({ default: () => {} }) },
       ],
     })
 
@@ -803,7 +803,7 @@ story("blocked chains expose their own reason and recover regardless of definiti
         {
           id: "leaf",
           requires: { branch: Branch },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: () => {
               observed.starts++
             },
@@ -812,7 +812,7 @@ story("blocked chains expose their own reason and recover regardless of definiti
         {
           id: "observer",
           uses: { branch: Branch },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context & { uses: { branch: () => Live<number> } }) => {
               observed.read = ctx.uses.branch
             },
@@ -822,12 +822,12 @@ story("blocked chains expose their own reason and recover regardless of definiti
           id: "branch",
           requires: { root: Root },
           provides: { branch: Branch },
-          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Branch, 2) }),
+          windowEntry: async () => ({ default: (ctx: Context) => void ctx.provide(Branch, 2) }),
         },
         {
           id: "root",
           provides: { root: Root },
-          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Root, 1) }),
+          windowEntry: async () => ({ default: (ctx: Context) => void ctx.provide(Root, 1) }),
         },
       ],
     })
@@ -871,7 +871,7 @@ invalidSetups.forEach((kind) => {
           definitions: [
             {
               id: "invalid",
-              renderer: async () => ({
+              windowEntry: async () => ({
                 default: (ctx: Context) => {
                   ctx.add(registry, "before")
 
@@ -931,7 +931,7 @@ story("declared global stores load before setup, so setup reads the stored value
         {
           id: "fixture",
           stores: { prefs: Store.global(Prefs, { open: false }) },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context & { stores: { prefs: { value: { open: boolean } } } }) =>
               void seen.push(ctx.stores.prefs.value.open),
           }),
@@ -985,7 +985,7 @@ story("startup enable state does not wait for the manager, and live updates beat
       capture: async () => undefined,
       runMenubarItem() {},
       configure() {},
-      pluginsChanged() {},
+      pluginGuis: async () => ({ plugins: [], reserved: [] }),
       manager: {
         initial: initial.promise,
         list: () => reply.promise,
@@ -1003,7 +1003,7 @@ story("startup enable state does not wait for the manager, and live updates beat
           id: "dependent",
           requires: { provider: Provider },
           provides: { value: Dependent },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context) => {
               setups.push("dependent")
               ctx.provide(Dependent, 2)
@@ -1013,7 +1013,7 @@ story("startup enable state does not wait for the manager, and live updates beat
         {
           id: "enabled",
           uses: { value: Dependent },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context & { uses: { value: () => Live<number> } }) => {
               setups.push("enabled")
               observed.read = ctx.uses.value
@@ -1023,7 +1023,7 @@ story("startup enable state does not wait for the manager, and live updates beat
         {
           id: "disabled",
           provides: { value: Provider },
-          renderer: async () => ({
+          windowEntry: async () => ({
             default: (ctx: Context) => {
               setups.push("disabled")
               ctx.provide(Provider, 1)
@@ -1054,7 +1054,7 @@ story("startup enable state does not wait for the manager, and live updates beat
 
       const failed = mountExtensions({
         bridge: { ...bridge, manager: { ...bridge.manager, initial, list: () => reply.promise } },
-        definitions: [{ id: "disabled", renderer: async () => ({ default: () => void setups.push("wrongly enabled") }) }],
+        definitions: [{ id: "disabled", windowEntry: async () => ({ default: () => void setups.push("wrongly enabled") }) }],
       })
 
       await new Promise((resolve) => setTimeout(resolve, 50))

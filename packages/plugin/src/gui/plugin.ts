@@ -1,24 +1,9 @@
 import type { Setup } from "./context.js"
-import type {
-  Catalog,
-  Cleanup,
-  Contract,
-  DefinitionCheck,
-  Ipc,
-  MainStoreDeclaration,
-  OS,
-  StoreDeclaration,
-  Tokens,
-} from "./core.js"
+import type { Cleanup, DefinitionCheck, Tokens } from "./core.js"
+import type { Declarations, Requires, Stores } from "./declarations.js"
 import type { MainSetup } from "./main.js"
 
-export type { Cleanup, MainSetup, Setup }
-
-/** The hard dependencies a plugin's GUI may declare in `requires`. */
-type Requires = Readonly<Record<string, Contract<unknown> | Ipc>>
-
-/** The stores a plugin's GUI may declare. */
-type Stores = Readonly<Record<string, StoreDeclaration | MainStoreDeclaration>>
+export type { Cleanup, Declarations, MainSetup, Setup }
 
 /** The declarations a setup's context is typed from. */
 type Declared<Id extends string, P extends Tokens, U extends Tokens, R extends Requires, S extends Stores> = {
@@ -30,21 +15,8 @@ type Declared<Id extends string, P extends Tokens, U extends Tokens, R extends R
 }
 
 /**
- * What a plugin's GUI declares before any setup: its id, what it provides and uses, its stores, its catalog and the
- * systems it runs on. `Plugin.define` returns this for a definition without setups, so setups in other files can be
- * typed from it.
- */
-export type Declarations<
-  Id extends string = string,
-  P extends Tokens = Tokens,
-  U extends Tokens = Tokens,
-  R extends Requires = Requires,
-  S extends Stores = Stores,
-> = Omit<Definition<Id, P, U, R, S>, "setup" | "main">
-
-/**
- * A plugin's GUI: the default export of its `./gui` bundle. Its declarations, then a window setup, a main-process setup,
- * or both. The app's built-in plugins declare with it too.
+ * A plugin's GUI: the default export of its `./gui` bundle. Its `Declarations`, then a window setup, a main-process
+ * setup, or both. The app's built-in plugins declare with it too.
  */
 export type Definition<
   Id extends string = string,
@@ -52,21 +24,7 @@ export type Definition<
   U extends Tokens = Tokens,
   R extends Requires = Requires,
   S extends Stores = Stores,
-> = {
-  /** The server plugin's id. The plugin fails to load when it differs. */
-  readonly id: Id
-  /** Restricts the GUI to these systems; omit it to run on every one. */
-  readonly os?: readonly OS[]
-  /** The contracts the window setup provides and the Ipcs the main setup provides. Each is in `ctx.uses` too. */
-  readonly provides?: P
-  /** Optional dependencies on other plugins' tokens. */
-  readonly uses?: U
-  /** Hard dependencies: setup runs only while every one is active. */
-  readonly requires?: R
-  /** Declared stored state: `Store.global`, `Store.session` or `Store.main`. */
-  readonly stores?: S
-  /** The plugin's copy by locale, every locale inline. */
-  readonly i18n?: Catalog
+> = Declarations<Id, P, U, R, S> & {
   /** Runs in every desktop app window. See `Setup`. */
   readonly setup?: Setup<NoInfer<Declared<Id, P, U, R, S>>>
   /** Runs once in the desktop app's main process. See `MainSetup`. */

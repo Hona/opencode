@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
-import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload } from "./extensions"
+import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload, ExtensionPluginGuis } from "./extensions"
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
   urls: Schema.Array(Schema.String),
@@ -51,6 +51,12 @@ export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("
   list: Schema.Array(ExtensionInstalled),
 }) {}
 
+// The plugin GUIs main lists from the app's own server changed; windows load the new set.
+export class ExtensionPluginGuisChanged extends Schema.TaggedClass<ExtensionPluginGuisChanged>()(
+  "ExtensionPluginGuisChanged",
+  ExtensionPluginGuis.fields,
+) {}
+
 export class ExtensionMenubarItemsChanged extends Schema.TaggedClass<ExtensionMenubarItemsChanged>()(
   "ExtensionMenubarItemsChanged",
   { items: Schema.Array(ExtensionMenubarItem) },
@@ -67,6 +73,7 @@ export const DesktopEvent = Schema.Union([
   ExtensionEvent,
   ExtensionAvailable,
   ExtensionsChanged,
+  ExtensionPluginGuisChanged,
   ExtensionMenubarItemsChanged,
 ])
 

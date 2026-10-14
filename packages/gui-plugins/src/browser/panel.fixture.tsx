@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
-import type { Bridge, BridgeLayout } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgeLayout, Entry } from "@opencode/plugin/gui/host"
 import {
   PluginContext,
   Live,
@@ -22,7 +22,6 @@ import {
   type App,
   type ComposerNote,
   type Context,
-  type Definition,
   type Embeds,
   type Ipc,
   type IpcClient,
@@ -568,7 +567,7 @@ type RegionHost = {
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   ExtensionHostProvider: Component<
     ParentProps<{
-      definitions: Accessor<readonly Definition[]>
+      definitions: Accessor<readonly Entry[]>
       disabled: Accessor<ReadonlySet<string> | undefined>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (extension: string) => object | undefined }
@@ -589,7 +588,7 @@ type RegionHost = {
     entry(key: string): { readonly tab: PanelTab; readonly extension: string; readonly provider: Panel } | undefined
   }
   /** The real browser and file extensions. */
-  definitions: readonly Definition[]
+  definitions: readonly Entry[]
   /** Real shell command providers for shortcut cases. */
   Shell: ParentComponent
   /** Shell fallback and the real extension command adapter. */

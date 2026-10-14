@@ -1,5 +1,5 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { Definition } from "@opencode/plugin/gui"
+import type { Entry } from "@opencode/plugin/gui/host"
 import { BUILTINS_UPDATED } from "./builtins"
 import { useExtensionHost } from "./host"
 
@@ -8,7 +8,7 @@ export default function ExtensionHotReload() {
   const host = useExtensionHost()
   makeEventListener(window, BUILTINS_UPDATED, (event) => {
     if (!(event instanceof CustomEvent)) return
-    const next: readonly Definition[] = event.detail
+    const next: readonly Entry[] = event.detail
     next.forEach((definition) => {
       const current = host.definitions().find((item) => item.id === definition.id)
 
@@ -23,11 +23,11 @@ export default function ExtensionHotReload() {
 }
 
 // Unchanged modules keep their URL, so importing them again returns the same module.
-async function changed(current: Definition, next: Definition) {
+async function changed(current: Entry, next: Entry) {
   if (current.i18n?.en !== next.i18n?.en) return true
 
-  if (!current.renderer || !next.renderer) return current.renderer !== next.renderer
-  const [before, after] = await Promise.all([current.renderer().catch(() => undefined), next.renderer()])
+  if (!current.windowEntry || !next.windowEntry) return current.windowEntry !== next.windowEntry
+  const [before, after] = await Promise.all([current.windowEntry().catch(() => undefined), next.windowEntry()])
 
   return before?.default !== after.default
 }

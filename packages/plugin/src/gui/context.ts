@@ -6,7 +6,6 @@ import type {
   Contract,
   Declared,
   DeclaredStores,
-  Definition,
   Ipc,
   IpcClient,
   IpcRef,
@@ -17,6 +16,7 @@ import type {
   TokenValue,
   Usable,
 } from "./core.js"
+import type { Declarations } from "./declarations.js"
 import type {
   Appearance,
   Desktop,
@@ -37,7 +37,7 @@ import type {
 } from "./host-apis.js"
 
 /**
- * What every window entry gets. Contracts other plugins provide are read through `Setup<typeof Definition>`, from
+ * What every window entry gets. Contracts other plugins provide are read through `Setup<typeof definition>`, from
  * the tokens the definition declares. The APIs the host always provides are properties, each created on first read.
  * Setup runs under the plugin's root owner: Solid's `onCleanup` in setup runs when the plugin goes away.
  * `usePlugin()` returns the same object inside contributions.
@@ -239,7 +239,7 @@ type Used<T> =
       }
     : Accessor<Live<TokenValue<T>>>
 
-/** The context `Setup<typeof Definition>` receives: the host's members, and only the contracts the definition declares. */
+/** The context `Setup<typeof definition>` receives: the host's members, and only the contracts the definition declares. */
 export interface SetupContext<D> extends Omit<Context, "provide"> {
   /**
    * Provides a contract the definition declares in `provides`. Withdrawn with the current owner, else with the
@@ -294,7 +294,7 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
 }
 
 /**
- * A window entry: the default export of `renderer.tsx`. `Setup<typeof Definition>` types the context from the
+ * A window entry: the default export of `renderer.tsx`. `Setup<typeof definition>` types the context from the
  * definition's declarations. Runs synchronously under the plugin's Solid owner; return nothing. Put async work
  * in `createKeyed` or `createLatest`, and pass `ctx.signal` or a signal derived from it.
  * The `undefined` return type rejects async functions and replacement values, while accepting a block with no
@@ -310,4 +310,4 @@ export interface SetupContext<D> extends Omit<Context, "provide"> {
  * export default setup
  * ```
  */
-export type Setup<D extends Pick<Definition, "id">> = (ctx: SetupContext<D>) => Cleanup | void
+export type Setup<D extends Pick<Declarations, "id">> = (ctx: SetupContext<D>) => Cleanup | void

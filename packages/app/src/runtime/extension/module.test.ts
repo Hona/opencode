@@ -33,7 +33,7 @@ describe("plugin GUIs in a window", () => {
     expect(definition.provides?.notes?.id).toBe("acme.notes")
     expect(definition.i18n?.en).toEqual({ title: "Notes" })
 
-    const entry = await definition.renderer?.()
+    const entry = await definition.windowEntry?.()
 
     const ctx = {
       add: (registry: Registry<Command>, item: Command) => void added.push({ registry, item }),
@@ -61,6 +61,6 @@ describe("plugin GUIs in a window", () => {
     const definition = await pluginDefinition("acme", code)
 
     expect(definition.id).toBe("acme")
-    await expect(definition.renderer?.()).rejects.toThrow(message)
+    await expect(definition.windowEntry?.()).rejects.toThrow(message)
   })
 })
