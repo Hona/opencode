@@ -16,6 +16,7 @@ const shared = {
   effect: () => import("effect"),
   "@opencode/plugin/gui": () => import("@opencode/plugin/gui/main"),
   "@opencode/plugin/gui/main": () => import("@opencode/plugin/gui/main"),
+  "@opencode/plugin/rpc": () => import("@opencode/plugin/rpc"),
   "@opencode/schema/rpc": () => import("@opencode/schema/rpc"),
   "@opencode/client": () => import("@opencode/client"),
   "@opencode/client/effect": () => import("@opencode/client/effect"),
